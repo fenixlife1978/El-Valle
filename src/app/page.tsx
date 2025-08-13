@@ -108,7 +108,7 @@ export default function LoginPage() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              disabled={isLoading || selectedRole === 'admin'}
+              disabled={isLoading}
             />
           </div>
           <div className="space-y-2">
