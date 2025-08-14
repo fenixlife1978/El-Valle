@@ -15,7 +15,7 @@ import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
 
 const adminNavItems: NavItem[] = [
     { href: "/admin/dashboard", icon: Home, label: "Dashboard" },
-    { href: "#", icon: Landmark, label: "Pagos" },
+    { href: "/admin/payments", icon: Landmark, label: "Pagos" },
     { href: "#", icon: Building, label: "Unidades" },
     { href: "#", icon: Users, label: "Residentes" },
     { href: "#", icon: CalendarCheck, label: "Reservas" },
