@@ -9,6 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
@@ -69,6 +71,14 @@ type CompanyInfo = {
     logo: string;
 };
 
+type ReportPreviewData = {
+    title: string;
+    headers: string[];
+    rows: (string|number)[][];
+    footers?: string[];
+    filename: string;
+};
+
 const monthsLocale: { [key: number]: string } = {
     1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril', 5: 'Mayo', 6: 'Junio',
     7: 'Julio', 8: 'Agosto', 9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre'
@@ -80,17 +90,26 @@ export default function ReportsPage() {
     const [loading, setLoading] = useState(true);
     const [owners, setOwners] = useState<Owner[]>([]);
 
+    // --- Form State ---
     const [startDate, setStartDate] = useState<Date | undefined>();
     const [endDate, setEndDate] = useState<Date | undefined>();
     const [selectedOwner, setSelectedOwner] = useState('');
     const [delinquencyPeriod, setDelinquencyPeriod] = useState('');
 
+    // --- Chart State ---
     const [incomeChartData, setIncomeChartData] = useState<ChartData[]>([]);
     const [debtChartData, setDebtChartData] = useState<ChartData[]>([]);
     const incomeChartRef = useRef<HTMLDivElement>(null);
     const debtChartRef = useRef<HTMLDivElement>(null);
+    
+    // --- System State ---
     const [activeRate, setActiveRate] = useState(0);
     const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
+
+    // --- Preview State ---
+    const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+    const [previewData, setPreviewData] = useState<ReportPreviewData | null>(null);
+
 
     useEffect(() => {
         const fetchData = async () => {
@@ -150,14 +169,12 @@ export default function ReportsPage() {
         fetchData();
     }, [toast]);
 
-
-    const generatePdf = (title: string, head: any[], body: any[], filename: string, options: { footerText?: string } = {}) => {
+    const generatePdf = (title: string, head: any[], body: any[][], filename: string, options: { footerText?: string } = {}) => {
         const doc = new jsPDF();
         const pageHeight = doc.internal.pageSize.getHeight();
         const pageWidth = doc.internal.pageSize.getWidth();
         const margin = 14;
 
-        // --- PDF Header ---
         if (companyInfo?.logo) {
             doc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25);
         }
@@ -178,12 +195,10 @@ export default function ReportsPage() {
         doc.setLineWidth(0.5);
         doc.line(margin, margin + 32, pageWidth - margin, margin + 32);
 
-        // --- PDF Title ---
         doc.setFontSize(16);
         doc.setFont('helvetica', 'bold');
         doc.text(title, pageWidth / 2, margin + 45, { align: 'center' });
 
-        // --- PDF Body ---
         autoTable(doc, {
             head,
             body,
@@ -201,6 +216,13 @@ export default function ReportsPage() {
         doc.save(`${filename}.pdf`);
     }
 
+    const handleExportPreview = () => {
+        if (!previewData) return;
+        generatePdf(previewData.title, [previewData.headers], previewData.rows, previewData.filename, {footerText: previewData.footers?.join(' | ')});
+        setIsPreviewOpen(false);
+        setPreviewData(null);
+    }
+    
     const generateChartPdf = async (chartRef: React.RefObject<HTMLDivElement>, title: string, filename: string) => {
         if (!chartRef.current) return;
         const canvas = await html2canvas(chartRef.current, { backgroundColor: '#ffffff', scale: 2 });
@@ -210,7 +232,6 @@ export default function ReportsPage() {
         const pageWidth = pdf.internal.pageSize.getWidth();
         const margin = 14;
 
-        // --- PDF Header ---
         if (companyInfo?.logo) {
             pdf.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25);
         }
@@ -226,12 +247,10 @@ export default function ReportsPage() {
         pdf.setFontSize(10);
         pdf.text(`Fecha de Emisión: ${new Date().toLocaleDateString('es-VE')}`, pageWidth - margin, margin + 8, { align: 'right' });
         
-        // --- PDF Title ---
         pdf.setFontSize(16);
         pdf.setFont('helvetica', 'bold');
         pdf.text(title, pageWidth / 2, margin + 40, { align: 'center' });
         
-        // --- PDF Chart Image ---
         const imgProps = pdf.getImageProperties(imgData);
         const pdfWidth = pageWidth - (margin * 2);
         const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
@@ -240,7 +259,7 @@ export default function ReportsPage() {
         pdf.save(`${filename}.pdf`);
     };
 
-    const generateIndividualStatement = async () => {
+    const showIndividualStatementPreview = async () => {
         if (!selectedOwner) {
             toast({ variant: 'destructive', title: 'Error', description: 'Por favor, seleccione un propietario.' });
             return;
@@ -251,97 +270,15 @@ export default function ReportsPage() {
 
         setLoading(true);
         try {
-            // This handles legacy owners without the `properties` array.
-            const ownerPropertiesPayload = (owner.properties && owner.properties.length > 0)
-                ? owner.properties.map(p => ({ ownerId: owner.id, house: p.house }))
-                : [{ ownerId: owner.id, house: owner.house }];
-
-            // Fetch all related data
-            const paymentsQuery = query(
-                collection(db, "payments"),
-                where("beneficiaries", "array-contains-any", ownerPropertiesPayload.map(p => ({ownerId: p.ownerId, house: p.house}))),
-                where("status", "==", "aprobado")
-            );
-            
             const debtsQuery = query(collection(db, "debts"), where("ownerId", "==", owner.id));
-
-            const [paymentSnapshot, debtSnapshot] = await Promise.all([
-                getDocs(paymentsQuery),
-                getDocs(debtsQuery)
-            ]);
-
-            const ownerPayments = paymentSnapshot.docs
-                .map(doc => doc.data() as Payment)
-                .filter(p => p.beneficiaries.some(b => b.ownerId === owner.id));
-
+            const debtSnapshot = await getDocs(debtsQuery);
+            
             const ownerDebts = debtSnapshot.docs
                 .map(doc => doc.data() as Debt)
                 .sort((a, b) => a.year - b.year || a.month - b.month);
-            
-            // Generate PDF
-            const doc = new jsPDF();
-            const margin = 14;
-            const pageWidth = doc.internal.pageSize.getWidth();
-            let finalY = margin;
-
-            // --- Header ---
-            if (companyInfo?.logo) {
-                doc.addImage(companyInfo.logo, 'PNG', margin, finalY, 25, 25);
-            }
-            if (companyInfo) {
-                doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, margin + 30, finalY + 5);
-            }
-            
-            doc.setFontSize(9).setFont('helvetica', 'normal');
-            const ownerProperties = (owner.properties && owner.properties.length > 0) 
-                ? owner.properties.map(p => `${p.street} - ${p.house}`).join(', ')
-                : (owner.street && owner.house ? `${owner.street} - ${owner.house}`: 'N/A');
-
-            doc.text(`Propietario: ${owner.name}`, margin + 30, finalY + 10);
-            doc.text(`Propiedad(es): ${ownerProperties}`, margin + 30, finalY + 14);
-            
-            const generatedDate = format(new Date(), "dd/MM/yyyy, h:mm:ss a");
-            doc.text(`Reporte generado el: ${generatedDate}`, margin + 30, finalY + 18);
-            
-            finalY += 35;
-
-            // --- Resumen de Pagos ---
-            doc.setFontSize(12).setFont('helvetica', 'bold').text('Resumen de Pagos', margin, finalY);
-            finalY += 5;
-
-            const paymentsBody = ownerPayments.map(p => {
-                const paymentForOwner = p.beneficiaries.find(b => b.ownerId === owner.id);
-                const amountBs = paymentForOwner ? paymentForOwner.amount : 0;
-                return [
-                    format(new Date(p.paymentDate.seconds * 1000), 'dd/MM/yyyy'),
-                    p.paymentMethod === 'transferencia' ? 'Transferencia' : 'Pago Móvil',
-                    'N/A', // "Pagado por" is not available in the data model
-                    `Bs. ${amountBs.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`
-                ];
-            });
-
-            const totalPaid = ownerPayments.reduce((acc, p) => {
-                 const paymentForOwner = p.beneficiaries.find(b => b.ownerId === owner.id);
-                 return acc + (paymentForOwner ? paymentForOwner.amount : 0);
-            }, 0);
-
-            autoTable(doc, {
-                startY: finalY,
-                head: [['Fecha', 'Concepto', 'Pagado por', 'Monto (Bs)']],
-                body: paymentsBody,
-                foot: [['Total Pagado', '', '', `Bs. ${totalPaid.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`]],
-                theme: 'striped',
-                headStyles: { fillColor: [26, 145, 125], textColor: 255 },
-                footStyles: { fillColor: [255, 255, 255], textColor: 0, fontStyle: 'bold' },
-            });
-            finalY = (doc as any).lastAutoTable.finalY + 10;
-            
-            // --- Resumen de Deudas ---
-            doc.setFontSize(12).setFont('helvetica', 'bold').text('Resumen de Deudas', margin, finalY);
-            finalY += 5;
 
             let totalAdeudadoUSD = 0;
-            const debtsBody = ownerDebts.map(d => {
+            const debtsRows = ownerDebts.map(d => {
                 if (d.status === 'pending') {
                     totalAdeudadoUSD += d.amountUSD;
                 }
@@ -352,27 +289,17 @@ export default function ReportsPage() {
                 ];
             });
             
-            autoTable(doc, {
-                startY: finalY,
-                head: [['Periodo', 'Monto ($)', 'Estado']],
-                body: debtsBody,
-                foot: [['Total Adeudado', `$${totalAdeudadoUSD.toFixed(2)}`, '']],
-                theme: 'striped',
-                headStyles: { fillColor: [26, 145, 125], textColor: 255 },
-                footStyles: { fillColor: [255, 255, 255], textColor: 0, fontStyle: 'bold' },
-                 didParseCell: (data) => {
-                    if (data.row.section === 'foot') {
-                       if(data.column.dataKey === 'Monto ($)') data.cell.styles.halign = 'left';
-                    }
-                }
+            setPreviewData({
+                title: `Estado de Cuenta: ${owner.name}`,
+                headers: ['Periodo', 'Monto ($)', 'Estado'],
+                rows: debtsRows,
+                footers: [
+                    `Total Adeudado: $${totalAdeudadoUSD.toFixed(2)}`,
+                    `Saldo a Favor: Bs. ${(owner.balance > 0 ? owner.balance * activeRate : 0).toLocaleString('es-VE', { minimumFractionDigits: 2 })}`
+                ],
+                filename: `estado_cuenta_${owner.name.replace(/\s/g, '_')}`
             });
-            finalY = (doc as any).lastAutoTable.finalY + 10;
-            
-            // --- Saldo a Favor ---
-            doc.setFontSize(11).setFont('helvetica', 'bold');
-            doc.text(`Saldo a Favor Actual: Bs. ${(owner.balance > 0 ? owner.balance * activeRate : 0).toLocaleString('es-VE', { minimumFractionDigits: 2 })}`, pageWidth - margin, finalY, { align: 'right' });
-
-            doc.save(`estado_cuenta_${owner.name.replace(/\s/g, '_')}.pdf`);
+            setIsPreviewOpen(true);
 
         } catch (error) {
             console.error("Error generating individual statement:", error);
@@ -382,46 +309,49 @@ export default function ReportsPage() {
         }
     };
 
-    const generateDelinquencyReport = () => {
+    const showDelinquencyReportPreview = () => {
         if (!delinquencyPeriod) return toast({ variant: 'destructive', title: 'Error', description: 'Por favor, seleccione un período de morosidad.' });
         const months = parseInt(delinquencyPeriod);
         const delinquentOwners = owners.filter(o => o.delinquency >= months);
         
-         generatePdf(
-            `Reporte de Morosidad (${months} o más meses)`,
-            [['Propietario', 'Propiedades', 'Meses de Deuda', 'Saldo Deudor (Bs.)']],
-            delinquentOwners.map(o => {
+        setPreviewData({
+            title: `Reporte de Morosidad (${months} o más meses)`,
+            headers: ['Propietario', 'Propiedades', 'Meses de Deuda', 'Saldo Deudor (Bs.)'],
+            rows: delinquentOwners.map(o => {
                 const properties = (o.properties || []).map(p => `${p.street} - ${p.house}`).join(', ');
                 const debtBs = o.balance < 0 ? Math.abs(o.balance * activeRate) : 0;
                 return [o.name, properties, o.delinquency, debtBs.toLocaleString('es-VE', { minimumFractionDigits: 2 })];
             }),
-            `reporte_morosidad`
-        );
+            filename: `reporte_morosidad`
+        });
+        setIsPreviewOpen(true);
     }
     
-    const generateSolvencyReport = () => {
+    const showSolvencyReportPreview = () => {
         const solventOwners = owners.filter(o => o.status === 'solvente');
-         generatePdf(
-            'Reporte de Solvencia',
-            [['Propietario', 'Propiedades', 'Email']],
-            solventOwners.map(o => [o.name, (o.properties || []).map(p => `${p.street} - ${p.house}`).join(', '), o.email || '-']),
-            'reporte_solvencia'
-        );
+        setPreviewData({
+            title: 'Reporte de Solvencia',
+            headers: ['Propietario', 'Propiedades', 'Email'],
+            rows: solventOwners.map(o => [o.name, (o.properties || []).map(p => `${p.street} - ${p.house}`).join(', '), o.email || '-']),
+            filename: 'reporte_solvencia'
+        });
+        setIsPreviewOpen(true);
     };
 
-    const generateBalanceFavorReport = () => {
+    const showBalanceFavorReportPreview = () => {
         const ownersWithBalance = owners.filter(o => o.balance > 0);
-         generatePdf(
-            'Reporte de Saldos a Favor',
-            [['Propietario', 'Propiedades', 'Saldo a Favor (Bs.)']],
-            ownersWithBalance.map(o => [o.name, (o.properties || []).map(p => `${p.street} - ${p.house}`).join(', '), (o.balance * activeRate).toLocaleString('es-VE', { minimumFractionDigits: 2 })]),
-            'reporte_saldos_favor'
-        );
+        setPreviewData({
+            title: 'Reporte de Saldos a Favor',
+            headers: ['Propietario', 'Propiedades', 'Saldo a Favor (Bs.)'],
+            rows: ownersWithBalance.map(o => [o.name, (o.properties || []).map(p => `${p.street} - ${p.house}`).join(', '), (o.balance * activeRate).toLocaleString('es-VE', { minimumFractionDigits: 2 })]),
+            filename: 'reporte_saldos_favor'
+        });
+        setIsPreviewOpen(true);
     };
     
-    const generateIncomeReport = async () => {
+    const showIncomeReportPreview = async () => {
         if (!startDate || !endDate) return toast({ variant: 'destructive', title: 'Error', description: 'Por favor, seleccione un rango de fechas.' });
-        
+        setLoading(true);
         const q = query(
             collection(db, 'payments'),
             where('paymentDate', '>=', startDate),
@@ -433,32 +363,35 @@ export default function ReportsPage() {
         const incomePayments = incomeSnapshot.docs.map(doc => doc.data());
         const totalIncome = incomePayments.reduce((sum, p) => sum + p.totalAmount, 0);
 
-        generatePdf(
-            `Reporte de Ingresos (${format(startDate, "dd/MM/yy")} - ${format(endDate, "dd/MM/yy")})`,
-            [['Fecha', 'Monto (Bs.)', 'Método de Pago']],
-            incomePayments.map(p => [new Date(p.paymentDate.seconds * 1000).toLocaleDateString('es-VE'), p.totalAmount.toFixed(2), p.paymentMethod]),
-            'reporte_ingresos',
-            { footerText: `Total de Ingresos: Bs. ${totalIncome.toFixed(2)}` }
-        );
+        setPreviewData({
+            title: `Reporte de Ingresos (${format(startDate, "dd/MM/yy")} - ${format(endDate, "dd/MM/yy")})`,
+            headers: [['Fecha', 'Monto (Bs.)', 'Método de Pago']],
+            rows: incomePayments.map(p => [new Date(p.paymentDate.seconds * 1000).toLocaleDateString('es-VE'), p.totalAmount.toFixed(2), p.paymentMethod]),
+            footers: [`Total de Ingresos: Bs. ${totalIncome.toFixed(2)}`],
+            filename: 'reporte_ingresos',
+        });
+        setLoading(false);
+        setIsPreviewOpen(true);
     };
 
-    const generateGeneralStatusReport = () => {
-         generatePdf(
-            'Reporte General de Estatus',
-            [['Propietario', 'Propiedades', 'Estatus', 'Saldo (Bs.)']],
-            owners.map(o => {
+    const showGeneralStatusReportPreview = () => {
+         setPreviewData({
+            title: 'Reporte General de Estatus',
+            headers: [['Propietario', 'Propiedades', 'Estatus', 'Saldo (Bs.)']],
+            rows: owners.map(o => {
                 const properties = (o.properties && o.properties.length > 0)
                     ? o.properties.map(p => `${p.street} - ${p.house}`).join(', ')
                     : (o.house ? `${o.street} - ${o.house}` : 'N/A');
                 const balanceBs = o.balance * activeRate;
                 return [o.name, properties, o.status === 'solvente' ? 'Solvente' : 'Moroso', balanceBs.toLocaleString('es-VE', { minimumFractionDigits: 2 })]
             }),
-            'reporte_general_estatus'
-        );
+            filename: 'reporte_general_estatus'
+        });
+        setIsPreviewOpen(true);
     };
 
 
-    if (loading) {
+    if (loading && !isPreviewOpen) {
         return (
             <div className="flex justify-center items-center h-full">
                 <Loader2 className="h-10 w-10 animate-spin text-primary" />
@@ -552,9 +485,9 @@ export default function ReportsPage() {
                         </div>
                     </CardContent>
                     <CardFooter>
-                        <Button className="w-full" onClick={generateIndividualStatement} disabled={!selectedOwner || loading}>
-                            {loading && selectedOwner ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Download className="mr-2 h-4 w-4" />} 
-                            Generar y Exportar
+                        <Button className="w-full" onClick={showIndividualStatementPreview} disabled={!selectedOwner || loading}>
+                            {loading && selectedOwner ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Search className="mr-2 h-4 w-4" />} 
+                            Generar Vista Previa
                         </Button>
                     </CardFooter>
                 </Card>
@@ -581,8 +514,8 @@ export default function ReportsPage() {
                         </div>
                     </CardContent>
                     <CardFooter>
-                         <Button className="w-full" onClick={generateDelinquencyReport} disabled={!delinquencyPeriod}>
-                            <Download className="mr-2 h-4 w-4" /> Generar y Exportar
+                         <Button className="w-full" onClick={showDelinquencyReportPreview} disabled={!delinquencyPeriod}>
+                            <Search className="mr-2 h-4 w-4" /> Generar Vista Previa
                         </Button>
                     </CardFooter>
                 </Card>
@@ -594,11 +527,11 @@ export default function ReportsPage() {
                         <CardDescription>Genere una lista de todos los propietarios al día con sus pagos.</CardDescription>
                     </CardHeader>
                     <CardContent className="flex items-center justify-center h-20">
-                         <p className="text-sm text-muted-foreground">Vista previa no disponible.</p>
+                         <p className="text-sm text-muted-foreground">Haga clic para generar.</p>
                     </CardContent>
                     <CardFooter>
-                        <Button className="w-full" onClick={generateSolvencyReport}>
-                           <Download className="mr-2 h-4 w-4" /> Generar y Exportar
+                        <Button className="w-full" onClick={showSolvencyReportPreview}>
+                           <Search className="mr-2 h-4 w-4" /> Generar Vista Previa
                         </Button>
                     </CardFooter>
                 </Card>
@@ -610,11 +543,11 @@ export default function ReportsPage() {
                         <CardDescription>Liste todos los propietarios con saldo a favor y sus montos.</CardDescription>
                     </CardHeader>
                     <CardContent className="flex items-center justify-center h-20">
-                         <p className="text-sm text-muted-foreground">Vista previa no disponible.</p>
+                         <p className="text-sm text-muted-foreground">Haga clic para generar.</p>
                     </CardContent>
                     <CardFooter>
-                        <Button className="w-full" onClick={generateBalanceFavorReport}>
-                           <Download className="mr-2 h-4 w-4" /> Generar y Exportar
+                        <Button className="w-full" onClick={showBalanceFavorReportPreview}>
+                           <Search className="mr-2 h-4 w-4" /> Generar Vista Previa
                         </Button>
                     </CardFooter>
                 </Card>
@@ -682,8 +615,9 @@ export default function ReportsPage() {
                         </div>
                     </CardContent>
                     <CardFooter>
-                         <Button className="w-full" onClick={generateIncomeReport} disabled={!startDate || !endDate}>
-                           <Download className="mr-2 h-4 w-4" /> Generar y Exportar
+                         <Button className="w-full" onClick={showIncomeReportPreview} disabled={!startDate || !endDate || loading}>
+                            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Search className="mr-2 h-4 w-4" />}
+                            Generar Vista Previa
                         </Button>
                     </CardFooter>
                 </Card>
@@ -695,16 +629,64 @@ export default function ReportsPage() {
                         <CardDescription>Una vista completa del estatus de pago de todas las unidades.</CardDescription>
                     </CardHeader>
                      <CardContent className="flex items-center justify-center h-20">
-                         <p className="text-sm text-muted-foreground">Vista previa no disponible.</p>
+                         <p className="text-sm text-muted-foreground">Haga clic para generar.</p>
                     </CardContent>
                     <CardFooter>
-                        <Button className="w-full" onClick={generateGeneralStatusReport}>
-                           <Download className="mr-2 h-4 w-4" /> Generar y Exportar
+                        <Button className="w-full" onClick={showGeneralStatusReportPreview}>
+                           <Search className="mr-2 h-4 w-4" /> Generar Vista Previa
                         </Button>
                     </CardFooter>
                 </Card>
 
             </div>
+
+             {/* Preview Dialog */}
+            <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+                <DialogContent className="max-w-4xl">
+                    <DialogHeader>
+                        <DialogTitle>{previewData?.title}</DialogTitle>
+                        <DialogDescription>
+                            Revise la información a continuación. Si todo es correcto, puede exportar el reporte a PDF.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="max-h-[60vh] overflow-y-auto">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    {previewData?.headers.map((header, index) => (
+                                        <TableHead key={index}>{header}</TableHead>
+                                    ))}
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {previewData?.rows.map((row, rowIndex) => (
+                                    <TableRow key={rowIndex}>
+                                        {row.map((cell, cellIndex) => (
+                                            <TableCell key={cellIndex}>{cell}</TableCell>
+                                        ))}
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </div>
+                     {previewData?.footers && (
+                        <div className="mt-4 pt-4 border-t font-semibold text-right">
+                           {previewData.footers.map((footer, index) => (
+                               <p key={index}>{footer}</p>
+                           ))}
+                        </div>
+                    )}
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsPreviewOpen(false)}>Cerrar</Button>
+                        <Button onClick={handleExportPreview}>
+                             <Download className="mr-2 h-4 w-4" /> Exportar a PDF
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
         </div>
     );
 }
+
+    
