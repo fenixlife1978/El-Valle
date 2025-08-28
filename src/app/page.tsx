@@ -69,6 +69,19 @@ export default function LoginPage() {
     // Mock authentication
     await new Promise((resolve) => setTimeout(resolve, 1500));
 
+    // Check for generic password
+    if (password === '123456') {
+      toast({
+        variant: "destructive",
+        title: "Cambio de Contraseña Requerido",
+        description: "Por su seguridad, debe cambiar su contraseña inicial. Redirigiendo...",
+      });
+      // Redirect to a dedicated settings/profile page to change password
+      router.push(selectedRole === 'admin' ? '/admin/settings' : '/owner/settings');
+      return;
+    }
+
+
     if ((selectedRole === 'owner' && email && password) || 
         (selectedRole === 'admin' && email === 'vallecondo@gmail.com' && password)) {
       
