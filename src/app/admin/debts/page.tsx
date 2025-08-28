@@ -10,9 +10,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PlusCircle, MoreHorizontal, Edit, Trash2, Loader2, Info, ArrowLeft, ArrowRight, Search, BadgeHelp, WalletCards } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, Edit, Trash2, Loader2, Info, ArrowLeft, Search, WalletCards } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { collection, query, onSnapshot, where, addDoc, updateDoc, deleteDoc, doc, getDocs, getDoc, writeBatch } from 'firebase/firestore';
+import { collection, query, onSnapshot, where, doc, getDoc, writeBatch, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Badge } from '@/components/ui/badge';
 import { differenceInCalendarMonths, format, addMonths } from 'date-fns';
@@ -71,13 +71,17 @@ export default function DebtManagementPage() {
     const [selectedOwnerDebts, setSelectedOwnerDebts] = useState<Debt[]>([]);
     const [loadingDebts, setLoadingDebts] = useState(false);
     
-    const [isDialogOpen, setIsDialogOpen] = useState(false);
+    // Dialog for mass debt creation
+    const [isMassDebtDialogOpen, setIsMassDebtDialogOpen] = useState(false);
     const [currentMassDebt, setCurrentMassDebt] = useState<MassDebt>(emptyMassDebt);
     
+    // Dialog for single debt edit
+    const [isEditDebtDialogOpen, setIsEditDebtDialogOpen] = useState(false);
+    const [debtToEdit, setDebtToEdit] = useState<Debt | null>(null);
+    const [currentDebtData, setCurrentDebtData] = useState<{description: string, amountUSD: number | string}>({ description: '', amountUSD: '' });
+
     const [debtToDelete, setDebtToDelete] = useState<Debt | null>(null);
     const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
-
-    const [activeRate, setActiveRate] = useState(0);
     
     const { toast } = useToast();
 
@@ -104,19 +108,7 @@ export default function DebtManagementPage() {
             setLoading(false);
         });
 
-        const settingsRef = doc(db, 'config', 'mainSettings');
-        const settingsUnsubscribe = onSnapshot(settingsRef, (docSnap) => {
-             if (docSnap.exists()) {
-                const settings = docSnap.data();
-                const rate = (settings.exchangeRates || []).find((r: any) => r.active);
-                if (rate) setActiveRate(rate.rate);
-            }
-        });
-
-        return () => {
-            ownersUnsubscribe();
-            settingsUnsubscribe();
-        }
+        return () => ownersUnsubscribe();
     }, [toast]);
     
     // Filter owners based on search term
@@ -157,7 +149,7 @@ export default function DebtManagementPage() {
         setView('detail');
     };
 
-    const handleAddDebt = () => {
+    const handleAddMassiveDebt = () => {
         if (!selectedOwner) return;
         const today = new Date();
         setCurrentMassDebt({
@@ -165,7 +157,13 @@ export default function DebtManagementPage() {
              fromMonth: today.getMonth() + 1,
              fromYear: today.getFullYear(),
         });
-        setIsDialogOpen(true);
+        setIsMassDebtDialogOpen(true);
+    };
+
+    const handleEditDebt = (debt: Debt) => {
+        setDebtToEdit(debt);
+        setCurrentDebtData({ description: debt.description, amountUSD: debt.amountUSD });
+        setIsEditDebtDialogOpen(true);
     };
     
     const handleDeleteDebt = (debt: Debt) => {
@@ -232,11 +230,33 @@ export default function DebtManagementPage() {
             const errorMessage = error instanceof Error ? error.message : 'No se pudieron guardar las deudas.';
             toast({ variant: 'destructive', title: 'Error', description: errorMessage });
         } finally {
-            setIsDialogOpen(false);
+            setIsMassDebtDialogOpen(false);
             setCurrentMassDebt(emptyMassDebt);
         }
     };
     
+    const handleSaveSingleDebt = async () => {
+        if (!debtToEdit || !currentDebtData.description || Number(currentDebtData.amountUSD) <= 0) {
+             toast({ variant: 'destructive', title: 'Error de Validación', description: 'La descripción y un monto mayor a cero son obligatorios.' });
+            return;
+        }
+
+        try {
+            const debtRef = doc(db, "debts", debtToEdit.id);
+            await updateDoc(debtRef, {
+                description: currentDebtData.description,
+                amountUSD: Number(currentDebtData.amountUSD)
+            });
+            toast({ title: 'Deuda Actualizada', description: `La deuda ha sido actualizada exitosamente.` });
+        } catch (error) {
+            console.error("Error updating debt: ", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo actualizar la deuda.' });
+        } finally {
+            setIsEditDebtDialogOpen(false);
+            setDebtToEdit(null);
+        }
+    };
+
     const handleMassDebtInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { id, value, type } = e.target;
         setCurrentMassDebt({ 
@@ -360,7 +380,7 @@ export default function DebtManagementPage() {
                             <CardTitle>Deudas de: <span className="text-primary">{selectedOwner.name}</span></CardTitle>
                             <CardDescription>Ubicación: {selectedOwner.street} - {selectedOwner.house}</CardDescription>
                         </div>
-                        <Button onClick={handleAddDebt}>
+                        <Button onClick={handleAddMassiveDebt}>
                             <PlusCircle className="mr-2 h-4 w-4" />
                             Agregar Deuda Masiva
                         </Button>
@@ -369,10 +389,9 @@ export default function DebtManagementPage() {
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead>Año</TableHead>
-                                    <TableHead>Mes</TableHead>
+                                    <TableHead>Período</TableHead>
                                     <TableHead>Descripción</TableHead>
-                                    <TableHead>Monto (Bs.)</TableHead>
+                                    <TableHead>Monto (USD)</TableHead>
                                     <TableHead>Estado</TableHead>
                                     <TableHead className="text-right">Acciones</TableHead>
                                 </TableRow>
@@ -380,13 +399,13 @@ export default function DebtManagementPage() {
                             <TableBody>
                                 {loadingDebts ? (
                                     <TableRow>
-                                        <TableCell colSpan={6} className="h-24 text-center">
+                                        <TableCell colSpan={5} className="h-24 text-center">
                                             <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
                                         </TableCell>
                                     </TableRow>
                                 ) : selectedOwnerDebts.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={6} className="h-24 text-center">
+                                        <TableCell colSpan={5} className="h-24 text-center">
                                             <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
                                                 <Info className="h-8 w-8" />
                                                 <span>Este propietario no tiene deudas registradas.</span>
@@ -396,10 +415,9 @@ export default function DebtManagementPage() {
                                 ) : (
                                     selectedOwnerDebts.map((debt) => (
                                         <TableRow key={debt.id}>
-                                            <TableCell>{debt.year}</TableCell>
-                                            <TableCell>{months.find(m => m.value === debt.month)?.label}</TableCell>
-                                            <TableCell className="font-medium">{debt.description}</TableCell>
-                                            <TableCell>Bs. {(debt.amountUSD * activeRate).toFixed(2)}</TableCell>
+                                            <TableCell className="font-medium">{months.find(m => m.value === debt.month)?.label} {debt.year}</TableCell>
+                                            <TableCell>{debt.description}</TableCell>
+                                            <TableCell>$ {debt.amountUSD.toFixed(2)}</TableCell>
                                             <TableCell className="capitalize">
                                                 <Badge variant={debt.status === 'pending' ? 'warning' : 'success'}>
                                                     {debt.status === 'pending' ? 'Pendiente' : 'Pagada'}
@@ -414,6 +432,10 @@ export default function DebtManagementPage() {
                                                         </Button>
                                                     </DropdownMenuTrigger>
                                                     <DropdownMenuContent align="end">
+                                                        <DropdownMenuItem onClick={() => handleEditDebt(debt)}>
+                                                            <Edit className="mr-2 h-4 w-4" />
+                                                            Editar
+                                                        </DropdownMenuItem>
                                                         <DropdownMenuItem onClick={() => handleDeleteDebt(debt)} className="text-destructive">
                                                             <Trash2 className="mr-2 h-4 w-4" />
                                                             Eliminar
@@ -429,8 +451,8 @@ export default function DebtManagementPage() {
                     </CardContent>
                 </Card>
 
-                 {/* Add/Edit Debt Dialog */}
-                <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                 {/* Mass Debt Dialog */}
+                <Dialog open={isMassDebtDialogOpen} onOpenChange={setIsMassDebtDialogOpen}>
                     <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col">
                         <DialogHeader>
                             <DialogTitle>Agregar Deudas Masivas</DialogTitle>
@@ -474,8 +496,44 @@ export default function DebtManagementPage() {
                             </div>
                         </div>
                         <DialogFooter className="mt-auto pt-4 border-t">
-                            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
+                            <Button variant="outline" onClick={() => setIsMassDebtDialogOpen(false)}>Cancelar</Button>
                             <Button onClick={handleSaveMassDebt}>Generar Deudas</Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Edit Debt Dialog */}
+                <Dialog open={isEditDebtDialogOpen} onOpenChange={setIsEditDebtDialogOpen}>
+                    <DialogContent className="sm:max-w-md">
+                        <DialogHeader>
+                            <DialogTitle>Editar Deuda</DialogTitle>
+                             <DialogDescription>
+                                Modifique la descripción o el monto de la deuda para {debtToEdit ? `${months.find(m => m.value === debtToEdit.month)?.label} ${debtToEdit.year}` : ''}.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="grid gap-4 py-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="edit-description">Descripción</Label>
+                                <Input 
+                                    id="edit-description" 
+                                    value={currentDebtData.description} 
+                                    onChange={(e) => setCurrentDebtData({...currentDebtData, description: e.target.value })} 
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="edit-amountUSD">Monto (USD)</Label>
+                                <Input 
+                                    id="edit-amountUSD" 
+                                    type="number" 
+                                    value={currentDebtData.amountUSD} 
+                                    onChange={(e) => setCurrentDebtData({...currentDebtData, amountUSD: e.target.value })} 
+                                    placeholder="25.00" 
+                                />
+                            </div>
+                        </div>
+                        <DialogFooter>
+                            <Button variant="outline" onClick={() => setIsEditDebtDialogOpen(false)}>Cancelar</Button>
+                            <Button onClick={handleSaveSingleDebt}>Guardar Cambios</Button>
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
@@ -502,5 +560,3 @@ export default function DebtManagementPage() {
     // Fallback while loading or if view is invalid
     return null;
 }
-
-    
