@@ -1,26 +1,28 @@
 
 'use client';
 
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PlusCircle, MoreHorizontal, Edit, Trash2, FileUp, FileDown } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, Edit, Trash2, FileUp, FileDown, Loader2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 
 type Role = 'propietario' | 'administrador';
 
 type Owner = {
-    id: number;
+    id: string; // Firestore IDs are strings
     name: string;
     street: string;
     house: string;
@@ -29,20 +31,12 @@ type Owner = {
     role: Role;
 };
 
-const initialOwners: Owner[] = [
-    { id: 1, name: 'Ana Rodriguez', street: 'Calle 1', house: 'Casa 3', email: 'ana.r@email.com', balance: 50.00, role: 'propietario' },
-    { id: 2, name: 'Carlos Perez', street: 'Calle 2', house: 'Casa 5', email: 'carlos.p@email.com', balance: 0, role: 'propietario' },
-    { id: 3, name: 'Maria Garcia', street: 'Calle 3', house: 'Casa 1', email: 'maria.g@email.com', role: 'propietario' },
-    { id: 4, name: 'Luis Hernandez', street: 'Calle 1', house: 'Casa 2', email: 'luis.h@email.com', balance: 120.50, role: 'propietario' },
-    { id: 5, name: 'Sofia Martinez', street: 'Calle 8', house: 'Casa 14', role: 'propietario' },
-    { id: 6, name: 'Admin User', street: 'N/A', house: 'N/A', email: 'admin@condo.com', role: 'administrador' },
-];
-
-const emptyOwner: Owner = { id: 0, name: '', street: '', house: '', email: '', balance: 0, role: 'propietario' };
+const emptyOwner: Omit<Owner, 'id'> = { name: '', street: '', house: '', email: '', balance: 0, role: 'propietario' };
 
 const streets = Array.from({ length: 8 }, (_, i) => `Calle ${i + 1}`);
 
 const getHousesForStreet = (street: string) => {
+    if (!street) return [];
     const streetNumber = parseInt(street.replace('Calle ', ''));
     const houseCount = streetNumber === 1 ? 4 : 14;
     return Array.from({ length: houseCount }, (_, i) => `Casa ${i + 1}`);
@@ -50,13 +44,34 @@ const getHousesForStreet = (street: string) => {
 
 
 export default function PeopleManagementPage() {
-    const [owners, setOwners] = useState<Owner[]>(initialOwners);
+    const [owners, setOwners] = useState<Owner[]>([]);
+    const [loading, setLoading] = useState(true);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
-    const [currentOwner, setCurrentOwner] = useState<Owner>(emptyOwner);
+    const [currentOwner, setCurrentOwner] = useState<Omit<Owner, 'id'> & { id?: string }>(emptyOwner);
     const [ownerToDelete, setOwnerToDelete] = useState<Owner | null>(null);
     const importFileRef = useRef<HTMLInputElement>(null);
     const { toast } = useToast();
+
+     // --- Firestore Data Fetching ---
+    useEffect(() => {
+        const q = query(collection(db, "owners"));
+        const unsubscribe = onSnapshot(q, (querySnapshot) => {
+            const ownersData: Owner[] = [];
+            querySnapshot.forEach((doc) => {
+                ownersData.push({ id: doc.id, ...doc.data() } as Owner);
+            });
+            setOwners(ownersData.sort((a, b) => a.name.localeCompare(b.name)));
+            setLoading(false);
+        }, (error) => {
+            console.error("Error fetching owners: ", error);
+            toast({ variant: 'destructive', title: 'Error de Conexión', description: 'No se pudieron cargar los propietarios. Revisa la configuración de Firebase.' });
+            setLoading(false);
+        });
+
+        return () => unsubscribe(); // Cleanup subscription on unmount
+    }, [toast]);
+
 
     const houseOptions = useMemo(() => {
         if (!currentOwner.street) return [];
@@ -78,23 +93,45 @@ export default function PeopleManagementPage() {
         setIsDeleteConfirmationOpen(true);
     }
 
-    const confirmDelete = () => {
+    const confirmDelete = async () => {
         if (ownerToDelete) {
-            setOwners(owners.filter(o => o.id !== ownerToDelete.id));
-            setIsDeleteConfirmationOpen(false);
-            setOwnerToDelete(null);
+             try {
+                await deleteDoc(doc(db, "owners", ownerToDelete.id));
+                toast({ title: 'Propietario Eliminado', description: `${ownerToDelete.name} ha sido eliminado.` });
+            } catch (error) {
+                console.error("Error deleting document: ", error);
+                toast({ variant: 'destructive', title: 'Error', description: 'No se pudo eliminar el propietario.' });
+            } finally {
+                setIsDeleteConfirmationOpen(false);
+                setOwnerToDelete(null);
+            }
         }
     }
 
-    const handleSaveOwner = () => {
-        if (currentOwner.id === 0) { // New Owner
-            const newId = owners.length > 0 ? Math.max(...owners.map(o => o.id)) + 1 : 1;
-            setOwners([...owners, { ...currentOwner, id: newId }]);
-        } else { // Editing Owner
-            setOwners(owners.map(o => o.id === currentOwner.id ? currentOwner : o));
+    const handleSaveOwner = async () => {
+         if (!currentOwner.name || !currentOwner.street || !currentOwner.house) {
+            toast({ variant: 'destructive', title: 'Error de Validación', description: 'Nombre, calle y casa son obligatorios.' });
+            return;
         }
-        setIsDialogOpen(false);
-        setCurrentOwner(emptyOwner);
+
+        try {
+            if (currentOwner.id) { // Editing Owner
+                const ownerRef = doc(db, "owners", currentOwner.id);
+                const { id, ...dataToUpdate } = currentOwner;
+                await updateDoc(ownerRef, dataToUpdate);
+                toast({ title: 'Propietario Actualizado', description: 'Los datos han sido guardados en la base de datos.' });
+            } else { // New Owner
+                const { id, ...dataToAdd } = currentOwner;
+                await addDoc(collection(db, "owners"), dataToAdd);
+                toast({ title: 'Propietario Agregado', description: 'La nueva persona ha sido guardada en la base de datos.' });
+            }
+        } catch (error) {
+            console.error("Error saving owner: ", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron guardar los cambios en la base de datos.' });
+        } finally {
+            setIsDialogOpen(false);
+            setCurrentOwner(emptyOwner);
+        }
     };
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -107,11 +144,10 @@ export default function PeopleManagementPage() {
 
     const handleSelectChange = (field: 'street' | 'house' | 'role') => (value: string) => {
          const updatedOwner = { ...currentOwner, [field]: value };
-        // If street changes, reset house
         if (field === 'street' && value !== currentOwner.street) {
             updatedOwner.house = '';
         }
-        setCurrentOwner(updatedOwner as Owner);
+        setCurrentOwner(updatedOwner as typeof currentOwner);
     };
     
     const handleExportExcel = () => {
@@ -155,7 +191,7 @@ export default function PeopleManagementPage() {
         if (!file) return;
 
         const reader = new FileReader();
-        reader.onload = (event) => {
+        reader.onload = async (event) => {
             try {
                 const data = event.target?.result;
                 const workbook = XLSX.read(data, { type: 'binary' });
@@ -163,8 +199,7 @@ export default function PeopleManagementPage() {
                 const worksheet = workbook.Sheets[sheetName];
                 const json = XLSX.utils.sheet_to_json(worksheet, { header: ["name", "street", "house", "email", "balance", "role"], range: 1 });
                 
-                const newOwners = json.map((item: any, index) => ({
-                    id: (owners.length > 0 ? Math.max(...owners.map(o => o.id)) : 0) + index + 1,
+                const newOwners = json.map((item: any) => ({
                     name: item.name || 'Sin Nombre',
                     street: item.street || 'Sin Calle',
                     house: item.house || 'Sin Casa',
@@ -173,10 +208,13 @@ export default function PeopleManagementPage() {
                     role: (item.role === 'administrador' || item.role === 'propietario') ? item.role : 'propietario',
                 }));
                 
-                setOwners(prev => [...prev, ...newOwners]);
+                for (const ownerData of newOwners) {
+                    await addDoc(collection(db, "owners"), ownerData);
+                }
+
                 toast({
                     title: 'Importación Exitosa',
-                    description: `${newOwners.length} propietarios han sido agregados.`,
+                    description: `${newOwners.length} propietarios han sido agregados a la base de datos.`,
                     className: 'bg-green-100 border-green-400 text-green-800'
                 });
 
@@ -185,7 +223,7 @@ export default function PeopleManagementPage() {
                 toast({
                     variant: 'destructive',
                     title: 'Error de Importación',
-                    description: 'Hubo un problema al leer el archivo Excel. Asegúrate que el formato es correcto.',
+                    description: 'Hubo un problema al leer o guardar los datos. Asegúrate de que el formato es correcto.',
                 });
             }
         };
@@ -199,7 +237,7 @@ export default function PeopleManagementPage() {
             <div className="flex items-center justify-between gap-4 flex-wrap">
                 <div>
                     <h1 className="text-3xl font-bold font-headline">Gestión de Personas</h1>
-                    <p className="text-muted-foreground">Agrega, edita y elimina propietarios y residentes.</p>
+                    <p className="text-muted-foreground">Agrega, edita y consulta personas en la base de datos.</p>
                 </div>
                 <div className="flex gap-2 flex-wrap">
                     <Button onClick={handleImportClick} variant="outline">
@@ -227,58 +265,76 @@ export default function PeopleManagementPage() {
             </div>
 
             <Card>
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>Nombre</TableHead>
-                            <TableHead>Calle</TableHead>
-                            <TableHead>Casa</TableHead>
-                            <TableHead>Email</TableHead>
-                            <TableHead>Saldo a Favor (Bs.)</TableHead>
-                            <TableHead>Rol</TableHead>
-                            <TableHead className="text-right">Acciones</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {owners.map((owner) => (
-                            <TableRow key={owner.id}>
-                                <TableCell className="font-medium">{owner.name}</TableCell>
-                                <TableCell>{owner.street}</TableCell>
-                                <TableCell>{owner.house}</TableCell>
-                                <TableCell>{owner.email || '-'}</TableCell>
-                                <TableCell>{(owner.balance ?? 0).toFixed(2)}</TableCell>
-                                <TableCell className="capitalize">{owner.role}</TableCell>
-                                <TableCell className="text-right">
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                            <Button variant="ghost" className="h-8 w-8 p-0">
-                                                <span className="sr-only">Abrir menú</span>
-                                                <MoreHorizontal className="h-4 w-4" />
-                                            </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end">
-                                            <DropdownMenuItem onClick={() => handleEditOwner(owner)}>
-                                                <Edit className="mr-2 h-4 w-4" />
-                                                Editar
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => handleDeleteOwner(owner)} className="text-destructive">
-                                                <Trash2 className="mr-2 h-4 w-4" />
-                                                Eliminar
-                                            </DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
-                                </TableCell>
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
+                <CardContent className="p-0">
+                    <div className="overflow-x-auto">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Nombre</TableHead>
+                                    <TableHead>Calle</TableHead>
+                                    <TableHead>Casa</TableHead>
+                                    <TableHead>Email</TableHead>
+                                    <TableHead>Saldo a Favor (Bs.)</TableHead>
+                                    <TableHead>Rol</TableHead>
+                                    <TableHead className="text-right">Acciones</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {loading ? (
+                                    <TableRow>
+                                        <TableCell colSpan={7} className="h-24 text-center">
+                                            <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
+                                        </TableCell>
+                                    </TableRow>
+                                ) : owners.length === 0 ? (
+                                    <TableRow>
+                                        <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                                            No hay personas registradas.
+                                        </TableCell>
+                                    </TableRow>
+                                ) : (
+                                    owners.map((owner) => (
+                                        <TableRow key={owner.id}>
+                                            <TableCell className="font-medium">{owner.name}</TableCell>
+                                            <TableCell>{owner.street}</TableCell>
+                                            <TableCell>{owner.house}</TableCell>
+                                            <TableCell>{owner.email || '-'}</TableCell>
+                                            <TableCell>Bs. {(owner.balance ?? 0).toFixed(2)}</TableCell>
+                                            <TableCell className="capitalize">{owner.role}</TableCell>
+                                            <TableCell className="text-right">
+                                                <DropdownMenu>
+                                                    <DropdownMenuTrigger asChild>
+                                                        <Button variant="ghost" className="h-8 w-8 p-0">
+                                                            <span className="sr-only">Abrir menú</span>
+                                                            <MoreHorizontal className="h-4 w-4" />
+                                                        </Button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent align="end">
+                                                        <DropdownMenuItem onClick={() => handleEditOwner(owner)}>
+                                                            <Edit className="mr-2 h-4 w-4" />
+                                                            Editar
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem onClick={() => handleDeleteOwner(owner)} className="text-destructive focus:text-destructive focus:bg-destructive/10">
+                                                            <Trash2 className="mr-2 h-4 w-4" />
+                                                            Eliminar
+                                                        </DropdownMenuItem>
+                                                    </DropdownMenuContent>
+                                                </DropdownMenu>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
+                </CardContent>
             </Card>
 
             {/* Add/Edit Dialog */}
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                 <DialogContent className="sm:max-w-[425px]">
                     <DialogHeader>
-                        <DialogTitle>{currentOwner.id === 0 ? 'Agregar Nueva Persona' : 'Editar Persona'}</DialogTitle>
+                        <DialogTitle>{currentOwner.id ? 'Editar Persona' : 'Agregar Nueva Persona'}</DialogTitle>
                         <DialogDescription>
                             Completa la información aquí. Haz clic en guardar cuando termines.
                         </DialogDescription>
@@ -348,7 +404,7 @@ export default function PeopleManagementPage() {
                     <DialogHeader>
                         <DialogTitle>¿Estás seguro?</DialogTitle>
                         <DialogDescription>
-                            Esta acción no se puede deshacer. Esto eliminará permanentemente a <span className="font-semibold">{ownerToDelete?.name}</span>.
+                            Esta acción no se puede deshacer. Esto eliminará permanentemente a <span className="font-semibold">{ownerToDelete?.name}</span> de la base de datos.
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>
@@ -360,5 +416,7 @@ export default function PeopleManagementPage() {
 
         </div>
     );
+    
+}
 
     
