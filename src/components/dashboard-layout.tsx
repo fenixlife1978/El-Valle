@@ -2,8 +2,10 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Building2, LogOut, type LucideIcon, ChevronDown } from 'lucide-react';
+import { Building2, LogOut, type LucideIcon, ChevronDown, Loader2 } from 'lucide-react';
 import * as React from 'react';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -44,6 +46,11 @@ export type NavItem = {
   items?: Omit<NavItem, 'icon' | 'items'>[];
 };
 
+type CompanyInfo = {
+    name: string;
+    logo: string;
+};
+
 export function DashboardLayout({
   children,
   userName,
@@ -57,6 +64,17 @@ export function DashboardLayout({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [companyInfo, setCompanyInfo] = React.useState<CompanyInfo | null>(null);
+
+  React.useEffect(() => {
+    const settingsRef = doc(db, 'config', 'mainSettings');
+    const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
+        if (docSnap.exists()) {
+            setCompanyInfo(docSnap.data().companyInfo as CompanyInfo);
+        }
+    });
+    return () => unsubscribe();
+  }, []);
 
   const handleLogout = () => {
     // Mock logout
@@ -73,8 +91,8 @@ export function DashboardLayout({
       <Sidebar>
         <SidebarHeader>
           <div className="flex items-center gap-2 p-2">
-            <Building2 className="w-6 h-6 text-primary" />
-            <span className="font-semibold text-lg font-headline">CondoConnect</span>
+            {companyInfo?.logo ? <img src={companyInfo.logo} alt="Logo" className="w-8 h-8 rounded-md object-cover"/> : <Building2 className="w-6 h-6 text-primary" />}
+            <span className="font-semibold text-lg font-headline truncate">{companyInfo?.name || 'Cargando...'}</span>
           </div>
         </SidebarHeader>
         <SidebarContent>
@@ -160,7 +178,7 @@ export function DashboardLayout({
         </header>
         <main className="flex-1 p-4 md:p-8 bg-background">{children}</main>
         <footer className="bg-secondary text-secondary-foreground p-4 text-center text-sm">
-          © {new Date().getFullYear()} Residencias El Valle. Todos los derechos reservados.
+           © {new Date().getFullYear()} {companyInfo?.name || 'CondoConnect'}. Todos los derechos reservados.
         </footer>
       </SidebarInset>
     </SidebarProvider>

@@ -14,8 +14,10 @@ import { Upload, Save, Calendar as CalendarIcon, PlusCircle, Loader2 } from 'luc
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { doc, getDoc, setDoc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, arrayUnion, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+// In a real production app, use Firebase Storage for uploads
+// import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 type CompanyInfo = {
     name: string;
@@ -23,7 +25,7 @@ type CompanyInfo = {
     rif: string;
     phone: string;
     email: string;
-    logo: string;
+    logo: string; // Will store as data URL for simplicity
 };
 
 type ExchangeRate = {
@@ -40,17 +42,18 @@ type Settings = {
 }
 
 const emptyCompanyInfo: CompanyInfo = {
-    name: '',
+    name: 'Nombre de la Empresa',
     address: '',
     rif: '',
     phone: '',
     email: '',
-    logo: '/logo-placeholder.png'
+    logo: '/logo-placeholder.png' // A default placeholder
 };
 
 export default function SettingsPage() {
     const { toast } = useToast();
     const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
     const [companyInfo, setCompanyInfo] = useState<CompanyInfo>(emptyCompanyInfo);
     const [logoPreview, setLogoPreview] = useState<string | null>(null);
     const [condoFee, setCondoFee] = useState(0);
@@ -59,32 +62,30 @@ export default function SettingsPage() {
     const [newRateAmount, setNewRateAmount] = useState('');
 
     useEffect(() => {
-        const fetchSettings = async () => {
-            const settingsRef = doc(db, 'config', 'mainSettings');
-            try {
-                const docSnap = await getDoc(settingsRef);
-                if (docSnap.exists()) {
-                    const settings = docSnap.data() as Settings;
-                    setCompanyInfo(settings.companyInfo);
-                    setLogoPreview(settings.companyInfo.logo);
-                    setCondoFee(settings.condoFee);
-                    setExchangeRates(settings.exchangeRates || []);
-                } else {
-                    // Initialize with default/empty values if no settings doc exists
-                    await setDoc(settingsRef, {
-                        companyInfo: emptyCompanyInfo,
-                        condoFee: 25.00,
-                        exchangeRates: []
-                    });
-                }
-            } catch (error) {
-                console.error("Error fetching settings:", error);
-                toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron cargar las configuraciones.' });
-            } finally {
-                setLoading(false);
+        const settingsRef = doc(db, 'config', 'mainSettings');
+        const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
+            if (docSnap.exists()) {
+                const settings = docSnap.data() as Settings;
+                setCompanyInfo(settings.companyInfo);
+                setLogoPreview(settings.companyInfo.logo);
+                setCondoFee(settings.condoFee);
+                setExchangeRates(settings.exchangeRates || []);
+            } else {
+                // Initialize with default/empty values if no settings doc exists
+                setDoc(settingsRef, {
+                    companyInfo: emptyCompanyInfo,
+                    condoFee: 25.00,
+                    exchangeRates: []
+                });
             }
-        };
-        fetchSettings();
+            setLoading(false);
+        }, (error) => {
+            console.error("Error fetching settings:", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron cargar las configuraciones.' });
+            setLoading(false);
+        });
+
+        return () => unsubscribe();
     }, [toast]);
 
     const handleInfoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -94,12 +95,15 @@ export default function SettingsPage() {
     const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
+            if (file.size > 1 * 1024 * 1024) { // 1MB limit
+                 toast({ variant: 'destructive', title: 'Archivo muy grande', description: 'El logo no debe pesar más de 1MB.' });
+                return;
+            }
             const reader = new FileReader();
             reader.onloadend = () => {
-                setLogoPreview(reader.result as string);
-                // In a real app, you'd upload this file and save the URL
-                // For now, we'll save the base64 string
-                setCompanyInfo({ ...companyInfo, logo: reader.result as string });
+                const result = reader.result as string;
+                setLogoPreview(result);
+                setCompanyInfo({ ...companyInfo, logo: result });
             };
             reader.readAsDataURL(file);
         }
@@ -122,7 +126,7 @@ export default function SettingsPage() {
             await updateDoc(settingsRef, {
                 exchangeRates: arrayUnion(newRate)
             });
-            setExchangeRates(prev => [...prev, newRate]);
+            // No need to set state here, onSnapshot will do it
             setNewRateDate(undefined);
             setNewRateAmount('');
             toast({ title: 'Tasa Agregada', description: 'La nueva tasa de cambio ha sido añadida.' });
@@ -137,7 +141,7 @@ export default function SettingsPage() {
         try {
             const settingsRef = doc(db, 'config', 'mainSettings');
             await updateDoc(settingsRef, { exchangeRates: updatedRates });
-            setExchangeRates(updatedRates);
+             // No need to set state here, onSnapshot will do it
              toast({ title: 'Tasa Activada', description: 'La tasa seleccionada ahora es la activa.' });
         } catch (error) {
             console.error("Error activating rate:", error);
@@ -146,6 +150,7 @@ export default function SettingsPage() {
     }
     
     const handleSaveChanges = async () => {
+        setSaving(true);
         try {
             const settingsRef = doc(db, 'config', 'mainSettings');
             await updateDoc(settingsRef, {
@@ -160,6 +165,8 @@ export default function SettingsPage() {
         } catch(error) {
              console.error("Error saving settings:", error);
              toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron guardar los cambios.' });
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -188,8 +195,8 @@ export default function SettingsPage() {
                         </CardHeader>
                         <CardContent className="space-y-4">
                              <div className="flex items-center gap-6">
-                                <div className="w-24 h-24 rounded-full bg-muted flex items-center justify-center overflow-hidden">
-                                   {logoPreview ? <img src={logoPreview} alt="Logo" className="w-full h-full object-cover" /> : <span>Logo</span>}
+                                <div className="w-24 h-24 rounded-full bg-muted flex items-center justify-center overflow-hidden border">
+                                   {logoPreview ? <img src={logoPreview} alt="Logo" className="w-full h-full object-cover" /> : <span className="text-sm text-muted-foreground">Logo</span>}
                                 </div>
                                 <div className="space-y-2">
                                      <Label htmlFor="logo-upload">Logo de la Empresa</Label>
@@ -199,7 +206,7 @@ export default function SettingsPage() {
                                             <Upload className="mr-2 h-4 w-4"/> Subir Logo
                                         </Button>
                                      </div>
-                                     <p className="text-xs text-muted-foreground">PNG o JPG, recomendado 200x200px.</p>
+                                     <p className="text-xs text-muted-foreground">PNG o JPG. Recomendado 200x200px, max 1MB.</p>
                                 </div>
                              </div>
                             <div className="grid md:grid-cols-2 gap-4">
@@ -306,8 +313,8 @@ export default function SettingsPage() {
             </div>
             
             <div className="flex justify-end">
-                <Button onClick={handleSaveChanges}>
-                    <Save className="mr-2 h-4 w-4"/>
+                <Button onClick={handleSaveChanges} disabled={saving}>
+                    {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4"/>}
                     Guardar Todos los Cambios
                 </Button>
             </div>

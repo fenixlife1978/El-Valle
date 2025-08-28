@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Building2, Loader2, User, Wrench } from "lucide-react";
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,13 +14,37 @@ import { useToast } from "@/hooks/use-toast";
 
 type Role = "owner" | "admin" | null;
 
+type CompanyInfo = {
+  name: string;
+  logo: string;
+};
+
 export default function LoginPage() {
   const [selectedRole, setSelectedRole] = useState<Role>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
+  const [isCompanyInfoLoading, setIsCompanyInfoLoading] = useState(true);
   const router = useRouter();
   const { toast } = useToast();
+
+  useEffect(() => {
+    const fetchCompanyInfo = async () => {
+      try {
+        const settingsRef = doc(db, 'config', 'mainSettings');
+        const docSnap = await getDoc(settingsRef);
+        if (docSnap.exists()) {
+          setCompanyInfo(docSnap.data().companyInfo as CompanyInfo);
+        }
+      } catch (error) {
+        console.error("Error fetching company info:", error);
+      } finally {
+        setIsCompanyInfoLoading(false);
+      }
+    };
+    fetchCompanyInfo();
+  }, []);
 
   const handleRoleSelect = (role: Role) => {
     setSelectedRole(role);
@@ -104,7 +130,7 @@ export default function LoginPage() {
             <Input
               id="email"
               type="email"
-              placeholder={selectedRole === 'admin' ? "vallecondo@gmail.com" : "tu@email.com"}
+              placeholder={selectedRole === 'admin' ? "admin@email.com" : "tu@email.com"}
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -142,9 +168,11 @@ export default function LoginPage() {
       <Card className="w-full max-w-4xl shadow-2xl">
         <CardHeader className="text-center bg-primary text-primary-foreground p-8 rounded-t-lg">
           <div className="mx-auto bg-white rounded-full p-4 w-24 h-24 flex items-center justify-center mb-4">
-            <Building2 className="w-12 h-12 text-primary" />
+            {isCompanyInfoLoading ? <Loader2 className="w-12 h-12 text-primary animate-spin" /> :
+              companyInfo?.logo ? <img src={companyInfo.logo} alt="Logo" className="w-full h-full object-cover rounded-full" /> : <Building2 className="w-12 h-12 text-primary" />
+            }
           </div>
-          <CardTitle className="text-3xl font-headline">Bienvenido a CondoConnect</CardTitle>
+          <CardTitle className="text-3xl font-headline">Bienvenido a {isCompanyInfoLoading ? '...' : companyInfo?.name || 'CondoConnect'}</CardTitle>
           <CardDescription className="text-primary-foreground/80 text-lg">
             Ingresa a tu cuenta de condominio
           </CardDescription>
