@@ -24,7 +24,8 @@ type Payment = {
 export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
-    paymentsThisMonth: 0,
+    paymentsThisMonthBs: 0,
+    paymentsThisMonthUsd: 0,
     pendingPayments: 0,
     totalUnits: 0,
   });
@@ -39,20 +40,25 @@ export default function AdminDashboardPage() {
 
     const paymentsQuery = query(collection(db, "payments"));
     const paymentsUnsubscribe = onSnapshot(paymentsQuery, (snapshot) => {
-        let monthTotal = 0;
+        let monthTotalBs = 0;
+        let monthTotalUsd = 0;
         let pendingCount = 0;
         const now = new Date();
         snapshot.forEach(doc => {
             const payment = doc.data();
             const paymentDate = new Date(payment.paymentDate.seconds * 1000);
             if (payment.status === 'aprobado' && paymentDate.getMonth() === now.getMonth() && paymentDate.getFullYear() === now.getFullYear()) {
-                monthTotal += Number(payment.totalAmount);
+                const amountBs = Number(payment.totalAmount);
+                monthTotalBs += amountBs;
+                if (payment.exchangeRate && payment.exchangeRate > 0) {
+                    monthTotalUsd += amountBs / payment.exchangeRate;
+                }
             }
             if (payment.status === 'pendiente') {
                 pendingCount++;
             }
         });
-        setStats(prev => ({ ...prev, paymentsThisMonth: monthTotal, pendingPayments: pendingCount }));
+        setStats(prev => ({ ...prev, paymentsThisMonthBs: monthTotalBs, paymentsThisMonthUsd: monthTotalUsd, pendingPayments: pendingCount }));
     });
 
     // Fetch recent payments
@@ -94,7 +100,12 @@ export default function AdminDashboardPage() {
             <Landmark className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            {loading ? <Loader2 className="h-6 w-6 animate-spin" /> : <div className="text-2xl font-bold">Bs. {stats.paymentsThisMonth.toLocaleString('es-VE', {minimumFractionDigits: 2})}</div>}
+            {loading ? <Loader2 className="h-6 w-6 animate-spin" /> : (
+              <div>
+                <div className="text-2xl font-bold">Bs. {stats.paymentsThisMonthBs.toLocaleString('es-VE', {minimumFractionDigits: 2})}</div>
+                <p className="text-xs text-muted-foreground">~ ${stats.paymentsThisMonthUsd.toLocaleString('en-US', {minimumFractionDigits: 2})}</p>
+              </div>
+            )}
           </CardContent>
         </Card>
         <Card>
