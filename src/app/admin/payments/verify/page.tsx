@@ -11,22 +11,38 @@ import { CheckCircle2, XCircle, MoreHorizontal, Eye, Printer, Filter, Loader2 } 
 import { useToast } from '@/hooks/use-toast';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import { collection, onSnapshot, query, doc, updateDoc, getDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, doc, updateDoc, getDoc, writeBatch, runTransaction, where, orderBy, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
 type PaymentStatus = 'pendiente' | 'aprobado' | 'rechazado';
-type PaymentType = 'Transferencia' | 'Pago Móvil';
+type PaymentMethod = 'transferencia' | 'movil';
 
-type Payment = {
+type FullPayment = {
   id: string;
-  user?: string; // To be enriched
+  beneficiaries: { ownerId: string; amount: number; house?: string; }[];
+  totalAmount: number;
+  exchangeRate: number;
+  paymentDate: Timestamp;
+  status: PaymentStatus;
+  user?: string; 
   unit: string;
   amount: number;
   date: string;
   bank: string;
-  type: PaymentType;
+  type: PaymentMethod;
   reference: string;
-  status: PaymentStatus;
+};
+
+type Debt = {
+    id: string;
+    ownerId: string;
+    year: number;
+    month: number;
+    amountUSD: number;
+    description: string;
+    status: 'pending' | 'paid';
+    paidAmountUSD?: number;
+    paymentDate?: Timestamp;
 };
 
 type CompanyInfo = {
@@ -51,7 +67,7 @@ const statusTextMap: { [key in PaymentStatus]: string } = {
 };
 
 export default function VerifyPaymentsPage() {
-  const [payments, setPayments] = useState<Payment[]>([]);
+  const [payments, setPayments] = useState<FullPayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<PaymentStatus | 'todos'>('todos');
   const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
@@ -60,7 +76,7 @@ export default function VerifyPaymentsPage() {
   useEffect(() => {
     const q = query(collection(db, "payments"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-        const paymentsData: Payment[] = [];
+        const paymentsData: FullPayment[] = [];
         snapshot.forEach(doc => {
             const data = doc.data();
             paymentsData.push({
@@ -72,6 +88,11 @@ export default function VerifyPaymentsPage() {
                 type: data.paymentMethod,
                 reference: data.reference,
                 status: data.status,
+                // Full data for processing
+                beneficiaries: data.beneficiaries,
+                totalAmount: data.totalAmount,
+                exchangeRate: data.exchangeRate,
+                paymentDate: data.paymentDate,
             });
         });
         setPayments(paymentsData);
@@ -95,28 +116,103 @@ export default function VerifyPaymentsPage() {
   }, [toast]);
 
 
-  const handleStatusChange = async (id: string, status: PaymentStatus) => {
+  const handleStatusChange = async (id: string, newStatus: PaymentStatus) => {
     const paymentRef = doc(db, 'payments', id);
-    try {
-        await updateDoc(paymentRef, { status });
-        toast({
-            title: 'Estado actualizado',
-            description: `El pago ha sido marcado como ${statusTextMap[status].toLowerCase()}.`,
-            className: 'bg-green-100 border-green-400 text-green-800'
-        });
-    } catch (error) {
-        console.error("Error updating status: ", error);
-        toast({ variant: 'destructive', title: 'Error', description: 'No se pudo actualizar el estado.' });
+    const paymentToProcess = payments.find(p => p.id === id);
+
+    if (!paymentToProcess) {
+        toast({ variant: 'destructive', title: 'Error', description: 'Pago no encontrado.' });
+        return;
+    }
+    
+    if (newStatus === 'rechazado') {
+        try {
+            await updateDoc(paymentRef, { status: 'rechazado' });
+            toast({ title: 'Pago Rechazado', description: `El pago ha sido marcado como rechazado.` });
+        } catch (error) {
+            console.error("Error rejecting payment: ", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo actualizar el estado.' });
+        }
+        return;
+    }
+
+    if (newStatus === 'aprobado') {
+        try {
+            await runTransaction(db, async (transaction) => {
+                const paymentDoc = await transaction.get(paymentRef);
+                if (!paymentDoc.exists() || paymentDoc.data().status === 'aprobado') {
+                    throw new Error("El pago no existe o ya fue aprobado.");
+                }
+
+                const paymentData = paymentDoc.data() as FullPayment;
+                const paymentAmountUSD = paymentData.totalAmount / paymentData.exchangeRate;
+
+                // Process each beneficiary of the payment
+                for (const beneficiary of paymentData.beneficiaries) {
+                    const ownerRef = doc(db, "owners", beneficiary.ownerId);
+                    const ownerDoc = await transaction.get(ownerRef);
+
+                    if (!ownerDoc.exists()) {
+                       throw new Error(`Propietario con ID ${beneficiary.ownerId} no encontrado.`);
+                    }
+                    
+                    const ownerBalanceUSD = ownerDoc.data().balance || 0;
+                    const beneficiaryAmountUSD = beneficiary.amount / paymentData.exchangeRate;
+                    let availableFundsUSD = ownerBalanceUSD + beneficiaryAmountUSD;
+                    
+                    const debtsQuery = query(
+                        collection(db, "debts"),
+                        where("ownerId", "==", beneficiary.ownerId),
+                        where("status", "==", "pending"),
+                        orderBy("year", "asc"),
+                        orderBy("month", "asc")
+                    );
+                    const debtsSnapshot = await getDocs(debtsQuery); // Note: getDocs inside transaction is not ideal, but necessary here. Better with a cloud function.
+                    
+                    const pendingDebts: Debt[] = [];
+                    debtsSnapshot.forEach(doc => pendingDebts.push({id: doc.id, ...doc.data()} as Debt));
+
+                    for (const debt of pendingDebts) {
+                        if (availableFundsUSD >= debt.amountUSD) {
+                            availableFundsUSD -= debt.amountUSD;
+                            const debtRef = doc(db, "debts", debt.id);
+                            transaction.update(debtRef, { 
+                                status: 'paid',
+                                paidAmountUSD: debt.amountUSD,
+                                paymentDate: paymentData.paymentDate,
+                            });
+                        } else {
+                            break; 
+                        }
+                    }
+                    
+                    transaction.update(ownerRef, { balance: availableFundsUSD });
+                }
+
+                // Finally, update the payment status
+                transaction.update(paymentRef, { status: 'aprobado' });
+            });
+            
+            toast({
+                title: 'Pago Aprobado y Conciliado',
+                description: 'Las deudas han sido saldadas y el saldo actualizado.',
+                className: 'bg-green-100 border-green-400 text-green-800'
+            });
+
+        } catch (error) {
+            console.error("Error processing payment approval: ", error);
+            const errorMessage = error instanceof Error ? error.message : 'No se pudo aprobar y conciliar el pago.';
+            toast({ variant: 'destructive', title: 'Error en la Transacción', description: errorMessage });
+        }
     }
   };
 
-  const generateReceipt = (payment: Payment) => {
+  const generateReceipt = (payment: FullPayment) => {
     const doc = new jsPDF();
     const pageHeight = doc.internal.pageSize.getHeight();
     const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 14;
 
-    // --- PDF Header ---
     if (companyInfo?.logo) {
         doc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25);
     }
@@ -140,13 +236,11 @@ export default function VerifyPaymentsPage() {
     doc.setLineWidth(0.5);
     doc.line(margin, margin + 32, pageWidth - margin, margin + 32);
 
-    // --- PDF Title ---
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.text('Recibo de Pago de Condominio', pageWidth / 2, margin + 45, { align: 'center' });
 
 
-    // --- PDF Body ---
     (doc as any).autoTable({
         startY: margin + 55,
         head: [['Concepto', 'Detalle']],

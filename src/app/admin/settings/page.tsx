@@ -213,10 +213,10 @@ export default function SettingsPage() {
             const settingsRef = doc(db, 'config', 'mainSettings');
             const dataToUpdate: Partial<Settings> = {
                 companyInfo,
-                condoFee,
+                condoFee: Number(condoFee),
             }
             if (isFeeChanged) {
-                dataToUpdate.lastCondoFee = lastCondoFee;
+                dataToUpdate.lastCondoFee = Number(lastCondoFee);
             }
 
             await updateDoc(settingsRef, dataToUpdate);
@@ -263,8 +263,6 @@ export default function SettingsPage() {
                 collection(db, "debts"), 
                 where("status", "==", "paid"),
                 where("description", "==", "Cuota de Condominio"),
-                // This is tricky in Firestore, we query all paid and filter in client
-                // A better approach would be a Cloud Function with more complex querying
             );
             const querySnapshot = await getDocs(q);
 
@@ -273,12 +271,15 @@ export default function SettingsPage() {
 
             querySnapshot.forEach(doc => {
                 const debt = doc.data() as Debt;
-                const isFutureOrCurrentMonth = debt.year > currentYear || (debt.year === currentYear && debt.month >= currentMonth);
-                
-                // We assume paidAmountUSD exists from a proper payment reconciliation process
+                const paidDebtDate = debt.paymentDate ? debt.paymentDate.toDate() : new Date(0);
+
+                // We adjust debts paid in the current month or for future months
+                const isPaidThisMonthOrFuture = paidDebtDate.getFullYear() > currentYear || 
+                               (paidDebtDate.getFullYear() === currentYear && paidDebtDate.getMonth() + 1 >= currentMonth);
+
                 const paidAmount = debt.paidAmountUSD || lastCondoFee; 
 
-                if (isFutureOrCurrentMonth && paidAmount < condoFee) {
+                if (isPaidThisMonthOrFuture && paidAmount < condoFee) {
                     const adjustmentAmount = condoFee - paidAmount;
                     const adjustmentDebtRef = doc(collection(db, "debts"));
                     batch.set(adjustmentDebtRef, {
@@ -289,20 +290,24 @@ export default function SettingsPage() {
                         description: `Ajuste por aumento de cuota`,
                         status: 'pending'
                     });
+
+                    const ownerRef = doc(db, "owners", debt.ownerId);
+                    batch.update(ownerRef, { balance: -adjustmentAmount });
+
                     adjustmentsCount++;
                 }
             });
 
             if (adjustmentsCount > 0) {
                 await batch.commit();
-                toast({title: 'Ajuste Completado', description: `${adjustmentsCount} deudas por ajuste han sido generadas.`});
+                toast({title: 'Ajuste Completado', description: `${adjustmentsCount} deudas por ajuste han sido generadas y saldos actualizados.`});
             } else {
                 toast({title: 'Sin Ajustes', description: 'No se encontraron cuotas pagadas por adelantado que requieran ajuste.'});
             }
 
-            // Update lastCondoFee in settings to prevent re-running this adjustment
             const settingsRef = doc(db, 'config', 'mainSettings');
-            await updateDoc(settingsRef, { lastCondoFee: condoFee });
+            await updateDoc(settingsRef, { lastCondoFee: condoFee, condoFee: condoFee });
+            setIsFeeChanged(false);
 
         } catch (error) {
              console.error("Error running fee adjustment:", error);
@@ -380,7 +385,7 @@ export default function SettingsPage() {
                             <CardTitle>Gestión de Cuota Condominial</CardTitle>
                             <CardDescription>Define el monto y las reglas de vencimiento de la cuota mensual.</CardDescription>
                         </CardHeader>
-                        <CardContent className="space-y-4">
+                        <CardContent>
                             <div className="space-y-2">
                                 <Label htmlFor="condoFee">Monto de la Cuota Mensual (USD)</Label>
                                 <Input 
@@ -391,24 +396,24 @@ export default function SettingsPage() {
                                     placeholder="0.00"
                                 />
                             </div>
-                            <CardFooter className="p-0 pt-4 flex-col items-start gap-4">
-                                <div className="p-4 bg-muted/50 rounded-lg flex items-start gap-3 text-sm text-muted-foreground w-full">
-                                    <AlertTriangle className="h-5 w-5 mt-0.5 text-orange-500 shrink-0"/>
-                                    <div>
-                                        <p><strong>Regla de Vencimiento:</strong> La cuota del mes en curso vence los <strong>días 5 de cada mes</strong>.</p>
-                                        <p className="mt-1">El día 6, el sistema debería generar automáticamente la deuda a los propietarios que no hayan cancelado. Esta automatización requiere configuración en el servidor (backend).</p>
-                                    </div>
-                                </div>
-                                <Button onClick={runFeeAdjustment} disabled={!isFeeChanged || condoFee <= lastCondoFee || isAdjustmentRunning}>
-                                    {isAdjustmentRunning ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <FileCog className="mr-2 h-4 w-4"/>}
-                                    Ejecutar Ajuste por Aumento de Cuota
-                                </Button>
-                                <p className="text-xs text-muted-foreground">
-                                    Esta acción genera deudas por diferencia a quienes pagaron meses por adelantado con una cuota anterior. 
-                                    Úselo después de guardar un aumento en la cuota.
-                                </p>
-                            </CardFooter>
                         </CardContent>
+                        <CardFooter className="flex-col items-start gap-4">
+                            <div className="p-4 bg-muted/50 rounded-lg flex items-start gap-3 text-sm text-muted-foreground w-full">
+                                <AlertTriangle className="h-5 w-5 mt-0.5 text-orange-500 shrink-0"/>
+                                <div>
+                                    <p><strong>Regla de Vencimiento:</strong> La cuota del mes en curso vence los <strong>días 5 de cada mes</strong>.</p>
+                                    <p className="mt-1">El día 6, el sistema debería generar automáticamente la deuda a los propietarios que no hayan cancelado. Esta automatización requiere configuración en el servidor (backend).</p>
+                                </div>
+                            </div>
+                            <Button onClick={runFeeAdjustment} disabled={!isFeeChanged || condoFee <= lastCondoFee || isAdjustmentRunning}>
+                                {isAdjustmentRunning ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <FileCog className="mr-2 h-4 w-4"/>}
+                                Ejecutar Ajuste por Aumento de Cuota
+                            </Button>
+                            <p className="text-xs text-muted-foreground">
+                                Esta acción genera deudas por diferencia a quienes pagaron meses por adelantado con una cuota anterior. 
+                                Úselo después de guardar un aumento en la cuota.
+                            </p>
+                        </CardFooter>
                     </Card>
                 </div>
 
