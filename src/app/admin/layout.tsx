@@ -9,13 +9,22 @@ import {
     Wrench,
     Megaphone,
     Settings,
+    FileCheck2,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
 
 const adminNavItems: NavItem[] = [
     { href: "/admin/dashboard", icon: Home, label: "Dashboard" },
-    { href: "/admin/payments", icon: Landmark, label: "Pagos" },
+    { 
+      href: "/admin/payments", 
+      icon: Landmark, 
+      label: "Pagos",
+      items: [
+        { href: "/admin/payments", label: "Reportar Pago" },
+        { href: "/admin/payments/verify", label: "Verificar Pagos" },
+      ]
+    },
     { href: "#", icon: Building, label: "Unidades" },
     { href: "/admin/people", icon: Users, label: "Personas" },
     { href: "#", icon: CalendarCheck, label: "Reservas" },

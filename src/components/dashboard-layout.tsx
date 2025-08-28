@@ -2,10 +2,16 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Building2, LogOut, type LucideIcon } from 'lucide-react';
+import { Building2, LogOut, type LucideIcon, ChevronDown } from 'lucide-react';
+import * as React from 'react';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import {
   SidebarProvider,
   Sidebar,
@@ -17,6 +23,9 @@ import {
   SidebarFooter,
   SidebarTrigger,
   SidebarInset,
+  SidebarMenuSub,
+  SidebarMenuSubItem,
+  SidebarMenuSubButton,
 } from '@/components/ui/sidebar';
 import {
   DropdownMenu,
@@ -26,11 +35,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { cn } from '@/lib/utils';
 
 export type NavItem = {
   href: string;
   icon: LucideIcon;
   label: string;
+  items?: Omit<NavItem, 'icon' | 'items'>[];
 };
 
 export function DashboardLayout({
@@ -52,6 +63,11 @@ export function DashboardLayout({
     router.push('/');
   };
 
+  const isSubItemActive = (parentHref: string, items?: Omit<NavItem, 'icon' | 'items'>[]) => {
+    if (pathname === parentHref) return true;
+    return items?.some(item => pathname === item.href) ?? false;
+  }
+
   return (
     <SidebarProvider>
       <Sidebar>
@@ -63,20 +79,53 @@ export function DashboardLayout({
         </SidebarHeader>
         <SidebarContent>
           <SidebarMenu>
-            {navItems.map((item) => (
-              <SidebarMenuItem key={item.label}>
-                <SidebarMenuButton
-                  asChild
-                  isActive={pathname === item.href}
-                  tooltip={{ children: item.label }}
-                >
-                  <Link href={item.href}>
-                    <item.icon />
-                    <span>{item.label}</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            ))}
+            {navItems.map((item) => 
+                item.items ? (
+                  <Collapsible key={item.label} defaultOpen={isSubItemActive(item.href, item.items)}>
+                    <SidebarMenuItem>
+                      <CollapsibleTrigger asChild>
+                          <SidebarMenuButton
+                            isActive={isSubItemActive(item.href, item.items)}
+                            tooltip={{ children: item.label }}
+                            className="justify-between"
+                          >
+                            <div className='flex gap-2 items-center'>
+                              <item.icon />
+                              <span>{item.label}</span>
+                            </div>
+                            <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200 group-data-[state=open]:-rotate-180" />
+                          </SidebarMenuButton>
+                      </CollapsibleTrigger>
+                    </SidebarMenuItem>
+                    <CollapsibleContent>
+                       <SidebarMenuSub>
+                        {item.items.map(subItem => (
+                          <SidebarMenuSubItem key={subItem.label}>
+                             <Link href={subItem.href} passHref legacyBehavior>
+                                <SidebarMenuSubButton isActive={pathname === subItem.href}>
+                                  <span>{subItem.label}</span>
+                                </SidebarMenuSubButton>
+                            </Link>
+                          </SidebarMenuSubItem>
+                        ))}
+                      </SidebarMenuSub>
+                    </CollapsibleContent>
+                  </Collapsible>
+                ) : (
+                  <SidebarMenuItem key={item.label}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={pathname === item.href}
+                        tooltip={{ children: item.label }}
+                      >
+                        <Link href={item.href}>
+                          <item.icon />
+                          <span>{item.label}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )
+            )}
           </SidebarMenu>
         </SidebarContent>
         <SidebarFooter>
