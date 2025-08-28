@@ -11,7 +11,7 @@ import { CheckCircle2, XCircle, MoreHorizontal, Eye, Printer, Filter, Loader2 } 
 import { useToast } from '@/hooks/use-toast';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import { collection, onSnapshot, query, doc, updateDoc, getDoc, writeBatch, runTransaction, where, orderBy, Timestamp, getDocs, addDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, doc, updateDoc, getDoc, writeBatch, runTransaction, where, orderBy, Timestamp, getDocs, addDoc, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { addMonths, format } from 'date-fns';
 
@@ -32,6 +32,7 @@ type FullPayment = {
   bank: string;
   type: PaymentMethod;
   reference: string;
+  reportedBy: string;
 };
 
 type Debt = {
@@ -121,6 +122,7 @@ export default function VerifyPaymentsPage() {
                 totalAmount: data.totalAmount,
                 exchangeRate: data.exchangeRate,
                 paymentDate: data.paymentDate,
+                reportedBy: data.reportedBy
             });
         });
 
@@ -185,18 +187,16 @@ export default function VerifyPaymentsPage() {
                     const debtsQuery = query(
                         collection(db, "debts"),
                         where("ownerId", "==", beneficiary.ownerId),
-                        where("status", "==", "pending")
+                        where("status", "==", "pending"),
+                        orderBy("year", "asc"),
+                        orderBy("month", "asc")
                     );
                     
                     const debtsSnapshot = await getDocs(debtsQuery);
                     
-                    const pendingDebts: Debt[] = [];
-                    debtsSnapshot.forEach(doc => pendingDebts.push({id: doc.id, ...doc.data()} as Debt));
+                    const pendingDebts: Debt[] = debtsSnapshot.docs.map(doc => ({id: doc.id, ...doc.data()} as Debt));
                     
                     if (pendingDebts.length > 0) {
-                        // Logic for paying existing debts
-                        pendingDebts.sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month);
-
                         for (const debt of pendingDebts) {
                             if (availableFundsUSD >= debt.amountUSD) {
                                 availableFundsUSD -= debt.amountUSD;
@@ -207,27 +207,36 @@ export default function VerifyPaymentsPage() {
                                     paymentDate: paymentData.paymentDate,
                                 });
                             } else {
+                                // If funds don't cover the next full debt, stop processing.
+                                // The remaining availableFundsUSD will become the new balance.
                                 break; 
                             }
                         }
                     } else {
-                        // New logic for advance payments
+                        // Logic for advance payments if no pending debts
                         const settingsRef = doc(db, 'config', 'mainSettings');
                         const settingsDoc = await transaction.get(settingsRef);
                         if (!settingsDoc.exists()) throw new Error("Configuraciones del sistema no encontradas.");
                         
                         const condoFeeUSD = settingsDoc.data().condoFee || 0;
-                        if (condoFeeUSD <= 0) throw new Error("La cuota de condominio no está configurada o es cero.");
+                        if (condoFeeUSD <= 0) {
+                             // If condo fee isn't set, just add to balance and stop.
+                             transaction.update(ownerRef, { balance: availableFundsUSD });
+                             transaction.update(paymentRef, { status: 'aprobado' });
+                             return; // Exit this beneficiary's loop
+                        }
 
                         let lastDebtDate;
                         const lastDebtQuery = query(collection(db, 'debts'), where('ownerId', '==', beneficiary.ownerId), orderBy('year', 'desc'), orderBy('month', 'desc'), limit(1));
                         const lastDebtSnapshot = await getDocs(lastDebtQuery);
+                        
                         if (!lastDebtSnapshot.empty) {
                             const lastDebt = lastDebtSnapshot.docs[0].data();
                             lastDebtDate = new Date(lastDebt.year, lastDebt.month - 1);
                         } else {
                             lastDebtDate = new Date(); // Start from current month if no debts exist
                             lastDebtDate.setDate(1); // Set to the first day to avoid month-end issues
+                            lastDebtDate = addMonths(lastDebtDate, -1); // Start generating for the *current* month.
                         }
 
                         while (availableFundsUSD >= condoFeeUSD) {
@@ -251,9 +260,11 @@ export default function VerifyPaymentsPage() {
                         }
                     }
                     
+                    // Whatever is left in availableFundsUSD is the new balance.
                     transaction.update(ownerRef, { balance: availableFundsUSD });
                 }
 
+                // Finally, mark the payment itself as approved.
                 transaction.update(paymentRef, { status: 'aprobado' });
             });
             
@@ -271,11 +282,28 @@ export default function VerifyPaymentsPage() {
     }
   };
 
-  const generateReceipt = (payment: FullPayment) => {
+  const generateReceipt = async (payment: FullPayment) => {
     const doc = new jsPDF();
     const pageHeight = doc.internal.pageSize.getHeight();
     const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 14;
+
+    // Fetch the primary owner's name for the receipt
+    let ownerName = 'No disponible';
+    let ownerUnit = 'N/A';
+    
+    const ownerId = payment.reportedBy || payment.beneficiaries?.[0]?.ownerId;
+    if (ownerId) {
+        const ownerRef = doc(db, 'owners', ownerId);
+        const ownerSnap = await getDoc(ownerRef);
+        if (ownerSnap.exists()) {
+            const ownerData = ownerSnap.data();
+            ownerName = ownerData.name;
+            const property = (ownerData.properties && ownerData.properties.length > 0) ? ownerData.properties[0] : null;
+            ownerUnit = property ? `${property.street} - ${property.house}` : 'N/A';
+        }
+    }
+
 
     if (companyInfo?.logo) {
         try {
@@ -313,8 +341,8 @@ export default function VerifyPaymentsPage() {
         head: [['Concepto', 'Detalle']],
         body: [
             ['ID de Transacción', payment.id],
-            ['Propietario', payment.user || 'No disponible'],
-            ['Unidad', payment.unit],
+            ['Propietario', ownerName],
+            ['Unidad', ownerUnit],
             ['Fecha de Pago', new Date(payment.date).toLocaleDateString('es-VE')],
             ['Monto Pagado', `Bs. ${payment.amount.toFixed(2)}`],
             ['Banco Emisor', payment.bank],
@@ -326,7 +354,7 @@ export default function VerifyPaymentsPage() {
         headStyles: { fillColor: [30, 80, 180] },
     });
 
-    doc.save(`recibo-${payment.unit}-${payment.id.substring(0,5)}.pdf`);
+    doc.save(`recibo-${ownerUnit}-${payment.id.substring(0,5)}.pdf`);
   };
 
   const filteredPayments = payments.filter(p => filter === 'todos' || p.status === filter);
