@@ -103,8 +103,6 @@ export default function ReportsPage() {
     const [endDate, setEndDate] = useState<Date | undefined>();
     const [selectedOwner, setSelectedOwner] = useState('');
     const [delinquencyPeriod, setDelinquencyPeriod] = useState('');
-    const [statementStartDate, setStatementStartDate] = useState<Date | undefined>();
-    const [statementEndDate, setStatementEndDate] = useState<Date | undefined>();
 
     // --- Chart State ---
     const [incomeChartData, setIncomeChartData] = useState<ChartData[]>([]);
@@ -313,37 +311,35 @@ export default function ReportsPage() {
     };
 
     const generateIndividualStatement = async () => {
-        if (!selectedOwner || !statementStartDate || !statementEndDate) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Por favor, seleccione propietario y rango de fechas.' });
+        if (!selectedOwner) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Por favor, seleccione un propietario.' });
             return;
         }
 
         const owner = owners.find(o => o.id === selectedOwner);
         if (!owner) return;
         
-        // FIX: Add a safeguard to ensure owner.properties exists and is not empty.
-        if (!owner.properties || owner.properties.length === 0) {
-            toast({ variant: 'destructive', title: 'Error de Datos', description: 'El propietario seleccionado no tiene propiedades registradas.' });
+        const validProperties = (owner.properties || []).filter(p => p.street && p.house);
+        if (validProperties.length === 0) {
+            toast({ variant: 'destructive', title: 'Error de Datos', description: 'El propietario seleccionado no tiene propiedades completas registradas.' });
             return;
         }
 
         setGeneratingReport(true);
         try {
             // Fetch Payments
-            const paymentsQuery = query(
+             const paymentsQuery = query(
                 collection(db, "payments"),
                 where("status", "==", "aprobado"),
-                where("beneficiaries", "array-contains", { ownerId: owner.id, house: owner.properties[0].house })
+                where("beneficiaries", "array-contains-any", validProperties.map(p => ({ ownerId: owner.id, house: p.house })))
             );
 
             const paymentsSnapshot = await getDocs(paymentsQuery);
             let totalPaid = 0;
-            const paymentsRows = paymentsSnapshot.docs
-                .map(doc => doc.data() as Payment)
-                .filter(p => {
-                    const paymentDate = p.paymentDate.toDate();
-                    return paymentDate >= statementStartDate && paymentDate <= statementEndDate;
-                })
+            const allPayments = paymentsSnapshot.docs.map(doc => doc.data() as Payment);
+
+            const paymentsRows = allPayments
+                .sort((a, b) => a.paymentDate.toMillis() - b.paymentDate.toMillis())
                 .map(p => {
                     totalPaid += p.totalAmount;
                     const paidByOwner = owners.find(o => o.id === p.reportedBy);
@@ -362,12 +358,9 @@ export default function ReportsPage() {
             );
             const debtSnapshot = await getDocs(debtsQuery);
             let totalDebt = 0;
-            const debtsRows = debtSnapshot.docs
-                .map(doc => doc.data() as Debt)
-                .filter(d => {
-                    const debtDate = new Date(d.year, d.month -1, 1);
-                    return debtDate >= statementStartDate && debtDate <= statementEndDate;
-                })
+            const allDebts = debtSnapshot.docs.map(doc => doc.data() as Debt);
+            
+            const debtsRows = allDebts
                 .sort((a, b) => a.year - b.year || a.month - b.month)
                 .map(d => {
                     totalDebt += d.amountUSD;
@@ -377,6 +370,13 @@ export default function ReportsPage() {
                         d.status === 'paid' ? 'Pagada' : 'Pendiente'
                     ];
                 });
+
+            let dateRange = "Sin transacciones";
+            if (allDebts.length > 0) {
+                const firstDebt = allDebts[0];
+                const lastDebt = allDebts[allDebts.length - 1];
+                dateRange = `Período: ${monthsLocale[firstDebt.month]} ${firstDebt.year} - ${monthsLocale[lastDebt.month]} ${lastDebt.year}`;
+            }
 
             const ownerProps = (owner.properties || []).map(p => `${p.street} - ${p.house}`).join(', ');
 
@@ -388,7 +388,7 @@ export default function ReportsPage() {
                 rows: [], // Not used for detailed view
                 detailedData: {
                     ownerInfo: `Propietario: ${owner.name} | Propiedad: ${ownerProps}`,
-                    dateRange: `Período: ${format(statementStartDate, "dd/MM/yyyy")} - ${format(statementEndDate, "dd/MM/yyyy")}`,
+                    dateRange: dateRange,
                     payments: {
                         headers: ["Fecha", "Concepto", "Pagado por", "Monto"],
                         rows: paymentsRows,
@@ -566,9 +566,9 @@ export default function ReportsPage() {
                 <Card className="md:col-span-2 lg:col-span-3">
                     <CardHeader>
                         <CardTitle>Estado de Cuenta Individual Detallado</CardTitle>
-                        <CardDescription>Consulte los movimientos (pagos y deudas) de un propietario en un período específico.</CardDescription>
+                        <CardDescription>Consulte el historial completo de movimientos (pagos y deudas) de un propietario.</CardDescription>
                     </CardHeader>
-                    <CardContent className="grid sm:grid-cols-3 gap-4">
+                    <CardContent className="grid sm:grid-cols-1 gap-4">
                         <div className="space-y-2">
                             <Label htmlFor="owner-select">Propietario</Label>
                             <Select value={selectedOwner} onValueChange={setSelectedOwner}>
@@ -580,33 +580,9 @@ export default function ReportsPage() {
                                 </SelectContent>
                             </Select>
                         </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="statement-start-date">Fecha de Inicio</Label>
-                            <Popover>
-                                <PopoverTrigger asChild>
-                                    <Button id="statement-start-date" variant={"outline"} className={cn("w-full justify-start text-left font-normal", !statementStartDate && "text-muted-foreground")}>
-                                        <CalendarIcon className="mr-2 h-4 w-4" />
-                                        {statementStartDate ? format(statementStartDate, "PPP", { locale: es }) : <span>Seleccione fecha</span>}
-                                    </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={statementStartDate} onSelect={setStatementStartDate} initialFocus locale={es} /></PopoverContent>
-                            </Popover>
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="statement-end-date">Fecha de Fin</Label>
-                            <Popover>
-                                <PopoverTrigger asChild>
-                                    <Button id="statement-end-date" variant={"outline"} className={cn("w-full justify-start text-left font-normal", !statementEndDate && "text-muted-foreground")}>
-                                        <CalendarIcon className="mr-2 h-4 w-4" />
-                                        {statementEndDate ? format(statementEndDate, "PPP", { locale: es }) : <span>Seleccione fecha</span>}
-                                    </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={statementEndDate} onSelect={setStatementEndDate} initialFocus locale={es} /></PopoverContent>
-                            </Popover>
-                        </div>
                     </CardContent>
                     <CardFooter>
-                        <Button className="w-full" onClick={generateIndividualStatement} disabled={!selectedOwner || !statementStartDate || !statementEndDate || generatingReport}>
+                        <Button className="w-full" onClick={generateIndividualStatement} disabled={!selectedOwner || generatingReport}>
                             {generatingReport ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Search className="mr-2 h-4 w-4" />} 
                             Generar Vista Previa
                         </Button>
