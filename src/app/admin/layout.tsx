@@ -17,7 +17,7 @@ const adminNavItems: NavItem[] = [
     { href: "/admin/dashboard", icon: Home, label: "Dashboard" },
     { href: "/admin/payments", icon: Landmark, label: "Pagos" },
     { href: "#", icon: Building, label: "Unidades" },
-    { href: "#", icon: Users, label: "Residentes" },
+    { href: "/admin/people", icon: Users, label: "Personas" },
     { href: "#", icon: CalendarCheck, label: "Reservas" },
     { href: "#", icon: Wrench, label: "Mantenimiento" },
     { href: "#", icon: Megaphone, label: "Comunicados" },
