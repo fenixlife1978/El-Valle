@@ -14,9 +14,9 @@ import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { Calendar as CalendarIcon, Download, Search, Loader2, BarChart2 } from "lucide-react";
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 import html2canvas from 'html2canvas';
-import { collection, getDocs, query, where, doc, getDoc } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, getDoc, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend } from 'recharts';
@@ -31,17 +31,28 @@ type Owner = {
     balance: number;
     delinquency: number; 
     status: 'solvente' | 'moroso';
-    // Legacy fields
     street?: string;
     house?: string;
 };
 
 type Payment = {
   id: string;
-  userId: string;
-  date: string;
-  amount: number;
-  description: string;
+  reportedBy: string;
+  paymentDate: { seconds: number };
+  totalAmount: number;
+  paymentMethod: string;
+  status: string;
+  beneficiaries: { ownerId: string, house?: string, amount: number }[];
+};
+
+type Debt = {
+    id: string;
+    ownerId: string;
+    year: number;
+    month: number;
+    amountUSD: number;
+    description: string;
+    status: 'pending' | 'paid';
 };
 
 type ChartData = {
@@ -56,6 +67,11 @@ type CompanyInfo = {
     phone: string;
     email: string;
     logo: string;
+};
+
+const monthsLocale: { [key: number]: string } = {
+    1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril', 5: 'Mayo', 6: 'Junio',
+    7: 'Julio', 8: 'Agosto', 9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre'
 };
 
 
@@ -132,7 +148,7 @@ export default function ReportsPage() {
             }
         };
         fetchData();
-    }, [toast, activeRate]);
+    }, [toast]);
 
 
     const generatePdf = (title: string, head: any[], body: any[], filename: string, options: { footerText?: string } = {}) => {
@@ -168,7 +184,7 @@ export default function ReportsPage() {
         doc.text(title, pageWidth / 2, margin + 45, { align: 'center' });
 
         // --- PDF Body ---
-        (doc as any).autoTable({
+        autoTable(doc, {
             head,
             body,
             startY: margin + 55,
@@ -176,9 +192,10 @@ export default function ReportsPage() {
         });
 
         if (options.footerText) {
+            const finalY = (doc as any).lastAutoTable.finalY;
             doc.setFontSize(12);
             doc.setFont('helvetica', 'bold');
-            doc.text(options.footerText, margin, (doc as any).lastAutoTable.finalY + 15);
+            doc.text(options.footerText, margin, finalY + 15);
         }
 
         doc.save(`${filename}.pdf`);
@@ -224,27 +241,137 @@ export default function ReportsPage() {
     };
 
     const generateIndividualStatement = async () => {
-        if (!selectedOwner) return toast({ variant: 'destructive', title: 'Error', description: 'Por favor, seleccione un propietario.' });
+        if (!selectedOwner) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Por favor, seleccione un propietario.' });
+            return;
+        }
+
         const owner = owners.find(o => o.id === selectedOwner);
         if (!owner) return;
 
-        const paymentsQuery = query(collection(db, "payments"), where("beneficiaries", "array-contains", { ownerId: owner.id }));
-        const paymentSnapshot = await getDocs(paymentsQuery);
-        const ownerPayments = paymentSnapshot.docs.map(doc => {
-            const data = doc.data();
-            return {
-                date: new Date(data.paymentDate.seconds * 1000).toLocaleDateString('es-VE'),
-                description: `Pago ${data.paymentMethod}`,
-                amount: data.totalAmount,
-            };
-        });
-        
-        generatePdf(
-            `Estado de Cuenta: ${owner.name}`,
-            [['Fecha', 'Descripción', 'Monto (Bs.)']],
-            ownerPayments.map(p => [p.date, p.description, p.amount.toFixed(2)]),
-            `estado_cuenta_${owner.id}`
-        );
+        setLoading(true);
+        try {
+            // Fetch all related data
+            const paymentsQuery = query(
+                collection(db, "payments"),
+                where("beneficiaries", "array-contains", { ownerId: owner.id, house: owner.properties[0].house, amount: owner.balance }),
+                where("status", "==", "aprobado")
+            );
+
+            const debtsQuery = query(
+                collection(db, "debts"),
+                where("ownerId", "==", owner.id),
+                orderBy("year", "asc"),
+                orderBy("month", "asc")
+            );
+
+            const [paymentSnapshot, debtSnapshot] = await Promise.all([
+                getDocs(paymentsQuery),
+                getDocs(debtsQuery)
+            ]);
+
+            const ownerPayments = paymentSnapshot.docs.map(doc => doc.data() as Payment);
+            const ownerDebts = debtSnapshot.docs.map(doc => doc.data() as Debt);
+            
+            // Generate PDF
+            const doc = new jsPDF();
+            const margin = 14;
+            const pageWidth = doc.internal.pageSize.getWidth();
+            let finalY = margin;
+
+            // --- Header ---
+            if (companyInfo?.logo) {
+                doc.addImage(companyInfo.logo, 'PNG', margin, finalY, 25, 25);
+            }
+            if (companyInfo) {
+                doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, margin + 30, finalY + 5);
+            }
+            
+            doc.setFontSize(9).setFont('helvetica', 'normal');
+            const ownerProperties = (owner.properties || []).map(p => `${p.street}-${p.house}`).join(', ');
+            doc.text(`Propietario: ${owner.name}`, margin + 30, finalY + 10);
+            doc.text(`Propiedad(es): ${ownerProperties}`, margin + 30, finalY + 14);
+            
+            const generatedDate = format(new Date(), "dd/MM/yyyy, h:mm:ss a");
+            doc.text(`Reporte generado el: ${generatedDate}`, margin + 30, finalY + 18);
+            
+            finalY += 35;
+
+            // --- Resumen de Pagos ---
+            doc.setFontSize(12).setFont('helvetica', 'bold').text('Resumen de Pagos', margin, finalY);
+            finalY += 5;
+
+            const paymentsBody = ownerPayments.map(p => {
+                const paymentForOwner = p.beneficiaries.find(b => b.ownerId === owner.id);
+                const amountBs = paymentForOwner ? paymentForOwner.amount : 0;
+                return [
+                    format(new Date(p.paymentDate.seconds * 1000), 'dd/MM/yyyy'),
+                    p.paymentMethod === 'transferencia' ? 'Transferencia' : 'Pago Móvil',
+                    'N/A', // "Pagado por" is not available in the data model
+                    `Bs. ${amountBs.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`
+                ];
+            });
+
+            const totalPaid = ownerPayments.reduce((acc, p) => {
+                 const paymentForOwner = p.beneficiaries.find(b => b.ownerId === owner.id);
+                 return acc + (paymentForOwner ? paymentForOwner.amount : 0);
+            }, 0);
+
+            autoTable(doc, {
+                startY: finalY,
+                head: [['Fecha', 'Concepto', 'Pagado por', 'Monto (Bs)']],
+                body: paymentsBody,
+                foot: [['Total Pagado', '', '', `Bs. ${totalPaid.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`]],
+                theme: 'striped',
+                headStyles: { fillColor: [26, 145, 125], textColor: 255 },
+                footStyles: { fillColor: [255, 255, 255], textColor: 0, fontStyle: 'bold' },
+            });
+            finalY = (doc as any).lastAutoTable.finalY + 10;
+            
+            // --- Resumen de Deudas ---
+            doc.setFontSize(12).setFont('helvetica', 'bold').text('Resumen de Deudas', margin, finalY);
+            finalY += 5;
+
+            let totalAdeudadoUSD = 0;
+            const debtsBody = ownerDebts.map(d => {
+                if (d.status === 'pending') {
+                    totalAdeudadoUSD += d.amountUSD;
+                }
+                return [
+                    `${monthsLocale[d.month]} ${d.year}`,
+                    `$${d.amountUSD.toFixed(2)}`,
+                    d.status === 'paid' ? 'Pagada' : 'Pendiente'
+                ];
+            });
+            
+            autoTable(doc, {
+                startY: finalY,
+                head: [['Periodo', 'Monto ($)', 'Estado']],
+                body: debtsBody,
+                foot: [['Total Adeudado', `$${totalAdeudadoUSD.toFixed(2)}`, '']],
+                theme: 'striped',
+                headStyles: { fillColor: [26, 145, 125], textColor: 255 },
+                footStyles: { fillColor: [255, 255, 255], textColor: 0, fontStyle: 'bold' },
+                 didParseCell: (data) => {
+                    if (data.row.section === 'foot') {
+                       if(data.column.dataKey === 'Monto ($)') data.cell.styles.halign = 'left';
+                    }
+                }
+            });
+            finalY = (doc as any).lastAutoTable.finalY + 10;
+            
+            // --- Saldo a Favor ---
+            doc.setFontSize(11).setFont('helvetica', 'bold');
+            doc.text(`Saldo a Favor Actual: Bs. ${(owner.balance > 0 ? owner.balance * activeRate : 0).toLocaleString('es-VE', { minimumFractionDigits: 2 })}`, pageWidth - margin, finalY, { align: 'right' });
+
+            doc.save(`estado_cuenta_${owner.name.replace(/\s/g, '_')}.pdf`);
+
+        } catch (error) {
+            console.error("Error generating individual statement:", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo generar el estado de cuenta.' });
+        } finally {
+            setLoading(false);
+        }
     };
 
     const generateDelinquencyReport = () => {
@@ -255,7 +382,11 @@ export default function ReportsPage() {
          generatePdf(
             `Reporte de Morosidad (${months} o más meses)`,
             [['Propietario', 'Propiedades', 'Meses de Deuda', 'Saldo Deudor (Bs.)']],
-            delinquentOwners.map(o => [o.name, o.properties.map(p => p.house).join(', '), o.delinquency, (o.balance < 0 ? Math.abs(o.balance) : 0).toFixed(2)]),
+            delinquentOwners.map(o => {
+                const properties = (o.properties || []).map(p => `${p.street} - ${p.house}`).join(', ');
+                const debtBs = o.balance < 0 ? Math.abs(o.balance * activeRate) : 0;
+                return [o.name, properties, o.delinquency, debtBs.toLocaleString('es-VE', { minimumFractionDigits: 2 })];
+            }),
             `reporte_morosidad`
         );
     }
@@ -275,7 +406,7 @@ export default function ReportsPage() {
          generatePdf(
             'Reporte de Saldos a Favor',
             [['Propietario', 'Propiedades', 'Saldo a Favor (Bs.)']],
-            ownersWithBalance.map(o => [o.name, (o.properties || []).map(p => `${p.street} - ${p.house}`).join(', '), o.balance.toFixed(2)]),
+            ownersWithBalance.map(o => [o.name, (o.properties || []).map(p => `${p.street} - ${p.house}`).join(', '), (o.balance * activeRate).toLocaleString('es-VE', { minimumFractionDigits: 2 })]),
             'reporte_saldos_favor'
         );
     };
@@ -311,7 +442,8 @@ export default function ReportsPage() {
                 const properties = (o.properties && o.properties.length > 0)
                     ? o.properties.map(p => `${p.street} - ${p.house}`).join(', ')
                     : (o.house ? `${o.street} - ${o.house}` : 'N/A');
-                return [o.name, properties, o.status === 'solvente' ? 'Solvente' : 'Moroso', o.balance.toFixed(2)]
+                const balanceBs = o.balance * activeRate;
+                return [o.name, properties, o.status === 'solvente' ? 'Solvente' : 'Moroso', balanceBs.toLocaleString('es-VE', { minimumFractionDigits: 2 })]
             }),
             'reporte_general_estatus'
         );
@@ -412,8 +544,9 @@ export default function ReportsPage() {
                         </div>
                     </CardContent>
                     <CardFooter>
-                        <Button className="w-full" onClick={generateIndividualStatement} disabled={!selectedOwner}>
-                            <Download className="mr-2 h-4 w-4" /> Generar y Exportar
+                        <Button className="w-full" onClick={generateIndividualStatement} disabled={!selectedOwner || loading}>
+                            {loading && selectedOwner ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Download className="mr-2 h-4 w-4" />} 
+                            Generar y Exportar
                         </Button>
                     </CardFooter>
                 </Card>
