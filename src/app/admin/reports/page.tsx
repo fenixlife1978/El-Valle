@@ -251,10 +251,15 @@ export default function ReportsPage() {
 
         setLoading(true);
         try {
+            // This handles legacy owners without the `properties` array.
+            const ownerPropertiesPayload = (owner.properties && owner.properties.length > 0)
+                ? owner.properties.map(p => ({ ownerId: owner.id, house: p.house }))
+                : [{ ownerId: owner.id, house: owner.house }];
+
             // Fetch all related data
             const paymentsQuery = query(
                 collection(db, "payments"),
-                where("beneficiaries", "array-contains-any", owner.properties.map(p => ({ ownerId: owner.id, house: p.house }))),
+                where("beneficiaries", "array-contains-any", ownerPropertiesPayload.map(p => ({ownerId: p.ownerId, house: p.house}))),
                 where("status", "==", "aprobado")
             );
 
@@ -270,7 +275,10 @@ export default function ReportsPage() {
                 getDocs(debtsQuery)
             ]);
 
-            const ownerPayments = paymentSnapshot.docs.map(doc => doc.data() as Payment);
+            const ownerPayments = paymentSnapshot.docs
+                .map(doc => doc.data() as Payment)
+                .filter(p => p.beneficiaries.some(b => b.ownerId === owner.id));
+
             const ownerDebts = debtSnapshot.docs.map(doc => doc.data() as Debt);
             
             // Generate PDF
