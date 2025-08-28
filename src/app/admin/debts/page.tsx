@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PlusCircle, MoreHorizontal, Edit, Trash2, Loader2, Info, ArrowLeft, Search, WalletCards } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { collection, query, onSnapshot, where, doc, getDoc, writeBatch, updateDoc, deleteDoc, runTransaction } from 'firebase/firestore';
+import { collection, query, onSnapshot, where, doc, getDoc, writeBatch, updateDoc, deleteDoc, runTransaction, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Badge } from '@/components/ui/badge';
 import { differenceInCalendarMonths, format, addMonths } from 'date-fns';
@@ -211,19 +211,18 @@ export default function DebtManagementPage() {
             toast({ variant: 'destructive', title: 'Error de Validación', description: 'La descripción y un monto mayor a cero son obligatorios.' });
             return;
         }
-
+    
         const { fromMonth, fromYear, amountUSD, description } = currentMassDebt;
         const startDate = new Date(fromYear, fromMonth - 1, 1);
         const endDate = new Date();
-
+    
         if (startDate > endDate) {
             toast({ variant: 'destructive', title: 'Error de Fecha', description: 'La fecha "Desde" no puede ser futura.' });
             return;
         }
-
+    
         const monthsToGenerate = differenceInCalendarMonths(endDate, startDate) + 1;
-        const totalDebtAmountUSD = monthsToGenerate * amountUSD;
-
+    
         try {
             const ownerRef = doc(db, "owners", selectedOwner.id);
             
@@ -232,32 +231,47 @@ export default function DebtManagementPage() {
                 if (!ownerDoc.exists()) {
                     throw "El documento del propietario no existe.";
                 }
-
-                // Update owner's balance
-                const currentBalance = ownerDoc.data().balance || 0;
-                const newBalance = currentBalance - totalDebtAmountUSD;
-                transaction.update(ownerRef, { balance: newBalance });
-
-                // Create debt documents
+    
+                let currentBalanceUSD = ownerDoc.data().balance || 0;
+                let totalDebtAmountUSD = 0;
+    
                 for (let i = 0; i < monthsToGenerate; i++) {
                     const debtDate = addMonths(startDate, i);
                     const debtYear = debtDate.getFullYear();
                     const debtMonth = debtDate.getMonth() + 1;
                     
-                    const debtRef = doc(collection(db, "debts"));
-                    transaction.set(debtRef, {
+                    const debtData: any = {
                         ownerId: selectedOwner.id,
                         year: debtYear,
                         month: debtMonth,
                         amountUSD: amountUSD,
                         description: description,
-                        status: 'pending',
-                    });
+                    };
+    
+                    if (currentBalanceUSD >= amountUSD) {
+                        // Saldo a favor cubre la deuda
+                        currentBalanceUSD -= amountUSD;
+                        debtData.status = 'paid';
+                        debtData.paidAmountUSD = amountUSD;
+                        debtData.paymentDate = Timestamp.now();
+                        // No se suma a la deuda total, ya que se pagó instantáneamente
+                    } else {
+                        // Saldo a favor no cubre la deuda, se genera pendiente
+                        debtData.status = 'pending';
+                        totalDebtAmountUSD += amountUSD;
+                    }
+                    
+                    const debtRef = doc(collection(db, "debts"));
+                    transaction.set(debtRef, debtData);
                 }
+    
+                // El nuevo balance del propietario es el saldo a favor restante, menos la nueva deuda generada.
+                const newBalance = currentBalanceUSD - totalDebtAmountUSD;
+                transaction.update(ownerRef, { balance: newBalance });
             });
-
-            toast({ title: 'Deudas Generadas', description: `${monthsToGenerate} meses de deuda han sido agregados y el saldo del propietario ha sido actualizado.` });
-
+    
+            toast({ title: 'Deudas Generadas', description: `Se procesaron ${monthsToGenerate} meses de deuda. El saldo del propietario fue actualizado.` });
+    
         } catch (error) {
             console.error("Error generating mass debts: ", error);
             const errorMessage = typeof error === 'string' ? error : (error instanceof Error ? error.message : 'No se pudieron guardar las deudas.');
@@ -523,7 +537,7 @@ export default function DebtManagementPage() {
                                     <CardContent className="p-4 text-sm text-muted-foreground">
                                         <Info className="inline h-4 w-4 mr-2"/>
                                         {periodDescription}
-                                        <p className="text-xs mt-2">Se creará una deuda por cada mes con el monto en USD especificado. El valor en Bolívares se calculará dinámicamente con la tasa activa.</p>
+                                        <p className="text-xs mt-2">Si el propietario tiene saldo a favor, se usará para pagar estas nuevas deudas automáticamente.</p>
                                     </CardContent>
                                 </Card>
                             </div>
