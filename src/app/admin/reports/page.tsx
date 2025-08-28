@@ -321,13 +321,19 @@ export default function ReportsPage() {
         const owner = owners.find(o => o.id === selectedOwner);
         if (!owner) return;
         
+        // FIX: Add a safeguard to ensure owner.properties exists and is not empty.
+        if (!owner.properties || owner.properties.length === 0) {
+            toast({ variant: 'destructive', title: 'Error de Datos', description: 'El propietario seleccionado no tiene propiedades registradas.' });
+            return;
+        }
+
         setGeneratingReport(true);
         try {
             // Fetch Payments
             const paymentsQuery = query(
                 collection(db, "payments"),
                 where("status", "==", "aprobado"),
-                where("beneficiaries", "array-contains", { ownerId: owner.id, house: (owner.properties[0] || {}).house })
+                where("beneficiaries", "array-contains", { ownerId: owner.id, house: owner.properties[0].house })
             );
 
             const paymentsSnapshot = await getDocs(paymentsQuery);
@@ -828,4 +834,3 @@ export default function ReportsPage() {
         </div>
     );
 }
-
