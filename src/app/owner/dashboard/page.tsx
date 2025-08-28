@@ -6,7 +6,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/componen
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Landmark, AlertCircle, Building, Eye, Printer, Megaphone, Loader2, Wallet, FileText, CalendarClock, Scale, Calculator, Minus, Equal } from "lucide-react";
+import { Landmark, AlertCircle, Building, Eye, Printer, Megaphone, Loader2, Wallet, FileText, CalendarClock, Scale, Calculator, Minus, Equal, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getCommunityUpdates } from '@/ai/flows/community-updates';
 import { auth, db } from '@/lib/firebase';
@@ -45,7 +45,7 @@ type SolvencyStatus = 'solvente' | 'moroso' | 'saldo a favor' | 'cargando...';
 const statusVariantMap: { [key in SolvencyStatus]: 'success' | 'destructive' | 'default' | 'outline' } = {
   'solvente': 'success',
   'moroso': 'destructive',
-  'saldo a favor': 'default',
+  'saldo a favor': 'success', // Changed to success for consistency
   'cargando...': 'outline',
 };
 
@@ -70,6 +70,7 @@ export default function OwnerDashboardPage() {
         isOverdue: false,
     });
     const [solvencyStatus, setSolvencyStatus] = useState<SolvencyStatus>('cargando...');
+    const [solvencyUntil, setSolvencyUntil] = useState('');
     const [communityUpdates, setCommunityUpdates] = useState<string[]>([]);
     const [selectedDebts, setSelectedDebts] = useState<string[]>([]);
     
@@ -102,26 +103,42 @@ export default function OwnerDashboardPage() {
                     const ownerData = { id: userSnap.id, ...userSnap.data() } as UserData;
                     setUserData(ownerData);
                     
-                    const debtsQuery = query(collection(db, "debts"), where("ownerId", "==", userId), where("status", "==", "pending"));
-                    const debtsSnapshot = await getDocs(debtsQuery);
+                    const pendingDebtsQuery = query(collection(db, "debts"), where("ownerId", "==", userId), where("status", "==", "pending"));
+                    const pendingDebtsSnapshot = await getDocs(pendingDebtsQuery);
                     
-                    const debtsData: Debt[] = [];
+                    const pendingDebtsData: Debt[] = [];
                     let totalDebtUSD = 0;
-                    debtsSnapshot.forEach((doc) => {
+                    pendingDebtsSnapshot.forEach((doc) => {
                         const debt = { id: doc.id, ...doc.data() } as Debt
-                        debtsData.push(debt);
+                        pendingDebtsData.push(debt);
                         totalDebtUSD += debt.amountUSD;
                     });
                     
-                    setDebts(debtsData.sort((a,b) => b.year - a.year || b.month - a.month));
+                    setDebts(pendingDebtsData.sort((a,b) => b.year - a.year || b.month - a.month));
                     const totalDebtBs = totalDebtUSD * activeRate;
 
                     if (totalDebtBs > 0) {
                         setSolvencyStatus('moroso');
-                    } else if (ownerData.balance > 0) {
-                        setSolvencyStatus('saldo a favor');
+                        setSolvencyUntil('');
                     } else {
-                        setSolvencyStatus('solvente');
+                         if (ownerData.balance > 0) {
+                            setSolvencyStatus('saldo a favor');
+                        } else {
+                            setSolvencyStatus('solvente');
+                        }
+                        
+                        // Find last paid month to show "Solvente hasta..."
+                        const allDebtsQuery = query(collection(db, "debts"), where("ownerId", "==", userId), where("status", "==", "paid"), orderBy("year", "desc"), orderBy("month", "desc"), limit(1));
+                        const lastPaidDebtSnapshot = await getDocs(allDebtsQuery);
+
+                        if (!lastPaidDebtSnapshot.empty) {
+                            const lastPaidDebt = lastPaidDebtSnapshot.docs[0].data();
+                            const monthLabel = months.find(m => m.value === lastPaidDebt.month)?.label || '';
+                            setSolvencyUntil(`Solvente hasta ${monthLabel} ${lastPaidDebt.year}`);
+                        } else {
+                            const monthLabel = months.find(m => m.value === now.getMonth() + 1)?.label || '';
+                             setSolvencyUntil(`Solvente hasta ${monthLabel} ${now.getFullYear()}`);
+                        }
                     }
 
                     setDashboardStats({
@@ -207,11 +224,17 @@ export default function OwnerDashboardPage() {
           </CardHeader>
           <CardContent>
             {loading ? <Loader2 className="h-6 w-6 animate-spin"/> : 
-            <Badge variant={statusVariantMap[solvencyStatus]} className="text-lg capitalize">
-              {solvencyStatus}
-            </Badge>
+              <div>
+                <Badge variant={statusVariantMap[solvencyStatus]} className="text-lg capitalize">
+                  {solvencyStatus}
+                </Badge>
+                {solvencyUntil && (
+                  <p className="text-sm font-semibold text-muted-foreground mt-2 flex items-center gap-2">
+                     <ShieldCheck className="h-4 w-4 text-green-600"/> {solvencyUntil}
+                  </p>
+                )}
+              </div>
             }
-            <p className="text-xs text-muted-foreground mt-2">Su situación financiera actual.</p>
           </CardContent>
         </Card>
         <Card>
