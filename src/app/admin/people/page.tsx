@@ -15,7 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
 
@@ -36,6 +36,15 @@ type Owner = {
     // Legacy fields for backward compatibility
     street?: string;
     house?: string;
+};
+
+type CompanyInfo = {
+    name: string;
+    address: string;
+    rif: string;
+    phone: string;
+    email: string;
+    logo: string;
 };
 
 const emptyOwner: Omit<Owner, 'id'> = { 
@@ -65,14 +74,15 @@ export default function PeopleManagementPage() {
     const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
     const [currentOwner, setCurrentOwner] = useState<Omit<Owner, 'id'> & { id?: string }>(emptyOwner);
     const [ownerToDelete, setOwnerToDelete] = useState<Owner | null>(null);
+    const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
     const importFileRef = useRef<HTMLInputElement>(null);
     const { toast } = useToast();
 
     useEffect(() => {
         const q = query(collection(db, "owners"));
-        const unsubscribe = onSnapshot(q, (querySnapshot) => {
+        const unsubscribe = onSnapshot(q, (snapshot) => {
             const ownersData: Owner[] = [];
-            querySnapshot.forEach((doc) => {
+            snapshot.forEach((doc) => {
                 ownersData.push({ id: doc.id, ...doc.data() } as Owner);
             });
             setOwners(ownersData.sort((a, b) => a.name.localeCompare(b.name)));
@@ -82,6 +92,15 @@ export default function PeopleManagementPage() {
             toast({ variant: 'destructive', title: 'Error de Conexión', description: 'No se pudieron cargar los propietarios. Revisa la configuración de Firebase.' });
             setLoading(false);
         });
+
+        const fetchCompanyInfo = async () => {
+            const settingsRef = doc(db, 'config', 'mainSettings');
+            const docSnap = await getDoc(settingsRef);
+            if (docSnap.exists()) {
+                setCompanyInfo(docSnap.data().companyInfo as CompanyInfo);
+            }
+        };
+        fetchCompanyInfo();
 
         return () => unsubscribe();
     }, [toast]);
@@ -198,17 +217,47 @@ export default function PeopleManagementPage() {
 
     const handleExportPDF = () => {
         const doc = new jsPDF();
-        doc.text("Lista de Propietarios", 14, 16);
+        const pageHeight = doc.internal.pageSize.getHeight();
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const margin = 14;
+
+        // --- PDF Header ---
+        if (companyInfo?.logo) {
+            doc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25);
+        }
+        if (companyInfo) {
+            doc.setFontSize(12);
+            doc.setFont('helvetica', 'bold');
+            doc.text(companyInfo.name, margin + 30, margin + 8);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+            doc.text(`${companyInfo.rif} | ${companyInfo.phone}`, margin + 30, margin + 14);
+            doc.text(companyInfo.address, margin + 30, margin + 19);
+        }
+        doc.setFontSize(10);
+        doc.text(`Fecha de Emisión: ${new Date().toLocaleDateString('es-VE')}`, pageWidth - margin, margin + 8, { align: 'right' });
+        doc.setLineWidth(0.5);
+        doc.line(margin, margin + 32, pageWidth - margin, margin + 32);
+        
+        // --- PDF Title ---
+        doc.setFontSize(16);
+        doc.setFont('helvetica', 'bold');
+        doc.text("Lista de Propietarios", pageWidth / 2, margin + 45, { align: 'center' });
+
+        // --- PDF Body ---
         (doc as any).autoTable({
             head: [['Nombre', 'Propiedades', 'Email', 'Rol']],
             body: owners.map(o => {
                 const properties = (o.properties && o.properties.length > 0) 
-                    ? o.properties.map(p => `${p.street} - ${p.house}`).join(', ') 
+                    ? o.properties.map(p => `${p.street} - ${p.house}`).join('\n') 
                     : (o.street && o.house ? `${o.street} - ${o.house}` : 'N/A');
                 return [o.name, properties, o.email || '-', o.role];
             }),
-            startY: 20,
+            startY: margin + 55,
+            headStyles: { fillColor: [30, 80, 180] },
+            styles: { cellPadding: 2, fontSize: 8 },
         });
+
         doc.save('propietarios.pdf');
     };
 
@@ -459,7 +508,7 @@ export default function PeopleManagementPage() {
                         <DialogTitle>¿Estás seguro?</DialogTitle>
                         <DialogDescription>
                             Esta acción no se puede deshacer. Esto eliminará permanentemente a <span className="font-semibold">{ownerToDelete?.name}</span> de la base de datos.
-                        </DialogDescription>
+                        </Description>
                     </DialogHeader>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setIsDeleteConfirmationOpen(false)}>Cancelar</Button>
@@ -472,5 +521,3 @@ export default function PeopleManagementPage() {
     );
     
 }
-
-    

@@ -11,7 +11,7 @@ import { CheckCircle2, XCircle, MoreHorizontal, Eye, Printer, Filter, Loader2 } 
 import { useToast } from '@/hooks/use-toast';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import { collection, onSnapshot, query, doc, updateDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, doc, updateDoc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
 type PaymentStatus = 'pendiente' | 'aprobado' | 'rechazado';
@@ -27,6 +27,15 @@ type Payment = {
   type: PaymentType;
   reference: string;
   status: PaymentStatus;
+};
+
+type CompanyInfo = {
+    name: string;
+    address: string;
+    rif: string;
+    phone: string;
+    email: string;
+    logo: string;
 };
 
 const statusVariantMap: { [key in PaymentStatus]: 'warning' | 'success' | 'destructive' } = {
@@ -45,6 +54,7 @@ export default function VerifyPaymentsPage() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<PaymentStatus | 'todos'>('todos');
+  const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -71,6 +81,15 @@ export default function VerifyPaymentsPage() {
         toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron cargar los pagos.' });
         setLoading(false);
     });
+    
+    const fetchCompanyInfo = async () => {
+        const settingsRef = doc(db, 'config', 'mainSettings');
+        const docSnap = await getDoc(settingsRef);
+        if (docSnap.exists()) {
+            setCompanyInfo(docSnap.data().companyInfo as CompanyInfo);
+        }
+    };
+    fetchCompanyInfo();
 
     return () => unsubscribe();
   }, [toast]);
@@ -93,18 +112,46 @@ export default function VerifyPaymentsPage() {
 
   const generateReceipt = (payment: Payment) => {
     const doc = new jsPDF();
-    doc.setFontSize(18);
-    doc.text('Recibo de Pago de Condominio', 14, 22);
-    
-    doc.setFontSize(11);
-    doc.setTextColor(100);
-    doc.text(`Fecha de Emisión: ${new Date().toLocaleDateString('es-VE')}`, 14, 32);
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 14;
 
+    // --- PDF Header ---
+    if (companyInfo?.logo) {
+        doc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25);
+    }
+    
+    if (companyInfo) {
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold');
+        doc.text(companyInfo.name, margin + 30, margin + 8);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.text(`${companyInfo.rif} | ${companyInfo.phone}`, margin + 30, margin + 14);
+        doc.text(companyInfo.address, margin + 30, margin + 19);
+        doc.text(companyInfo.email, margin + 30, margin + 24);
+    }
+    
+    doc.setFontSize(10);
+    doc.text(`Fecha de Emisión:`, pageWidth - margin, margin + 8, { align: 'right' });
+    doc.setFont('helvetica', 'bold');
+    doc.text(new Date().toLocaleDateString('es-VE'), pageWidth - margin, margin + 13, { align: 'right' });
+    
+    doc.setLineWidth(0.5);
+    doc.line(margin, margin + 32, pageWidth - margin, margin + 32);
+
+    // --- PDF Title ---
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Recibo de Pago de Condominio', pageWidth / 2, margin + 45, { align: 'center' });
+
+
+    // --- PDF Body ---
     (doc as any).autoTable({
-        startY: 40,
+        startY: margin + 55,
         head: [['Concepto', 'Detalle']],
         body: [
-            ['ID de Pago', payment.id],
+            ['ID de Transacción', payment.id],
             ['Propietario', payment.user || 'No disponible'],
             ['Unidad', payment.unit],
             ['Fecha de Pago', new Date(payment.date).toLocaleDateString('es-VE')],
@@ -115,10 +162,10 @@ export default function VerifyPaymentsPage() {
             ['Estado del Pago', statusTextMap[payment.status]],
         ],
         theme: 'striped',
-        headStyles: { fillColor: [22, 160, 133] },
+        headStyles: { fillColor: [30, 80, 180] },
     });
 
-    doc.save(`recibo-${payment.unit}-${payment.id}.pdf`);
+    doc.save(`recibo-${payment.unit}-${payment.id.substring(0,5)}.pdf`);
   };
 
   const filteredPayments = payments.filter(p => filter === 'todos' || p.status === filter);

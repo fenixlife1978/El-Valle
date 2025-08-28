@@ -49,6 +49,15 @@ type ChartData = {
     total: number;
 }
 
+type CompanyInfo = {
+    name: string;
+    address: string;
+    rif: string;
+    phone: string;
+    email: string;
+    logo: string;
+};
+
 
 export default function ReportsPage() {
     const { toast } = useToast();
@@ -65,6 +74,7 @@ export default function ReportsPage() {
     const incomeChartRef = useRef<HTMLDivElement>(null);
     const debtChartRef = useRef<HTMLDivElement>(null);
     const [activeRate, setActiveRate] = useState(0);
+    const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -76,11 +86,15 @@ export default function ReportsPage() {
                 const ownersData = ownersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Owner[];
                 setOwners(ownersData.sort((a,b) => a.name.localeCompare(b.name)));
 
-                // Fetch Settings for Rate
+                // Fetch Settings for Rate and Company Info
                 const settingsRef = doc(db, 'config', 'mainSettings');
                 const settingsSnap = await getDoc(settingsRef);
-                const rate = settingsSnap.exists() ? (settingsSnap.data().exchangeRates || []).find((r: any) => r.active)?.rate || 36.5 : 36.5;
-                setActiveRate(rate);
+                if (settingsSnap.exists()) {
+                    const settings = settingsSnap.data();
+                    setCompanyInfo(settings.companyInfo);
+                    const rate = (settings.exchangeRates || []).find((r: any) => r.active)?.rate || 36.5;
+                    setActiveRate(rate);
+                }
 
                 // Fetch Payments for Income Chart
                 const incomeQuery = query(collection(db, 'payments'), where('status', '==', 'aprobado'));
@@ -104,7 +118,7 @@ export default function ReportsPage() {
                     if(owner) {
                         const ownerStreet = owner.properties && owner.properties.length > 0 ? owner.properties[0].street : owner.street;
                         if (ownerStreet) {
-                            debtsByStreet[ownerStreet] = (debtsByStreet[ownerStreet] || 0) + (debt.amountUSD * rate);
+                            debtsByStreet[ownerStreet] = (debtsByStreet[ownerStreet] || 0) + (debt.amountUSD * activeRate);
                         }
                     }
                 }
@@ -118,32 +132,94 @@ export default function ReportsPage() {
             }
         };
         fetchData();
-    }, [toast]);
+    }, [toast, activeRate]);
 
 
-    const generatePdf = (title: string, head: any[], body: any[], filename: string) => {
+    const generatePdf = (title: string, head: any[], body: any[], filename: string, options: { footerText?: string } = {}) => {
         const doc = new jsPDF();
-        doc.text(title, 14, 16);
-        doc.text(`Fecha: ${new Date().toLocaleDateString('es-VE')}`, 14, 22);
+        const pageHeight = doc.internal.pageSize.getHeight();
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const margin = 14;
+
+        // --- PDF Header ---
+        if (companyInfo?.logo) {
+            doc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25);
+        }
+        if (companyInfo) {
+            doc.setFontSize(12);
+            doc.setFont('helvetica', 'bold');
+            doc.text(companyInfo.name, margin + 30, margin + 8);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+            doc.text(`${companyInfo.rif} | ${companyInfo.phone}`, margin + 30, margin + 14);
+            doc.text(companyInfo.address, margin + 30, margin + 19);
+            doc.text(companyInfo.email, margin + 30, margin + 24);
+        }
+        doc.setFontSize(10);
+        doc.text(`Fecha de Emisión:`, pageWidth - margin, margin + 8, { align: 'right' });
+        doc.setFont('helvetica', 'bold');
+        doc.text(new Date().toLocaleDateString('es-VE'), pageWidth - margin, margin + 13, { align: 'right' });
+        doc.setLineWidth(0.5);
+        doc.line(margin, margin + 32, pageWidth - margin, margin + 32);
+
+        // --- PDF Title ---
+        doc.setFontSize(16);
+        doc.setFont('helvetica', 'bold');
+        doc.text(title, pageWidth / 2, margin + 45, { align: 'center' });
+
+        // --- PDF Body ---
         (doc as any).autoTable({
             head,
             body,
-            startY: 30,
+            startY: margin + 55,
+            headStyles: { fillColor: [30, 80, 180] },
         });
+
+        if (options.footerText) {
+            doc.setFontSize(12);
+            doc.setFont('helvetica', 'bold');
+            doc.text(options.footerText, margin, (doc as any).lastAutoTable.finalY + 15);
+        }
+
         doc.save(`${filename}.pdf`);
     }
 
     const generateChartPdf = async (chartRef: React.RefObject<HTMLDivElement>, title: string, filename: string) => {
         if (!chartRef.current) return;
-        const canvas = await html2canvas(chartRef.current, { backgroundColor: null });
+        const canvas = await html2canvas(chartRef.current, { backgroundColor: '#ffffff', scale: 2 });
         const imgData = canvas.toDataURL('image/png');
         
         const pdf = new jsPDF('landscape');
-        pdf.text(title, 14, 16);
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const margin = 14;
+
+        // --- PDF Header ---
+        if (companyInfo?.logo) {
+            pdf.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25);
+        }
+        if (companyInfo) {
+            pdf.setFontSize(12);
+            pdf.setFont('helvetica', 'bold');
+            pdf.text(companyInfo.name, margin + 30, margin + 8);
+            pdf.setFont('helvetica', 'normal');
+            pdf.setFontSize(9);
+            pdf.text(`${companyInfo.rif} | ${companyInfo.phone}`, margin + 30, margin + 14);
+            pdf.text(companyInfo.address, margin + 30, margin + 19);
+        }
+        pdf.setFontSize(10);
+        pdf.text(`Fecha de Emisión: ${new Date().toLocaleDateString('es-VE')}`, pageWidth - margin, margin + 8, { align: 'right' });
+        
+        // --- PDF Title ---
+        pdf.setFontSize(16);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text(title, pageWidth / 2, margin + 40, { align: 'center' });
+        
+        // --- PDF Chart Image ---
         const imgProps = pdf.getImageProperties(imgData);
-        const pdfWidth = pdf.internal.pageSize.getWidth() - 28;
+        const pdfWidth = pageWidth - (margin * 2);
         const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-        pdf.addImage(imgData, 'PNG', 14, 28, pdfWidth, pdfHeight);
+        pdf.addImage(imgData, 'PNG', margin, margin + 50, pdfWidth, pdfHeight);
+
         pdf.save(`${filename}.pdf`);
     };
 
@@ -158,7 +234,7 @@ export default function ReportsPage() {
             const data = doc.data();
             return {
                 date: new Date(data.paymentDate.seconds * 1000).toLocaleDateString('es-VE'),
-                description: 'Pago de cuota', // Placeholder description
+                description: `Pago ${data.paymentMethod}`,
                 amount: data.totalAmount,
             };
         });
@@ -189,7 +265,7 @@ export default function ReportsPage() {
          generatePdf(
             'Reporte de Solvencia',
             [['Propietario', 'Propiedades', 'Email']],
-            solventOwners.map(o => [o.name, o.properties.map(p => p.house).join(', '), o.email || '-']),
+            solventOwners.map(o => [o.name, (o.properties || []).map(p => `${p.street} - ${p.house}`).join(', '), o.email || '-']),
             'reporte_solvencia'
         );
     };
@@ -199,7 +275,7 @@ export default function ReportsPage() {
          generatePdf(
             'Reporte de Saldos a Favor',
             [['Propietario', 'Propiedades', 'Saldo a Favor (Bs.)']],
-            ownersWithBalance.map(o => [o.name, o.properties.map(p => p.house).join(', '), o.balance.toFixed(2)]),
+            ownersWithBalance.map(o => [o.name, (o.properties || []).map(p => `${p.street} - ${p.house}`).join(', '), o.balance.toFixed(2)]),
             'reporte_saldos_favor'
         );
     };
@@ -218,16 +294,13 @@ export default function ReportsPage() {
         const incomePayments = incomeSnapshot.docs.map(doc => doc.data());
         const totalIncome = incomePayments.reduce((sum, p) => sum + p.totalAmount, 0);
 
-        const doc = new jsPDF();
-        doc.text('Reporte de Ingresos', 14, 16);
-        doc.text(`Período: ${format(startDate, "PPP", { locale: es })} - ${format(endDate, "PPP", { locale: es })}`, 14, 22);
-        (doc as any).autoTable({
-            head: [['Fecha', 'Monto (Bs.)', 'Descripción']],
-            body: incomePayments.map(p => [new Date(p.paymentDate.seconds * 1000).toLocaleDateString('es-VE'), p.totalAmount.toFixed(2), p.paymentMethod]),
-            startY: 30,
-        });
-        doc.text(`Total de Ingresos: Bs. ${totalIncome.toFixed(2)}`, 14, (doc as any).lastAutoTable.finalY + 10);
-        doc.save('reporte_ingresos.pdf');
+        generatePdf(
+            `Reporte de Ingresos (${format(startDate, "dd/MM/yy")} - ${format(endDate, "dd/MM/yy")})`,
+            [['Fecha', 'Monto (Bs.)', 'Método de Pago']],
+            incomePayments.map(p => [new Date(p.paymentDate.seconds * 1000).toLocaleDateString('es-VE'), p.totalAmount.toFixed(2), p.paymentMethod]),
+            'reporte_ingresos',
+            { footerText: `Total de Ingresos: Bs. ${totalIncome.toFixed(2)}` }
+        );
     };
 
     const generateGeneralStatusReport = () => {
@@ -236,8 +309,8 @@ export default function ReportsPage() {
             [['Propietario', 'Propiedades', 'Estatus', 'Saldo (Bs.)']],
             owners.map(o => {
                 const properties = (o.properties && o.properties.length > 0)
-                    ? o.properties.map(p => p.house).join(', ')
-                    : (o.house || 'N/A');
+                    ? o.properties.map(p => `${p.street} - ${p.house}`).join(', ')
+                    : (o.house ? `${o.street} - ${o.house}` : 'N/A');
                 return [o.name, properties, o.status === 'solvente' ? 'Solvente' : 'Moroso', o.balance.toFixed(2)]
             }),
             'reporte_general_estatus'
@@ -281,11 +354,11 @@ export default function ReportsPage() {
                     </CardContent>
                     <CardFooter>
                         <Button className="w-full" onClick={() => generateChartPdf(incomeChartRef, 'Gráfico de Ingresos por Mes', 'grafico_ingresos')}>
-                           <Download className="mr-2 h-4 w-4" /> Generar y Exportar PDF
+                           <Download className="mr-2 h-4 w-4" /> Exportar Gráfico
                         </Button>
                     </CardFooter>
                 </Card>
-                 <Card className="lg:col-span-1">
+                 <Card className="lg-col-span-1">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2"><BarChart2 className="h-5 w-5"/> Gráfico de Deuda por Calle</CardTitle>
                         <CardDescription>Visualización de la deuda pendiente agrupada por calle.</CardDescription>
@@ -306,7 +379,7 @@ export default function ReportsPage() {
                     </CardContent>
                     <CardFooter>
                         <Button className="w-full" variant="destructive" onClick={() => generateChartPdf(debtChartRef, 'Gráfico de Deuda por Calle', 'grafico_deudas')}>
-                           <Download className="mr-2 h-4 w-4" /> Generar y Exportar PDF
+                           <Download className="mr-2 h-4 w-4" /> Exportar Gráfico
                         </Button>
                     </CardFooter>
                 </Card>
@@ -339,8 +412,8 @@ export default function ReportsPage() {
                         </div>
                     </CardContent>
                     <CardFooter>
-                        <Button className="w-full" onClick={generateIndividualStatement}>
-                            <Search className="mr-2 h-4 w-4" /> Consultar
+                        <Button className="w-full" onClick={generateIndividualStatement} disabled={!selectedOwner}>
+                            <Download className="mr-2 h-4 w-4" /> Generar y Exportar
                         </Button>
                     </CardFooter>
                 </Card>
@@ -367,7 +440,7 @@ export default function ReportsPage() {
                         </div>
                     </CardContent>
                     <CardFooter>
-                         <Button className="w-full" onClick={generateDelinquencyReport}>
+                         <Button className="w-full" onClick={generateDelinquencyReport} disabled={!delinquencyPeriod}>
                             <Download className="mr-2 h-4 w-4" /> Generar y Exportar
                         </Button>
                     </CardFooter>
@@ -380,7 +453,7 @@ export default function ReportsPage() {
                         <CardDescription>Genere una lista de todos los propietarios al día con sus pagos.</CardDescription>
                     </CardHeader>
                     <CardContent className="flex items-center justify-center h-20">
-                         <p className="text-sm text-muted-foreground">Listo para generar.</p>
+                         <p className="text-sm text-muted-foreground">Vista previa no disponible.</p>
                     </CardContent>
                     <CardFooter>
                         <Button className="w-full" onClick={generateSolvencyReport}>
@@ -396,7 +469,7 @@ export default function ReportsPage() {
                         <CardDescription>Liste todos los propietarios con saldo a favor y sus montos.</CardDescription>
                     </CardHeader>
                     <CardContent className="flex items-center justify-center h-20">
-                         <p className="text-sm text-muted-foreground">Listo para generar.</p>
+                         <p className="text-sm text-muted-foreground">Vista previa no disponible.</p>
                     </CardContent>
                     <CardFooter>
                         <Button className="w-full" onClick={generateBalanceFavorReport}>
@@ -468,7 +541,7 @@ export default function ReportsPage() {
                         </div>
                     </CardContent>
                     <CardFooter>
-                         <Button className="w-full" onClick={generateIncomeReport}>
+                         <Button className="w-full" onClick={generateIncomeReport} disabled={!startDate || !endDate}>
                            <Download className="mr-2 h-4 w-4" /> Generar y Exportar
                         </Button>
                     </CardFooter>
@@ -481,7 +554,7 @@ export default function ReportsPage() {
                         <CardDescription>Una vista completa del estatus de pago de todas las unidades.</CardDescription>
                     </CardHeader>
                      <CardContent className="flex items-center justify-center h-20">
-                         <p className="text-sm text-muted-foreground">Listo para generar.</p>
+                         <p className="text-sm text-muted-foreground">Vista previa no disponible.</p>
                     </CardContent>
                     <CardFooter>
                         <Button className="w-full" onClick={generateGeneralStatusReport}>
