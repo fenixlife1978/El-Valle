@@ -172,13 +172,33 @@ export default function DebtManagementPage() {
     }
     
     const confirmDelete = async () => {
-        if (!debtToDelete) return;
+        if (!debtToDelete || !selectedOwner) return;
+
         try {
-            await deleteDoc(doc(db, "debts", debtToDelete.id));
-            toast({ title: 'Deuda Eliminada', description: `La deuda ha sido eliminada exitosamente.` });
+            const ownerRef = doc(db, "owners", selectedOwner.id);
+            const debtRef = doc(db, "debts", debtToDelete.id);
+
+            await runTransaction(db, async (transaction) => {
+                const ownerDoc = await transaction.get(ownerRef);
+                if (!ownerDoc.exists()) {
+                    throw "El documento del propietario no existe.";
+                }
+
+                // Restore balance by adding the deleted debt amount back
+                const currentBalance = ownerDoc.data().balance || 0;
+                const newBalance = currentBalance + debtToDelete.amountUSD;
+                transaction.update(ownerRef, { balance: newBalance });
+                
+                // Delete the debt document
+                transaction.delete(debtRef);
+            });
+
+            toast({ title: 'Deuda Eliminada', description: 'La deuda ha sido eliminada y el saldo del propietario ha sido actualizado.' });
+
         } catch (error) {
             console.error("Error deleting debt: ", error);
-            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo eliminar la deuda.' });
+            const errorMessage = typeof error === 'string' ? error : (error instanceof Error ? error.message : 'No se pudo eliminar la deuda.');
+            toast({ variant: 'destructive', title: 'Error', description: errorMessage });
         } finally {
             setIsDeleteConfirmationOpen(false);
             setDebtToDelete(null);
@@ -557,7 +577,7 @@ export default function DebtManagementPage() {
                         <DialogHeader>
                             <DialogTitle>¿Está seguro?</DialogTitle>
                             <DialogDescription>
-                                Esta acción no se puede deshacer. Esto eliminará permanentemente la deuda de la base de datos.
+                                Esta acción no se puede deshacer. Esto eliminará permanentemente la deuda y ajustará el saldo del propietario.
                             </DialogDescription>
                         </DialogHeader>
                         <DialogFooter>
