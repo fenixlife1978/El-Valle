@@ -85,7 +85,25 @@ export default function PeopleManagementPage() {
             snapshot.forEach((doc) => {
                 ownersData.push({ id: doc.id, ...doc.data() } as Owner);
             });
-            setOwners(ownersData.sort((a, b) => a.name.localeCompare(b.name)));
+            
+            // Custom sort logic
+            const getSortKeys = (owner: Owner) => {
+                const prop = (owner.properties && owner.properties.length > 0) ? owner.properties[0] : { street: owner.street, house: owner.house };
+                const streetNum = parseInt(String(prop.street).replace('Calle ', '') || '0');
+                const houseNum = parseInt(String(prop.house).replace('Casa ', '') || '0');
+                return { streetNum, houseNum };
+            };
+
+            ownersData.sort((a, b) => {
+                const aKeys = getSortKeys(a);
+                const bKeys = getSortKeys(b);
+                if (aKeys.streetNum !== bKeys.streetNum) {
+                    return aKeys.streetNum - bKeys.streetNum;
+                }
+                return aKeys.houseNum - bKeys.houseNum;
+            });
+
+            setOwners(ownersData);
             setLoading(false);
         }, (error) => {
             console.error("Error fetching owners: ", error);
