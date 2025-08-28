@@ -12,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useToast } from '@/hooks/use-toast';
 import { Upload, Save, Calendar as CalendarIcon, PlusCircle, Loader2, AlertTriangle, Wand2, MoreHorizontal, Edit } from 'lucide-react';
 import { cn } from "@/lib/utils";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { doc, getDoc, setDoc, updateDoc, arrayUnion, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -31,7 +31,7 @@ type CompanyInfo = {
 
 type ExchangeRate = {
     id: string;
-    date: string;
+    date: string; // Stored as 'yyyy-MM-dd'
     rate: number;
     active: boolean;
 };
@@ -157,7 +157,8 @@ export default function SettingsPage() {
     
     const openEditRateDialog = (rate: ExchangeRate) => {
         setRateToEdit(rate);
-        setEditRateDate(new Date(rate.date));
+        // Dates are stored as 'yyyy-MM-dd', parseISO handles this correctly without timezone shifts.
+        setEditRateDate(parseISO(rate.date));
         setEditRateAmount(String(rate.rate));
         setIsRateDialogOpen(true);
     };
@@ -348,7 +349,7 @@ export default function SettingsPage() {
                                         <TableBody>
                                             {exchangeRates.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(rate => (
                                                 <TableRow key={rate.id}>
-                                                    <TableCell>{format(new Date(rate.date), "dd/MM/yyyy")}</TableCell>
+                                                    <TableCell>{format(parseISO(rate.date), "dd/MM/yyyy")}</TableCell>
                                                     <TableCell>{rate.rate.toFixed(2)}</TableCell>
                                                     <TableCell className="text-right">
                                                         <DropdownMenu>

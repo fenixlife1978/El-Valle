@@ -11,7 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { useToast } from '@/hooks/use-toast';
 import { CalendarIcon, Upload, CheckCircle2, Trash2, PlusCircle, Loader2 } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore';
@@ -35,6 +35,13 @@ type Owner = {
     name: string;
     street: string;
     house: string;
+};
+
+type ExchangeRate = {
+    id: string;
+    date: string; // Stored as 'yyyy-MM-dd'
+    rate: number;
+    active: boolean;
 };
 
 // --- Type Definitions ---
@@ -95,12 +102,19 @@ export default function UnifiedPaymentsPage() {
                     if (paymentDate) {
                         setExchangeRate(null);
                         setExchangeRateMessage('Buscando tasa...');
-                        const activeRate = settings.exchangeRates?.find((r: any) => r.active);
-                        if (activeRate) {
-                             setExchangeRate(activeRate.rate);
+                        const allRates = (settings.exchangeRates || []) as ExchangeRate[];
+                        
+                        // Find the most recent rate *on or before* the payment date
+                        const paymentDateString = format(paymentDate, 'yyyy-MM-dd');
+                        const applicableRates = allRates
+                            .filter(r => r.date <= paymentDateString)
+                            .sort((a, b) => b.date.localeCompare(a.date));
+
+                        if (applicableRates.length > 0) {
+                             setExchangeRate(applicableRates[0].rate);
                              setExchangeRateMessage('');
                         } else {
-                           setExchangeRateMessage('No hay tasa activa. Contacte al administrador.');
+                           setExchangeRateMessage('No hay tasa para esta fecha.');
                         }
                     } else {
                         setExchangeRate(null);
@@ -112,6 +126,7 @@ export default function UnifiedPaymentsPage() {
                 }
             } catch (e) {
                  setExchangeRateMessage('Error al buscar tasa.');
+                 console.error(e);
             }
         }
         fetchRateAndFee();
@@ -193,7 +208,7 @@ export default function UnifiedPaymentsPage() {
 
         if (!paymentDate) newErrors.paymentDate = 'La fecha es obligatoria.';
         else if (paymentDate > new Date()) newErrors.paymentDate = 'La fecha no puede ser futura.';
-        if (!exchangeRate) newErrors.exchangeRate = 'Se requiere una tasa de cambio válida.';
+        if (!exchangeRate) newErrors.exchangeRate = 'Se requiere una tasa de cambio válida para la fecha.';
         if (!paymentMethod) newErrors.paymentMethod = 'Seleccione un tipo de pago.';
         if (!bank) newErrors.bank = 'Seleccione un banco.';
         if (bank === 'otro' && !otherBank) newErrors.otherBank = 'Especifique el nombre del banco.';
@@ -448,7 +463,8 @@ export default function UnifiedPaymentsPage() {
                                 placeholder="0.00"
                                 step="0.01"
                                 className={cn(errors.totalAmount && "border-destructive")}
-                                disabled={loading}
+                                disabled={loading || (beneficiaryType === 'propio' && !!exchangeRate)}
+                                readOnly={beneficiaryType === 'propio' && !!exchangeRate}
                             />
                             {errors.totalAmount && <p className="text-sm text-destructive">{errors.totalAmount}</p>}
                         </div>
@@ -552,3 +568,5 @@ export default function UnifiedPaymentsPage() {
         </div>
     );
 }
+
+    
