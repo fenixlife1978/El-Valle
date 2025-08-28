@@ -1,3 +1,4 @@
+
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { Button } from "@/components/ui/button";
@@ -9,15 +10,16 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { useToast } from '@/hooks/use-toast';
-import { CalendarIcon, Upload, CircleAlert, CheckCircle2, Trash2, PlusCircle } from 'lucide-react';
+import { CalendarIcon, Upload, CheckCircle2, Trash2, PlusCircle, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import { collection, onSnapshot, query } from 'firebase/firestore';
+import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+// In a real app, you would also use Firebase Storage for the file upload
+// import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
-// --- Mock Data ---
-// In a real app, this would come from Firestore
+// --- Static Data ---
 const venezuelanBanks = [
     { value: 'banesco', label: 'Banesco' },
     { value: 'mercantil', label: 'Mercantil' },
@@ -29,24 +31,23 @@ const venezuelanBanks = [
 ];
 
 type Owner = {
-    id: string; // Firestore IDs are strings
+    id: string;
     name: string;
     street: string;
     house: string;
-    email?: string;
-    balance?: number;
-    role: 'propietario' | 'administrador';
 };
 
 // --- Type Definitions ---
 type BeneficiaryType = 'propio' | 'terceros' | 'global';
 type PaymentMethod = 'movil' | 'transferencia' | '';
-type GlobalSplit = { ownerId: string; amount: number | string };
+type GlobalSplit = { ownerId: string; amount: number | string; house?: string; };
 type FormErrors = { [key: string]: string | undefined };
 
 export default function UnifiedPaymentsPage() {
     const { toast } = useToast();
     const [owners, setOwners] = useState<Owner[]>([]);
+    const [loading, setLoading] = useState(false);
+    const receiptFileRef = useRef<HTMLInputElement>(null);
 
     // --- Form State ---
     const [paymentDate, setPaymentDate] = useState<Date | undefined>();
@@ -57,19 +58,20 @@ export default function UnifiedPaymentsPage() {
     const [otherBank, setOtherBank] = useState('');
     const [reference, setReference] = useState('');
     const [receiptFile, setReceiptFile] = useState<File | null>(null);
-    const receiptFileRef = useRef<HTMLInputElement>(null);
     const [beneficiaryType, setBeneficiaryType] = useState<BeneficiaryType>('propio');
     const [totalAmount, setTotalAmount] = useState<number | string>('');
     const [thirdPartyBeneficiary, setThirdPartyBeneficiary] = useState('');
     const [globalSplits, setGlobalSplits] = useState<GlobalSplit[]>([{ ownerId: '', amount: '' }]);
     const [errors, setErrors] = useState<FormErrors>({});
 
+    // --- Data Fetching ---
     useEffect(() => {
         const q = query(collection(db, "owners"));
         const unsubscribe = onSnapshot(q, (querySnapshot) => {
             const ownersData: Owner[] = [];
             querySnapshot.forEach((doc) => {
-                ownersData.push({ id: doc.id, ...doc.data() } as Owner);
+                const data = doc.data();
+                ownersData.push({ id: doc.id, name: data.name, street: data.street, house: data.house });
             });
             setOwners(ownersData.sort((a, b) => a.name.localeCompare(b.name)));
         }, (error) => {
@@ -80,26 +82,35 @@ export default function UnifiedPaymentsPage() {
         return () => unsubscribe();
     }, [toast]);
     
-    // --- Effects ---
     useEffect(() => {
-        if (paymentDate) {
-            // Mock fetching exchange rate from Firestore
-            setExchangeRate(null);
-            setExchangeRateMessage('Buscando tasa...');
-            setTimeout(() => {
-                if (paymentDate.getDate() % 5 === 0) { // Simulate no rate found
-                    setExchangeRate(null);
-                    setExchangeRateMessage('No hay tasa registrada para esta fecha. Contacte al administrador.');
-                } else {
-                    const rate = 36.50 + (paymentDate.getDate() / 10);
-                    setExchangeRate(rate);
-                    setExchangeRateMessage('');
+        const fetchRate = async () => {
+            if (paymentDate) {
+                setExchangeRate(null);
+                setExchangeRateMessage('Buscando tasa...');
+                try {
+                    const settingsRef = doc(db, 'config', 'mainSettings');
+                    const docSnap = await getDoc(settingsRef);
+                    if (docSnap.exists()) {
+                        const settings = docSnap.data();
+                        const activeRate = settings.exchangeRates?.find((r: any) => r.active);
+                        if (activeRate) {
+                             setExchangeRate(activeRate.rate);
+                             setExchangeRateMessage('');
+                        } else {
+                           setExchangeRateMessage('No hay tasa activa. Contacte al administrador.');
+                        }
+                    } else {
+                         setExchangeRateMessage('No hay configuraciones. Contacte al administrador.');
+                    }
+                } catch (e) {
+                     setExchangeRateMessage('Error al buscar tasa.');
                 }
-            }, 1000);
-        } else {
-            setExchangeRate(null);
-            setExchangeRateMessage('');
+            } else {
+                setExchangeRate(null);
+                setExchangeRateMessage('');
+            }
         }
+        fetchRate();
     }, [paymentDate]);
 
     // --- Derived State & Calculations ---
@@ -107,6 +118,24 @@ export default function UnifiedPaymentsPage() {
     const globalBalance = (Number(totalAmount) || 0) - globalSplitTotal;
 
     // --- Handlers ---
+    const resetForm = () => {
+        setPaymentDate(undefined);
+        setExchangeRate(null);
+        setExchangeRateMessage('');
+        setPaymentMethod('');
+        setBank('');
+        setOtherBank('');
+        setReference('');
+        setReceiptFile(null);
+        if(receiptFileRef.current) receiptFileRef.current.value = '';
+        setBeneficiaryType('propio');
+        setTotalAmount('');
+        setThirdPartyBeneficiary('');
+        setGlobalSplits([{ ownerId: '', amount: '' }]);
+        setErrors({});
+    }
+
+
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
@@ -137,7 +166,13 @@ export default function UnifiedPaymentsPage() {
 
     const handleGlobalSplitChange = (index: number, field: 'ownerId' | 'amount', value: string | number) => {
         const newSplits = [...globalSplits];
-        (newSplits[index] as any)[field] = value;
+        if (field === 'ownerId') {
+            const owner = owners.find(o => o.id === value);
+            (newSplits[index] as any)[field] = value;
+            (newSplits[index] as any)['house'] = owner?.house;
+        } else {
+             (newSplits[index] as any)[field] = value;
+        }
         setGlobalSplits(newSplits);
     };
 
@@ -151,7 +186,7 @@ export default function UnifiedPaymentsPage() {
         if (!paymentMethod) newErrors.paymentMethod = 'Seleccione un tipo de pago.';
         if (!bank) newErrors.bank = 'Seleccione un banco.';
         if (bank === 'otro' && !otherBank) newErrors.otherBank = 'Especifique el nombre del banco.';
-        if (!/^\d{6}$/.test(reference)) newErrors.reference = 'La referencia debe tener 6 dígitos.';
+        if (!/^\d{6,}$/.test(reference)) newErrors.reference = 'La referencia debe tener al menos 6 dígitos.';
         if (!receiptFile) newErrors.receiptFile = 'El comprobante es obligatorio.';
         if (!totalAmount || Number(totalAmount) <= 0) newErrors.totalAmount = 'El monto debe ser mayor a cero.';
 
@@ -181,33 +216,59 @@ export default function UnifiedPaymentsPage() {
             });
             return;
         }
+        setLoading(true);
 
-        // Mock submission to Firestore
-        console.log({
+        // This would be the real user, not a mock one
+        const currentUserId = "mock-user-id"; 
+
+        // In a real app, upload the file to Firebase Storage first and get the URL
+        const receiptFileUrl = "mock-receipt-url";
+        
+        let beneficiaries: GlobalSplit[] = [];
+        if (beneficiaryType === 'propio') {
+            const owner = owners.find(o => o.id === currentUserId); // You'd need the current user's owner doc ID
+            if(owner) beneficiaries = [{ ownerId: owner.id, amount: Number(totalAmount), house: owner.house }];
+        } else if (beneficiaryType === 'terceros') {
+            const owner = owners.find(o => o.id === thirdPartyBeneficiary);
+            if(owner) beneficiaries = [{ ownerId: owner.id, amount: Number(totalAmount), house: owner.house }];
+        } else { // global
+            beneficiaries = globalSplits.map(s => ({...s, amount: Number(s.amount) }));
+        }
+
+        const paymentData = {
             paymentDate,
             exchangeRate,
             paymentMethod,
             bank: bank === 'otro' ? otherBank : bank,
             reference,
-            totalAmount,
+            totalAmount: Number(totalAmount),
             beneficiaryType,
-            beneficiaries: beneficiaryType === 'propio' 
-                ? 'current-user-uid' 
-                : beneficiaryType === 'terceros' 
-                ? thirdPartyBeneficiary 
-                : globalSplits,
+            beneficiaries,
+            receiptFileUrl,
             receiptFileName: receiptFile?.name,
             status: 'pendiente',
-            reportedAt: new Date().toISOString()
-        });
+            reportedAt: serverTimestamp(),
+            reportedBy: currentUserId,
+        };
 
-        toast({
-            title: 'Reporte Enviado',
-            description: 'Tu reporte de pago ha sido enviado para revisión.',
-            className: 'bg-green-100 border-green-400 text-green-800'
-        });
-        
-        // Reset form state here
+        try {
+            await addDoc(collection(db, "payments"), paymentData);
+            toast({
+                title: 'Reporte Enviado',
+                description: 'Tu reporte de pago ha sido enviado para revisión.',
+                className: 'bg-green-100 border-green-400 text-green-800'
+            });
+            resetForm();
+        } catch (error) {
+            console.error("Error adding payment: ", error);
+             toast({
+                variant: 'destructive',
+                title: 'Error en el servidor',
+                description: 'No se pudo guardar el reporte de pago. Inténtalo de nuevo.',
+            });
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -270,7 +331,7 @@ export default function UnifiedPaymentsPage() {
                         {/* --- Fila 2 --- */}
                         <div className="space-y-2">
                            <Label htmlFor="paymentMethod">3. Tipo de Pago</Label>
-                           <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}>
+                           <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as PaymentMethod)} disabled={loading}>
                                 <SelectTrigger id="paymentMethod" className={cn(errors.paymentMethod && "border-destructive")}>
                                     <SelectValue placeholder="Seleccione..." />
                                 </SelectTrigger>
@@ -284,7 +345,7 @@ export default function UnifiedPaymentsPage() {
 
                         <div className="space-y-2">
                             <Label htmlFor="bank">4. Banco Emisor</Label>
-                             <Select value={bank} onValueChange={setBank}>
+                             <Select value={bank} onValueChange={setBank} disabled={loading}>
                                 <SelectTrigger id="bank" className={cn(errors.bank && "border-destructive")}>
                                     <SelectValue placeholder="Seleccione un banco..." />
                                 </SelectTrigger>
@@ -304,6 +365,7 @@ export default function UnifiedPaymentsPage() {
                                     onChange={(e) => setOtherBank(e.target.value)} 
                                     placeholder="Ej: Banco del Sur"
                                     className={cn(errors.otherBank && "border-destructive")}
+                                    disabled={loading}
                                 />
                                 {errors.otherBank && <p className="text-sm text-destructive">{errors.otherBank}</p>}
                             </div>
@@ -311,14 +373,14 @@ export default function UnifiedPaymentsPage() {
 
                         {/* --- Fila 3 --- */}
                         <div className="space-y-2">
-                             <Label htmlFor="reference">5. Referencia (Últimos 6 dígitos)</Label>
+                             <Label htmlFor="reference">5. Referencia (Últimos 6 dígitos o más)</Label>
                              <Input 
                                 id="reference" 
                                 value={reference} 
-                                onChange={(e) => setReference(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                                maxLength={6}
+                                onChange={(e) => setReference(e.target.value.replace(/\D/g, ''))}
                                 placeholder="123456"
                                 className={cn(errors.reference && "border-destructive")}
+                                disabled={loading}
                              />
                              {errors.reference && <p className="text-sm text-destructive">{errors.reference}</p>}
                         </div>
@@ -326,7 +388,7 @@ export default function UnifiedPaymentsPage() {
                         <div className="space-y-2">
                             <Label htmlFor="receiptFile">6. Comprobante de Pago</Label>
                             <div className="flex items-center gap-4">
-                                <Button type="button" variant="outline" onClick={() => receiptFileRef.current?.click()} className="flex-1">
+                                <Button type="button" variant="outline" onClick={() => receiptFileRef.current?.click()} className="flex-1" disabled={loading}>
                                     <Upload className="mr-2 h-4 w-4"/>
                                     {receiptFile ? 'Cambiar archivo' : 'Subir archivo'}
                                 </Button>
@@ -348,7 +410,7 @@ export default function UnifiedPaymentsPage() {
                         {/* --- Beneficiary Type --- */}
                         <div className="space-y-3">
                             <Label>7. Tipo de Pago</Label>
-                            <RadioGroup value={beneficiaryType} onValueChange={(v) => setBeneficiaryType(v as BeneficiaryType)} className="flex flex-col sm:flex-row gap-4">
+                            <RadioGroup value={beneficiaryType} onValueChange={(v) => setBeneficiaryType(v as BeneficiaryType)} className="flex flex-col sm:flex-row gap-4" disabled={loading}>
                                 <div className="flex items-center space-x-2">
                                     <RadioGroupItem value="propio" id="r-propio" />
                                     <Label htmlFor="r-propio">Pago Propio</Label>
@@ -375,6 +437,8 @@ export default function UnifiedPaymentsPage() {
                                 placeholder="0.00"
                                 step="0.01"
                                 className={cn(errors.totalAmount && "border-destructive")}
+                                disabled={loading || beneficiaryType === 'propio'}
+                                readOnly={beneficiaryType === 'propio'}
                             />
                             {errors.totalAmount && <p className="text-sm text-destructive">{errors.totalAmount}</p>}
                         </div>
@@ -386,14 +450,14 @@ export default function UnifiedPaymentsPage() {
                             {beneficiaryType === 'propio' && (
                                 <div className="p-4 bg-muted/50 rounded-lg flex items-center gap-3">
                                     <CheckCircle2 className="h-5 w-5 text-green-600"/>
-                                    <p className="text-sm text-muted-foreground">El monto total se asignará a tu unidad: <strong>Juan Perez (Propietario)</strong>.</p>
+                                    <p className="text-sm text-muted-foreground">El monto total se asignará a tu unidad/deuda.</p>
                                 </div>
                             )}
 
                             {beneficiaryType === 'terceros' && (
                                 <div className="space-y-2">
                                     <Label htmlFor="third-party-beneficiary">Beneficiario</Label>
-                                    <Select value={thirdPartyBeneficiary} onValueChange={setThirdPartyBeneficiary}>
+                                    <Select value={thirdPartyBeneficiary} onValueChange={setThirdPartyBeneficiary} disabled={loading}>
                                         <SelectTrigger id="third-party-beneficiary" className={cn(errors.thirdPartyBeneficiary && "border-destructive")}>
                                             <SelectValue placeholder="Seleccione un propietario..." />
                                         </SelectTrigger>
@@ -410,7 +474,7 @@ export default function UnifiedPaymentsPage() {
                                     {globalSplits.map((split, index) => (
                                         <div key={index} className="flex items-center gap-2">
                                             <div className="flex-1">
-                                                 <Select value={split.ownerId} onValueChange={(v) => handleGlobalSplitChange(index, 'ownerId', v)}>
+                                                 <Select value={split.ownerId} onValueChange={(v) => handleGlobalSplitChange(index, 'ownerId', v)} disabled={loading}>
                                                     <SelectTrigger>
                                                         <SelectValue placeholder="Seleccione beneficiario..." />
                                                     </SelectTrigger>
@@ -433,14 +497,15 @@ export default function UnifiedPaymentsPage() {
                                                     placeholder="Monto (Bs.)" 
                                                     value={split.amount}
                                                     onChange={(e) => handleGlobalSplitChange(index, 'amount', e.target.value)}
+                                                    disabled={loading}
                                                 />
                                             </div>
-                                            <Button type="button" variant="ghost" size="icon" onClick={() => removeGlobalSplit(index)} disabled={globalSplits.length <= 1}>
+                                            <Button type="button" variant="ghost" size="icon" onClick={() => removeGlobalSplit(index)} disabled={globalSplits.length <= 1 || loading}>
                                                 <Trash2 className="h-4 w-4 text-destructive"/>
                                             </Button>
                                         </div>
                                     ))}
-                                    <Button type="button" variant="outline" size="sm" onClick={addGlobalSplit}>
+                                    <Button type="button" variant="outline" size="sm" onClick={addGlobalSplit} disabled={loading}>
                                         <PlusCircle className="mr-2 h-4 w-4"/>
                                         Agregar Beneficiario
                                     </Button>
@@ -467,8 +532,8 @@ export default function UnifiedPaymentsPage() {
                         </div>
                     </CardContent>
                     <CardFooter>
-                         <Button type="submit" className="w-full md:w-auto ml-auto">
-                            <CheckCircle2 className="mr-2 h-4 w-4"/>
+                         <Button type="submit" className="w-full md:w-auto ml-auto" disabled={loading}>
+                            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CheckCircle2 className="mr-2 h-4 w-4"/>}
                             Enviar Reporte
                         </Button>
                     </CardFooter>
@@ -477,3 +542,4 @@ export default function UnifiedPaymentsPage() {
         </div>
     );
 }
+

@@ -1,23 +1,88 @@
+
+'use client';
+
+import { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Landmark, AlertCircle, Building, Eye, Printer } from "lucide-react";
+import { Landmark, AlertCircle, Building, Eye, Printer, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { collection, onSnapshot, query, where, limit, orderBy } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
-// Mock Data
-const paymentsThisMonth = 12500.50;
-const pendingPayments = 5;
-const totalUnits = 48;
-
-const recentPayments = [
-  { id: 1, user: "Ana Rodriguez", unit: "A-101", amount: 250.00, date: "2023-10-28", bank: "Banesco", type: "Transferencia", status: "aprobado" },
-  { id: 2, user: "Carlos Perez", unit: "B-203", amount: 250.00, date: "2023-10-27", bank: "Mercantil", type: "Pago Móvil", status: "aprobado" },
-  { id: 3, user: "Maria Garcia", unit: "C-305", amount: 250.00, date: "2023-10-26", bank: "Provincial", type: "Transferencia", status: "pendiente" },
-  { id: 4, user: "Luis Hernandez", unit: "A-102", amount: 250.00, date: "2023-10-25", bank: "Banesco", type: "Transferencia", status: "aprobado" },
-  { id: 5, user: "Sofia Martinez", unit: "D-401", amount: 250.00, date: "2023-10-24", bank: "Mercantil", type: "Pago Móvil", status: "aprobado" },
-];
+type Payment = {
+  id: string;
+  user: string;
+  unit: string;
+  amount: number;
+  date: string;
+  bank: string;
+  type: string;
+  status: 'aprobado' | 'pendiente' | 'rechazado';
+};
 
 export default function AdminDashboardPage() {
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    paymentsThisMonth: 0,
+    pendingPayments: 0,
+    totalUnits: 0,
+  });
+  const [recentPayments, setRecentPayments] = useState<Payment[]>([]);
+
+  useEffect(() => {
+    // Fetch stats
+    const ownersQuery = query(collection(db, "owners"));
+    const ownersUnsubscribe = onSnapshot(ownersQuery, (snapshot) => {
+      setStats(prev => ({ ...prev, totalUnits: snapshot.size }));
+    });
+
+    const paymentsQuery = query(collection(db, "payments"));
+    const paymentsUnsubscribe = onSnapshot(paymentsQuery, (snapshot) => {
+        let monthTotal = 0;
+        let pendingCount = 0;
+        const now = new Date();
+        snapshot.forEach(doc => {
+            const payment = doc.data();
+            const paymentDate = new Date(payment.paymentDate.seconds * 1000);
+            if (payment.status === 'aprobado' && paymentDate.getMonth() === now.getMonth() && paymentDate.getFullYear() === now.getFullYear()) {
+                monthTotal += Number(payment.totalAmount);
+            }
+            if (payment.status === 'pendiente') {
+                pendingCount++;
+            }
+        });
+        setStats(prev => ({ ...prev, paymentsThisMonth: monthTotal, pendingPayments: pendingCount }));
+    });
+
+    // Fetch recent payments
+    const recentPaymentsQuery = query(collection(db, "payments"), orderBy('reportedAt', 'desc'), limit(5));
+    const recentPaymentsUnsubscribe = onSnapshot(recentPaymentsQuery, (snapshot) => {
+      const paymentsData: Payment[] = [];
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        paymentsData.push({ 
+            id: doc.id,
+            user: "Usuario", // This should be fetched/joined from owners collection
+            unit: data.beneficiaries[0]?.house || 'N/A', // Simplified for now
+            amount: data.totalAmount,
+            date: new Date(data.paymentDate.seconds * 1000).toISOString(),
+            bank: data.bank,
+            type: data.paymentMethod,
+            status: data.status,
+        });
+      });
+      setRecentPayments(paymentsData);
+      setLoading(false);
+    });
+
+    return () => {
+      ownersUnsubscribe();
+      paymentsUnsubscribe();
+      recentPaymentsUnsubscribe();
+    }
+  }, []);
+
   return (
     <div className="space-y-8">
       <h1 className="text-3xl font-bold font-headline">Panel de Administrador</h1>
@@ -29,7 +94,7 @@ export default function AdminDashboardPage() {
             <Landmark className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">Bs. {paymentsThisMonth.toLocaleString('es-VE', {minimumFractionDigits: 2})}</div>
+            {loading ? <Loader2 className="h-6 w-6 animate-spin" /> : <div className="text-2xl font-bold">Bs. {stats.paymentsThisMonth.toLocaleString('es-VE', {minimumFractionDigits: 2})}</div>}
           </CardContent>
         </Card>
         <Card>
@@ -38,7 +103,7 @@ export default function AdminDashboardPage() {
             <AlertCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{pendingPayments}</div>
+            {loading ? <Loader2 className="h-6 w-6 animate-spin" /> : <div className="text-2xl font-bold">{stats.pendingPayments}</div>}
           </CardContent>
         </Card>
         <Card>
@@ -47,7 +112,7 @@ export default function AdminDashboardPage() {
             <Building className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalUnits}</div>
+            {loading ? <Loader2 className="h-6 w-6 animate-spin" /> : <div className="text-2xl font-bold">{stats.totalUnits}</div>}
           </CardContent>
         </Card>
       </div>
@@ -69,7 +134,20 @@ export default function AdminDashboardPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {recentPayments.map((payment) => (
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="h-24 text-center">
+                      <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
+                    </TableCell>
+                  </TableRow>
+                ) : recentPayments.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                      No hay pagos registrados recientemente.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  recentPayments.map((payment) => (
                   <TableRow key={payment.id}>
                     <TableCell>{payment.user}</TableCell>
                     <TableCell>{payment.unit}</TableCell>
@@ -78,8 +156,8 @@ export default function AdminDashboardPage() {
                     <TableCell>{payment.bank}</TableCell>
                     <TableCell>{payment.type}</TableCell>
                     <TableCell>
-                      <Badge variant={payment.status === 'aprobado' ? 'success' : 'warning'}>
-                        {payment.status === 'aprobado' ? 'Aprobado' : 'Pendiente'}
+                      <Badge variant={payment.status === 'aprobado' ? 'success' : payment.status === 'rechazado' ? 'destructive' : 'warning'}>
+                        {payment.status.charAt(0).toUpperCase() + payment.status.slice(1)}
                       </Badge>
                     </TableCell>
                     <TableCell className="flex gap-2">
@@ -93,7 +171,8 @@ export default function AdminDashboardPage() {
                         </Button>
                     </TableCell>
                   </TableRow>
-                ))}
+                  ))
+                )}
               </TableBody>
             </Table>
         </Card>

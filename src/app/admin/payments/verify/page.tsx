@@ -1,22 +1,25 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { CheckCircle2, XCircle, MoreHorizontal, Eye, Printer, FileDown, Filter } from 'lucide-react';
+import { CheckCircle2, XCircle, MoreHorizontal, Eye, Printer, Filter, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+import { collection, onSnapshot, query, doc, updateDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 type PaymentStatus = 'pendiente' | 'aprobado' | 'rechazado';
 type PaymentType = 'Transferencia' | 'Pago Móvil';
 
 type Payment = {
-  id: number;
-  user: string;
+  id: string;
+  user?: string; // To be enriched
   unit: string;
   amount: number;
   date: string;
@@ -25,15 +28,6 @@ type Payment = {
   reference: string;
   status: PaymentStatus;
 };
-
-const initialPayments: Payment[] = [
-  { id: 1, user: 'Ana Rodriguez', unit: 'A-101', amount: 250.00, date: '2023-10-28', bank: 'Banesco', type: 'Transferencia', reference: '123456', status: 'pendiente' },
-  { id: 2, user: 'Carlos Perez', unit: 'B-203', amount: 250.00, date: '2023-10-27', bank: 'Mercantil', type: 'Pago Móvil', reference: '234567', status: 'pendiente' },
-  { id: 3, user: 'Maria Garcia', unit: 'C-305', amount: 250.00, date: '2023-10-26', bank: 'Provincial', type: 'Transferencia', reference: '345678', status: 'aprobado' },
-  { id: 4, user: 'Luis Hernandez', unit: 'A-102', amount: 250.00, date: '2023-10-25', bank: 'Banesco', type: 'Transferencia', reference: '456789', status: 'aprobado' },
-  { id: 5, user: 'Sofia Martinez', unit: 'D-401', amount: 250.00, date: '2023-10-24', bank: 'Mercantil', type: 'Pago Móvil', reference: '567890', status: 'rechazado' },
-  { id: 6, user: 'Pedro Gonzalez', unit: 'B-201', amount: 250.00, date: '2023-10-23', bank: 'Banco de Venezuela', type: 'Transferencia', reference: '678901', status: 'pendiente' },
-];
 
 const statusVariantMap: { [key in PaymentStatus]: 'warning' | 'success' | 'destructive' } = {
   pendiente: 'warning',
@@ -48,17 +42,53 @@ const statusTextMap: { [key in PaymentStatus]: string } = {
 };
 
 export default function VerifyPaymentsPage() {
-  const [payments, setPayments] = useState<Payment[]>(initialPayments);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<PaymentStatus | 'todos'>('todos');
   const { toast } = useToast();
 
-  const handleStatusChange = (id: number, status: PaymentStatus) => {
-    setPayments(payments.map(p => p.id === id ? { ...p, status } : p));
-    toast({
-      title: 'Estado actualizado',
-      description: `El pago ha sido marcado como ${statusTextMap[status].toLowerCase()}.`,
-      className: 'bg-green-100 border-green-400 text-green-800'
+  useEffect(() => {
+    const q = query(collection(db, "payments"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+        const paymentsData: Payment[] = [];
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            paymentsData.push({
+                id: doc.id,
+                unit: data.beneficiaries[0]?.house || 'N/A', // Simplified
+                amount: data.totalAmount,
+                date: new Date(data.paymentDate.seconds * 1000).toISOString(),
+                bank: data.bank,
+                type: data.paymentMethod,
+                reference: data.reference,
+                status: data.status,
+            });
+        });
+        setPayments(paymentsData);
+        setLoading(false);
+    }, (error) => {
+        console.error("Error fetching payments: ", error);
+        toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron cargar los pagos.' });
+        setLoading(false);
     });
+
+    return () => unsubscribe();
+  }, [toast]);
+
+
+  const handleStatusChange = async (id: string, status: PaymentStatus) => {
+    const paymentRef = doc(db, 'payments', id);
+    try {
+        await updateDoc(paymentRef, { status });
+        toast({
+            title: 'Estado actualizado',
+            description: `El pago ha sido marcado como ${statusTextMap[status].toLowerCase()}.`,
+            className: 'bg-green-100 border-green-400 text-green-800'
+        });
+    } catch (error) {
+        console.error("Error updating status: ", error);
+        toast({ variant: 'destructive', title: 'Error', description: 'No se pudo actualizar el estado.' });
+    }
   };
 
   const generateReceipt = (payment: Payment) => {
@@ -74,8 +104,8 @@ export default function VerifyPaymentsPage() {
         startY: 40,
         head: [['Concepto', 'Detalle']],
         body: [
-            ['ID de Pago', payment.id.toString()],
-            ['Propietario', payment.user],
+            ['ID de Pago', payment.id],
+            ['Propietario', payment.user || 'No disponible'],
             ['Unidad', payment.unit],
             ['Fecha de Pago', new Date(payment.date).toLocaleDateString('es-VE')],
             ['Monto Pagado', `Bs. ${payment.amount.toFixed(2)}`],
@@ -134,9 +164,22 @@ export default function VerifyPaymentsPage() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {filteredPayments.map((payment) => (
+                        {loading ? (
+                            <TableRow>
+                                <TableCell colSpan={7} className="h-24 text-center">
+                                    <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
+                                </TableCell>
+                            </TableRow>
+                        ) : filteredPayments.length === 0 ? (
+                             <TableRow>
+                                <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                                    No hay pagos que coincidan con el filtro seleccionado.
+                                </TableCell>
+                             </TableRow>
+                        ) : (
+                            filteredPayments.map((payment) => (
                             <TableRow key={payment.id}>
-                                <TableCell className="font-medium">{payment.user}</TableCell>
+                                <TableCell className="font-medium">{payment.user || 'No disponible'}</TableCell>
                                 <TableCell>{payment.unit}</TableCell>
                                 <TableCell>Bs. {payment.amount.toFixed(2)}</TableCell>
                                 <TableCell>{new Date(payment.date).toLocaleDateString('es-VE')}</TableCell>
@@ -181,14 +224,10 @@ export default function VerifyPaymentsPage() {
                                     </DropdownMenu>
                                 </TableCell>
                             </TableRow>
-                        ))}
+                            ))
+                        )}
                     </TableBody>
                 </Table>
-                 {filteredPayments.length === 0 && (
-                    <div className="text-center p-8 text-muted-foreground">
-                        No hay pagos que coincidan con el filtro seleccionado.
-                    </div>
-                 )}
             </CardContent>
         </Card>
     </div>

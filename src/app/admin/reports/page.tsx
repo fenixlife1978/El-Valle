@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,34 +12,58 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { Calendar as CalendarIcon, Download, Search } from "lucide-react";
+import { Calendar as CalendarIcon, Download, Search, Loader2 } from "lucide-react";
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+import { collection, getDocs, query, where } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { useToast } from '@/hooks/use-toast';
 
-// --- Mock Data ---
-// In a real app, this would come from Firestore
-const owners = [
-    { id: '1', name: 'Ana Rodriguez', unit: 'A-101', email: 'ana.r@email.com', balance: 50.00, delinquency: 0, status: 'solvente' },
-    { id: '2', name: 'Carlos Perez', unit: 'B-203', email: 'carlos.p@email.com', balance: 0, delinquency: 2, status: 'moroso' },
-    { id: '3', name: 'Maria Garcia', unit: 'C-305', email: 'maria.g@email.com', balance: 0, delinquency: 0, status: 'solvente' },
-    { id: '4', name: 'Luis Hernandez', unit: 'A-102', email: 'luis.h@email.com', balance: -120.50, delinquency: 3, status: 'moroso' },
-    { id: '5', name: 'Sofia Martinez', unit: 'D-401', balance: 25.00, delinquency: 0, status: 'solvente' },
-];
+type Owner = {
+    id: string;
+    name: string;
+    unit: string;
+    email?: string;
+    balance: number;
+    delinquency: number; 
+    status: 'solvente' | 'moroso';
+};
 
-const payments = [
-  { id: 1, userId: '1', date: '2023-10-28', amount: 250.00, description: 'Cuota Octubre' },
-  { id: 2, userId: '2', date: '2023-08-27', amount: 250.00, description: 'Cuota Agosto' },
-  { id: 3, userId: '3', date: '2023-10-26', amount: 250.00, description: 'Cuota Octubre' },
-  { id: 4, userId: '4', date: '2023-07-25', amount: 250.00, description: 'Cuota Julio' },
-  { id: 5, userId: '5', date: '2023-10-24', amount: 250.00, description: 'Cuota Octubre' },
-];
+type Payment = {
+  id: string;
+  userId: string;
+  date: string;
+  amount: number;
+  description: string;
+};
+
 
 export default function ReportsPage() {
+    const { toast } = useToast();
+    const [loading, setLoading] = useState(true);
+    const [owners, setOwners] = useState<Owner[]>([]);
 
     const [startDate, setStartDate] = useState<Date | undefined>();
     const [endDate, setEndDate] = useState<Date | undefined>();
     const [selectedOwner, setSelectedOwner] = useState('');
     const [delinquencyPeriod, setDelinquencyPeriod] = useState('');
+
+    useEffect(() => {
+        const fetchOwners = async () => {
+            try {
+                const q = query(collection(db, 'owners'));
+                const querySnapshot = await getDocs(q);
+                const ownersData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Owner[];
+                setOwners(ownersData.sort((a,b) => a.name.localeCompare(b.name)));
+            } catch (error) {
+                console.error("Error fetching owners for reports:", error);
+                toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron cargar los propietarios.' });
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchOwners();
+    }, [toast]);
 
 
     const generatePdf = (title: string, head: any[], body: any[], filename: string) => {
@@ -54,23 +78,32 @@ export default function ReportsPage() {
         doc.save(`${filename}.pdf`);
     }
 
-    const generateIndividualStatement = () => {
-        if (!selectedOwner) return alert('Por favor, seleccione un propietario.');
+    const generateIndividualStatement = async () => {
+        if (!selectedOwner) return toast({ variant: 'destructive', title: 'Error', description: 'Por favor, seleccione un propietario.' });
         const owner = owners.find(o => o.id === selectedOwner);
         if (!owner) return;
 
-        const ownerPayments = payments.filter(p => p.userId === owner.id);
+        const paymentsQuery = query(collection(db, "payments"), where("beneficiaries", "array-contains", { ownerId: owner.id }));
+        const paymentSnapshot = await getDocs(paymentsQuery);
+        const ownerPayments = paymentSnapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                date: new Date(data.paymentDate.seconds * 1000).toLocaleDateString('es-VE'),
+                description: 'Pago de cuota', // Placeholder description
+                amount: data.totalAmount,
+            };
+        });
         
         generatePdf(
             `Estado de Cuenta: ${owner.name}`,
             [['Fecha', 'Descripción', 'Monto (Bs.)']],
-            ownerPayments.map(p => [new Date(p.date).toLocaleDateString('es-VE'), p.description, p.amount.toFixed(2)]),
+            ownerPayments.map(p => [p.date, p.description, p.amount.toFixed(2)]),
             `estado_cuenta_${owner.unit}`
         );
     };
 
     const generateDelinquencyReport = () => {
-        if (!delinquencyPeriod) return alert('Por favor, seleccione un período de morosidad.');
+        if (!delinquencyPeriod) return toast({ variant: 'destructive', title: 'Error', description: 'Por favor, seleccione un período de morosidad.' });
         const months = parseInt(delinquencyPeriod);
         const delinquentOwners = owners.filter(o => o.delinquency >= months);
         
@@ -102,22 +135,26 @@ export default function ReportsPage() {
         );
     };
     
-    const generateIncomeReport = () => {
-        if (!startDate || !endDate) return alert('Por favor, seleccione un rango de fechas.');
+    const generateIncomeReport = async () => {
+        if (!startDate || !endDate) return toast({ variant: 'destructive', title: 'Error', description: 'Por favor, seleccione un rango de fechas.' });
         
-        const incomePayments = payments.filter(p => {
-            const paymentDate = new Date(p.date);
-            return paymentDate >= startDate && paymentDate <= endDate;
-        });
-
-        const totalIncome = incomePayments.reduce((sum, p) => sum + p.amount, 0);
+        const q = query(
+            collection(db, 'payments'),
+            where('paymentDate', '>=', startDate),
+            where('paymentDate', '<=', endDate),
+            where('status', '==', 'aprobado')
+        );
+        
+        const incomeSnapshot = await getDocs(q);
+        const incomePayments = incomeSnapshot.docs.map(doc => doc.data());
+        const totalIncome = incomePayments.reduce((sum, p) => sum + p.totalAmount, 0);
 
         const doc = new jsPDF();
         doc.text('Reporte de Ingresos', 14, 16);
         doc.text(`Período: ${format(startDate, "PPP", { locale: es })} - ${format(endDate, "PPP", { locale: es })}`, 14, 22);
         (doc as any).autoTable({
             head: [['Fecha', 'Monto (Bs.)', 'Descripción']],
-            body: incomePayments.map(p => [new Date(p.date).toLocaleDateString('es-VE'), p.amount.toFixed(2), p.description]),
+            body: incomePayments.map(p => [new Date(p.paymentDate.seconds * 1000).toLocaleDateString('es-VE'), p.totalAmount.toFixed(2), p.paymentMethod]),
             startY: 30,
         });
         doc.text(`Total de Ingresos: Bs. ${totalIncome.toFixed(2)}`, 14, (doc as any).lastAutoTable.finalY + 10);
@@ -133,6 +170,14 @@ export default function ReportsPage() {
         );
     };
 
+
+    if (loading) {
+        return (
+            <div className="flex justify-center items-center h-full">
+                <Loader2 className="h-10 w-10 animate-spin text-primary" />
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-8">
@@ -317,5 +362,3 @@ export default function ReportsPage() {
             </div>
         </div>
     );
-
-    

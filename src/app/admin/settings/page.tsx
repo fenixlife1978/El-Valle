@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -10,35 +10,82 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from '@/hooks/use-toast';
-import { Upload, Save, Calendar as CalendarIcon, Edit, PlusCircle } from 'lucide-react';
+import { Upload, Save, Calendar as CalendarIcon, PlusCircle, Loader2 } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
+import { doc, getDoc, setDoc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
-// Mock Data
-const initialCompanyInfo = {
-    name: 'Residencias El Valle',
-    address: 'Calle 123, Urbanización El Valle, Caracas, Venezuela',
-    rif: 'J-12345678-9',
-    phone: '+58 212-555-1234',
-    email: 'vallecondo@gmail.com',
+type CompanyInfo = {
+    name: string;
+    address: string;
+    rif: string;
+    phone: string;
+    email: string;
+    logo: string;
+};
+
+type ExchangeRate = {
+    id: string;
+    date: string;
+    rate: number;
+    active: boolean;
+};
+
+type Settings = {
+    companyInfo: CompanyInfo;
+    condoFee: number;
+    exchangeRates: ExchangeRate[];
+}
+
+const emptyCompanyInfo: CompanyInfo = {
+    name: '',
+    address: '',
+    rif: '',
+    phone: '',
+    email: '',
     logo: '/logo-placeholder.png'
 };
 
-const initialExchangeRates = [
-    { id: 1, date: '2023-11-03', rate: 37.15, active: false },
-    { id: 2, date: '2023-11-04', rate: 37.20, active: false },
-    { id: 3, date: '2023-11-05', rate: 37.22, active: true },
-];
-
 export default function SettingsPage() {
     const { toast } = useToast();
-    const [companyInfo, setCompanyInfo] = useState(initialCompanyInfo);
-    const [logoPreview, setLogoPreview] = useState<string | null>(initialCompanyInfo.logo);
-    const [condoFee, setCondoFee] = useState(25.00); // Monto en USD
-    const [exchangeRates, setExchangeRates] = useState(initialExchangeRates);
+    const [loading, setLoading] = useState(true);
+    const [companyInfo, setCompanyInfo] = useState<CompanyInfo>(emptyCompanyInfo);
+    const [logoPreview, setLogoPreview] = useState<string | null>(null);
+    const [condoFee, setCondoFee] = useState(0);
+    const [exchangeRates, setExchangeRates] = useState<ExchangeRate[]>([]);
     const [newRateDate, setNewRateDate] = useState<Date | undefined>();
     const [newRateAmount, setNewRateAmount] = useState('');
+
+    useEffect(() => {
+        const fetchSettings = async () => {
+            const settingsRef = doc(db, 'config', 'mainSettings');
+            try {
+                const docSnap = await getDoc(settingsRef);
+                if (docSnap.exists()) {
+                    const settings = docSnap.data() as Settings;
+                    setCompanyInfo(settings.companyInfo);
+                    setLogoPreview(settings.companyInfo.logo);
+                    setCondoFee(settings.condoFee);
+                    setExchangeRates(settings.exchangeRates || []);
+                } else {
+                    // Initialize with default/empty values if no settings doc exists
+                    await setDoc(settingsRef, {
+                        companyInfo: emptyCompanyInfo,
+                        condoFee: 25.00,
+                        exchangeRates: []
+                    });
+                }
+            } catch (error) {
+                console.error("Error fetching settings:", error);
+                toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron cargar las configuraciones.' });
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchSettings();
+    }, [toast]);
 
     const handleInfoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setCompanyInfo({ ...companyInfo, [e.target.name]: e.target.value });
@@ -51,37 +98,78 @@ export default function SettingsPage() {
             reader.onloadend = () => {
                 setLogoPreview(reader.result as string);
                 // In a real app, you'd upload this file and save the URL
+                // For now, we'll save the base64 string
+                setCompanyInfo({ ...companyInfo, logo: reader.result as string });
             };
             reader.readAsDataURL(file);
         }
     };
     
-    const handleAddRate = () => {
+    const handleAddRate = async () => {
         if(!newRateDate || !newRateAmount) {
             toast({ variant: 'destructive', title: 'Error', description: 'Por favor, complete la fecha y el monto de la tasa.' });
             return;
         }
-        const newRate = {
-            id: exchangeRates.length + 1,
+        const newRate: ExchangeRate = {
+            id: new Date().toISOString(), // simple unique id
             date: format(newRateDate, 'yyyy-MM-dd'),
             rate: parseFloat(newRateAmount),
             active: false
         };
-        setExchangeRates([...exchangeRates, newRate]);
-        setNewRateDate(undefined);
-        setNewRateAmount('');
-        toast({ title: 'Tasa Agregada', description: 'La nueva tasa de cambio ha sido añadida.' });
+        
+        try {
+            const settingsRef = doc(db, 'config', 'mainSettings');
+            await updateDoc(settingsRef, {
+                exchangeRates: arrayUnion(newRate)
+            });
+            setExchangeRates(prev => [...prev, newRate]);
+            setNewRateDate(undefined);
+            setNewRateAmount('');
+            toast({ title: 'Tasa Agregada', description: 'La nueva tasa de cambio ha sido añadida.' });
+        } catch (error) {
+            console.error("Error adding rate:", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo agregar la nueva tasa.' });
+        }
     };
+
+    const handleActivateRate = async (rateToActivate: ExchangeRate) => {
+        const updatedRates = exchangeRates.map(r => ({...r, active: r.id === rateToActivate.id }));
+        try {
+            const settingsRef = doc(db, 'config', 'mainSettings');
+            await updateDoc(settingsRef, { exchangeRates: updatedRates });
+            setExchangeRates(updatedRates);
+             toast({ title: 'Tasa Activada', description: 'La tasa seleccionada ahora es la activa.' });
+        } catch (error) {
+            console.error("Error activating rate:", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo activar la tasa.' });
+        }
+    }
     
-    const handleSaveChanges = () => {
-        // Mock saving to Firestore
-        console.log('Saving settings:', { companyInfo, condoFee, exchangeRates });
-        toast({
-            title: 'Cambios Guardados',
-            description: 'La configuración ha sido actualizada exitosamente.',
-            className: 'bg-green-100 border-green-400 text-green-800'
-        });
+    const handleSaveChanges = async () => {
+        try {
+            const settingsRef = doc(db, 'config', 'mainSettings');
+            await updateDoc(settingsRef, {
+                companyInfo,
+                condoFee
+            });
+            toast({
+                title: 'Cambios Guardados',
+                description: 'La configuración ha sido actualizada exitosamente.',
+                className: 'bg-green-100 border-green-400 text-green-800'
+            });
+        } catch(error) {
+             console.error("Error saving settings:", error);
+             toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron guardar los cambios.' });
+        }
     };
+
+    if (loading) {
+        return (
+            <div className="flex justify-center items-center h-full">
+                <Loader2 className="h-10 w-10 animate-spin text-primary" />
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-8">
@@ -151,7 +239,7 @@ export default function SettingsPage() {
                                     type="number" 
                                     value={condoFee} 
                                     onChange={(e) => setCondoFee(parseFloat(e.target.value) || 0)} 
-                                    placeholder="25.00"
+                                    placeholder="0.00"
                                 />
                             </div>
                             <div className="p-4 bg-muted/50 rounded-lg flex items-center gap-3 text-sm text-muted-foreground">
@@ -202,7 +290,7 @@ export default function SettingsPage() {
                                                     <TableCell>{format(new Date(rate.date), "dd/MM/yyyy")}</TableCell>
                                                     <TableCell>{rate.rate.toFixed(2)}</TableCell>
                                                     <TableCell>
-                                                        <Button variant={rate.active ? 'secondary' : 'outline'} size="sm" disabled={rate.active}>
+                                                        <Button variant={rate.active ? 'secondary' : 'outline'} size="sm" disabled={rate.active} onClick={() => handleActivateRate(rate)}>
                                                             {rate.active ? 'Activa' : 'Activar'}
                                                         </Button>
                                                     </TableCell>
