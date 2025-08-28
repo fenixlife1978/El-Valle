@@ -145,7 +145,6 @@ export default function VerifyPaymentsPage() {
                 }
 
                 const paymentData = paymentDoc.data() as FullPayment;
-                const paymentAmountUSD = paymentData.totalAmount / paymentData.exchangeRate;
 
                 // Process each beneficiary of the payment
                 for (const beneficiary of paymentData.beneficiaries) {
@@ -170,13 +169,14 @@ export default function VerifyPaymentsPage() {
                     const pendingDebts: Debt[] = [];
                     debtsSnapshot.forEach(doc => pendingDebts.push({id: doc.id, ...doc.data()} as Debt));
                     
-                    // Sort debts client-side
+                    // Sort debts client-side to avoid needing a composite index
                     pendingDebts.sort((a, b) => {
                         if (a.year !== b.year) return a.year - b.year;
                         return a.month - b.month;
                     });
 
                     for (const debt of pendingDebts) {
+                        // Only pay off debt if funds are enough to cover the entire amount
                         if (availableFundsUSD >= debt.amountUSD) {
                             availableFundsUSD -= debt.amountUSD;
                             const debtRef = doc(db, "debts", debt.id);
@@ -186,10 +186,12 @@ export default function VerifyPaymentsPage() {
                                 paymentDate: paymentData.paymentDate,
                             });
                         } else {
+                            // If funds are not enough for the oldest debt, stop.
                             break; 
                         }
                     }
                     
+                    // Any remaining funds (or the initial funds if no debt was paid) become the new balance.
                     transaction.update(ownerRef, { balance: availableFundsUSD });
                 }
 
