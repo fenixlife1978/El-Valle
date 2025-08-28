@@ -17,6 +17,8 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
 
+type Role = 'propietario' | 'administrador';
+
 type Owner = {
     id: number;
     name: string;
@@ -24,17 +26,19 @@ type Owner = {
     house: string;
     email?: string;
     balance?: number;
+    role: Role;
 };
 
 const initialOwners: Owner[] = [
-    { id: 1, name: 'Ana Rodriguez', street: 'Calle 1', house: 'Casa 3', email: 'ana.r@email.com', balance: 50.00 },
-    { id: 2, name: 'Carlos Perez', street: 'Calle 2', house: 'Casa 5', email: 'carlos.p@email.com', balance: 0 },
-    { id: 3, name: 'Maria Garcia', street: 'Calle 3', house: 'Casa 1', email: 'maria.g@email.com' },
-    { id: 4, name: 'Luis Hernandez', street: 'Calle 1', house: 'Casa 2', email: 'luis.h@email.com', balance: 120.50 },
-    { id: 5, name: 'Sofia Martinez', street: 'Calle 8', house: 'Casa 14' },
+    { id: 1, name: 'Ana Rodriguez', street: 'Calle 1', house: 'Casa 3', email: 'ana.r@email.com', balance: 50.00, role: 'propietario' },
+    { id: 2, name: 'Carlos Perez', street: 'Calle 2', house: 'Casa 5', email: 'carlos.p@email.com', balance: 0, role: 'propietario' },
+    { id: 3, name: 'Maria Garcia', street: 'Calle 3', house: 'Casa 1', email: 'maria.g@email.com', role: 'propietario' },
+    { id: 4, name: 'Luis Hernandez', street: 'Calle 1', house: 'Casa 2', email: 'luis.h@email.com', balance: 120.50, role: 'propietario' },
+    { id: 5, name: 'Sofia Martinez', street: 'Calle 8', house: 'Casa 14', role: 'propietario' },
+    { id: 6, name: 'Admin User', street: 'N/A', house: 'N/A', email: 'admin@condo.com', role: 'administrador' },
 ];
 
-const emptyOwner: Owner = { id: 0, name: '', street: '', house: '', email: '', balance: 0 };
+const emptyOwner: Owner = { id: 0, name: '', street: '', house: '', email: '', balance: 0, role: 'propietario' };
 
 const streets = Array.from({ length: 8 }, (_, i) => `Calle ${i + 1}`);
 
@@ -101,13 +105,13 @@ export default function PeopleManagementPage() {
         });
     };
 
-    const handleSelectChange = (field: 'street' | 'house') => (value: string) => {
+    const handleSelectChange = (field: 'street' | 'house' | 'role') => (value: string) => {
          const updatedOwner = { ...currentOwner, [field]: value };
         // If street changes, reset house
         if (field === 'street' && value !== currentOwner.street) {
             updatedOwner.house = '';
         }
-        setCurrentOwner(updatedOwner);
+        setCurrentOwner(updatedOwner as Owner);
     };
     
     const handleExportExcel = () => {
@@ -117,6 +121,7 @@ export default function PeopleManagementPage() {
             Casa: o.house,
             Email: o.email || '',
             'Saldo a Favor (Bs.)': o.balance ?? 0,
+            Rol: o.role,
         })));
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Propietarios");
@@ -127,13 +132,14 @@ export default function PeopleManagementPage() {
         const doc = new jsPDF();
         doc.text("Lista de Propietarios", 14, 16);
         (doc as any).autoTable({
-            head: [['Nombre', 'Calle', 'Casa', 'Email', 'Saldo a Favor (Bs.)']],
+            head: [['Nombre', 'Calle', 'Casa', 'Email', 'Saldo a Favor (Bs.)', 'Rol']],
             body: owners.map(o => [
                 o.name,
                 o.street,
                 o.house,
                 o.email || '-',
-                (o.balance ?? 0).toFixed(2)
+                (o.balance ?? 0).toFixed(2),
+                o.role
             ]),
             startY: 20,
         });
@@ -155,7 +161,7 @@ export default function PeopleManagementPage() {
                 const workbook = XLSX.read(data, { type: 'binary' });
                 const sheetName = workbook.SheetNames[0];
                 const worksheet = workbook.Sheets[sheetName];
-                const json = XLSX.utils.sheet_to_json(worksheet, { header: ["name", "street", "house", "email", "balance"], range: 1 });
+                const json = XLSX.utils.sheet_to_json(worksheet, { header: ["name", "street", "house", "email", "balance", "role"], range: 1 });
                 
                 const newOwners = json.map((item: any, index) => ({
                     id: (owners.length > 0 ? Math.max(...owners.map(o => o.id)) : 0) + index + 1,
@@ -164,6 +170,7 @@ export default function PeopleManagementPage() {
                     house: item.house || 'Sin Casa',
                     email: item.email || '',
                     balance: parseFloat(item.balance) || 0,
+                    role: (item.role === 'administrador' || item.role === 'propietario') ? item.role : 'propietario',
                 }));
                 
                 setOwners(prev => [...prev, ...newOwners]);
@@ -214,7 +221,7 @@ export default function PeopleManagementPage() {
                     </DropdownMenu>
                     <Button onClick={handleAddOwner}>
                         <PlusCircle className="mr-2 h-4 w-4" />
-                        Agregar Propietario
+                        Agregar Persona
                     </Button>
                 </div>
             </div>
@@ -228,6 +235,7 @@ export default function PeopleManagementPage() {
                             <TableHead>Casa</TableHead>
                             <TableHead>Email</TableHead>
                             <TableHead>Saldo a Favor (Bs.)</TableHead>
+                            <TableHead>Rol</TableHead>
                             <TableHead className="text-right">Acciones</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -239,6 +247,7 @@ export default function PeopleManagementPage() {
                                 <TableCell>{owner.house}</TableCell>
                                 <TableCell>{owner.email || '-'}</TableCell>
                                 <TableCell>{(owner.balance ?? 0).toFixed(2)}</TableCell>
+                                <TableCell className="capitalize">{owner.role}</TableCell>
                                 <TableCell className="text-right">
                                     <DropdownMenu>
                                         <DropdownMenuTrigger asChild>
@@ -269,15 +278,27 @@ export default function PeopleManagementPage() {
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                 <DialogContent className="sm:max-w-[425px]">
                     <DialogHeader>
-                        <DialogTitle>{currentOwner.id === 0 ? 'Agregar Nuevo Propietario' : 'Editar Propietario'}</DialogTitle>
+                        <DialogTitle>{currentOwner.id === 0 ? 'Agregar Nueva Persona' : 'Editar Persona'}</DialogTitle>
                         <DialogDescription>
-                            Completa la información del propietario aquí. Haz clic en guardar cuando termines.
+                            Completa la información aquí. Haz clic en guardar cuando termines.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
                         <div className="grid grid-cols-4 items-center gap-4">
                             <Label htmlFor="name" className="text-right">Nombre</Label>
                             <Input id="name" value={currentOwner.name} onChange={handleInputChange} className="col-span-3" />
+                        </div>
+                         <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="role" className="text-right">Rol</Label>
+                             <Select onValueChange={handleSelectChange('role')} value={currentOwner.role}>
+                                <SelectTrigger className="col-span-3">
+                                    <SelectValue placeholder="Seleccione un rol" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="propietario">Propietario</SelectItem>
+                                    <SelectItem value="administrador">Administrador</SelectItem>
+                                </SelectContent>
+                            </Select>
                         </div>
                         <div className="grid grid-cols-4 items-center gap-4">
                             <Label htmlFor="street" className="text-right">Calle</Label>
@@ -327,7 +348,7 @@ export default function PeopleManagementPage() {
                     <DialogHeader>
                         <DialogTitle>¿Estás seguro?</DialogTitle>
                         <DialogDescription>
-                            Esta acción no se puede deshacer. Esto eliminará permanentemente al propietario <span className="font-semibold">{ownerToDelete?.name}</span>.
+                            Esta acción no se puede deshacer. Esto eliminará permanentemente a <span className="font-semibold">{ownerToDelete?.name}</span>.
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>
@@ -339,4 +360,5 @@ export default function PeopleManagementPage() {
 
         </div>
     );
-}
+
+    
