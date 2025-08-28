@@ -223,7 +223,9 @@ export default function ReportsPage() {
                 didDrawPage: (hookData) => { startY = hookData.cursor?.y || startY; }
             });
             startY = (doc as any).lastAutoTable.finalY + 5;
-            doc.setFontSize(10).setFont('helvetica', 'bold').text(`Total Pagado: Bs. ${payments.total.toLocaleString('es-VE', {minimumFractionDigits: 2})}`, pageWidth - margin, startY, { align: 'right' });
+            const balanceBs = data.detailedData ? (owners.find(o => o.id === selectedOwner)?.balance || 0) * activeRate : 0;
+            const balanceText = balanceBs > 0 ? `(Saldo a Favor aplicado: Bs. ${balanceBs.toLocaleString('es-VE', {minimumFractionDigits: 2})})` : '';
+            doc.setFontSize(10).setFont('helvetica', 'bold').text(`Total Pagado: Bs. ${payments.total.toLocaleString('es-VE', {minimumFractionDigits: 2})} ${balanceText}`, pageWidth - margin, startY, { align: 'right' });
             startY += 10;
     
             // Debts Table
@@ -303,12 +305,6 @@ export default function ReportsPage() {
         const owner = owners.find(o => o.id === selectedOwner);
         if (!owner) return;
         
-        const validProperties = (owner.properties || []).filter(p => p.street && p.house);
-        if (validProperties.length === 0) {
-             toast({ variant: 'destructive', title: 'Error', description: 'El propietario seleccionado no tiene propiedades válidas para consultar.' });
-             return;
-        }
-
         setGeneratingReport(true);
         try {
             // Fetch Payments
@@ -316,7 +312,7 @@ export default function ReportsPage() {
                 collection(db, "payments"),
                 where("status", "==", "aprobado"),
                 where("beneficiaries", "array-contains-any", 
-                    validProperties.map(p => ({ ownerId: owner.id, house: p.house }))
+                    (owner.properties || []).map(p => ({ ownerId: owner.id, house: p.house }))
                 )
             );
             
@@ -818,3 +814,4 @@ export default function ReportsPage() {
         </div>
     );
 }
+
