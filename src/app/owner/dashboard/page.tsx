@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Landmark, AlertCircle, Building, Eye, Printer, Megaphone, Loader2, Wallet, FileText, CalendarClock } from "lucide-react";
+import { Landmark, AlertCircle, Building, Eye, Printer, Megaphone, Loader2, Wallet, FileText, CalendarClock, Scale } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getCommunityUpdates } from '@/ai/flows/community-updates';
 import { auth, db } from '@/lib/firebase';
@@ -39,6 +39,15 @@ type Debt = {
     status: 'pending' | 'paid';
 };
 
+type SolvencyStatus = 'solvente' | 'moroso' | 'saldo a favor' | 'cargando...';
+
+const statusVariantMap: { [key in SolvencyStatus]: 'success' | 'destructive' | 'default' | 'outline' } = {
+  'solvente': 'success',
+  'moroso': 'destructive',
+  'saldo a favor': 'default',
+  'cargando...': 'outline',
+};
+
 const months = [
     { value: 1, label: 'Enero' }, { value: 2, label: 'Febrero' }, { value: 3, label: 'Marzo' },
     { value: 4, label: 'Abril' }, { value: 5, label: 'Mayo' }, { value: 6, label: 'Junio' },
@@ -59,6 +68,7 @@ export default function OwnerDashboardPage() {
         dueDate: '',
         isOverdue: false,
     });
+    const [solvencyStatus, setSolvencyStatus] = useState<SolvencyStatus>('cargando...');
     const [communityUpdates, setCommunityUpdates] = useState<string[]>([]);
     
     const userId = "088a5367-a75b-4355-b0b0-3162b2b64b1f"; 
@@ -102,10 +112,19 @@ export default function OwnerDashboardPage() {
                     });
                     
                     setDebts(debtsData.sort((a,b) => b.year - a.year || b.month - a.month));
+                    const totalDebtBs = totalDebtUSD * activeRate;
+
+                    if (totalDebtBs > 0) {
+                        setSolvencyStatus('moroso');
+                    } else if (ownerData.balance > 0) {
+                        setSolvencyStatus('saldo a favor');
+                    } else {
+                        setSolvencyStatus('solvente');
+                    }
 
                     setDashboardStats({
-                        balanceInFavor: ownerData.balance || 0,
-                        totalDebt: totalDebtUSD * activeRate,
+                        balanceInFavor: (ownerData.balance || 0) * activeRate,
+                        totalDebt: totalDebtBs,
                         condoFeeBs: condoFeeUSD * activeRate,
                         exchangeRate: activeRate,
                         dueDate: format(dueDate, "dd 'de' MMMM", { locale: es }),
@@ -156,7 +175,21 @@ export default function OwnerDashboardPage() {
     <div className="space-y-8">
       <h1 className="text-3xl font-bold font-headline">Panel de Propietario</h1>
       
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Estado de Cuenta</CardTitle>
+            <Scale className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            {loading ? <Loader2 className="h-6 w-6 animate-spin"/> : 
+            <Badge variant={statusVariantMap[solvencyStatus]} className="text-lg capitalize">
+              {solvencyStatus}
+            </Badge>
+            }
+            <p className="text-xs text-muted-foreground mt-2">Su situación financiera actual.</p>
+          </CardContent>
+        </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Saldo a Favor</CardTitle>
@@ -177,7 +210,7 @@ export default function OwnerDashboardPage() {
              <p className="text-xs text-muted-foreground">Suma de todas las cuotas pendientes.</p>
           </CardContent>
         </Card>
-        <Card className="md:col-span-2 lg:col-span-1">
+        <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Cuota del Mes</CardTitle>
                 <CalendarClock className="h-4 w-4 text-muted-foreground" />
