@@ -375,76 +375,78 @@ export default function PeopleManagementPage() {
             </Card>
 
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent className="sm:max-w-md">
+                <DialogContent className="sm:max-w-md max-h-[90vh] flex flex-col">
                     <DialogHeader>
                         <DialogTitle>{currentOwner.id ? 'Editar Persona' : 'Agregar Nueva Persona'}</DialogTitle>
                         <DialogDescription>
                             Completa la información aquí. Haz clic en guardar cuando termines.
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="grid gap-4 py-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="name">Nombre</Label>
-                            <Input id="name" value={currentOwner.name} onChange={handleInputChange} />
-                        </div>
-                         <div className="space-y-2">
-                            <Label htmlFor="role">Rol</Label>
-                             <Select onValueChange={handleRoleChange} value={currentOwner.role}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Seleccione un rol" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="propietario">Propietario</SelectItem>
-                                    <SelectItem value="administrador">Administrador</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        
-                        <div className="space-y-4">
-                            <Label>Propiedades</Label>
-                            {currentOwner.properties.map((prop, index) => {
-                                const houseOptions = getHousesForStreet(prop.street);
-                                return (
-                                <div key={index} className="grid grid-cols-10 gap-2 items-center p-2 rounded-md border">
-                                    <div className="col-span-4 space-y-1">
-                                        <Label htmlFor={`street-${index}`} className="text-xs">Calle</Label>
-                                         <Select onValueChange={(v) => handlePropertyChange(index, 'street', v)} value={prop.street}>
-                                            <SelectTrigger><SelectValue placeholder="Calle..." /></SelectTrigger>
-                                            <SelectContent>{streets.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-                                        </Select>
+                    <div className="flex-grow overflow-y-auto pr-6 -mr-6">
+                        <div className="grid gap-4 py-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="name">Nombre</Label>
+                                <Input id="name" value={currentOwner.name} onChange={handleInputChange} />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="role">Rol</Label>
+                                <Select onValueChange={handleRoleChange} value={currentOwner.role}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Seleccione un rol" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="propietario">Propietario</SelectItem>
+                                        <SelectItem value="administrador">Administrador</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            
+                            <div className="space-y-4">
+                                <Label>Propiedades</Label>
+                                {currentOwner.properties.map((prop, index) => {
+                                    const houseOptions = getHousesForStreet(prop.street);
+                                    return (
+                                    <div key={index} className="grid grid-cols-10 gap-2 items-center p-2 rounded-md border">
+                                        <div className="col-span-4 space-y-1">
+                                            <Label htmlFor={`street-${index}`} className="text-xs">Calle</Label>
+                                            <Select onValueChange={(v) => handlePropertyChange(index, 'street', v)} value={prop.street}>
+                                                <SelectTrigger><SelectValue placeholder="Calle..." /></SelectTrigger>
+                                                <SelectContent>{streets.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="col-span-4 space-y-1">
+                                            <Label htmlFor={`house-${index}`} className="text-xs">Casa</Label>
+                                            <Select onValueChange={(v) => handlePropertyChange(index, 'house', v)} value={prop.house} disabled={!prop.street}>
+                                                <SelectTrigger><SelectValue placeholder="Casa..." /></SelectTrigger>
+                                                <SelectContent>{houseOptions.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="col-span-2 flex items-end justify-end h-full">
+                                        {currentOwner.properties.length > 1 && (
+                                            <Button size="icon" variant="ghost" className="text-destructive" onClick={() => removeProperty(index)}>
+                                                <MinusCircle className="h-5 w-5"/>
+                                            </Button>
+                                        )}
+                                        </div>
                                     </div>
-                                    <div className="col-span-4 space-y-1">
-                                        <Label htmlFor={`house-${index}`} className="text-xs">Casa</Label>
-                                         <Select onValueChange={(v) => handlePropertyChange(index, 'house', v)} value={prop.house} disabled={!prop.street}>
-                                            <SelectTrigger><SelectValue placeholder="Casa..." /></SelectTrigger>
-                                            <SelectContent>{houseOptions.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
-                                        </Select>
-                                    </div>
-                                    <div className="col-span-2 flex items-end justify-end h-full">
-                                    {currentOwner.properties.length > 1 && (
-                                        <Button size="icon" variant="ghost" className="text-destructive" onClick={() => removeProperty(index)}>
-                                            <MinusCircle className="h-5 w-5"/>
-                                        </Button>
-                                    )}
-                                    </div>
-                                </div>
-                            )})}
-                             <Button variant="outline" size="sm" onClick={addProperty}>
-                                <PlusCircle className="mr-2 h-4 w-4"/>
-                                Agregar Propiedad
-                            </Button>
-                        </div>
+                                )})}
+                                <Button variant="outline" size="sm" onClick={addProperty}>
+                                    <PlusCircle className="mr-2 h-4 w-4"/>
+                                    Agregar Propiedad
+                                </Button>
+                            </div>
 
-                        <div className="space-y-2">
-                            <Label htmlFor="email">Email</Label>
-                            <Input id="email" type="email" value={currentOwner.email || ''} onChange={handleInputChange} />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="balance">Saldo a Favor (Bs.)</Label>
-                            <Input id="balance" type="number" value={currentOwner.balance ?? ''} onChange={handleInputChange} placeholder="0.00" />
+                            <div className="space-y-2">
+                                <Label htmlFor="email">Email</Label>
+                                <Input id="email" type="email" value={currentOwner.email || ''} onChange={handleInputChange} />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="balance">Saldo a Favor (Bs.)</Label>
+                                <Input id="balance" type="number" value={currentOwner.balance ?? ''} onChange={handleInputChange} placeholder="0.00" />
+                            </div>
                         </div>
                     </div>
-                    <DialogFooter>
+                    <DialogFooter className="mt-auto pt-4 border-t">
                         <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
                         <Button onClick={handleSaveOwner}>Guardar Cambios</Button>
                     </DialogFooter>

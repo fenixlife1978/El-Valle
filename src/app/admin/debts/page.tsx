@@ -431,47 +431,49 @@ export default function DebtManagementPage() {
 
                  {/* Add/Edit Debt Dialog */}
                 <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                    <DialogContent className="sm:max-w-[480px]">
+                    <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col">
                         <DialogHeader>
                             <DialogTitle>Agregar Deudas Masivas</DialogTitle>
                             <DialogDescription>
                                 Seleccione la fecha de inicio. El sistema generará todas las deudas desde esa fecha hasta hoy.
                             </DialogDescription>
                         </DialogHeader>
-                        <div className="grid gap-4 py-4">
-                             <div className="space-y-2">
-                                <Label htmlFor="description">Descripción</Label>
-                                <Input id="description" value={currentMassDebt.description} onChange={handleMassDebtInputChange} />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
+                        <div className="flex-grow overflow-y-auto pr-6 -mr-6">
+                            <div className="grid gap-4 py-4">
                                 <div className="space-y-2">
-                                    <Label htmlFor="fromYear">Desde el Año</Label>
-                                    <Select onValueChange={handleMassDebtSelectChange('fromYear')} value={String(currentMassDebt.fromYear)}>
-                                        <SelectTrigger><SelectValue/></SelectTrigger>
-                                        <SelectContent>{years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
-                                    </Select>
+                                    <Label htmlFor="description">Descripción</Label>
+                                    <Input id="description" value={currentMassDebt.description} onChange={handleMassDebtInputChange} />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="fromYear">Desde el Año</Label>
+                                        <Select onValueChange={handleMassDebtSelectChange('fromYear')} value={String(currentMassDebt.fromYear)}>
+                                            <SelectTrigger><SelectValue/></SelectTrigger>
+                                            <SelectContent>{years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="fromMonth">Desde el Mes</Label>
+                                        <Select onValueChange={handleMassDebtSelectChange('fromMonth')} value={String(currentMassDebt.fromMonth)}>
+                                            <SelectTrigger><SelectValue/></SelectTrigger>
+                                            <SelectContent>{months.map(m => <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>)}</SelectContent>
+                                        </Select>
+                                    </div>
                                 </div>
                                 <div className="space-y-2">
-                                    <Label htmlFor="fromMonth">Desde el Mes</Label>
-                                    <Select onValueChange={handleMassDebtSelectChange('fromMonth')} value={String(currentMassDebt.fromMonth)}>
-                                        <SelectTrigger><SelectValue/></SelectTrigger>
-                                        <SelectContent>{months.map(m => <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>)}</SelectContent>
-                                    </Select>
+                                    <Label htmlFor="amountUSD">Monto Mensual (USD)</Label>
+                                    <Input id="amountUSD" type="number" value={currentMassDebt.amountUSD} onChange={handleMassDebtInputChange} placeholder="25.00" />
                                 </div>
+                                <Card className="bg-muted/50">
+                                    <CardContent className="p-4 text-sm text-muted-foreground">
+                                        <Info className="inline h-4 w-4 mr-2"/>
+                                        {periodDescription}
+                                        <p className="text-xs mt-2">Se creará una deuda por cada mes con el monto en USD especificado. El valor en Bolívares se calculará dinámicamente con la tasa activa.</p>
+                                    </CardContent>
+                                </Card>
                             </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="amountUSD">Monto Mensual (USD)</Label>
-                                <Input id="amountUSD" type="number" value={currentMassDebt.amountUSD} onChange={handleMassDebtInputChange} placeholder="25.00" />
-                            </div>
-                             <Card className="bg-muted/50">
-                                <CardContent className="p-4 text-sm text-muted-foreground">
-                                    <Info className="inline h-4 w-4 mr-2"/>
-                                    {periodDescription}
-                                    <p className="text-xs mt-2">Se creará una deuda por cada mes con el monto en USD especificado. El valor en Bolívares se calculará dinámicamente con la tasa activa.</p>
-                                </CardContent>
-                            </Card>
                         </div>
-                        <DialogFooter>
+                        <DialogFooter className="mt-auto pt-4 border-t">
                             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
                             <Button onClick={handleSaveMassDebt}>Generar Deudas</Button>
                         </DialogFooter>
@@ -500,3 +502,5 @@ export default function DebtManagementPage() {
     // Fallback while loading or if view is invalid
     return null;
 }
+
+    
