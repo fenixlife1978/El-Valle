@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -9,8 +9,13 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PlusCircle, MoreHorizontal, Edit, Trash2 } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, Edit, Trash2, FileUp, FileDown } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useToast } from '@/hooks/use-toast';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+
 
 type Owner = {
     id: number;
@@ -46,12 +51,13 @@ export default function PeopleManagementPage() {
     const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
     const [currentOwner, setCurrentOwner] = useState<Owner>(emptyOwner);
     const [ownerToDelete, setOwnerToDelete] = useState<Owner | null>(null);
+    const importFileRef = useRef<HTMLInputElement>(null);
+    const { toast } = useToast();
 
     const houseOptions = useMemo(() => {
         if (!currentOwner.street) return [];
         return getHousesForStreet(currentOwner.street);
     }, [currentOwner.street]);
-
 
     const handleAddOwner = () => {
         setCurrentOwner(emptyOwner);
@@ -103,18 +109,114 @@ export default function PeopleManagementPage() {
         }
         setCurrentOwner(updatedOwner);
     };
+    
+    const handleExportExcel = () => {
+        const worksheet = XLSX.utils.json_to_sheet(owners.map(o => ({
+            Nombre: o.name,
+            Calle: o.street,
+            Casa: o.house,
+            Email: o.email || '',
+            'Saldo a Favor (Bs.)': o.balance ?? 0,
+        })));
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Propietarios");
+        XLSX.writeFile(workbook, "propietarios.xlsx");
+    };
+
+    const handleExportPDF = () => {
+        const doc = new jsPDF();
+        doc.text("Lista de Propietarios", 14, 16);
+        (doc as any).autoTable({
+            head: [['Nombre', 'Calle', 'Casa', 'Email', 'Saldo a Favor (Bs.)']],
+            body: owners.map(o => [
+                o.name,
+                o.street,
+                o.house,
+                o.email || '-',
+                (o.balance ?? 0).toFixed(2)
+            ]),
+            startY: 20,
+        });
+        doc.save('propietarios.pdf');
+    };
+
+    const handleImportClick = () => {
+        importFileRef.current?.click();
+    };
+
+    const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const data = event.target?.result;
+                const workbook = XLSX.read(data, { type: 'binary' });
+                const sheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[sheetName];
+                const json = XLSX.utils.sheet_to_json(worksheet, { header: ["name", "street", "house", "email", "balance"], range: 1 });
+                
+                const newOwners = json.map((item: any, index) => ({
+                    id: (owners.length > 0 ? Math.max(...owners.map(o => o.id)) : 0) + index + 1,
+                    name: item.name || 'Sin Nombre',
+                    street: item.street || 'Sin Calle',
+                    house: item.house || 'Sin Casa',
+                    email: item.email || '',
+                    balance: parseFloat(item.balance) || 0,
+                }));
+                
+                setOwners(prev => [...prev, ...newOwners]);
+                toast({
+                    title: 'Importación Exitosa',
+                    description: `${newOwners.length} propietarios han sido agregados.`,
+                    className: 'bg-green-100 border-green-400 text-green-800'
+                });
+
+            } catch (error) {
+                console.error("Error al importar el archivo:", error);
+                toast({
+                    variant: 'destructive',
+                    title: 'Error de Importación',
+                    description: 'Hubo un problema al leer el archivo Excel. Asegúrate que el formato es correcto.',
+                });
+            }
+        };
+        reader.readAsBinaryString(file);
+        e.target.value = ''; // Reset input
+    };
+
 
     return (
         <div className="space-y-8">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
                 <div>
                     <h1 className="text-3xl font-bold font-headline">Gestión de Personas</h1>
                     <p className="text-muted-foreground">Agrega, edita y elimina propietarios y residentes.</p>
                 </div>
-                <Button onClick={handleAddOwner}>
-                    <PlusCircle className="mr-2 h-4 w-4" />
-                    Agregar Propietario
-                </Button>
+                <div className="flex gap-2 flex-wrap">
+                    <Button onClick={handleImportClick} variant="outline">
+                        <FileUp className="mr-2 h-4 w-4" />
+                        Importar Excel
+                    </Button>
+                     <input type="file" ref={importFileRef} onChange={handleFileImport} accept=".xlsx, .xls" className="hidden"/>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline">
+                                <FileDown className="mr-2 h-4 w-4" />
+                                Exportar
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent>
+                            <DropdownMenuItem onClick={handleExportExcel}>Exportar a Excel</DropdownMenuItem>
+                            <DropdownMenuItem onClick={handleExportPDF}>Exportar a PDF</DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                    <Button onClick={handleAddOwner}>
+                        <PlusCircle className="mr-2 h-4 w-4" />
+                        Agregar Propietario
+                    </Button>
+                </div>
             </div>
 
             <Card>
@@ -136,7 +238,7 @@ export default function PeopleManagementPage() {
                                 <TableCell>{owner.street}</TableCell>
                                 <TableCell>{owner.house}</TableCell>
                                 <TableCell>{owner.email || '-'}</TableCell>
-                                <TableCell>{owner.balance?.toFixed(2) ?? '-'}</TableCell>
+                                <TableCell>{(owner.balance ?? 0).toFixed(2)}</TableCell>
                                 <TableCell className="text-right">
                                     <DropdownMenu>
                                         <DropdownMenuTrigger asChild>
@@ -209,7 +311,7 @@ export default function PeopleManagementPage() {
                         </div>
                         <div className="grid grid-cols-4 items-center gap-4">
                             <Label htmlFor="balance" className="text-right">Saldo a Favor</Label>
-                            <Input id="balance" type="number" value={currentOwner.balance || ''} onChange={handleInputChange} className="col-span-3" placeholder="0.00" />
+                            <Input id="balance" type="number" value={currentOwner.balance ?? ''} onChange={handleInputChange} className="col-span-3" placeholder="0.00" />
                         </div>
                     </div>
                     <DialogFooter>
@@ -238,4 +340,3 @@ export default function PeopleManagementPage() {
         </div>
     );
 }
-
