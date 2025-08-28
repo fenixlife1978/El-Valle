@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -129,7 +128,27 @@ export default function ReportsPage() {
                 // Fetch Owners
                 const ownersQuery = query(collection(db, 'owners'));
                 const ownersSnapshot = await getDocs(ownersQuery);
-                const ownersData = ownersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Owner[];
+                let ownersData = ownersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), delinquency: 0, status: 'solvente' })) as Owner[];
+                
+                // Fetch ALL pending debts to calculate delinquency in real-time
+                const allPendingDebtsQuery = query(collection(db, 'debts'), where('status', '==', 'pending'));
+                const allPendingDebtsSnapshot = await getDocs(allPendingDebtsQuery);
+                const debtCountsByOwner: {[key: string]: number} = {};
+                allPendingDebtsSnapshot.forEach(doc => {
+                    const debt = doc.data();
+                    debtCountsByOwner[debt.ownerId] = (debtCountsByOwner[debt.ownerId] || 0) + 1;
+                });
+
+                // Update owners with real-time delinquency and status
+                ownersData = ownersData.map(owner => {
+                    const delinquency = debtCountsByOwner[owner.id] || 0;
+                    return {
+                        ...owner,
+                        delinquency,
+                        status: delinquency > 0 ? 'moroso' : 'solvente'
+                    };
+                });
+                
                 setOwners(ownersData.sort((a,b) => a.name.localeCompare(b.name)));
 
                 // Fetch Settings for Rate and Company Info
@@ -153,16 +172,13 @@ export default function ReportsPage() {
                 });
                 setIncomeChartData(Object.entries(incomeByMonth).map(([name, total]) => ({name, total})).sort((a,b) => a.name.localeCompare(b.name)));
 
-                // Fetch Debts for Debt Chart
-                const debtsQuery = query(collection(db, 'debts'), where('status', '==', 'pending'));
-                const debtsSnapshot = await getDocs(debtsQuery);
+                // Fetch Debts for Debt Chart (using the already fetched pending debts)
                 const debtsByStreet: {[key: string]: number} = {};
-
-                for(const debtDoc of debtsSnapshot.docs) {
+                for(const debtDoc of allPendingDebtsSnapshot.docs) {
                     const debt = debtDoc.data();
                     const owner = ownersData.find(o => o.id === debt.ownerId);
                     if(owner) {
-                        const ownerStreet = owner.properties && owner.properties.length > 0 ? owner.properties[0].street : owner.street;
+                        const ownerStreet = (owner.properties && owner.properties.length > 0) ? owner.properties[0].street : owner.street;
                         if (ownerStreet) {
                             debtsByStreet[ownerStreet] = (debtsByStreet[ownerStreet] || 0) + (debt.amountUSD * activeRate);
                         }
@@ -178,7 +194,7 @@ export default function ReportsPage() {
             }
         };
         fetchData();
-    }, [toast]);
+    }, [toast, activeRate]);
 
     const generatePdf = (data: ReportPreviewData) => {
         const doc = new jsPDF();
@@ -223,7 +239,7 @@ export default function ReportsPage() {
                 didDrawPage: (hookData) => { startY = hookData.cursor?.y || startY; }
             });
             startY = (doc as any).lastAutoTable.finalY + 5;
-            const balanceBs = data.detailedData ? (owners.find(o => o.id === selectedOwner)?.balance || 0) * activeRate : 0;
+            const balanceBs = data.detailedData ? (owners.find(o => o.id === selectedOwner)?.balance || 0) : 0;
             const balanceText = balanceBs > 0 ? `(Saldo a Favor aplicado: Bs. ${balanceBs.toLocaleString('es-VE', {minimumFractionDigits: 2})})` : '';
             doc.setFontSize(10).setFont('helvetica', 'bold').text(`Total Pagado: Bs. ${payments.total.toLocaleString('es-VE', {minimumFractionDigits: 2})} ${balanceText}`, pageWidth - margin, startY, { align: 'right' });
             startY += 10;
@@ -311,11 +327,9 @@ export default function ReportsPage() {
             const paymentsQuery = query(
                 collection(db, "payments"),
                 where("status", "==", "aprobado"),
-                where("beneficiaries", "array-contains-any", 
-                    (owner.properties || []).map(p => ({ ownerId: owner.id, house: p.house }))
-                )
+                where("beneficiaries", "array-contains", { ownerId: owner.id, house: (owner.properties[0] || {}).house })
             );
-            
+
             const paymentsSnapshot = await getDocs(paymentsQuery);
             let totalPaid = 0;
             const paymentsRows = paymentsSnapshot.docs
