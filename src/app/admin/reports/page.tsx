@@ -18,7 +18,7 @@ import { Calendar as CalendarIcon, Download, Search, Loader2, BarChart2 } from "
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import html2canvas from 'html2canvas';
-import { collection, getDocs, query, where, doc, getDoc, orderBy } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, getDoc, orderBy, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend } from 'recharts';
@@ -40,7 +40,7 @@ type Owner = {
 type Payment = {
   id: string;
   reportedBy: string;
-  paymentDate: { seconds: number };
+  paymentDate: Timestamp;
   totalAmount: number;
   paymentMethod: string;
   status: string;
@@ -77,6 +77,13 @@ type ReportPreviewData = {
     rows: (string|number)[][];
     footers?: string[];
     filename: string;
+    isDetailedStatement?: boolean;
+    detailedData?: {
+        payments: { headers: string[], rows: (string|number)[][], total: number };
+        debts: { headers: string[], rows: (string|number)[][], total: number };
+        ownerInfo: string;
+        dateRange: string;
+    }
 };
 
 const monthsLocale: { [key: number]: string } = {
@@ -88,6 +95,7 @@ const monthsLocale: { [key: number]: string } = {
 export default function ReportsPage() {
     const { toast } = useToast();
     const [loading, setLoading] = useState(true);
+    const [generatingReport, setGeneratingReport] = useState(false);
     const [owners, setOwners] = useState<Owner[]>([]);
 
     // --- Form State ---
@@ -95,6 +103,8 @@ export default function ReportsPage() {
     const [endDate, setEndDate] = useState<Date | undefined>();
     const [selectedOwner, setSelectedOwner] = useState('');
     const [delinquencyPeriod, setDelinquencyPeriod] = useState('');
+    const [statementStartDate, setStatementStartDate] = useState<Date | undefined>();
+    const [statementEndDate, setStatementEndDate] = useState<Date | undefined>();
 
     // --- Chart State ---
     const [incomeChartData, setIncomeChartData] = useState<ChartData[]>([]);
@@ -169,56 +179,80 @@ export default function ReportsPage() {
         fetchData();
     }, [toast]);
 
-    const generatePdf = (title: string, head: any[], body: any[][], filename: string, options: { footerText?: string } = {}) => {
+    const generatePdf = (data: ReportPreviewData) => {
         const doc = new jsPDF();
         const pageHeight = doc.internal.pageSize.getHeight();
         const pageWidth = doc.internal.pageSize.getWidth();
         const margin = 14;
-
+    
         if (companyInfo?.logo) {
             doc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25);
         }
         if (companyInfo) {
-            doc.setFontSize(12);
-            doc.setFont('helvetica', 'bold');
-            doc.text(companyInfo.name, margin + 30, margin + 8);
-            doc.setFont('helvetica', 'normal');
-            doc.setFontSize(9);
+            doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, margin + 30, margin + 8);
+            doc.setFontSize(9).setFont('helvetica', 'normal');
             doc.text(`${companyInfo.rif} | ${companyInfo.phone}`, margin + 30, margin + 14);
             doc.text(companyInfo.address, margin + 30, margin + 19);
-            doc.text(companyInfo.email, margin + 30, margin + 24);
         }
         doc.setFontSize(10);
         doc.text(`Fecha de Emisión:`, pageWidth - margin, margin + 8, { align: 'right' });
-        doc.setFont('helvetica', 'bold');
-        doc.text(new Date().toLocaleDateString('es-VE'), pageWidth - margin, margin + 13, { align: 'right' });
-        doc.setLineWidth(0.5);
-        doc.line(margin, margin + 32, pageWidth - margin, margin + 32);
-
-        doc.setFontSize(16);
-        doc.setFont('helvetica', 'bold');
-        doc.text(title, pageWidth / 2, margin + 45, { align: 'center' });
-
-        autoTable(doc, {
-            head,
-            body,
-            startY: margin + 55,
-            headStyles: { fillColor: [30, 80, 180] },
-        });
-
-        if (options.footerText) {
-            const finalY = (doc as any).lastAutoTable.finalY;
-            doc.setFontSize(12);
-            doc.setFont('helvetica', 'bold');
-            doc.text(options.footerText, margin, finalY + 15);
+        doc.setFont('helvetica', 'bold').text(new Date().toLocaleString('es-VE'), pageWidth - margin, margin + 13, { align: 'right' });
+    
+        doc.setLineWidth(0.5).line(margin, margin + 32, pageWidth - margin, margin + 32);
+    
+        doc.setFontSize(16).setFont('helvetica', 'bold').text(data.title, pageWidth / 2, margin + 45, { align: 'center' });
+    
+        let startY = margin + 55;
+    
+        if (data.isDetailedStatement && data.detailedData) {
+            const { ownerInfo, dateRange, payments, debts } = data.detailedData;
+            doc.setFontSize(10).setFont('helvetica', 'normal');
+            doc.text(ownerInfo, margin, startY);
+            doc.text(dateRange, margin, startY + 5);
+            startY += 15;
+    
+            // Payments Table
+            doc.setFontSize(12).setFont('helvetica', 'bold').text("Resumen de Pagos", margin, startY);
+            startY += 5;
+            autoTable(doc, {
+                head: [payments.headers],
+                body: payments.rows,
+                startY,
+                headStyles: { fillColor: [40, 167, 69] },
+                didDrawPage: (hookData) => { startY = hookData.cursor?.y || startY; }
+            });
+            startY = (doc as any).lastAutoTable.finalY + 5;
+            doc.setFontSize(10).setFont('helvetica', 'bold').text(`Total Pagado: Bs. ${payments.total.toLocaleString('es-VE', {minimumFractionDigits: 2})}`, pageWidth - margin, startY, { align: 'right' });
+            startY += 10;
+    
+            // Debts Table
+            doc.setFontSize(12).setFont('helvetica', 'bold').text("Resumen de Deudas", margin, startY);
+            startY += 5;
+            autoTable(doc, {
+                head: [debts.headers],
+                body: debts.rows,
+                startY,
+                headStyles: { fillColor: [220, 53, 69] },
+                didDrawPage: (hookData) => { startY = hookData.cursor?.y || startY; }
+            });
+            startY = (doc as any).lastAutoTable.finalY + 5;
+            doc.setFontSize(10).setFont('helvetica', 'bold').text(`Total Adeudado: $${debts.total.toLocaleString('en-US', {minimumFractionDigits: 2})}`, pageWidth - margin, startY, { align: 'right' });
+            startY += 10;
+    
+        } else {
+            autoTable(doc, { head: [data.headers], body: data.rows, startY });
+            if (data.footers) {
+                const finalY = (doc as any).lastAutoTable.finalY;
+                doc.setFontSize(12).setFont('helvetica', 'bold').text(data.footers.join(' | '), margin, finalY + 15);
+            }
         }
-
-        doc.save(`${filename}.pdf`);
-    }
+    
+        doc.save(`${data.filename}.pdf`);
+    };
 
     const handleExportPreview = () => {
         if (!previewData) return;
-        generatePdf(previewData.title, [previewData.headers], previewData.rows, previewData.filename, {footerText: previewData.footers?.join(' | ')});
+        generatePdf(previewData);
         setIsPreviewOpen(false);
         setPreviewData(null);
     }
@@ -259,50 +293,87 @@ export default function ReportsPage() {
         pdf.save(`${filename}.pdf`);
     };
 
-    const showIndividualStatementPreview = async () => {
-        if (!selectedOwner) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Por favor, seleccione un propietario.' });
+    const generateIndividualStatement = async () => {
+        if (!selectedOwner || !statementStartDate || !statementEndDate) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Por favor, seleccione propietario y rango de fechas.' });
             return;
         }
 
         const owner = owners.find(o => o.id === selectedOwner);
         if (!owner) return;
 
-        setLoading(true);
+        setGeneratingReport(true);
         try {
-            const debtsQuery = query(collection(db, "debts"), where("ownerId", "==", owner.id));
-            const debtSnapshot = await getDocs(debtsQuery);
+            const start = Timestamp.fromDate(statementStartDate);
+            const end = Timestamp.fromDate(statementEndDate);
             
-            const ownerDebts = debtSnapshot.docs
-                .map(doc => doc.data() as Debt)
-                .sort((a, b) => {
-                    if (a.year !== b.year) return a.year - b.year;
-                    return a.month - b.month;
-                });
-
-            let totalAdeudadoUSD = 0;
-            const debtsRows = ownerDebts.map(d => {
-                if (d.status === 'pending') {
-                    totalAdeudadoUSD += d.amountUSD;
-                }
+            // Fetch Payments
+            const paymentsQuery = query(
+                collection(db, "payments"),
+                where("beneficiaries", "array-contains-any", owner.properties.map(p => ({ ownerId: owner.id, house: p.house }))),
+                where("status", "==", "aprobado"),
+                where("paymentDate", ">=", start),
+                where("paymentDate", "<=", end)
+            );
+            const paymentsSnapshot = await getDocs(paymentsQuery);
+            let totalPaid = 0;
+            const paymentsRows = paymentsSnapshot.docs.map(doc => {
+                const p = doc.data() as Payment;
+                totalPaid += p.totalAmount;
+                const paidByOwner = owners.find(o => o.id === p.reportedBy);
                 return [
-                    `${monthsLocale[d.month]} ${d.year}`,
-                    `$${d.amountUSD.toFixed(2)}`,
-                    d.status === 'paid' ? 'Pagada' : 'Pendiente'
+                    format(p.paymentDate.toDate(), "dd/MM/yyyy"),
+                    "Pago de Condominio",
+                    paidByOwner?.name || 'N/A',
+                    `Bs. ${p.totalAmount.toLocaleString('es-VE', {minimumFractionDigits: 2})}`
                 ];
             });
-            
-            const saldoFavorBs = owner.balance > 0 ? owner.balance * activeRate : 0;
-            
+
+            // Fetch Debts
+            const debtsQuery = query(
+                collection(db, "debts"),
+                where("ownerId", "==", owner.id)
+            );
+            const debtSnapshot = await getDocs(debtsQuery);
+            let totalDebt = 0;
+            const debtsRows = debtSnapshot.docs
+                .map(doc => doc.data() as Debt)
+                .filter(d => {
+                    const debtDate = new Date(d.year, d.month -1, 1);
+                    return debtDate >= statementStartDate && debtDate <= statementEndDate;
+                })
+                .sort((a, b) => a.year - b.year || a.month - b.month)
+                .map(d => {
+                    totalDebt += d.amountUSD;
+                    return [
+                        `${monthsLocale[d.month]} ${d.year}`,
+                        `$${d.amountUSD.toFixed(2)}`,
+                        d.status === 'paid' ? 'Pagada' : 'Pendiente'
+                    ];
+                });
+
+            const ownerProps = (owner.properties || []).map(p => `${p.street} - ${p.house}`).join(', ');
+
             setPreviewData({
-                title: `Estado de Cuenta: ${owner.name}`,
-                headers: ['Periodo', 'Monto ($)', 'Estado'],
-                rows: debtsRows,
-                footers: [
-                    `Total Adeudado: $${totalAdeudadoUSD.toFixed(2)}`,
-                    `Saldo a Favor: Bs. ${saldoFavorBs.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`
-                ],
-                filename: `estado_cuenta_${owner.name.replace(/\s/g, '_')}`
+                title: `Estado de Cuenta Detallado`,
+                filename: `estado_cuenta_detallado_${owner.name.replace(/\s/g, '_')}`,
+                isDetailedStatement: true,
+                headers: [], // Not used for detailed view
+                rows: [], // Not used for detailed view
+                detailedData: {
+                    ownerInfo: `Propietario: ${owner.name} | Propiedad: ${ownerProps}`,
+                    dateRange: `Período: ${format(statementStartDate, "dd/MM/yyyy")} - ${format(statementEndDate, "dd/MM/yyyy")}`,
+                    payments: {
+                        headers: ["Fecha", "Concepto", "Pagado por", "Monto"],
+                        rows: paymentsRows,
+                        total: totalPaid
+                    },
+                    debts: {
+                        headers: ["Período", "Monto ($)", "Estado"],
+                        rows: debtsRows,
+                        total: totalDebt
+                    }
+                }
             });
             setIsPreviewOpen(true);
 
@@ -310,7 +381,7 @@ export default function ReportsPage() {
             console.error("Error generating individual statement:", error);
             toast({ variant: 'destructive', title: 'Error', description: 'No se pudo generar el estado de cuenta.' });
         } finally {
-            setLoading(false);
+            setGeneratingReport(false);
         }
     };
 
@@ -356,7 +427,7 @@ export default function ReportsPage() {
     
     const showIncomeReportPreview = async () => {
         if (!startDate || !endDate) return toast({ variant: 'destructive', title: 'Error', description: 'Por favor, seleccione un rango de fechas.' });
-        setLoading(true);
+        setGeneratingReport(true);
         const q = query(
             collection(db, 'payments'),
             where('paymentDate', '>=', startDate),
@@ -375,7 +446,7 @@ export default function ReportsPage() {
             footers: [`Total de Ingresos: Bs. ${totalIncome.toFixed(2)}`],
             filename: 'reporte_ingresos',
         });
-        setLoading(false);
+        setGeneratingReport(false);
         setIsPreviewOpen(true);
     };
 
@@ -466,32 +537,51 @@ export default function ReportsPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 
                 {/* Reporte: Estado de Cuenta Individual */}
-                <Card>
+                <Card className="md:col-span-2 lg:col-span-3">
                     <CardHeader>
-                        <CardTitle>Estado de Cuenta Individual</CardTitle>
-                        <CardDescription>Consulte el estado de cuenta detallado de un propietario.</CardDescription>
+                        <CardTitle>Estado de Cuenta Individual Detallado</CardTitle>
+                        <CardDescription>Consulte los movimientos (pagos y deudas) de un propietario en un período específico.</CardDescription>
                     </CardHeader>
-                    <CardContent className="space-y-4">
+                    <CardContent className="grid sm:grid-cols-3 gap-4">
                         <div className="space-y-2">
                             <Label htmlFor="owner-select">Propietario</Label>
                             <Select value={selectedOwner} onValueChange={setSelectedOwner}>
                                 <SelectTrigger id="owner-select">
-                                    <SelectValue placeholder="Seleccione un propietario..." />
+                                    <SelectValue placeholder="Seleccione..." />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {owners.map(o => {
-                                        const properties = (o.properties && o.properties.length > 0) 
-                                            ? o.properties.map(p => p.house).join(', ') 
-                                            : (o.house || 'N/A');
-                                        return <SelectItem key={o.id} value={o.id}>{o.name} ({properties})</SelectItem>
-                                    })}
+                                    {owners.map(o => <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>)}
                                 </SelectContent>
                             </Select>
                         </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="statement-start-date">Fecha de Inicio</Label>
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button id="statement-start-date" variant={"outline"} className={cn("w-full justify-start text-left font-normal", !statementStartDate && "text-muted-foreground")}>
+                                        <CalendarIcon className="mr-2 h-4 w-4" />
+                                        {statementStartDate ? format(statementStartDate, "PPP", { locale: es }) : <span>Seleccione fecha</span>}
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={statementStartDate} onSelect={setStatementStartDate} initialFocus locale={es} /></PopoverContent>
+                            </Popover>
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="statement-end-date">Fecha de Fin</Label>
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button id="statement-end-date" variant={"outline"} className={cn("w-full justify-start text-left font-normal", !statementEndDate && "text-muted-foreground")}>
+                                        <CalendarIcon className="mr-2 h-4 w-4" />
+                                        {statementEndDate ? format(statementEndDate, "PPP", { locale: es }) : <span>Seleccione fecha</span>}
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={statementEndDate} onSelect={setStatementEndDate} initialFocus locale={es} /></PopoverContent>
+                            </Popover>
+                        </div>
                     </CardContent>
                     <CardFooter>
-                        <Button className="w-full" onClick={showIndividualStatementPreview} disabled={!selectedOwner || loading}>
-                            {loading && selectedOwner ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Search className="mr-2 h-4 w-4" />} 
+                        <Button className="w-full" onClick={generateIndividualStatement} disabled={!selectedOwner || !statementStartDate || !statementEndDate || generatingReport}>
+                            {generatingReport ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Search className="mr-2 h-4 w-4" />} 
                             Generar Vista Previa
                         </Button>
                     </CardFooter>
@@ -620,8 +710,8 @@ export default function ReportsPage() {
                         </div>
                     </CardContent>
                     <CardFooter>
-                         <Button className="w-full" onClick={showIncomeReportPreview} disabled={!startDate || !endDate || loading}>
-                            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Search className="mr-2 h-4 w-4" />}
+                         <Button className="w-full" onClick={showIncomeReportPreview} disabled={!startDate || !endDate || generatingReport}>
+                            {generatingReport ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Search className="mr-2 h-4 w-4" />}
                             Generar Vista Previa
                         </Button>
                     </CardFooter>
@@ -655,24 +745,49 @@ export default function ReportsPage() {
                         </DialogDescription>
                     </DialogHeader>
                     <div className="max-h-[60vh] overflow-y-auto">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    {previewData?.headers.map((header, index) => (
-                                        <TableHead key={index}>{header}</TableHead>
-                                    ))}
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {previewData?.rows.map((row, rowIndex) => (
-                                    <TableRow key={rowIndex}>
-                                        {row.map((cell, cellIndex) => (
-                                            <TableCell key={cellIndex}>{cell}</TableCell>
+                        {previewData?.isDetailedStatement && previewData.detailedData ? (
+                            <div className="space-y-6">
+                                <div>
+                                    <h3 className="font-semibold">{previewData.detailedData.ownerInfo}</h3>
+                                    <p className="text-sm text-muted-foreground">{previewData.detailedData.dateRange}</p>
+                                </div>
+                                <div>
+                                    <h4 className="font-semibold mb-2">Resumen de Pagos</h4>
+                                    <Table>
+                                        <TableHeader><TableRow>{previewData.detailedData.payments.headers.map((h, i) => <TableHead key={i}>{h}</TableHead>)}</TableRow></TableHeader>
+                                        <TableBody>{previewData.detailedData.payments.rows.map((r, i) => <TableRow key={i}>{r.map((c, j) => <TableCell key={j}>{c}</TableCell>)}</TableRow>)}</TableBody>
+                                    </Table>
+                                    <p className="text-right font-bold mt-2">Total Pagado: Bs. {previewData.detailedData.payments.total.toLocaleString('es-VE', {minimumFractionDigits: 2})}</p>
+                                </div>
+                                <div>
+                                    <h4 className="font-semibold mb-2">Resumen de Deudas</h4>
+                                    <Table>
+                                        <TableHeader><TableRow>{previewData.detailedData.debts.headers.map((h, i) => <TableHead key={i}>{h}</TableHead>)}</TableRow></TableHeader>
+                                        <TableBody>{previewData.detailedData.debts.rows.map((r, i) => <TableRow key={i}>{r.map((c, j) => <TableCell key={j}>{c}</TableCell>)}</TableRow>)}</TableBody>
+                                    </Table>
+                                    <p className="text-right font-bold mt-2">Total Adeudado: ${previewData.detailedData.debts.total.toLocaleString('en-US', {minimumFractionDigits: 2})}</p>
+                                </div>
+                            </div>
+                        ) : (
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        {previewData?.headers.map((header, index) => (
+                                            <TableHead key={index}>{header}</TableHead>
                                         ))}
                                     </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
+                                </TableHeader>
+                                <TableBody>
+                                    {previewData?.rows.map((row, rowIndex) => (
+                                        <TableRow key={rowIndex}>
+                                            {row.map((cell, cellIndex) => (
+                                                <TableCell key={cellIndex}>{cell}</TableCell>
+                                            ))}
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        )}
                     </div>
                      {previewData?.footers && (
                         <div className="mt-4 pt-4 border-t font-semibold text-right">
@@ -693,6 +808,8 @@ export default function ReportsPage() {
         </div>
     );
 }
+
+    
 
     
 
