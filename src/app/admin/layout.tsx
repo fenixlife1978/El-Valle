@@ -6,7 +6,7 @@ import {
     Users,
     Megaphone,
     Settings,
-    Search,
+    FileSearch,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
@@ -22,7 +22,7 @@ const adminNavItems: NavItem[] = [
         { href: "/admin/payments/verify", label: "Verificar Pagos" },
       ]
     },
-    { href: "#", icon: Search, label: "Consultas" },
+    { href: "/admin/reports", icon: FileSearch, label: "Consultas y Reportes" },
     { href: "/admin/people", icon: Users, label: "Personas" },
     { href: "#", icon: Megaphone, label: "Comunicados" },
     { href: "#", icon: Settings, label: "Configuración" },
