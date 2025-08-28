@@ -262,25 +262,24 @@ export default function SettingsPage() {
             const q = query(
                 collection(db, "debts"), 
                 where("status", "==", "paid"),
-                where("description", "==", "Cuota de Condominio"),
+                where("description", "==", "Cuota de Condominio (Pagada por adelantado)"),
             );
             const querySnapshot = await getDocs(q);
 
             const batch = writeBatch(db);
             let adjustmentsCount = 0;
+            const ownersToUpdate: { [key: string]: number } = {};
 
             querySnapshot.forEach(doc => {
                 const debt = doc.data() as Debt;
-                const paidDebtDate = debt.paymentDate ? debt.paymentDate.toDate() : new Date(0);
+                
+                const debtDate = new Date(debt.year, debt.month - 1);
+                
+                // We adjust debts for the current month or future months
+                const isCurrentOrFutureDebt = debt.year > currentYear || (debt.year === currentYear && debt.month >= currentMonth);
 
-                // We adjust debts paid in the current month or for future months
-                const isPaidThisMonthOrFuture = paidDebtDate.getFullYear() > currentYear || 
-                               (paidDebtDate.getFullYear() === currentYear && paidDebtDate.getMonth() + 1 >= currentMonth);
-
-                const paidAmount = debt.paidAmountUSD || lastCondoFee; 
-
-                if (isPaidThisMonthOrFuture && paidAmount < condoFee) {
-                    const adjustmentAmount = condoFee - paidAmount;
+                if (isCurrentOrFutureDebt) {
+                    const adjustmentAmount = feeDifference;
                     const adjustmentDebtRef = doc(collection(db, "debts"));
                     batch.set(adjustmentDebtRef, {
                         ownerId: debt.ownerId,
@@ -291,12 +290,22 @@ export default function SettingsPage() {
                         status: 'pending'
                     });
 
-                    const ownerRef = doc(db, "owners", debt.ownerId);
-                    batch.update(ownerRef, { balance: -adjustmentAmount });
-
+                    // Aggregate adjustments per owner
+                    ownersToUpdate[debt.ownerId] = (ownersToUpdate[debt.ownerId] || 0) + adjustmentAmount;
                     adjustmentsCount++;
                 }
             });
+
+            // Update owner balances
+            for (const ownerId in ownersToUpdate) {
+                const ownerRef = doc(db, "owners", ownerId);
+                const ownerSnap = await getDoc(ownerRef);
+                if (ownerSnap.exists()) {
+                    const currentBalance = ownerSnap.data().balance || 0;
+                    batch.update(ownerRef, { balance: currentBalance - ownersToUpdate[ownerId] });
+                }
+            }
+
 
             if (adjustmentsCount > 0) {
                 await batch.commit();
