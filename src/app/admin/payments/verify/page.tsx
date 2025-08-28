@@ -11,7 +11,7 @@ import { CheckCircle2, XCircle, MoreHorizontal, Eye, Printer, Filter, Loader2 } 
 import { useToast } from '@/hooks/use-toast';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import { collection, onSnapshot, query, doc, updateDoc, getDoc, writeBatch, runTransaction, where, orderBy, Timestamp } from 'firebase/firestore';
+import { collection, onSnapshot, query, doc, updateDoc, getDoc, writeBatch, runTransaction, where, orderBy, Timestamp, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
 type PaymentStatus = 'pendiente' | 'aprobado' | 'rechazado';
@@ -163,14 +163,18 @@ export default function VerifyPaymentsPage() {
                     const debtsQuery = query(
                         collection(db, "debts"),
                         where("ownerId", "==", beneficiary.ownerId),
-                        where("status", "==", "pending"),
-                        orderBy("year", "asc"),
-                        orderBy("month", "asc")
+                        where("status", "==", "pending")
                     );
-                    const debtsSnapshot = await getDocs(debtsQuery); // Note: getDocs inside transaction is not ideal, but necessary here. Better with a cloud function.
+                    const debtsSnapshot = await getDocs(debtsQuery); 
                     
                     const pendingDebts: Debt[] = [];
                     debtsSnapshot.forEach(doc => pendingDebts.push({id: doc.id, ...doc.data()} as Debt));
+                    
+                    // Sort debts client-side
+                    pendingDebts.sort((a, b) => {
+                        if (a.year !== b.year) return a.year - b.year;
+                        return a.month - b.month;
+                    });
 
                     for (const debt of pendingDebts) {
                         if (availableFundsUSD >= debt.amountUSD) {
