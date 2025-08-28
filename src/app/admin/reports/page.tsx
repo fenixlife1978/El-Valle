@@ -307,27 +307,31 @@ export default function ReportsPage() {
             const start = Timestamp.fromDate(statementStartDate);
             const end = Timestamp.fromDate(statementEndDate);
             
-            // Fetch Payments
+            // Fetch Payments - Simplified query
             const paymentsQuery = query(
                 collection(db, "payments"),
-                where("beneficiaries", "array-contains-any", owner.properties.map(p => ({ ownerId: owner.id, house: p.house }))),
-                where("status", "==", "aprobado"),
-                where("paymentDate", ">=", start),
-                where("paymentDate", "<=", end)
+                where("beneficiaries", "array-contains-any", owner.properties.map(p => ({ ownerId: owner.id, house: p.house, amount: p.amount}))),
+                where("status", "==", "aprobado")
             );
             const paymentsSnapshot = await getDocs(paymentsQuery);
             let totalPaid = 0;
-            const paymentsRows = paymentsSnapshot.docs.map(doc => {
-                const p = doc.data() as Payment;
-                totalPaid += p.totalAmount;
-                const paidByOwner = owners.find(o => o.id === p.reportedBy);
-                return [
-                    format(p.paymentDate.toDate(), "dd/MM/yyyy"),
-                    "Pago de Condominio",
-                    paidByOwner?.name || 'N/A',
-                    `Bs. ${p.totalAmount.toLocaleString('es-VE', {minimumFractionDigits: 2})}`
-                ];
-            });
+            // Filter by date on the client
+            const paymentsRows = paymentsSnapshot.docs
+                .map(doc => doc.data() as Payment)
+                .filter(p => {
+                    const paymentDate = p.paymentDate.toDate();
+                    return paymentDate >= statementStartDate && paymentDate <= statementEndDate;
+                })
+                .map(p => {
+                    totalPaid += p.totalAmount;
+                    const paidByOwner = owners.find(o => o.id === p.reportedBy);
+                    return [
+                        format(p.paymentDate.toDate(), "dd/MM/yyyy"),
+                        "Pago de Condominio",
+                        paidByOwner?.name || 'N/A',
+                        `Bs. ${p.totalAmount.toLocaleString('es-VE', {minimumFractionDigits: 2})}`
+                    ];
+                });
 
             // Fetch Debts
             const debtsQuery = query(
@@ -808,6 +812,8 @@ export default function ReportsPage() {
         </div>
     );
 }
+
+    
 
     
 
