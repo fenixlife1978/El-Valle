@@ -13,26 +13,126 @@ import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { Calendar as CalendarIcon, Download, Search } from "lucide-react";
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
-// Mock Data
+// --- Mock Data ---
+// In a real app, this would come from Firestore
 const owners = [
-    { id: 'owner-1', name: 'Ana Rodriguez', unit: 'A-101' },
-    { id: 'owner-2', name: 'Carlos Perez', unit: 'B-203' },
-    { id: 'owner-3', name: 'Maria Garcia', unit: 'C-305' },
-    { id: 'owner-4', name: 'Luis Hernandez', unit: 'A-102' },
-    { id: 'owner-5', name: 'Sofia Martinez', unit: 'D-401' },
+    { id: '1', name: 'Ana Rodriguez', unit: 'A-101', email: 'ana.r@email.com', balance: 50.00, delinquency: 0, status: 'solvente' },
+    { id: '2', name: 'Carlos Perez', unit: 'B-203', email: 'carlos.p@email.com', balance: 0, delinquency: 2, status: 'moroso' },
+    { id: '3', name: 'Maria Garcia', unit: 'C-305', email: 'maria.g@email.com', balance: 0, delinquency: 0, status: 'solvente' },
+    { id: '4', name: 'Luis Hernandez', unit: 'A-102', email: 'luis.h@email.com', balance: -120.50, delinquency: 3, status: 'moroso' },
+    { id: '5', name: 'Sofia Martinez', unit: 'D-401', balance: 25.00, delinquency: 0, status: 'solvente' },
+];
+
+const payments = [
+  { id: 1, userId: '1', date: '2023-10-28', amount: 250.00, description: 'Cuota Octubre' },
+  { id: 2, userId: '2', date: '2023-08-27', amount: 250.00, description: 'Cuota Agosto' },
+  { id: 3, userId: '3', date: '2023-10-26', amount: 250.00, description: 'Cuota Octubre' },
+  { id: 4, userId: '4', date: '2023-07-25', amount: 250.00, description: 'Cuota Julio' },
+  { id: 5, userId: '5', date: '2023-10-24', amount: 250.00, description: 'Cuota Octubre' },
 ];
 
 export default function ReportsPage() {
 
     const [startDate, setStartDate] = useState<Date | undefined>();
     const [endDate, setEndDate] = useState<Date | undefined>();
+    const [selectedOwner, setSelectedOwner] = useState('');
+    const [delinquencyPeriod, setDelinquencyPeriod] = useState('');
 
-    const generateReport = (reportType: string) => {
-        console.log(`Generating report: ${reportType}`);
-        // Here you would add the logic to fetch data and generate the report
-        alert(`Generando reporte: ${reportType}. La funcionalidad de exportación será implementada en el backend.`);
+
+    const generatePdf = (title: string, head: any[], body: any[], filename: string) => {
+        const doc = new jsPDF();
+        doc.text(title, 14, 16);
+        doc.text(`Fecha: ${new Date().toLocaleDateString('es-VE')}`, 14, 22);
+        (doc as any).autoTable({
+            head,
+            body,
+            startY: 30,
+        });
+        doc.save(`${filename}.pdf`);
     }
+
+    const generateIndividualStatement = () => {
+        if (!selectedOwner) return alert('Por favor, seleccione un propietario.');
+        const owner = owners.find(o => o.id === selectedOwner);
+        if (!owner) return;
+
+        const ownerPayments = payments.filter(p => p.userId === owner.id);
+        
+        generatePdf(
+            `Estado de Cuenta: ${owner.name}`,
+            [['Fecha', 'Descripción', 'Monto (Bs.)']],
+            ownerPayments.map(p => [new Date(p.date).toLocaleDateString('es-VE'), p.description, p.amount.toFixed(2)]),
+            `estado_cuenta_${owner.unit}`
+        );
+    };
+
+    const generateDelinquencyReport = () => {
+        if (!delinquencyPeriod) return alert('Por favor, seleccione un período de morosidad.');
+        const months = parseInt(delinquencyPeriod);
+        const delinquentOwners = owners.filter(o => o.delinquency >= months);
+        
+         generatePdf(
+            `Reporte de Morosidad (${months} o más meses)`,
+            [['Propietario', 'Unidad', 'Meses de Deuda', 'Saldo Deudor (Bs.)']],
+            delinquentOwners.map(o => [o.name, o.unit, o.delinquency, (o.balance < 0 ? Math.abs(o.balance) : 0).toFixed(2)]),
+            `reporte_morosidad`
+        );
+    }
+    
+    const generateSolvencyReport = () => {
+        const solventOwners = owners.filter(o => o.status === 'solvente');
+         generatePdf(
+            'Reporte de Solvencia',
+            [['Propietario', 'Unidad', 'Email']],
+            solventOwners.map(o => [o.name, o.unit, o.email || '-']),
+            'reporte_solvencia'
+        );
+    };
+
+    const generateBalanceFavorReport = () => {
+        const ownersWithBalance = owners.filter(o => o.balance > 0);
+         generatePdf(
+            'Reporte de Saldos a Favor',
+            [['Propietario', 'Unidad', 'Saldo a Favor (Bs.)']],
+            ownersWithBalance.map(o => [o.name, o.unit, o.balance.toFixed(2)]),
+            'reporte_saldos_favor'
+        );
+    };
+    
+    const generateIncomeReport = () => {
+        if (!startDate || !endDate) return alert('Por favor, seleccione un rango de fechas.');
+        
+        const incomePayments = payments.filter(p => {
+            const paymentDate = new Date(p.date);
+            return paymentDate >= startDate && paymentDate <= endDate;
+        });
+
+        const totalIncome = incomePayments.reduce((sum, p) => sum + p.amount, 0);
+
+        const doc = new jsPDF();
+        doc.text('Reporte de Ingresos', 14, 16);
+        doc.text(`Período: ${format(startDate, "PPP", { locale: es })} - ${format(endDate, "PPP", { locale: es })}`, 14, 22);
+        (doc as any).autoTable({
+            head: [['Fecha', 'Monto (Bs.)', 'Descripción']],
+            body: incomePayments.map(p => [new Date(p.date).toLocaleDateString('es-VE'), p.amount.toFixed(2), p.description]),
+            startY: 30,
+        });
+        doc.text(`Total de Ingresos: Bs. ${totalIncome.toFixed(2)}`, 14, (doc as any).lastAutoTable.finalY + 10);
+        doc.save('reporte_ingresos.pdf');
+    };
+
+    const generateGeneralStatusReport = () => {
+         generatePdf(
+            'Reporte General de Estatus',
+            [['Propietario', 'Unidad', 'Estatus', 'Saldo (Bs.)']],
+            owners.map(o => [o.name, o.unit, o.status === 'solvente' ? 'Solvente' : 'Moroso', o.balance.toFixed(2)]),
+            'reporte_general_estatus'
+        );
+    };
+
 
     return (
         <div className="space-y-8">
@@ -52,7 +152,7 @@ export default function ReportsPage() {
                     <CardContent className="space-y-4">
                         <div className="space-y-2">
                             <Label htmlFor="owner-select">Propietario</Label>
-                            <Select>
+                            <Select value={selectedOwner} onValueChange={setSelectedOwner}>
                                 <SelectTrigger id="owner-select">
                                     <SelectValue placeholder="Seleccione un propietario..." />
                                 </SelectTrigger>
@@ -63,7 +163,7 @@ export default function ReportsPage() {
                         </div>
                     </CardContent>
                     <CardFooter>
-                        <Button className="w-full" onClick={() => generateReport('Estado de Cuenta Individual')}>
+                        <Button className="w-full" onClick={generateIndividualStatement}>
                             <Search className="mr-2 h-4 w-4" /> Consultar
                         </Button>
                     </CardFooter>
@@ -78,7 +178,7 @@ export default function ReportsPage() {
                     <CardContent className="space-y-4">
                        <div className="space-y-2">
                             <Label htmlFor="delinquency-period">Período de Morosidad</Label>
-                            <Select>
+                            <Select value={delinquencyPeriod} onValueChange={setDelinquencyPeriod}>
                                 <SelectTrigger id="delinquency-period">
                                     <SelectValue placeholder="Seleccione período..." />
                                 </SelectTrigger>
@@ -86,13 +186,12 @@ export default function ReportsPage() {
                                     <SelectItem value="1">1 o más meses</SelectItem>
                                     <SelectItem value="2">2 o más meses</SelectItem>
                                     <SelectItem value="3">3 o más meses</SelectItem>
-                                    <SelectItem value="6">6 o más meses</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
                     </CardContent>
                     <CardFooter>
-                         <Button className="w-full" onClick={() => generateReport('Reporte de Morosidad')}>
+                         <Button className="w-full" onClick={generateDelinquencyReport}>
                             <Download className="mr-2 h-4 w-4" /> Generar y Exportar
                         </Button>
                     </CardFooter>
@@ -108,7 +207,7 @@ export default function ReportsPage() {
                          <p className="text-sm text-muted-foreground">Listo para generar.</p>
                     </CardContent>
                     <CardFooter>
-                        <Button className="w-full" onClick={() => generateReport('Reporte de Solvencia')}>
+                        <Button className="w-full" onClick={generateSolvencyReport}>
                            <Download className="mr-2 h-4 w-4" /> Generar y Exportar
                         </Button>
                     </CardFooter>
@@ -124,7 +223,7 @@ export default function ReportsPage() {
                          <p className="text-sm text-muted-foreground">Listo para generar.</p>
                     </CardContent>
                     <CardFooter>
-                        <Button className="w-full" onClick={() => generateReport('Reporte de Saldos a Favor')}>
+                        <Button className="w-full" onClick={generateBalanceFavorReport}>
                            <Download className="mr-2 h-4 w-4" /> Generar y Exportar
                         </Button>
                     </CardFooter>
@@ -193,7 +292,7 @@ export default function ReportsPage() {
                         </div>
                     </CardContent>
                     <CardFooter>
-                         <Button className="w-full" onClick={() => generateReport('Reporte de Ingresos por Período')}>
+                         <Button className="w-full" onClick={generateIncomeReport}>
                            <Download className="mr-2 h-4 w-4" /> Generar y Exportar
                         </Button>
                     </CardFooter>
@@ -209,7 +308,7 @@ export default function ReportsPage() {
                          <p className="text-sm text-muted-foreground">Listo para generar.</p>
                     </CardContent>
                     <CardFooter>
-                        <Button className="w-full" onClick={() => generateReport('Reporte General de Estatus')}>
+                        <Button className="w-full" onClick={generateGeneralStatusReport}>
                            <Download className="mr-2 h-4 w-4" /> Generar y Exportar
                         </Button>
                     </CardFooter>
@@ -218,4 +317,5 @@ export default function ReportsPage() {
             </div>
         </div>
     );
-}
+
+    
