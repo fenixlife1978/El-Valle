@@ -33,6 +33,9 @@ type Owner = {
     email?: string;
     balance?: number;
     role: Role;
+    // Legacy fields for backward compatibility
+    street?: string;
+    house?: string;
 };
 
 const emptyOwner: Omit<Owner, 'id'> = { 
@@ -89,7 +92,14 @@ export default function PeopleManagementPage() {
     };
 
     const handleEditOwner = (owner: Owner) => {
-        setCurrentOwner(owner);
+        // Ensure owner has a properties array, converting legacy data if needed
+        const editableOwner = {
+            ...owner,
+            properties: owner.properties && owner.properties.length > 0 
+                ? owner.properties 
+                : [{ street: owner.street || '', house: owner.house || '' }]
+        };
+        setCurrentOwner(editableOwner);
         setIsDialogOpen(true);
     };
 
@@ -120,14 +130,13 @@ export default function PeopleManagementPage() {
         }
 
         try {
-            if (currentOwner.id) {
-                const ownerRef = doc(db, "owners", currentOwner.id);
-                const { id, ...dataToUpdate } = currentOwner;
-                await updateDoc(ownerRef, dataToUpdate);
+            const { id, street, house, ...dataToSave } = currentOwner;
+            if (id) {
+                const ownerRef = doc(db, "owners", id);
+                await updateDoc(ownerRef, dataToSave);
                 toast({ title: 'Propietario Actualizado', description: 'Los datos han sido guardados en la base de datos.' });
             } else {
-                const { id, ...dataToAdd } = currentOwner;
-                await addDoc(collection(db, "owners"), dataToAdd);
+                await addDoc(collection(db, "owners"), dataToSave);
                 toast({ title: 'Propietario Agregado', description: 'La nueva persona ha sido guardada en la base de datos.' });
             }
         } catch (error) {
@@ -170,16 +179,17 @@ export default function PeopleManagementPage() {
     };
     
     const handleExportExcel = () => {
-        const dataToExport = owners.flatMap(o => 
-            o.properties.map(p => ({
+        const dataToExport = owners.flatMap(o => {
+            const properties = (o.properties && o.properties.length > 0) ? o.properties : [{ street: o.street || 'N/A', house: o.house || 'N/A'}];
+            return properties.map(p => ({
                 Nombre: o.name,
                 Calle: p.street,
                 Casa: p.house,
                 Email: o.email || '',
                 'Saldo a Favor (Bs.)': o.balance ?? 0,
                 Rol: o.role,
-            }))
-        );
+            }));
+        });
         const worksheet = XLSX.utils.json_to_sheet(dataToExport);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Propietarios");
@@ -191,12 +201,12 @@ export default function PeopleManagementPage() {
         doc.text("Lista de Propietarios", 14, 16);
         (doc as any).autoTable({
             head: [['Nombre', 'Propiedades', 'Email', 'Rol']],
-            body: owners.map(o => [
-                o.name,
-                o.properties.map(p => `${p.street} - ${p.house}`).join(', '),
-                o.email || '-',
-                o.role
-            ]),
+            body: owners.map(o => {
+                const properties = (o.properties && o.properties.length > 0) 
+                    ? o.properties.map(p => `${p.street} - ${p.house}`).join(', ') 
+                    : (o.street && o.house ? `${o.street} - ${o.house}` : 'N/A');
+                return [o.name, properties, o.email || '-', o.role];
+            }),
             startY: 20,
         });
         doc.save('propietarios.pdf');
@@ -219,13 +229,13 @@ export default function PeopleManagementPage() {
                 const worksheet = workbook.Sheets[sheetName];
                 const json = XLSX.utils.sheet_to_json(worksheet, { header: ["name", "street", "house", "email", "balance", "role"], range: 1 });
                 
-                // Group by owner name and email to handle multiple properties
                 const ownersMap: { [key: string]: Partial<Owner> } = {};
                 (json as any[]).forEach(item => {
-                    const key = `${item.name}-${item.email}`;
+                    if (!item.name) return; // Skip rows without a name
+                    const key = `${item.name}-${item.email || ''}`.toLowerCase();
                     if (!ownersMap[key]) {
                         ownersMap[key] = {
-                            name: item.name || 'Sin Nombre',
+                            name: item.name,
                             email: item.email || '',
                             balance: parseFloat(item.balance) || 0,
                             role: (item.role === 'administrador' || item.role === 'propietario') ? item.role : 'propietario',
@@ -233,7 +243,7 @@ export default function PeopleManagementPage() {
                         };
                     }
                     if (item.street && item.house) {
-                        ownersMap[key].properties?.push({ street: item.street, house: item.house });
+                        ownersMap[key].properties?.push({ street: String(item.street), house: String(item.house) });
                     }
                 });
 
@@ -328,7 +338,10 @@ export default function PeopleManagementPage() {
                                         <TableRow key={owner.id}>
                                             <TableCell className="font-medium">{owner.name}</TableCell>
                                             <TableCell>
-                                                {owner.properties.map(p => `${p.street} - ${p.house}`).join(', ')}
+                                                {owner.properties && owner.properties.length > 0 
+                                                    ? owner.properties.map(p => `${p.street} - ${p.house}`).join(', ') 
+                                                    : (owner.street && owner.house ? `${owner.street} - ${owner.house}` : 'N/A')
+                                                }
                                             </TableCell>
                                             <TableCell>{owner.email || '-'}</TableCell>
                                             <TableCell className="capitalize">{owner.role}</TableCell>
@@ -427,7 +440,7 @@ export default function PeopleManagementPage() {
                             <Input id="email" type="email" value={currentOwner.email || ''} onChange={handleInputChange} />
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="balance">Saldo a Favor</Label>
+                            <Label htmlFor="balance">Saldo a Favor (Bs.)</Label>
                             <Input id="balance" type="number" value={currentOwner.balance ?? ''} onChange={handleInputChange} placeholder="0.00" />
                         </div>
                     </div>
