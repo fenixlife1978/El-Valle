@@ -248,8 +248,8 @@ export default function SettingsPage() {
         setIsAdjustmentRunning(true);
         
         const feeDifference = condoFee - lastCondoFee;
-        if (feeDifference <= 0) {
-            toast({variant: 'destructive', title: 'Sin cambios', description: 'El ajuste solo se ejecuta si la nueva cuota es mayor a la anterior.'});
+        if (feeDifference === 0) {
+            toast({variant: 'destructive', title: 'Sin cambios', description: 'El ajuste solo se ejecuta si la nueva cuota es diferente a la anterior.'});
             setIsAdjustmentRunning(false);
             return;
         }
@@ -272,26 +272,27 @@ export default function SettingsPage() {
 
             querySnapshot.forEach(doc => {
                 const debt = doc.data() as Debt;
-                
-                const debtDate = new Date(debt.year, debt.month - 1);
-                
-                // We adjust debts for the current month or future months
                 const isCurrentOrFutureDebt = debt.year > currentYear || (debt.year === currentYear && debt.month >= currentMonth);
 
                 if (isCurrentOrFutureDebt) {
                     const adjustmentAmount = feeDifference;
-                    const adjustmentDebtRef = doc(collection(db, "debts"));
-                    batch.set(adjustmentDebtRef, {
-                        ownerId: debt.ownerId,
-                        year: debt.year,
-                        month: debt.month,
-                        amountUSD: adjustmentAmount,
-                        description: `Ajuste por aumento de cuota`,
-                        status: 'pending'
-                    });
-
-                    // Aggregate adjustments per owner
-                    ownersToUpdate[debt.ownerId] = (ownersToUpdate[debt.ownerId] || 0) + adjustmentAmount;
+                    
+                    if (adjustmentAmount > 0) { // Fee increased
+                        const adjustmentDebtRef = doc(collection(db, "debts"));
+                        batch.set(adjustmentDebtRef, {
+                            ownerId: debt.ownerId,
+                            year: debt.year,
+                            month: debt.month,
+                            amountUSD: adjustmentAmount,
+                            description: `Ajuste por aumento de cuota`,
+                            status: 'pending'
+                        });
+                        // Aggregate negative adjustments for owner balance
+                        ownersToUpdate[debt.ownerId] = (ownersToUpdate[debt.ownerId] || 0) - adjustmentAmount;
+                    } else { // Fee decreased
+                        // Aggregate positive adjustments for owner balance
+                        ownersToUpdate[debt.ownerId] = (ownersToUpdate[debt.ownerId] || 0) - adjustmentAmount; // Subtracting a negative number
+                    }
                     adjustmentsCount++;
                 }
             });
@@ -302,14 +303,14 @@ export default function SettingsPage() {
                 const ownerSnap = await getDoc(ownerRef);
                 if (ownerSnap.exists()) {
                     const currentBalance = ownerSnap.data().balance || 0;
-                    batch.update(ownerRef, { balance: currentBalance - ownersToUpdate[ownerId] });
+                    batch.update(ownerRef, { balance: currentBalance + ownersToUpdate[ownerId] });
                 }
             }
 
 
             if (adjustmentsCount > 0) {
                 await batch.commit();
-                toast({title: 'Ajuste Completado', description: `${adjustmentsCount} deudas por ajuste han sido generadas y saldos actualizados.`});
+                toast({title: 'Ajuste Completado', description: `${adjustmentsCount} deudas por ajuste han sido generadas y/o saldos actualizados.`});
             } else {
                 toast({title: 'Sin Ajustes', description: 'No se encontraron cuotas pagadas por adelantado que requieran ajuste.'});
             }
@@ -414,13 +415,13 @@ export default function SettingsPage() {
                                     <p className="mt-1">El día 6, el sistema debería generar automáticamente la deuda a los propietarios que no hayan cancelado. Esta automatización requiere configuración en el servidor (backend).</p>
                                 </div>
                             </div>
-                            <Button onClick={runFeeAdjustment} disabled={!isFeeChanged || condoFee <= lastCondoFee || isAdjustmentRunning}>
+                            <Button onClick={runFeeAdjustment} disabled={!isFeeChanged || condoFee === lastCondoFee || isAdjustmentRunning}>
                                 {isAdjustmentRunning ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <FileCog className="mr-2 h-4 w-4"/>}
-                                Ejecutar Ajuste por Aumento de Cuota
+                                Ejecutar Ajuste por Cambio de Cuota
                             </Button>
                             <p className="text-xs text-muted-foreground">
-                                Esta acción genera deudas por diferencia a quienes pagaron meses por adelantado con una cuota anterior. 
-                                Úselo después de guardar un aumento en la cuota.
+                                Esta acción genera deudas o créditos a quienes pagaron meses por adelantado con una cuota anterior. 
+                                Úselo después de guardar un cambio en la cuota.
                             </p>
                         </CardFooter>
                     </Card>
@@ -554,3 +555,5 @@ export default function SettingsPage() {
         </div>
     );
 }
+
+    
