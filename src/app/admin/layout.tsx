@@ -4,7 +4,6 @@ import {
     Home,
     Landmark,
     Users,
-    Megaphone,
     Settings,
     FileSearch,
 } from 'lucide-react';
@@ -24,7 +23,6 @@ const adminNavItems: NavItem[] = [
     },
     { href: "/admin/reports", icon: FileSearch, label: "Consultas y Reportes" },
     { href: "/admin/people", icon: Users, label: "Personas" },
-    { href: "#", icon: Megaphone, label: "Comunicados" },
     { href: "#", icon: Settings, label: "Configuración" },
 ];
 

@@ -3,7 +3,6 @@
 import {
     Home,
     Landmark,
-    Megaphone,
     Settings,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -19,7 +18,6 @@ const ownerNavItems: NavItem[] = [
         { href: "/admin/payments", label: "Reportar Pago" },
       ]
     },
-    { href: "#", icon: Megaphone, label: "Comunicados" },
     { href: "#", icon: Settings, label: "Configuración" },
 ];
 
