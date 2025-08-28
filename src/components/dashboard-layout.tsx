@@ -101,7 +101,7 @@ export function DashboardLayout({
                        <SidebarMenuSub>
                         {item.items.map(subItem => (
                           <SidebarMenuSubItem key={subItem.label}>
-                             <Link href={subItem.href} passHref legacyBehavior>
+                             <Link href={subItem.href} passHref>
                                 <SidebarMenuSubButton isActive={pathname === subItem.href}>
                                   <span>{subItem.label}</span>
                                 </SidebarMenuSubButton>
@@ -113,16 +113,15 @@ export function DashboardLayout({
                   </Collapsible>
                 ) : (
                   <SidebarMenuItem key={item.label}>
+                    <Link href={item.href}>
                       <SidebarMenuButton
-                        asChild
                         isActive={pathname === item.href}
                         tooltip={{ children: item.label }}
                       >
-                        <Link href={item.href}>
                           <item.icon />
                           <span>{item.label}</span>
-                        </Link>
                       </SidebarMenuButton>
+                    </Link>
                   </SidebarMenuItem>
                 )
             )}
