@@ -102,7 +102,7 @@ export function DashboardLayout({
                         {item.items.map(subItem => (
                           <SidebarMenuSubItem key={subItem.label}>
                              <Link href={subItem.href} passHref>
-                                <SidebarMenuSubButton isActive={pathname === subItem.href}>
+                                <SidebarMenuSubButton asChild isActive={pathname === subItem.href}>
                                   <span>{subItem.label}</span>
                                 </SidebarMenuSubButton>
                             </Link>
