@@ -275,7 +275,10 @@ export default function ReportsPage() {
             
             const ownerDebts = debtSnapshot.docs
                 .map(doc => doc.data() as Debt)
-                .sort((a, b) => a.year - b.year || a.month - b.month);
+                .sort((a, b) => {
+                    if (a.year !== b.year) return a.year - b.year;
+                    return a.month - b.month;
+                });
 
             let totalAdeudadoUSD = 0;
             const debtsRows = ownerDebts.map(d => {
@@ -289,13 +292,15 @@ export default function ReportsPage() {
                 ];
             });
             
+            const saldoFavorBs = owner.balance > 0 ? owner.balance * activeRate : 0;
+            
             setPreviewData({
                 title: `Estado de Cuenta: ${owner.name}`,
                 headers: ['Periodo', 'Monto ($)', 'Estado'],
                 rows: debtsRows,
                 footers: [
                     `Total Adeudado: $${totalAdeudadoUSD.toFixed(2)}`,
-                    `Saldo a Favor: Bs. ${(owner.balance > 0 ? owner.balance * activeRate : 0).toLocaleString('es-VE', { minimumFractionDigits: 2 })}`
+                    `Saldo a Favor: Bs. ${saldoFavorBs.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`
                 ],
                 filename: `estado_cuenta_${owner.name.replace(/\s/g, '_')}`
             });
@@ -365,7 +370,7 @@ export default function ReportsPage() {
 
         setPreviewData({
             title: `Reporte de Ingresos (${format(startDate, "dd/MM/yy")} - ${format(endDate, "dd/MM/yy")})`,
-            headers: [['Fecha', 'Monto (Bs.)', 'Método de Pago']],
+            headers: ['Fecha', 'Monto (Bs.)', 'Método de Pago'],
             rows: incomePayments.map(p => [new Date(p.paymentDate.seconds * 1000).toLocaleDateString('es-VE'), p.totalAmount.toFixed(2), p.paymentMethod]),
             footers: [`Total de Ingresos: Bs. ${totalIncome.toFixed(2)}`],
             filename: 'reporte_ingresos',
@@ -377,7 +382,7 @@ export default function ReportsPage() {
     const showGeneralStatusReportPreview = () => {
          setPreviewData({
             title: 'Reporte General de Estatus',
-            headers: [['Propietario', 'Propiedades', 'Estatus', 'Saldo (Bs.)']],
+            headers: ['Propietario', 'Propiedades', 'Estatus', 'Saldo (Bs.)'],
             rows: owners.map(o => {
                 const properties = (o.properties && o.properties.length > 0)
                     ? o.properties.map(p => `${p.street} - ${p.house}`).join(', ')
@@ -688,5 +693,7 @@ export default function ReportsPage() {
         </div>
     );
 }
+
+    
 
     
