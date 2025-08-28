@@ -23,7 +23,7 @@ const adminNavItems: NavItem[] = [
     },
     { href: "/admin/reports", icon: FileSearch, label: "Consultas y Reportes" },
     { href: "/admin/people", icon: Users, label: "Personas" },
-    { href: "#", icon: Settings, label: "Configuración" },
+    { href: "/admin/settings", icon: Settings, label: "Configuración" },
 ];
 
 export default function AdminLayout({ children }: { children: ReactNode }) {

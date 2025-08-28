@@ -18,7 +18,7 @@ const ownerNavItems: NavItem[] = [
         { href: "/admin/payments", label: "Reportar Pago" },
       ]
     },
-    { href: "#", icon: Settings, label: "Configuración" },
+    { href: "/owner/settings", icon: Settings, label: "Configuración" },
 ];
 
 export default function OwnerLayout({ children }: { children: ReactNode }) {
