@@ -31,6 +31,9 @@ type Owner = {
     balance: number;
     delinquency: number; 
     status: 'solvente' | 'moroso';
+    // Legacy fields
+    street?: string;
+    house?: string;
 };
 
 type Payment = {
@@ -98,9 +101,11 @@ export default function ReportsPage() {
                 for(const debtDoc of debtsSnapshot.docs) {
                     const debt = debtDoc.data();
                     const owner = ownersData.find(o => o.id === debt.ownerId);
-                    if(owner && owner.properties && owner.properties.length > 0) {
-                        const street = owner.properties[0].street;
-                        debtsByStreet[street] = (debtsByStreet[street] || 0) + (debt.amountUSD * rate);
+                    if(owner) {
+                        const ownerStreet = owner.properties && owner.properties.length > 0 ? owner.properties[0].street : owner.street;
+                        if (ownerStreet) {
+                            debtsByStreet[ownerStreet] = (debtsByStreet[ownerStreet] || 0) + (debt.amountUSD * rate);
+                        }
                     }
                 }
                 setDebtChartData(Object.entries(debtsByStreet).map(([name, total]) => ({name, total})).sort((a,b) => a.name.localeCompare(b.name)));
@@ -229,7 +234,12 @@ export default function ReportsPage() {
          generatePdf(
             'Reporte General de Estatus',
             [['Propietario', 'Propiedades', 'Estatus', 'Saldo (Bs.)']],
-            owners.map(o => [o.name, o.properties.map(p => p.house).join(', '), o.status === 'solvente' ? 'Solvente' : 'Moroso', o.balance.toFixed(2)]),
+            owners.map(o => {
+                const properties = (o.properties && o.properties.length > 0)
+                    ? o.properties.map(p => p.house).join(', ')
+                    : (o.house || 'N/A');
+                return [o.name, properties, o.status === 'solvente' ? 'Solvente' : 'Moroso', o.balance.toFixed(2)]
+            }),
             'reporte_general_estatus'
         );
     };
@@ -318,7 +328,12 @@ export default function ReportsPage() {
                                     <SelectValue placeholder="Seleccione un propietario..." />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {owners.map(o => <SelectItem key={o.id} value={o.id}>{o.name} ({o.properties.map(p => p.house).join(', ')})</SelectItem>)}
+                                    {owners.map(o => {
+                                        const properties = (o.properties && o.properties.length > 0) 
+                                            ? o.properties.map(p => p.house).join(', ') 
+                                            : (o.house || 'N/A');
+                                        return <SelectItem key={o.id} value={o.id}>{o.name} ({properties})</SelectItem>
+                                    })}
                                 </SelectContent>
                             </Select>
                         </div>
