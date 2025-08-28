@@ -10,20 +10,22 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PlusCircle, MoreHorizontal, Edit, Trash2, Loader2, Info, ArrowRight, Eye } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, Edit, Trash2, Loader2, Info, ArrowLeft, ArrowRight, Search, BadgeHelp, WalletCards } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { collection, query, onSnapshot, where, addDoc, updateDoc, deleteDoc, doc, getDoc, getDocs } from 'firebase/firestore';
+import { collection, query, onSnapshot, where, addDoc, updateDoc, deleteDoc, doc, getDocs, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { Badge } from '@/components/ui/badge';
 
 type Owner = {
     id: string;
     name: string;
     house: string;
     street: string;
+    balance: number;
 };
 
 type Debt = {
-    id: string;
+    id:string;
     ownerId: string;
     year: number;
     month: number;
@@ -32,15 +34,7 @@ type Debt = {
     status: 'pending' | 'paid';
 };
 
-type OwnerDebtSummary = {
-    owner: Owner;
-    debtCount: number;
-    totalDebt: number;
-    periodFrom?: string;
-    periodTo?: string;
-};
-
-type View = 'summary' | 'detail';
+type View = 'list' | 'detail';
 
 const emptyDebt: Omit<Debt, 'id' | 'ownerId'> = { 
     year: new Date().getFullYear(), 
@@ -61,11 +55,10 @@ const years = Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - i)
 
 
 export default function DebtManagementPage() {
-    const [view, setView] = useState<View>('summary');
+    const [view, setView] = useState<View>('list');
     const [owners, setOwners] = useState<Owner[]>([]);
-    const [allDebts, setAllDebts] = useState<Debt[]>([]);
     const [loading, setLoading] = useState(true);
-    const [activeRate, setActiveRate] = useState<number | null>(null);
+    const [searchTerm, setSearchTerm] = useState('');
 
     const [selectedOwner, setSelectedOwner] = useState<Owner | null>(null);
     const [selectedOwnerDebts, setSelectedOwnerDebts] = useState<Debt[]>([]);
@@ -79,79 +72,40 @@ export default function DebtManagementPage() {
     
     const { toast } = useToast();
 
-    // Fetch All Data (Owners, Debts, Rate)
+    // Fetch All Owners
     useEffect(() => {
-        const fetchAllData = async () => {
-            setLoading(true);
-            try {
-                // Fetch Owners
-                const ownersQuery = query(collection(db, "owners"));
-                const ownersSnapshot = await getDocs(ownersQuery);
-                const ownersData: Owner[] = [];
-                ownersSnapshot.forEach(doc => {
-                    const data = doc.data();
-                    ownersData.push({ id: doc.id, name: data.name, house: data.house, street: data.street });
-                });
-                setOwners(ownersData);
-
-                // Fetch All Pending Debts
-                const debtsQuery = query(collection(db, "debts"), where("status", "==", "pending"));
-                const debtsSnapshot = await getDocs(debtsQuery);
-                const debtsData: Debt[] = [];
-                debtsSnapshot.forEach(doc => {
-                    debtsData.push({ id: doc.id, ...doc.data() } as Debt);
-                });
-                setAllDebts(debtsData);
-
-                // Fetch Active Rate
-                const settingsRef = doc(db, 'config', 'mainSettings');
-                const docSnap = await getDoc(settingsRef);
-                if (docSnap.exists()) {
-                    const settings = docSnap.data();
-                    const rate = settings.exchangeRates?.find((r: any) => r.active);
-                    if (rate) setActiveRate(rate.rate);
-                }
-            } catch (error) {
-                console.error("Error fetching data:", error);
-                toast({ variant: 'destructive', title: 'Error de Carga', description: 'No se pudieron cargar los datos iniciales.' });
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchAllData();
-    }, [toast]);
-
-    const debtSummary = useMemo<OwnerDebtSummary[]>(() => {
-        const summaryMap = new Map<string, OwnerDebtSummary>();
-        
-        allDebts.forEach(debt => {
-            const owner = owners.find(o => o.id === debt.ownerId);
-            if (!owner) return;
-
-            let entry = summaryMap.get(owner.id);
-            if (!entry) {
-                entry = { owner, debtCount: 0, totalDebt: 0 };
-            }
-            
-            entry.debtCount += 1;
-            entry.totalDebt += debt.amount;
-            
-            const debtDate = new Date(debt.year, debt.month - 1);
-            const debtPeriod = `${months.find(m => m.value === debt.month)?.label} ${debt.year}`;
-
-            if (!entry.periodFrom || new Date(entry.periodFrom) > debtDate) {
-                 entry.periodFrom = debtPeriod;
-            }
-             if (!entry.periodTo || new Date(entry.periodTo) < debtDate) {
-                 entry.periodTo = debtPeriod;
-            }
-
-            summaryMap.set(owner.id, entry);
+        setLoading(true);
+        const ownersQuery = query(collection(db, "owners"));
+        const unsubscribe = onSnapshot(ownersQuery, (snapshot) => {
+            const ownersData: Owner[] = snapshot.docs.map(doc => {
+                const data = doc.data();
+                return { 
+                    id: doc.id, 
+                    name: data.name, 
+                    house: data.house, 
+                    street: data.street,
+                    balance: data.balance || 0
+                };
+            });
+            setOwners(ownersData);
+            setLoading(false);
+        }, (error) => {
+            console.error("Error fetching owners:", error);
+            toast({ variant: 'destructive', title: 'Error de Carga', description: 'No se pudieron cargar los propietarios.' });
+            setLoading(false);
         });
 
-        return Array.from(summaryMap.values()).sort((a,b) => b.totalDebt - a.totalDebt);
-    }, [allDebts, owners]);
+        return () => unsubscribe();
+    }, [toast]);
+    
+    // Filter owners based on search term
+    const filteredOwners = useMemo(() => {
+        if (!searchTerm) return owners;
+        return owners.filter(owner => 
+            owner.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            owner.house.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+    }, [searchTerm, owners]);
 
     // Fetch Debts for selected owner when view changes to 'detail'
     useEffect(() => {
@@ -261,57 +215,69 @@ export default function DebtManagementPage() {
         );
     }
     
-    // Summary View
-    if (view === 'summary') {
+    // Main List View
+    if (view === 'list') {
         return (
             <div className="space-y-8">
-                <div>
+                 <div>
                     <h1 className="text-3xl font-bold font-headline">Gestión de Deudas</h1>
-                    <p className="text-muted-foreground">Resumen de propietarios con deudas pendientes.</p>
+                    <p className="text-muted-foreground">Busque un propietario para ver o registrar sus deudas.</p>
                 </div>
                  <Card>
                     <CardHeader>
-                        <CardTitle>Resumen de Morosidad</CardTitle>
-                        <CardDescription>Lista de propietarios con deudas y el total acumulado.</CardDescription>
+                        <CardTitle>Lista de Propietarios</CardTitle>
+                        <div className="relative mt-2">
+                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                             <Input 
+                                placeholder="Buscar por nombre o casa..." 
+                                className="pl-9"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                             />
+                        </div>
                     </CardHeader>
                     <CardContent>
                         <Table>
                              <TableHeader>
                                 <TableRow>
                                     <TableHead>Propietario</TableHead>
-                                    <TableHead>Período Adeudado</TableHead>
-                                    <TableHead className="text-center">Meses</TableHead>
-                                    <TableHead className="text-right">Total Deuda ($)</TableHead>
+                                    <TableHead>Ubicación</TableHead>
+                                    <TableHead>Estado de Cuenta</TableHead>
                                     <TableHead className="text-right">Acción</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {debtSummary.length === 0 ? (
+                                {loading ? (
                                      <TableRow>
-                                        <TableCell colSpan={5} className="h-24 text-center">
+                                        <TableCell colSpan={4} className="h-24 text-center">
+                                             <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
+                                        </TableCell>
+                                    </TableRow>
+                                ) : filteredOwners.length === 0 ? (
+                                     <TableRow>
+                                        <TableCell colSpan={4} className="h-24 text-center">
                                             <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
                                                 <Info className="h-8 w-8" />
-                                                <span>¡Excelente! No hay propietarios con deudas pendientes.</span>
+                                                <span>No se encontraron propietarios.</span>
                                             </div>
                                         </TableCell>
                                     </TableRow>
                                 ) : (
-                                    debtSummary.map(({ owner, debtCount, totalDebt, periodFrom, periodTo }) => (
+                                    filteredOwners.map((owner) => (
                                         <TableRow key={owner.id}>
+                                            <TableCell className="font-medium">{owner.name}</TableCell>
+                                            <TableCell>{owner.street} - {owner.house}</TableCell>
                                             <TableCell>
-                                                <div className="font-medium">{owner.name}</div>
-                                                <div className="text-sm text-muted-foreground">{owner.street} - {owner.house}</div>
-                                            </TableCell>
-                                            <TableCell>
-                                                {periodFrom === periodTo ? periodFrom : `${periodFrom} - ${periodTo}`}
-                                            </TableCell>
-                                            <TableCell className="text-center">{debtCount}</TableCell>
-                                            <TableCell className="text-right">
-                                                {activeRate ? `$ ${(totalDebt / activeRate).toFixed(2)}` : 'N/A'}
+                                                {owner.balance < 0 ? 
+                                                    <Badge variant="destructive">Moroso</Badge> : 
+                                                owner.balance > 0 ? 
+                                                    <Badge variant="success">Saldo a Favor</Badge> : 
+                                                    <Badge variant="outline">Solvente</Badge>
+                                                }
                                             </TableCell>
                                             <TableCell className="text-right">
                                                 <Button variant="outline" size="sm" onClick={() => handleManageOwnerDebts(owner)}>
-                                                    Gestionar <ArrowRight className="ml-2 h-4 w-4" />
+                                                    Gestionar Deudas <WalletCards className="ml-2 h-4 w-4" />
                                                 </Button>
                                             </TableCell>
                                         </TableRow>
@@ -329,16 +295,16 @@ export default function DebtManagementPage() {
     if (view === 'detail' && selectedOwner) {
         return (
             <div className="space-y-8">
-                 <Button variant="outline" onClick={() => setView('summary')}>
-                    <ArrowRight className="mr-2 h-4 w-4 transform rotate-180" />
-                    Volver al Resumen
+                 <Button variant="outline" onClick={() => setView('list')}>
+                    <ArrowLeft className="mr-2 h-4 w-4" />
+                    Volver a la Lista
                 </Button>
 
                  <Card>
                     <CardHeader className="flex flex-row items-center justify-between">
                         <div>
                             <CardTitle>Deudas de: <span className="text-primary">{selectedOwner.name}</span></CardTitle>
-                            <CardDescription>Lista de todas las deudas (pendientes y pagadas).</CardDescription>
+                            <CardDescription>Ubicación: {selectedOwner.street} - {selectedOwner.house}</CardDescription>
                         </div>
                         <Button onClick={handleAddDebt}>
                             <PlusCircle className="mr-2 h-4 w-4" />
@@ -381,9 +347,9 @@ export default function DebtManagementPage() {
                                             <TableCell className="font-medium">{debt.description}</TableCell>
                                             <TableCell>Bs. {debt.amount.toFixed(2)}</TableCell>
                                             <TableCell className="capitalize">
-                                                <span className={`px-2 py-1 text-xs rounded-full ${debt.status === 'pending' ? 'bg-warning/20 text-warning-foreground' : 'bg-success/20 text-success-foreground'}`}>
+                                                <Badge variant={debt.status === 'pending' ? 'warning' : 'success'}>
                                                     {debt.status === 'pending' ? 'Pendiente' : 'Pagada'}
-                                                </span>
+                                                </Badge>
                                             </TableCell>
                                             <TableCell className="text-right">
                                                  <DropdownMenu>
