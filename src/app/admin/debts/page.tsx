@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PlusCircle, MoreHorizontal, Edit, Trash2, Loader2, Info, ArrowLeft, Search, WalletCards } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { collection, query, onSnapshot, where, doc, getDoc, writeBatch, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, query, onSnapshot, where, doc, getDoc, writeBatch, updateDoc, deleteDoc, runTransaction } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Badge } from '@/components/ui/badge';
 import { differenceInCalendarMonths, format, addMonths } from 'date-fns';
@@ -202,33 +202,46 @@ export default function DebtManagementPage() {
         }
 
         const monthsToGenerate = differenceInCalendarMonths(endDate, startDate) + 1;
+        const totalDebtAmountUSD = monthsToGenerate * amountUSD;
 
         try {
-            const batch = writeBatch(db);
+            const ownerRef = doc(db, "owners", selectedOwner.id);
+            
+            await runTransaction(db, async (transaction) => {
+                const ownerDoc = await transaction.get(ownerRef);
+                if (!ownerDoc.exists()) {
+                    throw "El documento del propietario no existe.";
+                }
 
-            for (let i = 0; i < monthsToGenerate; i++) {
-                const debtDate = addMonths(startDate, i);
-                const debtYear = debtDate.getFullYear();
-                const debtMonth = debtDate.getMonth() + 1;
-                
-                const debtRef = doc(collection(db, "debts"));
-                batch.set(debtRef, {
-                    ownerId: selectedOwner.id,
-                    year: debtYear,
-                    month: debtMonth,
-                    amountUSD: amountUSD,
-                    description: description,
-                    status: 'pending',
-                });
-            }
+                // Update owner's balance
+                const currentBalance = ownerDoc.data().balance || 0;
+                const newBalance = currentBalance - totalDebtAmountUSD;
+                transaction.update(ownerRef, { balance: newBalance });
 
-            await batch.commit();
-            toast({ title: 'Deudas Generadas', description: `${monthsToGenerate} meses de deuda han sido agregados.` });
+                // Create debt documents
+                for (let i = 0; i < monthsToGenerate; i++) {
+                    const debtDate = addMonths(startDate, i);
+                    const debtYear = debtDate.getFullYear();
+                    const debtMonth = debtDate.getMonth() + 1;
+                    
+                    const debtRef = doc(collection(db, "debts"));
+                    transaction.set(debtRef, {
+                        ownerId: selectedOwner.id,
+                        year: debtYear,
+                        month: debtMonth,
+                        amountUSD: amountUSD,
+                        description: description,
+                        status: 'pending',
+                    });
+                }
+            });
+
+            toast({ title: 'Deudas Generadas', description: `${monthsToGenerate} meses de deuda han sido agregados y el saldo del propietario ha sido actualizado.` });
 
         } catch (error) {
             console.error("Error generating mass debts: ", error);
-            const errorMessage = error instanceof Error ? error.message : 'No se pudieron guardar las deudas.';
-            toast({ variant: 'destructive', title: 'Error', description: errorMessage });
+            const errorMessage = typeof error === 'string' ? error : (error instanceof Error ? error.message : 'No se pudieron guardar las deudas.');
+            toast({ variant: 'destructive', title: 'Error en la Transacción', description: errorMessage });
         } finally {
             setIsMassDebtDialogOpen(false);
             setCurrentMassDebt(emptyMassDebt);
