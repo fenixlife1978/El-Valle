@@ -103,7 +103,7 @@ export default function DebtManagementPage() {
         if (!searchTerm) return owners;
         return owners.filter(owner => 
             owner.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            owner.house.toLowerCase().includes(searchTerm.toLowerCase())
+            String(owner.house).toLowerCase().includes(searchTerm.toLowerCase())
         );
     }, [searchTerm, owners]);
 
