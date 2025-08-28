@@ -254,7 +254,7 @@ export default function ReportsPage() {
             // Fetch all related data
             const paymentsQuery = query(
                 collection(db, "payments"),
-                where("beneficiaries", "array-contains", { ownerId: owner.id, house: owner.properties[0].house, amount: owner.balance }),
+                where("beneficiaries", "array-contains-any", owner.properties.map(p => ({ ownerId: owner.id, house: p.house }))),
                 where("status", "==", "aprobado")
             );
 
@@ -288,7 +288,10 @@ export default function ReportsPage() {
             }
             
             doc.setFontSize(9).setFont('helvetica', 'normal');
-            const ownerProperties = (owner.properties || []).map(p => `${p.street}-${p.house}`).join(', ');
+            const ownerProperties = (owner.properties && owner.properties.length > 0) 
+                ? owner.properties.map(p => `${p.street} - ${p.house}`).join(', ')
+                : (owner.street && owner.house ? `${owner.street} - ${owner.house}`: 'N/A');
+
             doc.text(`Propietario: ${owner.name}`, margin + 30, finalY + 10);
             doc.text(`Propiedad(es): ${ownerProperties}`, margin + 30, finalY + 14);
             
