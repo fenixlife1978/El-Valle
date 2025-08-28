@@ -74,13 +74,36 @@ export default function VerifyPaymentsPage() {
   const { toast } = useToast();
 
   useEffect(() => {
+    setLoading(true);
     const q = query(collection(db, "payments"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    
+    const unsubscribe = onSnapshot(q, async (snapshot) => {
+        const ownerIds = new Set<string>();
+        snapshot.docs.forEach(doc => {
+            const data = doc.data();
+            if (data.beneficiaries && data.beneficiaries.length > 0) {
+                ownerIds.add(data.beneficiaries[0].ownerId);
+            }
+        });
+
+        const ownersData: {[key: string]: {name: string}} = {};
+        if (ownerIds.size > 0) {
+            const ownersQuery = query(collection(db, "owners"), where("__name__", "in", Array.from(ownerIds)));
+            const ownersSnapshot = await getDocs(ownersQuery);
+            ownersSnapshot.forEach(doc => {
+                ownersData[doc.id] = { name: doc.data().name };
+            });
+        }
+        
         const paymentsData: FullPayment[] = [];
         snapshot.forEach(doc => {
             const data = doc.data();
+            const mainBeneficiaryId = data.beneficiaries?.[0]?.ownerId;
+            const userName = mainBeneficiaryId ? ownersData[mainBeneficiaryId]?.name : 'No disponible';
+
             paymentsData.push({
                 id: doc.id,
+                user: userName,
                 unit: data.beneficiaries[0]?.house || 'N/A', // Simplified
                 amount: data.totalAmount,
                 date: new Date(data.paymentDate.seconds * 1000).toISOString(),
@@ -95,6 +118,7 @@ export default function VerifyPaymentsPage() {
                 paymentDate: data.paymentDate,
             });
         });
+
         setPayments(paymentsData);
         setLoading(false);
     }, (error) => {
@@ -156,15 +180,17 @@ export default function VerifyPaymentsPage() {
                     }
                     
                     const ownerBalanceUSD = ownerDoc.data().balance || 0;
-                    const beneficiaryAmountUSD = beneficiary.amount / paymentData.exchangeRate;
-                    let availableFundsUSD = ownerBalanceUSD + beneficiaryAmountUSD;
+                    const paymentAmountUSD = beneficiary.amount / paymentData.exchangeRate;
+                    let availableFundsUSD = ownerBalanceUSD + paymentAmountUSD;
                     
                     const debtsQuery = query(
                         collection(db, "debts"),
                         where("ownerId", "==", beneficiary.ownerId),
                         where("status", "==", "pending")
                     );
-                    const debtsSnapshot = await getDocs(debtsQuery); 
+                    
+                    // Fetch debts within the transaction
+                    const debtsSnapshot = await getDocs(debtsQuery);
                     
                     const pendingDebts: Debt[] = [];
                     debtsSnapshot.forEach(doc => pendingDebts.push({id: doc.id, ...doc.data()} as Debt));
@@ -219,8 +245,13 @@ export default function VerifyPaymentsPage() {
     const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 14;
 
+    // --- Header ---
     if (companyInfo?.logo) {
-        doc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25);
+        try {
+            doc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25);
+        } catch(e) {
+            console.error("Error adding logo to PDF", e);
+        }
     }
     
     if (companyInfo) {
@@ -242,11 +273,12 @@ export default function VerifyPaymentsPage() {
     doc.setLineWidth(0.5);
     doc.line(margin, margin + 32, pageWidth - margin, margin + 32);
 
+    // --- Title ---
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.text('Recibo de Pago de Condominio', pageWidth / 2, margin + 45, { align: 'center' });
 
-
+    // --- Body ---
     (doc as any).autoTable({
         startY: margin + 55,
         head: [['Concepto', 'Detalle']],
@@ -262,7 +294,7 @@ export default function VerifyPaymentsPage() {
             ['Estado del Pago', statusTextMap[payment.status]],
         ],
         theme: 'striped',
-        headStyles: { fillColor: [30, 80, 180] },
+        headStyles: { fillColor: [30, 80, 180] }, // Deep Blue
     });
 
     doc.save(`recibo-${payment.unit}-${payment.id.substring(0,5)}.pdf`);
