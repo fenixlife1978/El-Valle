@@ -13,7 +13,8 @@ import { CalendarIcon, Upload, CircleAlert, CheckCircle2, Trash2, PlusCircle } f
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-
+import { collection, onSnapshot, query } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 // --- Mock Data ---
 // In a real app, this would come from Firestore
@@ -27,13 +28,15 @@ const venezuelanBanks = [
     { value: 'otro', label: 'Otro' },
 ];
 
-const owners = [
-    { id: 'owner-1', name: 'Ana Rodriguez', unit: 'A-101' },
-    { id: 'owner-2', name: 'Carlos Perez', unit: 'B-203' },
-    { id: 'owner-3', name: 'Maria Garcia', unit: 'C-305' },
-    { id: 'owner-4', name: 'Luis Hernandez', unit: 'A-102' },
-    { id: 'owner-5', name: 'Sofia Martinez', unit: 'D-401' },
-];
+type Owner = {
+    id: string; // Firestore IDs are strings
+    name: string;
+    street: string;
+    house: string;
+    email?: string;
+    balance?: number;
+    role: 'propietario' | 'administrador';
+};
 
 // --- Type Definitions ---
 type BeneficiaryType = 'propio' | 'terceros' | 'global';
@@ -43,6 +46,7 @@ type FormErrors = { [key: string]: string | undefined };
 
 export default function UnifiedPaymentsPage() {
     const { toast } = useToast();
+    const [owners, setOwners] = useState<Owner[]>([]);
 
     // --- Form State ---
     const [paymentDate, setPaymentDate] = useState<Date | undefined>();
@@ -60,6 +64,22 @@ export default function UnifiedPaymentsPage() {
     const [globalSplits, setGlobalSplits] = useState<GlobalSplit[]>([{ ownerId: '', amount: '' }]);
     const [errors, setErrors] = useState<FormErrors>({});
 
+    useEffect(() => {
+        const q = query(collection(db, "owners"));
+        const unsubscribe = onSnapshot(q, (querySnapshot) => {
+            const ownersData: Owner[] = [];
+            querySnapshot.forEach((doc) => {
+                ownersData.push({ id: doc.id, ...doc.data() } as Owner);
+            });
+            setOwners(ownersData.sort((a, b) => a.name.localeCompare(b.name)));
+        }, (error) => {
+            console.error("Error fetching owners: ", error);
+            toast({ variant: 'destructive', title: 'Error de Conexión', description: 'No se pudieron cargar los propietarios.' });
+        });
+
+        return () => unsubscribe();
+    }, [toast]);
+    
     // --- Effects ---
     useEffect(() => {
         if (paymentDate) {
@@ -378,7 +398,7 @@ export default function UnifiedPaymentsPage() {
                                             <SelectValue placeholder="Seleccione un propietario..." />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {owners.map(o => <SelectItem key={o.id} value={o.id}>{o.name} ({o.unit})</SelectItem>)}
+                                            {owners.map(o => <SelectItem key={o.id} value={o.id}>{o.name} ({o.house})</SelectItem>)}
                                         </SelectContent>
                                     </Select>
                                     {errors.thirdPartyBeneficiary && <p className="text-sm text-destructive">{errors.thirdPartyBeneficiary}</p>}
@@ -401,7 +421,7 @@ export default function UnifiedPaymentsPage() {
                                                                 value={o.id}
                                                                 disabled={globalSplits.some(s => s.ownerId === o.id && s.ownerId !== split.ownerId)}
                                                             >
-                                                                {o.name} ({o.unit})
+                                                                {o.name} ({o.house})
                                                             </SelectItem>
                                                         ))}
                                                     </SelectContent>
