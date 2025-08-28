@@ -281,7 +281,6 @@ export default function DebtManagementPage() {
                                     <TableHead>Propietario</TableHead>
                                     <TableHead>Período Adeudado</TableHead>
                                     <TableHead className="text-center">Meses</TableHead>
-                                    <TableHead className="text-right">Total Deuda (Bs.)</TableHead>
                                     <TableHead className="text-right">Total Deuda ($)</TableHead>
                                     <TableHead className="text-right">Acción</TableHead>
                                 </TableRow>
@@ -289,7 +288,7 @@ export default function DebtManagementPage() {
                             <TableBody>
                                 {debtSummary.length === 0 ? (
                                      <TableRow>
-                                        <TableCell colSpan={6} className="h-24 text-center">
+                                        <TableCell colSpan={5} className="h-24 text-center">
                                             <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
                                                 <Info className="h-8 w-8" />
                                                 <span>¡Excelente! No hay propietarios con deudas pendientes.</span>
@@ -307,7 +306,6 @@ export default function DebtManagementPage() {
                                                 {periodFrom === periodTo ? periodFrom : `${periodFrom} - ${periodTo}`}
                                             </TableCell>
                                             <TableCell className="text-center">{debtCount}</TableCell>
-                                            <TableCell className="text-right">Bs. {totalDebt.toFixed(2)}</TableCell>
                                             <TableCell className="text-right">
                                                 {activeRate ? `$ ${(totalDebt / activeRate).toFixed(2)}` : 'N/A'}
                                             </TableCell>
