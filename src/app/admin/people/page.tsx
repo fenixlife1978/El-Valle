@@ -59,7 +59,7 @@ const streets = Array.from({ length: 8 }, (_, i) => `Calle ${i + 1}`);
 
 const getHousesForStreet = (street: string) => {
     if (!street) return [];
-    const streetString = String(street); 
+    const streetString = String(street);
     const streetNumber = parseInt(streetString.replace('Calle ', ''));
     if (isNaN(streetNumber)) return [];
     const houseCount = streetNumber === 1 ? 4 : 14;
@@ -89,8 +89,8 @@ export default function PeopleManagementPage() {
             // Custom sort logic
             const getSortKeys = (owner: Owner) => {
                 const prop = (owner.properties && owner.properties.length > 0) ? owner.properties[0] : { street: owner.street, house: owner.house };
-                const streetNum = parseInt(String(prop.street).replace('Calle ', '') || '0');
-                const houseNum = parseInt(String(prop.house).replace('Casa ', '') || '0');
+                const streetNum = parseInt(String(prop.street || '').replace('Calle ', '') || '0');
+                const houseNum = parseInt(String(prop.house || '').replace('Casa ', '') || '0');
                 return { streetNum, houseNum };
             };
 
@@ -210,6 +210,8 @@ export default function PeopleManagementPage() {
         setCurrentOwner({ ...currentOwner, properties: [...currentOwner.properties, { street: '', house: '' }] });
     };
 
+
+
     const removeProperty = (index: number) => {
         const newProperties = currentOwner.properties.filter((_, i) => i !== index);
         setCurrentOwner({ ...currentOwner, properties: newProperties });
@@ -239,7 +241,6 @@ export default function PeopleManagementPage() {
         const pageWidth = doc.internal.pageSize.getWidth();
         const margin = 14;
 
-        // --- PDF Header ---
         if (companyInfo?.logo) {
             doc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25);
         }
@@ -257,12 +258,10 @@ export default function PeopleManagementPage() {
         doc.setLineWidth(0.5);
         doc.line(margin, margin + 32, pageWidth - margin, margin + 32);
         
-        // --- PDF Title ---
         doc.setFontSize(16);
         doc.setFont('helvetica', 'bold');
         doc.text("Lista de Propietarios", pageWidth / 2, margin + 45, { align: 'center' });
 
-        // --- PDF Body ---
         (doc as any).autoTable({
             head: [['Nombre', 'Propiedades', 'Email', 'Rol']],
             body: owners.map(o => {
@@ -278,11 +277,7 @@ export default function PeopleManagementPage() {
 
         doc.save('propietarios.pdf');
     };
-
-    const handleImportClick = () => {
-        importFileRef.current?.click();
-    };
-
+    
     const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -298,7 +293,7 @@ export default function PeopleManagementPage() {
                 
                 const ownersMap: { [key: string]: Partial<Owner> } = {};
                 (json as any[]).forEach(item => {
-                    if (!item.name) return; // Skip rows without a name
+                    if (!item.name) return;
                     const key = `${item.name}-${item.email || ''}`.toLowerCase();
                     if (!ownersMap[key]) {
                         ownersMap[key] = {
@@ -324,7 +319,7 @@ export default function PeopleManagementPage() {
 
                 toast({
                     title: 'Importación Exitosa',
-                    description: `${newOwners.length} registros de propietarios han sido agregados/actualizados.`,
+                    description: `${newOwners.length} registros han sido agregados.`,
                     className: 'bg-green-100 border-green-400 text-green-800'
                 });
 
@@ -338,9 +333,12 @@ export default function PeopleManagementPage() {
             }
         };
         reader.readAsBinaryString(file);
-        e.target.value = ''; // Reset input
+        if(e.target) e.target.value = '';
     };
 
+    const handleImportClick = () => {
+        importFileRef.current?.click();
+    };
 
     return (
         <div className="space-y-8">
@@ -537,7 +535,4 @@ export default function PeopleManagementPage() {
 
         </div>
     );
-    
 }
-
-    
