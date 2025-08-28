@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -301,21 +302,26 @@ export default function ReportsPage() {
 
         const owner = owners.find(o => o.id === selectedOwner);
         if (!owner) return;
+        
+        const validProperties = (owner.properties || []).filter(p => p.street && p.house);
+        if (validProperties.length === 0) {
+             toast({ variant: 'destructive', title: 'Error', description: 'El propietario seleccionado no tiene propiedades válidas para consultar.' });
+             return;
+        }
 
         setGeneratingReport(true);
         try {
-            const start = Timestamp.fromDate(statementStartDate);
-            const end = Timestamp.fromDate(statementEndDate);
-            
-            // Fetch Payments - Simplified query
+            // Fetch Payments
             const paymentsQuery = query(
                 collection(db, "payments"),
-                where("beneficiaries", "array-contains-any", owner.properties.map(p => ({ ownerId: owner.id, house: p.house, amount: p.amount}))),
-                where("status", "==", "aprobado")
+                where("status", "==", "aprobado"),
+                where("beneficiaries", "array-contains-any", 
+                    validProperties.map(p => ({ ownerId: owner.id, house: p.house }))
+                )
             );
+            
             const paymentsSnapshot = await getDocs(paymentsQuery);
             let totalPaid = 0;
-            // Filter by date on the client
             const paymentsRows = paymentsSnapshot.docs
                 .map(doc => doc.data() as Payment)
                 .filter(p => {
@@ -812,11 +818,3 @@ export default function ReportsPage() {
         </div>
     );
 }
-
-    
-
-    
-
-    
-
-    
