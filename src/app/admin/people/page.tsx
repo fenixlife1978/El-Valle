@@ -263,12 +263,13 @@ export default function PeopleManagementPage() {
         doc.text("Lista de Propietarios", pageWidth / 2, margin + 45, { align: 'center' });
 
         (doc as any).autoTable({
-            head: [['Nombre', 'Propiedades', 'Email', 'Rol']],
+            head: [['Nombre', 'Propiedades', 'Email', 'Rol', 'Saldo a Favor (Bs)']],
             body: owners.map(o => {
                 const properties = (o.properties && o.properties.length > 0) 
                     ? o.properties.map(p => `${p.street} - ${p.house}`).join('\n') 
                     : (o.street && o.house ? `${o.street} - ${o.house}` : 'N/A');
-                return [o.name, properties, o.email || '-', o.role];
+                const balanceDisplay = o.balance && o.balance > 0 ? `Bs. ${o.balance.toLocaleString('es-VE', { minimumFractionDigits: 2 })}` : '-';
+                return [o.name, properties, o.email || '-', o.role, balanceDisplay];
             }),
             startY: margin + 55,
             headStyles: { fillColor: [30, 80, 180] },
@@ -387,19 +388,20 @@ export default function PeopleManagementPage() {
                                     <TableHead>Propiedades</TableHead>
                                     <TableHead>Email</TableHead>
                                     <TableHead>Rol</TableHead>
+                                    <TableHead>Saldo a Favor</TableHead>
                                     <TableHead className="text-right">Acciones</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {loading ? (
                                     <TableRow>
-                                        <TableCell colSpan={5} className="h-24 text-center">
+                                        <TableCell colSpan={6} className="h-24 text-center">
                                             <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
                                         </TableCell>
                                     </TableRow>
                                 ) : owners.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                                        <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                                             No hay personas registradas.
                                         </TableCell>
                                     </TableRow>
@@ -415,6 +417,11 @@ export default function PeopleManagementPage() {
                                             </TableCell>
                                             <TableCell>{owner.email || '-'}</TableCell>
                                             <TableCell className="capitalize">{owner.role}</TableCell>
+                                            <TableCell>
+                                                 {owner.balance && owner.balance > 0 
+                                                    ? `Bs. ${owner.balance.toLocaleString('es-VE', { minimumFractionDigits: 2 })}` 
+                                                    : '-'}
+                                            </TableCell>
                                             <TableCell className="text-right">
                                                 <DropdownMenu>
                                                     <DropdownMenuTrigger asChild>
