@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,19 +10,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
-import { Calendar as CalendarIcon, Download, Search, Loader2 } from "lucide-react";
+import { Calendar as CalendarIcon, Download, Search, Loader2, BarChart2 } from "lucide-react";
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import html2canvas from 'html2canvas';
+import { collection, getDocs, query, where, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
+import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend } from 'recharts';
+import { ChartContainer, ChartTooltipContent } from '@/components/ui/chart';
+
 
 type Owner = {
     id: string;
     name: string;
-    unit: string;
+    properties: { street: string, house: string }[];
     email?: string;
     balance: number;
     delinquency: number; 
@@ -37,6 +41,11 @@ type Payment = {
   description: string;
 };
 
+type ChartData = {
+    name: string;
+    total: number;
+}
+
 
 export default function ReportsPage() {
     const { toast } = useToast();
@@ -48,21 +57,62 @@ export default function ReportsPage() {
     const [selectedOwner, setSelectedOwner] = useState('');
     const [delinquencyPeriod, setDelinquencyPeriod] = useState('');
 
+    const [incomeChartData, setIncomeChartData] = useState<ChartData[]>([]);
+    const [debtChartData, setDebtChartData] = useState<ChartData[]>([]);
+    const incomeChartRef = useRef<HTMLDivElement>(null);
+    const debtChartRef = useRef<HTMLDivElement>(null);
+    const [activeRate, setActiveRate] = useState(0);
+
     useEffect(() => {
-        const fetchOwners = async () => {
+        const fetchData = async () => {
+            setLoading(true);
             try {
-                const q = query(collection(db, 'owners'));
-                const querySnapshot = await getDocs(q);
-                const ownersData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Owner[];
+                // Fetch Owners
+                const ownersQuery = query(collection(db, 'owners'));
+                const ownersSnapshot = await getDocs(ownersQuery);
+                const ownersData = ownersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Owner[];
                 setOwners(ownersData.sort((a,b) => a.name.localeCompare(b.name)));
+
+                // Fetch Settings for Rate
+                const settingsRef = doc(db, 'config', 'mainSettings');
+                const settingsSnap = await getDoc(settingsRef);
+                const rate = settingsSnap.exists() ? (settingsSnap.data().exchangeRates || []).find((r: any) => r.active)?.rate || 36.5 : 36.5;
+                setActiveRate(rate);
+
+                // Fetch Payments for Income Chart
+                const incomeQuery = query(collection(db, 'payments'), where('status', '==', 'aprobado'));
+                const incomeSnapshot = await getDocs(incomeQuery);
+                const incomeByMonth: {[key: string]: number} = {};
+                incomeSnapshot.forEach(doc => {
+                    const payment = doc.data();
+                    const month = format(new Date(payment.paymentDate.seconds * 1000), 'yyyy-MM');
+                    incomeByMonth[month] = (incomeByMonth[month] || 0) + payment.totalAmount;
+                });
+                setIncomeChartData(Object.entries(incomeByMonth).map(([name, total]) => ({name, total})).sort((a,b) => a.name.localeCompare(b.name)));
+
+                // Fetch Debts for Debt Chart
+                const debtsQuery = query(collection(db, 'debts'), where('status', '==', 'pending'));
+                const debtsSnapshot = await getDocs(debtsQuery);
+                const debtsByStreet: {[key: string]: number} = {};
+
+                for(const debtDoc of debtsSnapshot.docs) {
+                    const debt = debtDoc.data();
+                    const owner = ownersData.find(o => o.id === debt.ownerId);
+                    if(owner && owner.properties && owner.properties.length > 0) {
+                        const street = owner.properties[0].street;
+                        debtsByStreet[street] = (debtsByStreet[street] || 0) + (debt.amountUSD * rate);
+                    }
+                }
+                setDebtChartData(Object.entries(debtsByStreet).map(([name, total]) => ({name, total})).sort((a,b) => a.name.localeCompare(b.name)));
+
             } catch (error) {
-                console.error("Error fetching owners for reports:", error);
-                toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron cargar los propietarios.' });
+                console.error("Error fetching report data:", error);
+                toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron cargar los datos para los reportes.' });
             } finally {
                 setLoading(false);
             }
         };
-        fetchOwners();
+        fetchData();
     }, [toast]);
 
 
@@ -77,6 +127,20 @@ export default function ReportsPage() {
         });
         doc.save(`${filename}.pdf`);
     }
+
+    const generateChartPdf = async (chartRef: React.RefObject<HTMLDivElement>, title: string, filename: string) => {
+        if (!chartRef.current) return;
+        const canvas = await html2canvas(chartRef.current, { backgroundColor: null });
+        const imgData = canvas.toDataURL('image/png');
+        
+        const pdf = new jsPDF('landscape');
+        pdf.text(title, 14, 16);
+        const imgProps = pdf.getImageProperties(imgData);
+        const pdfWidth = pdf.internal.pageSize.getWidth() - 28;
+        const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+        pdf.addImage(imgData, 'PNG', 14, 28, pdfWidth, pdfHeight);
+        pdf.save(`${filename}.pdf`);
+    };
 
     const generateIndividualStatement = async () => {
         if (!selectedOwner) return toast({ variant: 'destructive', title: 'Error', description: 'Por favor, seleccione un propietario.' });
@@ -98,7 +162,7 @@ export default function ReportsPage() {
             `Estado de Cuenta: ${owner.name}`,
             [['Fecha', 'Descripción', 'Monto (Bs.)']],
             ownerPayments.map(p => [p.date, p.description, p.amount.toFixed(2)]),
-            `estado_cuenta_${owner.unit}`
+            `estado_cuenta_${owner.id}`
         );
     };
 
@@ -109,8 +173,8 @@ export default function ReportsPage() {
         
          generatePdf(
             `Reporte de Morosidad (${months} o más meses)`,
-            [['Propietario', 'Unidad', 'Meses de Deuda', 'Saldo Deudor (Bs.)']],
-            delinquentOwners.map(o => [o.name, o.unit, o.delinquency, (o.balance < 0 ? Math.abs(o.balance) : 0).toFixed(2)]),
+            [['Propietario', 'Propiedades', 'Meses de Deuda', 'Saldo Deudor (Bs.)']],
+            delinquentOwners.map(o => [o.name, o.properties.map(p => p.house).join(', '), o.delinquency, (o.balance < 0 ? Math.abs(o.balance) : 0).toFixed(2)]),
             `reporte_morosidad`
         );
     }
@@ -119,8 +183,8 @@ export default function ReportsPage() {
         const solventOwners = owners.filter(o => o.status === 'solvente');
          generatePdf(
             'Reporte de Solvencia',
-            [['Propietario', 'Unidad', 'Email']],
-            solventOwners.map(o => [o.name, o.unit, o.email || '-']),
+            [['Propietario', 'Propiedades', 'Email']],
+            solventOwners.map(o => [o.name, o.properties.map(p => p.house).join(', '), o.email || '-']),
             'reporte_solvencia'
         );
     };
@@ -129,8 +193,8 @@ export default function ReportsPage() {
         const ownersWithBalance = owners.filter(o => o.balance > 0);
          generatePdf(
             'Reporte de Saldos a Favor',
-            [['Propietario', 'Unidad', 'Saldo a Favor (Bs.)']],
-            ownersWithBalance.map(o => [o.name, o.unit, o.balance.toFixed(2)]),
+            [['Propietario', 'Propiedades', 'Saldo a Favor (Bs.)']],
+            ownersWithBalance.map(o => [o.name, o.properties.map(p => p.house).join(', '), o.balance.toFixed(2)]),
             'reporte_saldos_favor'
         );
     };
@@ -164,8 +228,8 @@ export default function ReportsPage() {
     const generateGeneralStatusReport = () => {
          generatePdf(
             'Reporte General de Estatus',
-            [['Propietario', 'Unidad', 'Estatus', 'Saldo (Bs.)']],
-            owners.map(o => [o.name, o.unit, o.status === 'solvente' ? 'Solvente' : 'Moroso', o.balance.toFixed(2)]),
+            [['Propietario', 'Propiedades', 'Estatus', 'Saldo (Bs.)']],
+            owners.map(o => [o.name, o.properties.map(p => p.house).join(', '), o.status === 'solvente' ? 'Solvente' : 'Moroso', o.balance.toFixed(2)]),
             'reporte_general_estatus'
         );
     };
@@ -185,6 +249,58 @@ export default function ReportsPage() {
                 <h1 className="text-3xl font-bold font-headline">Consultas y Reportes</h1>
                 <p className="text-muted-foreground">Genere y exporte reportes detallados sobre la gestión del condominio.</p>
             </div>
+             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Card className="lg:col-span-1">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2"><BarChart2 className="h-5 w-5"/> Gráfico de Ingresos por Mes</CardTitle>
+                        <CardDescription>Visualización de los ingresos aprobados mensualmente.</CardDescription>
+                    </CardHeader>
+                    <CardContent ref={incomeChartRef} className="pl-2">
+                        {incomeChartData.length > 0 ? (
+                            <ChartContainer config={{
+                                total: { label: "Ingresos (Bs.)", color: "hsl(var(--primary))" }
+                            }} className="h-[250px] w-full">
+                                <BarChart accessibilityLayer data={incomeChartData}>
+                                    <XAxis dataKey="name" tickLine={false} axisLine={false} tickMargin={8} angle={-45} textAnchor="end" height={60} />
+                                    <YAxis tickLine={false} axisLine={false} tickMargin={8} />
+                                    <ChartTooltip content={<ChartTooltipContent />} />
+                                    <Bar dataKey="total" fill="var(--color-total)" radius={4} />
+                                </BarChart>
+                            </ChartContainer>
+                        ) : <p className="text-center text-muted-foreground h-[250px] flex items-center justify-center">No hay datos de ingresos para mostrar.</p>}
+                    </CardContent>
+                    <CardFooter>
+                        <Button className="w-full" onClick={() => generateChartPdf(incomeChartRef, 'Gráfico de Ingresos por Mes', 'grafico_ingresos')}>
+                           <Download className="mr-2 h-4 w-4" /> Generar y Exportar PDF
+                        </Button>
+                    </CardFooter>
+                </Card>
+                 <Card className="lg:col-span-1">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2"><BarChart2 className="h-5 w-5"/> Gráfico de Deuda por Calle</CardTitle>
+                        <CardDescription>Visualización de la deuda pendiente agrupada por calle.</CardDescription>
+                    </CardHeader>
+                    <CardContent ref={debtChartRef} className="pl-2">
+                         {debtChartData.length > 0 ? (
+                             <ChartContainer config={{
+                                total: { label: "Deuda (Bs.)", color: "hsl(var(--destructive))" }
+                            }} className="h-[250px] w-full">
+                                <BarChart accessibilityLayer data={debtChartData}>
+                                    <XAxis dataKey="name" tickLine={false} axisLine={false} tickMargin={8} />
+                                    <YAxis tickLine={false} axisLine={false} tickMargin={8} />
+                                    <ChartTooltip content={<ChartTooltipContent />} />
+                                    <Bar dataKey="total" fill="var(--color-total)" radius={4} />
+                                </BarChart>
+                            </ChartContainer>
+                         ) : <p className="text-center text-muted-foreground h-[250px] flex items-center justify-center">No hay datos de deudas para mostrar.</p>}
+                    </CardContent>
+                    <CardFooter>
+                        <Button className="w-full" variant="destructive" onClick={() => generateChartPdf(debtChartRef, 'Gráfico de Deuda por Calle', 'grafico_deudas')}>
+                           <Download className="mr-2 h-4 w-4" /> Generar y Exportar PDF
+                        </Button>
+                    </CardFooter>
+                </Card>
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 
@@ -202,7 +318,7 @@ export default function ReportsPage() {
                                     <SelectValue placeholder="Seleccione un propietario..." />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {owners.map(o => <SelectItem key={o.id} value={o.id}>{o.name} ({o.unit})</SelectItem>)}
+                                    {owners.map(o => <SelectItem key={o.id} value={o.id}>{o.name} ({o.properties.map(p => p.house).join(', ')})</SelectItem>)}
                                 </SelectContent>
                             </Select>
                         </div>
@@ -362,3 +478,4 @@ export default function ReportsPage() {
             </div>
         </div>
     );
+}
