@@ -280,12 +280,16 @@ export default function PeopleManagementPage() {
     
     const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
-        if (!file) return;
+        if (!file) {
+            return;
+        }
 
         const reader = new FileReader();
         reader.onload = async (event) => {
             try {
                 const data = event.target?.result;
+                if (!data) throw new Error("File data is empty.");
+
                 const workbook = XLSX.read(data, { type: 'binary' });
                 const sheetName = workbook.SheetNames[0];
                 const worksheet = workbook.Sheets[sheetName];
@@ -330,10 +334,11 @@ export default function PeopleManagementPage() {
                     title: 'Error de Importación',
                     description: 'Hubo un problema al leer o guardar los datos. Asegúrate de que el formato es correcto.',
                 });
+            } finally {
+                if (e.target) e.target.value = '';
             }
         };
         reader.readAsBinaryString(file);
-        if(e.target) e.target.value = '';
     };
 
     const handleImportClick = () => {
