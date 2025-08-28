@@ -53,6 +53,7 @@ export default function UnifiedPaymentsPage() {
     const [paymentDate, setPaymentDate] = useState<Date | undefined>();
     const [exchangeRate, setExchangeRate] = useState<number | null>(null);
     const [exchangeRateMessage, setExchangeRateMessage] = useState('');
+    const [condoFee, setCondoFee] = useState<number | null>(null);
     const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('');
     const [bank, setBank] = useState('');
     const [otherBank, setOtherBank] = useState('');
@@ -83,15 +84,17 @@ export default function UnifiedPaymentsPage() {
     }, [toast]);
     
     useEffect(() => {
-        const fetchRate = async () => {
-            if (paymentDate) {
-                setExchangeRate(null);
-                setExchangeRateMessage('Buscando tasa...');
-                try {
-                    const settingsRef = doc(db, 'config', 'mainSettings');
-                    const docSnap = await getDoc(settingsRef);
-                    if (docSnap.exists()) {
-                        const settings = docSnap.data();
+        const fetchRateAndFee = async () => {
+             try {
+                const settingsRef = doc(db, 'config', 'mainSettings');
+                const docSnap = await getDoc(settingsRef);
+                if (docSnap.exists()) {
+                    const settings = docSnap.data();
+                    setCondoFee(settings.condoFee || 0);
+
+                    if (paymentDate) {
+                        setExchangeRate(null);
+                        setExchangeRateMessage('Buscando tasa...');
                         const activeRate = settings.exchangeRates?.find((r: any) => r.active);
                         if (activeRate) {
                              setExchangeRate(activeRate.rate);
@@ -100,24 +103,33 @@ export default function UnifiedPaymentsPage() {
                            setExchangeRateMessage('No hay tasa activa. Contacte al administrador.');
                         }
                     } else {
-                         setExchangeRateMessage('No hay configuraciones. Contacte al administrador.');
+                        setExchangeRate(null);
+                        setExchangeRateMessage('');
                     }
-                } catch (e) {
-                     setExchangeRateMessage('Error al buscar tasa.');
+
+                } else {
+                     setExchangeRateMessage('No hay configuraciones. Contacte al administrador.');
                 }
-            } else {
-                setExchangeRate(null);
-                setExchangeRateMessage('');
+            } catch (e) {
+                 setExchangeRateMessage('Error al buscar tasa.');
             }
         }
-        fetchRate();
+        fetchRateAndFee();
     }, [paymentDate]);
 
     // --- Derived State & Calculations ---
     const globalSplitTotal = globalSplits.reduce((acc, split) => acc + (Number(split.amount) || 0), 0);
     const globalBalance = (Number(totalAmount) || 0) - globalSplitTotal;
 
-    // --- Handlers ---
+    // --- Handlers & Effects ---
+    useEffect(() => {
+        if (beneficiaryType === 'propio' && condoFee && exchangeRate) {
+            setTotalAmount((condoFee * exchangeRate).toFixed(2));
+        } else if (beneficiaryType !== 'global') {
+            setTotalAmount('');
+        }
+    }, [beneficiaryType, condoFee, exchangeRate]);
+
     const resetForm = () => {
         setPaymentDate(undefined);
         setExchangeRate(null);
@@ -134,7 +146,6 @@ export default function UnifiedPaymentsPage() {
         setGlobalSplits([{ ownerId: '', amount: '' }]);
         setErrors({});
     }
-
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -437,8 +448,7 @@ export default function UnifiedPaymentsPage() {
                                 placeholder="0.00"
                                 step="0.01"
                                 className={cn(errors.totalAmount && "border-destructive")}
-                                disabled={loading || beneficiaryType === 'propio'}
-                                readOnly={beneficiaryType === 'propio'}
+                                disabled={loading}
                             />
                             {errors.totalAmount && <p className="text-sm text-destructive">{errors.totalAmount}</p>}
                         </div>
@@ -542,4 +552,3 @@ export default function UnifiedPaymentsPage() {
         </div>
     );
 }
-
