@@ -60,7 +60,7 @@ const streets = Array.from({ length: 8 }, (_, i) => `Calle ${i + 1}`);
 const getHousesForStreet = (street: string) => {
     if (!street) return [];
     const streetString = String(street);
-    const streetNumber = parseInt(streetString.replace('Calle ', ''));
+    const streetNumber = parseInt(streetString.replace('Calle ', '') || '0');
     if (isNaN(streetNumber)) return [];
     const houseCount = streetNumber === 1 ? 4 : 14;
     return Array.from({ length: houseCount }, (_, i) => `Casa ${i + 1}`);
@@ -304,8 +304,8 @@ export default function PeopleManagementPage() {
                             properties: []
                         };
                     }
-                    if (item.street && item.house) {
-                        ownersMap[key].properties?.push({ street: String(item.street), house: String(item.house) });
+                    if (item.street && item.house && ownersMap[key].properties) {
+                        (ownersMap[key].properties as Property[]).push({ street: String(item.street), house: String(item.house) });
                     }
                 });
 
@@ -524,7 +524,7 @@ export default function PeopleManagementPage() {
                         <DialogTitle>¿Estás seguro?</DialogTitle>
                         <DialogDescription>
                             Esta acción no se puede deshacer. Esto eliminará permanentemente a <span className="font-semibold">{ownerToDelete?.name}</span> de la base de datos.
-                        </Description>
+                        </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setIsDeleteConfirmationOpen(false)}>Cancelar</Button>
@@ -536,3 +536,4 @@ export default function PeopleManagementPage() {
         </div>
     );
 }
+
