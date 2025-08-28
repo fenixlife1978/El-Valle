@@ -81,8 +81,10 @@ export default function VerifyPaymentsPage() {
         const ownerIds = new Set<string>();
         snapshot.docs.forEach(doc => {
             const data = doc.data();
-            if (data.beneficiaries && data.beneficiaries.length > 0) {
-                ownerIds.add(data.beneficiaries[0].ownerId);
+            if (data.beneficiaries && Array.isArray(data.beneficiaries)) {
+                data.beneficiaries.forEach((b: any) => {
+                    if (b.ownerId) ownerIds.add(b.ownerId);
+                });
             }
         });
 
@@ -189,20 +191,17 @@ export default function VerifyPaymentsPage() {
                         where("status", "==", "pending")
                     );
                     
-                    // Fetch debts within the transaction
                     const debtsSnapshot = await getDocs(debtsQuery);
                     
                     const pendingDebts: Debt[] = [];
                     debtsSnapshot.forEach(doc => pendingDebts.push({id: doc.id, ...doc.data()} as Debt));
                     
-                    // Sort debts client-side to avoid needing a composite index
                     pendingDebts.sort((a, b) => {
                         if (a.year !== b.year) return a.year - b.year;
                         return a.month - b.month;
                     });
 
                     for (const debt of pendingDebts) {
-                        // Only pay off debt if funds are enough to cover the entire amount
                         if (availableFundsUSD >= debt.amountUSD) {
                             availableFundsUSD -= debt.amountUSD;
                             const debtRef = doc(db, "debts", debt.id);
@@ -212,16 +211,13 @@ export default function VerifyPaymentsPage() {
                                 paymentDate: paymentData.paymentDate,
                             });
                         } else {
-                            // If funds are not enough for the oldest debt, stop.
                             break; 
                         }
                     }
                     
-                    // Any remaining funds (or the initial funds if no debt was paid) become the new balance.
                     transaction.update(ownerRef, { balance: availableFundsUSD });
                 }
 
-                // Finally, update the payment status
                 transaction.update(paymentRef, { status: 'aprobado' });
             });
             
@@ -245,7 +241,6 @@ export default function VerifyPaymentsPage() {
     const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 14;
 
-    // --- Header ---
     if (companyInfo?.logo) {
         try {
             doc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25);
@@ -273,12 +268,10 @@ export default function VerifyPaymentsPage() {
     doc.setLineWidth(0.5);
     doc.line(margin, margin + 32, pageWidth - margin, margin + 32);
 
-    // --- Title ---
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.text('Recibo de Pago de Condominio', pageWidth / 2, margin + 45, { align: 'center' });
 
-    // --- Body ---
     (doc as any).autoTable({
         startY: margin + 55,
         head: [['Concepto', 'Detalle']],
@@ -294,7 +287,7 @@ export default function VerifyPaymentsPage() {
             ['Estado del Pago', statusTextMap[payment.status]],
         ],
         theme: 'striped',
-        headStyles: { fillColor: [30, 80, 180] }, // Deep Blue
+        headStyles: { fillColor: [30, 80, 180] },
     });
 
     doc.save(`recibo-${payment.unit}-${payment.id.substring(0,5)}.pdf`);
