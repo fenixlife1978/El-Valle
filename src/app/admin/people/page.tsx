@@ -37,7 +37,9 @@ const streets = Array.from({ length: 8 }, (_, i) => `Calle ${i + 1}`);
 
 const getHousesForStreet = (street: string) => {
     if (!street) return [];
-    const streetNumber = parseInt(street.replace('Calle ', ''));
+    const streetString = String(street); // Ensure street is a string
+    const streetNumber = parseInt(streetString.replace('Calle ', ''));
+    if (isNaN(streetNumber)) return [];
     const houseCount = streetNumber === 1 ? 4 : 14;
     return Array.from({ length: houseCount }, (_, i) => `Casa ${i + 1}`);
 };
@@ -418,5 +420,3 @@ export default function PeopleManagementPage() {
     );
     
 }
-
-    
