@@ -5,11 +5,13 @@ import { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Landmark, AlertCircle, Building, Eye, Printer, Megaphone, Loader2 } from "lucide-react";
+import { Landmark, AlertCircle, Building, Eye, Printer, Megaphone, Loader2, Wallet, FileText, CalendarClock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getCommunityUpdates } from '@/ai/flows/community-updates';
-import { auth, db } from '@/lib/firebase'; // Assuming auth is exported for user info
-import { doc, onSnapshot, collection, query, where, orderBy, limit } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase';
+import { doc, onSnapshot, collection, query, where, orderBy, limit, getDoc, getDocs } from 'firebase/firestore';
+import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
 
 type Payment = {
     id: string;
@@ -22,37 +24,98 @@ type Payment = {
 };
 
 type UserData = {
+    id: string;
     unit: string;
     name: string;
-    // Add other fields as needed
+    balance: number;
 };
+
+type Debt = {
+    id: string;
+    amount: number;
+    status: 'pending' | 'paid';
+}
 
 export default function OwnerDashboardPage() {
     const [loading, setLoading] = useState(true);
     const [userData, setUserData] = useState<UserData | null>(null);
     const [payments, setPayments] = useState<Payment[]>([]);
-    const [dashboardStats, setDashboardStats] = useState({ lastPayment: 0, nextPaymentDate: "N/A" });
+    const [dashboardStats, setDashboardStats] = useState({
+        balanceInFavor: 0,
+        totalDebt: 0,
+        condoFeeBs: 0,
+        exchangeRate: 0,
+        dueDate: '',
+        isOverdue: false,
+    });
     const [communityUpdates, setCommunityUpdates] = useState<string[]>([]);
+    
+    // This is a placeholder for getting the current user's ID
+    // In a real app, you'd get this from the auth state
+    const userId = "088a5367-a75b-4355-b0b0-3162b2b64b1f"; // Hardcoded for demo until auth is real
 
     useEffect(() => {
-        // This is a placeholder for getting the current user's ID
-        // In a real app, you'd get this from the auth state
-        const userId = "mock-user-id-for-now"; // Replace with real auth.currentUser.uid
+        if (!userId) return;
 
-        // Fetch User Data
-        const userDocRef = doc(db, "owners", userId); // Assuming user's doc ID is their auth UID
-        const userUnsubscribe = onSnapshot(userDocRef, (doc) => {
-            if (doc.exists()) {
-                setUserData(doc.data() as UserData);
-            } else {
-                console.log("No such user document!");
+        // Fetch User Data, Debts, and Settings
+        const fetchData = async () => {
+            setLoading(true);
+            try {
+                // Fetch settings first to get fee and rate
+                const settingsRef = doc(db, 'config', 'mainSettings');
+                const settingsSnap = await getDoc(settingsRef);
+                let condoFeeUSD = 25; // default
+                let activeRate = 36.5; // default
+                if (settingsSnap.exists()) {
+                    const settings = settingsSnap.data();
+                    condoFeeUSD = settings.condoFee || 0;
+                    const rate = settings.exchangeRates?.find((r: any) => r.active);
+                    if (rate) {
+                        activeRate = rate.rate;
+                    }
+                }
+
+                // Calculate due date info
+                const now = new Date();
+                const dueDate = new Date(now.getFullYear(), now.getMonth(), 5);
+                const isOverdue = now.getDate() > 5;
+                
+                // Fetch User Data
+                const userDocRef = doc(db, "owners", userId);
+                const userSnap = await getDoc(userDocRef);
+                 if (userSnap.exists()) {
+                    const ownerData = { id: userSnap.id, ...userSnap.data() } as UserData;
+                    setUserData(ownerData);
+                    
+                    // Fetch Debts
+                    const debtsQuery = query(collection(db, "debts"), where("ownerId", "==", userId), where("status", "==", "pending"));
+                    const debtsSnapshot = await getDocs(debtsQuery);
+                    const totalDebt = debtsSnapshot.docs.reduce((sum, doc) => sum + doc.data().amount, 0);
+
+                    setDashboardStats({
+                        balanceInFavor: ownerData.balance || 0,
+                        totalDebt: totalDebt,
+                        condoFeeBs: condoFeeUSD * activeRate,
+                        exchangeRate: activeRate,
+                        dueDate: format(dueDate, "dd 'de' MMMM", { locale: es }),
+                        isOverdue: isOverdue,
+                    });
+                } else {
+                    console.log("No such user document!");
+                }
+            } catch (error) {
+                console.error("Error fetching dashboard data:", error);
+            } finally {
+                setLoading(false);
             }
-        });
+        };
 
-        // Fetch User Payments
+        fetchData();
+
+        // Fetch User Payments (last 5)
         const paymentsQuery = query(
             collection(db, "payments"),
-            where("userId", "==", userId), // This requires a userId field in payment docs
+            where("reportedBy", "==", userId), // Assuming the user reports their own payments
             orderBy("reportedAt", "desc"),
             limit(5)
         );
@@ -71,13 +134,9 @@ export default function OwnerDashboardPage() {
                 });
             });
             setPayments(paymentsData);
-            if (paymentsData.length > 0) {
-                 setDashboardStats(prev => ({...prev, lastPayment: paymentsData[0].amount}));
-            }
-            setLoading(false);
         });
         
-        // AI Community Updates (remains the same but could be triggered after user data is loaded)
+        // AI Community Updates
         const fetchAndUpdate = async () => {
              const userProfile = "Role: Owner, Unit: A-101, Name: Juan Perez"; // Replace with real data
              const paymentHistory = "October: Paid, September: Paid, August: Paid"; // Replace with real data
@@ -99,11 +158,10 @@ export default function OwnerDashboardPage() {
         fetchAndUpdate();
 
         return () => {
-            userUnsubscribe();
             paymentsUnsubscribe();
         };
 
-    }, []);
+    }, [userId]);
     
   return (
     <div className="space-y-8">
@@ -112,30 +170,40 @@ export default function OwnerDashboardPage() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Último Pago</CardTitle>
-            <Landmark className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Saldo a Favor</CardTitle>
+            <Wallet className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            {loading ? <Loader2 className="h-6 w-6 animate-spin"/> : <div className="text-2xl font-bold">Bs. {dashboardStats.lastPayment.toLocaleString('es-VE', {minimumFractionDigits: 2})}</div>}
+            {loading ? <Loader2 className="h-6 w-6 animate-spin"/> : <div className="text-2xl font-bold">Bs. {dashboardStats.balanceInFavor.toLocaleString('es-VE', {minimumFractionDigits: 2})}</div>}
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Próximo Pago</CardTitle>
-            <AlertCircle className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Deuda Total Pendiente</CardTitle>
+            <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            {loading ? <Loader2 className="h-6 w-6 animate-spin"/> : <div className="text-2xl font-bold">{dashboardStats.nextPaymentDate}</div>}
+            {loading ? <Loader2 className="h-6 w-6 animate-spin"/> : <div className="text-2xl font-bold">Bs. {dashboardStats.totalDebt.toLocaleString('es-VE', {minimumFractionDigits: 2})}</div>}
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Mi Unidad</CardTitle>
-            <Building className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-             {loading ? <Loader2 className="h-6 w-6 animate-spin"/> : <div className="text-2xl font-bold">{userData?.unit || "Cargando..."}</div>}
-          </CardContent>
+        <Card className="md:col-span-2 lg:col-span-1">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Cuota del Mes</CardTitle>
+                <CalendarClock className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+                {loading ? <Loader2 className="h-6 w-6 animate-spin"/> : (
+                    <div>
+                        <div className="text-2xl font-bold">Bs. {dashboardStats.condoFeeBs.toLocaleString('es-VE', {minimumFractionDigits: 2})}</div>
+                        <p className="text-xs text-muted-foreground">
+                            Tasa de cambio: Bs. {dashboardStats.exchangeRate.toLocaleString('es-VE', {minimumFractionDigits: 2})}
+                        </p>
+                        <div className={`mt-2 text-sm font-semibold ${dashboardStats.isOverdue ? 'text-destructive' : 'text-green-600'}`}>
+                            {dashboardStats.isOverdue ? `Vencida. (Venció el ${dashboardStats.dueDate})` : `Vence el ${dashboardStats.dueDate}`}
+                        </div>
+                    </div>
+                )}
+            </CardContent>
         </Card>
       </div>
 
