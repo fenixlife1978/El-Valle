@@ -3,10 +3,10 @@
 import {
     Home,
     Landmark,
-    Building,
     Users,
     Megaphone,
     Settings,
+    Search,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
@@ -22,7 +22,7 @@ const adminNavItems: NavItem[] = [
         { href: "/admin/payments/verify", label: "Verificar Pagos" },
       ]
     },
-    { href: "#", icon: Building, label: "Unidades" },
+    { href: "#", icon: Search, label: "Consultas" },
     { href: "/admin/people", icon: Users, label: "Personas" },
     { href: "#", icon: Megaphone, label: "Comunicados" },
     { href: "#", icon: Settings, label: "Configuración" },
