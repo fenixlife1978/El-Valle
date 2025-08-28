@@ -10,14 +10,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from '@/hooks/use-toast';
-import { Upload, Save, Calendar as CalendarIcon, PlusCircle, Loader2, AlertTriangle, Wand2 } from 'lucide-react';
+import { Upload, Save, Calendar as CalendarIcon, PlusCircle, Loader2, AlertTriangle, Wand2, MoreHorizontal, Edit } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { doc, getDoc, setDoc, updateDoc, arrayUnion, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-// In a real production app, use Firebase Storage for uploads
-// import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
+
 
 type CompanyInfo = {
     name: string;
@@ -58,8 +59,16 @@ export default function SettingsPage() {
     const [logoPreview, setLogoPreview] = useState<string | null>(null);
     const [condoFee, setCondoFee] = useState(0);
     const [exchangeRates, setExchangeRates] = useState<ExchangeRate[]>([]);
+    
+    // State for adding a new rate
     const [newRateDate, setNewRateDate] = useState<Date | undefined>();
     const [newRateAmount, setNewRateAmount] = useState('');
+
+    // State for editing a rate
+    const [isRateDialogOpen, setIsRateDialogOpen] = useState(false);
+    const [rateToEdit, setRateToEdit] = useState<ExchangeRate | null>(null);
+    const [editRateDate, setEditRateDate] = useState<Date | undefined>();
+    const [editRateAmount, setEditRateAmount] = useState('');
 
     useEffect(() => {
         const settingsRef = doc(db, 'config', 'mainSettings');
@@ -146,6 +155,37 @@ export default function SettingsPage() {
         }
     }
     
+    const openEditRateDialog = (rate: ExchangeRate) => {
+        setRateToEdit(rate);
+        setEditRateDate(new Date(rate.date));
+        setEditRateAmount(String(rate.rate));
+        setIsRateDialogOpen(true);
+    };
+
+    const handleEditRate = async () => {
+        if (!rateToEdit || !editRateDate || !editRateAmount) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Faltan datos para editar la tasa.' });
+            return;
+        }
+        const updatedRates = exchangeRates.map(r => 
+            r.id === rateToEdit.id 
+            ? { ...r, date: format(editRateDate, 'yyyy-MM-dd'), rate: parseFloat(editRateAmount) }
+            : r
+        );
+        
+        try {
+            const settingsRef = doc(db, 'config', 'mainSettings');
+            await updateDoc(settingsRef, { exchangeRates: updatedRates });
+            toast({ title: 'Tasa Actualizada', description: 'La tasa de cambio ha sido modificada.' });
+        } catch (error) {
+            console.error("Error editing rate:", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo modificar la tasa.' });
+        } finally {
+            setIsRateDialogOpen(false);
+            setRateToEdit(null);
+        }
+    };
+
     const handleSaveChanges = async () => {
         setSaving(true);
         try {
@@ -302,7 +342,7 @@ export default function SettingsPage() {
                                             <TableRow>
                                                 <TableHead>Fecha</TableHead>
                                                 <TableHead>Tasa (Bs.)</TableHead>
-                                                <TableHead>Acción</TableHead>
+                                                <TableHead className="text-right">Acciones</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
@@ -310,10 +350,24 @@ export default function SettingsPage() {
                                                 <TableRow key={rate.id}>
                                                     <TableCell>{format(new Date(rate.date), "dd/MM/yyyy")}</TableCell>
                                                     <TableCell>{rate.rate.toFixed(2)}</TableCell>
-                                                    <TableCell>
-                                                        <Button variant={rate.active ? 'secondary' : 'outline'} size="sm" disabled={rate.active} onClick={() => handleActivateRate(rate)}>
-                                                            {rate.active ? 'Activa' : 'Activar'}
-                                                        </Button>
+                                                    <TableCell className="text-right">
+                                                        <DropdownMenu>
+                                                            <DropdownMenuTrigger asChild>
+                                                                <Button variant="ghost" className="h-8 w-8 p-0">
+                                                                    <span className="sr-only">Abrir menú</span>
+                                                                    <MoreHorizontal className="h-4 w-4" />
+                                                                </Button>
+                                                            </DropdownMenuTrigger>
+                                                            <DropdownMenuContent align="end">
+                                                                <DropdownMenuItem onClick={() => handleActivateRate(rate)} disabled={rate.active}>
+                                                                    {rate.active ? 'Activa' : 'Activar'}
+                                                                </DropdownMenuItem>
+                                                                <DropdownMenuItem onClick={() => openEditRateDialog(rate)}>
+                                                                    <Edit className="mr-2 h-4 w-4" />
+                                                                    Editar
+                                                                </DropdownMenuItem>
+                                                            </DropdownMenuContent>
+                                                        </DropdownMenu>
                                                     </TableCell>
                                                 </TableRow>
                                             ))}
@@ -332,6 +386,43 @@ export default function SettingsPage() {
                     Guardar Todos los Cambios
                 </Button>
             </div>
+
+            {/* Edit Rate Dialog */}
+            <Dialog open={isRateDialogOpen} onOpenChange={setIsRateDialogOpen}>
+                <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                        <DialogTitle>Editar Tasa de Cambio</DialogTitle>
+                        <DialogDescription>
+                            Modifique la fecha o el monto de la tasa seleccionada.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="space-y-2">
+                             <Label htmlFor="edit-rate-date">Fecha</Label>
+                             <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button id="edit-rate-date" variant={"outline"} className={cn("w-full justify-start text-left font-normal", !editRateDate && "text-muted-foreground")}>
+                                        <CalendarIcon className="mr-2 h-4 w-4" />
+                                        {editRateDate ? format(editRateDate, "PPP", { locale: es }) : <span>Seleccione una fecha</span>}
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={editRateDate} onSelect={setEditRateDate} initialFocus locale={es} /></PopoverContent>
+                            </Popover>
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="edit-rate-amount">Monto de la Tasa (Bs.)</Label>
+                            <Input id="edit-rate-amount" type="number" value={editRateAmount} onChange={(e) => setEditRateAmount(e.target.value)} placeholder="0.00" />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsRateDialogOpen(false)}>Cancelar</Button>
+                        <Button onClick={handleEditRate}>Guardar Cambios</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
         </div>
     );
 }
+
+    
