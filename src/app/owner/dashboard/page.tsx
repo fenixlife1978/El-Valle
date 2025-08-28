@@ -1,11 +1,12 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { useState, useEffect, useMemo } from 'react';
+import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Landmark, AlertCircle, Building, Eye, Printer, Megaphone, Loader2, Wallet, FileText, CalendarClock, Scale } from "lucide-react";
+import { Landmark, AlertCircle, Building, Eye, Printer, Megaphone, Loader2, Wallet, FileText, CalendarClock, Scale, Calculator, Minus, Equal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getCommunityUpdates } from '@/ai/flows/community-updates';
 import { auth, db } from '@/lib/firebase';
@@ -70,6 +71,7 @@ export default function OwnerDashboardPage() {
     });
     const [solvencyStatus, setSolvencyStatus] = useState<SolvencyStatus>('cargando...');
     const [communityUpdates, setCommunityUpdates] = useState<string[]>([]);
+    const [selectedDebts, setSelectedDebts] = useState<string[]>([]);
     
     const userId = "088a5367-a75b-4355-b0b0-3162b2b64b1f"; 
 
@@ -123,7 +125,7 @@ export default function OwnerDashboardPage() {
                     }
 
                     setDashboardStats({
-                        balanceInFavor: (ownerData.balance || 0) * activeRate,
+                        balanceInFavor: (ownerData.balance || 0) > 0 ? (ownerData.balance * activeRate) : 0,
                         totalDebt: totalDebtBs,
                         condoFeeBs: condoFeeUSD * activeRate,
                         exchangeRate: activeRate,
@@ -171,6 +173,28 @@ export default function OwnerDashboardPage() {
 
     }, [userId]);
     
+    const handleDebtSelection = (debtId: string) => {
+        setSelectedDebts(prev => 
+            prev.includes(debtId) ? prev.filter(id => id !== debtId) : [...prev, debtId]
+        );
+    };
+
+    const paymentCalculator = useMemo(() => {
+        const totalSelectedDebtUSD = debts
+            .filter(debt => selectedDebts.includes(debt.id))
+            .reduce((sum, debt) => sum + debt.amountUSD, 0);
+            
+        const totalSelectedDebtBs = totalSelectedDebtUSD * dashboardStats.exchangeRate;
+        const totalToPay = Math.max(0, totalSelectedDebtBs - dashboardStats.balanceInFavor);
+
+        return {
+            totalSelectedBs: totalSelectedDebtBs,
+            balanceInFavor: dashboardStats.balanceInFavor,
+            totalToPay: totalToPay,
+            hasSelection: selectedDebts.length > 0,
+        };
+    }, [selectedDebts, debts, dashboardStats]);
+
   return (
     <div className="space-y-8">
       <h1 className="text-3xl font-bold font-headline">Panel de Propietario</h1>
@@ -238,6 +262,7 @@ export default function OwnerDashboardPage() {
                 <Table>
                 <TableHeader>
                     <TableRow>
+                    <TableHead className="w-[50px] text-center">Pagar</TableHead>
                     <TableHead>Período</TableHead>
                     <TableHead>Concepto</TableHead>
                     <TableHead className="text-right">Monto (Bs.)</TableHead>
@@ -245,12 +270,19 @@ export default function OwnerDashboardPage() {
                 </TableHeader>
                 <TableBody>
                     {loading ? (
-                        <TableRow><TableCell colSpan={3} className="h-24 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto"/></TableCell></TableRow>
+                        <TableRow><TableCell colSpan={4} className="h-24 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto"/></TableCell></TableRow>
                     ) : debts.length === 0 ? (
-                        <TableRow><TableCell colSpan={3} className="h-24 text-center text-muted-foreground">¡Felicidades! No tienes deudas pendientes.</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={4} className="h-24 text-center text-muted-foreground">¡Felicidades! No tienes deudas pendientes.</TableCell></TableRow>
                     ) : (
                     debts.map((debt) => (
-                    <TableRow key={debt.id}>
+                    <TableRow key={debt.id} data-state={selectedDebts.includes(debt.id) ? 'selected' : ''}>
+                        <TableCell className="text-center">
+                            <Checkbox 
+                                onCheckedChange={() => handleDebtSelection(debt.id)}
+                                checked={selectedDebts.includes(debt.id)}
+                                aria-label={`Seleccionar deuda de ${months.find(m => m.value === debt.month)?.label} ${debt.year}`}
+                            />
+                        </TableCell>
                         <TableCell className="font-medium">{months.find(m => m.value === debt.month)?.label} {debt.year}</TableCell>
                         <TableCell>{debt.description}</TableCell>
                         <TableCell className="text-right">Bs. {(debt.amountUSD * dashboardStats.exchangeRate).toLocaleString('es-VE', {minimumFractionDigits: 2})}</TableCell>
@@ -258,7 +290,28 @@ export default function OwnerDashboardPage() {
                     )))}
                 </TableBody>
                 </Table>
+                 {paymentCalculator.hasSelection && (
+                    <CardFooter className="p-4 bg-muted/50 border-t">
+                        <div className="w-full max-w-md ml-auto space-y-2">
+                             <h3 className="text-lg font-semibold flex items-center"><Calculator className="mr-2 h-5 w-5"/> Calculadora de Pago</h3>
+                             <div className="flex justify-between items-center">
+                                 <span className="text-muted-foreground">Total Seleccionado:</span>
+                                 <span className="font-medium">Bs. {paymentCalculator.totalSelectedBs.toLocaleString('es-VE', {minimumFractionDigits: 2})}</span>
+                             </div>
+                             <div className="flex justify-between items-center text-sm">
+                                 <span className="text-muted-foreground flex items-center"><Minus className="mr-2 h-4 w-4"/> Saldo a Favor:</span>
+                                 <span className="font-medium">Bs. {paymentCalculator.balanceInFavor.toLocaleString('es-VE', {minimumFractionDigits: 2})}</span>
+                             </div>
+                             <hr className="my-1"/>
+                             <div className="flex justify-between items-center text-lg">
+                                 <span className="font-bold flex items-center"><Equal className="mr-2 h-4 w-4"/> TOTAL A PAGAR:</span>
+                                 <span className="font-bold text-primary">Bs. {paymentCalculator.totalToPay.toLocaleString('es-VE', {minimumFractionDigits: 2})}</span>
+                             </div>
+                        </div>
+                    </CardFooter>
+                )}
             </Card>
+           
         </div>
 
         <div>
