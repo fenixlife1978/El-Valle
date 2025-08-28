@@ -30,7 +30,7 @@ type Debt = {
     ownerId: string;
     year: number;
     month: number;
-    amount: number;
+    amountUSD: number;
     description: string;
     status: 'pending' | 'paid';
 };
@@ -76,6 +76,8 @@ export default function DebtManagementPage() {
     
     const [debtToDelete, setDebtToDelete] = useState<Debt | null>(null);
     const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
+
+    const [activeRate, setActiveRate] = useState(0);
     
     const { toast } = useToast();
 
@@ -83,7 +85,7 @@ export default function DebtManagementPage() {
     useEffect(() => {
         setLoading(true);
         const ownersQuery = query(collection(db, "owners"));
-        const unsubscribe = onSnapshot(ownersQuery, (snapshot) => {
+        const ownersUnsubscribe = onSnapshot(ownersQuery, (snapshot) => {
             const ownersData: Owner[] = snapshot.docs.map(doc => {
                 const data = doc.data();
                 return { 
@@ -102,7 +104,19 @@ export default function DebtManagementPage() {
             setLoading(false);
         });
 
-        return () => unsubscribe();
+        const settingsRef = doc(db, 'config', 'mainSettings');
+        const settingsUnsubscribe = onSnapshot(settingsRef, (docSnap) => {
+             if (docSnap.exists()) {
+                const settings = docSnap.data();
+                const rate = (settings.exchangeRates || []).find((r: any) => r.active);
+                if (rate) setActiveRate(rate.rate);
+            }
+        });
+
+        return () => {
+            ownersUnsubscribe();
+            settingsUnsubscribe();
+        }
     }, [toast]);
     
     // Filter owners based on search term
@@ -192,11 +206,6 @@ export default function DebtManagementPage() {
         const monthsToGenerate = differenceInCalendarMonths(endDate, startDate) + 1;
 
         try {
-            const settingsRef = doc(db, 'config', 'mainSettings');
-            const docSnap = await getDoc(settingsRef);
-            if (!docSnap.exists()) throw new Error("Settings document not found.");
-            
-            const allRates = (docSnap.data().exchangeRates || []) as { date: string; rate: number }[];
             const batch = writeBatch(db);
 
             for (let i = 0; i < monthsToGenerate; i++) {
@@ -204,26 +213,12 @@ export default function DebtManagementPage() {
                 const debtYear = debtDate.getFullYear();
                 const debtMonth = debtDate.getMonth() + 1;
                 
-                // Find rate for the specific month.
-                const monthString = format(debtDate, 'yyyy-MM');
-                const applicableRates = allRates
-                    .filter(r => r.date.startsWith(monthString))
-                    .sort((a, b) => b.date.localeCompare(a.date));
-
-                const rateForMonth = applicableRates.length > 0 ? applicableRates[0].rate : null;
-
-                if (!rateForMonth) {
-                     throw new Error(`No hay tasa de cambio para ${monthString}.`);
-                }
-                
-                const debtAmountBs = amountUSD * rateForMonth;
-
                 const debtRef = doc(collection(db, "debts"));
                 batch.set(debtRef, {
                     ownerId: selectedOwner.id,
                     year: debtYear,
                     month: debtMonth,
-                    amount: debtAmountBs,
+                    amountUSD: amountUSD,
                     description: description,
                     status: 'pending',
                 });
@@ -404,7 +399,7 @@ export default function DebtManagementPage() {
                                             <TableCell>{debt.year}</TableCell>
                                             <TableCell>{months.find(m => m.value === debt.month)?.label}</TableCell>
                                             <TableCell className="font-medium">{debt.description}</TableCell>
-                                            <TableCell>Bs. {debt.amount.toFixed(2)}</TableCell>
+                                            <TableCell>Bs. {(debt.amountUSD * activeRate).toFixed(2)}</TableCell>
                                             <TableCell className="capitalize">
                                                 <Badge variant={debt.status === 'pending' ? 'warning' : 'success'}>
                                                     {debt.status === 'pending' ? 'Pendiente' : 'Pagada'}
@@ -472,7 +467,7 @@ export default function DebtManagementPage() {
                                 <CardContent className="p-4 text-sm text-muted-foreground">
                                     <Info className="inline h-4 w-4 mr-2"/>
                                     {periodDescription}
-                                    <p className="text-xs mt-2">La conversión a Bolívares usará la tasa guardada para cada mes respectivo.</p>
+                                    <p className="text-xs mt-2">Se creará una deuda por cada mes con el monto en USD especificado. El valor en Bolívares se calculará dinámicamente con la tasa activa.</p>
                                 </CardContent>
                             </Card>
                         </div>
@@ -505,5 +500,3 @@ export default function DebtManagementPage() {
     // Fallback while loading or if view is invalid
     return null;
 }
-
-    

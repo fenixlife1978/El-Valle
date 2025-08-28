@@ -34,7 +34,7 @@ type Debt = {
     id: string;
     year: number;
     month: number;
-    amount: number;
+    amountUSD: number;
     description: string;
     status: 'pending' | 'paid';
 };
@@ -92,17 +92,20 @@ export default function OwnerDashboardPage() {
                     
                     const debtsQuery = query(collection(db, "debts"), where("ownerId", "==", userId), where("status", "==", "pending"));
                     const debtsSnapshot = await getDocs(debtsQuery);
-                    const totalDebt = debtsSnapshot.docs.reduce((sum, doc) => sum + doc.data().amount, 0);
                     
                     const debtsData: Debt[] = [];
+                    let totalDebtUSD = 0;
                     debtsSnapshot.forEach((doc) => {
-                        debtsData.push({ id: doc.id, ...doc.data() } as Debt);
+                        const debt = { id: doc.id, ...doc.data() } as Debt
+                        debtsData.push(debt);
+                        totalDebtUSD += debt.amountUSD;
                     });
+                    
                     setDebts(debtsData.sort((a,b) => b.year - a.year || b.month - a.month));
 
                     setDashboardStats({
                         balanceInFavor: ownerData.balance || 0,
-                        totalDebt: totalDebt,
+                        totalDebt: totalDebtUSD * activeRate,
                         condoFeeBs: condoFeeUSD * activeRate,
                         exchangeRate: activeRate,
                         dueDate: format(dueDate, "dd 'de' MMMM", { locale: es }),
@@ -217,7 +220,7 @@ export default function OwnerDashboardPage() {
                     <TableRow key={debt.id}>
                         <TableCell className="font-medium">{months.find(m => m.value === debt.month)?.label} {debt.year}</TableCell>
                         <TableCell>{debt.description}</TableCell>
-                        <TableCell className="text-right">Bs. {debt.amount.toLocaleString('es-VE', {minimumFractionDigits: 2})}</TableCell>
+                        <TableCell className="text-right">Bs. {(debt.amountUSD * dashboardStats.exchangeRate).toLocaleString('es-VE', {minimumFractionDigits: 2})}</TableCell>
                     </TableRow>
                     )))}
                 </TableBody>
