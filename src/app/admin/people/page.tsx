@@ -9,7 +9,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PlusCircle, MoreHorizontal, Edit, Trash2, FileUp, FileDown, Loader2 } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, Edit, Trash2, FileUp, FileDown, Loader2, MinusCircle } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import * as XLSX from 'xlsx';
@@ -21,23 +21,33 @@ import { db } from '@/lib/firebase';
 
 type Role = 'propietario' | 'administrador';
 
-type Owner = {
-    id: string; // Firestore IDs are strings
-    name: string;
+type Property = {
     street: string;
     house: string;
+};
+
+type Owner = {
+    id: string; 
+    name: string;
+    properties: Property[];
     email?: string;
     balance?: number;
     role: Role;
 };
 
-const emptyOwner: Omit<Owner, 'id'> = { name: '', street: '', house: '', email: '', balance: 0, role: 'propietario' };
+const emptyOwner: Omit<Owner, 'id'> = { 
+    name: '', 
+    properties: [{ street: '', house: '' }], 
+    email: '', 
+    balance: 0, 
+    role: 'propietario' 
+};
 
 const streets = Array.from({ length: 8 }, (_, i) => `Calle ${i + 1}`);
 
 const getHousesForStreet = (street: string) => {
     if (!street) return [];
-    const streetString = String(street); // Ensure street is a string
+    const streetString = String(street); 
     const streetNumber = parseInt(streetString.replace('Calle ', ''));
     if (isNaN(streetNumber)) return [];
     const houseCount = streetNumber === 1 ? 4 : 14;
@@ -55,7 +65,6 @@ export default function PeopleManagementPage() {
     const importFileRef = useRef<HTMLInputElement>(null);
     const { toast } = useToast();
 
-     // --- Firestore Data Fetching ---
     useEffect(() => {
         const q = query(collection(db, "owners"));
         const unsubscribe = onSnapshot(q, (querySnapshot) => {
@@ -71,14 +80,8 @@ export default function PeopleManagementPage() {
             setLoading(false);
         });
 
-        return () => unsubscribe(); // Cleanup subscription on unmount
+        return () => unsubscribe();
     }, [toast]);
-
-
-    const houseOptions = useMemo(() => {
-        if (!currentOwner.street) return [];
-        return getHousesForStreet(currentOwner.street);
-    }, [currentOwner.street]);
 
     const handleAddOwner = () => {
         setCurrentOwner(emptyOwner);
@@ -111,18 +114,18 @@ export default function PeopleManagementPage() {
     }
 
     const handleSaveOwner = async () => {
-         if (!currentOwner.name || !currentOwner.street || !currentOwner.house) {
-            toast({ variant: 'destructive', title: 'Error de Validación', description: 'Nombre, calle y casa son obligatorios.' });
+        if (!currentOwner.name || currentOwner.properties.some(p => !p.street || !p.house)) {
+            toast({ variant: 'destructive', title: 'Error de Validación', description: 'Nombre, calle y casa son obligatorios para todas las propiedades.' });
             return;
         }
 
         try {
-            if (currentOwner.id) { // Editing Owner
+            if (currentOwner.id) {
                 const ownerRef = doc(db, "owners", currentOwner.id);
                 const { id, ...dataToUpdate } = currentOwner;
                 await updateDoc(ownerRef, dataToUpdate);
                 toast({ title: 'Propietario Actualizado', description: 'Los datos han sido guardados en la base de datos.' });
-            } else { // New Owner
+            } else {
                 const { id, ...dataToAdd } = currentOwner;
                 await addDoc(collection(db, "owners"), dataToAdd);
                 toast({ title: 'Propietario Agregado', description: 'La nueva persona ha sido guardada en la base de datos.' });
@@ -144,23 +147,40 @@ export default function PeopleManagementPage() {
         });
     };
 
-    const handleSelectChange = (field: 'street' | 'house' | 'role') => (value: string) => {
-         const updatedOwner = { ...currentOwner, [field]: value };
-        if (field === 'street' && value !== currentOwner.street) {
-            updatedOwner.house = '';
+    const handleRoleChange = (value: string) => {
+        setCurrentOwner({ ...currentOwner, role: value as Role });
+    };
+
+    const handlePropertyChange = (index: number, field: 'street' | 'house', value: string) => {
+        const newProperties = [...currentOwner.properties];
+        newProperties[index] = { ...newProperties[index], [field]: value };
+        if (field === 'street') {
+            newProperties[index].house = ''; // Reset house when street changes
         }
-        setCurrentOwner(updatedOwner as typeof currentOwner);
+        setCurrentOwner({ ...currentOwner, properties: newProperties });
+    };
+
+    const addProperty = () => {
+        setCurrentOwner({ ...currentOwner, properties: [...currentOwner.properties, { street: '', house: '' }] });
+    };
+
+    const removeProperty = (index: number) => {
+        const newProperties = currentOwner.properties.filter((_, i) => i !== index);
+        setCurrentOwner({ ...currentOwner, properties: newProperties });
     };
     
     const handleExportExcel = () => {
-        const worksheet = XLSX.utils.json_to_sheet(owners.map(o => ({
-            Nombre: o.name,
-            Calle: o.street,
-            Casa: o.house,
-            Email: o.email || '',
-            'Saldo a Favor (Bs.)': o.balance ?? 0,
-            Rol: o.role,
-        })));
+        const dataToExport = owners.flatMap(o => 
+            o.properties.map(p => ({
+                Nombre: o.name,
+                Calle: p.street,
+                Casa: p.house,
+                Email: o.email || '',
+                'Saldo a Favor (Bs.)': o.balance ?? 0,
+                Rol: o.role,
+            }))
+        );
+        const worksheet = XLSX.utils.json_to_sheet(dataToExport);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Propietarios");
         XLSX.writeFile(workbook, "propietarios.xlsx");
@@ -170,13 +190,11 @@ export default function PeopleManagementPage() {
         const doc = new jsPDF();
         doc.text("Lista de Propietarios", 14, 16);
         (doc as any).autoTable({
-            head: [['Nombre', 'Calle', 'Casa', 'Email', 'Saldo a Favor (Bs.)', 'Rol']],
+            head: [['Nombre', 'Propiedades', 'Email', 'Rol']],
             body: owners.map(o => [
                 o.name,
-                o.street,
-                o.house,
+                o.properties.map(p => `${p.street} - ${p.house}`).join(', '),
                 o.email || '-',
-                (o.balance ?? 0).toFixed(2),
                 o.role
             ]),
             startY: 20,
@@ -201,22 +219,35 @@ export default function PeopleManagementPage() {
                 const worksheet = workbook.Sheets[sheetName];
                 const json = XLSX.utils.sheet_to_json(worksheet, { header: ["name", "street", "house", "email", "balance", "role"], range: 1 });
                 
-                const newOwners = json.map((item: any) => ({
-                    name: item.name || 'Sin Nombre',
-                    street: item.street || 'Sin Calle',
-                    house: item.house || 'Sin Casa',
-                    email: item.email || '',
-                    balance: parseFloat(item.balance) || 0,
-                    role: (item.role === 'administrador' || item.role === 'propietario') ? item.role : 'propietario',
-                }));
+                // Group by owner name and email to handle multiple properties
+                const ownersMap: { [key: string]: Partial<Owner> } = {};
+                (json as any[]).forEach(item => {
+                    const key = `${item.name}-${item.email}`;
+                    if (!ownersMap[key]) {
+                        ownersMap[key] = {
+                            name: item.name || 'Sin Nombre',
+                            email: item.email || '',
+                            balance: parseFloat(item.balance) || 0,
+                            role: (item.role === 'administrador' || item.role === 'propietario') ? item.role : 'propietario',
+                            properties: []
+                        };
+                    }
+                    if (item.street && item.house) {
+                        ownersMap[key].properties?.push({ street: item.street, house: item.house });
+                    }
+                });
+
+                const newOwners = Object.values(ownersMap);
                 
                 for (const ownerData of newOwners) {
-                    await addDoc(collection(db, "owners"), ownerData);
+                    if (ownerData.properties && ownerData.properties.length > 0) {
+                        await addDoc(collection(db, "owners"), ownerData);
+                    }
                 }
 
                 toast({
                     title: 'Importación Exitosa',
-                    description: `${newOwners.length} propietarios han sido agregados a la base de datos.`,
+                    description: `${newOwners.length} registros de propietarios han sido agregados/actualizados.`,
                     className: 'bg-green-100 border-green-400 text-green-800'
                 });
 
@@ -273,10 +304,8 @@ export default function PeopleManagementPage() {
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>Nombre</TableHead>
-                                    <TableHead>Calle</TableHead>
-                                    <TableHead>Casa</TableHead>
+                                    <TableHead>Propiedades</TableHead>
                                     <TableHead>Email</TableHead>
-                                    <TableHead>Saldo a Favor (Bs.)</TableHead>
                                     <TableHead>Rol</TableHead>
                                     <TableHead className="text-right">Acciones</TableHead>
                                 </TableRow>
@@ -284,13 +313,13 @@ export default function PeopleManagementPage() {
                             <TableBody>
                                 {loading ? (
                                     <TableRow>
-                                        <TableCell colSpan={7} className="h-24 text-center">
+                                        <TableCell colSpan={5} className="h-24 text-center">
                                             <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
                                         </TableCell>
                                     </TableRow>
                                 ) : owners.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                                        <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
                                             No hay personas registradas.
                                         </TableCell>
                                     </TableRow>
@@ -298,10 +327,10 @@ export default function PeopleManagementPage() {
                                     owners.map((owner) => (
                                         <TableRow key={owner.id}>
                                             <TableCell className="font-medium">{owner.name}</TableCell>
-                                            <TableCell>{owner.street}</TableCell>
-                                            <TableCell>{owner.house}</TableCell>
+                                            <TableCell>
+                                                {owner.properties.map(p => `${p.street} - ${p.house}`).join(', ')}
+                                            </TableCell>
                                             <TableCell>{owner.email || '-'}</TableCell>
-                                            <TableCell>Bs. {(owner.balance ?? 0).toFixed(2)}</TableCell>
                                             <TableCell className="capitalize">{owner.role}</TableCell>
                                             <TableCell className="text-right">
                                                 <DropdownMenu>
@@ -332,9 +361,8 @@ export default function PeopleManagementPage() {
                 </CardContent>
             </Card>
 
-            {/* Add/Edit Dialog */}
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent className="sm:max-w-[425px]">
+                <DialogContent className="sm:max-w-md">
                     <DialogHeader>
                         <DialogTitle>{currentOwner.id ? 'Editar Persona' : 'Agregar Nueva Persona'}</DialogTitle>
                         <DialogDescription>
@@ -342,14 +370,14 @@ export default function PeopleManagementPage() {
                         </DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
-                        <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="name" className="text-right">Nombre</Label>
-                            <Input id="name" value={currentOwner.name} onChange={handleInputChange} className="col-span-3" />
+                        <div className="space-y-2">
+                            <Label htmlFor="name">Nombre</Label>
+                            <Input id="name" value={currentOwner.name} onChange={handleInputChange} />
                         </div>
-                         <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="role" className="text-right">Rol</Label>
-                             <Select onValueChange={handleSelectChange('role')} value={currentOwner.role}>
-                                <SelectTrigger className="col-span-3">
+                         <div className="space-y-2">
+                            <Label htmlFor="role">Rol</Label>
+                             <Select onValueChange={handleRoleChange} value={currentOwner.role}>
+                                <SelectTrigger>
                                     <SelectValue placeholder="Seleccione un rol" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -358,39 +386,49 @@ export default function PeopleManagementPage() {
                                 </SelectContent>
                             </Select>
                         </div>
-                        <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="street" className="text-right">Calle</Label>
-                             <Select onValueChange={handleSelectChange('street')} value={currentOwner.street}>
-                                <SelectTrigger className="col-span-3">
-                                    <SelectValue placeholder="Seleccione una calle" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {streets.map((street) => (
-                                        <SelectItem key={street} value={street}>{street}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                        
+                        <div className="space-y-4">
+                            <Label>Propiedades</Label>
+                            {currentOwner.properties.map((prop, index) => {
+                                const houseOptions = getHousesForStreet(prop.street);
+                                return (
+                                <div key={index} className="grid grid-cols-10 gap-2 items-center p-2 rounded-md border">
+                                    <div className="col-span-4 space-y-1">
+                                        <Label htmlFor={`street-${index}`} className="text-xs">Calle</Label>
+                                         <Select onValueChange={(v) => handlePropertyChange(index, 'street', v)} value={prop.street}>
+                                            <SelectTrigger><SelectValue placeholder="Calle..." /></SelectTrigger>
+                                            <SelectContent>{streets.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="col-span-4 space-y-1">
+                                        <Label htmlFor={`house-${index}`} className="text-xs">Casa</Label>
+                                         <Select onValueChange={(v) => handlePropertyChange(index, 'house', v)} value={prop.house} disabled={!prop.street}>
+                                            <SelectTrigger><SelectValue placeholder="Casa..." /></SelectTrigger>
+                                            <SelectContent>{houseOptions.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="col-span-2 flex items-end justify-end h-full">
+                                    {currentOwner.properties.length > 1 && (
+                                        <Button size="icon" variant="ghost" className="text-destructive" onClick={() => removeProperty(index)}>
+                                            <MinusCircle className="h-5 w-5"/>
+                                        </Button>
+                                    )}
+                                    </div>
+                                </div>
+                            )})}
+                             <Button variant="outline" size="sm" onClick={addProperty}>
+                                <PlusCircle className="mr-2 h-4 w-4"/>
+                                Agregar Propiedad
+                            </Button>
                         </div>
-                        <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="house" className="text-right">Casa</Label>
-                             <Select onValueChange={handleSelectChange('house')} value={currentOwner.house} disabled={!currentOwner.street}>
-                                <SelectTrigger className="col-span-3">
-                                    <SelectValue placeholder="Seleccione una casa" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {houseOptions.map((house) => (
-                                        <SelectItem key={house} value={house}>{house}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="email">Email</Label>
+                            <Input id="email" type="email" value={currentOwner.email || ''} onChange={handleInputChange} />
                         </div>
-                        <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="email" className="text-right">Email</Label>
-                            <Input id="email" type="email" value={currentOwner.email || ''} onChange={handleInputChange} className="col-span-3" />
-                        </div>
-                        <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="balance" className="text-right">Saldo a Favor</Label>
-                            <Input id="balance" type="number" value={currentOwner.balance ?? ''} onChange={handleInputChange} className="col-span-3" placeholder="0.00" />
+                        <div className="space-y-2">
+                            <Label htmlFor="balance">Saldo a Favor</Label>
+                            <Input id="balance" type="number" value={currentOwner.balance ?? ''} onChange={handleInputChange} placeholder="0.00" />
                         </div>
                     </div>
                     <DialogFooter>
@@ -400,7 +438,6 @@ export default function PeopleManagementPage() {
                 </DialogContent>
             </Dialog>
 
-            {/* Delete Confirmation Dialog */}
             <Dialog open={isDeleteConfirmationOpen} onOpenChange={setIsDeleteConfirmationOpen}>
                 <DialogContent className="sm:max-w-[425px]">
                     <DialogHeader>
@@ -420,3 +457,5 @@ export default function PeopleManagementPage() {
     );
     
 }
+
+    
