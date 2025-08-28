@@ -3,7 +3,6 @@
 import {
     Home,
     Landmark,
-    CalendarCheck,
     Megaphone,
     Settings,
 } from 'lucide-react';
@@ -20,7 +19,6 @@ const ownerNavItems: NavItem[] = [
         { href: "/admin/payments", label: "Reportar Pago" },
       ]
     },
-    { href: "#", icon: CalendarCheck, label: "Mis Reservas" },
     { href: "#", icon: Megaphone, label: "Comunicados" },
     { href: "#", icon: Settings, label: "Configuración" },
 ];
