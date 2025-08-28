@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from '@/hooks/use-toast';
-import { Upload, Save, Calendar as CalendarIcon, PlusCircle, Loader2 } from 'lucide-react';
+import { Upload, Save, Calendar as CalendarIcon, PlusCircle, Loader2, AlertTriangle, Wand2 } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -71,7 +71,6 @@ export default function SettingsPage() {
                 setCondoFee(settings.condoFee);
                 setExchangeRates(settings.exchangeRates || []);
             } else {
-                // Initialize with default/empty values if no settings doc exists
                 setDoc(settingsRef, {
                     companyInfo: emptyCompanyInfo,
                     condoFee: 25.00,
@@ -126,7 +125,6 @@ export default function SettingsPage() {
             await updateDoc(settingsRef, {
                 exchangeRates: arrayUnion(newRate)
             });
-            // No need to set state here, onSnapshot will do it
             setNewRateDate(undefined);
             setNewRateAmount('');
             toast({ title: 'Tasa Agregada', description: 'La nueva tasa de cambio ha sido añadida.' });
@@ -141,7 +139,6 @@ export default function SettingsPage() {
         try {
             const settingsRef = doc(db, 'config', 'mainSettings');
             await updateDoc(settingsRef, { exchangeRates: updatedRates });
-             // No need to set state here, onSnapshot will do it
              toast({ title: 'Tasa Activada', description: 'La tasa seleccionada ahora es la activa.' });
         } catch (error) {
             console.error("Error activating rate:", error);
@@ -186,7 +183,6 @@ export default function SettingsPage() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Columna Izquierda: Info y Cuota */}
                 <div className="lg:col-span-2 space-y-8">
                     <Card>
                         <CardHeader>
@@ -249,18 +245,36 @@ export default function SettingsPage() {
                                     placeholder="0.00"
                                 />
                             </div>
-                            <div className="p-4 bg-muted/50 rounded-lg flex items-center gap-3 text-sm text-muted-foreground">
-                                <p><strong>Regla de Vencimiento:</strong> La cuota del mes en curso vence los <strong>días 5 de cada mes</strong>. El día 6, se generará automáticamente la deuda a los propietarios que no hayan cancelado.</p>
+                            <div className="p-4 bg-muted/50 rounded-lg flex items-start gap-3 text-sm text-muted-foreground">
+                                <AlertTriangle className="h-5 w-5 mt-0.5 text-orange-500 shrink-0"/>
+                                <div>
+                                    <p><strong>Regla de Vencimiento:</strong> La cuota del mes en curso vence los <strong>días 5 de cada mes</strong>.</p>
+                                    <p className="mt-1">El día 6, el sistema debería generar automáticamente la deuda a los propietarios que no hayan cancelado. Esta automatización requiere configuración en el servidor (backend).</p>
+                                </div>
                             </div>
                         </CardContent>
                     </Card>
                 </div>
 
-                {/* Columna Derecha: Tasa de Cambio */}
-                <div className="lg:col-span-1">
+                <div className="lg:col-span-1 space-y-8">
+                     <Card>
+                        <CardHeader>
+                            <CardTitle>Conversión Automática Bs/$</CardTitle>
+                            <CardDescription>Integración con la tasa oficial BCV.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                             <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-3 text-sm text-blue-800">
+                                <Wand2 className="h-5 w-5 mt-0.5 shrink-0"/>
+                                <div>
+                                    <p>Para automatizar la tasa de cambio, se debe conectar este sistema a la API del Banco Central de Venezuela (BCV).</p>
+                                    <p className="mt-2">Esto requiere una función en el servidor que se ejecute diariamente para obtener y guardar la nueva tasa.</p>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
                     <Card>
                         <CardHeader>
-                            <CardTitle>Gestión de Tasa de Cambio</CardTitle>
+                            <CardTitle>Gestión Manual de Tasa</CardTitle>
                             <CardDescription>Historial de tasas y activación para los cálculos.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">

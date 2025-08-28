@@ -32,14 +32,25 @@ type UserData = {
 
 type Debt = {
     id: string;
+    year: number;
+    month: number;
     amount: number;
+    description: string;
     status: 'pending' | 'paid';
-}
+};
+
+const months = [
+    { value: 1, label: 'Enero' }, { value: 2, label: 'Febrero' }, { value: 3, label: 'Marzo' },
+    { value: 4, label: 'Abril' }, { value: 5, label: 'Mayo' }, { value: 6, label: 'Junio' },
+    { value: 7, label: 'Julio' }, { value: 8, label: 'Agosto' }, { value: 9, label: 'Septiembre' },
+    { value: 10, label: 'Octubre' }, { value: 11, label: 'Noviembre' }, { value: 12, label: 'Diciembre' }
+];
 
 export default function OwnerDashboardPage() {
     const [loading, setLoading] = useState(true);
     const [userData, setUserData] = useState<UserData | null>(null);
     const [payments, setPayments] = useState<Payment[]>([]);
+    const [debts, setDebts] = useState<Debt[]>([]);
     const [dashboardStats, setDashboardStats] = useState({
         balanceInFavor: 0,
         totalDebt: 0,
@@ -50,47 +61,44 @@ export default function OwnerDashboardPage() {
     });
     const [communityUpdates, setCommunityUpdates] = useState<string[]>([]);
     
-    // This is a placeholder for getting the current user's ID
-    // In a real app, you'd get this from the auth state
-    const userId = "088a5367-a75b-4355-b0b0-3162b2b64b1f"; // Hardcoded for demo until auth is real
+    const userId = "088a5367-a75b-4355-b0b0-3162b2b64b1f"; 
 
     useEffect(() => {
         if (!userId) return;
 
-        // Fetch User Data, Debts, and Settings
         const fetchData = async () => {
             setLoading(true);
             try {
-                // Fetch settings first to get fee and rate
                 const settingsRef = doc(db, 'config', 'mainSettings');
                 const settingsSnap = await getDoc(settingsRef);
-                let condoFeeUSD = 25; // default
-                let activeRate = 36.5; // default
+                let condoFeeUSD = 25;
+                let activeRate = 36.5;
                 if (settingsSnap.exists()) {
                     const settings = settingsSnap.data();
                     condoFeeUSD = settings.condoFee || 0;
                     const rate = settings.exchangeRates?.find((r: any) => r.active);
-                    if (rate) {
-                        activeRate = rate.rate;
-                    }
+                    if (rate) activeRate = rate.rate;
                 }
 
-                // Calculate due date info
                 const now = new Date();
                 const dueDate = new Date(now.getFullYear(), now.getMonth(), 5);
                 const isOverdue = now.getDate() > 5;
                 
-                // Fetch User Data
                 const userDocRef = doc(db, "owners", userId);
                 const userSnap = await getDoc(userDocRef);
                  if (userSnap.exists()) {
                     const ownerData = { id: userSnap.id, ...userSnap.data() } as UserData;
                     setUserData(ownerData);
                     
-                    // Fetch Debts
                     const debtsQuery = query(collection(db, "debts"), where("ownerId", "==", userId), where("status", "==", "pending"));
                     const debtsSnapshot = await getDocs(debtsQuery);
                     const totalDebt = debtsSnapshot.docs.reduce((sum, doc) => sum + doc.data().amount, 0);
+                    
+                    const debtsData: Debt[] = [];
+                    debtsSnapshot.forEach((doc) => {
+                        debtsData.push({ id: doc.id, ...doc.data() } as Debt);
+                    });
+                    setDebts(debtsData.sort((a,b) => b.year - a.year || b.month - a.month));
 
                     setDashboardStats({
                         balanceInFavor: ownerData.balance || 0,
@@ -112,10 +120,9 @@ export default function OwnerDashboardPage() {
 
         fetchData();
 
-        // Fetch User Payments (last 5)
         const paymentsQuery = query(
             collection(db, "payments"),
-            where("reportedBy", "==", userId), // Assuming the user reports their own payments
+            where("reportedBy", "==", userId),
             orderBy("reportedAt", "desc"),
             limit(5)
         );
@@ -136,27 +143,6 @@ export default function OwnerDashboardPage() {
             setPayments(paymentsData);
         });
         
-        // AI Community Updates
-        const fetchAndUpdate = async () => {
-             const userProfile = "Role: Owner, Unit: A-101, Name: Juan Perez"; // Replace with real data
-             const paymentHistory = "October: Paid, September: Paid, August: Paid"; // Replace with real data
-             const allUpdates = [
-                "Recordatorio: La cuota de mantenimiento de Noviembre vence el 15.",
-                "El área de la piscina estará cerrada por mantenimiento el 10 de Noviembre.",
-                "Asamblea general de propietarios el 20 de Noviembre.",
-                "Nuevas normas de uso para el salón de fiestas.",
-                "Fumigación general programada para el 5 de Noviembre."
-            ].join('\n');
-
-            const { updates } = await getCommunityUpdates({
-                userProfile,
-                paymentHistory,
-                allUpdates,
-            });
-            setCommunityUpdates(updates);
-        }
-        fetchAndUpdate();
-
         return () => {
             paymentsUnsubscribe();
         };
@@ -175,6 +161,7 @@ export default function OwnerDashboardPage() {
           </CardHeader>
           <CardContent>
             {loading ? <Loader2 className="h-6 w-6 animate-spin"/> : <div className="text-2xl font-bold">Bs. {dashboardStats.balanceInFavor.toLocaleString('es-VE', {minimumFractionDigits: 2})}</div>}
+            <p className="text-xs text-muted-foreground">Balance positivo en tu cuenta.</p>
           </CardContent>
         </Card>
         <Card>
@@ -184,6 +171,7 @@ export default function OwnerDashboardPage() {
           </CardHeader>
           <CardContent>
             {loading ? <Loader2 className="h-6 w-6 animate-spin"/> : <div className="text-2xl font-bold">Bs. {dashboardStats.totalDebt.toLocaleString('es-VE', {minimumFractionDigits: 2})}</div>}
+             <p className="text-xs text-muted-foreground">Suma de todas las cuotas pendientes.</p>
           </CardContent>
         </Card>
         <Card className="md:col-span-2 lg:col-span-1">
@@ -207,7 +195,36 @@ export default function OwnerDashboardPage() {
         </Card>
       </div>
 
-      <div className="grid gap-8 lg:grid-cols-2">
+       <div className="grid gap-8 lg:grid-cols-1">
+          <div>
+            <h2 className="text-2xl font-bold mb-4 font-headline">Desglose de Deudas Pendientes</h2>
+            <Card>
+                <Table>
+                <TableHeader>
+                    <TableRow>
+                    <TableHead>Período</TableHead>
+                    <TableHead>Concepto</TableHead>
+                    <TableHead className="text-right">Monto (Bs.)</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {loading ? (
+                        <TableRow><TableCell colSpan={3} className="h-24 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto"/></TableCell></TableRow>
+                    ) : debts.length === 0 ? (
+                        <TableRow><TableCell colSpan={3} className="h-24 text-center text-muted-foreground">¡Felicidades! No tienes deudas pendientes.</TableCell></TableRow>
+                    ) : (
+                    debts.map((debt) => (
+                    <TableRow key={debt.id}>
+                        <TableCell className="font-medium">{months.find(m => m.value === debt.month)?.label} {debt.year}</TableCell>
+                        <TableCell>{debt.description}</TableCell>
+                        <TableCell className="text-right">Bs. {debt.amount.toLocaleString('es-VE', {minimumFractionDigits: 2})}</TableCell>
+                    </TableRow>
+                    )))}
+                </TableBody>
+                </Table>
+            </Card>
+        </div>
+
         <div>
             <h2 className="text-2xl font-bold mb-4 font-headline">Mis Últimos Pagos</h2>
             <Card>
@@ -217,38 +234,32 @@ export default function OwnerDashboardPage() {
                     <TableHead>Fecha</TableHead>
                     <TableHead>Monto</TableHead>
                     <TableHead>Banco</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Ref</TableHead>
+                    <TableHead>Referencia</TableHead>
                     <TableHead>Estado</TableHead>
-                    <TableHead>Acciones</TableHead>
+                    <TableHead className="text-right">Acciones</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
                     {loading ? (
-                        <TableRow><TableCell colSpan={7} className="h-24 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto"/></TableCell></TableRow>
+                        <TableRow><TableCell colSpan={6} className="h-24 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto"/></TableCell></TableRow>
                     ) : payments.length === 0 ? (
-                        <TableRow><TableCell colSpan={7} className="h-24 text-center text-muted-foreground">No tienes pagos registrados.</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={6} className="h-24 text-center text-muted-foreground">No tienes pagos registrados.</TableCell></TableRow>
                     ) : (
                     payments.map((payment) => (
                     <TableRow key={payment.id}>
                         <TableCell>{new Date(payment.date).toLocaleDateString('es-VE')}</TableCell>
                         <TableCell>Bs. {payment.amount.toLocaleString('es-VE', {minimumFractionDigits: 2})}</TableCell>
                         <TableCell>{payment.bank}</TableCell>
-                        <TableCell>{payment.type}</TableCell>
                         <TableCell>{payment.ref}</TableCell>
                         <TableCell>
                           <Badge variant={payment.status === 'aprobado' ? 'success' : payment.status === 'rechazado' ? 'destructive' : 'warning'}>
                             {payment.status.charAt(0).toUpperCase() + payment.status.slice(1)}
                           </Badge>
                         </TableCell>
-                         <TableCell className="flex gap-2">
+                         <TableCell className="text-right">
                             <Button variant="ghost" size="icon">
                                 <Eye className="h-4 w-4"/>
-                                <span className="sr-only">Ver</span>
-                            </Button>
-                            <Button variant="ghost" size="icon">
-                                <Printer className="h-4 w-4"/>
-                                <span className="sr-only">Imprimir</span>
+                                <span className="sr-only">Ver Comprobante</span>
                             </Button>
                         </TableCell>
                     </TableRow>
@@ -257,35 +268,7 @@ export default function OwnerDashboardPage() {
                 </Table>
             </Card>
         </div>
-        <div>
-            <h2 className="text-2xl font-bold mb-4 font-headline">Comunicados Importantes</h2>
-            <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <Megaphone className="h-6 w-6 text-primary" />
-                        <span>Actualizaciones para ti</span>
-                    </CardTitle>
-                </CardHeader>
-                <CardContent>
-                     {loading || communityUpdates.length === 0 ? (
-                        <div className="text-center text-muted-foreground py-4">
-                            {loading ? <Loader2 className="h-6 w-6 animate-spin mx-auto"/> : "No hay comunicados importantes para ti."}
-                        </div>
-                     ) : (
-                        <ul className="space-y-4">
-                            {communityUpdates.map((update, index) => (
-                                <li key={index} className="flex items-start gap-3">
-                                    <div className="mt-1.5 h-2 w-2 rounded-full bg-primary shrink-0" />
-                                    <span>{update}</span>
-                                </li>
-                            ))}
-                        </ul>
-                     )}
-                </CardContent>
-            </Card>
-        </div>
       </div>
     </div>
   );
 }
-
