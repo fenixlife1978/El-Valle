@@ -10,11 +10,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from '@/hooks/use-toast';
-import { Upload, Save, Calendar as CalendarIcon, PlusCircle, Loader2, AlertTriangle, Wand2, MoreHorizontal, Edit } from 'lucide-react';
+import { Upload, Save, Calendar as CalendarIcon, PlusCircle, Loader2, AlertTriangle, Wand2, MoreHorizontal, Edit, FileCog } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
-import { doc, getDoc, setDoc, updateDoc, arrayUnion, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, arrayUnion, onSnapshot, writeBatch, collection, query, where, getDocs, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
@@ -40,7 +40,21 @@ type Settings = {
     companyInfo: CompanyInfo;
     condoFee: number;
     exchangeRates: ExchangeRate[];
-}
+    lastCondoFee?: number; // To track the previous fee for adjustment logic
+};
+
+type Debt = {
+    id: string;
+    ownerId: string;
+    year: number;
+    month: number;
+    amountUSD: number;
+    description: string;
+    status: 'pending' | 'paid';
+    paidAmountUSD?: number; // Amount at which the debt was paid
+    paymentDate?: Timestamp;
+};
+
 
 const emptyCompanyInfo: CompanyInfo = {
     name: 'Nombre de la Empresa',
@@ -58,6 +72,7 @@ export default function SettingsPage() {
     const [companyInfo, setCompanyInfo] = useState<CompanyInfo>(emptyCompanyInfo);
     const [logoPreview, setLogoPreview] = useState<string | null>(null);
     const [condoFee, setCondoFee] = useState(0);
+    const [lastCondoFee, setLastCondoFee] = useState(0);
     const [exchangeRates, setExchangeRates] = useState<ExchangeRate[]>([]);
     
     // State for adding a new rate
@@ -69,6 +84,9 @@ export default function SettingsPage() {
     const [rateToEdit, setRateToEdit] = useState<ExchangeRate | null>(null);
     const [editRateDate, setEditRateDate] = useState<Date | undefined>();
     const [editRateAmount, setEditRateAmount] = useState('');
+    
+    const [isFeeChanged, setIsFeeChanged] = useState(false);
+    const [isAdjustmentRunning, setIsAdjustmentRunning] = useState(false);
 
     useEffect(() => {
         const settingsRef = doc(db, 'config', 'mainSettings');
@@ -78,11 +96,13 @@ export default function SettingsPage() {
                 setCompanyInfo(settings.companyInfo);
                 setLogoPreview(settings.companyInfo.logo);
                 setCondoFee(settings.condoFee);
+                setLastCondoFee(settings.lastCondoFee ?? settings.condoFee);
                 setExchangeRates(settings.exchangeRates || []);
             } else {
                 setDoc(settingsRef, {
                     companyInfo: emptyCompanyInfo,
                     condoFee: 25.00,
+                    lastCondoFee: 25.00,
                     exchangeRates: []
                 });
             }
@@ -191,15 +211,23 @@ export default function SettingsPage() {
         setSaving(true);
         try {
             const settingsRef = doc(db, 'config', 'mainSettings');
-            await updateDoc(settingsRef, {
+            const dataToUpdate: Partial<Settings> = {
                 companyInfo,
-                condoFee
-            });
+                condoFee,
+            }
+            if (isFeeChanged) {
+                dataToUpdate.lastCondoFee = lastCondoFee;
+            }
+
+            await updateDoc(settingsRef, dataToUpdate);
             toast({
                 title: 'Cambios Guardados',
                 description: 'La configuración ha sido actualizada exitosamente.',
                 className: 'bg-green-100 border-green-400 text-green-800'
             });
+            if(isFeeChanged) setLastCondoFee(condoFee);
+            setIsFeeChanged(false);
+
         } catch(error) {
              console.error("Error saving settings:", error);
              toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron guardar los cambios.' });
@@ -207,6 +235,83 @@ export default function SettingsPage() {
             setSaving(false);
         }
     };
+
+    const handleCondoFeeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const newFee = parseFloat(e.target.value) || 0;
+        setCondoFee(newFee);
+        if(newFee !== lastCondoFee) {
+            setIsFeeChanged(true);
+        }
+    }
+    
+    const runFeeAdjustment = async () => {
+        setIsAdjustmentRunning(true);
+        
+        const feeDifference = condoFee - lastCondoFee;
+        if (feeDifference <= 0) {
+            toast({variant: 'destructive', title: 'Sin cambios', description: 'El ajuste solo se ejecuta si la nueva cuota es mayor a la anterior.'});
+            setIsAdjustmentRunning(false);
+            return;
+        }
+
+        try {
+            const now = new Date();
+            const currentYear = now.getFullYear();
+            const currentMonth = now.getMonth() + 1;
+            
+            const q = query(
+                collection(db, "debts"), 
+                where("status", "==", "paid"),
+                where("description", "==", "Cuota de Condominio"),
+                // This is tricky in Firestore, we query all paid and filter in client
+                // A better approach would be a Cloud Function with more complex querying
+            );
+            const querySnapshot = await getDocs(q);
+
+            const batch = writeBatch(db);
+            let adjustmentsCount = 0;
+
+            querySnapshot.forEach(doc => {
+                const debt = doc.data() as Debt;
+                const isFutureOrCurrentMonth = debt.year > currentYear || (debt.year === currentYear && debt.month >= currentMonth);
+                
+                // We assume paidAmountUSD exists from a proper payment reconciliation process
+                const paidAmount = debt.paidAmountUSD || lastCondoFee; 
+
+                if (isFutureOrCurrentMonth && paidAmount < condoFee) {
+                    const adjustmentAmount = condoFee - paidAmount;
+                    const adjustmentDebtRef = doc(collection(db, "debts"));
+                    batch.set(adjustmentDebtRef, {
+                        ownerId: debt.ownerId,
+                        year: debt.year,
+                        month: debt.month,
+                        amountUSD: adjustmentAmount,
+                        description: `Ajuste por aumento de cuota`,
+                        status: 'pending'
+                    });
+                    adjustmentsCount++;
+                }
+            });
+
+            if (adjustmentsCount > 0) {
+                await batch.commit();
+                toast({title: 'Ajuste Completado', description: `${adjustmentsCount} deudas por ajuste han sido generadas.`});
+            } else {
+                toast({title: 'Sin Ajustes', description: 'No se encontraron cuotas pagadas por adelantado que requieran ajuste.'});
+            }
+
+            // Update lastCondoFee in settings to prevent re-running this adjustment
+            const settingsRef = doc(db, 'config', 'mainSettings');
+            await updateDoc(settingsRef, { lastCondoFee: condoFee });
+
+        } catch (error) {
+             console.error("Error running fee adjustment:", error);
+             toast({ variant: 'destructive', title: 'Error en el Proceso', description: 'No se pudo completar el ajuste de cuotas.' });
+        } finally {
+            setIsAdjustmentRunning(false);
+        }
+    };
+
 
     if (loading) {
         return (
@@ -282,17 +387,27 @@ export default function SettingsPage() {
                                     id="condoFee" 
                                     type="number" 
                                     value={condoFee} 
-                                    onChange={(e) => setCondoFee(parseFloat(e.target.value) || 0)} 
+                                    onChange={handleCondoFeeChange}
                                     placeholder="0.00"
                                 />
                             </div>
-                            <div className="p-4 bg-muted/50 rounded-lg flex items-start gap-3 text-sm text-muted-foreground">
-                                <AlertTriangle className="h-5 w-5 mt-0.5 text-orange-500 shrink-0"/>
-                                <div>
-                                    <p><strong>Regla de Vencimiento:</strong> La cuota del mes en curso vence los <strong>días 5 de cada mes</strong>.</p>
-                                    <p className="mt-1">El día 6, el sistema debería generar automáticamente la deuda a los propietarios que no hayan cancelado. Esta automatización requiere configuración en el servidor (backend).</p>
+                            <CardFooter className="p-0 pt-4 flex-col items-start gap-4">
+                                <div className="p-4 bg-muted/50 rounded-lg flex items-start gap-3 text-sm text-muted-foreground w-full">
+                                    <AlertTriangle className="h-5 w-5 mt-0.5 text-orange-500 shrink-0"/>
+                                    <div>
+                                        <p><strong>Regla de Vencimiento:</strong> La cuota del mes en curso vence los <strong>días 5 de cada mes</strong>.</p>
+                                        <p className="mt-1">El día 6, el sistema debería generar automáticamente la deuda a los propietarios que no hayan cancelado. Esta automatización requiere configuración en el servidor (backend).</p>
+                                    </div>
                                 </div>
-                            </div>
+                                <Button onClick={runFeeAdjustment} disabled={!isFeeChanged || condoFee <= lastCondoFee || isAdjustmentRunning}>
+                                    {isAdjustmentRunning ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <FileCog className="mr-2 h-4 w-4"/>}
+                                    Ejecutar Ajuste por Aumento de Cuota
+                                </Button>
+                                <p className="text-xs text-muted-foreground">
+                                    Esta acción genera deudas por diferencia a quienes pagaron meses por adelantado con una cuota anterior. 
+                                    Úselo después de guardar un aumento en la cuota.
+                                </p>
+                            </CardFooter>
                         </CardContent>
                     </Card>
                 </div>
@@ -382,7 +497,7 @@ export default function SettingsPage() {
             </div>
             
             <div className="flex justify-end">
-                <Button onClick={handleSaveChanges} disabled={saving}>
+                <Button onClick={handleSaveChanges} disabled={saving || isAdjustmentRunning}>
                     {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4"/>}
                     Guardar Todos los Cambios
                 </Button>
@@ -425,5 +540,3 @@ export default function SettingsPage() {
         </div>
     );
 }
-
-    
