@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -192,7 +193,7 @@ export default function ReportsPage() {
             }
         };
         fetchData();
-    }, [toast, activeRate]);
+    }, [toast]);
 
     const generatePdf = (data: ReportPreviewData) => {
         const doc = new jsPDF();
@@ -320,7 +321,7 @@ export default function ReportsPage() {
         if (!owner) return;
         
         const validProperties = (owner.properties || []).filter(p => p.street && p.house);
-        if (validProperties.length === 0) {
+        if (validProperties.length === 0 && (!owner.street || !owner.house)) {
             toast({ variant: 'destructive', title: 'Error de Datos', description: 'El propietario seleccionado no tiene propiedades completas registradas.' });
             return;
         }
@@ -328,12 +329,21 @@ export default function ReportsPage() {
         setGeneratingReport(true);
         try {
             // Fetch Payments
-             const paymentsQuery = query(
-                collection(db, "payments"),
-                where("status", "==", "aprobado"),
-                where("beneficiaries", "array-contains-any", validProperties.map(p => ({ ownerId: owner.id, house: p.house })))
-            );
-
+            let paymentsQuery;
+            if (validProperties.length > 0) {
+                 paymentsQuery = query(
+                    collection(db, "payments"),
+                    where("status", "==", "aprobado"),
+                    where("beneficiaries", "array-contains-any", validProperties.map(p => ({ ownerId: owner.id, house: p.house })))
+                );
+            } else {
+                 paymentsQuery = query(
+                    collection(db, "payments"),
+                    where("status", "==", "aprobado"),
+                    where("beneficiaries", "array-contains", { ownerId: owner.id, house: owner.house })
+                );
+            }
+            
             const paymentsSnapshot = await getDocs(paymentsQuery);
             let totalPaid = 0;
             const allPayments = paymentsSnapshot.docs.map(doc => doc.data() as Payment);
@@ -378,7 +388,7 @@ export default function ReportsPage() {
                 dateRange = `Período: ${monthsLocale[firstDebt.month]} ${firstDebt.year} - ${monthsLocale[lastDebt.month]} ${lastDebt.year}`;
             }
 
-            const ownerProps = (owner.properties || []).map(p => `${p.street} - ${p.house}`).join(', ');
+            const ownerProps = (owner.properties && owner.properties.length > 0) ? owner.properties.map(p => `${p.street} - ${p.house}`).join(', ') : `${owner.street} - ${owner.house}`;
 
             setPreviewData({
                 title: `Estado de Cuenta Detallado`,
@@ -411,22 +421,65 @@ export default function ReportsPage() {
         }
     };
 
-    const showDelinquencyReportPreview = () => {
-        if (!delinquencyPeriod) return toast({ variant: 'destructive', title: 'Error', description: 'Por favor, seleccione un período de morosidad.' });
-        const months = parseInt(delinquencyPeriod);
-        const delinquentOwners = owners.filter(o => o.delinquency >= months);
-        
-        setPreviewData({
-            title: `Reporte de Morosidad (${months} o más meses)`,
-            headers: ['Propietario', 'Propiedades', 'Meses de Deuda', 'Saldo Deudor (Bs.)'],
-            rows: delinquentOwners.map(o => {
-                const properties = (o.properties || []).map(p => `${p.street} - ${p.house}`).join(', ');
-                const debtBs = o.balance < 0 ? Math.abs(o.balance * activeRate) : 0;
-                return [o.name, properties, o.delinquency, debtBs.toLocaleString('es-VE', { minimumFractionDigits: 2 })];
-            }),
-            filename: `reporte_morosidad`
-        });
-        setIsPreviewOpen(true);
+    const showDelinquencyReportPreview = async () => {
+        if (!delinquencyPeriod) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Por favor, seleccione un período de morosidad.' });
+            return;
+        }
+        setGeneratingReport(true);
+
+        try {
+            const debtsQuery = query(collection(db, 'debts'), where('status', '==', 'pending'));
+            const debtsSnapshot = await getDocs(debtsQuery);
+            const allPendingDebts = debtsSnapshot.docs.map(doc => doc.data() as Debt);
+            
+            const debtsByOwner: { [ownerId: string]: Debt[] } = {};
+            for (const debt of allPendingDebts) {
+                if (!debtsByOwner[debt.ownerId]) {
+                    debtsByOwner[debt.ownerId] = [];
+                }
+                debtsByOwner[debt.ownerId].push(debt);
+            }
+
+            const reportRows = Object.entries(debtsByOwner)
+                .map(([ownerId, ownerDebts]) => {
+                    const ownerData = owners.find(o => o.id === ownerId);
+                    if (!ownerData || ownerDebts.length < parseInt(delinquencyPeriod)) return null;
+
+                    ownerDebts.sort((a, b) => a.year - b.year || a.month - b.month);
+                    const firstDebt = ownerDebts[0];
+                    const lastDebt = ownerDebts[ownerDebts.length - 1];
+                    
+                    const period = `${monthsLocale[firstDebt.month]} ${firstDebt.year} - ${monthsLocale[lastDebt.month]} ${lastDebt.year}`;
+                    const totalDebtUSD = ownerDebts.reduce((sum, d) => sum + d.amountUSD, 0);
+                    const properties = (ownerData.properties && ownerData.properties.length > 0)
+                        ? ownerData.properties.map(p => `${p.street} - ${p.house}`).join(', ')
+                        : `${ownerData.street} - ${ownerData.house}`;
+                    
+                    return [
+                        ownerData.name,
+                        properties,
+                        period,
+                        ownerDebts.length,
+                        totalDebtUSD.toFixed(2)
+                    ];
+                })
+                .filter(row => row !== null) as (string|number)[][];
+
+            setPreviewData({
+                title: `Reporte de Morosidad (${delinquencyPeriod} o más meses)`,
+                headers: ['PROPIETARIO', 'PROPIEDAD', 'PERIODO (DESDE - HASTA)', 'MESES ADEUDADOS', 'MONTO EN DÓLARES'],
+                rows: reportRows,
+                filename: `reporte_morosidad_${delinquencyPeriod}_meses`
+            });
+            setIsPreviewOpen(true);
+
+        } catch (error) {
+            console.error("Error generating delinquency report: ", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo generar el reporte de morosidad.' });
+        } finally {
+            setGeneratingReport(false);
+        }
     }
     
     const showSolvencyReportPreview = () => {
@@ -434,7 +487,12 @@ export default function ReportsPage() {
         setPreviewData({
             title: 'Reporte de Solvencia',
             headers: ['Propietario', 'Propiedades', 'Email'],
-            rows: solventOwners.map(o => [o.name, (o.properties || []).map(p => `${p.street} - ${p.house}`).join(', '), o.email || '-']),
+            rows: solventOwners.map(o => {
+                const properties = (o.properties && o.properties.length > 0)
+                    ? o.properties.map(p => `${p.street} - ${p.house}`).join(', ')
+                    : (o.street && o.house ? `${o.street} - ${o.house}` : 'N/A');
+                return [o.name, properties, o.email || '-'];
+            }),
             filename: 'reporte_solvencia'
         });
         setIsPreviewOpen(true);
@@ -445,7 +503,12 @@ export default function ReportsPage() {
         setPreviewData({
             title: 'Reporte de Saldos a Favor',
             headers: ['Propietario', 'Propiedades', 'Saldo a Favor (Bs.)'],
-            rows: ownersWithBalance.map(o => [o.name, (o.properties || []).map(p => `${p.street} - ${p.house}`).join(', '), (o.balance * activeRate).toLocaleString('es-VE', { minimumFractionDigits: 2 })]),
+            rows: ownersWithBalance.map(o => {
+                const properties = (o.properties && o.properties.length > 0)
+                    ? o.properties.map(p => `${p.street} - ${p.house}`).join(', ')
+                    : (o.street && o.house ? `${o.street} - ${o.house}` : 'N/A');
+                return [o.name, properties, (o.balance * activeRate).toLocaleString('es-VE', { minimumFractionDigits: 2 })];
+            }),
             filename: 'reporte_saldos_favor'
         });
         setIsPreviewOpen(true);
@@ -611,8 +674,9 @@ export default function ReportsPage() {
                         </div>
                     </CardContent>
                     <CardFooter>
-                         <Button className="w-full" onClick={showDelinquencyReportPreview} disabled={!delinquencyPeriod}>
-                            <Search className="mr-2 h-4 w-4" /> Generar Vista Previa
+                         <Button className="w-full" onClick={showDelinquencyReportPreview} disabled={!delinquencyPeriod || generatingReport}>
+                            {generatingReport ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Search className="mr-2 h-4 w-4" />} 
+                            Generar Vista Previa
                         </Button>
                     </CardFooter>
                 </Card>
@@ -810,3 +874,4 @@ export default function ReportsPage() {
         </div>
     );
 }
+
