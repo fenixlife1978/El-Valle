@@ -12,9 +12,10 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PlusCircle, MoreHorizontal, Edit, Trash2, Loader2, Info, ArrowLeft, ArrowRight, Search, BadgeHelp, WalletCards } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { collection, query, onSnapshot, where, addDoc, updateDoc, deleteDoc, doc, getDocs, getDoc } from 'firebase/firestore';
+import { collection, query, onSnapshot, where, addDoc, updateDoc, deleteDoc, doc, getDocs, getDoc, writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Badge } from '@/components/ui/badge';
+import { differenceInCalendarMonths, format, addMonths } from 'date-fns';
 
 type Owner = {
     id: string;
@@ -36,12 +37,18 @@ type Debt = {
 
 type View = 'list' | 'detail';
 
-const emptyDebt: Omit<Debt, 'id' | 'ownerId'> = { 
-    year: new Date().getFullYear(), 
-    month: new Date().getMonth() + 1, 
-    amount: 0, 
-    description: '',
-    status: 'pending' 
+type MassDebt = {
+    description: string;
+    amountUSD: number;
+    fromMonth: number;
+    fromYear: number;
+};
+
+const emptyMassDebt: MassDebt = { 
+    description: 'Cuota de Condominio', 
+    amountUSD: 25, 
+    fromMonth: new Date().getMonth() + 1,
+    fromYear: new Date().getFullYear(),
 };
 
 const months = [
@@ -65,7 +72,7 @@ export default function DebtManagementPage() {
     const [loadingDebts, setLoadingDebts] = useState(false);
     
     const [isDialogOpen, setIsDialogOpen] = useState(false);
-    const [currentDebt, setCurrentDebt] = useState<Omit<Debt, 'id' | 'ownerId'> & { id?: string }>(emptyDebt);
+    const [currentMassDebt, setCurrentMassDebt] = useState<MassDebt>(emptyMassDebt);
     
     const [debtToDelete, setDebtToDelete] = useState<Debt | null>(null);
     const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
@@ -138,15 +145,15 @@ export default function DebtManagementPage() {
 
     const handleAddDebt = () => {
         if (!selectedOwner) return;
-        setCurrentDebt(emptyDebt);
+        const today = new Date();
+        setCurrentMassDebt({
+             ...emptyMassDebt,
+             fromMonth: today.getMonth() + 1,
+             fromYear: today.getFullYear(),
+        });
         setIsDialogOpen(true);
     };
-
-    const handleEditDebt = (debt: Debt) => {
-        setCurrentDebt(debt);
-        setIsDialogOpen(true);
-    };
-
+    
     const handleDeleteDebt = (debt: Debt) => {
         setDebtToDelete(debt);
         setIsDeleteConfirmationOpen(true);
@@ -166,46 +173,98 @@ export default function DebtManagementPage() {
         }
     }
 
-    const handleSaveDebt = async () => {
-        if (!selectedOwner) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Debe seleccionar un propietario.' });
-            return;
-        }
-         if (!currentDebt.description || currentDebt.amount <= 0) {
+    const handleSaveMassDebt = async () => {
+        if (!selectedOwner) return;
+        if (!currentMassDebt.description || currentMassDebt.amountUSD <= 0) {
             toast({ variant: 'destructive', title: 'Error de Validación', description: 'La descripción y un monto mayor a cero son obligatorios.' });
             return;
         }
 
+        const { fromMonth, fromYear, amountUSD, description } = currentMassDebt;
+        const startDate = new Date(fromYear, fromMonth - 1, 1);
+        const endDate = new Date();
+
+        if (startDate > endDate) {
+            toast({ variant: 'destructive', title: 'Error de Fecha', description: 'La fecha "Desde" no puede ser futura.' });
+            return;
+        }
+
+        const monthsToGenerate = differenceInCalendarMonths(endDate, startDate) + 1;
+
         try {
-            if (currentDebt.id) { // Editing
-                const debtRef = doc(db, "debts", currentDebt.id);
-                const { id, ...dataToUpdate } = currentDebt;
-                await updateDoc(debtRef, dataToUpdate);
-                toast({ title: 'Deuda Actualizada', description: 'Los datos de la deuda han sido guardados.' });
-            } else { // New
-                await addDoc(collection(db, "debts"), { ...currentDebt, ownerId: selectedOwner.id, status: 'pending' });
-                toast({ title: 'Deuda Agregada', description: 'La nueva deuda ha sido registrada.' });
+            const settingsRef = doc(db, 'config', 'mainSettings');
+            const docSnap = await getDoc(settingsRef);
+            if (!docSnap.exists()) throw new Error("Settings document not found.");
+            
+            const allRates = (docSnap.data().exchangeRates || []) as { date: string; rate: number }[];
+            const batch = writeBatch(db);
+
+            for (let i = 0; i < monthsToGenerate; i++) {
+                const debtDate = addMonths(startDate, i);
+                const debtYear = debtDate.getFullYear();
+                const debtMonth = debtDate.getMonth() + 1;
+                
+                // Find rate for the specific month.
+                const monthString = format(debtDate, 'yyyy-MM');
+                const applicableRates = allRates
+                    .filter(r => r.date.startsWith(monthString))
+                    .sort((a, b) => b.date.localeCompare(a.date));
+
+                const rateForMonth = applicableRates.length > 0 ? applicableRates[0].rate : null;
+
+                if (!rateForMonth) {
+                     throw new Error(`No hay tasa de cambio para ${monthString}.`);
+                }
+                
+                const debtAmountBs = amountUSD * rateForMonth;
+
+                const debtRef = doc(collection(db, "debts"));
+                batch.set(debtRef, {
+                    ownerId: selectedOwner.id,
+                    year: debtYear,
+                    month: debtMonth,
+                    amount: debtAmountBs,
+                    description: description,
+                    status: 'pending',
+                });
             }
+
+            await batch.commit();
+            toast({ title: 'Deudas Generadas', description: `${monthsToGenerate} meses de deuda han sido agregados.` });
+
         } catch (error) {
-             console.error("Error saving debt: ", error);
-            toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron guardar los cambios.' });
+            console.error("Error generating mass debts: ", error);
+            const errorMessage = error instanceof Error ? error.message : 'No se pudieron guardar las deudas.';
+            toast({ variant: 'destructive', title: 'Error', description: errorMessage });
         } finally {
             setIsDialogOpen(false);
-            setCurrentDebt(emptyDebt);
+            setCurrentMassDebt(emptyMassDebt);
         }
     };
     
-    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleMassDebtInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { id, value, type } = e.target;
-        setCurrentDebt({ 
-            ...currentDebt, 
+        setCurrentMassDebt({ 
+            ...currentMassDebt, 
             [id]: type === 'number' ? (value === '' ? '' : parseFloat(value)) : value
         });
     };
     
-    const handleSelectChange = (field: 'year' | 'month' | 'status') => (value: string) => {
-        setCurrentDebt({ ...currentDebt, [field]: (field === 'status' ? value : parseInt(value)) as any });
+    const handleMassDebtSelectChange = (field: 'fromYear' | 'fromMonth') => (value: string) => {
+        setCurrentMassDebt({ ...currentMassDebt, [field]: parseInt(value) });
     };
+
+    const periodDescription = useMemo(() => {
+        const { fromMonth, fromYear } = currentMassDebt;
+        const startDate = new Date(fromYear, fromMonth - 1, 1);
+        const endDate = new Date();
+        if (startDate > endDate) return "La fecha de inicio no puede ser futura.";
+        const monthsCount = differenceInCalendarMonths(endDate, startDate) + 1;
+        const fromDateStr = months.find(m => m.value === fromMonth)?.label + ` ${fromYear}`;
+        const toDateStr = months.find(m => m.value === endDate.getMonth() + 1)?.label + ` ${endDate.getFullYear()}`;
+        return `Se generarán ${monthsCount} deudas desde ${fromDateStr} hasta ${toDateStr}.`;
+    }, [currentMassDebt.fromMonth, currentMassDebt.fromYear]);
+
 
     if (loading) {
          return (
@@ -308,7 +367,7 @@ export default function DebtManagementPage() {
                         </div>
                         <Button onClick={handleAddDebt}>
                             <PlusCircle className="mr-2 h-4 w-4" />
-                            Agregar Deuda
+                            Agregar Deuda Masiva
                         </Button>
                     </CardHeader>
                     <CardContent>
@@ -360,10 +419,6 @@ export default function DebtManagementPage() {
                                                         </Button>
                                                     </DropdownMenuTrigger>
                                                     <DropdownMenuContent align="end">
-                                                        <DropdownMenuItem onClick={() => handleEditDebt(debt)}>
-                                                            <Edit className="mr-2 h-4 w-4" />
-                                                            Editar
-                                                        </DropdownMenuItem>
                                                         <DropdownMenuItem onClick={() => handleDeleteDebt(debt)} className="text-destructive">
                                                             <Trash2 className="mr-2 h-4 w-4" />
                                                             Eliminar
@@ -383,50 +438,47 @@ export default function DebtManagementPage() {
                 <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                     <DialogContent className="sm:max-w-[480px]">
                         <DialogHeader>
-                            <DialogTitle>{currentDebt.id ? 'Editar Deuda' : 'Agregar Nueva Deuda'}</DialogTitle>
-                            <DialogDescription>Complete la información de la deuda. Haga clic en guardar cuando termine.</DialogDescription>
+                            <DialogTitle>Agregar Deudas Masivas</DialogTitle>
+                            <DialogDescription>
+                                Seleccione la fecha de inicio. El sistema generará todas las deudas desde esa fecha hasta hoy.
+                            </DialogDescription>
                         </DialogHeader>
                         <div className="grid gap-4 py-4">
                              <div className="space-y-2">
                                 <Label htmlFor="description">Descripción</Label>
-                                <Input id="description" value={currentDebt.description} onChange={handleInputChange} placeholder="Ej: Cuota de condominio" />
+                                <Input id="description" value={currentMassDebt.description} onChange={handleMassDebtInputChange} />
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
-                                    <Label htmlFor="year">Año</Label>
-                                    <Select onValueChange={handleSelectChange('year')} value={String(currentDebt.year)}>
+                                    <Label htmlFor="fromYear">Desde el Año</Label>
+                                    <Select onValueChange={handleMassDebtSelectChange('fromYear')} value={String(currentMassDebt.fromYear)}>
                                         <SelectTrigger><SelectValue/></SelectTrigger>
                                         <SelectContent>{years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
                                     </Select>
                                 </div>
                                 <div className="space-y-2">
-                                    <Label htmlFor="month">Mes</Label>
-                                    <Select onValueChange={handleSelectChange('month')} value={String(currentDebt.month)}>
+                                    <Label htmlFor="fromMonth">Desde el Mes</Label>
+                                    <Select onValueChange={handleMassDebtSelectChange('fromMonth')} value={String(currentMassDebt.fromMonth)}>
                                         <SelectTrigger><SelectValue/></SelectTrigger>
                                         <SelectContent>{months.map(m => <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>)}</SelectContent>
                                     </Select>
                                 </div>
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="amount">Monto (Bs.)</Label>
-                                <Input id="amount" type="number" value={currentDebt.amount} onChange={handleInputChange} placeholder="0.00" />
+                                <Label htmlFor="amountUSD">Monto Mensual (USD)</Label>
+                                <Input id="amountUSD" type="number" value={currentMassDebt.amountUSD} onChange={handleMassDebtInputChange} placeholder="25.00" />
                             </div>
-                              {currentDebt.id && (
-                                <div className="space-y-2">
-                                    <Label htmlFor="status">Estado</Label>
-                                    <Select onValueChange={handleSelectChange('status')} value={String(currentDebt.status)}>
-                                        <SelectTrigger id="status"><SelectValue/></SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="pending">Pendiente</SelectItem>
-                                            <SelectItem value="paid">Pagada</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            )}
+                             <Card className="bg-muted/50">
+                                <CardContent className="p-4 text-sm text-muted-foreground">
+                                    <Info className="inline h-4 w-4 mr-2"/>
+                                    {periodDescription}
+                                    <p className="text-xs mt-2">La conversión a Bolívares usará la tasa guardada para cada mes respectivo.</p>
+                                </CardContent>
+                            </Card>
                         </div>
                         <DialogFooter>
                             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
-                            <Button onClick={handleSaveDebt}>Guardar Cambios</Button>
+                            <Button onClick={handleSaveMassDebt}>Generar Deudas</Button>
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
@@ -453,3 +505,5 @@ export default function DebtManagementPage() {
     // Fallback while loading or if view is invalid
     return null;
 }
+
+    
