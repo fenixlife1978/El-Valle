@@ -262,13 +262,8 @@ export default function ReportsPage() {
                 where("beneficiaries", "array-contains-any", ownerPropertiesPayload.map(p => ({ownerId: p.ownerId, house: p.house}))),
                 where("status", "==", "aprobado")
             );
-
-            const debtsQuery = query(
-                collection(db, "debts"),
-                where("ownerId", "==", owner.id),
-                orderBy("year", "asc"),
-                orderBy("month", "asc")
-            );
+            
+            const debtsQuery = query(collection(db, "debts"), where("ownerId", "==", owner.id));
 
             const [paymentSnapshot, debtSnapshot] = await Promise.all([
                 getDocs(paymentsQuery),
@@ -279,7 +274,9 @@ export default function ReportsPage() {
                 .map(doc => doc.data() as Payment)
                 .filter(p => p.beneficiaries.some(b => b.ownerId === owner.id));
 
-            const ownerDebts = debtSnapshot.docs.map(doc => doc.data() as Debt);
+            const ownerDebts = debtSnapshot.docs
+                .map(doc => doc.data() as Debt)
+                .sort((a, b) => a.year - b.year || a.month - b.month);
             
             // Generate PDF
             const doc = new jsPDF();
