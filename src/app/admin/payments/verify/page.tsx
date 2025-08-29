@@ -199,6 +199,7 @@ export default function VerifyPaymentsPage() {
                     if (pendingDebts.length > 0) {
                         for (const debt of pendingDebts) {
                             const debtAmountBs = debt.amountUSD * paymentData.exchangeRate;
+                            // Business Rule: A debt is only paid if the available funds cover the entire amount. No partial payments.
                             if (availableFundsBs >= debtAmountBs) {
                                 availableFundsBs -= debtAmountBs;
                                 const debtRef = doc(db, "debts", debt.id);

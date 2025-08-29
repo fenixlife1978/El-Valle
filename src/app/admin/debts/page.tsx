@@ -272,6 +272,7 @@ export default function DebtManagementPage() {
                     const existingDebtSnapshot = await getDocs(existingDebtQuery);
                     
                     if (existingDebtSnapshot.empty) {
+                        // Business Rule: A debt is only paid if the available funds cover the entire amount. No partial payments.
                         if (currentBalanceBs >= debtAmountBs) {
                             currentBalanceBs -= debtAmountBs;
                             debtData.status = 'paid';
