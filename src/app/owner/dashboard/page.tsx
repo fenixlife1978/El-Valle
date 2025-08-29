@@ -85,7 +85,6 @@ export default function OwnerDashboardPage() {
     const [dashboardStats, setDashboardStats] = useState({
         balanceInFavor: 0,
         totalDebtUSD: 0,
-        condoFeeBs: 0,
         exchangeRate: 0,
     });
     const [solvencyStatus, setSolvencyStatus] = useState<SolvencyStatus>('cargando...');
@@ -105,13 +104,11 @@ export default function OwnerDashboardPage() {
         
         const settingsRef = doc(db, 'config', 'mainSettings');
         const settingsUnsubscribe = onSnapshot(settingsRef, (settingsSnap) => {
-            let condoFeeUSD = 0;
             let activeRate = 0;
             let fetchedCompanyInfo: CompanyInfo | null = null;
 
             if (settingsSnap.exists()) {
                 const settings = settingsSnap.data();
-                condoFeeUSD = settings.condoFee || 0;
                 fetchedCompanyInfo = settings.companyInfo || null;
                 const rates = settings.exchangeRates || [];
                 const activeRateObj = rates.find((r: any) => r.active);
@@ -152,7 +149,7 @@ export default function OwnerDashboardPage() {
                         totalDebtUSD += debt.amountUSD;
                     });
                     
-                    const sortedPendingDebts = pendingDebtsData.sort((a,b) => a.year - b.year || a.month - b.month);
+                    const sortedPendingDebts = pendingDebtsData.sort((a,b) => a.year - b.year || a.month - a.month);
                     setDebts(sortedPendingDebts);
                     
                     if (totalDebtUSD > 0) {
@@ -181,7 +178,6 @@ export default function OwnerDashboardPage() {
                     setDashboardStats({
                         balanceInFavor: ownerData.balance || 0,
                         totalDebtUSD: totalDebtUSD,
-                        condoFeeBs: condoFeeUSD * activeRate,
                         exchangeRate: activeRate,
                     });
                 } else {
@@ -248,26 +244,6 @@ export default function OwnerDashboardPage() {
             hasSelection: selectedDebts.length > 0,
         };
     }, [selectedDebts, debts, dashboardStats]);
-
-  const mainBalance = useMemo(() => {
-    if (dashboardStats.totalDebtUSD > 0) {
-        return {
-            isDebt: true,
-            primaryAmount: dashboardStats.totalDebtUSD,
-            primaryCurrency: 'USD',
-            secondaryAmount: dashboardStats.totalDebtUSD * dashboardStats.exchangeRate,
-            secondaryCurrency: 'Bs.'
-        }
-    } else {
-         return {
-            isDebt: false,
-            primaryAmount: dashboardStats.balanceInFavor,
-            primaryCurrency: 'Bs.',
-            secondaryAmount: dashboardStats.exchangeRate > 0 ? dashboardStats.balanceInFavor / dashboardStats.exchangeRate : 0,
-            secondaryCurrency: 'USD'
-        }
-    }
-  }, [dashboardStats]);
 
   const showReceiptPreview = (payment: Payment) => {
     if (!userData) return;
@@ -355,21 +331,24 @@ export default function OwnerDashboardPage() {
             <p className="text-muted-foreground">Bienvenido, {userData?.name || 'Propietario'}. Aquí está el resumen de tu cuenta.</p>
         </div>
       
-        <Card className={cn(
-            "w-full rounded-2xl shadow-lg border-2",
-            mainBalance.isDebt ? "border-destructive/50" : "border-success/50"
-        )}>
-            <CardHeader className="flex flex-row items-start justify-between p-6">
-                <div>
-                    <CardTitle className="text-sm font-medium text-muted-foreground">{mainBalance.isDebt ? 'Deuda Total Pendiente' : 'Saldo a Favor'}</CardTitle>
-                     <div className="mt-2">
-                        <span className="text-4xl font-bold">{mainBalance.isDebt ? '$' : ''}{mainBalance.primaryAmount.toLocaleString('es-VE', {minimumFractionDigits: 2})} {!mainBalance.isDebt ? ' Bs.' : ''}</span>
-                        <p className="text-sm text-muted-foreground">
-                            ~ {mainBalance.secondaryAmount.toLocaleString('es-VE', {minimumFractionDigits: 2})} {mainBalance.secondaryCurrency}
-                        </p>
+      <Card className="w-full rounded-2xl shadow-lg border-2 border-border/20">
+            <CardHeader className="flex flex-col md:flex-row md:items-start md:justify-between p-6 gap-4">
+                <div className="flex-1">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">Estado de Cuenta</CardTitle>
+                    <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                             <p className="text-xs text-destructive">Deuda Total Pendiente</p>
+                             <p className="text-2xl font-bold text-destructive">${dashboardStats.totalDebtUSD.toLocaleString('en-US', {minimumFractionDigits: 2})}</p>
+                             <p className="text-sm text-muted-foreground">~ Bs. {(dashboardStats.totalDebtUSD * dashboardStats.exchangeRate).toLocaleString('es-VE', {minimumFractionDigits: 2})}</p>
+                        </div>
+                        <div>
+                            <p className="text-xs text-success">Saldo a Favor</p>
+                            <p className="text-2xl font-bold text-success">Bs. {dashboardStats.balanceInFavor.toLocaleString('es-VE', {minimumFractionDigits: 2})}</p>
+                            <p className="text-sm text-muted-foreground">~ ${dashboardStats.exchangeRate > 0 ? (dashboardStats.balanceInFavor / dashboardStats.exchangeRate).toLocaleString('en-US', {minimumFractionDigits: 2}) : '0.00'}</p>
+                        </div>
                     </div>
                 </div>
-                 <div className="flex flex-col items-end">
+                 <div className="flex flex-col items-start md:items-end flex-shrink-0">
                     <Badge variant={statusVariantMap[solvencyStatus]} className="text-base capitalize mb-2">
                         {solvencyStatus === 'moroso' ? <AlertCircle className="mr-2 h-4 w-4"/> : <ShieldCheck className="mr-2 h-4 w-4"/>}
                         {solvencyStatus}

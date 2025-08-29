@@ -253,7 +253,6 @@ export default function DebtManagementPage() {
                 if(!activeRate) throw "No hay una tasa de cambio activa o registrada configurada.";
 
                 let currentBalanceBs = ownerDoc.data().balance || 0;
-                let totalNewDebtInBs = 0;
     
                 for (let i = 0; i < monthsToGenerate; i++) {
                     const debtDate = addMonths(startDate, i);
@@ -285,7 +284,6 @@ export default function DebtManagementPage() {
                             debtData.paymentDate = Timestamp.now();
                         } else {
                             debtData.status = 'pending';
-                            // Note: We don't add to a "total debt" here because balance is not for paying future debts in this transaction.
                         }
                         
                         const debtRef = doc(collection(db, "debts"));
@@ -418,14 +416,10 @@ export default function DebtManagementPage() {
                                             <TableCell>
                                                {owner.balance > 0 ? (
                                                     <Badge variant="success">
-                                                        Bs. {owner.balance.toLocaleString('es-VE', {minimumFractionDigits: 2})} a favor
-                                                    </Badge>
-                                                ) : owner.balance < 0 ? (
-                                                     <Badge variant="destructive">
-                                                        Bs. {Math.abs(owner.balance).toLocaleString('es-VE', {minimumFractionDigits: 2})} en deuda
+                                                        Bs. {owner.balance.toLocaleString('es-VE', {minimumFractionDigits: 2})}
                                                     </Badge>
                                                 ) : (
-                                                    <Badge variant="outline">Solvente</Badge>
+                                                    <Badge variant="outline">Bs. 0,00</Badge>
                                                 )}
                                             </TableCell>
                                             <TableCell className="text-right">

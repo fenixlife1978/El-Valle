@@ -160,7 +160,7 @@ export default function ReportsPage() {
                         activeRateValue = activeRateObj.rate;
                     } else if (rates.length > 0) {
                         // Fallback to the most recent rate if none is active
-                        const sortedRates = [...rates].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                        const sortedRates = [...rates].sort((a:any,b:any) => new Date(b.date).getTime() - new Date(a.date).getTime());
                         activeRateValue = sortedRates[0].rate;
                     }
                     if(activeRateValue === 0) {
@@ -593,21 +593,13 @@ export default function ReportsPage() {
     const showGeneralStatusReportPreview = () => {
         setPreviewData({
            title: 'Reporte General de Estatus',
-           headers: ['Propietario', 'Propiedades', 'Estatus', 'Saldo'],
+           headers: ['Propietario', 'Propiedades', 'Estatus', 'Saldo a Favor (Bs.)'],
            rows: owners.map(o => {
                const properties = (o.properties && o.properties.length > 0)
                    ? o.properties.map(p => `${p.street} - ${p.house}`).join(', ')
                    : (o.house ? `${o.street} - ${o.house}` : 'N/A');
                 
-                let balanceDisplay;
-                if (o.balance > 0) {
-                    balanceDisplay = `Bs. ${o.balance.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`;
-                } else if (o.balance < 0) {
-                    const debtUSD = Math.abs(o.balance) / activeRate;
-                    balanceDisplay = `-$${debtUSD.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
-                } else {
-                    balanceDisplay = 'Bs. 0,00';
-                }
+                const balanceDisplay = `Bs. ${o.balance.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`;
 
                return [o.name, properties, o.status === 'solvente' ? 'Solvente' : 'Moroso', balanceDisplay];
            }),
