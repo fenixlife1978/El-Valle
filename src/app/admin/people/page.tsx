@@ -31,7 +31,7 @@ type Owner = {
     name: string;
     properties: Property[];
     email?: string;
-    balance: number; // Changed from optional to required
+    balance: number;
     role: Role;
     // Legacy fields for backward compatibility
     street?: string;
@@ -47,11 +47,11 @@ type CompanyInfo = {
     logo: string;
 };
 
-const emptyOwner: Omit<Owner, 'id'> = { 
+const emptyOwner: Omit<Owner, 'id' | 'balance'> & { balance: number | string } = { 
     name: '', 
     properties: [{ street: '', house: '' }], 
     email: '', 
-    balance: 0, 
+    balance: '', 
     role: 'propietario' 
 };
 
@@ -72,7 +72,7 @@ export default function PeopleManagementPage() {
     const [loading, setLoading] = useState(true);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
-    const [currentOwner, setCurrentOwner] = useState<Omit<Owner, 'id'> & { id?: string }>(emptyOwner);
+    const [currentOwner, setCurrentOwner] = useState<Omit<Owner, 'id'> & { id?: string; balance: number | string; }>(emptyOwner);
     const [ownerToDelete, setOwnerToDelete] = useState<Owner | null>(null);
     const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
     const importFileRef = useRef<HTMLInputElement>(null);
@@ -557,5 +557,7 @@ export default function PeopleManagementPage() {
 
         </div>
     );
+
+    
 
     
