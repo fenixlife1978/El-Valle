@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -191,7 +192,7 @@ export default function ReportsPage() {
             }
         };
         fetchData();
-    }, [toast, activeRate]);
+    }, [toast]);
 
     const generatePdf = (data: ReportPreviewData) => {
         const doc = new jsPDF();
@@ -328,23 +329,20 @@ export default function ReportsPage() {
             const validOwnerProperties = owner.properties.filter(p => p.street && p.house);
             if (validOwnerProperties.length === 0) {
                 toast({ variant: 'destructive', title: 'Error de Datos', description: 'El propietario seleccionado no tiene propiedades completas registradas.' });
+                setGeneratingReport(false);
                 return;
             }
             
             // Fetch Payments
-            let paymentsQuery;
-            let paymentsSnapshot;
             let allPayments: Payment[] = [];
 
-            // Firestore 'array-contains-any' is limited to 10 items. We may need to chunk it.
-            // For simplicity, we query for all payments for the user. A better approach for scale would be to query per property.
-            const paymentsBaseQuery = query(
+            const paymentsQuery = query(
                 collection(db, "payments"),
                 where("status", "==", "aprobado"),
                 where("beneficiaries", "array-contains-any", validOwnerProperties.map(p => ({ ownerId: owner.id, house: p.house })))
             );
 
-            paymentsSnapshot = await getDocs(paymentsBaseQuery);
+            const paymentsSnapshot = await getDocs(paymentsQuery);
             allPayments = paymentsSnapshot.docs.map(doc => doc.data() as Payment);
 
             let totalPaid = 0;
@@ -548,7 +546,7 @@ export default function ReportsPage() {
             title: 'Reporte de Saldos a Favor',
             headers: ['Propietario', 'Propiedades', 'Saldo a Favor (USD)'],
             rows: ownersWithBalance.map(o => {
-                const properties = (owner.properties && owner.properties.length > 0)
+                const properties = (o.properties && o.properties.length > 0)
                     ? o.properties.map(p => `${p.street} - ${p.house}`).join(', ')
                     : (o.street && o.house ? `${o.street} - ${o.house}` : 'N/A');
                 return [o.name, properties, `$${o.balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}`];
@@ -592,14 +590,22 @@ export default function ReportsPage() {
     const showGeneralStatusReportPreview = () => {
         setPreviewData({
            title: 'Reporte General de Estatus',
-           headers: ['Propietario', 'Propiedades', 'Estatus', 'Saldo (USD)'],
+           headers: ['Propietario', 'Propiedades', 'Estatus', 'Saldo'],
            rows: owners.map(o => {
                const properties = (o.properties && o.properties.length > 0)
                    ? o.properties.map(p => `${p.street} - ${p.house}`).join(', ')
                    : (o.house ? `${o.street} - ${o.house}` : 'N/A');
-               const balanceDisplay = o.balance > 0 
-                   ? `$${o.balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}` 
-                   : (o.balance < 0 ? `-$${Math.abs(o.balance).toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '$0.00');
+                
+                let balanceDisplay;
+                if (o.balance > 0) {
+                    const balanceBs = o.balance * activeRate;
+                    balanceDisplay = `Bs. ${balanceBs.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`;
+                } else if (o.balance < 0) {
+                    balanceDisplay = `-$${Math.abs(o.balance).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+                } else {
+                    balanceDisplay = '$0.00';
+                }
+
                return [o.name, properties, o.status === 'solvente' ? 'Solvente' : 'Moroso', balanceDisplay];
            }),
            filename: 'reporte_general_estatus'
@@ -897,3 +903,5 @@ export default function ReportsPage() {
         </div>
     );
 }
+
+    
