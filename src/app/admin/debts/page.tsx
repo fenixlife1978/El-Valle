@@ -10,13 +10,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PlusCircle, MoreHorizontal, Edit, Trash2, Loader2, Info, ArrowLeft, Search, WalletCards, Calculator, Minus, Equal } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, Edit, Trash2, Loader2, Info, ArrowLeft, Search, WalletCards, Calculator, Minus, Equal, FileDown } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { collection, query, onSnapshot, where, doc, getDoc, writeBatch, updateDoc, deleteDoc, runTransaction, Timestamp, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Badge } from '@/components/ui/badge';
 import { differenceInCalendarMonths, format, addMonths } from 'date-fns';
 import { Checkbox } from '@/components/ui/checkbox';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+
 
 type Owner = {
     id: string;
@@ -46,6 +49,15 @@ type MassDebt = {
     fromYear: number;
 };
 
+type CompanyInfo = {
+    name: string;
+    address: string;
+    rif: string;
+    phone: string;
+    email: string;
+    logo: string;
+};
+
 const emptyMassDebt: MassDebt = { 
     description: 'Cuota de Condominio', 
     amountUSD: 25, 
@@ -69,6 +81,7 @@ export default function DebtManagementPage() {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [activeRate, setActiveRate] = useState(0);
+    const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
 
     const [selectedOwner, setSelectedOwner] = useState<Owner | null>(null);
     const [selectedOwnerDebts, setSelectedOwnerDebts] = useState<Debt[]>([]);
@@ -97,6 +110,7 @@ export default function DebtManagementPage() {
                 let currentActiveRate = 0;
                 if (settingsSnap.exists()) {
                     const settings = settingsSnap.data();
+                    setCompanyInfo(settings.companyInfo as CompanyInfo);
                     const rates = (settings.exchangeRates || []);
                     const activeRateObj = rates.find((r: any) => r.active);
                     if (activeRateObj) {
@@ -373,6 +387,47 @@ export default function DebtManagementPage() {
         return `Se generarán ${monthsCount} deudas desde ${fromDateStr} hasta ${toDateStr}.`;
     }, [currentMassDebt.fromMonth, currentMassDebt.fromYear]);
 
+    const handleExportPDF = () => {
+        const doc = new jsPDF();
+        const pageHeight = doc.internal.pageSize.getHeight();
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const margin = 14;
+
+        if (companyInfo?.logo) {
+            doc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25);
+        }
+        if (companyInfo) {
+            doc.setFontSize(12);
+            doc.setFont('helvetica', 'bold');
+            doc.text(companyInfo.name, margin + 30, margin + 8);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+            doc.text(`${companyInfo.rif} | ${companyInfo.phone}`, margin + 30, margin + 14);
+            doc.text(companyInfo.address, margin + 30, margin + 19);
+        }
+        doc.setFontSize(10);
+        doc.text(`Fecha de Emisión: ${new Date().toLocaleDateString('es-VE')}`, pageWidth - margin, margin + 8, { align: 'right' });
+        doc.setLineWidth(0.5);
+        doc.line(margin, margin + 32, pageWidth - margin, margin + 32);
+        
+        doc.setFontSize(16);
+        doc.setFont('helvetica', 'bold');
+        doc.text("Lista de Deudas de Propietarios", pageWidth / 2, margin + 45, { align: 'center' });
+
+        (doc as any).autoTable({
+            head: [['Propietario', 'Ubicación', 'Deuda Pendiente (Bs.)', 'Saldo a Favor (Bs.)']],
+            body: filteredOwners.map(o => {
+                const debtDisplay = o.pendingDebtUSD > 0 ? `Bs. ${(o.pendingDebtUSD * activeRate).toLocaleString('es-VE', { minimumFractionDigits: 2 })}` : 'Bs. 0,00';
+                const balanceDisplay = o.balance > 0 ? `Bs. ${o.balance.toLocaleString('es-VE', { minimumFractionDigits: 2 })}` : 'Bs. 0,00';
+                return [o.name, `${o.street} - ${o.house}`, debtDisplay, balanceDisplay];
+            }),
+            startY: margin + 55,
+            headStyles: { fillColor: [30, 80, 180] },
+            styles: { cellPadding: 2, fontSize: 8 },
+        });
+
+        doc.save('lista_deudas_propietarios.pdf');
+    };
 
     if (loading) {
          return (
@@ -392,7 +447,20 @@ export default function DebtManagementPage() {
                 </div>
                  <Card>
                     <CardHeader>
-                        <CardTitle>Lista de Propietarios</CardTitle>
+                        <div className="flex justify-between items-center gap-2 flex-wrap">
+                            <CardTitle>Lista de Propietarios</CardTitle>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="outline">
+                                        <FileDown className="mr-2 h-4 w-4" />
+                                        Exportar
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent>
+                                    <DropdownMenuItem onClick={handleExportPDF}>Exportar a PDF</DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        </div>
                         <div className="relative mt-2">
                              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                              <Input 
@@ -473,6 +541,23 @@ export default function DebtManagementPage() {
     if (view === 'detail' && selectedOwner) {
         const pendingDebts = selectedOwnerDebts.filter(d => d.status === 'pending').sort((a,b) => a.year - b.year || a.month - b.month);
         const paidDebts = selectedOwnerDebts.filter(d => d.status === 'paid').sort((a,b) => b.year - a.year || b.month - a.month);
+
+        const paymentCalculator = useMemo(() => {
+            const totalSelectedDebtUSD = pendingDebts
+                .filter(debt => selectedOwnerDebts.some(d => d.id === debt.id))
+                .reduce((sum, debt) => sum + debt.amountUSD, 0);
+                
+            const totalSelectedDebtBs = totalSelectedDebtUSD * activeRate;
+            const totalToPay = Math.max(0, totalSelectedDebtBs - selectedOwner.balance);
+    
+            return {
+                totalSelectedBs: totalSelectedDebtBs,
+                balanceInFavor: selectedOwner.balance,
+                totalToPay: totalToPay,
+                hasSelection: selectedOwnerDebts.filter(d => d.status === 'pending').length > 0,
+            };
+        }, [selectedOwnerDebts, activeRate, selectedOwner]);
+        
 
         return (
             <div className="space-y-8">
