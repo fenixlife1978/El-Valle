@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -318,8 +317,7 @@ export default function ReportsPage() {
         const owner = owners.find(o => o.id === selectedOwner);
         if (!owner) return;
         
-        const validProperties = (owner.properties || []).filter(p => p.street && p.house);
-        if (validProperties.length === 0 && (!owner.street || !owner.house)) {
+        if (!owner.properties || owner.properties.length === 0 || !owner.properties[0].street) {
             toast({ variant: 'destructive', title: 'Error de Datos', description: 'El propietario seleccionado no tiene propiedades completas registradas.' });
             return;
         }
@@ -330,7 +328,7 @@ export default function ReportsPage() {
             const paymentsQuery = query(
                 collection(db, "payments"),
                 where("status", "==", "aprobado"),
-                where("beneficiaries", "array-contains-any", owner.properties)
+                where("beneficiaries", "array-contains-any", owner.properties.filter(p => p.street && p.house))
             );
             
             const paymentsSnapshot = await getDocs(paymentsQuery);
@@ -482,6 +480,7 @@ export default function ReportsPage() {
             if (ownerIds.length === 0) {
                 setPreviewData({ title: 'Reporte de Solvencia', headers: ['PROPIETARIO', 'PROPIEDAD', 'ESTADO', 'PERIODO (DESDE - HASTA)'], rows: [], filename: 'reporte_solvencia' });
                 setIsPreviewOpen(true);
+                setGeneratingReport(false);
                 return;
             }
 
@@ -569,20 +568,22 @@ export default function ReportsPage() {
     };
 
     const showGeneralStatusReportPreview = () => {
-         setPreviewData({
-            title: 'Reporte General de Estatus',
-            headers: ['Propietario', 'Propiedades', 'Estatus', 'Saldo (Bs.)'],
-            rows: owners.map(o => {
-                const properties = (o.properties && o.properties.length > 0)
-                    ? o.properties.map(p => `${p.street} - ${p.house}`).join(', ')
-                    : (o.house ? `${o.street} - ${o.house}` : 'N/A');
-                const balanceBs = o.balance * activeRate;
-                return [o.name, properties, o.status === 'solvente' ? 'Solvente' : 'Moroso', balanceBs.toLocaleString('es-VE', { minimumFractionDigits: 2 })]
-            }),
-            filename: 'reporte_general_estatus'
-        });
-        setIsPreviewOpen(true);
-    };
+        setPreviewData({
+           title: 'Reporte General de Estatus',
+           headers: ['Propietario', 'Propiedades', 'Estatus', 'Saldo (USD)'],
+           rows: owners.map(o => {
+               const properties = (o.properties && o.properties.length > 0)
+                   ? o.properties.map(p => `${p.street} - ${p.house}`).join(', ')
+                   : (o.house ? `${o.street} - ${o.house}` : 'N/A');
+               const balanceDisplay = o.status === 'moroso' 
+                   ? `-$${Math.abs(o.balance).toLocaleString('en-US', { minimumFractionDigits: 2 })}` 
+                   : `$${o.balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+               return [o.name, properties, o.status === 'solvente' ? 'Solvente' : 'Moroso', balanceDisplay];
+           }),
+           filename: 'reporte_general_estatus'
+       });
+       setIsPreviewOpen(true);
+   };
 
 
     if (loading && !isPreviewOpen) {
@@ -850,6 +851,4 @@ export default function ReportsPage() {
         </div>
     );
 }
-
-
 
