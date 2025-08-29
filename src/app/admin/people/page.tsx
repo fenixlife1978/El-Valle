@@ -31,7 +31,7 @@ type Owner = {
     name: string;
     properties: Property[];
     email?: string;
-    balance?: number;
+    balance: number; // Changed from optional to required
     role: Role;
     // Legacy fields for backward compatibility
     street?: string;
@@ -83,7 +83,9 @@ export default function PeopleManagementPage() {
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const ownersData: Owner[] = [];
             snapshot.forEach((doc) => {
-                ownersData.push({ id: doc.id, ...doc.data() } as Owner);
+                const data = doc.data();
+                // Ensure balance is always a number, default to 0
+                ownersData.push({ id: doc.id, ...data, balance: data.balance ?? 0 } as Owner);
             });
             
             // Custom sort logic
@@ -169,10 +171,11 @@ export default function PeopleManagementPage() {
         try {
             const { id, street, house, ...ownerData } = currentOwner;
             
-            // Ensure balance is not undefined before saving
+            // Ensure balance is a correctly formatted number before saving
+            const balanceValue = parseFloat(String(ownerData.balance));
             const dataToSave = {
                 ...ownerData,
-                balance: ownerData.balance === undefined || isNaN(ownerData.balance) ? 0 : ownerData.balance,
+                balance: isNaN(balanceValue) ? 0 : balanceValue,
             };
 
             if (id) {
@@ -196,7 +199,7 @@ export default function PeopleManagementPage() {
         const { id, value, type } = e.target;
         setCurrentOwner({ 
             ...currentOwner, 
-            [id]: type === 'number' ? (value === '' ? undefined : parseFloat(value)) : value
+            [id]: type === 'number' ? (value === '' ? '' : parseFloat(value)) : value
         });
     };
 
@@ -526,7 +529,7 @@ export default function PeopleManagementPage() {
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="balance">Saldo a Favor (Bs.)</Label>
-                                <Input id="balance" type="number" value={currentOwner.balance ?? ''} onChange={handleInputChange} placeholder="0.00" />
+                                <Input id="balance" type="number" value={currentOwner.balance} onChange={handleInputChange} placeholder="0.00" />
                             </div>
                         </div>
                     </div>
@@ -554,4 +557,5 @@ export default function PeopleManagementPage() {
 
         </div>
     );
-}
+
+    
