@@ -47,7 +47,9 @@ export default function AdminDashboardPage() {
         snapshot.forEach(doc => {
             const payment = doc.data();
             const paymentDate = new Date(payment.paymentDate.seconds * 1000);
-            if (payment.status === 'aprobado' && paymentDate.getMonth() === now.getMonth() && paymentDate.getFullYear() === now.getFullYear()) {
+            
+            // Exclude advance payments from monthly totals
+            if (payment.status === 'aprobado' && payment.paymentMethod !== 'adelanto' && paymentDate.getMonth() === now.getMonth() && paymentDate.getFullYear() === now.getFullYear()) {
                 const amountBs = Number(payment.totalAmount);
                 monthTotalBs += amountBs;
                 if (payment.exchangeRate && payment.exchangeRate > 0) {
