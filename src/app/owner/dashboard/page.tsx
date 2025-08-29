@@ -6,13 +6,14 @@ import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/componen
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Landmark, AlertCircle, Building, Eye, Printer, Megaphone, Loader2, Wallet, FileText, CalendarClock, Scale, Calculator, Minus, Equal, ShieldCheck } from "lucide-react";
+import { Landmark, AlertCircle, Building, Eye, Printer, Megaphone, Loader2, Wallet, FileText, CalendarClock, Scale, Calculator, Minus, Equal, ShieldCheck, TrendingUp, TrendingDown, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getCommunityUpdates } from '@/ai/flows/community-updates';
 import { auth, db } from '@/lib/firebase';
 import { doc, onSnapshot, collection, query, where, orderBy, limit, getDoc, getDocs } from 'firebase/firestore';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { cn } from '@/lib/utils';
 
 type Payment = {
     id: string;
@@ -40,12 +41,11 @@ type Debt = {
     status: 'pending' | 'paid';
 };
 
-type SolvencyStatus = 'solvente' | 'moroso' | 'saldo a favor' | 'cargando...';
+type SolvencyStatus = 'solvente' | 'moroso' | 'cargando...';
 
-const statusVariantMap: { [key in SolvencyStatus]: 'success' | 'destructive' | 'default' | 'outline' } = {
+const statusVariantMap: { [key in SolvencyStatus]: 'success' | 'destructive' | 'outline' } = {
   'solvente': 'success',
   'moroso': 'destructive',
-  'saldo a favor': 'success', // Changed to success for consistency
   'cargando...': 'outline',
 };
 
@@ -63,14 +63,12 @@ export default function OwnerDashboardPage() {
     const [debts, setDebts] = useState<Debt[]>([]);
     const [dashboardStats, setDashboardStats] = useState({
         balanceInFavor: 0,
-        totalDebt: 0,
+        totalDebtUSD: 0,
         condoFeeBs: 0,
         exchangeRate: 0,
-        dueDate: '',
-        isOverdue: false,
     });
     const [solvencyStatus, setSolvencyStatus] = useState<SolvencyStatus>('cargando...');
-    const [solvencyUntil, setSolvencyUntil] = useState('');
+    const [solvencyPeriod, setSolvencyPeriod] = useState('');
     const [communityUpdates, setCommunityUpdates] = useState<string[]>([]);
     const [selectedDebts, setSelectedDebts] = useState<string[]>([]);
     
@@ -79,8 +77,6 @@ export default function OwnerDashboardPage() {
     useEffect(() => {
         if (!userId) return;
 
-        // Auditor Note: This combined listener ensures that any change in settings (like the exchange rate)
-        // immediately triggers a recalculation of the user's data and dashboard stats.
         let userUnsubscribe: () => void;
         const settingsUnsubscribe = onSnapshot(doc(db, 'config', 'mainSettings'), (settingsSnap) => {
             let condoFeeUSD = 0;
@@ -127,44 +123,37 @@ export default function OwnerDashboardPage() {
                         totalDebtUSD += debt.amountUSD;
                     });
                     
-                    setDebts(pendingDebtsData.sort((a,b) => b.year - a.year || b.month - a.month));
-                    // Auditor Note: Real-time calculation. The debt in Bs is always calculated using the most recent active rate.
-                    const totalDebtBs = totalDebtUSD * activeRate;
-
-                    if (totalDebtBs > 0) {
+                    const sortedPendingDebts = pendingDebtsData.sort((a,b) => a.year - b.year || a.month - b.month);
+                    setDebts(sortedPendingDebts);
+                    
+                    if (totalDebtUSD > 0) {
                         setSolvencyStatus('moroso');
-                        setSolvencyUntil('');
-                    } else {
-                         if (ownerData.balance > 0) {
-                            setSolvencyStatus('saldo a favor');
-                        } else {
-                            setSolvencyStatus('solvente');
+                        const oldestDebt = sortedPendingDebts[0];
+                        if (oldestDebt) {
+                             const monthLabel = months.find(m => m.value === oldestDebt.month)?.label || '';
+                             setSolvencyPeriod(`Desde ${monthLabel} ${oldestDebt.year}`);
                         }
-                        
+                    } else {
+                        setSolvencyStatus('solvente');
                         const allDebtsQuery = query(collection(db, "debts"), where("ownerId", "==", userId), where("status", "==", "paid"), orderBy("year", "desc"), orderBy("month", "desc"), limit(1));
                         const lastPaidDebtSnapshot = await getDocs(allDebtsQuery);
 
                         if (!lastPaidDebtSnapshot.empty) {
                             const lastPaidDebt = lastPaidDebtSnapshot.docs[0].data();
                             const monthLabel = months.find(m => m.value === lastPaidDebt.month)?.label || '';
-                            setSolvencyUntil(`Solvente hasta ${monthLabel} ${lastPaidDebt.year}`);
+                            setSolvencyPeriod(`Hasta ${monthLabel} ${lastPaidDebt.year}`);
                         } else {
                             const now = new Date();
-                            const monthLabel = months.find(m => m.value === now.getMonth())?.label || '';
-                             setSolvencyUntil(`Solvente hasta ${monthLabel} ${now.getFullYear()}`);
+                             const monthLabel = months.find(m => m.value === now.getMonth())?.label || '';
+                             setSolvencyPeriod(`Hasta ${monthLabel} ${now.getFullYear()}`);
                         }
                     }
                     
-                    const now = new Date();
-                    const dueDate = new Date(now.getFullYear(), now.getMonth(), 5);
-
                     setDashboardStats({
-                        balanceInFavor: (ownerData.balance || 0), // Balance is now in Bs.
-                        totalDebt: totalDebtBs,
+                        balanceInFavor: ownerData.balance || 0,
+                        totalDebtUSD: totalDebtUSD,
                         condoFeeBs: condoFeeUSD * activeRate,
                         exchangeRate: activeRate,
-                        dueDate: format(dueDate, "dd 'de' MMMM", { locale: es }),
-                        isOverdue: now.getDate() > 5,
                     });
                 } else {
                     console.log("No such user document!");
@@ -226,71 +215,69 @@ export default function OwnerDashboardPage() {
         };
     }, [selectedDebts, debts, dashboardStats]);
 
+  const mainBalance = useMemo(() => {
+    if (dashboardStats.totalDebtUSD > 0) {
+        return {
+            isDebt: true,
+            primaryAmount: dashboardStats.totalDebtUSD,
+            primaryCurrency: 'USD',
+            secondaryAmount: dashboardStats.totalDebtUSD * dashboardStats.exchangeRate,
+            secondaryCurrency: 'Bs.'
+        }
+    } else {
+         return {
+            isDebt: false,
+            primaryAmount: dashboardStats.balanceInFavor,
+            primaryCurrency: 'Bs.',
+            secondaryAmount: dashboardStats.exchangeRate > 0 ? dashboardStats.balanceInFavor / dashboardStats.exchangeRate : 0,
+            secondaryCurrency: 'USD'
+        }
+    }
+  }, [dashboardStats]);
+
+  if (loading) {
+    return (
+        <div className="flex justify-center items-center h-full">
+            <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
-      <h1 className="text-3xl font-bold font-headline">Panel de Propietario</h1>
+        <div>
+            <h1 className="text-3xl font-bold font-headline">Panel de Propietario</h1>
+            <p className="text-muted-foreground">Bienvenido, {userData?.name || 'Propietario'}. Aquí está el resumen de tu cuenta.</p>
+        </div>
       
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Estado de Cuenta</CardTitle>
-            <Scale className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            {loading ? <Loader2 className="h-6 w-6 animate-spin"/> : 
-              <div>
-                <Badge variant={statusVariantMap[solvencyStatus]} className="text-lg capitalize">
-                  {solvencyStatus}
-                </Badge>
-                {solvencyUntil && (
-                  <p className="text-sm font-semibold text-muted-foreground mt-2 flex items-center gap-2">
-                     <ShieldCheck className="h-4 w-4 text-green-600"/> {solvencyUntil}
-                  </p>
-                )}
-              </div>
-            }
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Saldo a Favor</CardTitle>
-            <Wallet className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            {loading ? <Loader2 className="h-6 w-6 animate-spin"/> : <div className="text-2xl font-bold">Bs. {dashboardStats.balanceInFavor.toLocaleString('es-VE', {minimumFractionDigits: 2})}</div>}
-            <p className="text-xs text-muted-foreground">Balance positivo en tu cuenta.</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Deuda Total Pendiente</CardTitle>
-            <FileText className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            {loading ? <Loader2 className="h-6 w-6 animate-spin"/> : <div className="text-2xl font-bold">Bs. {dashboardStats.totalDebt.toLocaleString('es-VE', {minimumFractionDigits: 2})}</div>}
-             <p className="text-xs text-muted-foreground">Suma de todas las cuotas pendientes.</p>
-          </CardContent>
-        </Card>
-        <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Cuota del Mes</CardTitle>
-                <CalendarClock className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-                {loading ? <Loader2 className="h-6 w-6 animate-spin"/> : (
-                    <div>
-                        <div className="text-2xl font-bold">Bs. {dashboardStats.condoFeeBs.toLocaleString('es-VE', {minimumFractionDigits: 2})}</div>
-                        <p className="text-xs text-muted-foreground">
-                            Tasa de cambio: Bs. {dashboardStats.exchangeRate.toLocaleString('es-VE', {minimumFractionDigits: 2})}
+        <Card className={cn(
+            "w-full rounded-2xl shadow-lg border-2",
+            mainBalance.isDebt ? "border-destructive/50" : "border-success/50"
+        )}>
+            <CardHeader className="flex flex-row items-start justify-between p-6">
+                <div>
+                    <CardTitle className="text-sm font-medium text-muted-foreground">{mainBalance.isDebt ? 'Deuda Total Pendiente' : 'Saldo a Favor'}</CardTitle>
+                     <div className="mt-2">
+                        <span className="text-4xl font-bold">{mainBalance.isDebt ? '$' : ''}{mainBalance.primaryAmount.toLocaleString('es-VE', {minimumFractionDigits: 2})} {!mainBalance.isDebt ? ' Bs.' : ''}</span>
+                        <p className="text-sm text-muted-foreground">
+                            ~ {mainBalance.secondaryAmount.toLocaleString('es-VE', {minimumFractionDigits: 2})} {mainBalance.secondaryCurrency}
                         </p>
-                        <div className={`mt-2 text-sm font-semibold ${dashboardStats.isOverdue ? 'text-destructive' : 'text-green-600'}`}>
-                            {dashboardStats.isOverdue ? `Vencida. (Venció el ${dashboardStats.dueDate})` : `Vence el ${dashboardStats.dueDate}`}
-                        </div>
                     </div>
-                )}
+                </div>
+                 <div className="flex flex-col items-end">
+                    <Badge variant={statusVariantMap[solvencyStatus]} className="text-base capitalize mb-2">
+                        {solvencyStatus === 'moroso' ? <AlertCircle className="mr-2 h-4 w-4"/> : <ShieldCheck className="mr-2 h-4 w-4"/>}
+                        {solvencyStatus}
+                    </Badge>
+                     {solvencyPeriod && <p className="text-sm font-semibold text-muted-foreground">{solvencyPeriod}</p>}
+                 </div>
+            </CardHeader>
+            <CardContent className="px-6 pb-6">
+                 <div className="text-xs text-muted-foreground">
+                    Tasa de cambio del día: Bs. {dashboardStats.exchangeRate.toLocaleString('es-VE', {minimumFractionDigits: 2})} por USD
+                 </div>
             </CardContent>
         </Card>
-      </div>
 
        <div className="grid gap-8 lg:grid-cols-1">
           <div>
@@ -398,5 +385,6 @@ export default function OwnerDashboardPage() {
     </div>
   );
 }
+
 
     
