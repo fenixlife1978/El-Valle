@@ -133,7 +133,7 @@ export default function LoginPage() {
       <Button variant="ghost" onClick={handleBack} className="mb-4">
         <ArrowLeft className="mr-2 h-4 w-4" /> Volver
       </Button>
-      <h2 className="text-2xl font-bold text-center text-primary-foreground mb-6">
+      <h2 className="text-2xl font-bold text-center text-foreground mb-6">
         Accede a tu panel de {selectedRole === "owner" ? "Propietario" : "Administrador"}
       </h2>
       <form onSubmit={handleLogin}>
