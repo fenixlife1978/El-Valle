@@ -198,6 +198,26 @@ export default function DebtManagementPage() {
         return () => unsubscribe();
     }, [view, selectedOwner]);
     
+    // Moved from detail view to top level
+    const paymentCalculator = useMemo(() => {
+        if (!selectedOwner) return { totalSelectedBs: 0, balanceInFavor: 0, totalToPay: 0, hasSelection: false };
+
+        const pendingDebts = selectedOwnerDebts.filter(d => d.status === 'pending');
+        const totalSelectedDebtUSD = pendingDebts
+            .filter(debt => selectedOwnerDebts.some(d => d.id === debt.id)) // This logic seems redundant, all pendingDebts are in selectedOwnerDebts
+            .reduce((sum, debt) => sum + debt.amountUSD, 0);
+            
+        const totalSelectedDebtBs = totalSelectedDebtUSD * activeRate;
+        const totalToPay = Math.max(0, totalSelectedDebtBs - selectedOwner.balance);
+
+        return {
+            totalSelectedBs: totalSelectedDebtBs,
+            balanceInFavor: selectedOwner.balance,
+            totalToPay: totalToPay,
+            hasSelection: pendingDebts.length > 0,
+        };
+    }, [selectedOwnerDebts, activeRate, selectedOwner]);
+
 
     const handleManageOwnerDebts = (owner: Owner) => {
         setSelectedOwner(owner);
@@ -541,24 +561,7 @@ export default function DebtManagementPage() {
     if (view === 'detail' && selectedOwner) {
         const pendingDebts = selectedOwnerDebts.filter(d => d.status === 'pending').sort((a,b) => a.year - b.year || a.month - b.month);
         const paidDebts = selectedOwnerDebts.filter(d => d.status === 'paid').sort((a,b) => b.year - a.year || b.month - a.month);
-
-        const paymentCalculator = useMemo(() => {
-            const totalSelectedDebtUSD = pendingDebts
-                .filter(debt => selectedOwnerDebts.some(d => d.id === debt.id))
-                .reduce((sum, debt) => sum + debt.amountUSD, 0);
-                
-            const totalSelectedDebtBs = totalSelectedDebtUSD * activeRate;
-            const totalToPay = Math.max(0, totalSelectedDebtBs - selectedOwner.balance);
-    
-            return {
-                totalSelectedBs: totalSelectedDebtBs,
-                balanceInFavor: selectedOwner.balance,
-                totalToPay: totalToPay,
-                hasSelection: selectedOwnerDebts.filter(d => d.status === 'pending').length > 0,
-            };
-        }, [selectedOwnerDebts, activeRate, selectedOwner]);
         
-
         return (
             <div className="space-y-8">
                  <Button variant="outline" onClick={() => setView('list')}>
@@ -649,6 +652,26 @@ export default function DebtManagementPage() {
                             </TableBody>
                         </Table>
                     </CardContent>
+                    <CardFooter className="p-4 bg-muted/50 border-t">
+                        {paymentCalculator.hasSelection && (
+                        <div className="w-full max-w-md ml-auto space-y-2">
+                             <h3 className="text-lg font-semibold flex items-center"><Calculator className="mr-2 h-5 w-5"/> Calculadora de Pago</h3>
+                             <div className="flex justify-between items-center">
+                                 <span className="text-muted-foreground">Total Seleccionado:</span>
+                                 <span className="font-medium">Bs. {paymentCalculator.totalSelectedBs.toLocaleString('es-VE', {minimumFractionDigits: 2})}</span>
+                             </div>
+                             <div className="flex justify-between items-center text-sm">
+                                 <span className="text-muted-foreground flex items-center"><Minus className="mr-2 h-4 w-4"/> Saldo a Favor:</span>
+                                 <span className="font-medium">Bs. {paymentCalculator.balanceInFavor.toLocaleString('es-VE', {minimumFractionDigits: 2})}</span>
+                             </div>
+                             <hr className="my-1"/>
+                             <div className="flex justify-between items-center text-lg">
+                                 <span className="font-bold flex items-center"><Equal className="mr-2 h-4 w-4"/> TOTAL A PAGAR:</span>
+                                 <span className="font-bold text-primary">Bs. {paymentCalculator.totalToPay.toLocaleString('es-VE', {minimumFractionDigits: 2})}</span>
+                             </div>
+                        </div>
+                        )}
+                    </CardFooter>
                 </Card>
 
                  {/* Mass Debt Dialog */}
@@ -760,5 +783,3 @@ export default function DebtManagementPage() {
     // Fallback while loading or if view is invalid
     return null;
 }
-
-    
