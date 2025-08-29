@@ -10,10 +10,14 @@ import { Landmark, AlertCircle, Building, Eye, Printer, Megaphone, Loader2, Wall
 import { Button } from "@/components/ui/button";
 import { getCommunityUpdates } from '@/ai/flows/community-updates';
 import { auth, db } from '@/lib/firebase';
-import { doc, onSnapshot, collection, query, where, orderBy, limit, getDoc, getDocs } from 'firebase/firestore';
+import { doc, onSnapshot, collection, query, where, orderBy, limit, getDoc, getDocs, Timestamp } from 'firebase/firestore';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+
 
 type Payment = {
     id: string;
@@ -41,6 +45,22 @@ type Debt = {
     description: string;
     status: 'pending' | 'paid';
 };
+
+type CompanyInfo = {
+    name: string;
+    address: string;
+    rif: string;
+    phone: string;
+    email: string;
+    logo: string;
+};
+
+type ReceiptData = {
+    payment: Payment;
+    ownerName: string;
+    ownerUnit: string;
+} | null;
+
 
 type SolvencyStatus = 'solvente' | 'moroso' | 'cargando...';
 
@@ -72,6 +92,9 @@ export default function OwnerDashboardPage() {
     const [solvencyPeriod, setSolvencyPeriod] = useState('');
     const [communityUpdates, setCommunityUpdates] = useState<string[]>([]);
     const [selectedDebts, setSelectedDebts] = useState<string[]>([]);
+    const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
+    const [receiptData, setReceiptData] = useState<ReceiptData>(null);
+    const [isReceiptPreviewOpen, setIsReceiptPreviewOpen] = useState(false);
     
     const userId = "088a5367-a75b-4355-b0b0-3162b2b64b1f"; 
 
@@ -79,13 +102,17 @@ export default function OwnerDashboardPage() {
         if (!userId) return;
 
         let userUnsubscribe: () => void;
-        const settingsUnsubscribe = onSnapshot(doc(db, 'config', 'mainSettings'), (settingsSnap) => {
+        
+        const settingsRef = doc(db, 'config', 'mainSettings');
+        const settingsUnsubscribe = onSnapshot(settingsRef, (settingsSnap) => {
             let condoFeeUSD = 0;
             let activeRate = 0;
+            let fetchedCompanyInfo: CompanyInfo | null = null;
 
             if (settingsSnap.exists()) {
                 const settings = settingsSnap.data();
                 condoFeeUSD = settings.condoFee || 0;
+                fetchedCompanyInfo = settings.companyInfo || null;
                 const rates = settings.exchangeRates || [];
                 const activeRateObj = rates.find((r: any) => r.active);
                 if (activeRateObj) {
@@ -97,6 +124,7 @@ export default function OwnerDashboardPage() {
             } else {
                 console.error("Settings document not found!");
             }
+            setCompanyInfo(fetchedCompanyInfo);
             
             if (userUnsubscribe) userUnsubscribe();
 
@@ -241,6 +269,77 @@ export default function OwnerDashboardPage() {
     }
   }, [dashboardStats]);
 
+  const showReceiptPreview = (payment: Payment) => {
+    if (!userData) return;
+    setReceiptData({ 
+        payment, 
+        ownerName: userData.name, 
+        ownerUnit: userData.unit 
+    });
+    setIsReceiptPreviewOpen(true);
+  }
+
+   const handleDownloadPdf = () => {
+    if (!receiptData) return;
+    const { payment, ownerName, ownerUnit } = receiptData;
+    const doc = new jsPDF();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 14;
+
+    if (companyInfo?.logo) {
+        try {
+            doc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25);
+        } catch(e) {
+            console.error("Error adding logo to PDF", e);
+        }
+    }
+    
+    if (companyInfo) {
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold');
+        doc.text(companyInfo.name, margin + 30, margin + 8);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.text(`${companyInfo.rif} | ${companyInfo.phone}`, margin + 30, margin + 14);
+        doc.text(companyInfo.address, margin + 30, margin + 19);
+        doc.text(companyInfo.email, margin + 30, margin + 24);
+    }
+    
+    doc.setFontSize(10);
+    doc.text(`Fecha de Emisión:`, pageWidth - margin, margin + 8, { align: 'right' });
+    doc.setFont('helvetica', 'bold');
+    doc.text(new Date().toLocaleDateString('es-VE'), pageWidth - margin, margin + 13, { align: 'right' });
+    
+    doc.setLineWidth(0.5);
+    doc.line(margin, margin + 32, pageWidth - margin, margin + 32);
+
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Recibo de Pago de Condominio', pageWidth / 2, margin + 45, { align: 'center' });
+
+    (doc as any).autoTable({
+        startY: margin + 55,
+        head: [['Concepto', 'Detalle']],
+        body: [
+            ['ID de Transacción', payment.id],
+            ['Propietario', ownerName],
+            ['Unidad', ownerUnit],
+            ['Fecha de Pago', new Date(payment.date).toLocaleDateString('es-VE')],
+            ['Monto Pagado', `Bs. ${payment.amount.toFixed(2)}`],
+            ['Banco Emisor', payment.bank],
+            ['Tipo de Pago', payment.type],
+            ['Referencia', payment.ref],
+            ['Estado del Pago', payment.status.charAt(0).toUpperCase() + payment.status.slice(1)],
+        ],
+        theme: 'striped',
+        headStyles: { fillColor: [30, 80, 180] },
+    });
+
+    doc.save(`recibo-${ownerUnit.replace(/\s/g, '_')}-${payment.id.substring(0,5)}.pdf`);
+    setIsReceiptPreviewOpen(false);
+  };
+
   if (loading) {
     return (
         <div className="flex justify-center items-center h-full">
@@ -376,10 +475,17 @@ export default function OwnerDashboardPage() {
                           </Badge>
                         </TableCell>
                          <TableCell className="text-right">
-                            <Button variant="ghost" size="icon">
-                                <Eye className="h-4 w-4"/>
-                                <span className="sr-only">Ver Comprobante</span>
-                            </Button>
+                            {payment.status === 'aprobado' ? (
+                                <Button variant="ghost" size="icon" onClick={() => showReceiptPreview(payment)}>
+                                    <FileText className="h-4 w-4"/>
+                                    <span className="sr-only">Ver Recibo</span>
+                                </Button>
+                            ) : (
+                                <Button variant="ghost" size="icon" disabled>
+                                    <FileText className="h-4 w-4 text-muted-foreground/50"/>
+                                    <span className="sr-only">Ver Recibo (No disponible)</span>
+                                </Button>
+                            )}
                         </TableCell>
                     </TableRow>
                     )))}
@@ -388,6 +494,85 @@ export default function OwnerDashboardPage() {
             </Card>
         </div>
       </div>
+      
+       {/* Receipt Preview Dialog */}
+        <Dialog open={isReceiptPreviewOpen} onOpenChange={setIsReceiptPreviewOpen}>
+            <DialogContent className="sm:max-w-2xl">
+                <DialogHeader>
+                    <DialogTitle>Vista Previa del Recibo</DialogTitle>
+                    <DialogDescription>
+                        Revise el recibo antes de descargarlo.
+                    </DialogDescription>
+                </DialogHeader>
+                {receiptData && (
+                     <div className="border rounded-lg p-6 my-4 bg-white text-black font-sans">
+                        <header className="flex justify-between items-start pb-4 border-b">
+                            <div className="flex items-center gap-4">
+                                {companyInfo?.logo && <img src={companyInfo.logo} alt="Logo" className="w-20 h-20 object-contain"/>}
+                                <div>
+                                    <h3 className="font-bold text-lg">{companyInfo?.name}</h3>
+                                    <p className="text-xs">{companyInfo?.rif}</p>
+                                    <p className="text-xs">{companyInfo?.address}</p>
+                                    <p className="text-xs">{companyInfo?.phone} | {companyInfo?.email}</p>
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <h4 className="font-bold text-xl">RECIBO DE PAGO</h4>
+                                <p className="text-sm">ID: {receiptData.payment.id}</p>
+                                <p className="text-sm">Fecha: {new Date().toLocaleDateString('es-VE')}</p>
+                            </div>
+                        </header>
+                        <section className="mt-6">
+                            <h5 className="font-bold mb-2">Detalles del Propietario</h5>
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                                <p><span className="font-semibold">Nombre:</span> {receiptData.ownerName}</p>
+                                <p><span className="font-semibold">Unidad:</span> {receiptData.ownerUnit}</p>
+                            </div>
+                        </section>
+                         <section className="mt-6">
+                            <h5 className="font-bold mb-2">Detalles del Pago</h5>
+                            <Table className="text-sm">
+                                <TableHeader>
+                                    <TableRow className="bg-muted/50">
+                                        <TableHead className="text-black">Concepto</TableHead>
+                                        <TableHead className="text-right text-black">Monto</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    <TableRow>
+                                        <TableCell>
+                                            <p>Pago de Condominio</p>
+                                            <p className="text-xs text-muted-foreground">
+                                                Ref: {receiptData.payment.ref} | {receiptData.payment.bank} | {new Date(receiptData.payment.date).toLocaleDateString('es-VE')}
+                                            </p>
+                                        </TableCell>
+                                        <TableCell className="text-right font-semibold">Bs. {receiptData.payment.amount.toLocaleString('es-VE', {minimumFractionDigits: 2})}</TableCell>
+                                    </TableRow>
+                                </TableBody>
+                            </Table>
+                            <div className="flex justify-end mt-4">
+                                <div className="w-64">
+                                    <div className="flex justify-between text-lg font-bold border-t-2 pt-2">
+                                        <span>TOTAL PAGADO:</span>
+                                        <span>Bs. {receiptData.payment.amount.toLocaleString('es-VE', {minimumFractionDigits: 2})}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+                        <footer className="mt-8 text-center text-xs text-muted-foreground">
+                            <p>Este es un recibo generado por el sistema. Válido sin firma ni sello.</p>
+                            <p>Gracias por su pago.</p>
+                        </footer>
+                    </div>
+                )}
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => setIsReceiptPreviewOpen(false)}>Cerrar</Button>
+                    <Button onClick={handleDownloadPdf}>
+                        <Printer className="mr-2 h-4 w-4"/> Descargar PDF
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     </div>
   );
 }

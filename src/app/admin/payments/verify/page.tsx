@@ -7,6 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { CheckCircle2, XCircle, MoreHorizontal, Eye, Printer, Filter, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import jsPDF from 'jspdf';
@@ -56,6 +57,12 @@ type CompanyInfo = {
     logo: string;
 };
 
+type ReceiptData = {
+    payment: FullPayment;
+    ownerName: string;
+    ownerUnit: string;
+} | null;
+
 const statusVariantMap: { [key in PaymentStatus]: 'warning' | 'success' | 'destructive' } = {
   pendiente: 'warning',
   aprobado: 'success',
@@ -73,6 +80,8 @@ export default function VerifyPaymentsPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<PaymentStatus | 'todos'>('todos');
   const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
+  const [receiptData, setReceiptData] = useState<ReceiptData>(null);
+  const [isReceiptPreviewOpen, setIsReceiptPreviewOpen] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -236,13 +245,7 @@ export default function VerifyPaymentsPage() {
     }
   };
 
-  const generateReceipt = async (payment: FullPayment) => {
-    const doc = new jsPDF();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const margin = 14;
-
-    // Fetch the primary owner's name for the receipt
+  const showReceiptPreview = async (payment: FullPayment) => {
     let ownerName = 'No disponible';
     let ownerUnit = 'N/A';
     
@@ -257,7 +260,17 @@ export default function VerifyPaymentsPage() {
             ownerUnit = property ? `${property.street} - ${property.house}` : 'N/A';
         }
     }
+    setReceiptData({ payment, ownerName, ownerUnit });
+    setIsReceiptPreviewOpen(true);
+  }
 
+  const handleDownloadPdf = () => {
+    if (!receiptData) return;
+    const { payment, ownerName, ownerUnit } = receiptData;
+    const doc = new jsPDF();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 14;
 
     if (companyInfo?.logo) {
         try {
@@ -308,7 +321,8 @@ export default function VerifyPaymentsPage() {
         headStyles: { fillColor: [30, 80, 180] },
     });
 
-    doc.save(`recibo-${ownerUnit}-${payment.id.substring(0,5)}.pdf`);
+    doc.save(`recibo-${ownerUnit.replace(/\s/g, '_')}-${payment.id.substring(0,5)}.pdf`);
+    setIsReceiptPreviewOpen(false);
   };
 
   const filteredPayments = payments.filter(p => filter === 'todos' || p.status === filter);
@@ -405,7 +419,7 @@ export default function VerifyPaymentsPage() {
                                                 Ver Comprobante
                                             </DropdownMenuItem>
                                             {payment.status === 'aprobado' && (
-                                                <DropdownMenuItem onClick={() => generateReceipt(payment)}>
+                                                <DropdownMenuItem onClick={() => showReceiptPreview(payment)}>
                                                     <Printer className="mr-2 h-4 w-4" />
                                                     Generar Recibo
                                                 </DropdownMenuItem>
@@ -420,6 +434,87 @@ export default function VerifyPaymentsPage() {
                 </Table>
             </CardContent>
         </Card>
+
+        {/* Receipt Preview Dialog */}
+        <Dialog open={isReceiptPreviewOpen} onOpenChange={setIsReceiptPreviewOpen}>
+            <DialogContent className="sm:max-w-2xl">
+                <DialogHeader>
+                    <DialogTitle>Vista Previa del Recibo</DialogTitle>
+                    <DialogDescription>
+                        Revise el recibo antes de descargarlo.
+                    </DialogDescription>
+                </DialogHeader>
+                {receiptData && (
+                     <div className="border rounded-lg p-6 my-4 bg-white text-black font-sans">
+                        <header className="flex justify-between items-start pb-4 border-b">
+                            <div className="flex items-center gap-4">
+                                {companyInfo?.logo && <img src={companyInfo.logo} alt="Logo" className="w-20 h-20 object-contain"/>}
+                                <div>
+                                    <h3 className="font-bold text-lg">{companyInfo?.name}</h3>
+                                    <p className="text-xs">{companyInfo?.rif}</p>
+                                    <p className="text-xs">{companyInfo?.address}</p>
+                                    <p className="text-xs">{companyInfo?.phone} | {companyInfo?.email}</p>
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <h4 className="font-bold text-xl">RECIBO DE PAGO</h4>
+                                <p className="text-sm">ID: {receiptData.payment.id}</p>
+                                <p className="text-sm">Fecha: {new Date().toLocaleDateString('es-VE')}</p>
+                            </div>
+                        </header>
+                        <section className="mt-6">
+                            <h5 className="font-bold mb-2">Detalles del Propietario</h5>
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                                <p><span className="font-semibold">Nombre:</span> {receiptData.ownerName}</p>
+                                <p><span className="font-semibold">Unidad:</span> {receiptData.ownerUnit}</p>
+                            </div>
+                        </section>
+                         <section className="mt-6">
+                            <h5 className="font-bold mb-2">Detalles del Pago</h5>
+                            <Table className="text-sm">
+                                <TableHeader>
+                                    <TableRow className="bg-muted/50">
+                                        <TableHead className="text-black">Concepto</TableHead>
+                                        <TableHead className="text-right text-black">Monto</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    <TableRow>
+                                        <TableCell>
+                                            <p>Pago de Condominio</p>
+                                            <p className="text-xs text-muted-foreground">
+                                                Ref: {receiptData.payment.reference} | {receiptData.payment.bank} | {new Date(receiptData.payment.date).toLocaleDateString('es-VE')}
+                                            </p>
+                                        </TableCell>
+                                        <TableCell className="text-right font-semibold">Bs. {receiptData.payment.amount.toFixed(2)}</TableCell>
+                                    </TableRow>
+                                </TableBody>
+                            </Table>
+                            <div className="flex justify-end mt-4">
+                                <div className="w-64">
+                                    <div className="flex justify-between text-lg font-bold border-t-2 pt-2">
+                                        <span>TOTAL PAGADO:</span>
+                                        <span>Bs. {receiptData.payment.amount.toFixed(2)}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+                        <footer className="mt-8 text-center text-xs text-muted-foreground">
+                            <p>Este es un recibo generado por el sistema. Válido sin firma ni sello.</p>
+                            <p>Gracias por su pago.</p>
+                        </footer>
+                    </div>
+                )}
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => setIsReceiptPreviewOpen(false)}>Cerrar</Button>
+                    <Button onClick={handleDownloadPdf}>
+                        <Printer className="mr-2 h-4 w-4"/> Descargar PDF
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     </div>
   );
 }
+
+    
