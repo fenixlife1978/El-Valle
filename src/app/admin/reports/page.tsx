@@ -153,8 +153,22 @@ export default function ReportsPage() {
                 if (settingsSnap.exists()) {
                     const settings = settingsSnap.data();
                     setCompanyInfo(settings.companyInfo);
-                    const rate = (settings.exchangeRates || []).find((r: any) => r.active)?.rate || 36.5;
-                    setActiveRate(rate);
+                    const rates = (settings.exchangeRates || []);
+                    let activeRateValue = 0;
+                    const activeRateObj = rates.find((r: any) => r.active);
+                    if (activeRateObj) {
+                        activeRateValue = activeRateObj.rate;
+                    } else if (rates.length > 0) {
+                        // Fallback to the most recent rate if none is active
+                        const sortedRates = [...rates].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                        activeRateValue = sortedRates[0].rate;
+                    }
+                    if(activeRateValue === 0) {
+                         toast({ variant: 'destructive', title: 'Error de Configuración', description: 'No hay una tasa de cambio configurada o activa. Los cálculos pueden ser incorrectos.' });
+                    }
+                    setActiveRate(activeRateValue);
+                } else {
+                    toast({ variant: 'destructive', title: 'Error de Configuración', description: 'No se encontró el documento de configuración principal.' });
                 }
 
                 // Fetch Payments for Income Chart
@@ -869,3 +883,5 @@ export default function ReportsPage() {
         </div>
     );
 }
+
+    

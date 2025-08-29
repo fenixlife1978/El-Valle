@@ -186,12 +186,13 @@ export default function DebtManagementPage() {
                 if (!ownerDoc.exists()) throw "El documento del propietario no existe.";
                 if (!settingsDoc.exists()) throw "No se encontró la configuración del sistema.";
 
-                const activeRate = settingsDoc.data()?.exchangeRates?.find((r: any) => r.active)?.rate;
-                if(!activeRate) throw "No hay una tasa de cambio activa configurada.";
+                const rates = settingsDoc.data()?.exchangeRates || [];
+                let activeRate = rates.find((r: any) => r.active)?.rate;
+                if (!activeRate && rates.length > 0) {
+                    activeRate = [...rates].sort((a:any, b:any) => new Date(b.date).getTime() - new Date(a.date).getTime())[0].rate;
+                }
+                if(!activeRate) throw "No hay una tasa de cambio activa o registrada configurada.";
 
-                // Deleting a pending debt should not affect the balance.
-                // If we were to re-credit, it should be based on what was paid.
-                // As this is a pending debt, no payment was made.
                 // If a paid debt is deleted, we should credit the owner.
                 if (debtToDelete.status === 'paid') {
                      const currentBalanceBs = ownerDoc.data().balance || 0;
@@ -244,11 +245,15 @@ export default function DebtManagementPage() {
                 if (!ownerDoc.exists()) throw "El documento del propietario no existe.";
                 if (!settingsDoc.exists()) throw "No se encontró la configuración del sistema.";
 
-                const activeRate = settingsDoc.data()?.exchangeRates?.find((r: any) => r.active)?.rate;
-                if(!activeRate) throw "No hay una tasa de cambio activa configurada.";
+                const rates = settingsDoc.data()?.exchangeRates || [];
+                let activeRate = rates.find((r: any) => r.active)?.rate;
+                if (!activeRate && rates.length > 0) {
+                    activeRate = [...rates].sort((a:any, b:any) => new Date(b.date).getTime() - new Date(a.date).getTime())[0].rate;
+                }
+                if(!activeRate) throw "No hay una tasa de cambio activa o registrada configurada.";
 
                 let currentBalanceBs = ownerDoc.data().balance || 0;
-                let totalNewDebtBs = 0;
+                let totalNewDebtInBs = 0;
     
                 for (let i = 0; i < monthsToGenerate; i++) {
                     const debtDate = addMonths(startDate, i);
@@ -280,7 +285,7 @@ export default function DebtManagementPage() {
                             debtData.paymentDate = Timestamp.now();
                         } else {
                             debtData.status = 'pending';
-                            totalNewDebtBs += debtAmountBs;
+                            // Note: We don't add to a "total debt" here because balance is not for paying future debts in this transaction.
                         }
                         
                         const debtRef = doc(collection(db, "debts"));
@@ -288,8 +293,8 @@ export default function DebtManagementPage() {
                     }
                 }
     
-                const newBalanceBs = currentBalanceBs - totalNewDebtBs;
-                transaction.update(ownerRef, { balance: newBalanceBs });
+                // The balance is only updated with what's left after paying debts.
+                transaction.update(ownerRef, { balance: currentBalanceBs });
             });
     
             toast({ title: 'Deudas Generadas', description: `Se procesaron ${monthsToGenerate} meses de deuda. El saldo del propietario fue actualizado.` });
@@ -634,3 +639,5 @@ export default function DebtManagementPage() {
     // Fallback while loading or if view is invalid
     return null;
 }
+
+    

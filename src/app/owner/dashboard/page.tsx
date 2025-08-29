@@ -79,32 +79,37 @@ export default function OwnerDashboardPage() {
     useEffect(() => {
         if (!userId) return;
 
-        const fetchData = async () => {
-            setLoading(true);
-            try {
-                // Auditor Note: The system fetches the single active exchange rate on every load.
-                // This ensures that any change in the active rate is immediately reflected in all calculations below.
-                const settingsRef = doc(db, 'config', 'mainSettings');
-                const settingsSnap = await getDoc(settingsRef);
-                let condoFeeUSD = 25;
-                let activeRate = 36.5;
-                if (settingsSnap.exists()) {
-                    const settings = settingsSnap.data();
-                    condoFeeUSD = settings.condoFee || 0;
-                    const rate = settings.exchangeRates?.find((r: any) => r.active);
-                    if (rate) activeRate = rate.rate;
-                }
+        // Combined listener for user data and settings to ensure synchronized updates
+        let userUnsubscribe: () => void;
+        const settingsUnsubscribe = onSnapshot(doc(db, 'config', 'mainSettings'), (settingsSnap) => {
+            let condoFeeUSD = 0;
+            let activeRate = 0;
 
-                const now = new Date();
-                const dueDate = new Date(now.getFullYear(), now.getMonth(), 5);
-                const isOverdue = now.getDate() > 5;
-                
-                const userDocRef = doc(db, "owners", userId);
-                const userSnap = await getDoc(userDocRef);
+            if (settingsSnap.exists()) {
+                const settings = settingsSnap.data();
+                condoFeeUSD = settings.condoFee || 0;
+                const rates = settings.exchangeRates || [];
+                const activeRateObj = rates.find((r: any) => r.active);
+                if (activeRateObj) {
+                    activeRate = activeRateObj.rate;
+                } else if (rates.length > 0) {
+                     const sortedRates = [...rates].sort((a:any,b:any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                     activeRate = sortedRates[0].rate;
+                }
+            } else {
+                console.error("Settings document not found!");
+            }
+            
+            // If user listener is already active, unsubscribe to re-create it with the new rate
+            if (userUnsubscribe) userUnsubscribe();
+
+            const userDocRef = doc(db, "owners", userId);
+            userUnsubscribe = onSnapshot(userDocRef, async (userSnap) => {
+                setLoading(true);
                  if (userSnap.exists()) {
                     const ownerData = { id: userSnap.id, ...userSnap.data() } as UserData;
                     setUserData(ownerData);
-                    
+
                     const pendingDebtsQuery = query(collection(db, "debts"), where("ownerId", "==", userId), where("status", "==", "pending"));
                     const pendingDebtsSnapshot = await getDocs(pendingDebtsQuery);
                     
@@ -130,7 +135,6 @@ export default function OwnerDashboardPage() {
                             setSolvencyStatus('solvente');
                         }
                         
-                        // Find last paid month to show "Solvente hasta..."
                         const allDebtsQuery = query(collection(db, "debts"), where("ownerId", "==", userId), where("status", "==", "paid"), orderBy("year", "desc"), orderBy("month", "desc"), limit(1));
                         const lastPaidDebtSnapshot = await getDocs(allDebtsQuery);
 
@@ -139,10 +143,14 @@ export default function OwnerDashboardPage() {
                             const monthLabel = months.find(m => m.value === lastPaidDebt.month)?.label || '';
                             setSolvencyUntil(`Solvente hasta ${monthLabel} ${lastPaidDebt.year}`);
                         } else {
+                            const now = new Date();
                             const monthLabel = months.find(m => m.value === now.getMonth() + 1)?.label || '';
                              setSolvencyUntil(`Solvente hasta ${monthLabel} ${now.getFullYear()}`);
                         }
                     }
+                    
+                    const now = new Date();
+                    const dueDate = new Date(now.getFullYear(), now.getMonth(), 5);
 
                     setDashboardStats({
                         balanceInFavor: (ownerData.balance || 0), // Balance is now in Bs.
@@ -150,19 +158,14 @@ export default function OwnerDashboardPage() {
                         condoFeeBs: condoFeeUSD * activeRate,
                         exchangeRate: activeRate,
                         dueDate: format(dueDate, "dd 'de' MMMM", { locale: es }),
-                        isOverdue: isOverdue,
+                        isOverdue: now.getDate() > 5,
                     });
                 } else {
                     console.log("No such user document!");
                 }
-            } catch (error) {
-                console.error("Error fetching dashboard data:", error);
-            } finally {
                 setLoading(false);
-            }
-        };
-
-        fetchData();
+            });
+        });
 
         const paymentsQuery = query(
             collection(db, "payments"),
@@ -188,6 +191,8 @@ export default function OwnerDashboardPage() {
         });
         
         return () => {
+            settingsUnsubscribe();
+            if (userUnsubscribe) userUnsubscribe();
             paymentsUnsubscribe();
         };
 
@@ -387,3 +392,5 @@ export default function OwnerDashboardPage() {
     </div>
   );
 }
+
+    
