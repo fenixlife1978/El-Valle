@@ -31,7 +31,7 @@ type Owner = {
     name: string;
     properties: Property[];
     email?: string;
-    balance: number;
+    balance: number | string;
     role: Role;
     // Legacy fields for backward compatibility
     street?: string;
@@ -51,7 +51,7 @@ const emptyOwner: Omit<Owner, 'id' | 'balance'> & { balance: number | string } =
     name: '', 
     properties: [{ street: '', house: '' }], 
     email: '', 
-    balance: 0, 
+    balance: "0.00", 
     role: 'propietario' 
 };
 
@@ -84,8 +84,8 @@ export default function PeopleManagementPage() {
             const ownersData: Owner[] = [];
             snapshot.forEach((doc) => {
                 const data = doc.data();
-                // Ensure balance is always a number, default to 0 if null/undefined
-                ownersData.push({ id: doc.id, ...data, balance: data.balance ?? 0 } as Owner);
+                // Ensure balance is always a number for display/calculation, default to 0 if null/undefined
+                ownersData.push({ id: doc.id, ...data, balance: data.balance ?? "0.00" } as Owner);
             });
             
             // Custom sort logic
@@ -171,11 +171,11 @@ export default function PeopleManagementPage() {
         try {
             const { id, street, house, ...ownerData } = currentOwner;
             
-            // Prepare data for Firestore, handle balance specifically
+            // Prepare data for Firestore, handle balance specifically per user command
             const balanceValue = parseFloat(String(ownerData.balance));
             const dataToSave: any = {
                 ...ownerData,
-                balance: isNaN(balanceValue) ? 0 : balanceValue
+                balance: isNaN(balanceValue) || balanceValue === 0 ? "0.00" : balanceValue.toFixed(2)
             };
 
             if (id) {
@@ -199,7 +199,7 @@ export default function PeopleManagementPage() {
         const { id, value, type } = e.target;
         setCurrentOwner({ 
             ...currentOwner, 
-            [id]: type === 'number' ? (value === '' ? '' : parseFloat(value)) : value
+            [id]: value
         });
     };
 
@@ -235,7 +235,7 @@ export default function PeopleManagementPage() {
                 Calle: p.street,
                 Casa: p.house,
                 Email: o.email || '',
-                'Saldo a Favor (Bs.)': o.balance ?? 0,
+                'Saldo a Favor (Bs.)': parseFloat(String(o.balance)) || 0,
                 Rol: o.role,
             }));
         });
@@ -278,7 +278,8 @@ export default function PeopleManagementPage() {
                 const properties = (o.properties && o.properties.length > 0) 
                     ? o.properties.map(p => `${p.street} - ${p.house}`).join('\n') 
                     : (o.street && o.house ? `${o.street} - ${o.house}` : 'N/A');
-                const balanceDisplay = o.balance && o.balance > 0 ? `Bs. ${o.balance.toLocaleString('es-VE', { minimumFractionDigits: 2 })}` : '-';
+                const balanceNum = parseFloat(String(o.balance));
+                const balanceDisplay = balanceNum > 0 ? `Bs. ${balanceNum.toLocaleString('es-VE', { minimumFractionDigits: 2 })}` : '-';
                 return [o.name, properties, o.email || '-', o.role, balanceDisplay];
             }),
             startY: margin + 55,
@@ -311,10 +312,11 @@ export default function PeopleManagementPage() {
                     if (!item.name) return;
                     const key = `${item.name}-${item.email || ''}`.toLowerCase();
                     if (!ownersMap[key]) {
+                        const balanceNum = parseFloat(item.balance);
                         ownersMap[key] = {
                             name: item.name,
                             email: item.email || '',
-                            balance: parseFloat(item.balance) || 0,
+                            balance: isNaN(balanceNum) || balanceNum === 0 ? "0.00" : balanceNum.toFixed(2),
                             role: (item.role === 'administrador' || item.role === 'propietario') ? item.role : 'propietario',
                             properties: []
                         };
@@ -416,7 +418,9 @@ export default function PeopleManagementPage() {
                                         </TableCell>
                                     </TableRow>
                                 ) : (
-                                    owners.map((owner) => (
+                                    owners.map((owner) => {
+                                        const balanceNum = parseFloat(String(owner.balance));
+                                        return (
                                         <TableRow key={owner.id}>
                                             <TableCell className="font-medium">{owner.name}</TableCell>
                                             <TableCell>
@@ -428,8 +432,8 @@ export default function PeopleManagementPage() {
                                             <TableCell>{owner.email || '-'}</TableCell>
                                             <TableCell className="capitalize">{owner.role}</TableCell>
                                             <TableCell>
-                                                 {owner.balance && owner.balance > 0 
-                                                    ? `Bs. ${owner.balance.toLocaleString('es-VE', { minimumFractionDigits: 2 })}` 
+                                                 {balanceNum > 0
+                                                    ? `Bs. ${balanceNum.toLocaleString('es-VE', { minimumFractionDigits: 2 })}` 
                                                     : '-'}
                                             </TableCell>
                                             <TableCell className="text-right">
@@ -453,7 +457,7 @@ export default function PeopleManagementPage() {
                                                 </DropdownMenu>
                                             </TableCell>
                                         </TableRow>
-                                    ))
+                                    )})
                                 )}
                             </TableBody>
                         </Table>
@@ -529,7 +533,7 @@ export default function PeopleManagementPage() {
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="balance">Saldo a Favor (Bs.)</Label>
-                                <Input id="balance" type="number" value={currentOwner.balance} onChange={handleInputChange} placeholder="0.00" />
+                                <Input id="balance" type="number" value={String(currentOwner.balance)} onChange={handleInputChange} placeholder="0.00" />
                             </div>
                         </div>
                     </div>
@@ -557,6 +561,8 @@ export default function PeopleManagementPage() {
 
         </div>
     );
+
+    
 
     
 
