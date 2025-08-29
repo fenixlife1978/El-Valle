@@ -142,7 +142,7 @@ export default function OwnerDashboardPage() {
                     }
 
                     setDashboardStats({
-                        balanceInFavor: (ownerData.balance || 0) > 0 ? (ownerData.balance * activeRate) : 0,
+                        balanceInFavor: (ownerData.balance || 0), // Balance is now in Bs.
                         totalDebt: totalDebtBs,
                         condoFeeBs: condoFeeUSD * activeRate,
                         exchangeRate: activeRate,

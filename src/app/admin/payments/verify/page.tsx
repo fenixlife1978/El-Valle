@@ -180,9 +180,9 @@ export default function VerifyPaymentsPage() {
                        throw new Error(`Propietario con ID ${beneficiary.ownerId} no encontrado.`);
                     }
                     
-                    const ownerBalanceUSD = ownerDoc.data().balance || 0;
-                    const paymentAmountUSD = beneficiary.amount / paymentData.exchangeRate;
-                    let availableFundsUSD = ownerBalanceUSD + paymentAmountUSD;
+                    const ownerBalanceBs = ownerDoc.data().balance || 0;
+                    const paymentAmountBs = beneficiary.amount;
+                    let availableFundsBs = ownerBalanceBs + paymentAmountBs;
                     
                     const debtsQuery = query(
                         collection(db, "debts"),
@@ -198,8 +198,9 @@ export default function VerifyPaymentsPage() {
                     
                     if (pendingDebts.length > 0) {
                         for (const debt of pendingDebts) {
-                            if (availableFundsUSD >= debt.amountUSD) {
-                                availableFundsUSD -= debt.amountUSD;
+                            const debtAmountBs = debt.amountUSD * paymentData.exchangeRate;
+                            if (availableFundsBs >= debtAmountBs) {
+                                availableFundsBs -= debtAmountBs;
                                 const debtRef = doc(db, "debts", debt.id);
                                 transaction.update(debtRef, { 
                                     status: 'paid',
@@ -207,61 +208,13 @@ export default function VerifyPaymentsPage() {
                                     paymentDate: paymentData.paymentDate,
                                 });
                             } else {
-                                // If funds don't cover the next full debt, stop processing.
-                                // The remaining availableFundsUSD will become the new balance.
                                 break; 
                             }
                         }
-                    } else {
-                        // Logic for advance payments if no pending debts
-                        const settingsRef = doc(db, 'config', 'mainSettings');
-                        const settingsDoc = await transaction.get(settingsRef);
-                        if (!settingsDoc.exists()) throw new Error("Configuraciones del sistema no encontradas.");
-                        
-                        const condoFeeUSD = settingsDoc.data().condoFee || 0;
-                        if (condoFeeUSD <= 0) {
-                             // If condo fee isn't set, just add to balance and stop.
-                             transaction.update(ownerRef, { balance: availableFundsUSD });
-                             transaction.update(paymentRef, { status: 'aprobado' });
-                             return; // Exit this beneficiary's loop
-                        }
-
-                        let lastDebtDate;
-                        const lastDebtQuery = query(collection(db, 'debts'), where('ownerId', '==', beneficiary.ownerId), orderBy('year', 'desc'), orderBy('month', 'desc'), limit(1));
-                        const lastDebtSnapshot = await getDocs(lastDebtQuery);
-                        
-                        if (!lastDebtSnapshot.empty) {
-                            const lastDebt = lastDebtSnapshot.docs[0].data();
-                            lastDebtDate = new Date(lastDebt.year, lastDebt.month - 1);
-                        } else {
-                            lastDebtDate = new Date(); // Start from current month if no debts exist
-                            lastDebtDate.setDate(1); // Set to the first day to avoid month-end issues
-                            lastDebtDate = addMonths(lastDebtDate, -1); // Start generating for the *current* month.
-                        }
-
-                        while (availableFundsUSD >= condoFeeUSD) {
-                            availableFundsUSD -= condoFeeUSD;
-                            
-                            lastDebtDate = addMonths(lastDebtDate, 1);
-                            const nextDebtYear = lastDebtDate.getFullYear();
-                            const nextDebtMonth = lastDebtDate.getMonth() + 1;
-
-                            const newDebtRef = doc(collection(db, 'debts'));
-                            transaction.set(newDebtRef, {
-                                ownerId: beneficiary.ownerId,
-                                year: nextDebtYear,
-                                month: nextDebtMonth,
-                                amountUSD: condoFeeUSD,
-                                description: 'Cuota de Condominio (Pagada por adelantado)',
-                                status: 'paid',
-                                paidAmountUSD: condoFeeUSD,
-                                paymentDate: paymentData.paymentDate,
-                            });
-                        }
-                    }
+                    } 
                     
-                    // Whatever is left in availableFundsUSD is the new balance.
-                    transaction.update(ownerRef, { balance: availableFundsUSD });
+                    // Whatever is left in availableFundsBs is the new balance. It remains in Bs.
+                    transaction.update(ownerRef, { balance: availableFundsBs });
                 }
 
                 // Finally, mark the payment itself as approved.

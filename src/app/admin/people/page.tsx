@@ -270,7 +270,7 @@ export default function PeopleManagementPage() {
         doc.text("Lista de Propietarios", pageWidth / 2, margin + 45, { align: 'center' });
 
         (doc as any).autoTable({
-            head: [['Nombre', 'Propiedades', 'Email', 'Rol', 'Saldo a Favor (Bs)']],
+            head: [['Nombre', 'Propiedades', 'Email', 'Rol', 'Saldo a Favor (Bs.)']],
             body: owners.map(o => {
                 const properties = (o.properties && o.properties.length > 0) 
                     ? o.properties.map(p => `${p.street} - ${p.house}`).join('\n') 
@@ -395,7 +395,7 @@ export default function PeopleManagementPage() {
                                     <TableHead>Propiedades</TableHead>
                                     <TableHead>Email</TableHead>
                                     <TableHead>Rol</TableHead>
-                                    <TableHead>Saldo a Favor</TableHead>
+                                    <TableHead>Saldo a Favor (Bs.)</TableHead>
                                     <TableHead className="text-right">Acciones</TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -555,4 +555,3 @@ export default function PeopleManagementPage() {
         </div>
     );
 }
-

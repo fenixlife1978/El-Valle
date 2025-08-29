@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PlusCircle, MoreHorizontal, Edit, Trash2, Loader2, Info, ArrowLeft, Search, WalletCards } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { collection, query, onSnapshot, where, doc, getDoc, writeBatch, updateDoc, deleteDoc, runTransaction, Timestamp } from 'firebase/firestore';
+import { collection, query, onSnapshot, where, doc, getDoc, writeBatch, updateDoc, deleteDoc, runTransaction, Timestamp, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Badge } from '@/components/ui/badge';
 import { differenceInCalendarMonths, format, addMonths } from 'date-fns';
@@ -177,23 +177,33 @@ export default function DebtManagementPage() {
         try {
             const ownerRef = doc(db, "owners", selectedOwner.id);
             const debtRef = doc(db, "debts", debtToDelete.id);
-
+            const settingsRef = doc(db, 'config', 'mainSettings');
+            
             await runTransaction(db, async (transaction) => {
                 const ownerDoc = await transaction.get(ownerRef);
-                if (!ownerDoc.exists()) {
-                    throw "El documento del propietario no existe.";
-                }
-
-                // Restore balance by adding the deleted debt amount back
-                const currentBalance = ownerDoc.data().balance || 0;
-                const newBalance = currentBalance + debtToDelete.amountUSD;
-                transaction.update(ownerRef, { balance: newBalance });
+                const settingsDoc = await transaction.get(settingsRef);
                 
-                // Delete the debt document
+                if (!ownerDoc.exists()) throw "El documento del propietario no existe.";
+                if (!settingsDoc.exists()) throw "No se encontró la configuración del sistema.";
+
+                const activeRate = settingsDoc.data()?.exchangeRates?.find((r: any) => r.active)?.rate;
+                if(!activeRate) throw "No hay una tasa de cambio activa configurada.";
+
+                // Deleting a pending debt should not affect the balance.
+                // If we were to re-credit, it should be based on what was paid.
+                // As this is a pending debt, no payment was made.
+                // If a paid debt is deleted, we should credit the owner.
+                if (debtToDelete.status === 'paid') {
+                     const currentBalanceBs = ownerDoc.data().balance || 0;
+                     const debtAmountBs = debtToDelete.amountUSD * activeRate;
+                     const newBalanceBs = currentBalanceBs + debtAmountBs;
+                     transaction.update(ownerRef, { balance: newBalanceBs });
+                }
+                
                 transaction.delete(debtRef);
             });
 
-            toast({ title: 'Deuda Eliminada', description: 'La deuda ha sido eliminada y el saldo del propietario ha sido actualizado.' });
+            toast({ title: 'Deuda Eliminada', description: 'La deuda ha sido eliminada y el saldo del propietario ha sido actualizado si correspondía.' });
 
         } catch (error) {
             console.error("Error deleting debt: ", error);
@@ -225,20 +235,26 @@ export default function DebtManagementPage() {
     
         try {
             const ownerRef = doc(db, "owners", selectedOwner.id);
-            
+            const settingsRef = doc(db, 'config', 'mainSettings');
+
             await runTransaction(db, async (transaction) => {
                 const ownerDoc = await transaction.get(ownerRef);
-                if (!ownerDoc.exists()) {
-                    throw "El documento del propietario no existe.";
-                }
-    
-                let currentBalanceUSD = ownerDoc.data().balance || 0;
-                let totalDebtAmountUSD = 0;
+                const settingsDoc = await transaction.get(settingsRef);
+                
+                if (!ownerDoc.exists()) throw "El documento del propietario no existe.";
+                if (!settingsDoc.exists()) throw "No se encontró la configuración del sistema.";
+
+                const activeRate = settingsDoc.data()?.exchangeRates?.find((r: any) => r.active)?.rate;
+                if(!activeRate) throw "No hay una tasa de cambio activa configurada.";
+
+                let currentBalanceBs = ownerDoc.data().balance || 0;
+                let totalNewDebtBs = 0;
     
                 for (let i = 0; i < monthsToGenerate; i++) {
                     const debtDate = addMonths(startDate, i);
                     const debtYear = debtDate.getFullYear();
                     const debtMonth = debtDate.getMonth() + 1;
+                    const debtAmountBs = amountUSD * activeRate;
                     
                     const debtData: any = {
                         ownerId: selectedOwner.id,
@@ -247,27 +263,32 @@ export default function DebtManagementPage() {
                         amountUSD: amountUSD,
                         description: description,
                     };
-    
-                    if (currentBalanceUSD >= amountUSD) {
-                        // Saldo a favor cubre la deuda
-                        currentBalanceUSD -= amountUSD;
-                        debtData.status = 'paid';
-                        debtData.paidAmountUSD = amountUSD;
-                        debtData.paymentDate = Timestamp.now();
-                        // No se suma a la deuda total, ya que se pagó instantáneamente
-                    } else {
-                        // Saldo a favor no cubre la deuda, se genera pendiente
-                        debtData.status = 'pending';
-                        totalDebtAmountUSD += amountUSD;
-                    }
+
+                    const existingDebtQuery = query(collection(db, 'debts'), 
+                        where('ownerId', '==', selectedOwner.id),
+                        where('year', '==', debtYear),
+                        where('month', '==', debtMonth)
+                    );
+                    const existingDebtSnapshot = await getDocs(existingDebtQuery);
                     
-                    const debtRef = doc(collection(db, "debts"));
-                    transaction.set(debtRef, debtData);
+                    if (existingDebtSnapshot.empty) {
+                        if (currentBalanceBs >= debtAmountBs) {
+                            currentBalanceBs -= debtAmountBs;
+                            debtData.status = 'paid';
+                            debtData.paidAmountUSD = amountUSD;
+                            debtData.paymentDate = Timestamp.now();
+                        } else {
+                            debtData.status = 'pending';
+                            totalNewDebtBs += debtAmountBs;
+                        }
+                        
+                        const debtRef = doc(collection(db, "debts"));
+                        transaction.set(debtRef, debtData);
+                    }
                 }
     
-                // El nuevo balance del propietario es el saldo a favor restante, menos la nueva deuda generada.
-                const newBalance = currentBalanceUSD - totalDebtAmountUSD;
-                transaction.update(ownerRef, { balance: newBalance });
+                const newBalanceBs = currentBalanceBs - totalNewDebtBs;
+                transaction.update(ownerRef, { balance: newBalanceBs });
             });
     
             toast({ title: 'Deudas Generadas', description: `Se procesaron ${monthsToGenerate} meses de deuda. El saldo del propietario fue actualizado.` });
@@ -363,7 +384,7 @@ export default function DebtManagementPage() {
                                 <TableRow>
                                     <TableHead>Propietario</TableHead>
                                     <TableHead>Ubicación</TableHead>
-                                    <TableHead>Estado de Cuenta</TableHead>
+                                    <TableHead>Saldo (Bs.)</TableHead>
                                     <TableHead className="text-right">Acción</TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -389,12 +410,17 @@ export default function DebtManagementPage() {
                                             <TableCell className="font-medium">{owner.name}</TableCell>
                                             <TableCell>{owner.street} - {owner.house}</TableCell>
                                             <TableCell>
-                                                {owner.balance < 0 ? 
-                                                    <Badge variant="destructive">Moroso</Badge> : 
-                                                owner.balance > 0 ? 
-                                                    <Badge variant="success">Saldo a Favor</Badge> : 
+                                               {owner.balance > 0 ? (
+                                                    <Badge variant="success">
+                                                        Bs. {owner.balance.toLocaleString('es-VE', {minimumFractionDigits: 2})} a favor
+                                                    </Badge>
+                                                ) : owner.balance < 0 ? (
+                                                     <Badge variant="destructive">
+                                                        Bs. {Math.abs(owner.balance).toLocaleString('es-VE', {minimumFractionDigits: 2})} en deuda
+                                                    </Badge>
+                                                ) : (
                                                     <Badge variant="outline">Solvente</Badge>
-                                                }
+                                                )}
                                             </TableCell>
                                             <TableCell className="text-right">
                                                 <Button variant="outline" size="sm" onClick={() => handleManageOwnerDebts(owner)}>
@@ -591,7 +617,7 @@ export default function DebtManagementPage() {
                         <DialogHeader>
                             <DialogTitle>¿Está seguro?</DialogTitle>
                             <DialogDescription>
-                                Esta acción no se puede deshacer. Esto eliminará permanentemente la deuda y ajustará el saldo del propietario.
+                                Esta acción no se puede deshacer. Esto eliminará permanentemente la deuda y ajustará el saldo del propietario si la deuda ya estaba pagada.
                             </DialogDescription>
                         </DialogHeader>
                         <DialogFooter>

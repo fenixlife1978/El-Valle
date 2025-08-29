@@ -540,12 +540,12 @@ export default function ReportsPage() {
         const ownersWithBalance = owners.filter(o => o.balance > 0);
         setPreviewData({
             title: 'Reporte de Saldos a Favor',
-            headers: ['Propietario', 'Propiedades', 'Saldo a Favor (USD)'],
+            headers: ['Propietario', 'Propiedades', 'Saldo a Favor (Bs.)'],
             rows: ownersWithBalance.map(o => {
                 const properties = (o.properties && o.properties.length > 0)
                     ? o.properties.map(p => `${p.street} - ${p.house}`).join(', ')
                     : (o.street && o.house ? `${o.street} - ${o.house}` : 'N/A');
-                return [o.name, properties, `$${o.balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}`];
+                return [o.name, properties, `Bs. ${o.balance.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`];
             }),
             filename: 'reporte_saldos_favor'
         });
@@ -587,12 +587,12 @@ export default function ReportsPage() {
                 
                 let balanceDisplay;
                 if (o.balance > 0) {
-                    const balanceBs = o.balance * activeRate;
-                    balanceDisplay = `Bs. ${balanceBs.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`;
+                    balanceDisplay = `Bs. ${o.balance.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`;
                 } else if (o.balance < 0) {
-                    balanceDisplay = `-$${Math.abs(o.balance).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+                    const debtUSD = Math.abs(o.balance) / activeRate;
+                    balanceDisplay = `-$${debtUSD.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
                 } else {
-                    balanceDisplay = '$0.00';
+                    balanceDisplay = 'Bs. 0,00';
                 }
 
                return [o.name, properties, o.status === 'solvente' ? 'Solvente' : 'Moroso', balanceDisplay];
@@ -730,7 +730,7 @@ export default function ReportsPage() {
                         <CardTitle>Reporte de Ingresos</CardTitle>
                         <CardDescription>Calcule los ingresos totales en un período.</CardDescription>
                     </CardHeader>
-                    <CardContent className="grid sm:grid-cols-2 gap-4">
+                    <CardContent className="grid sm:grid-cols-2 gap-4 h-[92px]">
                         {/* Date pickers removed as per request for "to-date" reports */}
                     </CardContent>
                     <CardFooter>
