@@ -79,7 +79,8 @@ export default function OwnerDashboardPage() {
     useEffect(() => {
         if (!userId) return;
 
-        // Combined listener for user data and settings to ensure synchronized updates
+        // Auditor Note: This combined listener ensures that any change in settings (like the exchange rate)
+        // immediately triggers a recalculation of the user's data and dashboard stats.
         let userUnsubscribe: () => void;
         const settingsUnsubscribe = onSnapshot(doc(db, 'config', 'mainSettings'), (settingsSnap) => {
             let condoFeeUSD = 0;
@@ -100,7 +101,6 @@ export default function OwnerDashboardPage() {
                 console.error("Settings document not found!");
             }
             
-            // If user listener is already active, unsubscribe to re-create it with the new rate
             if (userUnsubscribe) userUnsubscribe();
 
             const userDocRef = doc(db, "owners", userId);
@@ -392,5 +392,3 @@ export default function OwnerDashboardPage() {
     </div>
   );
 }
-
-    
