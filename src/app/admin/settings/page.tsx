@@ -77,7 +77,7 @@ export default function SettingsPage() {
     
     // State for adding a new rate
     const [newRateDate, setNewRateDate] = useState<Date | undefined>(new Date());
-    const [newRateAmount, setNewRateAmount] = useState('147.08');
+    const [newRateAmount, setNewRateAmount] = useState('');
 
     // State for editing a rate
     const [isRateDialogOpen, setIsRateDialogOpen] = useState(false);
@@ -103,7 +103,7 @@ export default function SettingsPage() {
                 const initialRate: ExchangeRate = {
                     id: new Date().toISOString(),
                     date: format(new Date(), 'yyyy-MM-dd'),
-                    rate: 147.08,
+                    rate: 0,
                     active: true
                 };
                 setDoc(settingsRef, {
@@ -154,19 +154,17 @@ export default function SettingsPage() {
             id: new Date().toISOString(), // simple unique id
             date: format(newRateDate, 'yyyy-MM-dd'),
             rate: parseFloat(newRateAmount),
-            active: false // Initially false, will be activated by handleActivateRate
+            active: false
         };
         
         try {
             const settingsRef = doc(db, 'config', 'mainSettings');
-            // Add the new rate and then activate it.
             await updateDoc(settingsRef, {
                 exchangeRates: arrayUnion(newRate)
             });
-            await handleActivateRate(newRate); // Activate the newly added rate
-            setNewRateDate(undefined);
+            setNewRateDate(new Date());
             setNewRateAmount('');
-            toast({ title: 'Tasa Agregada y Activada', description: 'La nueva tasa de cambio ha sido añadida y establecida como activa.' });
+            toast({ title: 'Tasa Agregada', description: 'La nueva tasa de cambio ha sido añadida al historial.' });
         } catch (error) {
             console.error("Error adding rate:", error);
             toast({ variant: 'destructive', title: 'Error', description: 'No se pudo agregar la nueva tasa.' });
@@ -174,23 +172,11 @@ export default function SettingsPage() {
     };
 
     const handleActivateRate = async (rateToActivate: ExchangeRate) => {
-        // First, ensure all existing rates are deactivated.
-        const currentlyActiveRates = exchangeRates.map(r => ({...r, active: r.id === rateToActivate.id }));
+        const updatedRates = exchangeRates.map(r => ({...r, active: r.id === rateToActivate.id }));
         
-        // Find the rate to activate in the new array.
-        const rateExists = currentlyActiveRates.some(r => r.id === rateToActivate.id);
-
-        let finalRates = currentlyActiveRates;
-        if (!rateExists) {
-            // If the rate to activate wasn't in the original list (it's brand new)
-            // add it to the list and deactivate all others.
-            finalRates = exchangeRates.map(r => ({ ...r, active: false }));
-            finalRates.push({ ...rateToActivate, active: true });
-        }
-
         try {
             const settingsRef = doc(db, 'config', 'mainSettings');
-            await updateDoc(settingsRef, { exchangeRates: finalRates });
+            await updateDoc(settingsRef, { exchangeRates: updatedRates });
             toast({ title: 'Tasa Activada', description: `La tasa de ${rateToActivate.rate.toFixed(2)} ahora es la activa.` });
         } catch (error) {
             console.error("Error activating rate:", error);
@@ -244,11 +230,6 @@ export default function SettingsPage() {
 
             await updateDoc(settingsRef, dataToUpdate);
             
-            // Add and activate the new rate if provided
-            if(newRateDate && newRateAmount) {
-                await handleAddRate();
-            }
-
             toast({
                 title: 'Cambios Guardados',
                 description: 'La configuración ha sido actualizada exitosamente.',
@@ -543,7 +524,7 @@ export default function SettingsPage() {
             <div className="flex justify-end">
                 <Button onClick={handleSaveChanges} disabled={saving || isAdjustmentRunning}>
                     {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4"/>}
-                    Guardar Todos los Cambios
+                    Guardar Cambios
                 </Button>
             </div>
 
@@ -584,3 +565,5 @@ export default function SettingsPage() {
         </div>
     );
 }
+
+    
