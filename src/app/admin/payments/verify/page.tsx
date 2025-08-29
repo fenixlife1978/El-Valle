@@ -8,11 +8,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { CheckCircle2, XCircle, MoreHorizontal, Eye, Printer, Filter, Loader2 } from 'lucide-react';
+import { CheckCircle2, XCircle, MoreHorizontal, Eye, Printer, Filter, Loader2, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import { collection, onSnapshot, query, doc, updateDoc, getDoc, writeBatch, runTransaction, where, orderBy, Timestamp, getDocs, addDoc, limit } from 'firebase/firestore';
+import { collection, onSnapshot, query, doc, updateDoc, getDoc, writeBatch, runTransaction, where, orderBy, Timestamp, getDocs, addDoc, limit, deleteDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { addMonths, format } from 'date-fns';
 
@@ -82,6 +82,8 @@ export default function VerifyPaymentsPage() {
   const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
   const [receiptData, setReceiptData] = useState<ReceiptData>(null);
   const [isReceiptPreviewOpen, setIsReceiptPreviewOpen] = useState(false);
+  const [paymentToDelete, setPaymentToDelete] = useState<FullPayment | null>(null);
+  const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -264,6 +266,35 @@ export default function VerifyPaymentsPage() {
     setIsReceiptPreviewOpen(true);
   }
 
+  const handleDeletePayment = (payment: FullPayment) => {
+    // TODO: Add logic to revert balance/debt changes if the payment was 'aprobado'.
+    // This could be complex and might require a Cloud Function for atomicity.
+    // For now, we just ask for confirmation.
+    setPaymentToDelete(payment);
+    setIsDeleteConfirmationOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!paymentToDelete) return;
+    try {
+      await deleteDoc(doc(db, "payments", paymentToDelete.id));
+      toast({
+        title: "Pago Eliminado",
+        description: "El registro del pago ha sido eliminado exitosamente.",
+      });
+    } catch (error) {
+      console.error("Error deleting payment: ", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No se pudo eliminar el pago.",
+      });
+    } finally {
+      setIsDeleteConfirmationOpen(false);
+      setPaymentToDelete(null);
+    }
+  };
+
   const handleDownloadPdf = () => {
     if (!receiptData) return;
     const { payment, ownerName, ownerUnit } = receiptData;
@@ -424,6 +455,10 @@ export default function VerifyPaymentsPage() {
                                                     Generar Recibo
                                                 </DropdownMenuItem>
                                             )}
+                                             <DropdownMenuItem onClick={() => handleDeletePayment(payment)} className="text-destructive">
+                                                <Trash2 className="mr-2 h-4 w-4" />
+                                                Eliminar
+                                            </DropdownMenuItem>
                                         </DropdownMenuContent>
                                     </DropdownMenu>
                                 </TableCell>
@@ -513,8 +548,22 @@ export default function VerifyPaymentsPage() {
                 </DialogFooter>
             </DialogContent>
         </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={isDeleteConfirmationOpen} onOpenChange={setIsDeleteConfirmationOpen}>
+            <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                    <DialogTitle>¿Está seguro?</DialogTitle>
+                    <DialogDescription>
+                        Esta acción no se puede deshacer. Esto eliminará permanentemente el registro del pago. Si el pago ya fue aprobado, deberá ajustar manualmente las deudas o el saldo del propietario.
+                    </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => setIsDeleteConfirmationOpen(false)}>Cancelar</Button>
+                    <Button variant="destructive" onClick={confirmDelete}>Sí, eliminar pago</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     </div>
   );
 }
-
-    
