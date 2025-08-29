@@ -336,13 +336,18 @@ export default function ReportsPage() {
                     where("status", "==", "aprobado"),
                     where("beneficiaries", "array-contains-any", validProperties.map(p => ({ ownerId: owner.id, house: p.house })))
                 );
-            } else {
+            } else if (owner.street && owner.house) {
                  paymentsQuery = query(
                     collection(db, "payments"),
                     where("status", "==", "aprobado"),
                     where("beneficiaries", "array-contains", { ownerId: owner.id, house: owner.house })
                 );
+            } else {
+                 toast({ variant: 'destructive', title: 'Error de Datos', description: 'El propietario seleccionado no tiene propiedades completas registradas.' });
+                 setGeneratingReport(false);
+                 return;
             }
+
             
             const paymentsSnapshot = await getDocs(paymentsQuery);
             let totalPaid = 0;
@@ -502,12 +507,12 @@ export default function ReportsPage() {
         const ownersWithBalance = owners.filter(o => o.balance > 0);
         setPreviewData({
             title: 'Reporte de Saldos a Favor',
-            headers: ['Propietario', 'Propiedades', 'Saldo a Favor (Bs.)'],
+            headers: ['Propietario', 'Propiedades', 'Saldo a Favor (USD)'],
             rows: ownersWithBalance.map(o => {
                 const properties = (o.properties && o.properties.length > 0)
                     ? o.properties.map(p => `${p.street} - ${p.house}`).join(', ')
                     : (o.street && o.house ? `${o.street} - ${o.house}` : 'N/A');
-                return [o.name, properties, (o.balance * activeRate).toLocaleString('es-VE', { minimumFractionDigits: 2 })];
+                return [o.name, properties, `$${o.balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}`];
             }),
             filename: 'reporte_saldos_favor'
         });
@@ -874,4 +879,5 @@ export default function ReportsPage() {
         </div>
     );
 }
+
 
