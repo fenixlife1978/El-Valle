@@ -51,7 +51,7 @@ const emptyOwner: Omit<Owner, 'id' | 'balance'> & { balance: number | string } =
     name: '', 
     properties: [{ street: '', house: '' }], 
     email: '', 
-    balance: '', 
+    balance: 0, 
     role: 'propietario' 
 };
 
@@ -175,16 +175,8 @@ export default function PeopleManagementPage() {
             const balanceValue = parseFloat(String(ownerData.balance));
             const dataToSave: any = {
                 ...ownerData,
+                balance: isNaN(balanceValue) ? 0 : balanceValue
             };
-
-            // Only include balance if it's a valid, non-zero number
-            if (!isNaN(balanceValue) && balanceValue > 0) {
-                dataToSave.balance = balanceValue;
-            } else {
-                // Explicitly remove balance if it's 0 or invalid to keep DB clean
-                delete dataToSave.balance;
-            }
-
 
             if (id) {
                 const ownerRef = doc(db, "owners", id);
@@ -565,6 +557,8 @@ export default function PeopleManagementPage() {
 
         </div>
     );
+
+    
 
     
 
