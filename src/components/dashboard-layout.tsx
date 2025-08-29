@@ -1,3 +1,4 @@
+
 'use client';
 
 import Link from 'next/link';
@@ -61,6 +62,12 @@ type ExchangeRate = {
     active: boolean;
 };
 
+type AdminProfile = {
+    name: string;
+    email: string;
+    avatar: string;
+};
+
 
 const BCVLogo = () => (
     <svg width="24" height="24" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" className="shrink-0">
@@ -70,14 +77,17 @@ const BCVLogo = () => (
 );
 
 
-const CustomHeader = ({ userName }: { userName: string }) => {
+const CustomHeader = ({ userName, userRole }: { userName: string, userRole: string }) => {
     const [activeRate, setActiveRate] = React.useState<ExchangeRate | null>(null);
+    const [adminProfile, setAdminProfile] = React.useState<AdminProfile | null>(null);
 
     React.useEffect(() => {
         const settingsRef = doc(db, 'config', 'mainSettings');
         const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
             if (docSnap.exists()) {
                 const settings = docSnap.data();
+                setAdminProfile(settings.adminProfile || null);
+
                 const rates: ExchangeRate[] = settings.exchangeRates || [];
                 let currentActiveRate = rates.find(r => r.active) || null;
                 if (!currentActiveRate && rates.length > 0) {
@@ -89,11 +99,14 @@ const CustomHeader = ({ userName }: { userName: string }) => {
         return () => unsubscribe();
     }, []);
 
+    const avatarSrc = userRole === 'Administrador' ? adminProfile?.avatar : "https://placehold.co/40x40.png";
+    const displayName = userRole === 'Administrador' ? adminProfile?.name || userName : userName;
+
     return (
         <header className="sticky top-0 z-10 flex h-auto flex-col items-center gap-2 border-b bg-background/80 p-2 backdrop-blur-sm sm:flex-row sm:h-16 sm:px-4">
              <div className="flex w-full items-center justify-between sm:w-auto">
                 <SidebarTrigger className="sm:hidden" />
-                <h1 className="text-md font-semibold text-foreground">Hola, {userName}</h1>
+                <h1 className="text-md font-semibold text-foreground">Hola, {displayName}</h1>
             </div>
 
             <div className="flex w-full items-center justify-between gap-4 sm:w-auto sm:ml-auto">
@@ -112,15 +125,15 @@ const CustomHeader = ({ userName }: { userName: string }) => {
                     <DropdownMenuTrigger asChild>
                     <Button variant="ghost" className="relative h-10 w-10 rounded-full">
                         <Avatar className="h-10 w-10">
-                        <AvatarImage src="https://placehold.co/40x40.png" alt={userName} data-ai-hint="profile picture"/>
-                        <AvatarFallback>{userName.charAt(0)}</AvatarFallback>
+                        <AvatarImage src={avatarSrc} alt={displayName} data-ai-hint="profile picture"/>
+                        <AvatarFallback>{displayName.charAt(0)}</AvatarFallback>
                         </Avatar>
                     </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                     <DropdownMenuLabel>
                         <div className="flex flex-col space-y-1">
-                        <p className="text-sm font-medium leading-none font-headline">{userName}</p>
+                        <p className="text-sm font-medium leading-none font-headline">{displayName}</p>
                         </div>
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
@@ -235,7 +248,7 @@ export function DashboardLayout({
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>
-        <CustomHeader userName={userName} />
+        <CustomHeader userName={userName} userRole={userRole} />
         <main className="flex-1 p-4 md:p-8 bg-background">{children}</main>
         <footer className="bg-secondary text-secondary-foreground p-4 text-center text-sm">
            © {new Date().getFullYear()} {companyInfo?.name || 'CondoConnect'}. Todos los derechos reservados.

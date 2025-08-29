@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from '@/hooks/use-toast';
-import { Upload, Save, Calendar as CalendarIcon, PlusCircle, Loader2, AlertTriangle, Wand2, MoreHorizontal, Edit, FileCog } from 'lucide-react';
+import { Upload, Save, Calendar as CalendarIcon, PlusCircle, Loader2, AlertTriangle, Wand2, MoreHorizontal, Edit, FileCog, UserCircle } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
@@ -18,7 +18,14 @@ import { doc, getDoc, setDoc, updateDoc, arrayUnion, onSnapshot, writeBatch, col
 import { db } from '@/lib/firebase';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 
+
+type AdminProfile = {
+    name: string;
+    email: string;
+    avatar: string;
+};
 
 type CompanyInfo = {
     name: string;
@@ -37,6 +44,7 @@ type ExchangeRate = {
 };
 
 type Settings = {
+    adminProfile: AdminProfile;
     companyInfo: CompanyInfo;
     condoFee: number;
     exchangeRates: ExchangeRate[];
@@ -56,6 +64,12 @@ type Debt = {
 };
 
 
+const emptyAdminProfile: AdminProfile = {
+    name: 'Administrador',
+    email: 'admin@condominio.com',
+    avatar: ''
+};
+
 const emptyCompanyInfo: CompanyInfo = {
     name: 'Nombre de la Empresa',
     address: '',
@@ -69,8 +83,13 @@ export default function SettingsPage() {
     const { toast } = useToast();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    
+    const [adminProfile, setAdminProfile] = useState<AdminProfile>(emptyAdminProfile);
+    const [adminAvatarPreview, setAdminAvatarPreview] = useState<string | null>(null);
+
     const [companyInfo, setCompanyInfo] = useState<CompanyInfo>(emptyCompanyInfo);
     const [logoPreview, setLogoPreview] = useState<string | null>(null);
+    
     const [condoFee, setCondoFee] = useState(0);
     const [lastCondoFee, setLastCondoFee] = useState(0);
     const [exchangeRates, setExchangeRates] = useState<ExchangeRate[]>([]);
@@ -93,6 +112,8 @@ export default function SettingsPage() {
         const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
             if (docSnap.exists()) {
                 const settings = docSnap.data() as Settings;
+                setAdminProfile(settings.adminProfile || emptyAdminProfile);
+                setAdminAvatarPreview(settings.adminProfile?.avatar);
                 setCompanyInfo(settings.companyInfo);
                 setLogoPreview(settings.companyInfo.logo);
                 setCondoFee(settings.condoFee);
@@ -107,6 +128,7 @@ export default function SettingsPage() {
                     active: true
                 };
                 setDoc(settingsRef, {
+                    adminProfile: emptyAdminProfile,
                     companyInfo: emptyCompanyInfo,
                     condoFee: 25.00,
                     lastCondoFee: 25.00,
@@ -123,22 +145,31 @@ export default function SettingsPage() {
         return () => unsubscribe();
     }, [toast]);
 
-    const handleInfoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setCompanyInfo({ ...companyInfo, [e.target.name]: e.target.value });
+    const handleInfoChange = (e: React.ChangeEvent<HTMLInputElement>, target: 'admin' | 'company') => {
+        if (target === 'admin') {
+            setAdminProfile({ ...adminProfile, [e.target.name]: e.target.value });
+        } else {
+            setCompanyInfo({ ...companyInfo, [e.target.name]: e.target.value });
+        }
     };
 
-    const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>, target: 'avatar' | 'logo') => {
         const file = e.target.files?.[0];
         if (file) {
             if (file.size > 1 * 1024 * 1024) { // 1MB limit
-                 toast({ variant: 'destructive', title: 'Archivo muy grande', description: 'El logo no debe pesar más de 1MB.' });
+                 toast({ variant: 'destructive', title: 'Archivo muy grande', description: 'La imagen no debe pesar más de 1MB.' });
                 return;
             }
             const reader = new FileReader();
             reader.onloadend = () => {
                 const result = reader.result as string;
-                setLogoPreview(result);
-                setCompanyInfo({ ...companyInfo, logo: result });
+                if (target === 'avatar') {
+                    setAdminAvatarPreview(result);
+                    setAdminProfile({ ...adminProfile, avatar: result });
+                } else {
+                    setLogoPreview(result);
+                    setCompanyInfo({ ...companyInfo, logo: result });
+                }
             };
             reader.readAsDataURL(file);
         }
@@ -221,6 +252,7 @@ export default function SettingsPage() {
         try {
             const settingsRef = doc(db, 'config', 'mainSettings');
             const dataToUpdate: Partial<Settings> = {
+                adminProfile,
                 companyInfo,
                 condoFee: Number(condoFee),
             }
@@ -355,6 +387,42 @@ export default function SettingsPage() {
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2 space-y-8">
+                    
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Perfil de Administrador</CardTitle>
+                            <CardDescription>Edita tus datos personales.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="flex items-center gap-6">
+                                <Avatar className="w-24 h-24 text-lg">
+                                    <AvatarImage src={adminAvatarPreview || ''} alt="Admin Avatar" />
+                                    <AvatarFallback><UserCircle className="h-12 w-12"/></AvatarFallback>
+                                </Avatar>
+                                <div className="space-y-2">
+                                     <Label htmlFor="avatar-upload">Foto de Perfil</Label>
+                                     <div className="flex items-center gap-2">
+                                        <Input id="avatar-upload" type="file" className="hidden" onChange={(e) => handleImageChange(e, 'avatar')} accept="image/png, image/jpeg" />
+                                        <Button type="button" variant="outline" onClick={() => document.getElementById('avatar-upload')?.click()}>
+                                            <Upload className="mr-2 h-4 w-4"/> Cambiar Foto
+                                        </Button>
+                                     </div>
+                                     <p className="text-xs text-muted-foreground">PNG o JPG. Recomendado 200x200px, max 1MB.</p>
+                                </div>
+                             </div>
+                            <div className="grid md:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="admin-name">Nombre</Label>
+                                    <Input id="admin-name" name="name" value={adminProfile.name} onChange={(e) => handleInfoChange(e, 'admin')} />
+                                </div>
+                                 <div className="space-y-2">
+                                    <Label htmlFor="admin-email">Email</Label>
+                                    <Input id="admin-email" name="email" type="email" value={adminProfile.email} onChange={(e) => handleInfoChange(e, 'admin')} />
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                    
                     <Card>
                         <CardHeader>
                             <CardTitle>Información de la Empresa</CardTitle>
@@ -368,7 +436,7 @@ export default function SettingsPage() {
                                 <div className="space-y-2">
                                      <Label htmlFor="logo-upload">Logo de la Empresa</Label>
                                      <div className="flex items-center gap-2">
-                                        <Input id="logo-upload" type="file" className="hidden" onChange={handleLogoChange} accept="image/png, image/jpeg" />
+                                        <Input id="logo-upload" type="file" className="hidden" onChange={(e) => handleImageChange(e, 'logo')} accept="image/png, image/jpeg" />
                                         <Button type="button" variant="outline" onClick={() => document.getElementById('logo-upload')?.click()}>
                                             <Upload className="mr-2 h-4 w-4"/> Subir Logo
                                         </Button>
@@ -379,23 +447,23 @@ export default function SettingsPage() {
                             <div className="grid md:grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <Label htmlFor="name">Nombre</Label>
-                                    <Input id="name" name="name" value={companyInfo.name} onChange={handleInfoChange} />
+                                    <Input id="name" name="name" value={companyInfo.name} onChange={(e) => handleInfoChange(e, 'company')} />
                                 </div>
                                  <div className="space-y-2">
                                     <Label htmlFor="rif">RIF</Label>
-                                    <Input id="rif" name="rif" value={companyInfo.rif} onChange={handleInfoChange} />
+                                    <Input id="rif" name="rif" value={companyInfo.rif} onChange={(e) => handleInfoChange(e, 'company')} />
                                 </div>
                                 <div className="space-y-2 md:col-span-2">
                                     <Label htmlFor="address">Dirección</Label>
-                                    <Input id="address" name="address" value={companyInfo.address} onChange={handleInfoChange} />
+                                    <Input id="address" name="address" value={companyInfo.address} onChange={(e) => handleInfoChange(e, 'company')} />
                                 </div>
                                  <div className="space-y-2">
                                     <Label htmlFor="phone">Teléfono</Label>
-                                    <Input id="phone" name="phone" type="tel" value={companyInfo.phone} onChange={handleInfoChange} />
+                                    <Input id="phone" name="phone" type="tel" value={companyInfo.phone} onChange={(e) => handleInfoChange(e, 'company')} />
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="email">Correo Electrónico</Label>
-                                    <Input id="email" name="email" type="email" value={companyInfo.email} onChange={handleInfoChange} />
+                                    <Input id="email" name="email" type="email" value={companyInfo.email} onChange={(e) => handleInfoChange(e, 'company')} />
                                 </div>
                             </div>
                         </CardContent>
@@ -565,5 +633,3 @@ export default function SettingsPage() {
         </div>
     );
 }
-
-    
