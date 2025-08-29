@@ -84,7 +84,7 @@ export default function PeopleManagementPage() {
             const ownersData: Owner[] = [];
             snapshot.forEach((doc) => {
                 const data = doc.data();
-                // Ensure balance is always a number, default to 0
+                // Ensure balance is always a number, default to 0 if null/undefined
                 ownersData.push({ id: doc.id, ...data, balance: data.balance ?? 0 } as Owner);
             });
             
@@ -171,12 +171,20 @@ export default function PeopleManagementPage() {
         try {
             const { id, street, house, ...ownerData } = currentOwner;
             
-            // Ensure balance is a correctly formatted number before saving
+            // Prepare data for Firestore, handle balance specifically
             const balanceValue = parseFloat(String(ownerData.balance));
-            const dataToSave = {
+            const dataToSave: any = {
                 ...ownerData,
-                balance: isNaN(balanceValue) ? 0 : balanceValue,
             };
+
+            // Only include balance if it's a valid, non-zero number
+            if (!isNaN(balanceValue) && balanceValue > 0) {
+                dataToSave.balance = balanceValue;
+            } else {
+                // Explicitly remove balance if it's 0 or invalid to keep DB clean
+                delete dataToSave.balance;
+            }
+
 
             if (id) {
                 const ownerRef = doc(db, "owners", id);
@@ -557,6 +565,8 @@ export default function PeopleManagementPage() {
 
         </div>
     );
+
+    
 
     
 
