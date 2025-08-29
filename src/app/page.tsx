@@ -133,7 +133,7 @@ export default function LoginPage() {
       <Button variant="ghost" onClick={handleBack} className="mb-4">
         <ArrowLeft className="mr-2 h-4 w-4" /> Volver
       </Button>
-      <h2 className="text-2xl font-bold text-center text-secondary-foreground mb-6">
+      <h2 className="text-2xl font-bold text-center text-primary-foreground mb-6">
         Accede a tu panel de {selectedRole === "owner" ? "Propietario" : "Administrador"}
       </h2>
       <form onSubmit={handleLogin}>
@@ -179,14 +179,14 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-4xl shadow-2xl">
-        <CardHeader className="text-center bg-primary text-primary-foreground p-8 rounded-t-lg">
-          <div className="mx-auto bg-white rounded-full p-4 w-24 h-24 flex items-center justify-center mb-4">
+        <CardHeader className="text-center p-8 rounded-t-lg">
+          <div className="mx-auto bg-card rounded-full p-4 w-24 h-24 flex items-center justify-center mb-4">
             {isCompanyInfoLoading ? <Loader2 className="w-12 h-12 text-primary animate-spin" /> :
               companyInfo?.logo ? <img src={companyInfo.logo} alt="Logo" className="w-full h-full object-cover rounded-full" /> : <Building2 className="w-12 h-12 text-primary" />
             }
           </div>
           <CardTitle className="text-3xl font-headline">Bienvenido a {isCompanyInfoLoading ? '...' : companyInfo?.name || 'CondoConnect'}</CardTitle>
-          <CardDescription className="text-primary-foreground/80 text-lg">
+          <CardDescription className="text-muted-foreground text-lg">
             Ingresa a tu cuenta de condominio
           </CardDescription>
         </CardHeader>

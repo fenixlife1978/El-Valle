@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -14,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
-import { Calendar as CalendarIcon, Download, Search, Loader2, BarChart2 } from "lucide-react";
+import { Calendar as CalendarIcon, Download, Search, Loader2, BarChart2, ListChecks, FileText, UserCheck, ShieldCheck } from "lucide-react";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import html2canvas from 'html2canvas';
@@ -101,6 +100,8 @@ export default function ReportsPage() {
     // --- Form State ---
     const [selectedOwner, setSelectedOwner] = useState('');
     const [delinquencyPeriod, setDelinquencyPeriod] = useState('');
+    const [startDate, setStartDate] = useState<Date | undefined>();
+    const [endDate, setEndDate] = useState<Date | undefined>();
 
     // --- Chart State ---
     const [incomeChartData, setIncomeChartData] = useState<ChartData[]>([]);
@@ -122,7 +123,7 @@ export default function ReportsPage() {
             setLoading(true);
             try {
                 // Fetch Owners
-                const ownersQuery = query(collection(db, 'owners'));
+                const ownersQuery = query(collection(db, 'owners'), orderBy('name'));
                 const ownersSnapshot = await getDocs(ownersQuery);
                 let ownersData = ownersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), delinquency: 0, status: 'solvente' })) as Owner[];
                 
@@ -145,7 +146,7 @@ export default function ReportsPage() {
                     };
                 });
                 
-                setOwners(ownersData.sort((a,b) => a.name.localeCompare(b.name)));
+                setOwners(ownersData);
 
                 // Fetch Settings for Rate and Company Info
                 const settingsRef = doc(db, 'config', 'mainSettings');
@@ -190,7 +191,7 @@ export default function ReportsPage() {
             }
         };
         fetchData();
-    }, [toast]);
+    }, [toast, activeRate]);
 
     const generatePdf = (data: ReportPreviewData) => {
         const doc = new jsPDF();
@@ -274,7 +275,7 @@ export default function ReportsPage() {
     
     const generateChartPdf = async (chartRef: React.RefObject<HTMLDivElement>, title: string, filename: string) => {
         if (!chartRef.current) return;
-        const canvas = await html2canvas(chartRef.current, { backgroundColor: '#ffffff', scale: 2 });
+        const canvas = await html2canvas(chartRef.current, { backgroundColor: '#1C1C1E', scale: 2 });
         const imgData = canvas.toDataURL('image/png');
         
         const pdf = new jsPDF('landscape');
@@ -317,24 +318,36 @@ export default function ReportsPage() {
         const owner = owners.find(o => o.id === selectedOwner);
         if (!owner) return;
         
-        if (!owner.properties || owner.properties.length === 0 || !owner.properties[0].street) {
-            toast({ variant: 'destructive', title: 'Error de Datos', description: 'El propietario seleccionado no tiene propiedades completas registradas.' });
+        if (!owner.properties || owner.properties.length === 0) {
+            toast({ variant: 'destructive', title: 'Error de Datos', description: 'El propietario seleccionado no tiene propiedades registradas.' });
             return;
         }
 
         setGeneratingReport(true);
         try {
+            const validOwnerProperties = owner.properties.filter(p => p.street && p.house);
+            if (validOwnerProperties.length === 0) {
+                toast({ variant: 'destructive', title: 'Error de Datos', description: 'El propietario seleccionado no tiene propiedades completas registradas.' });
+                return;
+            }
+            
             // Fetch Payments
-            const paymentsQuery = query(
+            let paymentsQuery;
+            let paymentsSnapshot;
+            let allPayments: Payment[] = [];
+
+            // Firestore 'array-contains-any' is limited to 10 items. We may need to chunk it.
+            // For simplicity, we query for all payments for the user. A better approach for scale would be to query per property.
+            const paymentsBaseQuery = query(
                 collection(db, "payments"),
                 where("status", "==", "aprobado"),
-                where("beneficiaries", "array-contains-any", owner.properties.filter(p => p.street && p.house))
+                where("beneficiaries", "array-contains-any", validOwnerProperties.map(p => ({ ownerId: owner.id, house: p.house })))
             );
-            
-            const paymentsSnapshot = await getDocs(paymentsQuery);
-            let totalPaid = 0;
-            const allPayments = paymentsSnapshot.docs.map(doc => doc.data() as Payment);
 
+            paymentsSnapshot = await getDocs(paymentsBaseQuery);
+            allPayments = paymentsSnapshot.docs.map(doc => doc.data() as Payment);
+
+            let totalPaid = 0;
             const paymentsRows = allPayments
                 .filter(p => p.beneficiaries.some(b => b.ownerId === owner.id))
                 .sort((a, b) => a.paymentDate.toMillis() - b.paymentDate.toMillis())
@@ -535,7 +548,7 @@ export default function ReportsPage() {
             title: 'Reporte de Saldos a Favor',
             headers: ['Propietario', 'Propiedades', 'Saldo a Favor (USD)'],
             rows: ownersWithBalance.map(o => {
-                const properties = (o.properties && o.properties.length > 0)
+                const properties = (owner.properties && owner.properties.length > 0)
                     ? o.properties.map(p => `${p.street} - ${p.house}`).join(', ')
                     : (o.street && o.house ? `${o.street} - ${o.house}` : 'N/A');
                 return [o.name, properties, `$${o.balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}`];
@@ -547,21 +560,30 @@ export default function ReportsPage() {
     
     const showIncomeReportPreview = async () => {
         setGeneratingReport(true);
-        const q = query(
-            collection(db, 'payments'),
-            where('status', '==', 'aprobado')
-        );
         
-        const incomeSnapshot = await getDocs(q);
+        let finalQuery = query(
+            collection(db, 'payments'),
+            where('status', '==', 'aprobado'),
+            orderBy('paymentDate', 'desc')
+        );
+
+        if (startDate) {
+            finalQuery = query(finalQuery, where('paymentDate', '>=', startDate));
+        }
+        if (endDate) {
+            finalQuery = query(finalQuery, where('paymentDate', '<=', endDate));
+        }
+        
+        const incomeSnapshot = await getDocs(finalQuery);
         const incomePayments = incomeSnapshot.docs.map(doc => doc.data());
         const totalIncome = incomePayments.reduce((sum, p) => sum + p.totalAmount, 0);
 
         setPreviewData({
-            title: `Reporte de Ingresos (Histórico)`,
+            title: `Reporte de Ingresos`,
             headers: ['Fecha', 'Monto (Bs.)', 'Método de Pago'],
             rows: incomePayments.map(p => [new Date(p.paymentDate.seconds * 1000).toLocaleDateString('es-VE'), p.totalAmount.toFixed(2), p.paymentMethod]),
             footers: [`Total de Ingresos: Bs. ${totalIncome.toFixed(2)}`],
-            filename: 'reporte_ingresos_historico',
+            filename: 'reporte_ingresos',
         });
         setGeneratingReport(false);
         setIsPreviewOpen(true);
@@ -575,9 +597,9 @@ export default function ReportsPage() {
                const properties = (o.properties && o.properties.length > 0)
                    ? o.properties.map(p => `${p.street} - ${p.house}`).join(', ')
                    : (o.house ? `${o.street} - ${o.house}` : 'N/A');
-               const balanceDisplay = o.status === 'moroso' 
-                   ? `-$${Math.abs(o.balance).toLocaleString('en-US', { minimumFractionDigits: 2 })}` 
-                   : `$${o.balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+               const balanceDisplay = o.balance > 0 
+                   ? `$${o.balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}` 
+                   : (o.balance < 0 ? `-$${Math.abs(o.balance).toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '$0.00');
                return [o.name, properties, o.status === 'solvente' ? 'Solvente' : 'Moroso', balanceDisplay];
            }),
            filename: 'reporte_general_estatus'
@@ -600,66 +622,14 @@ export default function ReportsPage() {
                 <h1 className="text-3xl font-bold font-headline">Consultas y Reportes</h1>
                 <p className="text-muted-foreground">Genere y exporte reportes detallados sobre la gestión del condominio.</p>
             </div>
-             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card className="lg:col-span-1">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2"><BarChart2 className="h-5 w-5"/> Gráfico de Ingresos por Mes</CardTitle>
-                        <CardDescription>Visualización de los ingresos aprobados mensualmente.</CardDescription>
-                    </CardHeader>
-                    <CardContent ref={incomeChartRef} className="pl-2">
-                        {incomeChartData.length > 0 ? (
-                            <ChartContainer config={{
-                                total: { label: "Ingresos (Bs.)", color: "hsl(var(--primary))" }
-                            }} className="h-[250px] w-full">
-                                <BarChart accessibilityLayer data={incomeChartData}>
-                                    <XAxis dataKey="name" tickLine={false} axisLine={false} tickMargin={8} angle={-45} textAnchor="end" height={60} />
-                                    <YAxis tickLine={false} axisLine={false} tickMargin={8} />
-                                    <ChartTooltip content={<ChartTooltipContent />} />
-                                    <Bar dataKey="total" fill="var(--color-total)" radius={4} />
-                                </BarChart>
-                            </ChartContainer>
-                        ) : <p className="text-center text-muted-foreground h-[250px] flex items-center justify-center">No hay datos de ingresos para mostrar.</p>}
-                    </CardContent>
-                    <CardFooter>
-                        <Button className="w-full" onClick={() => generateChartPdf(incomeChartRef, 'Gráfico de Ingresos por Mes', 'grafico_ingresos')}>
-                           <Download className="mr-2 h-4 w-4" /> Exportar Gráfico
-                        </Button>
-                    </CardFooter>
-                </Card>
-                 <Card className="lg-col-span-1">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2"><BarChart2 className="h-5 w-5"/> Gráfico de Deuda por Calle</CardTitle>
-                        <CardDescription>Visualización de la deuda pendiente agrupada por calle.</CardDescription>
-                    </CardHeader>
-                    <CardContent ref={debtChartRef} className="pl-2">
-                         {debtChartData.length > 0 ? (
-                             <ChartContainer config={{
-                                total: { label: "Deuda (Bs.)", color: "hsl(var(--destructive))" }
-                            }} className="h-[250px] w-full">
-                                <BarChart accessibilityLayer data={debtChartData}>
-                                    <XAxis dataKey="name" tickLine={false} axisLine={false} tickMargin={8} />
-                                    <YAxis tickLine={false} axisLine={false} tickMargin={8} />
-                                    <ChartTooltip content={<ChartTooltipContent />} />
-                                    <Bar dataKey="total" fill="var(--color-total)" radius={4} />
-                                </BarChart>
-                            </ChartContainer>
-                         ) : <p className="text-center text-muted-foreground h-[250px] flex items-center justify-center">No hay datos de deudas para mostrar.</p>}
-                    </CardContent>
-                    <CardFooter>
-                        <Button className="w-full" variant="destructive" onClick={() => generateChartPdf(debtChartRef, 'Gráfico de Deuda por Calle', 'grafico_deudas')}>
-                           <Download className="mr-2 h-4 w-4" /> Exportar Gráfico
-                        </Button>
-                    </CardFooter>
-                </Card>
-            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 
                 {/* Reporte: Estado de Cuenta Individual */}
-                <Card className="md:col-span-2 lg:col-span-3">
+                <Card className="md:col-span-1 lg:col-span-1">
                     <CardHeader>
-                        <CardTitle>Estado de Cuenta Individual Detallado</CardTitle>
-                        <CardDescription>Consulte el historial completo de movimientos (pagos y deudas) de un propietario.</CardDescription>
+                        <CardTitle>Estado de Cuenta Individual</CardTitle>
+                        <CardDescription>Consulte el historial completo de un propietario.</CardDescription>
                     </CardHeader>
                     <CardContent className="grid sm:grid-cols-1 gap-4">
                         <div className="space-y-2">
@@ -715,47 +685,14 @@ export default function ReportsPage() {
                 <Card>
                     <CardHeader>
                         <CardTitle>Reporte de Solvencia</CardTitle>
-                        <CardDescription>Genere una lista de todos los propietarios al día con sus pagos.</CardDescription>
+                        <CardDescription>Genere una lista de todos los propietarios al día.</CardDescription>
                     </CardHeader>
-                    <CardContent className="flex items-center justify-center h-20">
-                         <p className="text-sm text-muted-foreground">Haga clic para generar.</p>
+                    <CardContent className="flex items-center justify-center h-[92px]">
+                         <p className="text-sm text-muted-foreground text-center">Haga clic para generar la lista de propietarios solventes.</p>
                     </CardContent>
                     <CardFooter>
                         <Button className="w-full" onClick={showSolvencyReportPreview} disabled={generatingReport}>
                            {generatingReport ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Search className="mr-2 h-4 w-4" />} Generar Vista Previa
-                        </Button>
-                    </CardFooter>
-                </Card>
-
-                {/* Reporte: Saldos a Favor */}
-                 <Card>
-                    <CardHeader>
-                        <CardTitle>Reporte de Saldos a Favor</CardTitle>
-                        <CardDescription>Liste todos los propietarios con saldo a favor y sus montos.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="flex items-center justify-center h-20">
-                         <p className="text-sm text-muted-foreground">Haga clic para generar.</p>
-                    </CardContent>
-                    <CardFooter>
-                        <Button className="w-full" onClick={showBalanceFavorReportPreview}>
-                           <Search className="mr-2 h-4 w-4" /> Generar Vista Previa
-                        </Button>
-                    </CardFooter>
-                </Card>
-
-                {/* Reporte: Ingresos por Período */}
-                <Card className="lg:col-span-2">
-                    <CardHeader>
-                        <CardTitle>Reporte de Ingresos</CardTitle>
-                        <CardDescription>Calcule los ingresos totales (histórico).</CardDescription>
-                    </CardHeader>
-                    <CardContent className="flex items-center justify-center h-20">
-                         <p className="text-sm text-muted-foreground">Haga clic para generar el reporte histórico.</p>
-                    </CardContent>
-                    <CardFooter>
-                         <Button className="w-full" onClick={showIncomeReportPreview} disabled={generatingReport}>
-                            {generatingReport ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Search className="mr-2 h-4 w-4" />}
-                            Generar Vista Previa
                         </Button>
                     </CardFooter>
                 </Card>
@@ -766,12 +703,68 @@ export default function ReportsPage() {
                         <CardTitle>Reporte General de Estatus</CardTitle>
                         <CardDescription>Una vista completa del estatus de pago de todas las unidades.</CardDescription>
                     </CardHeader>
-                     <CardContent className="flex items-center justify-center h-20">
-                         <p className="text-sm text-muted-foreground">Haga clic para generar.</p>
+                     <CardContent className="flex items-center justify-center h-[92px]">
+                         <p className="text-sm text-muted-foreground text-center">Haga clic para generar el reporte de estatus.</p>
                     </CardContent>
                     <CardFooter>
                         <Button className="w-full" onClick={showGeneralStatusReportPreview}>
                            <Search className="mr-2 h-4 w-4" /> Generar Vista Previa
+                        </Button>
+                    </CardFooter>
+                </Card>
+
+                {/* Reporte: Saldos a Favor */}
+                 <Card>
+                    <CardHeader>
+                        <CardTitle>Reporte de Saldos a Favor</CardTitle>
+                        <CardDescription>Liste todos los propietarios con saldo a favor y sus montos.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex items-center justify-center h-[92px]">
+                         <p className="text-sm text-muted-foreground text-center">Haga clic para generar el reporte de saldos.</p>
+                    </CardContent>
+                    <CardFooter>
+                        <Button className="w-full" onClick={showBalanceFavorReportPreview}>
+                           <Search className="mr-2 h-4 w-4" /> Generar Vista Previa
+                        </Button>
+                    </CardFooter>
+                </Card>
+
+                {/* Reporte: Ingresos por Período */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Reporte de Ingresos</CardTitle>
+                        <CardDescription>Calcule los ingresos totales en un período.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="grid sm:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="start-date">Fecha de Inicio</Label>
+                             <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button id="start-date" variant={"outline"} className={cn("w-full justify-start text-left font-normal", !startDate && "text-muted-foreground")}>
+                                        <CalendarIcon className="mr-2 h-4 w-4" />
+                                        {startDate ? format(startDate, "dd/MM/yyyy") : <span>Seleccione...</span>}
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={startDate} onSelect={setStartDate} initialFocus locale={es} /></PopoverContent>
+                            </Popover>
+                        </div>
+                        <div className="space-y-2">
+                             <Label htmlFor="end-date">Fecha de Fin</Label>
+                             <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button id="end-date" variant={"outline"} className={cn("w-full justify-start text-left font-normal", !endDate && "text-muted-foreground")}>
+                                        <CalendarIcon className="mr-2 h-4 w-4" />
+                                        {endDate ? format(endDate, "dd/MM/yyyy") : <span>Seleccione...</span>}
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={endDate} onSelect={setEndDate} initialFocus locale={es} /></PopoverContent>
+                            </Popover>
+                        </div>
+                    </CardContent>
+                    <CardFooter>
+                         <Button className="w-full" onClick={showIncomeReportPreview} disabled={generatingReport || !startDate || !endDate}>
+                            {generatingReport ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Search className="mr-2 h-4 w-4" />}
+                            Generar Vista Previa
                         </Button>
                     </CardFooter>
                 </Card>
@@ -847,8 +840,60 @@ export default function ReportsPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
+                <Card className="lg:col-span-1">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2"><BarChart2 className="h-5 w-5"/> Gráfico de Ingresos por Mes</CardTitle>
+                        <CardDescription>Visualización de los ingresos aprobados mensualmente.</CardDescription>
+                    </CardHeader>
+                    <CardContent ref={incomeChartRef} className="pl-2">
+                        {incomeChartData.length > 0 ? (
+                            <ChartContainer config={{
+                                total: { label: "Ingresos (Bs.)", color: "hsl(var(--primary))" }
+                            }} className="h-[250px] w-full">
+                                <BarChart accessibilityLayer data={incomeChartData}>
+                                    <XAxis dataKey="name" tickLine={false} axisLine={false} tickMargin={8} angle={-45} textAnchor="end" height={60} />
+                                    <YAxis tickLine={false} axisLine={false} tickMargin={8} />
+                                    <ChartTooltip content={<ChartTooltipContent />} />
+                                    <Bar dataKey="total" fill="var(--color-total)" radius={4} />
+                                </BarChart>
+                            </ChartContainer>
+                        ) : <p className="text-center text-muted-foreground h-[250px] flex items-center justify-center">No hay datos de ingresos para mostrar.</p>}
+                    </CardContent>
+                    <CardFooter>
+                        <Button className="w-full" onClick={() => generateChartPdf(incomeChartRef, 'Gráfico de Ingresos por Mes', 'grafico_ingresos')}>
+                           <Download className="mr-2 h-4 w-4" /> Exportar Gráfico
+                        </Button>
+                    </CardFooter>
+                </Card>
+                 <Card className="lg-col-span-1">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2"><BarChart2 className="h-5 w-5"/> Gráfico de Deuda por Calle</CardTitle>
+                        <CardDescription>Visualización de la deuda pendiente agrupada por calle.</CardDescription>
+                    </CardHeader>
+                    <CardContent ref={debtChartRef} className="pl-2">
+                         {debtChartData.length > 0 ? (
+                             <ChartContainer config={{
+                                total: { label: "Deuda (Bs.)", color: "hsl(var(--destructive))" }
+                            }} className="h-[250px] w-full">
+                                <BarChart accessibilityLayer data={debtChartData}>
+                                    <XAxis dataKey="name" tickLine={false} axisLine={false} tickMargin={8} />
+                                    <YAxis tickLine={false} axisLine={false} tickMargin={8} />
+                                    <ChartTooltip content={<ChartTooltipContent />} />
+                                    <Bar dataKey="total" fill="var(--color-total)" radius={4} />
+                                </BarChart>
+                            </ChartContainer>
+                         ) : <p className="text-center text-muted-foreground h-[250px] flex items-center justify-center">No hay datos de deudas para mostrar.</p>}
+                    </CardContent>
+                    <CardFooter>
+                        <Button className="w-full" variant="destructive" onClick={() => generateChartPdf(debtChartRef, 'Gráfico de Deuda por Calle', 'grafico_deudas')}>
+                           <Download className="mr-2 h-4 w-4" /> Exportar Gráfico
+                        </Button>
+                    </CardFooter>
+                </Card>
+            </div>
 
         </div>
     );
 }
-
