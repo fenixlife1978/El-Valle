@@ -12,6 +12,7 @@ import { CheckCircle, Loader2, CalendarPlus, Info, Check } from 'lucide-react';
 import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc, writeBatch, Timestamp, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { addMonths, format, startOfMonth } from 'date-fns';
+import { es } from 'date-fns/locale';
 
 type Owner = {
     id: string;
