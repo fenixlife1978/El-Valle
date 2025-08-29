@@ -23,6 +23,7 @@ type Payment = {
     type: string;
     ref: string;
     status: 'aprobado' | 'pendiente' | 'rechazado';
+    reportedAt: any;
 };
 
 type UserData = {
@@ -164,9 +165,7 @@ export default function OwnerDashboardPage() {
 
         const paymentsQuery = query(
             collection(db, "payments"),
-            where("reportedBy", "==", userId),
-            orderBy("reportedAt", "desc"),
-            limit(5)
+            where("reportedBy", "==", userId)
         );
         const paymentsUnsubscribe = onSnapshot(paymentsQuery, (snapshot) => {
             const paymentsData: Payment[] = [];
@@ -180,9 +179,16 @@ export default function OwnerDashboardPage() {
                     type: data.paymentMethod,
                     ref: data.reference,
                     status: data.status,
+                    reportedAt: data.reportedAt,
                 });
             });
-            setPayments(paymentsData);
+            // Sort client-side to avoid composite index
+            const sortedPayments = paymentsData.sort((a,b) => {
+                const dateA = a.reportedAt?.toMillis() || 0;
+                const dateB = b.reportedAt?.toMillis() || 0;
+                return dateB - dateA;
+            });
+            setPayments(sortedPayments.slice(0, 5));
         });
         
         return () => {
@@ -385,6 +391,5 @@ export default function OwnerDashboardPage() {
     </div>
   );
 }
-
 
     
