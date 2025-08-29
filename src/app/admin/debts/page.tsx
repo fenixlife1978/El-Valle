@@ -10,12 +10,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PlusCircle, MoreHorizontal, Edit, Trash2, Loader2, Info, ArrowLeft, Search, WalletCards } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, Edit, Trash2, Loader2, Info, ArrowLeft, Search, WalletCards, Calculator, Minus, Equal } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { collection, query, onSnapshot, where, doc, getDoc, writeBatch, updateDoc, deleteDoc, runTransaction, Timestamp, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Badge } from '@/components/ui/badge';
 import { differenceInCalendarMonths, format, addMonths } from 'date-fns';
+import { Checkbox } from '@/components/ui/checkbox';
 
 type Owner = {
     id: string;
@@ -83,6 +84,8 @@ export default function DebtManagementPage() {
     const [debtToDelete, setDebtToDelete] = useState<Debt | null>(null);
     const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
     
+    const [selectedDebtsForPayment, setSelectedDebtsForPayment] = useState<string[]>([]);
+
     const { toast } = useToast();
 
     // Fetch All Owners and their debts
@@ -131,8 +134,8 @@ export default function DebtManagementPage() {
                     return { 
                         id: doc.id, 
                         name: data.name, 
-                        house: data.house, 
-                        street: data.street,
+                        house: (data.properties && data.properties.length > 0) ? data.properties[0].house : data.house,
+                        street: (data.properties && data.properties.length > 0) ? data.properties[0].street : data.street,
                         balance: data.balance || 0,
                         pendingDebtUSD: debtsByOwner[doc.id] || 0,
                     };
@@ -182,6 +185,12 @@ export default function DebtManagementPage() {
 
         return () => unsubscribe();
     }, [view, selectedOwner]);
+    
+    // Reset selections when owner changes
+    useEffect(() => {
+        setSelectedDebtsForPayment([]);
+    }, [selectedOwner]);
+
 
     const handleManageOwnerDebts = (owner: Owner) => {
         setSelectedOwner(owner);
@@ -222,11 +231,6 @@ export default function DebtManagementPage() {
                 
                 if (!ownerDoc.exists()) throw "El documento del propietario no existe.";
 
-                // If a paid debt is deleted, we should credit the owner.
-                // This logic assumes the payment for that debt was applied to the balance before.
-                // The correct approach is to refund the amount that was paid for THAT specific debt.
-                // This assumes paidAmountUSD was stored on the debt doc. A safer bet is to use amountUSD * a stored exchange rate.
-                // For simplicity here, we'll use amountUSD * activeRate, but this can be inaccurate.
                 if (debtToDelete.status === 'paid') {
                      const currentBalanceBs = ownerDoc.data().balance || 0;
                      if(activeRate > 0) {
@@ -285,7 +289,6 @@ export default function DebtManagementPage() {
                     const debtDate = addMonths(startDate, i);
                     const debtYear = debtDate.getFullYear();
                     const debtMonth = debtDate.getMonth() + 1;
-                    const debtAmountBs = amountUSD * activeRate;
                     
                     const debtData: any = {
                         ownerId: selectedOwner.id,
@@ -293,6 +296,7 @@ export default function DebtManagementPage() {
                         month: debtMonth,
                         amountUSD: amountUSD,
                         description: description,
+                        status: 'pending'
                     };
 
                     const existingDebtQuery = query(collection(db, 'debts'), 
@@ -303,13 +307,12 @@ export default function DebtManagementPage() {
                     const existingDebtSnapshot = await getDocs(existingDebtQuery);
                     
                     if (existingDebtSnapshot.empty) {
+                        const debtAmountBs = amountUSD * activeRate;
                         if (currentBalanceBs >= debtAmountBs) {
                             currentBalanceBs -= debtAmountBs;
                             debtData.status = 'paid';
                             debtData.paidAmountUSD = amountUSD;
                             debtData.paymentDate = Timestamp.now();
-                        } else {
-                            debtData.status = 'pending';
                         }
                         
                         const debtRef = doc(collection(db, "debts"));
@@ -376,6 +379,30 @@ export default function DebtManagementPage() {
         const toDateStr = months.find(m => m.value === endDate.getMonth() + 1)?.label + ` ${endDate.getFullYear()}`;
         return `Se generarán ${monthsCount} deudas desde ${fromDateStr} hasta ${toDateStr}.`;
     }, [currentMassDebt.fromMonth, currentMassDebt.fromYear]);
+
+    const handleDebtSelection = (debtId: string) => {
+        setSelectedDebtsForPayment(prev => 
+            prev.includes(debtId) ? prev.filter(id => id !== debtId) : [...prev, debtId]
+        );
+    };
+
+    const paymentCalculator = useMemo(() => {
+        if (!selectedOwner) return { totalSelectedBs: 0, balanceInFavor: 0, totalToPay: 0, hasSelection: false };
+        
+        const totalSelectedDebtUSD = selectedOwnerDebts
+            .filter(debt => selectedDebtsForPayment.includes(debt.id))
+            .reduce((sum, debt) => sum + debt.amountUSD, 0);
+            
+        const totalSelectedDebtBs = totalSelectedDebtUSD * activeRate;
+        const totalToPay = Math.max(0, totalSelectedDebtBs - selectedOwner.balance);
+
+        return {
+            totalSelectedBs: totalSelectedDebtBs,
+            balanceInFavor: selectedOwner.balance,
+            totalToPay: totalToPay,
+            hasSelection: selectedDebtsForPayment.length > 0,
+        };
+    }, [selectedDebtsForPayment, selectedOwnerDebts, activeRate, selectedOwner]);
 
 
     if (loading) {
@@ -475,6 +502,9 @@ export default function DebtManagementPage() {
     
     // Detail View
     if (view === 'detail' && selectedOwner) {
+        const pendingDebts = selectedOwnerDebts.filter(d => d.status === 'pending').sort((a,b) => a.year - b.year || a.month - b.month);
+        const paidDebts = selectedOwnerDebts.filter(d => d.status === 'paid').sort((a,b) => b.year - a.year || b.month - a.month);
+
         return (
             <div className="space-y-8">
                  <Button variant="outline" onClick={() => setView('list')}>
@@ -497,9 +527,10 @@ export default function DebtManagementPage() {
                         <Table>
                             <TableHeader>
                                 <TableRow>
+                                    <TableHead className="w-[50px] text-center">Pagar</TableHead>
                                     <TableHead>Período</TableHead>
                                     <TableHead>Descripción</TableHead>
-                                    <TableHead>Monto (USD)</TableHead>
+                                    <TableHead>Monto (Bs.)</TableHead>
                                     <TableHead>Estado</TableHead>
                                     <TableHead className="text-right">Acciones</TableHead>
                                 </TableRow>
@@ -507,13 +538,13 @@ export default function DebtManagementPage() {
                             <TableBody>
                                 {loadingDebts ? (
                                     <TableRow>
-                                        <TableCell colSpan={5} className="h-24 text-center">
+                                        <TableCell colSpan={6} className="h-24 text-center">
                                             <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
                                         </TableCell>
                                     </TableRow>
                                 ) : selectedOwnerDebts.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={5} className="h-24 text-center">
+                                        <TableCell colSpan={6} className="h-24 text-center">
                                             <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
                                                 <Info className="h-8 w-8" />
                                                 <span>Este propietario no tiene deudas registradas.</span>
@@ -521,42 +552,82 @@ export default function DebtManagementPage() {
                                         </TableCell>
                                     </TableRow>
                                 ) : (
-                                    selectedOwnerDebts.map((debt) => (
-                                        <TableRow key={debt.id}>
-                                            <TableCell className="font-medium">{months.find(m => m.value === debt.month)?.label} {debt.year}</TableCell>
-                                            <TableCell>{debt.description}</TableCell>
-                                            <TableCell>$ {debt.amountUSD.toFixed(2)}</TableCell>
-                                            <TableCell className="capitalize">
-                                                <Badge variant={debt.status === 'pending' ? 'warning' : 'success'}>
-                                                    {debt.status === 'pending' ? 'Pendiente' : 'Pagada'}
-                                                </Badge>
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                 <DropdownMenu>
-                                                    <DropdownMenuTrigger asChild>
-                                                        <Button variant="ghost" className="h-8 w-8 p-0">
-                                                            <span className="sr-only">Abrir menú</span>
-                                                            <MoreHorizontal className="h-4 w-4" />
-                                                        </Button>
-                                                    </DropdownMenuTrigger>
-                                                    <DropdownMenuContent align="end">
-                                                        <DropdownMenuItem onClick={() => handleEditDebt(debt)}>
-                                                            <Edit className="mr-2 h-4 w-4" />
-                                                            Editar
-                                                        </DropdownMenuItem>
-                                                        <DropdownMenuItem onClick={() => handleDeleteDebt(debt)} className="text-destructive">
-                                                            <Trash2 className="mr-2 h-4 w-4" />
-                                                            Eliminar
-                                                        </DropdownMenuItem>
-                                                    </DropdownMenuContent>
-                                                </DropdownMenu>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))
+                                    <>
+                                        {pendingDebts.map((debt) => (
+                                            <TableRow key={debt.id} data-state={selectedDebtsForPayment.includes(debt.id) ? 'selected' : ''}>
+                                                <TableCell className="text-center">
+                                                    <Checkbox 
+                                                        onCheckedChange={() => handleDebtSelection(debt.id)}
+                                                        checked={selectedDebtsForPayment.includes(debt.id)}
+                                                        aria-label={`Seleccionar deuda de ${months.find(m => m.value === debt.month)?.label} ${debt.year}`}
+                                                    />
+                                                </TableCell>
+                                                <TableCell className="font-medium">{months.find(m => m.value === debt.month)?.label} {debt.year}</TableCell>
+                                                <TableCell>{debt.description}</TableCell>
+                                                <TableCell>Bs. {(debt.amountUSD * activeRate).toLocaleString('es-VE', {minimumFractionDigits: 2})}</TableCell>
+                                                <TableCell className="capitalize">
+                                                    <Badge variant={'warning'}>Pendiente</Badge>
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    <DropdownMenu>
+                                                        <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><span className="sr-only">Abrir menú</span><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                                                        <DropdownMenuContent align="end">
+                                                            <DropdownMenuItem onClick={() => handleEditDebt(debt)}><Edit className="mr-2 h-4 w-4" />Editar</DropdownMenuItem>
+                                                            <DropdownMenuItem onClick={() => handleDeleteDebt(debt)} className="text-destructive"><Trash2 className="mr-2 h-4 w-4" />Eliminar</DropdownMenuItem>
+                                                        </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                        {paidDebts.map((debt) => (
+                                            <TableRow key={debt.id} className="text-muted-foreground">
+                                                <TableCell className="text-center"><Checkbox disabled/></TableCell>
+                                                <TableCell className="font-medium">{months.find(m => m.value === debt.month)?.label} {debt.year}</TableCell>
+                                                <TableCell>{debt.description}</TableCell>
+                                                <TableCell>Bs. {(debt.amountUSD * activeRate).toLocaleString('es-VE', {minimumFractionDigits: 2})}</TableCell>
+                                                <TableCell className="capitalize">
+                                                    <Badge variant={'success'}>Pagada</Badge>
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    <DropdownMenu>
+                                                        <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><span className="sr-only">Abrir menú</span><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                                                        <DropdownMenuContent align="end">
+                                                            <DropdownMenuItem onClick={() => handleEditDebt(debt)}><Edit className="mr-2 h-4 w-4" />Editar</DropdownMenuItem>
+                                                            <DropdownMenuItem onClick={() => handleDeleteDebt(debt)} className="text-destructive"><Trash2 className="mr-2 h-4 w-4" />Eliminar</DropdownMenuItem>
+                                                        </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </>
                                 )}
                             </TableBody>
                         </Table>
                     </CardContent>
+                    {paymentCalculator.hasSelection && (
+                        <CardFooter className="p-4 bg-muted/50 border-t flex-col items-end">
+                            <div className="w-full max-w-md space-y-2">
+                                <h3 className="text-lg font-semibold flex items-center"><Calculator className="mr-2 h-5 w-5"/> Calculadora de Pago</h3>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-muted-foreground">Total Seleccionado:</span>
+                                    <span className="font-medium">Bs. {paymentCalculator.totalSelectedBs.toLocaleString('es-VE', {minimumFractionDigits: 2})}</span>
+                                </div>
+                                <div className="flex justify-between items-center text-sm">
+                                    <span className="text-muted-foreground flex items-center"><Minus className="mr-2 h-4 w-4"/> Saldo a Favor:</span>
+                                    <span className="font-medium text-success">Bs. {paymentCalculator.balanceInFavor.toLocaleString('es-VE', {minimumFractionDigits: 2})}</span>
+                                </div>
+                                <hr className="my-1"/>
+                                <div className="flex justify-between items-center text-lg">
+                                    <span className="font-bold flex items-center"><Equal className="mr-2 h-4 w-4"/> TOTAL A PAGAR:</span>
+                                    <span className="font-bold text-primary">Bs. {paymentCalculator.totalToPay.toLocaleString('es-VE', {minimumFractionDigits: 2})}</span>
+                                </div>
+                            </div>
+                             <div className="flex gap-2 mt-4">
+                                <Button variant="outline">Generar Recibo Proforma</Button>
+                                <Button>Registrar Pago</Button>
+                            </div>
+                        </CardFooter>
+                    )}
                 </Card>
 
                  {/* Mass Debt Dialog */}
@@ -668,3 +739,5 @@ export default function DebtManagementPage() {
     // Fallback while loading or if view is invalid
     return null;
 }
+
+    
