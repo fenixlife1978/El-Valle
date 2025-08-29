@@ -23,6 +23,7 @@ type Owner = {
     house: string;
     street: string;
     balance: number;
+    pendingDebtUSD: number;
 };
 
 type Debt = {
@@ -66,16 +67,15 @@ export default function DebtManagementPage() {
     const [owners, setOwners] = useState<Owner[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    const [activeRate, setActiveRate] = useState(0);
 
     const [selectedOwner, setSelectedOwner] = useState<Owner | null>(null);
     const [selectedOwnerDebts, setSelectedOwnerDebts] = useState<Debt[]>([]);
     const [loadingDebts, setLoadingDebts] = useState(false);
     
-    // Dialog for mass debt creation
     const [isMassDebtDialogOpen, setIsMassDebtDialogOpen] = useState(false);
     const [currentMassDebt, setCurrentMassDebt] = useState<MassDebt>(emptyMassDebt);
     
-    // Dialog for single debt edit
     const [isEditDebtDialogOpen, setIsEditDebtDialogOpen] = useState(false);
     const [debtToEdit, setDebtToEdit] = useState<Debt | null>(null);
     const [currentDebtData, setCurrentDebtData] = useState<{description: string, amountUSD: number | string}>({ description: '', amountUSD: '' });
@@ -85,30 +85,69 @@ export default function DebtManagementPage() {
     
     const { toast } = useToast();
 
-    // Fetch All Owners
+    // Fetch All Owners and their debts
     useEffect(() => {
         setLoading(true);
-        const ownersQuery = query(collection(db, "owners"));
-        const ownersUnsubscribe = onSnapshot(ownersQuery, (snapshot) => {
-            const ownersData: Owner[] = snapshot.docs.map(doc => {
-                const data = doc.data();
-                return { 
-                    id: doc.id, 
-                    name: data.name, 
-                    house: data.house, 
-                    street: data.street,
-                    balance: data.balance || 0
-                };
+
+        const fetchSettingsAndDebts = async () => {
+             try {
+                const settingsRef = doc(db, 'config', 'mainSettings');
+                const settingsSnap = await getDoc(settingsRef);
+                let currentActiveRate = 0;
+                if (settingsSnap.exists()) {
+                    const settings = settingsSnap.data();
+                    const rates = (settings.exchangeRates || []);
+                    const activeRateObj = rates.find((r: any) => r.active);
+                    if (activeRateObj) {
+                        currentActiveRate = activeRateObj.rate;
+                    } else if (rates.length > 0) {
+                        const sortedRates = [...rates].sort((a:any,b:any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                        currentActiveRate = sortedRates[0].rate;
+                    }
+                }
+                setActiveRate(currentActiveRate);
+
+                const pendingDebtsQuery = query(collection(db, "debts"), where("status", "==", "pending"));
+                const pendingDebtsSnapshot = await getDocs(pendingDebtsQuery);
+                const debtsByOwner: { [key: string]: number } = {};
+                pendingDebtsSnapshot.forEach(doc => {
+                    const debt = doc.data();
+                    debtsByOwner[debt.ownerId] = (debtsByOwner[debt.ownerId] || 0) + debt.amountUSD;
+                });
+                return debtsByOwner;
+
+            } catch (error) {
+                console.error("Error fetching settings or debts:", error);
+                toast({ variant: 'destructive', title: 'Error de Carga', description: 'No se pudieron cargar datos críticos.' });
+                return {};
+            }
+        };
+
+        fetchSettingsAndDebts().then(debtsByOwner => {
+            const ownersQuery = query(collection(db, "owners"));
+            const ownersUnsubscribe = onSnapshot(ownersQuery, (snapshot) => {
+                const ownersData: Owner[] = snapshot.docs.map(doc => {
+                    const data = doc.data();
+                    return { 
+                        id: doc.id, 
+                        name: data.name, 
+                        house: data.house, 
+                        street: data.street,
+                        balance: data.balance || 0,
+                        pendingDebtUSD: debtsByOwner[doc.id] || 0,
+                    };
+                });
+                setOwners(ownersData);
+                setLoading(false);
+            }, (error) => {
+                console.error("Error fetching owners:", error);
+                toast({ variant: 'destructive', title: 'Error de Carga', description: 'No se pudieron cargar los propietarios.' });
+                setLoading(false);
             });
-            setOwners(ownersData);
-            setLoading(false);
-        }, (error) => {
-            console.error("Error fetching owners:", error);
-            toast({ variant: 'destructive', title: 'Error de Carga', description: 'No se pudieron cargar los propietarios.' });
-            setLoading(false);
+            
+            return () => ownersUnsubscribe();
         });
 
-        return () => ownersUnsubscribe();
     }, [toast]);
     
     // Filter owners based on search term
@@ -177,28 +216,26 @@ export default function DebtManagementPage() {
         try {
             const ownerRef = doc(db, "owners", selectedOwner.id);
             const debtRef = doc(db, "debts", debtToDelete.id);
-            const settingsRef = doc(db, 'config', 'mainSettings');
             
             await runTransaction(db, async (transaction) => {
                 const ownerDoc = await transaction.get(ownerRef);
-                const settingsDoc = await transaction.get(settingsRef);
                 
                 if (!ownerDoc.exists()) throw "El documento del propietario no existe.";
-                if (!settingsDoc.exists()) throw "No se encontró la configuración del sistema.";
-
-                const rates = settingsDoc.data()?.exchangeRates || [];
-                let activeRate = rates.find((r: any) => r.active)?.rate;
-                if (!activeRate && rates.length > 0) {
-                    activeRate = [...rates].sort((a:any, b:any) => new Date(b.date).getTime() - new Date(a.date).getTime())[0].rate;
-                }
-                if(!activeRate) throw "No hay una tasa de cambio activa o registrada configurada.";
 
                 // If a paid debt is deleted, we should credit the owner.
+                // This logic assumes the payment for that debt was applied to the balance before.
+                // The correct approach is to refund the amount that was paid for THAT specific debt.
+                // This assumes paidAmountUSD was stored on the debt doc. A safer bet is to use amountUSD * a stored exchange rate.
+                // For simplicity here, we'll use amountUSD * activeRate, but this can be inaccurate.
                 if (debtToDelete.status === 'paid') {
                      const currentBalanceBs = ownerDoc.data().balance || 0;
-                     const debtAmountBs = debtToDelete.amountUSD * activeRate;
-                     const newBalanceBs = currentBalanceBs + debtAmountBs;
-                     transaction.update(ownerRef, { balance: newBalanceBs });
+                     if(activeRate > 0) {
+                        const debtAmountBs = debtToDelete.amountUSD * activeRate;
+                        const newBalanceBs = currentBalanceBs + debtAmountBs;
+                        transaction.update(ownerRef, { balance: newBalanceBs });
+                     } else {
+                        throw "No hay una tasa de cambio activa para recalcular el saldo.";
+                     }
                 }
                 
                 transaction.delete(debtRef);
@@ -236,22 +273,12 @@ export default function DebtManagementPage() {
     
         try {
             const ownerRef = doc(db, "owners", selectedOwner.id);
-            const settingsRef = doc(db, 'config', 'mainSettings');
+            if(activeRate === 0) throw "No hay una tasa de cambio activa o registrada configurada.";
 
             await runTransaction(db, async (transaction) => {
                 const ownerDoc = await transaction.get(ownerRef);
-                const settingsDoc = await transaction.get(settingsRef);
-                
                 if (!ownerDoc.exists()) throw "El documento del propietario no existe.";
-                if (!settingsDoc.exists()) throw "No se encontró la configuración del sistema.";
-
-                const rates = settingsDoc.data()?.exchangeRates || [];
-                let activeRate = rates.find((r: any) => r.active)?.rate;
-                if (!activeRate && rates.length > 0) {
-                    activeRate = [...rates].sort((a:any, b:any) => new Date(b.date).getTime() - new Date(a.date).getTime())[0].rate;
-                }
-                if(!activeRate) throw "No hay una tasa de cambio activa o registrada configurada.";
-
+                
                 let currentBalanceBs = ownerDoc.data().balance || 0;
     
                 for (let i = 0; i < monthsToGenerate; i++) {
@@ -276,7 +303,6 @@ export default function DebtManagementPage() {
                     const existingDebtSnapshot = await getDocs(existingDebtQuery);
                     
                     if (existingDebtSnapshot.empty) {
-                        // Business Rule: A debt is only paid if the available funds cover the entire amount. No partial payments.
                         if (currentBalanceBs >= debtAmountBs) {
                             currentBalanceBs -= debtAmountBs;
                             debtData.status = 'paid';
@@ -291,7 +317,6 @@ export default function DebtManagementPage() {
                     }
                 }
     
-                // The balance is only updated with what's left after paying debts.
                 transaction.update(ownerRef, { balance: currentBalanceBs });
             });
     
@@ -388,20 +413,21 @@ export default function DebtManagementPage() {
                                 <TableRow>
                                     <TableHead>Propietario</TableHead>
                                     <TableHead>Ubicación</TableHead>
-                                    <TableHead>Saldo (Bs.)</TableHead>
+                                    <TableHead>Deuda Pendiente (Bs.)</TableHead>
+                                    <TableHead>Saldo a Favor (Bs.)</TableHead>
                                     <TableHead className="text-right">Acción</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {loading ? (
                                      <TableRow>
-                                        <TableCell colSpan={4} className="h-24 text-center">
+                                        <TableCell colSpan={5} className="h-24 text-center">
                                              <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
                                         </TableCell>
                                     </TableRow>
                                 ) : filteredOwners.length === 0 ? (
                                      <TableRow>
-                                        <TableCell colSpan={4} className="h-24 text-center">
+                                        <TableCell colSpan={5} className="h-24 text-center">
                                             <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
                                                 <Info className="h-8 w-8" />
                                                 <span>No se encontraron propietarios.</span>
@@ -413,6 +439,15 @@ export default function DebtManagementPage() {
                                         <TableRow key={owner.id}>
                                             <TableCell className="font-medium">{owner.name}</TableCell>
                                             <TableCell>{owner.street} - {owner.house}</TableCell>
+                                            <TableCell>
+                                               {owner.pendingDebtUSD > 0 ? (
+                                                    <Badge variant="destructive">
+                                                        Bs. {(owner.pendingDebtUSD * activeRate).toLocaleString('es-VE', {minimumFractionDigits: 2})}
+                                                    </Badge>
+                                                ) : (
+                                                    <Badge variant="outline">Bs. 0,00</Badge>
+                                                )}
+                                            </TableCell>
                                             <TableCell>
                                                {owner.balance > 0 ? (
                                                     <Badge variant="success">
@@ -633,5 +668,3 @@ export default function DebtManagementPage() {
     // Fallback while loading or if view is invalid
     return null;
 }
-
-    
