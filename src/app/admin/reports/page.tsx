@@ -101,9 +101,7 @@ export default function ReportsPage() {
     // --- Form State ---
     const [selectedOwner, setSelectedOwner] = useState('');
     const [delinquencyPeriod, setDelinquencyPeriod] = useState('');
-    const [startDate, setStartDate] = useState<Date | undefined>();
-    const [endDate, setEndDate] = useState<Date | undefined>();
-
+    
     // --- Chart State ---
     const [incomeChartData, setIncomeChartData] = useState<ChartData[]>([]);
     const [debtChartData, setDebtChartData] = useState<ChartData[]>([]);
@@ -178,7 +176,7 @@ export default function ReportsPage() {
                     if(owner) {
                         const ownerStreet = (owner.properties && owner.properties.length > 0) ? owner.properties[0].street : owner.street;
                         if (ownerStreet) {
-                            debtsByStreet[ownerStreet] = (debtsByStreet[ownerStreet] || 0) + (debt.amountUSD * activeRate);
+                            debtsByStreet[ownerStreet] = (debtsByStreet[ownerStreet] || 0) + debt.amountUSD;
                         }
                     }
                 }
@@ -334,8 +332,6 @@ export default function ReportsPage() {
             }
             
             // Fetch Payments
-            let allPayments: Payment[] = [];
-
             const paymentsQuery = query(
                 collection(db, "payments"),
                 where("status", "==", "aprobado"),
@@ -343,7 +339,7 @@ export default function ReportsPage() {
             );
 
             const paymentsSnapshot = await getDocs(paymentsQuery);
-            allPayments = paymentsSnapshot.docs.map(doc => doc.data() as Payment);
+            const allPayments = paymentsSnapshot.docs.map(doc => doc.data() as Payment);
 
             let totalPaid = 0;
             const paymentsRows = allPayments
@@ -565,13 +561,6 @@ export default function ReportsPage() {
             orderBy('paymentDate', 'desc')
         );
 
-        if (startDate) {
-            finalQuery = query(finalQuery, where('paymentDate', '>=', startDate));
-        }
-        if (endDate) {
-            finalQuery = query(finalQuery, where('paymentDate', '<=', endDate));
-        }
-        
         const incomeSnapshot = await getDocs(finalQuery);
         const incomePayments = incomeSnapshot.docs.map(doc => doc.data());
         const totalIncome = incomePayments.reduce((sum, p) => sum + p.totalAmount, 0);
@@ -742,33 +731,10 @@ export default function ReportsPage() {
                         <CardDescription>Calcule los ingresos totales en un período.</CardDescription>
                     </CardHeader>
                     <CardContent className="grid sm:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="start-date">Fecha de Inicio</Label>
-                             <Popover>
-                                <PopoverTrigger asChild>
-                                    <Button id="start-date" variant={"outline"} className={cn("w-full justify-start text-left font-normal", !startDate && "text-muted-foreground")}>
-                                        <CalendarIcon className="mr-2 h-4 w-4" />
-                                        {startDate ? format(startDate, "dd/MM/yyyy") : <span>Seleccione...</span>}
-                                    </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={startDate} onSelect={setStartDate} initialFocus locale={es} /></PopoverContent>
-                            </Popover>
-                        </div>
-                        <div className="space-y-2">
-                             <Label htmlFor="end-date">Fecha de Fin</Label>
-                             <Popover>
-                                <PopoverTrigger asChild>
-                                    <Button id="end-date" variant={"outline"} className={cn("w-full justify-start text-left font-normal", !endDate && "text-muted-foreground")}>
-                                        <CalendarIcon className="mr-2 h-4 w-4" />
-                                        {endDate ? format(endDate, "dd/MM/yyyy") : <span>Seleccione...</span>}
-                                    </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={endDate} onSelect={setEndDate} initialFocus locale={es} /></PopoverContent>
-                            </Popover>
-                        </div>
+                        {/* Date pickers removed as per request for "to-date" reports */}
                     </CardContent>
                     <CardFooter>
-                         <Button className="w-full" onClick={showIncomeReportPreview} disabled={generatingReport || !startDate || !endDate}>
+                         <Button className="w-full" onClick={showIncomeReportPreview} disabled={generatingReport}>
                             {generatingReport ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Search className="mr-2 h-4 w-4" />}
                             Generar Vista Previa
                         </Button>
@@ -876,12 +842,12 @@ export default function ReportsPage() {
                  <Card className="lg-col-span-1">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2"><BarChart2 className="h-5 w-5"/> Gráfico de Deuda por Calle</CardTitle>
-                        <CardDescription>Visualización de la deuda pendiente agrupada por calle.</CardDescription>
+                        <CardDescription>Visualización de la deuda pendiente (en USD) agrupada por calle.</CardDescription>
                     </CardHeader>
                     <CardContent ref={debtChartRef} className="pl-2">
                          {debtChartData.length > 0 ? (
                              <ChartContainer config={{
-                                total: { label: "Deuda (Bs.)", color: "hsl(var(--destructive))" }
+                                total: { label: "Deuda (USD)", color: "hsl(var(--destructive))" }
                             }} className="h-[250px] w-full">
                                 <BarChart accessibilityLayer data={debtChartData}>
                                     <XAxis dataKey="name" tickLine={false} axisLine={false} tickMargin={8} />
@@ -893,7 +859,7 @@ export default function ReportsPage() {
                          ) : <p className="text-center text-muted-foreground h-[250px] flex items-center justify-center">No hay datos de deudas para mostrar.</p>}
                     </CardContent>
                     <CardFooter>
-                        <Button className="w-full" variant="destructive" onClick={() => generateChartPdf(debtChartRef, 'Gráfico de Deuda por Calle', 'grafico_deudas')}>
+                        <Button className="w-full" variant="destructive" onClick={() => generateChartPdf(debtChartRef, 'Gráfico de Deuda por Calle (USD)', 'grafico_deudas_usd')}>
                            <Download className="mr-2 h-4 w-4" /> Exportar Gráfico
                         </Button>
                     </CardFooter>
@@ -903,5 +869,3 @@ export default function ReportsPage() {
         </div>
     );
 }
-
-    
