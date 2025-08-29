@@ -76,8 +76,8 @@ export default function SettingsPage() {
     const [exchangeRates, setExchangeRates] = useState<ExchangeRate[]>([]);
     
     // State for adding a new rate
-    const [newRateDate, setNewRateDate] = useState<Date | undefined>();
-    const [newRateAmount, setNewRateAmount] = useState('');
+    const [newRateDate, setNewRateDate] = useState<Date | undefined>(new Date());
+    const [newRateAmount, setNewRateAmount] = useState('147.08');
 
     // State for editing a rate
     const [isRateDialogOpen, setIsRateDialogOpen] = useState(false);
@@ -99,11 +99,18 @@ export default function SettingsPage() {
                 setLastCondoFee(settings.lastCondoFee ?? settings.condoFee);
                 setExchangeRates(settings.exchangeRates || []);
             } else {
+                // Initialize with new rate if document doesn't exist
+                const initialRate: ExchangeRate = {
+                    id: new Date().toISOString(),
+                    date: format(new Date(), 'yyyy-MM-dd'),
+                    rate: 147.08,
+                    active: true
+                };
                 setDoc(settingsRef, {
                     companyInfo: emptyCompanyInfo,
                     condoFee: 25.00,
                     lastCondoFee: 25.00,
-                    exchangeRates: []
+                    exchangeRates: [initialRate]
                 });
             }
             setLoading(false);
@@ -142,21 +149,24 @@ export default function SettingsPage() {
             toast({ variant: 'destructive', title: 'Error', description: 'Por favor, complete la fecha y el monto de la tasa.' });
             return;
         }
+        
         const newRate: ExchangeRate = {
             id: new Date().toISOString(), // simple unique id
             date: format(newRateDate, 'yyyy-MM-dd'),
             rate: parseFloat(newRateAmount),
-            active: false
+            active: false // Initially false, will be activated by handleActivateRate
         };
         
         try {
             const settingsRef = doc(db, 'config', 'mainSettings');
+            // Add the new rate and then activate it.
             await updateDoc(settingsRef, {
                 exchangeRates: arrayUnion(newRate)
             });
+            await handleActivateRate(newRate); // Activate the newly added rate
             setNewRateDate(undefined);
             setNewRateAmount('');
-            toast({ title: 'Tasa Agregada', description: 'La nueva tasa de cambio ha sido añadida.' });
+            toast({ title: 'Tasa Agregada y Activada', description: 'La nueva tasa de cambio ha sido añadida y establecida como activa.' });
         } catch (error) {
             console.error("Error adding rate:", error);
             toast({ variant: 'destructive', title: 'Error', description: 'No se pudo agregar la nueva tasa.' });
@@ -164,11 +174,24 @@ export default function SettingsPage() {
     };
 
     const handleActivateRate = async (rateToActivate: ExchangeRate) => {
-        const updatedRates = exchangeRates.map(r => ({...r, active: r.id === rateToActivate.id }));
+        // First, ensure all existing rates are deactivated.
+        const currentlyActiveRates = exchangeRates.map(r => ({...r, active: r.id === rateToActivate.id }));
+        
+        // Find the rate to activate in the new array.
+        const rateExists = currentlyActiveRates.some(r => r.id === rateToActivate.id);
+
+        let finalRates = currentlyActiveRates;
+        if (!rateExists) {
+            // If the rate to activate wasn't in the original list (it's brand new)
+            // add it to the list and deactivate all others.
+            finalRates = exchangeRates.map(r => ({ ...r, active: false }));
+            finalRates.push({ ...rateToActivate, active: true });
+        }
+
         try {
             const settingsRef = doc(db, 'config', 'mainSettings');
-            await updateDoc(settingsRef, { exchangeRates: updatedRates });
-             toast({ title: 'Tasa Activada', description: 'La tasa seleccionada ahora es la activa.' });
+            await updateDoc(settingsRef, { exchangeRates: finalRates });
+            toast({ title: 'Tasa Activada', description: `La tasa de ${rateToActivate.rate.toFixed(2)} ahora es la activa.` });
         } catch (error) {
             console.error("Error activating rate:", error);
             toast({ variant: 'destructive', title: 'Error', description: 'No se pudo activar la tasa.' });
@@ -220,6 +243,12 @@ export default function SettingsPage() {
             }
 
             await updateDoc(settingsRef, dataToUpdate);
+            
+            // Add and activate the new rate if provided
+            if(newRateDate && newRateAmount) {
+                await handleAddRate();
+            }
+
             toast({
                 title: 'Cambios Guardados',
                 description: 'La configuración ha sido actualizada exitosamente.',
@@ -478,9 +507,9 @@ export default function SettingsPage() {
                                         </TableHeader>
                                         <TableBody>
                                             {exchangeRates.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(rate => (
-                                                <TableRow key={rate.id}>
+                                                <TableRow key={rate.id} data-state={rate.active ? 'selected' : 'unselected'}>
                                                     <TableCell>{format(parseISO(rate.date), "dd/MM/yyyy")}</TableCell>
-                                                    <TableCell>{rate.rate.toFixed(2)}</TableCell>
+                                                    <TableCell className={cn(rate.active && "font-bold text-primary")}>{rate.rate.toFixed(2)}</TableCell>
                                                     <TableCell className="text-right">
                                                         <DropdownMenu>
                                                             <DropdownMenuTrigger asChild>
@@ -555,5 +584,3 @@ export default function SettingsPage() {
         </div>
     );
 }
-
-    
