@@ -100,8 +100,6 @@ export default function ReportsPage() {
     const [owners, setOwners] = useState<Owner[]>([]);
 
     // --- Form State ---
-    const [startDate, setStartDate] = useState<Date | undefined>();
-    const [endDate, setEndDate] = useState<Date | undefined>();
     const [selectedOwner, setSelectedOwner] = useState('');
     const [delinquencyPeriod, setDelinquencyPeriod] = useState('');
 
@@ -329,40 +327,29 @@ export default function ReportsPage() {
         setGeneratingReport(true);
         try {
             // Fetch Payments
-            let paymentsQuery;
-            if (validProperties.length > 0) {
-                 paymentsQuery = query(
-                    collection(db, "payments"),
-                    where("status", "==", "aprobado"),
-                    where("beneficiaries", "array-contains-any", validProperties.map(p => ({ ownerId: owner.id, house: p.house })))
-                );
-            } else if (owner.street && owner.house) {
-                 paymentsQuery = query(
-                    collection(db, "payments"),
-                    where("status", "==", "aprobado"),
-                    where("beneficiaries", "array-contains", { ownerId: owner.id, house: owner.house })
-                );
-            } else {
-                 toast({ variant: 'destructive', title: 'Error de Datos', description: 'El propietario seleccionado no tiene propiedades completas registradas.' });
-                 setGeneratingReport(false);
-                 return;
-            }
-
+            const paymentsQuery = query(
+                collection(db, "payments"),
+                where("status", "==", "aprobado"),
+                where("beneficiaries", "array-contains-any", owner.properties)
+            );
             
             const paymentsSnapshot = await getDocs(paymentsQuery);
             let totalPaid = 0;
             const allPayments = paymentsSnapshot.docs.map(doc => doc.data() as Payment);
 
             const paymentsRows = allPayments
+                .filter(p => p.beneficiaries.some(b => b.ownerId === owner.id))
                 .sort((a, b) => a.paymentDate.toMillis() - b.paymentDate.toMillis())
                 .map(p => {
-                    totalPaid += p.totalAmount;
+                    const ownerBeneficiary = p.beneficiaries.find(b => b.ownerId === owner.id);
+                    const amountForOwner = ownerBeneficiary?.amount || p.totalAmount;
+                    totalPaid += amountForOwner;
                     const paidByOwner = owners.find(o => o.id === p.reportedBy);
                     return [
                         format(p.paymentDate.toDate(), "dd/MM/yyyy"),
                         "Pago de Condominio",
                         paidByOwner?.name || 'N/A',
-                        `Bs. ${p.totalAmount.toLocaleString('es-VE', {minimumFractionDigits: 2})}`
+                        `Bs. ${amountForOwner.toLocaleString('es-VE', {minimumFractionDigits: 2})}`
                     ];
                 });
 
@@ -393,7 +380,7 @@ export default function ReportsPage() {
                 dateRange = `Período: ${monthsLocale[firstDebt.month]} ${firstDebt.year} - ${monthsLocale[lastDebt.month]} ${lastDebt.year}`;
             }
 
-            const ownerProps = (owner.properties && owner.properties.length > 0) ? owner.properties.map(p => `${p.street} - ${p.house}`).join(', ') : `${owner.street} - ${owner.house}`;
+            const ownerProps = (owner.properties && owner.properties.length > 0) ? owner.properties.map(p => `${p.street} - ${p.house}`).join(', ') : (owner.street && owner.house ? `${owner.street} - ${owner.house}`: 'N/A');
 
             setPreviewData({
                 title: `Estado de Cuenta Detallado`,
@@ -487,20 +474,60 @@ export default function ReportsPage() {
         }
     }
     
-    const showSolvencyReportPreview = () => {
-        const solventOwners = owners.filter(o => o.status === 'solvente');
-        setPreviewData({
-            title: 'Reporte de Solvencia',
-            headers: ['Propietario', 'Propiedades', 'Email'],
-            rows: solventOwners.map(o => {
-                const properties = (o.properties && o.properties.length > 0)
-                    ? o.properties.map(p => `${p.street} - ${p.house}`).join(', ')
-                    : (o.street && o.house ? `${o.street} - ${o.house}` : 'N/A');
-                return [o.name, properties, o.email || '-'];
-            }),
-            filename: 'reporte_solvencia'
-        });
-        setIsPreviewOpen(true);
+    const showSolvencyReportPreview = async () => {
+        setGeneratingReport(true);
+        try {
+            const solventOwners = owners.filter(o => o.status === 'solvente');
+            const ownerIds = solventOwners.map(o => o.id);
+            if (ownerIds.length === 0) {
+                setPreviewData({ title: 'Reporte de Solvencia', headers: ['PROPIETARIO', 'PROPIEDAD', 'ESTADO', 'PERIODO (DESDE - HASTA)'], rows: [], filename: 'reporte_solvencia' });
+                setIsPreviewOpen(true);
+                return;
+            }
+
+            const debtsQuery = query(collection(db, 'debts'), where('ownerId', 'in', ownerIds), where('status', '==', 'paid'));
+            const debtsSnapshot = await getDocs(debtsQuery);
+            const paidDebtsByOwner: { [ownerId: string]: Debt[] } = {};
+            debtsSnapshot.forEach(doc => {
+                const debt = doc.data() as Debt;
+                if (!paidDebtsByOwner[debt.ownerId]) {
+                    paidDebtsByOwner[debt.ownerId] = [];
+                }
+                paidDebtsByOwner[debt.ownerId].push(debt);
+            });
+
+            const reportRows = solventOwners.map(owner => {
+                const properties = (owner.properties && owner.properties.length > 0)
+                    ? owner.properties.map(p => `${p.street} - ${p.house}`).join(', ')
+                    : (owner.street && owner.house ? `${owner.street} - ${owner.house}` : 'N/A');
+                
+                const ownerDebts = paidDebtsByOwner[owner.id];
+                let period = 'N/A';
+                if (ownerDebts && ownerDebts.length > 0) {
+                    ownerDebts.sort((a, b) => a.year - b.year || a.month - b.month);
+                    const firstDebt = ownerDebts[0];
+                    const lastDebt = ownerDebts[ownerDebts.length - 1];
+                    const from = `${monthsLocale[firstDebt.month]} ${firstDebt.year}`;
+                    const to = `${monthsLocale[lastDebt.month]} ${lastDebt.year}`;
+                    period = `${from} - ${to}`;
+                }
+
+                return [owner.name, properties, 'Solvente', period];
+            });
+
+            setPreviewData({
+                title: 'Reporte de Solvencia',
+                headers: ['PROPIETARIO', 'PROPIEDAD', 'ESTADO', 'PERIODO (DESDE - HASTA)'],
+                rows: reportRows,
+                filename: 'reporte_solvencia'
+            });
+            setIsPreviewOpen(true);
+        } catch (error) {
+            console.error("Error generating solvency report:", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo generar el reporte de solvencia.' });
+        } finally {
+            setGeneratingReport(false);
+        }
     };
 
     const showBalanceFavorReportPreview = () => {
@@ -520,12 +547,9 @@ export default function ReportsPage() {
     };
     
     const showIncomeReportPreview = async () => {
-        if (!startDate || !endDate) return toast({ variant: 'destructive', title: 'Error', description: 'Por favor, seleccione un rango de fechas.' });
         setGeneratingReport(true);
         const q = query(
             collection(db, 'payments'),
-            where('paymentDate', '>=', startDate),
-            where('paymentDate', '<=', endDate),
             where('status', '==', 'aprobado')
         );
         
@@ -534,11 +558,11 @@ export default function ReportsPage() {
         const totalIncome = incomePayments.reduce((sum, p) => sum + p.totalAmount, 0);
 
         setPreviewData({
-            title: `Reporte de Ingresos (${format(startDate, "dd/MM/yy")} - ${format(endDate, "dd/MM/yy")})`,
+            title: `Reporte de Ingresos (Histórico)`,
             headers: ['Fecha', 'Monto (Bs.)', 'Método de Pago'],
             rows: incomePayments.map(p => [new Date(p.paymentDate.seconds * 1000).toLocaleDateString('es-VE'), p.totalAmount.toFixed(2), p.paymentMethod]),
             footers: [`Total de Ingresos: Bs. ${totalIncome.toFixed(2)}`],
-            filename: 'reporte_ingresos',
+            filename: 'reporte_ingresos_historico',
         });
         setGeneratingReport(false);
         setIsPreviewOpen(true);
@@ -696,8 +720,8 @@ export default function ReportsPage() {
                          <p className="text-sm text-muted-foreground">Haga clic para generar.</p>
                     </CardContent>
                     <CardFooter>
-                        <Button className="w-full" onClick={showSolvencyReportPreview}>
-                           <Search className="mr-2 h-4 w-4" /> Generar Vista Previa
+                        <Button className="w-full" onClick={showSolvencyReportPreview} disabled={generatingReport}>
+                           {generatingReport ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Search className="mr-2 h-4 w-4" />} Generar Vista Previa
                         </Button>
                     </CardFooter>
                 </Card>
@@ -722,66 +746,13 @@ export default function ReportsPage() {
                 <Card className="lg:col-span-2">
                     <CardHeader>
                         <CardTitle>Reporte de Ingresos</CardTitle>
-                        <CardDescription>Calcule los ingresos totales dentro de un rango de fechas específico.</CardDescription>
+                        <CardDescription>Calcule los ingresos totales (histórico).</CardDescription>
                     </CardHeader>
-                    <CardContent className="grid sm:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="start-date">Fecha de Inicio</Label>
-                            <Popover>
-                                <PopoverTrigger asChild>
-                                    <Button
-                                    id="start-date"
-                                    variant={"outline"}
-                                    className={cn(
-                                        "w-full justify-start text-left font-normal",
-                                        !startDate && "text-muted-foreground"
-                                    )}
-                                    >
-                                    <CalendarIcon className="mr-2 h-4 w-4" />
-                                    {startDate ? format(startDate, "PPP", { locale: es }) : <span>Seleccione fecha</span>}
-                                    </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0">
-                                    <Calendar
-                                        mode="single"
-                                        selected={startDate}
-                                        onSelect={setStartDate}
-                                        initialFocus
-                                        locale={es}
-                                    />
-                                </PopoverContent>
-                            </Popover>
-                        </div>
-                         <div className="space-y-2">
-                            <Label htmlFor="end-date">Fecha de Fin</Label>
-                             <Popover>
-                                <PopoverTrigger asChild>
-                                    <Button
-                                    id="end-date"
-                                    variant={"outline"}
-                                    className={cn(
-                                        "w-full justify-start text-left font-normal",
-                                        !endDate && "text-muted-foreground"
-                                    )}
-                                    >
-                                    <CalendarIcon className="mr-2 h-4 w-4" />
-                                    {endDate ? format(endDate, "PPP", { locale: es }) : <span>Seleccione fecha</span>}
-                                    </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0">
-                                    <Calendar
-                                        mode="single"
-                                        selected={endDate}
-                                        onSelect={setEndDate}
-                                        initialFocus
-                                        locale={es}
-                                    />
-                                </PopoverContent>
-                            </Popover>
-                        </div>
+                    <CardContent className="flex items-center justify-center h-20">
+                         <p className="text-sm text-muted-foreground">Haga clic para generar el reporte histórico.</p>
                     </CardContent>
                     <CardFooter>
-                         <Button className="w-full" onClick={showIncomeReportPreview} disabled={!startDate || !endDate || generatingReport}>
+                         <Button className="w-full" onClick={showIncomeReportPreview} disabled={generatingReport}>
                             {generatingReport ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Search className="mr-2 h-4 w-4" />}
                             Generar Vista Previa
                         </Button>
@@ -879,5 +850,6 @@ export default function ReportsPage() {
         </div>
     );
 }
+
 
 
