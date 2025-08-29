@@ -23,7 +23,7 @@ const months = Array.from({ length: 12 }, (_, i) => {
     const date = addMonths(new Date(), i);
     return {
         value: format(date, 'yyyy-MM'),
-        label: format(date, 'MMMM yyyy'),
+        label: format(date, 'MMMM yyyy', { locale: es }),
     };
 });
 
@@ -100,6 +100,11 @@ export default function AdvancePaymentPage() {
             if (!ownerData) throw new Error("Propietario no encontrado");
 
             // Check for existing debts for the selected months to prevent duplicates
+            const monthsAsDates = selectedMonths.map(m => {
+                const [year, month] = m.split('-').map(Number);
+                return { year, month };
+            });
+
             const existingDebtsQuery = query(
                 collection(db, "debts"),
                 where("ownerId", "==", selectedOwner),
@@ -107,14 +112,22 @@ export default function AdvancePaymentPage() {
                 where("description", "==", "Cuota de Condominio (Pagada por adelantado)")
             );
             const existingDebtsSnapshot = await getDocs(existingDebtsQuery);
-            const existingPaidMonths = existingDebtsSnapshot.docs.map(d => `${d.data().year}-${String(d.data().month).padStart(2, '0')}`);
+            const existingPaidMonths = existingDebtsSnapshot.docs.map(d => {
+                const data = d.data();
+                return `${data.year}-${String(data.month).padStart(2, '0')}`;
+            });
 
             const duplicates = selectedMonths.filter(m => existingPaidMonths.includes(m));
             if (duplicates.length > 0) {
+                 const monthLabels = duplicates.map(dup => {
+                    const [year, month] = dup.split('-').map(Number);
+                    const date = new Date(year, month - 1);
+                    return format(date, 'MMMM yyyy', { locale: es });
+                }).join(', ');
                 toast({
                     variant: 'destructive',
                     title: 'Meses Duplicados',
-                    description: `Los meses ${duplicates.join(', ')} ya han sido pagados por adelantado.`,
+                    description: `Los meses ${monthLabels} ya han sido pagados por adelantado.`,
                 });
                 setLoading(false);
                 return;
@@ -122,6 +135,7 @@ export default function AdvancePaymentPage() {
 
             const batch = writeBatch(db);
             const paymentDate = Timestamp.now();
+            const amountPerMonth = parseFloat(totalAmount) / selectedMonths.length;
 
             // 1. Create future 'paid' debt documents
             selectedMonths.forEach(monthStr => {
@@ -131,11 +145,11 @@ export default function AdvancePaymentPage() {
                     ownerId: selectedOwner,
                     year,
                     month,
-                    amountUSD: condoFee,
+                    amountUSD: amountPerMonth,
                     description: "Cuota de Condominio (Pagada por adelantado)",
                     status: 'paid',
                     paymentDate: paymentDate,
-                    paidAmountUSD: condoFee,
+                    paidAmountUSD: amountPerMonth,
                 });
             });
             
@@ -143,7 +157,7 @@ export default function AdvancePaymentPage() {
             const paymentRef = doc(collection(db, "payments"));
             batch.set(paymentRef, {
                 reportedBy: selectedOwner, // Admin is reporting on behalf of owner
-                beneficiaries: [{ ownerId: selectedOwner, house: ownerData.house, amount: parseFloat(totalAmount) * selectedMonths.length }],
+                beneficiaries: [{ ownerId: selectedOwner, house: ownerData.house, amount: parseFloat(totalAmount) }],
                 totalAmount: parseFloat(totalAmount),
                 exchangeRate: 1, // Rate is not relevant as we are paying in USD equivalent
                 paymentDate: paymentDate,
@@ -215,11 +229,11 @@ export default function AdvancePaymentPage() {
                                             key={month.value}
                                             type="button"
                                             variant={selectedMonths.includes(month.value) ? 'default' : 'outline'}
-                                            className="flex items-center justify-center gap-2"
+                                            className="flex items-center justify-center gap-2 capitalize"
                                             onClick={() => handleMonthToggle(month.value)}
                                         >
                                             {selectedMonths.includes(month.value) && <Check className="h-4 w-4" />}
-                                            <span className="capitalize">{month.label}</span>
+                                            {month.label}
                                         </Button>
                                     ))}
                                 </div>
@@ -232,13 +246,14 @@ export default function AdvancePaymentPage() {
                                 id="totalAmount"
                                 type="number"
                                 value={totalAmount}
-                                readOnly
-                                className="bg-muted font-bold text-lg"
+                                onChange={(e) => setTotalAmount(e.target.value)}
+                                className="font-bold text-lg"
                                 placeholder="0.00"
+                                required
                             />
-                            {condoFee > 0 && selectedMonths.length > 0 &&
+                            {condoFee > 0 && selectedMonths.length > 0 && !totalAmount &&
                                 <p className="text-sm text-muted-foreground">
-                                    Cálculo: {selectedMonths.length} {selectedMonths.length > 1 ? 'meses' : 'mes'} x ${condoFee.toFixed(2)}/mes = ${totalAmount}
+                                    Monto sugerido: {selectedMonths.length} {selectedMonths.length > 1 ? 'meses' : 'mes'} x ${condoFee.toFixed(2)}/mes = ${(selectedMonths.length * condoFee).toFixed(2)}
                                 </p>
                             }
                         </div>
