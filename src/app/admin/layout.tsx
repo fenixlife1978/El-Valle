@@ -7,6 +7,7 @@ import {
     Settings,
     FileSearch,
     CircleDollarSign,
+    Calculator,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
@@ -20,6 +21,7 @@ const adminNavItems: NavItem[] = [
       items: [
         { href: "/admin/payments", label: "Reportar Pago" },
         { href: "/admin/payments/verify", label: "Verificar Pagos" },
+        { href: "/admin/payments/calculator", label: "Calculadora de Pagos" },
       ]
     },
     { href: "/admin/debts", icon: CircleDollarSign, label: "Gestión de Deudas" },
