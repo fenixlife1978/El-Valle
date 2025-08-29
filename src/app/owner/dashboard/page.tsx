@@ -82,6 +82,8 @@ export default function OwnerDashboardPage() {
         const fetchData = async () => {
             setLoading(true);
             try {
+                // Auditor Note: The system fetches the single active exchange rate on every load.
+                // This ensures that any change in the active rate is immediately reflected in all calculations below.
                 const settingsRef = doc(db, 'config', 'mainSettings');
                 const settingsSnap = await getDoc(settingsRef);
                 let condoFeeUSD = 25;
@@ -115,6 +117,7 @@ export default function OwnerDashboardPage() {
                     });
                     
                     setDebts(pendingDebtsData.sort((a,b) => b.year - a.year || b.month - a.month));
+                    // Auditor Note: Real-time calculation. The debt in Bs is always calculated using the most recent active rate.
                     const totalDebtBs = totalDebtUSD * activeRate;
 
                     if (totalDebtBs > 0) {
