@@ -167,7 +167,14 @@ export default function PeopleManagementPage() {
         }
 
         try {
-            const { id, street, house, ...dataToSave } = currentOwner;
+            const { id, street, house, ...ownerData } = currentOwner;
+            
+            // Ensure balance is not undefined before saving
+            const dataToSave = {
+                ...ownerData,
+                balance: ownerData.balance === undefined || isNaN(ownerData.balance) ? 0 : ownerData.balance,
+            };
+
             if (id) {
                 const ownerRef = doc(db, "owners", id);
                 await updateDoc(ownerRef, dataToSave);
