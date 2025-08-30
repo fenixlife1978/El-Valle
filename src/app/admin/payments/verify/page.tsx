@@ -88,60 +88,55 @@ export default function VerifyPaymentsPage() {
 
   useEffect(() => {
     setLoading(true);
+
+    const fetchAllOwners = async () => {
+        const ownersQuery = query(collection(db, "owners"));
+        const ownersSnapshot = await getDocs(ownersQuery);
+        const ownersMap = new Map<string, {name: string}>();
+        ownersSnapshot.forEach(doc => {
+            ownersMap.set(doc.id, { name: doc.data().name });
+        });
+        return ownersMap;
+    };
+
     const q = query(collection(db, "payments"));
     
-    const unsubscribe = onSnapshot(q, async (snapshot) => {
-        const ownerIds = new Set<string>();
-        snapshot.docs.forEach(doc => {
-            const data = doc.data();
-            if (data.beneficiaries && Array.isArray(data.beneficiaries)) {
-                data.beneficiaries.forEach((b: any) => {
-                    if (b.ownerId) ownerIds.add(b.ownerId);
+    fetchAllOwners().then(ownersMap => {
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const paymentsData: FullPayment[] = [];
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                const userName = ownersMap.get(data.reportedBy)?.name || (data.beneficiaries?.[0]?.ownerId ? ownersMap.get(data.beneficiaries[0].ownerId)?.name : 'No disponible');
+
+                paymentsData.push({
+                    id: doc.id,
+                    user: userName,
+                    unit: data.beneficiaries[0]?.house || 'N/A',
+                    amount: data.totalAmount,
+                    date: new Date(data.paymentDate.seconds * 1000).toISOString(),
+                    bank: data.bank,
+                    type: data.paymentMethod,
+                    reference: data.reference,
+                    status: data.status,
+                    beneficiaries: data.beneficiaries,
+                    totalAmount: data.totalAmount,
+                    exchangeRate: data.exchangeRate,
+                    paymentDate: data.paymentDate,
+                    reportedBy: data.reportedBy
                 });
-            }
-             if (data.reportedBy) {
-                ownerIds.add(data.reportedBy);
-            }
-        });
-
-        const ownersData: {[key: string]: {name: string}} = {};
-        if (ownerIds.size > 0) {
-            const ownersQuery = query(collection(db, "owners"), where("__name__", "in", Array.from(ownerIds)));
-            const ownersSnapshot = await getDocs(ownersQuery);
-            ownersSnapshot.forEach(doc => {
-                ownersData[doc.id] = { name: doc.data().name };
             });
-        }
-        
-        const paymentsData: FullPayment[] = [];
-        snapshot.forEach(doc => {
-            const data = doc.data();
-            // Use reportedBy as the primary source for user name, fallback to beneficiaries
-            const userName = ownersData[data.reportedBy]?.name || (data.beneficiaries?.[0]?.ownerId ? ownersData[data.beneficiaries[0].ownerId]?.name : 'No disponible');
 
-            paymentsData.push({
-                id: doc.id,
-                user: userName,
-                unit: data.beneficiaries[0]?.house || 'N/A',
-                amount: data.totalAmount,
-                date: new Date(data.paymentDate.seconds * 1000).toISOString(),
-                bank: data.bank,
-                type: data.paymentMethod,
-                reference: data.reference,
-                status: data.status,
-                beneficiaries: data.beneficiaries,
-                totalAmount: data.totalAmount,
-                exchangeRate: data.exchangeRate,
-                paymentDate: data.paymentDate,
-                reportedBy: data.reportedBy
-            });
+            setPayments(paymentsData);
+            setLoading(false);
+        }, (error) => {
+            console.error("Error fetching payments: ", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron cargar los pagos.' });
+            setLoading(false);
         });
-
-        setPayments(paymentsData);
-        setLoading(false);
-    }, (error) => {
-        console.error("Error fetching payments: ", error);
-        toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron cargar los pagos.' });
+        return unsubscribe;
+    }).catch(error => {
+        console.error("Error fetching owners map: ", error);
+        toast({ variant: 'destructive', title: 'Error Crítico', description: 'No se pudieron cargar los datos de los propietarios.' });
         setLoading(false);
     });
     
@@ -154,7 +149,6 @@ export default function VerifyPaymentsPage() {
     };
     fetchCompanyInfo();
 
-    return () => unsubscribe();
   }, [toast]);
 
 
