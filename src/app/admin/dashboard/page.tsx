@@ -181,7 +181,12 @@ export default function AdminDashboardPage() {
                   <TableRow key={payment.id}>
                     <TableCell>{payment.user}</TableCell>
                     <TableCell>{payment.unit}</TableCell>
-                    <TableCell>Bs. {payment.amount.toLocaleString('es-VE', {minimumFractionDigits: 2})}</TableCell>
+                    <TableCell>
+                        {payment.type === 'adelanto' 
+                            ? `$ ${payment.amount.toLocaleString('en-US', {minimumFractionDigits: 2})}`
+                            : `Bs. ${payment.amount.toLocaleString('es-VE', {minimumFractionDigits: 2})}`
+                        }
+                    </TableCell>
                     <TableCell>{new Date(payment.date).toLocaleDateString('es-VE')}</TableCell>
                     <TableCell>{payment.bank}</TableCell>
                     <TableCell>{payment.type}</TableCell>

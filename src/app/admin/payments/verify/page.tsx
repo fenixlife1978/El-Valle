@@ -394,7 +394,10 @@ export default function VerifyPaymentsPage() {
     startY += 6;
     doc.text(`Unidad: ${ownerUnit}`, margin, startY);
     startY += 6;
-    doc.text(`Monto pagado: Bs. ${payment.amount.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`, margin, startY);
+    const amountDisplay = payment.type === 'adelanto' 
+        ? `$ ${payment.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}` 
+        : `Bs. ${payment.amount.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`;
+    doc.text(`Monto pagado: ${amountDisplay}`, margin, startY);
     startY += 6;
     doc.text(`Método de pago: ${payment.type}`, margin, startY);
     startY += 6;
@@ -505,7 +508,12 @@ export default function VerifyPaymentsPage() {
                             <TableRow key={payment.id}>
                                 <TableCell className="font-medium">{payment.user || 'No disponible'}</TableCell>
                                 <TableCell>{payment.unit}</TableCell>
-                                <TableCell>Bs. {payment.amount.toFixed(2)}</TableCell>
+                                <TableCell>
+                                    {payment.type === 'adelanto' 
+                                        ? `$ ${payment.amount.toLocaleString('en-US', {minimumFractionDigits: 2})}`
+                                        : `Bs. ${payment.amount.toLocaleString('es-VE', {minimumFractionDigits: 2})}`
+                                    }
+                                </TableCell>
                                 <TableCell>{new Date(payment.date).toLocaleDateString('es-VE')}</TableCell>
                                 <TableCell>{payment.bank}</TableCell>
                                 <TableCell>
@@ -596,7 +604,7 @@ export default function VerifyPaymentsPage() {
                         <div className="mb-4">
                              <p><strong>Nombre del residente:</strong> {receiptData.ownerName}</p>
                              <p><strong>Unidad:</strong> {receiptData.ownerUnit}</p>
-                             <p><strong>Monto pagado:</strong> Bs. {receiptData.payment.amount.toLocaleString('es-VE', { minimumFractionDigits: 2 })}</p>
+                             <p><strong>Monto pagado:</strong> {receiptData.payment.type === 'adelanto' ? `$ ${receiptData.payment.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : `Bs. ${receiptData.payment.amount.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`}</p>
                              <p><strong>Método de pago:</strong> {receiptData.payment.type}</p>
                              <p><strong>Banco Emisor:</strong> {receiptData.payment.bank}</p>
                              <p><strong>N° de Referencia Bancaria:</strong> {receiptData.payment.reference}</p>
