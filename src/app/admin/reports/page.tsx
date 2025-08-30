@@ -345,11 +345,11 @@ export default function ReportsPage() {
                 return;
             }
             
-            // Fetch Payments
+            // Fetch Payments (all approved payments for the user)
             const paymentsQuery = query(
                 collection(db, "payments"),
                 where("status", "==", "aprobado"),
-                where("beneficiaries", "array-contains-any", validOwnerProperties.map(p => ({ ownerId: owner.id, house: p.house })))
+                where("reportedBy", "==", owner.id) // Assuming owner reports their own payments for this history
             );
 
             const paymentsSnapshot = await getDocs(paymentsQuery);
@@ -357,46 +357,46 @@ export default function ReportsPage() {
 
             let totalPaid = 0;
             const paymentsRows = allPayments
-                .filter(p => p.beneficiaries.some(b => b.ownerId === owner.id))
                 .sort((a, b) => a.paymentDate.toMillis() - b.paymentDate.toMillis())
                 .map(p => {
-                    const ownerBeneficiary = p.beneficiaries.find(b => b.ownerId === owner.id);
-                    const amountForOwner = ownerBeneficiary?.amount || p.totalAmount;
+                    const amountForOwner = p.totalAmount; // Assuming the total amount is for the owner
                     totalPaid += amountForOwner;
                     const paidByOwner = owners.find(o => o.id === p.reportedBy);
                     return [
                         format(p.paymentDate.toDate(), "dd/MM/yyyy"),
-                        "Pago de Condominio",
+                        p.paymentMethod === 'adelanto' ? 'Pago por Adelantado' : "Pago de Condominio",
                         paidByOwner?.name || 'N/A',
                         `Bs. ${amountForOwner.toLocaleString('es-VE', {minimumFractionDigits: 2})}`
                     ];
                 });
 
-            // Fetch Debts
+            // Fetch ONLY PENDING Debts
             const debtsQuery = query(
                 collection(db, "debts"),
-                where("ownerId", "==", owner.id)
+                where("ownerId", "==", owner.id),
+                where("status", "==", "pending") // <-- This is the key change
             );
             const debtSnapshot = await getDocs(debtsQuery);
-            let totalDebt = 0;
-            const allDebts = debtSnapshot.docs.map(doc => doc.data() as Debt);
+            let totalDebtUSD = 0;
+            const pendingDebts = debtSnapshot.docs.map(doc => doc.data() as Debt);
             
-            const debtsRows = allDebts
-                .sort((a, b) => a.year - b.year || a.month - b.month)
+            const debtsRows = pendingDebts
+                .sort((a, b) => a.year - b.year || a.month - a.month)
                 .map(d => {
-                    totalDebt += d.amountUSD;
+                    totalDebtUSD += d.amountUSD;
                     return [
                         `${monthsLocale[d.month]} ${d.year}`,
+                        d.description,
                         `$${d.amountUSD.toFixed(2)}`,
-                        d.status === 'paid' ? 'Pagada' : 'Pendiente'
+                        'Pendiente'
                     ];
                 });
 
-            let dateRange = "Sin transacciones";
-            if (allDebts.length > 0) {
-                const firstDebt = allDebts[0];
-                const lastDebt = allDebts[allDebts.length - 1];
-                dateRange = `Período: ${monthsLocale[firstDebt.month]} ${firstDebt.year} - ${monthsLocale[lastDebt.month]} ${lastDebt.year}`;
+            let dateRange = "Al día";
+            if (pendingDebts.length > 0) {
+                const firstDebt = pendingDebts[0];
+                const lastDebt = pendingDebts[pendingDebts.length - 1];
+                dateRange = `Deudas desde ${monthsLocale[firstDebt.month]} ${firstDebt.year}`;
             }
 
             const ownerProps = (owner.properties && owner.properties.length > 0) ? owner.properties.map(p => `${p.street} - ${p.house}`).join(', ') : (owner.street && owner.house ? `${owner.street} - ${owner.house}`: 'N/A');
@@ -411,14 +411,14 @@ export default function ReportsPage() {
                     ownerInfo: `Propietario: ${owner.name} | Propiedad: ${ownerProps}`,
                     dateRange: dateRange,
                     payments: {
-                        headers: ["Fecha", "Concepto", "Pagado por", "Monto"],
+                        headers: ["Fecha", "Concepto", "Pagado por", "Monto (Bs)"],
                         rows: paymentsRows,
                         total: totalPaid
                     },
                     debts: {
-                        headers: ["Período", "Monto ($)", "Estado"],
+                        headers: ["Período", "Descripción", "Monto ($)", "Estado"],
                         rows: debtsRows,
-                        total: totalDebt
+                        total: totalDebtUSD
                     }
                 }
             });
@@ -882,6 +882,8 @@ export default function ReportsPage() {
         </div>
     );
 }
+
+    
 
     
 
