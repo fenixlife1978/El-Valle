@@ -62,7 +62,7 @@ function LoginPageContent() {
                     // If user is admin, redirect to admin dashboard regardless of the role in URL
                     if (userData.role === 'administrador') {
                         router.push('/admin/dashboard');
-                        return;
+                        return; // <-- This was the missing piece
                     }
 
                     // Check if the role matches for non-admins
