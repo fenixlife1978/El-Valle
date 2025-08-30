@@ -17,7 +17,7 @@ import { db } from '@/lib/firebase';
 import { addMonths, format } from 'date-fns';
 
 type PaymentStatus = 'pendiente' | 'aprobado' | 'rechazado';
-type PaymentMethod = 'transferencia' | 'movil';
+type PaymentMethod = 'transferencia' | 'movil' | 'adelanto';
 
 type FullPayment = {
   id: string;
@@ -267,33 +267,73 @@ export default function VerifyPaymentsPage() {
   }
 
   const handleDeletePayment = (payment: FullPayment) => {
-    // TODO: Add logic to revert balance/debt changes if the payment was 'aprobado'.
-    // This could be complex and might require a Cloud Function for atomicity.
-    // For now, we just ask for confirmation.
     setPaymentToDelete(payment);
     setIsDeleteConfirmationOpen(true);
   };
 
   const confirmDelete = async () => {
     if (!paymentToDelete) return;
+    const paymentRef = doc(db, "payments", paymentToDelete.id);
+
     try {
-      await deleteDoc(doc(db, "payments", paymentToDelete.id));
-      toast({
-        title: "Pago Eliminado",
-        description: "El registro del pago ha sido eliminado exitosamente.",
-      });
+      // If the payment was approved, we need to revert the changes in a transaction
+      if (paymentToDelete.status === 'aprobado') {
+        await runTransaction(db, async (transaction) => {
+          
+          for(const beneficiary of paymentToDelete.beneficiaries) {
+            const ownerRef = doc(db, 'owners', beneficiary.ownerId);
+            const ownerDoc = await transaction.get(ownerRef);
+            if (!ownerDoc.exists()) throw new Error(`Propietario ${beneficiary.ownerId} no encontrado.`);
+
+            // 1. Revert owner's balance
+            const currentBalance = ownerDoc.data().balance || 0;
+            const newBalance = currentBalance - beneficiary.amount;
+            transaction.update(ownerRef, { balance: newBalance });
+
+            // 2. Find and revert debts that were paid by this payment
+            const paidDebtsQuery = query(
+              collection(db, "debts"),
+              where("ownerId", "==", beneficiary.ownerId),
+              where("status", "==", "paid"),
+              where("paymentDate", "==", paymentToDelete.paymentDate)
+            );
+            
+            const paidDebtsSnapshot = await getDocs(paidDebtsQuery); // Cannot use transaction.get() on a query
+            
+            paidDebtsSnapshot.forEach(debtDoc => {
+              const debtRef = doc(db, "debts", debtDoc.id);
+              transaction.update(debtRef, { 
+                status: 'pending',
+                paidAmountUSD: deleteField(),
+                paymentDate: deleteField(),
+              });
+            });
+          }
+
+          // 3. Delete the payment itself
+          transaction.delete(paymentRef);
+        });
+        toast({ title: "Pago Revertido", description: "El pago y sus efectos han sido revertidos." });
+      } else {
+        // If payment was pending or rejected, just delete it
+        await deleteDoc(paymentRef);
+        toast({ title: "Pago Eliminado", description: "El registro del pago ha sido eliminado." });
+      }
+
     } catch (error) {
-      console.error("Error deleting payment: ", error);
+      console.error("Error deleting/reverting payment: ", error);
+      const errorMessage = error instanceof Error ? error.message : "No se pudo completar la operación.";
       toast({
         variant: "destructive",
-        title: "Error",
-        description: "No se pudo eliminar el pago.",
+        title: "Error en la Operación",
+        description: errorMessage,
       });
     } finally {
       setIsDeleteConfirmationOpen(false);
       setPaymentToDelete(null);
     }
   };
+
 
   const handleDownloadPdf = () => {
     if (!receiptData) return;
@@ -555,7 +595,7 @@ export default function VerifyPaymentsPage() {
                 <DialogHeader>
                     <DialogTitle>¿Está seguro?</DialogTitle>
                     <DialogDescription>
-                        Esta acción no se puede deshacer. Esto eliminará permanentemente el registro del pago. Si el pago ya fue aprobado, deberá ajustar manualmente las deudas o el saldo del propietario.
+                        Esta acción no se puede deshacer. Esto eliminará permanentemente el registro del pago. Si el pago ya fue aprobado, se revertirán las deudas y el saldo del propietario afectado.
                     </DialogDescription>
                 </DialogHeader>
                 <DialogFooter>
@@ -567,3 +607,5 @@ export default function VerifyPaymentsPage() {
     </div>
   );
 }
+
+    
