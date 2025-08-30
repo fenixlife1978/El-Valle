@@ -3,7 +3,7 @@
 
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Building, UserShield } from 'lucide-react';
+import { Building, User, Shield } from 'lucide-react';
 
 export default function WelcomePage() {
     const router = useRouter();
@@ -39,7 +39,10 @@ export default function WelcomePage() {
                 >
                     <CardHeader>
                         <CardTitle className="flex flex-col items-center gap-4 text-2xl font-headline">
-                            <UserShield className="w-16 h-16 text-primary" />
+                            <div className="relative w-16 h-16">
+                                <User className="absolute w-12 h-12 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-primary" />
+                                <Shield className="absolute w-16 h-16 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-primary opacity-40" />
+                            </div>
                             Soy Administrador
                         </CardTitle>
                     </CardHeader>
