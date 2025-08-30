@@ -59,8 +59,9 @@ type CompanyInfo = {
 
 type ReceiptData = {
     payment: FullPayment;
-    ownerName: string;
+    ownerName: string; // Beneficiary name
     ownerUnit: string;
+    payerName: string; // Name of person who reported the payment
 } | null;
 
 const statusVariantMap: { [key in PaymentStatus]: 'warning' | 'success' | 'destructive' } = {
@@ -246,10 +247,11 @@ export default function VerifyPaymentsPage() {
   const showReceiptPreview = async (payment: FullPayment) => {
     let ownerName = 'No disponible';
     let ownerUnit = 'N/A';
-    
-    const ownerId = payment.reportedBy || payment.beneficiaries?.[0]?.ownerId;
-    if (ownerId) {
-        const ownerRef = doc(db, 'owners', ownerId);
+    let payerName = 'No disponible';
+
+    const beneficiaryId = payment.beneficiaries?.[0]?.ownerId;
+    if (beneficiaryId) {
+        const ownerRef = doc(db, 'owners', beneficiaryId);
         const ownerSnap = await getDoc(ownerRef);
         if (ownerSnap.exists()) {
             const ownerData = ownerSnap.data();
@@ -258,7 +260,17 @@ export default function VerifyPaymentsPage() {
             ownerUnit = property ? `${property.street} - ${property.house}` : 'N/A';
         }
     }
-    setReceiptData({ payment, ownerName, ownerUnit });
+    
+    const payerId = payment.reportedBy;
+    if(payerId) {
+        const payerRef = doc(db, 'owners', payerId);
+        const payerSnap = await getDoc(payerRef);
+        if(payerSnap.exists()) {
+            payerName = payerSnap.data().name;
+        }
+    }
+    
+    setReceiptData({ payment, ownerName, ownerUnit, payerName });
     setIsReceiptPreviewOpen(true);
   }
 
@@ -337,62 +349,27 @@ export default function VerifyPaymentsPage() {
 
   const handleDownloadPdf = () => {
     if (!receiptData) return;
-    const { payment, ownerName, ownerUnit } = receiptData;
+    const { payment, ownerName, ownerUnit, payerName } = receiptData;
     const doc = new jsPDF();
-    const pageHeight = doc.internal.pageSize.getHeight();
     const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 14;
 
-    if (companyInfo?.logo) {
-        try {
-            doc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25);
-        } catch(e) {
-            console.error("Error adding logo to PDF", e);
-        }
-    }
+    doc.setFontSize(16).setFont('helvetica', 'bold').text(`Recibo de Pago #${payment.id}`, pageWidth / 2, margin + 10, { align: 'center' });
     
-    if (companyInfo) {
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'bold');
-        doc.text(companyInfo.name, margin + 30, margin + 8);
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(9);
-        doc.text(`${companyInfo.rif} | ${companyInfo.phone}`, margin + 30, margin + 14);
-        doc.text(companyInfo.address, margin + 30, margin + 19);
-        doc.text(companyInfo.email, margin + 30, margin + 24);
-    }
-    
-    doc.setFontSize(10);
-    doc.text(`Fecha de Emisión:`, pageWidth - margin, margin + 8, { align: 'right' });
-    doc.setFont('helvetica', 'bold');
-    doc.text(new Date().toLocaleDateString('es-VE'), pageWidth - margin, margin + 13, { align: 'right' });
-    
-    doc.setLineWidth(0.5);
-    doc.line(margin, margin + 32, pageWidth - margin, margin + 32);
-
-    doc.setFontSize(16);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Recibo de Pago de Condominio', pageWidth / 2, margin + 45, { align: 'center' });
-
-    (doc as any).autoTable({
-        startY: margin + 55,
-        head: [['Concepto', 'Detalle']],
+    autoTable(doc, {
+        startY: margin + 20,
         body: [
-            ['ID de Transacción', payment.id],
             ['Propietario', ownerName],
-            ['Unidad', ownerUnit],
-            ['Fecha de Pago', new Date(payment.date).toLocaleDateString('es-VE')],
-            ['Monto Pagado', `Bs. ${payment.amount.toFixed(2)}`],
-            ['Banco Emisor', payment.bank],
-            ['Tipo de Pago', payment.type],
-            ['Referencia', payment.reference],
-            ['Estado del Pago', statusTextMap[payment.status]],
+            ['Monto', `Bs. ${payment.amount.toLocaleString('es-VE', {minimumFractionDigits: 2})}`],
+            ['Concepto', `Pago de ${payerName} para ${ownerName} (${ownerUnit})`],
+            ['Fecha de Aprobación', new Date(payment.date).toLocaleDateString('es-VE')],
         ],
-        theme: 'striped',
-        headStyles: { fillColor: [30, 80, 180] },
+        theme: 'plain',
+        styles: { fontSize: 11, cellPadding: 2.5 },
+        columnStyles: { 0: { fontStyle: 'bold', cellWidth: 50 } },
     });
 
-    doc.save(`recibo-${ownerUnit.replace(/\s/g, '_')}-${payment.id.substring(0,5)}.pdf`);
+    doc.save(`Recibo_de_Pago_${payment.id.substring(0,7)}.pdf`);
     setIsReceiptPreviewOpen(false);
   };
 
@@ -512,7 +489,7 @@ export default function VerifyPaymentsPage() {
 
         {/* Receipt Preview Dialog */}
         <Dialog open={isReceiptPreviewOpen} onOpenChange={setIsReceiptPreviewOpen}>
-            <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
+            <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col">
                 <DialogHeader>
                     <DialogTitle>Vista Previa del Recibo</DialogTitle>
                     <DialogDescription>
@@ -521,64 +498,14 @@ export default function VerifyPaymentsPage() {
                 </DialogHeader>
                 {receiptData && (
                      <div className="flex-grow overflow-y-auto pr-4 -mr-4">
-                        <div className="border rounded-lg p-6 my-4 bg-white text-black font-sans">
-                            <header className="flex flex-col sm:flex-row justify-between items-start pb-4 border-b gap-4">
-                                <div className="flex items-center gap-4">
-                                    {companyInfo?.logo && <img src={companyInfo.logo} alt="Logo" className="w-20 h-20 object-contain"/>}
-                                    <div>
-                                        <h3 className="font-bold text-lg">{companyInfo?.name}</h3>
-                                        <p className="text-xs">{companyInfo?.rif}</p>
-                                        <p className="text-xs">{companyInfo?.address}</p>
-                                        <p className="text-xs">{companyInfo?.phone} | {companyInfo?.email}</p>
-                                    </div>
-                                </div>
-                                <div className="text-left sm:text-right w-full sm:w-auto">
-                                    <h4 className="font-bold text-xl">RECIBO DE PAGO</h4>
-                                    <p className="text-sm">ID: {receiptData.payment.id}</p>
-                                    <p className="text-sm">Fecha: {new Date().toLocaleDateString('es-VE')}</p>
-                                </div>
-                            </header>
-                            <section className="mt-6">
-                                <h5 className="font-bold mb-2">Detalles del Propietario</h5>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                                    <p><span className="font-semibold">Nombre:</span> {receiptData.ownerName}</p>
-                                    <p><span className="font-semibold">Unidad:</span> {receiptData.ownerUnit}</p>
-                                </div>
-                            </section>
-                            <section className="mt-6">
-                                <h5 className="font-bold mb-2">Detalles del Pago</h5>
-                                <Table className="text-sm">
-                                    <TableHeader>
-                                        <TableRow className="bg-muted/50">
-                                            <TableHead className="text-black">Concepto</TableHead>
-                                            <TableHead className="text-right text-black">Monto</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        <TableRow>
-                                            <TableCell>
-                                                <p>Pago de Condominio</p>
-                                                <p className="text-xs text-muted-foreground">
-                                                    Ref: {receiptData.payment.reference} | {receiptData.payment.bank} | {new Date(receiptData.payment.date).toLocaleDateString('es-VE')}
-                                                </p>
-                                            </TableCell>
-                                            <TableCell className="text-right font-semibold">Bs. {receiptData.payment.amount.toLocaleString('es-VE', {minimumFractionDigits: 2})}</TableCell>
-                                        </TableRow>
-                                    </TableBody>
-                                </Table>
-                                <div className="flex justify-end mt-4">
-                                    <div className="w-full sm:w-64">
-                                        <div className="flex justify-between text-lg font-bold border-t-2 pt-2">
-                                            <span>TOTAL PAGADO:</span>
-                                            <span>Bs. {receiptData.payment.amount.toLocaleString('es-VE', {minimumFractionDigits: 2})}</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </section>
-                            <footer className="mt-8 text-center text-xs text-muted-foreground">
-                                <p>Este es un recibo generado por el sistema. Válido sin firma ni sello.</p>
-                                <p>Gracias por su pago.</p>
-                            </footer>
+                        <div className="border rounded-lg p-6 my-4 bg-white text-black font-sans space-y-4">
+                            <h3 className="text-center font-bold text-lg">Recibo de Pago #{receiptData.payment.id}</h3>
+                            <div className="text-sm space-y-2">
+                                <p><span className="font-semibold">Propietario:</span> {receiptData.ownerName}</p>
+                                <p><span className="font-semibold">Monto:</span> Bs. {receiptData.payment.amount.toLocaleString('es-VE', {minimumFractionDigits: 2})}</p>
+                                <p><span className="font-semibold">Concepto:</span> Pago de {receiptData.payerName} para {receiptData.ownerName} ({receiptData.ownerUnit})</p>
+                                <p><span className="font-semibold">Fecha de Aprobación:</span> {new Date(receiptData.payment.date).toLocaleDateString('es-VE')}</p>
+                            </div>
                         </div>
                     </div>
                 )}
