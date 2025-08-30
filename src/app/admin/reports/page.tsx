@@ -16,7 +16,7 @@ import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { Calendar as CalendarIcon, Download, Search, Loader2, BarChart2, ListChecks, FileText, UserCheck, ShieldCheck } from "lucide-react";
 import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import 'jspdf-autotable';
 import html2canvas from 'html2canvas';
 import { collection, getDocs, query, where, doc, getDoc, orderBy, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -79,7 +79,7 @@ type ReportPreviewData = {
     filename: string;
     isDetailedStatement?: boolean;
     detailedData?: {
-        payments: { headers: string[], rows: (string|number)[][], total: number };
+        payments: { headers: string[], rows: (string|number)[][], total: number, currency: 'Bs.' | '$' };
         debts: { headers: string[], rows: (string|number)[][], total: number };
         ownerInfo: string;
         dateRange: string;
@@ -241,35 +241,36 @@ export default function ReportsPage() {
             // Payments Table
             doc.setFontSize(12).setFont('helvetica', 'bold').text("Resumen de Pagos", margin, startY);
             startY += 5;
-            autoTable(doc, {
+            (doc as any).autoTable({
                 head: [payments.headers],
                 body: payments.rows,
                 startY,
                 headStyles: { fillColor: [40, 167, 69] },
-                didDrawPage: (hookData) => { startY = hookData.cursor?.y || startY; }
+                didDrawPage: (hookData: any) => { startY = hookData.cursor?.y || startY; }
             });
             startY = (doc as any).lastAutoTable.finalY + 5;
             const balanceBs = data.detailedData ? (owners.find(o => o.id === selectedOwner)?.balance || 0) : 0;
             const balanceText = balanceBs > 0 ? `(Saldo a Favor aplicado: Bs. ${balanceBs.toLocaleString('es-VE', {minimumFractionDigits: 2})})` : '';
-            doc.setFontSize(10).setFont('helvetica', 'bold').text(`Total Pagado: Bs. ${payments.total.toLocaleString('es-VE', {minimumFractionDigits: 2})} ${balanceText}`, pageWidth - margin, startY, { align: 'right' });
+            const paymentCurrencySymbol = payments.currency;
+            doc.setFontSize(10).setFont('helvetica', 'bold').text(`Total Pagado: ${paymentCurrencySymbol} ${payments.total.toLocaleString('es-VE', {minimumFractionDigits: 2})} ${balanceText}`, pageWidth - margin, startY, { align: 'right' });
             startY += 10;
     
             // Debts Table
             doc.setFontSize(12).setFont('helvetica', 'bold').text("Resumen de Deudas", margin, startY);
             startY += 5;
-            autoTable(doc, {
+            (doc as any).autoTable({
                 head: [debts.headers],
                 body: debts.rows,
                 startY,
                 headStyles: { fillColor: [220, 53, 69] },
-                didDrawPage: (hookData) => { startY = hookData.cursor?.y || startY; }
+                didDrawPage: (hookData: any) => { startY = hookData.cursor?.y || startY; }
             });
             startY = (doc as any).lastAutoTable.finalY + 5;
             doc.setFontSize(10).setFont('helvetica', 'bold').text(`Total Adeudado: $${debts.total.toLocaleString('en-US', {minimumFractionDigits: 2})}`, pageWidth - margin, startY, { align: 'right' });
             startY += 10;
     
         } else {
-            autoTable(doc, { head: [data.headers], body: data.rows, startY });
+            (doc as any).autoTable({ head: [data.headers], body: data.rows, startY });
             if (data.footers) {
                 const finalY = (doc as any).lastAutoTable.finalY;
                 doc.setFontSize(12).setFont('helvetica', 'bold').text(data.footers.join(' | '), margin, finalY + 15);
@@ -349,24 +350,33 @@ export default function ReportsPage() {
             const paymentsQuery = query(
                 collection(db, "payments"),
                 where("status", "==", "aprobado"),
-                where("reportedBy", "==", owner.id) // Assuming owner reports their own payments for this history
+                where("beneficiaries", "array-contains", { ownerId: owner.id, house: validOwnerProperties[0].house, amount: owner.balance, street: validOwnerProperties[0].street })
             );
 
             const paymentsSnapshot = await getDocs(paymentsQuery);
             const allPayments = paymentsSnapshot.docs.map(doc => doc.data() as Payment);
 
             let totalPaid = 0;
+            let isAdvancePaymentReport = false;
             const paymentsRows = allPayments
                 .sort((a, b) => a.paymentDate.toMillis() - b.paymentDate.toMillis())
                 .map(p => {
-                    const amountForOwner = p.totalAmount; // Assuming the total amount is for the owner
+                    const beneficiary = p.beneficiaries.find(b => b.ownerId === owner.id);
+                    const amountForOwner = beneficiary?.amount || p.totalAmount;
                     totalPaid += amountForOwner;
                     const paidByOwner = owners.find(o => o.id === p.reportedBy);
+                    
+                    const isAdvance = p.paymentMethod === 'adelanto';
+                    if (isAdvance) isAdvancePaymentReport = true;
+                    
+                    const currencySymbol = isAdvance ? '$' : 'Bs.';
+                    const locale = isAdvance ? 'en-US' : 'es-VE';
+
                     return [
                         format(p.paymentDate.toDate(), "dd/MM/yyyy"),
                         p.paymentMethod === 'adelanto' ? 'Pago por Adelantado' : "Pago de Condominio",
                         paidByOwner?.name || 'N/A',
-                        `Bs. ${amountForOwner.toLocaleString('es-VE', {minimumFractionDigits: 2})}`
+                        `${currencySymbol} ${amountForOwner.toLocaleString(locale, {minimumFractionDigits: 2})}`
                     ];
                 });
 
@@ -374,7 +384,7 @@ export default function ReportsPage() {
             const debtsQuery = query(
                 collection(db, "debts"),
                 where("ownerId", "==", owner.id),
-                where("status", "==", "pending") // <-- This is the key change
+                where("status", "==", "pending")
             );
             const debtSnapshot = await getDocs(debtsQuery);
             let totalDebtUSD = 0;
@@ -400,6 +410,8 @@ export default function ReportsPage() {
             }
 
             const ownerProps = (owner.properties && owner.properties.length > 0) ? owner.properties.map(p => `${p.street} - ${p.house}`).join(', ') : (owner.street && owner.house ? `${owner.street} - ${owner.house}`: 'N/A');
+            const paymentCurrencySymbol = isAdvancePaymentReport ? '$' : 'Bs.';
+            const paymentAmountHeader = isAdvancePaymentReport ? 'Monto ($)' : 'Monto (Bs.)';
 
             setPreviewData({
                 title: `Estado de Cuenta Detallado`,
@@ -411,9 +423,10 @@ export default function ReportsPage() {
                     ownerInfo: `Propietario: ${owner.name} | Propiedad: ${ownerProps}`,
                     dateRange: dateRange,
                     payments: {
-                        headers: ["Fecha", "Concepto", "Pagado por", "Monto (Bs)"],
+                        headers: ["Fecha", "Concepto", "Pagado por", paymentAmountHeader],
                         rows: paymentsRows,
-                        total: totalPaid
+                        total: totalPaid,
+                        currency: paymentCurrencySymbol,
                     },
                     debts: {
                         headers: ["Período", "Descripción", "Monto ($)", "Estado"],
@@ -457,7 +470,7 @@ export default function ReportsPage() {
                     const ownerData = owners.find(o => o.id === ownerId);
                     if (!ownerData || ownerDebts.length < parseInt(delinquencyPeriod)) return null;
 
-                    ownerDebts.sort((a, b) => a.year - b.year || a.month - b.month);
+                    ownerDebts.sort((a, b) => a.year - b.year || a.month - a.month);
                     const firstDebt = ownerDebts[0];
                     const lastDebt = ownerDebts[ownerDebts.length - 1];
                     
@@ -771,7 +784,7 @@ export default function ReportsPage() {
                                         <TableHeader><TableRow>{previewData.detailedData.payments.headers.map((h, i) => <TableHead key={i}>{h}</TableHead>)}</TableRow></TableHeader>
                                         <TableBody>{previewData.detailedData.payments.rows.map((r, i) => <TableRow key={i}>{r.map((c, j) => <TableCell key={j}>{c}</TableCell>)}</TableRow>)}</TableBody>
                                     </Table>
-                                    <p className="text-right font-bold mt-2">Total Pagado: Bs. {previewData.detailedData.payments.total.toLocaleString('es-VE', {minimumFractionDigits: 2})}</p>
+                                     <p className="text-right font-bold mt-2">Total Pagado: {previewData.detailedData.payments.currency} {previewData.detailedData.payments.total.toLocaleString('es-VE', {minimumFractionDigits: 2})}</p>
                                 </div>
                                 <div>
                                     <h4 className="font-semibold mb-2">Resumen de Deudas</h4>
@@ -882,9 +895,3 @@ export default function ReportsPage() {
         </div>
     );
 }
-
-    
-
-    
-
-    
