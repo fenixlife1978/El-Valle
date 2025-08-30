@@ -5,10 +5,8 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Building2, Loader2, User, Wrench } from "lucide-react";
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-// Firebase auth is no longer used directly on login, but might be needed elsewhere.
-// Keeping it for now but commenting out the specific sign-in function.
-import { signInWithEmailAndPassword, Auth, getAuth } from 'firebase/auth';
+import { db, auth } from '@/lib/firebase';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -64,54 +62,64 @@ export default function LoginPage() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedRole) return;
     setIsLoading(true);
 
     try {
-        // We now query Firestore directly to find a user with the matching email and role.
-        const q = query(
-            collection(db, "owners"), 
-            where("email", "==", email), 
-            where("role", "==", selectedRole)
-        );
-        const querySnapshot = await getDocs(q);
-
-        if (querySnapshot.empty) {
-             throw new Error("No se encontró un usuario con ese email y rol.");
-        }
-        
-        // Assuming the first match is the correct user.
-        const userDoc = querySnapshot.docs[0];
-        
-        // Here we can proceed, but we are not validating the password against anything.
-        // This is a simplification to solve the reported error.
-        // For a real app, you would use Firebase Auth to sign in, and then get the user doc.
-        
-        const auth = getAuth();
+        // 1. Authenticate with Firebase Auth first
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
 
-        toast({
-            title: "Inicio de sesión exitoso",
-            description: "Redirigiendo...",
-        });
-        
-        router.push(selectedRole === 'admin' ? '/admin/dashboard' : '/owner/dashboard');
-        
+        // 2. After successful authentication, check Firestore for role
+        const userDocRef = doc(db, "owners", user.uid);
+        const userDocSnap = await getDoc(userDocRef);
+
+        if (userDocSnap.exists()) {
+            const userData = userDocSnap.data();
+            if (userData.role === selectedRole) {
+                // Role matches, proceed to dashboard
+                toast({
+                    title: "Inicio de sesión exitoso",
+                    description: "Redirigiendo...",
+                });
+                router.push(selectedRole === 'admin' ? '/admin/dashboard' : '/owner/dashboard');
+            } else {
+                // Role does not match
+                throw new Error(`No tiene permisos de ${selectedRole}.`);
+            }
+        } else {
+            // No profile document in Firestore for this authenticated user
+            throw new Error("No se encontró un registro de propietario para este usuario.");
+        }
+
     } catch (error: any) {
         console.error("Authentication error:", error);
         let description = "Por favor verifique sus credenciales.";
-        if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-            description = "Correo electrónico o contraseña incorrectos.";
-        } else if (error.message) {
+        
+        if (error.code) { // Firebase Auth errors have a 'code' property
+            switch (error.code) {
+                case 'auth/user-not-found':
+                case 'auth/wrong-password':
+                case 'auth/invalid-credential':
+                    description = "Correo electrónico o contraseña incorrectos.";
+                    break;
+                case 'auth/too-many-requests':
+                    description = "Demasiados intentos de inicio de sesión. Intente más tarde.";
+                    break;
+                default:
+                    description = "Ocurrió un error inesperado durante la autenticación.";
+            }
+        } else if (error.message) { // Custom errors thrown in the try block
             description = error.message;
         }
+
         toast({
             variant: "destructive",
             title: "Error de autenticación",
             description: description,
         });
     } finally {
-      setIsLoading(false);
+        setIsLoading(false);
     }
   };
 
