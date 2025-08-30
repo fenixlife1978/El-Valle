@@ -315,8 +315,8 @@ export default function SettingsPage() {
             const batch = writeBatch(db);
             let adjustmentsCount = 0;
             
-            querySnapshot.forEach(doc => {
-                const debt = doc.data() as Debt;
+            querySnapshot.forEach(debtDoc => {
+                const debt = debtDoc.data() as Debt;
                 const isCurrentOrFutureDebt = debt.year > currentYear || (debt.year === currentYear && debt.month >= currentMonth);
 
                 // Check if the original paid amount was less than the new fee
