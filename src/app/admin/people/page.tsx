@@ -34,7 +34,6 @@ type Owner = {
     email?: string;
     balance: number | string;
     role: Role;
-    password?: string; // Optional password field
     // Legacy fields for backward compatibility
     street?: string;
     house?: string;
@@ -55,7 +54,6 @@ const emptyOwner: Omit<Owner, 'id' | 'balance'> & { balance: number | string } =
     email: '', 
     balance: "0.00", 
     role: 'propietario',
-    password: '',
 };
 
 const streets = Array.from({ length: 8 }, (_, i) => `Calle ${i + 1}`);
@@ -137,7 +135,6 @@ export default function PeopleManagementPage() {
         // Ensure owner has a properties array, converting legacy data if needed
         const editableOwner = {
             ...owner,
-            password: '', // Always clear password field on open
             properties: owner.properties && owner.properties.length > 0 
                 ? owner.properties 
                 : [{ street: owner.street || '', house: owner.house || '' }]
@@ -171,13 +168,9 @@ export default function PeopleManagementPage() {
             toast({ variant: 'destructive', title: 'Error de Validación', description: 'Nombre, calle y casa son obligatorios para todas las propiedades.' });
             return;
         }
-         if (currentOwner.password && currentOwner.password.length < 6) {
-            toast({ variant: 'destructive', title: 'Contraseña Débil', description: 'La contraseña debe tener al menos 6 caracteres.' });
-            return;
-        }
 
         try {
-            const { id, street, house, password, ...ownerData } = currentOwner;
+            const { id, street, house, ...ownerData } = currentOwner;
             
             // Prepare data for Firestore, handle balance specifically per user command
             const balanceValue = parseFloat(String(ownerData.balance));
@@ -209,7 +202,7 @@ export default function PeopleManagementPage() {
     };
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const { id, value, type } = e.target;
+        const { id, value } = e.target;
         setCurrentOwner({ 
             ...currentOwner, 
             [id]: value
@@ -439,7 +432,7 @@ export default function PeopleManagementPage() {
                                             <TableCell>
                                                 {owner.properties && owner.properties.length > 0 
                                                     ? owner.properties.map(p => `${p.street} - ${p.house}`).join(', ') 
-                                                    : (owner.street && owner.house ? `${owner.street} - ${o.house}` : 'N/A')
+                                                    : (owner.street && owner.house ? `${owner.street} - ${owner.house}` : 'N/A')
                                                 }
                                             </TableCell>
                                             <TableCell>{owner.email || '-'}</TableCell>
@@ -496,21 +489,6 @@ export default function PeopleManagementPage() {
                                 <Label htmlFor="email">Email</Label>
                                 <Input id="email" type="email" value={currentOwner.email || ''} onChange={handleInputChange} disabled={!!currentOwner.id} />
                                 {currentOwner.id && <p className="text-xs text-muted-foreground">El email no se puede cambiar para un usuario existente.</p>}
-                            </div>
-                             <div className="space-y-2">
-                                <Label htmlFor="password">Contraseña</Label>
-                                <div className="relative">
-                                    <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                    <Input 
-                                      id="password" 
-                                      type="text" 
-                                      value={currentOwner.password || ''} 
-                                      onChange={handleInputChange} 
-                                      placeholder="Dejar en blanco para no cambiar"
-                                      className="pl-10"
-                                    />
-                                </div>
-                                <p className="text-xs text-muted-foreground">Establecer o cambiar la contraseña del usuario. Mínimo 6 caracteres.</p>
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="role">Rol</Label>

@@ -8,20 +8,20 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Upload, Save, Loader2, UserCircle, KeyRound } from 'lucide-react';
-import { doc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
-import { db, auth } from '@/lib/firebase';
-import { useAuthState } from 'react-firebase-hooks/auth';
-import { updatePassword } from "firebase/auth";
+import { doc, getDoc, updateDoc, onSnapshot, collection, query, limit } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 
 
 type OwnerProfile = {
+    id: string;
     name: string;
     email: string;
     avatar: string;
 };
 
 const emptyOwnerProfile: OwnerProfile = {
+    id: '',
     name: 'Propietario',
     email: '',
     avatar: ''
@@ -29,7 +29,6 @@ const emptyOwnerProfile: OwnerProfile = {
 
 export default function OwnerSettingsPage() {
     const { toast } = useToast();
-    const [user, authLoading] = useAuthState(auth);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     
@@ -40,32 +39,38 @@ export default function OwnerSettingsPage() {
 
 
     useEffect(() => {
-        if (authLoading || !user) {
-            if (!authLoading) setLoading(false);
-            return;
+        const fetchFirstOwner = async () => {
+            setLoading(true);
+            const ownersQuery = query(collection(db, "owners"), limit(1));
+            const unsubscribe = onSnapshot(ownersQuery, (snapshot) => {
+                if (!snapshot.empty) {
+                    const ownerDoc = snapshot.docs[0];
+                    const data = ownerDoc.data();
+                    const profileData = {
+                        id: ownerDoc.id,
+                        name: data.name || 'Propietario',
+                        email: data.email || '',
+                        avatar: data.avatar || ''
+                    };
+                    setProfile(profileData);
+                    setAvatarPreview(profileData.avatar);
+                }
+                setLoading(false);
+            }, (error) => {
+                console.error("Error fetching owner profile:", error);
+                toast({ variant: 'destructive', title: 'Error', description: 'No se pudo cargar tu perfil.' });
+                setLoading(false);
+            });
+
+            return unsubscribe;
+        };
+        
+        const cleanupPromise = fetchFirstOwner();
+        return () => {
+            cleanupPromise.then(cleanup => cleanup());
         };
 
-        const userRef = doc(db, 'owners', user.uid);
-        const unsubscribe = onSnapshot(userRef, (docSnap) => {
-            if (docSnap.exists()) {
-                const data = docSnap.data();
-                const profileData = {
-                    name: data.name || 'Propietario',
-                    email: data.email || user.email || '',
-                    avatar: data.avatar || ''
-                };
-                setProfile(profileData);
-                setAvatarPreview(profileData.avatar);
-            }
-            setLoading(false);
-        }, (error) => {
-            console.error("Error fetching owner profile:", error);
-            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo cargar tu perfil.' });
-            setLoading(false);
-        });
-
-        return () => unsubscribe();
-    }, [user, authLoading, toast]);
+    }, [toast]);
 
     const handleProfileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setProfile({ ...profile, [e.target.name]: e.target.value });
@@ -89,10 +94,10 @@ export default function OwnerSettingsPage() {
     };
     
     const handleSaveChanges = async () => {
-        if (!user) return;
+        if (!profile.id) return;
         setSaving(true);
         try {
-            const userRef = doc(db, 'owners', user.uid);
+            const userRef = doc(db, 'owners', profile.id);
             const { name, avatar } = profile;
             await updateDoc(userRef, { name, avatar });
             
@@ -111,38 +116,15 @@ export default function OwnerSettingsPage() {
     };
 
     const handleChangePassword = async () => {
-        if (!user) {
-             toast({ variant: 'destructive', title: 'Error', description: 'Debes iniciar sesión para cambiar tu contraseña.' });
-            return;
-        }
-        if (newPassword !== confirmPassword) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Las contraseñas no coinciden.' });
-            return;
-        }
-        if (newPassword.length < 6) {
-             toast({ variant: 'destructive', title: 'Error', description: 'La contraseña debe tener al menos 6 caracteres.' });
-            return;
-        }
-        setSaving(true);
-        
-        try {
-            await updatePassword(user, newPassword);
-             toast({
-                title: 'Contraseña Cambiada',
-                description: 'Tu contraseña ha sido actualizada exitosamente.',
-            });
-            setNewPassword('');
-            setConfirmPassword('');
-        } catch (error) {
-            console.error("Error changing password:", error);
-            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo cambiar la contraseña. Es posible que necesites volver a iniciar sesión.' });
-        } finally {
-            setSaving(false);
-        }
+        toast({
+            variant: 'destructive',
+            title: 'Función Deshabilitada',
+            description: 'El cambio de contraseña no está disponible sin autenticación.',
+        });
     }
 
 
-    if (loading || authLoading) {
+    if (loading) {
         return (
             <div className="flex justify-center items-center h-full">
                 <Loader2 className="h-10 w-10 animate-spin text-primary" />
@@ -150,8 +132,8 @@ export default function OwnerSettingsPage() {
         );
     }
     
-    if (!user) {
-        return <div className="text-center">Por favor, inicie sesión para ver su configuración.</div>
+    if (!profile.id) {
+        return <div className="text-center">No se encontró información del propietario.</div>
     }
 
     return (
@@ -217,6 +199,7 @@ export default function OwnerSettingsPage() {
                             value={newPassword}
                             onChange={(e) => setNewPassword(e.target.value)}
                             placeholder="••••••••"
+                            disabled
                         />
                     </div>
                      <div className="space-y-2">
@@ -227,12 +210,13 @@ export default function OwnerSettingsPage() {
                             value={confirmPassword}
                             onChange={(e) => setConfirmPassword(e.target.value)}
                              placeholder="••••••••"
+                             disabled
                         />
                     </div>
                 </CardContent>
                 <CardFooter>
-                    <Button onClick={handleChangePassword} disabled={saving || !newPassword || !confirmPassword}>
-                        {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <KeyRound className="mr-2 h-4 w-4"/>}
+                    <Button onClick={handleChangePassword} disabled>
+                        <KeyRound className="mr-2 h-4 w-4"/>
                         Cambiar Contraseña
                     </Button>
                 </CardFooter>
@@ -241,5 +225,3 @@ export default function OwnerSettingsPage() {
         </div>
     );
 }
-
-    

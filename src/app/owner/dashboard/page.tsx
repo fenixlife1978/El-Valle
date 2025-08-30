@@ -9,8 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Landmark, AlertCircle, Building, Eye, Printer, Megaphone, Loader2, Wallet, FileText, CalendarClock, Scale, Calculator, Minus, Equal, ShieldCheck, TrendingUp, TrendingDown, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getCommunityUpdates } from '@/ai/flows/community-updates';
-import { auth, db } from '@/lib/firebase';
-import { useAuthState } from 'react-firebase-hooks/auth';
+import { db } from '@/lib/firebase';
 import { doc, onSnapshot, collection, query, where, orderBy, limit, getDoc, getDocs, Timestamp } from 'firebase/firestore';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -79,7 +78,6 @@ const months = [
 ];
 
 export default function OwnerDashboardPage() {
-    const [user, authLoading] = useAuthState(auth);
     const [loading, setLoading] = useState(true);
     const [userData, setUserData] = useState<UserData | null>(null);
     const [payments, setPayments] = useState<Payment[]>([]);
@@ -98,135 +96,147 @@ export default function OwnerDashboardPage() {
     const [isReceiptPreviewOpen, setIsReceiptPreviewOpen] = useState(false);
     
     useEffect(() => {
-        if (authLoading) return;
-        if (!user) {
-            setLoading(false);
-            return;
-        };
-
-        const userId = user.uid;
-        let userUnsubscribe: () => void;
-        
-        const settingsRef = doc(db, 'config', 'mainSettings');
-        const settingsUnsubscribe = onSnapshot(settingsRef, (settingsSnap) => {
-            let activeRate = 0;
-            let fetchedCompanyInfo: CompanyInfo | null = null;
-
-            if (settingsSnap.exists()) {
-                const settings = settingsSnap.data();
-                fetchedCompanyInfo = settings.companyInfo || null;
-                const rates = settings.exchangeRates || [];
-                const activeRateObj = rates.find((r: any) => r.active);
-                if (activeRateObj) {
-                    activeRate = activeRateObj.rate;
-                } else if (rates.length > 0) {
-                     const sortedRates = [...rates].sort((a:any,b:any) => new Date(b.date).getTime() - new Date(a.date).getTime());
-                     activeRate = sortedRates[0].rate;
-                }
-            } else {
-                console.error("Settings document not found!");
-            }
-            setCompanyInfo(fetchedCompanyInfo);
-            
-            if (userUnsubscribe) userUnsubscribe();
-
-            const userDocRef = doc(db, "owners", userId);
-            userUnsubscribe = onSnapshot(userDocRef, async (userSnap) => {
-                setLoading(true);
-                 if (userSnap.exists()) {
-                    const data = userSnap.data();
-                    const ownerData = { 
-                        id: userSnap.id, 
-                        name: data.name,
-                        unit: (data.properties && data.properties.length > 0) ? `${data.properties[0].street} - ${data.properties[0].house}` : 'N/A',
-                        balance: data.balance || 0,
-                    } as UserData;
-                    setUserData(ownerData);
-
-                    const pendingDebtsQuery = query(collection(db, "debts"), where("ownerId", "==", userId), where("status", "==", "pending"));
-                    const pendingDebtsSnapshot = await getDocs(pendingDebtsQuery);
-                    
-                    const pendingDebtsData: Debt[] = [];
-                    let totalDebtUSD = 0;
-                    pendingDebtsSnapshot.forEach((doc) => {
-                        const debt = { id: doc.id, ...doc.data() } as Debt
-                        pendingDebtsData.push(debt);
-                        totalDebtUSD += debt.amountUSD;
-                    });
-                    
-                    const sortedPendingDebts = pendingDebtsData.sort((a,b) => a.year - b.year || a.month - a.month);
-                    setDebts(sortedPendingDebts);
-                    
-                    if (totalDebtUSD > 0) {
-                        setSolvencyStatus('moroso');
-                        const oldestDebt = sortedPendingDebts[0];
-                        if (oldestDebt) {
-                             const monthLabel = months.find(m => m.value === oldestDebt.month)?.label || '';
-                             setSolvencyPeriod(`Desde ${monthLabel} ${oldestDebt.year}`);
-                        }
-                    } else {
-                        setSolvencyStatus('solvente');
-                        const allDebtsQuery = query(collection(db, "debts"), where("ownerId", "==", userId), where("status", "==", "paid"), orderBy("year", "desc"), orderBy("month", "desc"), limit(1));
-                        const lastPaidDebtSnapshot = await getDocs(allDebtsQuery);
-
-                        if (!lastPaidDebtSnapshot.empty) {
-                            const lastPaidDebt = lastPaidDebtSnapshot.docs[0].data();
-                            const monthLabel = months.find(m => m.value === lastPaidDebt.month)?.label || '';
-                            setSolvencyPeriod(`Hasta ${monthLabel} ${lastPaidDebt.year}`);
-                        } else {
-                            const now = new Date();
-                             const monthLabel = months.find(m => m.value === now.getMonth())?.label || '';
-                             setSolvencyPeriod(`Hasta ${monthLabel} ${now.getFullYear()}`);
-                        }
-                    }
-                    
-                    setDashboardStats({
-                        balanceInFavor: ownerData.balance || 0,
-                        totalDebtUSD: totalDebtUSD,
-                        exchangeRate: activeRate,
-                    });
-                } else {
-                    console.log("No such user document!");
-                }
+        // This is a placeholder for a user ID since auth is removed.
+        // In a real app with auth, you would get this from the logged-in user.
+        // We'll arbitrarily pick the first owner from the DB for demonstration.
+        const listenToFirstOwnerData = async () => {
+            const ownersQuery = query(collection(db, "owners"), limit(1));
+            const ownersSnapshot = await getDocs(ownersQuery);
+            if (ownersSnapshot.empty) {
+                console.log("No owners found in the database.");
                 setLoading(false);
-            });
-        });
+                return () => {}; // No-op cleanup
+            }
+            const firstOwnerDoc = ownersSnapshot.docs[0];
+            const userId = firstOwnerDoc.id;
 
-        const paymentsQuery = query(
-            collection(db, "payments"),
-            where("reportedBy", "==", userId)
-        );
-        const paymentsUnsubscribe = onSnapshot(paymentsQuery, (snapshot) => {
-            const paymentsData: Payment[] = [];
-            snapshot.forEach((doc) => {
-                const data = doc.data();
-                paymentsData.push({
-                    id: doc.id,
-                    date: new Date(data.paymentDate.seconds * 1000).toISOString(),
-                    amount: data.totalAmount,
-                    bank: data.bank,
-                    type: data.paymentMethod,
-                    ref: data.reference,
-                    status: data.status,
-                    reportedAt: data.reportedAt,
+            let userUnsubscribe: () => void;
+            
+            const settingsRef = doc(db, 'config', 'mainSettings');
+            const settingsUnsubscribe = onSnapshot(settingsRef, (settingsSnap) => {
+                let activeRate = 0;
+                let fetchedCompanyInfo: CompanyInfo | null = null;
+
+                if (settingsSnap.exists()) {
+                    const settings = settingsSnap.data();
+                    fetchedCompanyInfo = settings.companyInfo || null;
+                    const rates = settings.exchangeRates || [];
+                    const activeRateObj = rates.find((r: any) => r.active);
+                    if (activeRateObj) {
+                        activeRate = activeRateObj.rate;
+                    } else if (rates.length > 0) {
+                        const sortedRates = [...rates].sort((a:any,b:any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                        activeRate = sortedRates[0].rate;
+                    }
+                } else {
+                    console.error("Settings document not found!");
+                }
+                setCompanyInfo(fetchedCompanyInfo);
+                
+                if (userUnsubscribe) userUnsubscribe();
+
+                const userDocRef = doc(db, "owners", userId);
+                userUnsubscribe = onSnapshot(userDocRef, async (userSnap) => {
+                    setLoading(true);
+                    if (userSnap.exists()) {
+                        const data = userSnap.data();
+                        const ownerData = { 
+                            id: userSnap.id, 
+                            name: data.name,
+                            unit: (data.properties && data.properties.length > 0) ? `${data.properties[0].street} - ${data.properties[0].house}` : 'N/A',
+                            balance: data.balance || 0,
+                        } as UserData;
+                        setUserData(ownerData);
+
+                        const pendingDebtsQuery = query(collection(db, "debts"), where("ownerId", "==", userId), where("status", "==", "pending"));
+                        const pendingDebtsSnapshot = await getDocs(pendingDebtsQuery);
+                        
+                        const pendingDebtsData: Debt[] = [];
+                        let totalDebtUSD = 0;
+                        pendingDebtsSnapshot.forEach((doc) => {
+                            const debt = { id: doc.id, ...doc.data() } as Debt
+                            pendingDebtsData.push(debt);
+                            totalDebtUSD += debt.amountUSD;
+                        });
+                        
+                        const sortedPendingDebts = pendingDebtsData.sort((a,b) => a.year - b.year || a.month - a.month);
+                        setDebts(sortedPendingDebts);
+                        
+                        if (totalDebtUSD > 0) {
+                            setSolvencyStatus('moroso');
+                            const oldestDebt = sortedPendingDebts[0];
+                            if (oldestDebt) {
+                                const monthLabel = months.find(m => m.value === oldestDebt.month)?.label || '';
+                                setSolvencyPeriod(`Desde ${monthLabel} ${oldestDebt.year}`);
+                            }
+                        } else {
+                            setSolvencyStatus('solvente');
+                            const allDebtsQuery = query(collection(db, "debts"), where("ownerId", "==", userId), where("status", "==", "paid"), orderBy("year", "desc"), orderBy("month", "desc"), limit(1));
+                            const lastPaidDebtSnapshot = await getDocs(allDebtsQuery);
+
+                            if (!lastPaidDebtSnapshot.empty) {
+                                const lastPaidDebt = lastPaidDebtSnapshot.docs[0].data();
+                                const monthLabel = months.find(m => m.value === lastPaidDebt.month)?.label || '';
+                                setSolvencyPeriod(`Hasta ${monthLabel} ${lastPaidDebt.year}`);
+                            } else {
+                                const now = new Date();
+                                const monthLabel = months.find(m => m.value === now.getMonth())?.label || '';
+                                setSolvencyPeriod(`Hasta ${monthLabel} ${now.getFullYear()}`);
+                            }
+                        }
+                        
+                        setDashboardStats({
+                            balanceInFavor: ownerData.balance || 0,
+                            totalDebtUSD: totalDebtUSD,
+                            exchangeRate: activeRate,
+                        });
+                    } else {
+                        console.log("No such user document!");
+                    }
+                    setLoading(false);
                 });
             });
-            // Sort client-side to avoid composite index
-            const sortedPayments = paymentsData.sort((a,b) => {
-                const dateA = a.reportedAt?.toMillis() || 0;
-                const dateB = b.reportedAt?.toMillis() || 0;
-                return dateB - dateA;
+
+            const paymentsQuery = query(
+                collection(db, "payments"),
+                where("reportedBy", "==", userId)
+            );
+            const paymentsUnsubscribe = onSnapshot(paymentsQuery, (snapshot) => {
+                const paymentsData: Payment[] = [];
+                snapshot.forEach((doc) => {
+                    const data = doc.data();
+                    paymentsData.push({
+                        id: doc.id,
+                        date: new Date(data.paymentDate.seconds * 1000).toISOString(),
+                        amount: data.totalAmount,
+                        bank: data.bank,
+                        type: data.paymentMethod,
+                        ref: data.reference,
+                        status: data.status,
+                        reportedAt: data.reportedAt,
+                    });
+                });
+                const sortedPayments = paymentsData.sort((a,b) => {
+                    const dateA = a.reportedAt?.toMillis() || 0;
+                    const dateB = b.reportedAt?.toMillis() || 0;
+                    return dateB - dateA;
+                });
+                setPayments(sortedPayments.slice(0, 5));
             });
-            setPayments(sortedPayments.slice(0, 5));
-        });
-        
+            
+            return () => {
+                settingsUnsubscribe();
+                if (userUnsubscribe) userUnsubscribe();
+                paymentsUnsubscribe();
+            };
+        }
+
+        const cleanupPromise = listenToFirstOwnerData();
         return () => {
-            settingsUnsubscribe();
-            if (userUnsubscribe) userUnsubscribe();
-            paymentsUnsubscribe();
+            cleanupPromise.then(cleanup => cleanup());
         };
 
-    }, [user, authLoading]);
+    }, []);
     
     const handleDebtSelection = (debtId: string) => {
         setSelectedDebts(prev => 
@@ -321,7 +331,7 @@ export default function OwnerDashboardPage() {
     setIsReceiptPreviewOpen(false);
   };
 
-  if (loading || authLoading) {
+  if (loading) {
     return (
         <div className="flex justify-center items-center h-full">
             <Loader2 className="h-10 w-10 animate-spin text-primary" />
@@ -329,11 +339,10 @@ export default function OwnerDashboardPage() {
     );
   }
 
-  if (!user) {
+  if (!userData) {
     return (
         <div className="flex flex-col justify-center items-center h-full gap-4">
-            <p className="text-lg">Por favor, inicie sesión para ver su panel.</p>
-            <Button onClick={() => window.location.href = '/'}>Ir a la página de inicio</Button>
+            <p className="text-lg">No se encontró información del propietario.</p>
         </div>
     )
   }
@@ -569,7 +578,3 @@ export default function OwnerDashboardPage() {
     </div>
   );
 }
-
-    
-
-    

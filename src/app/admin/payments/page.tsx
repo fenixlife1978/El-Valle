@@ -15,8 +15,7 @@ import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore';
-import { db, auth } from '@/lib/firebase';
-import { useAuthState } from 'react-firebase-hooks/auth';
+import { db } from '@/lib/firebase';
 // In a real app, you would also use Firebase Storage for the file upload
 // import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
@@ -53,7 +52,6 @@ type FormErrors = { [key: string]: string | undefined };
 
 export default function UnifiedPaymentsPage() {
     const { toast } = useToast();
-    const [user] = useAuthState(auth);
     const [owners, setOwners] = useState<Owner[]>([]);
     const [loading, setLoading] = useState(false);
     const receiptFileRef = useRef<HTMLInputElement>(null);
@@ -220,6 +218,8 @@ export default function UnifiedPaymentsPage() {
 
         if (beneficiaryType === 'terceros' && !thirdPartyBeneficiary) {
             newErrors.thirdPartyBeneficiary = 'Debe seleccionar un beneficiario.';
+        } else if (beneficiaryType === 'propio' && !thirdPartyBeneficiary) {
+            newErrors.thirdPartyBeneficiary = 'Debe seleccionar un beneficiario para el pago propio.';
         }
         if (beneficiaryType === 'global') {
             if (globalSplits.some(s => !s.ownerId || !s.amount)) {
@@ -244,14 +244,6 @@ export default function UnifiedPaymentsPage() {
             });
             return;
         }
-        if (!user) {
-            toast({
-                variant: 'destructive',
-                title: 'Error de Autenticación',
-                description: 'Debes iniciar sesión para reportar un pago.',
-            });
-            return;
-        }
         setLoading(true);
 
 
@@ -259,14 +251,21 @@ export default function UnifiedPaymentsPage() {
         const receiptFileUrl = "mock-receipt-url";
         
         let beneficiaries: GlobalSplit[] = [];
+        let reportedById = 'admin_user'; // Default for admin
+
         if (beneficiaryType === 'propio') {
-            const owner = owners.find(o => o.id === user.uid); // You'd need the current user's owner doc ID
-            if(owner) beneficiaries = [{ ownerId: owner.id, amount: Number(totalAmount), house: owner.house }];
+            const owner = owners.find(o => o.id === thirdPartyBeneficiary);
+            if(owner) {
+                beneficiaries = [{ ownerId: owner.id, amount: Number(totalAmount), house: owner.house }];
+                reportedById = owner.id;
+            }
         } else if (beneficiaryType === 'terceros') {
             const owner = owners.find(o => o.id === thirdPartyBeneficiary);
             if(owner) beneficiaries = [{ ownerId: owner.id, amount: Number(totalAmount), house: owner.house }];
+            // reportedBy remains admin
         } else { // global
             beneficiaries = globalSplits.map(s => ({...s, amount: Number(s.amount) }));
+             // reportedBy remains admin
         }
 
         const paymentData = {
@@ -282,7 +281,7 @@ export default function UnifiedPaymentsPage() {
             receiptFileName: receiptFile?.name,
             status: 'pendiente',
             reportedAt: serverTimestamp(),
-            reportedBy: user.uid,
+            reportedBy: reportedById,
         };
 
         try {
@@ -481,25 +480,19 @@ export default function UnifiedPaymentsPage() {
                         <div className="md:col-span-2 space-y-4">
                             <Label className="font-semibold">9. Asignación de Montos</Label>
                             
-                            {beneficiaryType === 'propio' && (
-                                <div className="p-4 bg-muted/50 rounded-lg flex items-center gap-3">
-                                    <CheckCircle2 className="h-5 w-5 text-green-600"/>
-                                    <p className="text-sm text-muted-foreground">El monto total se asignará a tu unidad/deuda.</p>
-                                </div>
-                            )}
-
-                            {beneficiaryType === 'terceros' && (
+                            {(beneficiaryType === 'propio' || beneficiaryType === 'terceros') && (
                                 <div className="space-y-2">
-                                    <Label htmlFor="third-party-beneficiary">Beneficiario</Label>
-                                    <Select value={thirdPartyBeneficiary} onValueChange={setThirdPartyBeneficiary} disabled={loading}>
-                                        <SelectTrigger id="third-party-beneficiary" className={cn(errors.thirdPartyBeneficiary && "border-destructive")}>
+                                    <Label htmlFor="single-beneficiary">Beneficiario</Label>
+                                     <Select value={thirdPartyBeneficiary} onValueChange={setThirdPartyBeneficiary} disabled={loading}>
+                                        <SelectTrigger id="single-beneficiary" className={cn(errors.thirdPartyBeneficiary && "border-destructive")}>
                                             <SelectValue placeholder="Seleccione un propietario..." />
                                         </SelectTrigger>
                                         <SelectContent>
                                             {owners.map(o => <SelectItem key={o.id} value={o.id}>{o.name} ({o.house})</SelectItem>)}
                                         </SelectContent>
                                     </Select>
-                                    {errors.thirdPartyBeneficiary && <p className="text-sm text-destructive">{errors.thirdPartyBeneficiary}</p>}
+                                     {errors.thirdPartyBeneficiary && <p className="text-sm text-destructive">{errors.thirdPartyBeneficiary}</p>}
+                                    {beneficiaryType === 'propio' && <p className="text-sm text-muted-foreground">Selecciona a quién pertenece este pago.</p>}
                                 </div>
                             )}
 
@@ -576,9 +569,3 @@ export default function UnifiedPaymentsPage() {
         </div>
     );
 }
-
-    
-
-    
-
-    
