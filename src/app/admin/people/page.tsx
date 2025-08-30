@@ -1,4 +1,5 @@
 
+      
 'use client';
 
 import { useState, useMemo, useRef, useEffect } from 'react';
@@ -9,7 +10,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PlusCircle, MoreHorizontal, Edit, Trash2, FileUp, FileDown, Loader2, MinusCircle } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, Edit, Trash2, FileUp, FileDown, Loader2, MinusCircle, KeyRound } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import * as XLSX from 'xlsx';
@@ -33,6 +34,7 @@ type Owner = {
     email?: string;
     balance: number | string;
     role: Role;
+    password?: string; // Optional password field
     // Legacy fields for backward compatibility
     street?: string;
     house?: string;
@@ -52,7 +54,8 @@ const emptyOwner: Omit<Owner, 'id' | 'balance'> & { balance: number | string } =
     properties: [{ street: '', house: '' }], 
     email: '', 
     balance: "0.00", 
-    role: 'propietario' 
+    role: 'propietario',
+    password: '',
 };
 
 const streets = Array.from({ length: 8 }, (_, i) => `Calle ${i + 1}`);
@@ -134,6 +137,7 @@ export default function PeopleManagementPage() {
         // Ensure owner has a properties array, converting legacy data if needed
         const editableOwner = {
             ...owner,
+            password: '', // Always clear password field on open
             properties: owner.properties && owner.properties.length > 0 
                 ? owner.properties 
                 : [{ street: owner.street || '', house: owner.house || '' }]
@@ -167,9 +171,13 @@ export default function PeopleManagementPage() {
             toast({ variant: 'destructive', title: 'Error de Validación', description: 'Nombre, calle y casa son obligatorios para todas las propiedades.' });
             return;
         }
+         if (currentOwner.password && currentOwner.password.length < 6) {
+            toast({ variant: 'destructive', title: 'Contraseña Débil', description: 'La contraseña debe tener al menos 6 caracteres.' });
+            return;
+        }
 
         try {
-            const { id, street, house, ...ownerData } = currentOwner;
+            const { id, street, house, password, ...ownerData } = currentOwner;
             
             // Prepare data for Firestore, handle balance specifically per user command
             const balanceValue = parseFloat(String(ownerData.balance));
@@ -183,6 +191,11 @@ export default function PeopleManagementPage() {
                 await updateDoc(ownerRef, dataToSave);
                 toast({ title: 'Propietario Actualizado', description: 'Los datos han sido guardados en la base de datos.' });
             } else {
+                // For new users, email is required
+                if (!dataToSave.email) {
+                    toast({ variant: 'destructive', title: 'Error de Validación', description: 'El correo electrónico es obligatorio para nuevos usuarios.' });
+                    return;
+                }
                 await addDoc(collection(db, "owners"), dataToSave);
                 toast({ title: 'Propietario Agregado', description: 'La nueva persona ha sido guardada en la base de datos.' });
             }
@@ -426,7 +439,7 @@ export default function PeopleManagementPage() {
                                             <TableCell>
                                                 {owner.properties && owner.properties.length > 0 
                                                     ? owner.properties.map(p => `${p.street} - ${p.house}`).join(', ') 
-                                                    : (owner.street && owner.house ? `${owner.street} - ${owner.house}` : 'N/A')
+                                                    : (owner.street && owner.house ? `${owner.street} - ${o.house}` : 'N/A')
                                                 }
                                             </TableCell>
                                             <TableCell>{owner.email || '-'}</TableCell>
@@ -479,6 +492,26 @@ export default function PeopleManagementPage() {
                                 <Label htmlFor="name">Nombre</Label>
                                 <Input id="name" value={currentOwner.name} onChange={handleInputChange} />
                             </div>
+                             <div className="space-y-2">
+                                <Label htmlFor="email">Email</Label>
+                                <Input id="email" type="email" value={currentOwner.email || ''} onChange={handleInputChange} disabled={!!currentOwner.id} />
+                                {currentOwner.id && <p className="text-xs text-muted-foreground">El email no se puede cambiar para un usuario existente.</p>}
+                            </div>
+                             <div className="space-y-2">
+                                <Label htmlFor="password">Contraseña</Label>
+                                <div className="relative">
+                                    <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                    <Input 
+                                      id="password" 
+                                      type="text" 
+                                      value={currentOwner.password || ''} 
+                                      onChange={handleInputChange} 
+                                      placeholder="Dejar en blanco para no cambiar"
+                                      className="pl-10"
+                                    />
+                                </div>
+                                <p className="text-xs text-muted-foreground">Establecer o cambiar la contraseña del usuario. Mínimo 6 caracteres.</p>
+                            </div>
                             <div className="space-y-2">
                                 <Label htmlFor="role">Rol</Label>
                                 <Select onValueChange={handleRoleChange} value={currentOwner.role}>
@@ -527,10 +560,7 @@ export default function PeopleManagementPage() {
                                 </Button>
                             </div>
 
-                            <div className="space-y-2">
-                                <Label htmlFor="email">Email</Label>
-                                <Input id="email" type="email" value={currentOwner.email || ''} onChange={handleInputChange} />
-                            </div>
+                           
                             <div className="space-y-2">
                                 <Label htmlFor="balance">Saldo a Favor (Bs.)</Label>
                                 <Input id="balance" type="number" value={String(currentOwner.balance)} onChange={handleInputChange} placeholder="0.00" />
@@ -561,13 +591,5 @@ export default function PeopleManagementPage() {
 
         </div>
     );
-
     
-
-    
-
-    
-
-    
-
     
