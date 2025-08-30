@@ -4,7 +4,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,7 +36,25 @@ function LoginPageContent() {
 
             if (user) {
                 const userDocRef = doc(db, 'owners', user.uid);
-                const userDocSnap = await getDoc(userDocRef);
+                let userDocSnap = await getDoc(userDocRef);
+
+                // Admin auto-creation logic
+                if (!userDocSnap.exists() && email === 'vallecondo@gmail.com') {
+                    toast({
+                        title: 'Perfil no encontrado',
+                        description: 'Creando perfil de administrador por primera vez...',
+                    });
+                    const adminData = {
+                        name: 'EDWIN AGUIAR',
+                        email: 'vallecondo@gmail.com',
+                        role: 'administrador',
+                        properties: [{ street: 'N/A', house: 'N/A' }],
+                        balance: 0,
+                    };
+                    await setDoc(userDocRef, adminData);
+                    userDocSnap = await getDoc(userDocRef); // Re-fetch the document
+                }
+
 
                 if (userDocSnap.exists()) {
                     const userData = userDocSnap.data();
