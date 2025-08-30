@@ -273,7 +273,7 @@ export default function OwnerDashboardPage() {
 
     doc.setFontSize(16).setFont('helvetica', 'bold').text(`Recibo de Pago #${payment.id}`, pageWidth / 2, margin + 10, { align: 'center' });
     
-    autoTable(doc, {
+    (doc as any).autoTable({
         startY: margin + 20,
         body: [
             ['Propietario', ownerName],

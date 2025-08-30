@@ -267,6 +267,8 @@ export default function VerifyPaymentsPage() {
         const payerSnap = await getDoc(payerRef);
         if(payerSnap.exists()) {
             payerName = payerSnap.data().name;
+        } else if (payerId === 'admin_user') {
+            payerName = 'Administración';
         }
     }
     
@@ -356,7 +358,7 @@ export default function VerifyPaymentsPage() {
 
     doc.setFontSize(16).setFont('helvetica', 'bold').text(`Recibo de Pago #${payment.id}`, pageWidth / 2, margin + 10, { align: 'center' });
     
-    autoTable(doc, {
+    (doc as any).autoTable({
         startY: margin + 20,
         body: [
             ['Propietario', ownerName],
