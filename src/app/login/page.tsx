@@ -59,7 +59,13 @@ function LoginPageContent() {
                 if (userDocSnap.exists()) {
                     const userData = userDocSnap.data();
                     
-                    // Check if the role matches
+                    // If user is admin, redirect to admin dashboard regardless of the role in URL
+                    if (userData.role === 'administrador') {
+                        router.push('/admin/dashboard');
+                        return;
+                    }
+
+                    // Check if the role matches for non-admins
                     if (userData.role !== role) {
                         toast({ variant: 'destructive', title: 'Error de Rol', description: `No tienes permisos para acceder como ${role}.` });
                         setLoading(false);
@@ -69,8 +75,6 @@ function LoginPageContent() {
                     // Special check for owner's first login
                     if (userData.role === 'propietario' && password === '123456') {
                         router.push('/change-password');
-                    } else if (userData.role === 'administrador') {
-                        router.push('/admin/dashboard');
                     } else {
                         router.push('/owner/dashboard');
                     }
