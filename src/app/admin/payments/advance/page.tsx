@@ -6,13 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { CheckCircle, Loader2, CalendarPlus, Info, Check } from 'lucide-react';
+import { CheckCircle, Loader2, CalendarPlus, Info, Check, Search, XCircle } from 'lucide-react';
 import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc, writeBatch, Timestamp, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { addMonths, format, startOfMonth } from 'date-fns';
+import { addMonths, format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 type Owner = {
     id: string;
@@ -34,7 +34,8 @@ export default function AdvancePaymentPage() {
     const [loading, setLoading] = useState(false);
     
     // Form State
-    const [selectedOwner, setSelectedOwner] = useState('');
+    const [searchTerm, setSearchTerm] = useState('');
+    const [selectedOwner, setSelectedOwner] = useState<Owner | null>(null);
     const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
     const [monthlyAmount, setMonthlyAmount] = useState('');
     const [observations, setObservations] = useState('');
@@ -66,6 +67,24 @@ export default function AdvancePaymentPage() {
         };
     }, []);
 
+    const filteredOwners = useMemo(() => {
+        if (!searchTerm || searchTerm.length < 3) return [];
+        return owners.filter(owner =>
+            owner.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            String(owner.house).toLowerCase().includes(searchTerm.toLowerCase())
+        );
+    }, [searchTerm, owners]);
+
+    const handleOwnerSelect = (owner: Owner) => {
+        setSelectedOwner(owner);
+        setSearchTerm('');
+    };
+    
+    const resetOwnerSelection = () => {
+        setSelectedOwner(null);
+        setSearchTerm('');
+    };
+
     const handleMonthToggle = (monthValue: string) => {
         setSelectedMonths(prev =>
             prev.includes(monthValue)
@@ -89,13 +108,10 @@ export default function AdvancePaymentPage() {
         setLoading(true);
 
         try {
-            const ownerData = owners.find(o => o.id === selectedOwner);
-            if (!ownerData) throw new Error("Propietario no encontrado");
-
             // Check for existing debts for the selected months to prevent duplicates
             const existingDebtsQuery = query(
                 collection(db, "debts"),
-                where("ownerId", "==", selectedOwner),
+                where("ownerId", "==", selectedOwner.id),
                 where("status", "==", "paid"),
                 where("description", "==", "Cuota de Condominio (Pagada por adelantado)")
             );
@@ -129,7 +145,7 @@ export default function AdvancePaymentPage() {
                 const [year, month] = monthStr.split('-').map(Number);
                 const debtRef = doc(collection(db, "debts"));
                 batch.set(debtRef, {
-                    ownerId: selectedOwner,
+                    ownerId: selectedOwner.id,
                     year,
                     month,
                     amountUSD: monthlyAmountNum,
@@ -143,8 +159,8 @@ export default function AdvancePaymentPage() {
             // 2. Create the main payment document with the total amount
             const paymentRef = doc(collection(db, "payments"));
             batch.set(paymentRef, {
-                reportedBy: selectedOwner, // Admin is reporting on behalf of owner
-                beneficiaries: [{ ownerId: selectedOwner, house: ownerData.house, amount: totalAmount }],
+                reportedBy: selectedOwner.id, // Admin is reporting on behalf of owner
+                beneficiaries: [{ ownerId: selectedOwner.id, house: selectedOwner.house, amount: totalAmount }],
                 totalAmount: totalAmount,
                 exchangeRate: 1, // Rate is not relevant as we are paying in USD equivalent
                 paymentDate: paymentDate,
@@ -160,15 +176,16 @@ export default function AdvancePaymentPage() {
 
             toast({
                 title: 'Adelanto Registrado Exitosamente',
-                description: `Se registró el pago de ${selectedMonths.length} meses para ${ownerData.name}.`,
+                description: `Se registró el pago de ${selectedMonths.length} meses para ${selectedOwner.name}.`,
                 className: 'bg-green-100 border-green-400 text-green-800'
             });
 
             // Reset form
-            setSelectedOwner('');
+            setSelectedOwner(null);
             setSelectedMonths([]);
             setMonthlyAmount('');
             setObservations('');
+            setSearchTerm('');
 
         } catch (error) {
             console.error("Error registering advance payment: ", error);
@@ -196,84 +213,120 @@ export default function AdvancePaymentPage() {
                     </CardHeader>
                     <CardContent className="space-y-6">
                         <div className="space-y-2">
-                            <Label htmlFor="owner-select">1. Propietario</Label>
-                            <Select value={selectedOwner} onValueChange={setSelectedOwner} required>
-                                <SelectTrigger id="owner-select">
-                                    <SelectValue placeholder="Seleccione un propietario..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {owners.map(o => <SelectItem key={o.id} value={o.id}>{o.name} ({o.house})</SelectItem>)}
-                                </SelectContent>
-                            </Select>
+                             <Label htmlFor="owner-search">1. Propietario</Label>
+                            {!selectedOwner ? (
+                                <>
+                                    <div className="relative">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                        <Input
+                                            id="owner-search"
+                                            placeholder="Buscar por nombre o casa (mín. 3 caracteres)..."
+                                            className="pl-9"
+                                            value={searchTerm}
+                                            onChange={(e) => setSearchTerm(e.target.value)}
+                                        />
+                                    </div>
+                                    {searchTerm.length >= 3 && filteredOwners.length > 0 && (
+                                        <Card className="border rounded-md">
+                                            <ScrollArea className="h-48">
+                                                {filteredOwners.map(owner => (
+                                                    <div key={owner.id} onClick={() => handleOwnerSelect(owner)} className="p-3 hover:bg-muted cursor-pointer border-b last:border-b-0">
+                                                        <p className="font-medium">{owner.name}</p>
+                                                        <p className="text-sm text-muted-foreground">{owner.house}</p>
+                                                    </div>
+                                                ))}
+                                            </ScrollArea>
+                                        </Card>
+                                    )}
+                                </>
+                            ) : (
+                                <Card className="bg-muted/50 p-4 flex items-center justify-between">
+                                    <div>
+                                        <p className="font-semibold text-primary">{selectedOwner.name}</p>
+                                        <p className="text-sm text-muted-foreground">{selectedOwner.house}</p>
+                                    </div>
+                                    <Button variant="ghost" size="icon" onClick={resetOwnerSelection}>
+                                        <XCircle className="h-5 w-5 text-destructive"/>
+                                    </Button>
+                                </Card>
+                            )}
                         </div>
 
-                        <div className="space-y-2">
-                            <Label>2. Meses a Pagar por Adelantado</Label>
-                             <Card className="bg-muted/50 p-4">
-                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                                    {months.map(month => (
-                                        <Button
-                                            key={month.value}
-                                            type="button"
-                                            variant={selectedMonths.includes(month.value) ? 'default' : 'outline'}
-                                            className="flex items-center justify-center gap-2 capitalize"
-                                            onClick={() => handleMonthToggle(month.value)}
-                                        >
-                                            {selectedMonths.includes(month.value) && <Check className="h-4 w-4" />}
-                                            {month.label}
-                                        </Button>
-                                    ))}
-                                </div>
-                            </Card>
-                        </div>
-
-                        <div className="grid md:grid-cols-2 gap-6">
+                       {selectedOwner && (
+                        <>
                             <div className="space-y-2">
-                                <Label htmlFor="monthlyAmount">3. Monto de Cuota Pagada por Mes (USD)</Label>
+                                <Label>2. Meses a Pagar por Adelantado</Label>
+                                 <Card className="bg-muted/50 p-4">
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                                        {months.map(month => (
+                                            <Button
+                                                key={month.value}
+                                                type="button"
+                                                variant={selectedMonths.includes(month.value) ? 'default' : 'outline'}
+                                                className="flex items-center justify-center gap-2 capitalize"
+                                                onClick={() => handleMonthToggle(month.value)}
+                                            >
+                                                {selectedMonths.includes(month.value) && <Check className="h-4 w-4" />}
+                                                {month.label}
+                                            </Button>
+                                        ))}
+                                    </div>
+                                </Card>
+                            </div>
+
+                            <div className="grid md:grid-cols-2 gap-6">
+                                <div className="space-y-2">
+                                    <Label htmlFor="monthlyAmount">3. Monto de Cuota Pagada por Mes (USD)</Label>
+                                    <Input
+                                        id="monthlyAmount"
+                                        type="number"
+                                        value={monthlyAmount}
+                                        onChange={(e) => setMonthlyAmount(e.target.value)}
+                                        placeholder="25.00"
+                                        required
+                                    />
+                                </div>
+                                 <div className="space-y-2">
+                                    <Label htmlFor="totalAmount">Monto Total a Pagar (USD)</Label>
+                                    <Input
+                                        id="totalAmount"
+                                        type="number"
+                                        value={totalAmount.toFixed(2)}
+                                        className="font-bold text-lg bg-muted"
+                                        readOnly
+                                    />
+                                    {selectedMonths.length > 0 &&
+                                        <p className="text-sm text-muted-foreground">
+                                            {selectedMonths.length} {selectedMonths.length > 1 ? 'meses' : 'mes'} seleccionados
+                                        </p>
+                                    }
+                                </div>
+                            </div>
+                            
+                            <div className="space-y-2">
+                                <Label htmlFor="observations">Observaciones (Opcional)</Label>
                                 <Input
-                                    id="monthlyAmount"
-                                    type="number"
-                                    value={monthlyAmount}
-                                    onChange={(e) => setMonthlyAmount(e.target.value)}
-                                    placeholder="25.00"
-                                    required
+                                    id="observations"
+                                    value={observations}
+                                    onChange={(e) => setObservations(e.target.value)}
+                                    placeholder="Ej: Pago realizado por Zelle"
                                 />
                             </div>
-                             <div className="space-y-2">
-                                <Label htmlFor="totalAmount">Monto Total a Pagar (USD)</Label>
-                                <Input
-                                    id="totalAmount"
-                                    type="number"
-                                    value={totalAmount.toFixed(2)}
-                                    className="font-bold text-lg bg-muted"
-                                    readOnly
-                                />
-                                {selectedMonths.length > 0 &&
-                                    <p className="text-sm text-muted-foreground">
-                                        {selectedMonths.length} {selectedMonths.length > 1 ? 'meses' : 'mes'} seleccionados
-                                    </p>
-                                }
-                            </div>
-                        </div>
-                        
-                        <div className="space-y-2">
-                            <Label htmlFor="observations">Observaciones (Opcional)</Label>
-                            <Input
-                                id="observations"
-                                value={observations}
-                                onChange={(e) => setObservations(e.target.value)}
-                                placeholder="Ej: Pago realizado por Zelle"
-                            />
-                        </div>
+                        </>
+                       )}
                     </CardContent>
+                    {selectedOwner && (
                     <CardFooter>
                         <Button type="submit" className="w-full md:w-auto ml-auto" disabled={loading}>
                             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
                             Guardar Adelanto
                         </Button>
                     </CardFooter>
+                    )}
                 </Card>
             </form>
         </div>
     );
 }
+
+    
