@@ -21,7 +21,7 @@ import html2canvas from 'html2canvas';
 import { collection, getDocs, query, where, doc, getDoc, orderBy, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
-import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend } from 'recharts';
+import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend, LabelList } from 'recharts';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 
 
@@ -854,12 +854,19 @@ export default function ReportsPage() {
                          {debtChartData.length > 0 ? (
                              <ChartContainer config={{
                                 total: { label: "Deuda (USD)", color: "hsl(var(--destructive))" }
-                            }} className="h-[250px] w-full">
-                                <BarChart accessibilityLayer data={debtChartData}>
-                                    <XAxis dataKey="name" tickLine={false} axisLine={false} tickMargin={8} />
+                            }} className="h-[300px] w-full">
+                                <BarChart accessibilityLayer data={debtChartData} margin={{ top: 20 }}>
+                                    <XAxis dataKey="name" tickLine={false} axisLine={false} tickMargin={8} angle={-90} textAnchor="end" height={60} interval={0} />
                                     <YAxis tickLine={false} axisLine={false} tickMargin={8} />
                                     <ChartTooltip content={<ChartTooltipContent />} />
-                                    <Bar dataKey="total" fill="var(--color-total)" radius={4} />
+                                    <Bar dataKey="total" fill="var(--color-total)" radius={4}>
+                                        <LabelList 
+                                            dataKey="total" 
+                                            position="top" 
+                                            formatter={(value: number) => `$${value.toFixed(2)}`}
+                                            className="fill-foreground text-xs"
+                                        />
+                                    </Bar>
                                 </BarChart>
                             </ChartContainer>
                          ) : <p className="text-center text-muted-foreground h-[250px] flex items-center justify-center">No hay datos de deudas para mostrar.</p>}
@@ -875,5 +882,7 @@ export default function ReportsPage() {
         </div>
     );
 }
+
+    
 
     
