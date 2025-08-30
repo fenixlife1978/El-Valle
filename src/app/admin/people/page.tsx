@@ -17,7 +17,8 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db, auth } from '@/lib/firebase';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
 
 
 type Role = 'propietario' | 'administrador';
@@ -151,8 +152,10 @@ export default function PeopleManagementPage() {
     const confirmDelete = async () => {
         if (ownerToDelete) {
              try {
+                // Note: Deleting from Firestore does not delete from Firebase Auth.
+                // This would require a backend function for security reasons.
                 await deleteDoc(doc(db, "owners", ownerToDelete.id));
-                toast({ title: 'Propietario Eliminado', description: `${ownerToDelete.name} ha sido eliminado.` });
+                toast({ title: 'Propietario Eliminado', description: `${ownerToDelete.name} ha sido eliminado de Firestore. La cuenta de autenticación debe eliminarse manualmente.` });
             } catch (error) {
                 console.error("Error deleting document: ", error);
                 toast({ variant: 'destructive', title: 'Error', description: 'No se pudo eliminar el propietario.' });
@@ -172,34 +175,48 @@ export default function PeopleManagementPage() {
         try {
             const { id, street, house, ...ownerData } = currentOwner;
             
-            // Prepare data for Firestore, handle balance specifically per user command
             const balanceValue = parseFloat(String(ownerData.balance));
             const dataToSave: any = {
                 ...ownerData,
                 balance: isNaN(balanceValue) || balanceValue === 0 ? "0.00" : balanceValue.toFixed(2)
             };
 
-            if (id) {
+            if (id) { // Editing existing user
                 const ownerRef = doc(db, "owners", id);
                 await updateDoc(ownerRef, dataToSave);
                 toast({ title: 'Propietario Actualizado', description: 'Los datos han sido guardados en la base de datos.' });
-            } else {
-                // For new users, email is required
+            } else { // Adding new user
                 if (!dataToSave.email) {
                     toast({ variant: 'destructive', title: 'Error de Validación', description: 'El correo electrónico es obligatorio para nuevos usuarios.' });
                     return;
                 }
-                await addDoc(collection(db, "owners"), dataToSave);
-                toast({ title: 'Propietario Agregado', description: 'La nueva persona ha sido guardada en la base de datos.' });
+
+                // Step 1: Create user in Firebase Auth
+                const initialPassword = dataToSave.role === 'administrador' ? 'M110710.m' : '123456';
+                const userCredential = await createUserWithEmailAndPassword(auth, dataToSave.email, initialPassword);
+                const newUserId = userCredential.user.uid;
+                
+                // Step 2: Create user document in Firestore with the UID from Auth
+                const userRef = doc(db, "owners", newUserId);
+                await setDoc(userRef, dataToSave);
+                
+                toast({ title: 'Propietario Agregado', description: 'La nueva persona ha sido guardada en la base de datos y en el sistema de autenticación.' });
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error saving owner: ", error);
-            toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron guardar los cambios en la base de datos.' });
+            let description = 'No se pudieron guardar los cambios en la base de datos.';
+            if (error.code === 'auth/email-already-in-use') {
+                description = 'El correo electrónico ya está registrado. Por favor, use otro.';
+            } else if (error.code === 'auth/weak-password') {
+                description = 'La contraseña es demasiado débil.';
+            }
+            toast({ variant: 'destructive', title: 'Error', description });
         } finally {
             setIsDialogOpen(false);
             setCurrentOwner(emptyOwner);
         }
     };
+
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { id, value } = e.target;
@@ -315,13 +332,13 @@ export default function PeopleManagementPage() {
                 
                 const ownersMap: { [key: string]: Partial<Owner> } = {};
                 (json as any[]).forEach(item => {
-                    if (!item.name) return;
-                    const key = `${item.name}-${item.email || ''}`.toLowerCase();
+                    if (!item.name || !item.email) return;
+                    const key = item.email.toLowerCase();
                     if (!ownersMap[key]) {
                         const balanceNum = parseFloat(item.balance);
                         ownersMap[key] = {
                             name: item.name,
-                            email: item.email || '',
+                            email: item.email,
                             balance: isNaN(balanceNum) || balanceNum === 0 ? "0.00" : balanceNum.toFixed(2),
                             role: (item.role === 'administrador' || item.role === 'propietario') ? item.role : 'propietario',
                             properties: []
@@ -334,15 +351,25 @@ export default function PeopleManagementPage() {
 
                 const newOwners = Object.values(ownersMap);
                 
+                let successCount = 0;
                 for (const ownerData of newOwners) {
-                    if (ownerData.properties && ownerData.properties.length > 0) {
-                        await addDoc(collection(db, "owners"), ownerData);
+                    if (ownerData.properties && ownerData.properties.length > 0 && ownerData.email) {
+                         try {
+                            const initialPassword = ownerData.role === 'administrador' ? 'M110710.m' : '123456';
+                            const userCredential = await createUserWithEmailAndPassword(auth, ownerData.email, initialPassword);
+                            const newUserId = userCredential.user.uid;
+                            const userRef = doc(db, "owners", newUserId);
+                            await setDoc(userRef, ownerData);
+                            successCount++;
+                         } catch (error: any) {
+                             console.warn(`Could not import user ${ownerData.email}: ${error.message}`);
+                         }
                     }
                 }
 
                 toast({
-                    title: 'Importación Exitosa',
-                    description: `${newOwners.length} registros han sido agregados.`,
+                    title: 'Importación Completada',
+                    description: `${successCount} de ${newOwners.length} registros han sido agregados. Revisa la consola para ver errores.`,
                     className: 'bg-green-100 border-green-400 text-green-800'
                 });
 
@@ -359,6 +386,7 @@ export default function PeopleManagementPage() {
         };
         reader.readAsBinaryString(file);
     };
+
 
     const handleImportClick = () => {
         importFileRef.current?.click();
@@ -557,7 +585,7 @@ export default function PeopleManagementPage() {
                     <DialogHeader>
                         <DialogTitle>¿Estás seguro?</DialogTitle>
                         <DialogDescription>
-                            Esta acción no se puede deshacer. Esto eliminará permanentemente a <span className="font-semibold">{ownerToDelete?.name}</span> de la base de datos.
+                            Esta acción no se puede deshacer. Esto eliminará permanentemente a <span className="font-semibold">{ownerToDelete?.name}</span> de la base de datos de la app. La cuenta de autenticación deberá ser eliminada manualmente desde la consola de Firebase.
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>

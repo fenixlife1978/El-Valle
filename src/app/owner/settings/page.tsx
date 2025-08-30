@@ -8,8 +8,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Upload, Save, Loader2, UserCircle, KeyRound } from 'lucide-react';
-import { doc, getDoc, updateDoc, onSnapshot, collection, query, limit } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
+import { useAuthState } from 'react-firebase-hooks/auth';
+import { useRouter } from 'next/navigation';
+import { doc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { updatePassword } from 'firebase/auth';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 
 
@@ -29,6 +32,9 @@ const emptyOwnerProfile: OwnerProfile = {
 
 export default function OwnerSettingsPage() {
     const { toast } = useToast();
+    const [user, authLoading] = useAuthState(auth);
+    const router = useRouter();
+
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     
@@ -39,38 +45,34 @@ export default function OwnerSettingsPage() {
 
 
     useEffect(() => {
-        const fetchFirstOwner = async () => {
-            setLoading(true);
-            const ownersQuery = query(collection(db, "owners"), limit(1));
-            const unsubscribe = onSnapshot(ownersQuery, (snapshot) => {
-                if (!snapshot.empty) {
-                    const ownerDoc = snapshot.docs[0];
-                    const data = ownerDoc.data();
-                    const profileData = {
-                        id: ownerDoc.id,
-                        name: data.name || 'Propietario',
-                        email: data.email || '',
-                        avatar: data.avatar || ''
-                    };
-                    setProfile(profileData);
-                    setAvatarPreview(profileData.avatar);
-                }
-                setLoading(false);
-            }, (error) => {
-                console.error("Error fetching owner profile:", error);
-                toast({ variant: 'destructive', title: 'Error', description: 'No se pudo cargar tu perfil.' });
-                setLoading(false);
-            });
+        if (authLoading) return;
+        if (!user) {
+            router.push('/login?role=owner');
+            return;
+        }
 
-            return unsubscribe;
-        };
-        
-        const cleanupPromise = fetchFirstOwner();
-        return () => {
-            cleanupPromise.then(cleanup => cleanup());
-        };
+        const userRef = doc(db, 'owners', user.uid);
+        const unsubscribe = onSnapshot(userRef, (snapshot) => {
+            if (snapshot.exists()) {
+                const data = snapshot.data();
+                const profileData = {
+                    id: snapshot.id,
+                    name: data.name || 'Propietario',
+                    email: data.email || user.email || '',
+                    avatar: data.avatar || ''
+                };
+                setProfile(profileData);
+                setAvatarPreview(profileData.avatar);
+            }
+            setLoading(false);
+        }, (error) => {
+            console.error("Error fetching owner profile:", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo cargar tu perfil.' });
+            setLoading(false);
+        });
 
-    }, [toast]);
+        return () => unsubscribe();
+    }, [user, authLoading, router, toast]);
 
     const handleProfileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setProfile({ ...profile, [e.target.name]: e.target.value });
@@ -116,15 +118,35 @@ export default function OwnerSettingsPage() {
     };
 
     const handleChangePassword = async () => {
-        toast({
-            variant: 'destructive',
-            title: 'Función Deshabilitada',
-            description: 'El cambio de contraseña no está disponible sin autenticación.',
-        });
+        if (!user) return;
+        if (newPassword !== confirmPassword) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Las contraseñas no coinciden.' });
+            return;
+        }
+        if (newPassword.length < 6) {
+            toast({ variant: 'destructive', title: 'Error', description: 'La nueva contraseña debe tener al menos 6 caracteres.' });
+            return;
+        }
+        setSaving(true);
+        try {
+            await updatePassword(user, newPassword);
+            toast({
+                title: 'Contraseña Actualizada',
+                description: 'Tu contraseña ha sido cambiada exitosamente.',
+                className: 'bg-green-100 border-green-400 text-green-800'
+            });
+            setNewPassword('');
+            setConfirmPassword('');
+        } catch (error) {
+             console.error("Error updating password:", error);
+             toast({ variant: 'destructive', title: 'Error', description: 'No se pudo actualizar la contraseña. Puede que necesites volver a iniciar sesión.' });
+        } finally {
+            setSaving(false);
+        }
     }
 
 
-    if (loading) {
+    if (loading || authLoading) {
         return (
             <div className="flex justify-center items-center h-full">
                 <Loader2 className="h-10 w-10 animate-spin text-primary" />
@@ -199,7 +221,7 @@ export default function OwnerSettingsPage() {
                             value={newPassword}
                             onChange={(e) => setNewPassword(e.target.value)}
                             placeholder="••••••••"
-                            disabled
+                            disabled={saving}
                         />
                     </div>
                      <div className="space-y-2">
@@ -210,12 +232,12 @@ export default function OwnerSettingsPage() {
                             value={confirmPassword}
                             onChange={(e) => setConfirmPassword(e.target.value)}
                              placeholder="••••••••"
-                             disabled
+                             disabled={saving}
                         />
                     </div>
                 </CardContent>
                 <CardFooter>
-                    <Button onClick={handleChangePassword} disabled>
+                    <Button onClick={handleChangePassword} disabled={saving || !newPassword}>
                         <KeyRound className="mr-2 h-4 w-4"/>
                         Cambiar Contraseña
                     </Button>

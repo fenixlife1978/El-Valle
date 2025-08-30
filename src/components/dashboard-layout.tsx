@@ -6,7 +6,9 @@ import { usePathname, useRouter } from 'next/navigation';
 import { Building2, LogOut, type LucideIcon, ChevronDown, TrendingUp } from 'lucide-react';
 import * as React from 'react';
 import { doc, onSnapshot, Timestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db, auth } from '@/lib/firebase';
+import { signOut } from 'firebase/auth';
+import { useAuthState } from 'react-firebase-hooks/auth';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -62,9 +64,8 @@ type ExchangeRate = {
     active: boolean;
 };
 
-type AdminProfile = {
+type UserProfile = {
     name: string;
-    email: string;
     avatar: string;
 };
 
@@ -77,17 +78,17 @@ const BCVLogo = () => (
 );
 
 
-const CustomHeader = ({ userName, userRole }: { userName: string, userRole: string }) => {
+const CustomHeader = ({ userRole }: { userRole: string }) => {
+    const router = useRouter();
+    const [user, loading] = useAuthState(auth);
     const [activeRate, setActiveRate] = React.useState<ExchangeRate | null>(null);
-    const [adminProfile, setAdminProfile] = React.useState<AdminProfile | null>(null);
+    const [userProfile, setUserProfile] = React.useState<UserProfile | null>(null);
 
     React.useEffect(() => {
         const settingsRef = doc(db, 'config', 'mainSettings');
-        const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
+        const settingsUnsubscribe = onSnapshot(settingsRef, (docSnap) => {
             if (docSnap.exists()) {
                 const settings = docSnap.data();
-                setAdminProfile(settings.adminProfile || null);
-
                 const rates: ExchangeRate[] = settings.exchangeRates || [];
                 let currentActiveRate = rates.find(r => r.active) || null;
                 if (!currentActiveRate && rates.length > 0) {
@@ -96,11 +97,31 @@ const CustomHeader = ({ userName, userRole }: { userName: string, userRole: stri
                 setActiveRate(currentActiveRate);
             }
         });
-        return () => unsubscribe();
-    }, []);
 
-    const avatarSrc = userRole === 'Administrador' ? adminProfile?.avatar : "https://placehold.co/40x40.png";
-    const displayName = userRole === 'Administrador' ? adminProfile?.name || userName : userName;
+        let profileUnsubscribe: () => void;
+        if (user) {
+            const profileRef = doc(db, 'owners', user.uid);
+            profileUnsubscribe = onSnapshot(profileRef, (docSnap) => {
+                if(docSnap.exists()) {
+                    setUserProfile(docSnap.data() as UserProfile);
+                }
+            });
+        }
+        
+        return () => {
+            settingsUnsubscribe();
+            if(profileUnsubscribe) profileUnsubscribe();
+        };
+
+    }, [user]);
+
+    const handleLogout = async () => {
+        await signOut(auth);
+        router.push('/');
+    };
+
+    const displayName = userProfile?.name || (userRole === 'Administrador' ? 'Admin' : 'Propietario');
+    const avatarSrc = userProfile?.avatar;
 
     return (
         <header className="sticky top-0 z-10 flex h-auto flex-col items-center gap-2 border-b bg-background/80 p-2 backdrop-blur-sm sm:flex-row sm:h-16 sm:px-4">
@@ -137,7 +158,7 @@ const CustomHeader = ({ userName, userRole }: { userName: string, userRole: stri
                         </div>
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => (window.location.href = '/')} className="cursor-pointer">
+                    <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
                         <LogOut className="mr-2 h-4 w-4" />
                         <span>Salir</span>
                     </DropdownMenuItem>
@@ -151,7 +172,7 @@ const CustomHeader = ({ userName, userRole }: { userName: string, userRole: stri
 
 export function DashboardLayout({
   children,
-  userName,
+  userName, // This prop is no longer used, but kept for signature consistency
   userRole,
   navItems,
 }: {
@@ -161,8 +182,8 @@ export function DashboardLayout({
   navItems: NavItem[];
 }) {
   const pathname = usePathname();
-  const router = useRouter();
   const [companyInfo, setCompanyInfo] = React.useState<CompanyInfo | null>(null);
+  const [user] = useAuthState(auth);
 
   React.useEffect(() => {
     const settingsRef = doc(db, 'config', 'mainSettings');
@@ -174,10 +195,6 @@ export function DashboardLayout({
     return () => unsubscribe();
   }, []);
 
-  const handleLogout = () => {
-    // Mock logout
-    router.push('/');
-  };
 
   const isSubItemActive = (parentHref: string, items?: Omit<NavItem, 'icon' | 'items'>[]) => {
     if (pathname === parentHref) return true;
@@ -248,7 +265,7 @@ export function DashboardLayout({
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>
-        <CustomHeader userName={userName} userRole={userRole} />
+        <CustomHeader userRole={userRole} />
         <main className="flex-1 p-4 md:p-8 bg-background">{children}</main>
         <footer className="bg-secondary text-secondary-foreground p-4 text-center text-sm">
            © {new Date().getFullYear()} {companyInfo?.name || 'CondoConnect'}. Todos los derechos reservados.
