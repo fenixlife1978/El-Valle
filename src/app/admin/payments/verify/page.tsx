@@ -512,7 +512,7 @@ export default function VerifyPaymentsPage() {
 
         {/* Receipt Preview Dialog */}
         <Dialog open={isReceiptPreviewOpen} onOpenChange={setIsReceiptPreviewOpen}>
-            <DialogContent className="sm:max-w-2xl">
+            <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
                 <DialogHeader>
                     <DialogTitle>Vista Previa del Recibo</DialogTitle>
                     <DialogDescription>
@@ -520,67 +520,69 @@ export default function VerifyPaymentsPage() {
                     </DialogDescription>
                 </DialogHeader>
                 {receiptData && (
-                     <div className="border rounded-lg p-6 my-4 bg-white text-black font-sans">
-                        <header className="flex justify-between items-start pb-4 border-b">
-                            <div className="flex items-center gap-4">
-                                {companyInfo?.logo && <img src={companyInfo.logo} alt="Logo" className="w-20 h-20 object-contain"/>}
-                                <div>
-                                    <h3 className="font-bold text-lg">{companyInfo?.name}</h3>
-                                    <p className="text-xs">{companyInfo?.rif}</p>
-                                    <p className="text-xs">{companyInfo?.address}</p>
-                                    <p className="text-xs">{companyInfo?.phone} | {companyInfo?.email}</p>
-                                </div>
-                            </div>
-                            <div className="text-right">
-                                <h4 className="font-bold text-xl">RECIBO DE PAGO</h4>
-                                <p className="text-sm">ID: {receiptData.payment.id}</p>
-                                <p className="text-sm">Fecha: {new Date().toLocaleDateString('es-VE')}</p>
-                            </div>
-                        </header>
-                        <section className="mt-6">
-                            <h5 className="font-bold mb-2">Detalles del Propietario</h5>
-                            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                                <p><span className="font-semibold">Nombre:</span> {receiptData.ownerName}</p>
-                                <p><span className="font-semibold">Unidad:</span> {receiptData.ownerUnit}</p>
-                            </div>
-                        </section>
-                         <section className="mt-6">
-                            <h5 className="font-bold mb-2">Detalles del Pago</h5>
-                            <Table className="text-sm">
-                                <TableHeader>
-                                    <TableRow className="bg-muted/50">
-                                        <TableHead className="text-black">Concepto</TableHead>
-                                        <TableHead className="text-right text-black">Monto</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    <TableRow>
-                                        <TableCell>
-                                            <p>Pago de Condominio</p>
-                                            <p className="text-xs text-muted-foreground">
-                                                Ref: {receiptData.payment.reference} | {receiptData.payment.bank} | {new Date(receiptData.payment.date).toLocaleDateString('es-VE')}
-                                            </p>
-                                        </TableCell>
-                                        <TableCell className="text-right font-semibold">Bs. {receiptData.payment.amount.toFixed(2)}</TableCell>
-                                    </TableRow>
-                                </TableBody>
-                            </Table>
-                            <div className="flex justify-end mt-4">
-                                <div className="w-64">
-                                    <div className="flex justify-between text-lg font-bold border-t-2 pt-2">
-                                        <span>TOTAL PAGADO:</span>
-                                        <span>Bs. {receiptData.payment.amount.toFixed(2)}</span>
+                     <div className="flex-grow overflow-y-auto pr-4 -mr-4">
+                        <div className="border rounded-lg p-6 my-4 bg-white text-black font-sans">
+                            <header className="flex flex-col sm:flex-row justify-between items-start pb-4 border-b gap-4">
+                                <div className="flex items-center gap-4">
+                                    {companyInfo?.logo && <img src={companyInfo.logo} alt="Logo" className="w-20 h-20 object-contain"/>}
+                                    <div>
+                                        <h3 className="font-bold text-lg">{companyInfo?.name}</h3>
+                                        <p className="text-xs">{companyInfo?.rif}</p>
+                                        <p className="text-xs">{companyInfo?.address}</p>
+                                        <p className="text-xs">{companyInfo?.phone} | {companyInfo?.email}</p>
                                     </div>
                                 </div>
-                            </div>
-                        </section>
-                        <footer className="mt-8 text-center text-xs text-muted-foreground">
-                            <p>Este es un recibo generado por el sistema. Válido sin firma ni sello.</p>
-                            <p>Gracias por su pago.</p>
-                        </footer>
+                                <div className="text-left sm:text-right w-full sm:w-auto">
+                                    <h4 className="font-bold text-xl">RECIBO DE PAGO</h4>
+                                    <p className="text-sm">ID: {receiptData.payment.id}</p>
+                                    <p className="text-sm">Fecha: {new Date().toLocaleDateString('es-VE')}</p>
+                                </div>
+                            </header>
+                            <section className="mt-6">
+                                <h5 className="font-bold mb-2">Detalles del Propietario</h5>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                                    <p><span className="font-semibold">Nombre:</span> {receiptData.ownerName}</p>
+                                    <p><span className="font-semibold">Unidad:</span> {receiptData.ownerUnit}</p>
+                                </div>
+                            </section>
+                            <section className="mt-6">
+                                <h5 className="font-bold mb-2">Detalles del Pago</h5>
+                                <Table className="text-sm">
+                                    <TableHeader>
+                                        <TableRow className="bg-muted/50">
+                                            <TableHead className="text-black">Concepto</TableHead>
+                                            <TableHead className="text-right text-black">Monto</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        <TableRow>
+                                            <TableCell>
+                                                <p>Pago de Condominio</p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    Ref: {receiptData.payment.reference} | {receiptData.payment.bank} | {new Date(receiptData.payment.date).toLocaleDateString('es-VE')}
+                                                </p>
+                                            </TableCell>
+                                            <TableCell className="text-right font-semibold">Bs. {receiptData.payment.amount.toLocaleString('es-VE', {minimumFractionDigits: 2})}</TableCell>
+                                        </TableRow>
+                                    </TableBody>
+                                </Table>
+                                <div className="flex justify-end mt-4">
+                                    <div className="w-full sm:w-64">
+                                        <div className="flex justify-between text-lg font-bold border-t-2 pt-2">
+                                            <span>TOTAL PAGADO:</span>
+                                            <span>Bs. {receiptData.payment.amount.toLocaleString('es-VE', {minimumFractionDigits: 2})}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
+                            <footer className="mt-8 text-center text-xs text-muted-foreground">
+                                <p>Este es un recibo generado por el sistema. Válido sin firma ni sello.</p>
+                                <p>Gracias por su pago.</p>
+                            </footer>
+                        </div>
                     </div>
                 )}
-                <DialogFooter>
+                <DialogFooter className="mt-auto pt-4 border-t">
                     <Button variant="outline" onClick={() => setIsReceiptPreviewOpen(false)}>Cerrar</Button>
                     <Button onClick={handleDownloadPdf}>
                         <Printer className="mr-2 h-4 w-4"/> Descargar PDF
