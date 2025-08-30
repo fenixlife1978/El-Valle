@@ -21,7 +21,7 @@ type PaymentMethod = 'transferencia' | 'movil' | 'adelanto';
 
 type FullPayment = {
   id: string;
-  beneficiaries: { ownerId: string; amount: number; house?: string; }[];
+  beneficiaries: { ownerId: string; amount: number; street?: string; house?: string; }[];
   totalAmount: number;
   exchangeRate: number;
   paymentDate: Timestamp;
@@ -107,11 +107,13 @@ export default function VerifyPaymentsPage() {
             snapshot.forEach(doc => {
                 const data = doc.data();
                 const userName = ownersMap.get(data.reportedBy)?.name || (data.beneficiaries?.[0]?.ownerId ? ownersMap.get(data.beneficiaries[0].ownerId)?.name : 'No disponible');
+                const beneficiary = data.beneficiaries?.[0];
+                const unit = beneficiary ? `${beneficiary.street || 'N/A'} - ${beneficiary.house || 'N/A'}` : 'N/A';
 
                 paymentsData.push({
                     id: doc.id,
                     user: userName,
-                    unit: data.beneficiaries[0]?.house || 'N/A',
+                    unit: unit,
                     amount: data.totalAmount,
                     date: new Date(data.paymentDate.seconds * 1000).toISOString(),
                     bank: data.bank,
@@ -605,5 +607,3 @@ export default function VerifyPaymentsPage() {
     </div>
   );
 }
-
-    

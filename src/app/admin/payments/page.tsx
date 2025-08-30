@@ -33,8 +33,10 @@ const venezuelanBanks = [
 type Owner = {
     id: string;
     name: string;
-    street: string;
-    house: string;
+    properties: { street: string, house: string }[];
+    // Legacy fields for backward compatibility
+    street?: string;
+    house?: string;
 };
 
 type ExchangeRate = {
@@ -47,7 +49,7 @@ type ExchangeRate = {
 // --- Type Definitions ---
 type BeneficiaryType = 'propio' | 'terceros' | 'global';
 type PaymentMethod = 'movil' | 'transferencia' | '';
-type GlobalSplit = { ownerId: string; amount: number | string; house?: string; };
+type GlobalSplit = { ownerId: string; amount: number | string; street?: string; house?: string; };
 type FormErrors = { [key: string]: string | undefined };
 
 export default function UnifiedPaymentsPage() {
@@ -79,7 +81,7 @@ export default function UnifiedPaymentsPage() {
             const ownersData: Owner[] = [];
             querySnapshot.forEach((doc) => {
                 const data = doc.data();
-                ownersData.push({ id: doc.id, name: data.name, street: data.street, house: data.house });
+                ownersData.push({ id: doc.id, name: data.name, properties: data.properties, street: data.street, house: data.house });
             });
             setOwners(ownersData.sort((a, b) => a.name.localeCompare(b.name)));
         }, (error) => {
@@ -194,8 +196,8 @@ export default function UnifiedPaymentsPage() {
         const newSplits = [...globalSplits];
         if (field === 'ownerId') {
             const owner = owners.find(o => o.id === value);
-            (newSplits[index] as any)[field] = value;
-            (newSplits[index] as any)['house'] = owner?.house;
+            const property = owner?.properties?.[0] || { street: owner?.street, house: owner?.house };
+            newSplits[index] = { ...newSplits[index], ownerId: String(value), street: property?.street, house: property?.house };
         } else {
              (newSplits[index] as any)[field] = value;
         }
@@ -256,12 +258,16 @@ export default function UnifiedPaymentsPage() {
         if (beneficiaryType === 'propio') {
             const owner = owners.find(o => o.id === thirdPartyBeneficiary);
             if(owner) {
-                beneficiaries = [{ ownerId: owner.id, amount: Number(totalAmount), house: owner.house }];
+                const property = owner.properties?.[0] || { street: owner.street, house: owner.house };
+                beneficiaries = [{ ownerId: owner.id, amount: Number(totalAmount), street: property.street, house: property.house }];
                 reportedById = owner.id;
             }
         } else if (beneficiaryType === 'terceros') {
             const owner = owners.find(o => o.id === thirdPartyBeneficiary);
-            if(owner) beneficiaries = [{ ownerId: owner.id, amount: Number(totalAmount), house: owner.house }];
+            if(owner) {
+                const property = owner.properties?.[0] || { street: owner.street, house: owner.house };
+                beneficiaries = [{ ownerId: owner.id, amount: Number(totalAmount), street: property.street, house: property.house }];
+            }
             // reportedBy remains admin
         } else { // global
             beneficiaries = globalSplits.map(s => ({...s, amount: Number(s.amount) }));
@@ -302,6 +308,18 @@ export default function UnifiedPaymentsPage() {
         } finally {
             setLoading(false);
         }
+    };
+
+    const getOwnerDisplay = (owner: Owner) => {
+        const prop = (owner.properties && owner.properties.length > 0) ? owner.properties[0] : null;
+        if (prop) {
+            return `${owner.name} (${prop.street} - ${prop.house})`;
+        }
+        // Legacy fallback
+        if (owner.street && owner.house) {
+            return `${owner.name} (${owner.street} - ${owner.house})`;
+        }
+        return owner.name;
     };
 
     return (
@@ -488,7 +506,7 @@ export default function UnifiedPaymentsPage() {
                                             <SelectValue placeholder="Seleccione un propietario..." />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {owners.map(o => <SelectItem key={o.id} value={o.id}>{o.name} ({o.house})</SelectItem>)}
+                                            {owners.map(o => <SelectItem key={o.id} value={o.id}>{getOwnerDisplay(o)}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
                                      {errors.thirdPartyBeneficiary && <p className="text-sm text-destructive">{errors.thirdPartyBeneficiary}</p>}
@@ -512,7 +530,7 @@ export default function UnifiedPaymentsPage() {
                                                                 value={o.id}
                                                                 disabled={globalSplits.some(s => s.ownerId === o.id && s.ownerId !== split.ownerId)}
                                                             >
-                                                                {o.name} ({o.house})
+                                                                {getOwnerDisplay(o)}
                                                             </SelectItem>
                                                         ))}
                                                     </SelectContent>

@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Landmark, AlertCircle, Building, Eye, Printer, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { collection, onSnapshot, query, where, limit, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, limit, orderBy, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
 type Payment = {
@@ -63,31 +63,48 @@ export default function AdminDashboardPage() {
         setStats(prev => ({ ...prev, paymentsThisMonthBs: monthTotalBs, paymentsThisMonthUsd: monthTotalUsd, pendingPayments: pendingCount }));
     });
 
-    // Fetch recent payments
-    const recentPaymentsQuery = query(collection(db, "payments"), orderBy('reportedAt', 'desc'), limit(5));
-    const recentPaymentsUnsubscribe = onSnapshot(recentPaymentsQuery, (snapshot) => {
-      const paymentsData: Payment[] = [];
-      snapshot.forEach(doc => {
-        const data = doc.data();
-        paymentsData.push({ 
-            id: doc.id,
-            user: "Usuario", // This should be fetched/joined from owners collection
-            unit: data.beneficiaries[0]?.house || 'N/A', // Simplified for now
-            amount: data.totalAmount,
-            date: new Date(data.paymentDate.seconds * 1000).toISOString(),
-            bank: data.bank,
-            type: data.paymentMethod,
-            status: data.status,
+    // Fetch recent payments with owner info
+    const fetchRecentPayments = async () => {
+        const ownersQuery = query(collection(db, "owners"));
+        const ownersSnapshot = await getDocs(ownersQuery);
+        const ownersMap = new Map<string, {name: string}>();
+        ownersSnapshot.forEach(doc => {
+            ownersMap.set(doc.id, { name: doc.data().name });
         });
-      });
-      setRecentPayments(paymentsData);
-      setLoading(false);
-    });
+
+        const recentPaymentsQuery = query(collection(db, "payments"), orderBy('reportedAt', 'desc'), limit(5));
+        const recentPaymentsUnsubscribe = onSnapshot(recentPaymentsQuery, (snapshot) => {
+          const paymentsData: Payment[] = [];
+          snapshot.forEach(doc => {
+            const data = doc.data();
+            const beneficiary = data.beneficiaries?.[0];
+            const userName = ownersMap.get(data.reportedBy)?.name || (beneficiary ? ownersMap.get(beneficiary.ownerId)?.name : 'No disponible') || 'No disponible';
+            const unit = beneficiary ? `${beneficiary.street || 'N/A'} - ${beneficiary.house || 'N/A'}` : 'N/A';
+
+            paymentsData.push({ 
+                id: doc.id,
+                user: userName,
+                unit: unit,
+                amount: data.totalAmount,
+                date: new Date(data.paymentDate.seconds * 1000).toISOString(),
+                bank: data.bank,
+                type: data.paymentMethod,
+                status: data.status,
+            });
+          });
+          setRecentPayments(paymentsData);
+          setLoading(false);
+        });
+
+        return recentPaymentsUnsubscribe;
+    };
+
+    const unsubscribe = fetchRecentPayments();
 
     return () => {
       ownersUnsubscribe();
       paymentsUnsubscribe();
-      recentPaymentsUnsubscribe();
+      unsubscribe.then(unsub => unsub());
     }
   }, []);
 
