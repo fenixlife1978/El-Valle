@@ -32,13 +32,20 @@ export default function AdvancePaymentPage() {
     const { toast } = useToast();
     const [owners, setOwners] = useState<Owner[]>([]);
     const [loading, setLoading] = useState(false);
-    const [condoFee, setCondoFee] = useState(0);
-
+    
     // Form State
     const [selectedOwner, setSelectedOwner] = useState('');
     const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
-    const [totalAmount, setTotalAmount] = useState('');
+    const [monthlyAmount, setMonthlyAmount] = useState('');
     const [observations, setObservations] = useState('');
+
+    const totalAmount = useMemo(() => {
+        const amount = parseFloat(monthlyAmount);
+        if (isNaN(amount) || amount <= 0 || selectedMonths.length === 0) {
+            return 0;
+        }
+        return amount * selectedMonths.length;
+    }, [monthlyAmount, selectedMonths]);
 
     useEffect(() => {
         const ownersQuery = query(collection(db, "owners"));
@@ -54,16 +61,8 @@ export default function AdvancePaymentPage() {
             setOwners(ownersData.sort((a, b) => a.name.localeCompare(b.name)));
         });
 
-        const settingsRef = doc(db, 'config', 'mainSettings');
-        const settingsUnsubscribe = onSnapshot(settingsRef, (docSnap) => {
-            if (docSnap.exists()) {
-                setCondoFee(docSnap.data().condoFee || 0);
-            }
-        });
-
         return () => {
             ownersUnsubscribe();
-            settingsUnsubscribe();
         };
     }, []);
 
@@ -75,21 +74,14 @@ export default function AdvancePaymentPage() {
         );
     };
 
-    useEffect(() => {
-        if (selectedMonths.length > 0 && condoFee > 0) {
-            setTotalAmount(String(selectedMonths.length * condoFee));
-        } else {
-            setTotalAmount('');
-        }
-    }, [selectedMonths, condoFee]);
-
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!selectedOwner || selectedMonths.length === 0 || Number(totalAmount) <= 0) {
+        const monthlyAmountNum = parseFloat(monthlyAmount);
+        if (!selectedOwner || selectedMonths.length === 0 || isNaN(monthlyAmountNum) || monthlyAmountNum <= 0) {
             toast({
                 variant: 'destructive',
                 title: 'Datos Incompletos',
-                description: 'Debe seleccionar un propietario, al menos un mes y un monto válido.',
+                description: 'Debe seleccionar un propietario, al menos un mes y un monto de cuota válido.',
             });
             return;
         }
@@ -101,11 +93,6 @@ export default function AdvancePaymentPage() {
             if (!ownerData) throw new Error("Propietario no encontrado");
 
             // Check for existing debts for the selected months to prevent duplicates
-            const monthsAsDates = selectedMonths.map(m => {
-                const [year, month] = m.split('-').map(Number);
-                return { year, month };
-            });
-
             const existingDebtsQuery = query(
                 collection(db, "debts"),
                 where("ownerId", "==", selectedOwner),
@@ -136,9 +123,8 @@ export default function AdvancePaymentPage() {
 
             const batch = writeBatch(db);
             const paymentDate = Timestamp.now();
-            const amountPerMonth = parseFloat(totalAmount) / selectedMonths.length;
-
-            // 1. Create future 'paid' debt documents
+            
+            // 1. Create future 'paid' debt documents for each month
             selectedMonths.forEach(monthStr => {
                 const [year, month] = monthStr.split('-').map(Number);
                 const debtRef = doc(collection(db, "debts"));
@@ -146,20 +132,20 @@ export default function AdvancePaymentPage() {
                     ownerId: selectedOwner,
                     year,
                     month,
-                    amountUSD: amountPerMonth,
+                    amountUSD: monthlyAmountNum,
                     description: "Cuota de Condominio (Pagada por adelantado)",
                     status: 'paid',
                     paymentDate: paymentDate,
-                    paidAmountUSD: amountPerMonth,
+                    paidAmountUSD: monthlyAmountNum,
                 });
             });
             
-            // 2. Create the main payment document
+            // 2. Create the main payment document with the total amount
             const paymentRef = doc(collection(db, "payments"));
             batch.set(paymentRef, {
                 reportedBy: selectedOwner, // Admin is reporting on behalf of owner
-                beneficiaries: [{ ownerId: selectedOwner, house: ownerData.house, amount: parseFloat(totalAmount) }],
-                totalAmount: parseFloat(totalAmount),
+                beneficiaries: [{ ownerId: selectedOwner, house: ownerData.house, amount: totalAmount }],
+                totalAmount: totalAmount,
                 exchangeRate: 1, // Rate is not relevant as we are paying in USD equivalent
                 paymentDate: paymentDate,
                 reportedAt: serverTimestamp(),
@@ -181,7 +167,7 @@ export default function AdvancePaymentPage() {
             // Reset form
             setSelectedOwner('');
             setSelectedMonths([]);
-            setTotalAmount('');
+            setMonthlyAmount('');
             setObservations('');
 
         } catch (error) {
@@ -241,22 +227,33 @@ export default function AdvancePaymentPage() {
                             </Card>
                         </div>
 
-                        <div className="space-y-2">
-                            <Label htmlFor="totalAmount">3. Monto Total a Pagar (USD)</Label>
-                            <Input
-                                id="totalAmount"
-                                type="number"
-                                value={totalAmount}
-                                onChange={(e) => setTotalAmount(e.target.value)}
-                                className="font-bold text-lg"
-                                placeholder="0.00"
-                                required
-                            />
-                            {condoFee > 0 && selectedMonths.length > 0 && !totalAmount &&
-                                <p className="text-sm text-muted-foreground">
-                                    Monto sugerido: {selectedMonths.length} {selectedMonths.length > 1 ? 'meses' : 'mes'} x ${condoFee.toFixed(2)}/mes = ${(selectedMonths.length * condoFee).toFixed(2)}
-                                </p>
-                            }
+                        <div className="grid md:grid-cols-2 gap-6">
+                            <div className="space-y-2">
+                                <Label htmlFor="monthlyAmount">3. Monto de Cuota Pagada por Mes (USD)</Label>
+                                <Input
+                                    id="monthlyAmount"
+                                    type="number"
+                                    value={monthlyAmount}
+                                    onChange={(e) => setMonthlyAmount(e.target.value)}
+                                    placeholder="25.00"
+                                    required
+                                />
+                            </div>
+                             <div className="space-y-2">
+                                <Label htmlFor="totalAmount">Monto Total a Pagar (USD)</Label>
+                                <Input
+                                    id="totalAmount"
+                                    type="number"
+                                    value={totalAmount.toFixed(2)}
+                                    className="font-bold text-lg bg-muted"
+                                    readOnly
+                                />
+                                {selectedMonths.length > 0 &&
+                                    <p className="text-sm text-muted-foreground">
+                                        {selectedMonths.length} {selectedMonths.length > 1 ? 'meses' : 'mes'} seleccionados
+                                    </p>
+                                }
+                            </div>
                         </div>
                         
                         <div className="space-y-2">
