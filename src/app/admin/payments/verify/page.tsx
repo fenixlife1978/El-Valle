@@ -12,7 +12,7 @@ import { CheckCircle2, XCircle, MoreHorizontal, Eye, Printer, Filter, Loader2, T
 import { useToast } from '@/hooks/use-toast';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import { collection, onSnapshot, query, doc, updateDoc, getDoc, writeBatch, runTransaction, where, orderBy, Timestamp, getDocs, addDoc, limit, deleteDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, doc, updateDoc, getDoc, writeBatch, runTransaction, where, orderBy, Timestamp, getDocs, addDoc, limit, deleteDoc, deleteField } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { addMonths, format } from 'date-fns';
 
@@ -276,61 +276,65 @@ export default function VerifyPaymentsPage() {
     const paymentRef = doc(db, "payments", paymentToDelete.id);
 
     try {
-      // If the payment was approved, we need to revert the changes in a transaction
-      if (paymentToDelete.status === 'aprobado') {
-        await runTransaction(db, async (transaction) => {
-          
-          for(const beneficiary of paymentToDelete.beneficiaries) {
-            const ownerRef = doc(db, 'owners', beneficiary.ownerId);
-            const ownerDoc = await transaction.get(ownerRef);
-            if (!ownerDoc.exists()) throw new Error(`Propietario ${beneficiary.ownerId} no encontrado.`);
+        if (paymentToDelete.status === 'aprobado') {
+            await runTransaction(db, async (transaction) => {
+                const paymentDoc = await transaction.get(paymentRef);
+                if (!paymentDoc.exists()) throw new Error("El pago ya fue eliminado.");
+                
+                const paymentData = paymentDoc.data() as FullPayment;
 
-            // 1. Revert owner's balance
-            const currentBalance = ownerDoc.data().balance || 0;
-            const newBalance = currentBalance - beneficiary.amount;
-            transaction.update(ownerRef, { balance: newBalance });
+                for (const beneficiary of paymentData.beneficiaries) {
+                    const ownerRef = doc(db, 'owners', beneficiary.ownerId);
+                    const ownerDoc = await transaction.get(ownerRef);
+                    if (!ownerDoc.exists()) throw new Error(`Propietario ${beneficiary.ownerId} no encontrado.`);
 
-            // 2. Find and revert debts that were paid by this payment
-            const paidDebtsQuery = query(
-              collection(db, "debts"),
-              where("ownerId", "==", beneficiary.ownerId),
-              where("status", "==", "paid"),
-              where("paymentDate", "==", paymentToDelete.paymentDate)
-            );
-            
-            const paidDebtsSnapshot = await getDocs(paidDebtsQuery); // Cannot use transaction.get() on a query
-            
-            paidDebtsSnapshot.forEach(debtDoc => {
-              const debtRef = doc(db, "debts", debtDoc.id);
-              transaction.update(debtRef, { 
-                status: 'pending',
-                paidAmountUSD: deleteField(),
-                paymentDate: deleteField(),
-              });
+                    // 1. Revert owner's balance
+                    const currentBalance = ownerDoc.data().balance || 0;
+                    const paymentAmountForBeneficiary = beneficiary.amount || 0;
+                    const newBalance = currentBalance - paymentAmountForBeneficiary;
+                    transaction.update(ownerRef, { balance: newBalance });
+
+                    // 2. Find and revert debts that were paid by this specific payment
+                    const paidDebtsQuery = query(
+                        collection(db, "debts"),
+                        where("ownerId", "==", beneficiary.ownerId),
+                        where("status", "==", "paid"),
+                        where("paymentDate", "==", paymentData.paymentDate)
+                    );
+                    
+                    const paidDebtsSnapshot = await getDocs(paidDebtsQuery);
+                    
+                    paidDebtsSnapshot.forEach(debtDoc => {
+                        const debtRef = doc(db, "debts", debtDoc.id);
+                        transaction.update(debtRef, { 
+                            status: 'pending',
+                            paidAmountUSD: deleteField(),
+                            paymentDate: deleteField(),
+                        });
+                    });
+                }
+
+                // 3. Delete the payment itself
+                transaction.delete(paymentRef);
             });
-          }
-
-          // 3. Delete the payment itself
-          transaction.delete(paymentRef);
-        });
-        toast({ title: "Pago Revertido", description: "El pago y sus efectos han sido revertidos." });
-      } else {
-        // If payment was pending or rejected, just delete it
-        await deleteDoc(paymentRef);
-        toast({ title: "Pago Eliminado", description: "El registro del pago ha sido eliminado." });
-      }
+            toast({ title: "Pago Revertido", description: "El pago y sus efectos han sido revertidos." });
+        } else {
+            // If payment was pending or rejected, just delete it
+            await deleteDoc(paymentRef);
+            toast({ title: "Pago Eliminado", description: "El registro del pago ha sido eliminado." });
+        }
 
     } catch (error) {
-      console.error("Error deleting/reverting payment: ", error);
-      const errorMessage = error instanceof Error ? error.message : "No se pudo completar la operación.";
-      toast({
-        variant: "destructive",
-        title: "Error en la Operación",
-        description: errorMessage,
-      });
+        console.error("Error deleting/reverting payment: ", error);
+        const errorMessage = error instanceof Error ? error.message : "No se pudo completar la operación.";
+        toast({
+            variant: "destructive",
+            title: "Error en la Operación",
+            description: errorMessage,
+        });
     } finally {
-      setIsDeleteConfirmationOpen(false);
-      setPaymentToDelete(null);
+        setIsDeleteConfirmationOpen(false);
+        setPaymentToDelete(null);
     }
   };
 
