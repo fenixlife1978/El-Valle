@@ -10,6 +10,7 @@ import { Landmark, AlertCircle, Building, Eye, Printer, Megaphone, Loader2, Wall
 import { Button } from "@/components/ui/button";
 import { getCommunityUpdates } from '@/ai/flows/community-updates';
 import { auth, db } from '@/lib/firebase';
+import { useAuthState } from 'react-firebase-hooks/auth';
 import { doc, onSnapshot, collection, query, where, orderBy, limit, getDoc, getDocs, Timestamp } from 'firebase/firestore';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -78,6 +79,7 @@ const months = [
 ];
 
 export default function OwnerDashboardPage() {
+    const [user, authLoading] = useAuthState(auth);
     const [loading, setLoading] = useState(true);
     const [userData, setUserData] = useState<UserData | null>(null);
     const [payments, setPayments] = useState<Payment[]>([]);
@@ -95,11 +97,14 @@ export default function OwnerDashboardPage() {
     const [receiptData, setReceiptData] = useState<ReceiptData>(null);
     const [isReceiptPreviewOpen, setIsReceiptPreviewOpen] = useState(false);
     
-    const userId = "088a5367-a75b-4355-b0b0-3162b2b64b1f"; 
-
     useEffect(() => {
-        if (!userId) return;
+        if (authLoading) return;
+        if (!user) {
+            setLoading(false);
+            return;
+        };
 
+        const userId = user.uid;
         let userUnsubscribe: () => void;
         
         const settingsRef = doc(db, 'config', 'mainSettings');
@@ -221,7 +226,7 @@ export default function OwnerDashboardPage() {
             paymentsUnsubscribe();
         };
 
-    }, [userId]);
+    }, [user, authLoading]);
     
     const handleDebtSelection = (debtId: string) => {
         setSelectedDebts(prev => 
@@ -316,12 +321,21 @@ export default function OwnerDashboardPage() {
     setIsReceiptPreviewOpen(false);
   };
 
-  if (loading) {
+  if (loading || authLoading) {
     return (
         <div className="flex justify-center items-center h-full">
             <Loader2 className="h-10 w-10 animate-spin text-primary" />
         </div>
     );
+  }
+
+  if (!user) {
+    return (
+        <div className="flex flex-col justify-center items-center h-full gap-4">
+            <p className="text-lg">Por favor, inicie sesión para ver su panel.</p>
+            <Button onClick={() => window.location.href = '/'}>Ir a la página de inicio</Button>
+        </div>
+    )
   }
 
   return (
@@ -555,5 +569,7 @@ export default function OwnerDashboardPage() {
     </div>
   );
 }
+
+    
 
     

@@ -15,7 +15,8 @@ import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db, auth } from '@/lib/firebase';
+import { useAuthState } from 'react-firebase-hooks/auth';
 // In a real app, you would also use Firebase Storage for the file upload
 // import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
@@ -52,6 +53,7 @@ type FormErrors = { [key: string]: string | undefined };
 
 export default function UnifiedPaymentsPage() {
     const { toast } = useToast();
+    const [user] = useAuthState(auth);
     const [owners, setOwners] = useState<Owner[]>([]);
     const [loading, setLoading] = useState(false);
     const receiptFileRef = useRef<HTMLInputElement>(null);
@@ -242,17 +244,23 @@ export default function UnifiedPaymentsPage() {
             });
             return;
         }
+        if (!user) {
+            toast({
+                variant: 'destructive',
+                title: 'Error de Autenticación',
+                description: 'Debes iniciar sesión para reportar un pago.',
+            });
+            return;
+        }
         setLoading(true);
 
-        // This would be the real user, not a mock one
-        const currentUserId = "mock-user-id"; 
 
         // In a real app, upload the file to Firebase Storage first and get the URL
         const receiptFileUrl = "mock-receipt-url";
         
         let beneficiaries: GlobalSplit[] = [];
         if (beneficiaryType === 'propio') {
-            const owner = owners.find(o => o.id === currentUserId); // You'd need the current user's owner doc ID
+            const owner = owners.find(o => o.id === user.uid); // You'd need the current user's owner doc ID
             if(owner) beneficiaries = [{ ownerId: owner.id, amount: Number(totalAmount), house: owner.house }];
         } else if (beneficiaryType === 'terceros') {
             const owner = owners.find(o => o.id === thirdPartyBeneficiary);
@@ -274,7 +282,7 @@ export default function UnifiedPaymentsPage() {
             receiptFileName: receiptFile?.name,
             status: 'pendiente',
             reportedAt: serverTimestamp(),
-            reportedBy: currentUserId,
+            reportedBy: user.uid,
         };
 
         try {
@@ -568,6 +576,8 @@ export default function UnifiedPaymentsPage() {
         </div>
     );
 }
+
+    
 
     
 

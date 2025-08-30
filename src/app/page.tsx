@@ -1,10 +1,12 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Building2, Loader2, User, Wrench } from "lucide-react";
 import { doc, getDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db, auth } from '@/lib/firebase';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -48,11 +50,7 @@ export default function LoginPage() {
 
   const handleRoleSelect = (role: Role) => {
     setSelectedRole(role);
-    if (role === 'admin') {
-      setEmail('vallecondo@gmail.com');
-    } else {
-      setEmail('');
-    }
+    setEmail('');
     setPassword('');
   };
 
@@ -66,42 +64,44 @@ export default function LoginPage() {
     e.preventDefault();
     setIsLoading(true);
 
-    // Mock authentication
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    try {
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
 
-    // Check for generic password
-    if (password === '123456') {
-      toast({
-        variant: "destructive",
-        title: "Cambio de Contraseña Requerido",
-        description: "Por su seguridad, debe cambiar su contraseña inicial. Redirigiendo...",
-      });
-      // Redirect to a dedicated settings/profile page to change password
-      router.push(selectedRole === 'admin' ? '/admin/settings' : '/owner/settings');
-      return;
-    }
+        // Check user's role from Firestore
+        const userDocRef = doc(db, "owners", user.uid);
+        const userDocSnap = await getDoc(userDocRef);
 
+        if (userDocSnap.exists()) {
+            const userData = userDocSnap.data();
+            const userRole = userData.role; // Assuming 'role' field exists in owner document
 
-    if ((selectedRole === 'owner' && email && password) || 
-        (selectedRole === 'admin' && email === 'vallecondo@gmail.com' && password)) {
-      
-      toast({
-        title: "Inicio de sesión exitoso",
-        description: "Redirigiendo...",
-      });
-      
-      if (selectedRole === 'admin') {
-        router.push('/admin/dashboard');
-      } else {
-        router.push('/owner/dashboard');
-      }
-    } else {
-      toast({
-        variant: "destructive",
-        title: "Error de autenticación",
-        description: "Por favor verifique sus credenciales.",
-      });
-      setIsLoading(false);
+            if (userRole === selectedRole) {
+                toast({
+                    title: "Inicio de sesión exitoso",
+                    description: "Redirigiendo...",
+                });
+                router.push(userRole === 'admin' ? '/admin/dashboard' : '/owner/dashboard');
+            } else {
+                 throw new Error("El rol seleccionado no coincide con su cuenta.");
+            }
+        } else {
+            throw new Error("No se encontró un registro de propietario para este usuario.");
+        }
+    } catch (error: any) {
+        console.error("Authentication error:", error);
+        let description = "Por favor verifique sus credenciales.";
+        if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+            description = "Correo electrónico o contraseña incorrectos.";
+        } else if (error.message) {
+            description = error.message;
+        }
+        toast({
+            variant: "destructive",
+            title: "Error de autenticación",
+            description: description,
+        });
+        setIsLoading(false);
     }
   };
 
@@ -143,7 +143,7 @@ export default function LoginPage() {
             <Input
               id="email"
               type="email"
-              placeholder={selectedRole === 'admin' ? "admin@email.com" : "tu@email.com"}
+              placeholder={"tu@email.com"}
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -197,3 +197,5 @@ export default function LoginPage() {
     </div>
   );
 }
+
+    

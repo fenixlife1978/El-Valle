@@ -10,9 +10,10 @@ import { useToast } from '@/hooks/use-toast';
 import { Upload, Save, Loader2, UserCircle, KeyRound } from 'lucide-react';
 import { doc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
+import { useAuthState } from 'react-firebase-hooks/auth';
+import { updatePassword } from "firebase/auth";
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-// In a real app, you would use updatePassword from firebase/auth
-// import { updatePassword } from "firebase/auth";
+
 
 type OwnerProfile = {
     name: string;
@@ -28,6 +29,7 @@ const emptyOwnerProfile: OwnerProfile = {
 
 export default function OwnerSettingsPage() {
     const { toast } = useToast();
+    const [user, authLoading] = useAuthState(auth);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     
@@ -36,21 +38,20 @@ export default function OwnerSettingsPage() {
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
 
-    const userId = "088a5367-a75b-4355-b0b0-3162b2b64b1f"; // Mock user ID
 
     useEffect(() => {
-        if (!userId) {
-            setLoading(false);
+        if (authLoading || !user) {
+            if (!authLoading) setLoading(false);
             return;
         };
 
-        const userRef = doc(db, 'owners', userId);
+        const userRef = doc(db, 'owners', user.uid);
         const unsubscribe = onSnapshot(userRef, (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 const profileData = {
                     name: data.name || 'Propietario',
-                    email: data.email || '',
+                    email: data.email || user.email || '',
                     avatar: data.avatar || ''
                 };
                 setProfile(profileData);
@@ -64,7 +65,7 @@ export default function OwnerSettingsPage() {
         });
 
         return () => unsubscribe();
-    }, [userId, toast]);
+    }, [user, authLoading, toast]);
 
     const handleProfileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setProfile({ ...profile, [e.target.name]: e.target.value });
@@ -88,10 +89,10 @@ export default function OwnerSettingsPage() {
     };
     
     const handleSaveChanges = async () => {
-        if (!userId) return;
+        if (!user) return;
         setSaving(true);
         try {
-            const userRef = doc(db, 'owners', userId);
+            const userRef = doc(db, 'owners', user.uid);
             const { name, avatar } = profile;
             await updateDoc(userRef, { name, avatar });
             
@@ -110,6 +111,10 @@ export default function OwnerSettingsPage() {
     };
 
     const handleChangePassword = async () => {
+        if (!user) {
+             toast({ variant: 'destructive', title: 'Error', description: 'Debes iniciar sesión para cambiar tu contraseña.' });
+            return;
+        }
         if (newPassword !== confirmPassword) {
             toast({ variant: 'destructive', title: 'Error', description: 'Las contraseñas no coinciden.' });
             return;
@@ -120,28 +125,33 @@ export default function OwnerSettingsPage() {
         }
         setSaving(true);
         
-        // --- MOCK PASSWORD CHANGE ---
-        // In a real app, you would use the Firebase Auth SDK
-        // const user = auth.currentUser;
-        // if(user) { updatePassword(user, newPassword).then(() => ... }
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        toast({
-            title: 'Contraseña Cambiada',
-            description: 'Tu contraseña ha sido actualizada exitosamente.',
-        });
-        setNewPassword('');
-        setConfirmPassword('');
-        setSaving(false);
+        try {
+            await updatePassword(user, newPassword);
+             toast({
+                title: 'Contraseña Cambiada',
+                description: 'Tu contraseña ha sido actualizada exitosamente.',
+            });
+            setNewPassword('');
+            setConfirmPassword('');
+        } catch (error) {
+            console.error("Error changing password:", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo cambiar la contraseña. Es posible que necesites volver a iniciar sesión.' });
+        } finally {
+            setSaving(false);
+        }
     }
 
 
-    if (loading) {
+    if (loading || authLoading) {
         return (
             <div className="flex justify-center items-center h-full">
                 <Loader2 className="h-10 w-10 animate-spin text-primary" />
             </div>
         );
+    }
+    
+    if (!user) {
+        return <div className="text-center">Por favor, inicie sesión para ver su configuración.</div>
     }
 
     return (
@@ -232,3 +242,4 @@ export default function OwnerSettingsPage() {
     );
 }
 
+    
