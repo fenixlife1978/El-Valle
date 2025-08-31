@@ -380,32 +380,31 @@ export default function ReportsPage() {
                     ];
                 });
 
-            // Fetch ONLY PENDING Debts
+            // Fetch ONLY PENDING Debts, ordered chronologically
             const debtsQuery = query(
                 collection(db, "debts"),
                 where("ownerId", "==", owner.id),
-                where("status", "==", "pending")
+                where("status", "==", "pending"),
+                orderBy("year", "asc"),
+                orderBy("month", "asc")
             );
             const debtSnapshot = await getDocs(debtsQuery);
             let totalDebtUSD = 0;
             const pendingDebts = debtSnapshot.docs.map(doc => doc.data() as Debt);
             
-            const debtsRows = pendingDebts
-                .sort((a, b) => a.year - b.year || a.month - a.month)
-                .map(d => {
-                    totalDebtUSD += d.amountUSD;
-                    return [
-                        `${monthsLocale[d.month]} ${d.year}`,
-                        d.description,
-                        `$${d.amountUSD.toFixed(2)}`,
-                        'Pendiente'
-                    ];
-                });
+            const debtsRows = pendingDebts.map(d => {
+                totalDebtUSD += d.amountUSD;
+                return [
+                    `${monthsLocale[d.month]} ${d.year}`,
+                    d.description,
+                    `$${d.amountUSD.toFixed(2)}`,
+                    'Pendiente'
+                ];
+            });
 
             let dateRange = "Al día";
             if (pendingDebts.length > 0) {
                 const firstDebt = pendingDebts[0];
-                const lastDebt = pendingDebts[pendingDebts.length - 1];
                 dateRange = `Deudas desde ${monthsLocale[firstDebt.month]} ${firstDebt.year}`;
             }
 
@@ -439,7 +438,7 @@ export default function ReportsPage() {
 
         } catch (error) {
             console.error("Error generating individual statement:", error);
-            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo generar el estado de cuenta.' });
+            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo generar el estado de cuenta. Verifique que no falten índices en Firestore.' });
         } finally {
             setGeneratingReport(false);
         }
@@ -470,7 +469,7 @@ export default function ReportsPage() {
                     const ownerData = owners.find(o => o.id === ownerId);
                     if (!ownerData || ownerDebts.length < parseInt(delinquencyPeriod)) return null;
 
-                    ownerDebts.sort((a, b) => a.year - b.year || a.month - a.month);
+                    ownerDebts.sort((a, b) => a.year - b.year || a.month - b.month);
                     const firstDebt = ownerDebts[0];
                     const lastDebt = ownerDebts[ownerDebts.length - 1];
                     
