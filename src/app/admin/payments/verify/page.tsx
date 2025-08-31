@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -554,8 +553,9 @@ export default function VerifyPaymentsPage() {
                         Revise el recibo antes de descargarlo. El diseño se ajustará en el PDF final.
                     </DialogDescription>
                 </DialogHeader>
+                <div className="flex-grow overflow-y-auto pr-4 -mr-4">
                 {receiptData && companyInfo && (
-                     <div className="flex-grow overflow-y-auto pr-4 -mr-4 border rounded-md p-4 bg-white text-black font-sans text-xs">
+                     <div className="border rounded-md p-4 bg-white text-black font-sans text-xs">
                         <div className="flex justify-between items-start mb-4">
                             <div className="flex items-center gap-4">
                                 {companyInfo.logo && <img src={companyInfo.logo} alt="Logo" className="w-20 h-20 object-contain"/>}
@@ -621,6 +621,7 @@ export default function VerifyPaymentsPage() {
                         </div>
                     </div>
                 )}
+                </div>
                 <DialogFooter className="mt-auto pt-4 border-t">
                     <Button variant="outline" onClick={() => setIsReceiptPreviewOpen(false)}>Cerrar</Button>
                     <Button onClick={handleDownloadPdf}>
@@ -646,6 +647,3 @@ export default function VerifyPaymentsPage() {
         </Dialog>
     </div>
   );
-}
-
-    
