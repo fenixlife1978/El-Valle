@@ -191,26 +191,19 @@ export default function DebtManagementPage() {
     
         try {
             await runTransaction(db, async (transaction) => {
-                // GET ALL owners, then filter in code to avoid issues with data types in where() clause.
                 const allOwnersQuery = collection(db, 'owners');
                 const allOwnersSnapshot = await getDocs(allOwnersQuery);
-
-                const ownersWithBalance = allOwnersSnapshot.docs.filter(doc => {
-                    const balance = Number(doc.data().balance || 0);
-                    return balance > 0;
-                });
-    
-                if (ownersWithBalance.length === 0) {
-                    toast({ title: 'Sin Conciliaciones Necesarias', description: 'Ningún propietario tiene saldo a favor para conciliar.' });
-                    return;
-                }
     
                 let reconciledCount = 0;
     
-                for (const ownerDoc of ownersWithBalance) {
+                for (const ownerDoc of allOwnersSnapshot.docs) {
                     const ownerData = { id: ownerDoc.id, ...ownerDoc.data() };
                     const ownerRef = ownerDoc.ref;
                     let availableBalance = Number(ownerData.balance || 0);
+
+                    if (availableBalance <= 0) {
+                        continue;
+                    }
     
                     const debtsQuery = query(
                         collection(db, 'debts'),
@@ -219,11 +212,13 @@ export default function DebtManagementPage() {
                         orderBy('year', 'asc'),
                         orderBy('month', 'asc')
                     );
-                    // This get must be inside the transaction to ensure consistency
+                    
                     const debtsSnapshot = await getDocs(debtsQuery);
     
-                    if (debtsSnapshot.empty) continue;
-    
+                    if (debtsSnapshot.empty) {
+                        continue;
+                    }
+
                     const reconciliationDate = Timestamp.now();
                     let totalPaidInTx = 0;
     
@@ -915,3 +910,5 @@ export default function DebtManagementPage() {
     // Fallback while loading or if view is invalid
     return null;
 }
+
+    
