@@ -44,7 +44,7 @@ type Payment = {
   totalAmount: number;
   paymentMethod: string;
   status: string;
-  beneficiaries: { ownerId: string, house?: string, amount: number }[];
+  beneficiaries: { ownerId: string, house?: string, street?: string, amount: number }[];
 };
 
 type Debt = {
@@ -350,7 +350,13 @@ export default function ReportsPage() {
             const paymentsQuery = query(
                 collection(db, "payments"),
                 where("status", "==", "aprobado"),
-                where("beneficiaries", "array-contains", { ownerId: owner.id, house: validOwnerProperties[0].house, amount: owner.balance, street: validOwnerProperties[0].street })
+                where("beneficiaries", "array-contains-any", 
+                    validOwnerProperties.map(p => ({
+                        ownerId: owner.id,
+                        house: p.house,
+                        street: p.street
+                    }))
+                )
             );
 
             const paymentsSnapshot = await getDocs(paymentsQuery);
