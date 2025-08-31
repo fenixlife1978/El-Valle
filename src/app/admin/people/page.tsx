@@ -16,7 +16,7 @@ import { useToast } from '@/hooks/use-toast';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc } from 'firebase/firestore';
+import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc, setDoc } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 
@@ -33,7 +33,7 @@ type Owner = {
     name: string;
     properties: Property[];
     email?: string;
-    balance: number | string;
+    balance: number;
     role: Role;
     // Legacy fields for backward compatibility
     street?: string;
@@ -53,7 +53,7 @@ const emptyOwner: Omit<Owner, 'id' | 'balance'> & { balance: number | string } =
     name: '', 
     properties: [{ street: '', house: '' }], 
     email: '', 
-    balance: "0.00", 
+    balance: 0, 
     role: 'propietario',
 };
 
@@ -87,7 +87,7 @@ export default function PeopleManagementPage() {
             snapshot.forEach((doc) => {
                 const data = doc.data();
                 // Ensure balance is always a number for display/calculation, default to 0 if null/undefined
-                ownersData.push({ id: doc.id, ...data, balance: data.balance ?? "0.00" } as Owner);
+                ownersData.push({ id: doc.id, ...data, balance: data.balance ?? 0 } as Owner);
             });
             
             // Custom sort logic
@@ -178,7 +178,7 @@ export default function PeopleManagementPage() {
             const balanceValue = parseFloat(String(ownerData.balance));
             const dataToSave: any = {
                 ...ownerData,
-                balance: isNaN(balanceValue) || balanceValue === 0 ? "0.00" : balanceValue.toFixed(2)
+                balance: isNaN(balanceValue) ? 0 : parseFloat(balanceValue.toFixed(2))
             };
 
             if (id) { // Editing existing user
@@ -339,7 +339,7 @@ export default function PeopleManagementPage() {
                         ownersMap[key] = {
                             name: item.name,
                             email: item.email,
-                            balance: isNaN(balanceNum) || balanceNum === 0 ? "0.00" : balanceNum.toFixed(2),
+                            balance: isNaN(balanceNum) ? 0 : parseFloat(balanceNum.toFixed(2)),
                             role: (item.role === 'administrador' || item.role === 'propietario') ? item.role : 'propietario',
                             properties: []
                         };

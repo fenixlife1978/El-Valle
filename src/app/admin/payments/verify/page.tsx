@@ -18,7 +18,7 @@ import { addMonths, format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 type PaymentStatus = 'pendiente' | 'aprobado' | 'rechazado';
-type PaymentMethod = 'transferencia' | 'movil' | 'adelanto';
+type PaymentMethod = 'transferencia' | 'movil' | 'adelanto' | 'conciliacion';
 
 type FullPayment = {
   id: string;
@@ -182,62 +182,52 @@ export default function VerifyPaymentsPage() {
     if (newStatus === 'aprobado') {
         try {
             await runTransaction(db, async (transaction) => {
-                // --- 1. READ PHASE ---
                 const paymentDoc = await transaction.get(paymentRef);
                 if (!paymentDoc.exists() || paymentDoc.data().status === 'aprobado') {
                     throw new Error("El pago no existe o ya fue aprobado.");
                 }
                 const paymentData = paymentDoc.data() as FullPayment;
 
-                // For simplicity, this logic assumes one beneficiary per payment, as per most cases.
-                // A more complex system might loop through beneficiaries and apply funds proportionally.
-                const mainBeneficiary = paymentData.beneficiaries[0];
-                if (!mainBeneficiary) {
-                    throw new Error("El pago no tiene un beneficiario definido.");
-                }
-
-                const ownerRef = doc(db, "owners", mainBeneficiary.ownerId);
-                const ownerDoc = await transaction.get(ownerRef);
-                if (!ownerDoc.exists()) {
-                    throw new Error(`Propietario con ID ${mainBeneficiary.ownerId} no encontrado.`);
-                }
-
-                const debtsQuery = query(
-                    collection(db, "debts"),
-                    where("ownerId", "==", mainBeneficiary.ownerId),
-                    where("status", "==", "pending"),
-                    orderBy("year", "asc"),
-                    orderBy("month", "asc")
-                );
-                const debtsSnapshot = await transaction.get(debtsQuery);
-                
-                // --- 2. LOGIC / COMPUTE PHASE (in memory) ---
-                const ownerBalanceBs = ownerDoc.data().balance || 0;
-                let availableFundsBs = ownerBalanceBs + paymentData.totalAmount;
-                const debtsToUpdate: {ref: any, data: any}[] = [];
-
-                for (const debtDoc of debtsSnapshot.docs) {
-                    const debt = debtDoc.data() as Debt;
-                    const debtAmountBs = debt.amountUSD * paymentData.exchangeRate;
-                    if (availableFundsBs >= debtAmountBs) {
-                        availableFundsBs -= debtAmountBs;
-                        const debtRef = doc(db, "debts", debtDoc.id);
-                        debtsToUpdate.push({
-                            ref: debtRef,
-                            data: {
-                                status: 'paid',
-                                paidAmountUSD: debt.amountUSD,
-                                paymentDate: paymentData.paymentDate,
-                            }
-                        });
-                    } else {
-                        break; 
+                for (const beneficiary of paymentData.beneficiaries) {
+                    const ownerRef = doc(db, "owners", beneficiary.ownerId);
+                    const ownerDoc = await transaction.get(ownerRef);
+                    if (!ownerDoc.exists()) {
+                        throw new Error(`Propietario con ID ${beneficiary.ownerId} no encontrado.`);
                     }
+
+                    const ownerBalanceBs = ownerDoc.data().balance || 0;
+                    let availableFundsBs = ownerBalanceBs + beneficiary.amount;
+
+                    if (paymentData.exchangeRate > 0) {
+                        const debtsQuery = query(
+                            collection(db, "debts"),
+                            where("ownerId", "==", beneficiary.ownerId),
+                            where("status", "==", "pending"),
+                            orderBy("year", "asc"),
+                            orderBy("month", "asc")
+                        );
+                        const debtsSnapshot = await getDocs(debtsQuery);
+                        
+                        if (!debtsSnapshot.empty) {
+                             for (const debtDoc of debtsSnapshot.docs) {
+                                const debt = debtDoc.data() as Debt;
+                                const debtAmountBs = debt.amountUSD * paymentData.exchangeRate;
+                                if (availableFundsBs >= debtAmountBs) {
+                                    availableFundsBs -= debtAmountBs;
+                                    transaction.update(debtDoc.ref, {
+                                        status: 'paid',
+                                        paidAmountUSD: debt.amountUSD,
+                                        paymentDate: paymentData.paymentDate,
+                                    });
+                                } else {
+                                    break; 
+                                }
+                            }
+                        }
+                    }
+                    transaction.update(ownerRef, { balance: availableFundsBs });
                 }
                 
-                // --- 3. WRITE PHASE ---
-                debtsToUpdate.forEach(d => transaction.update(d.ref, d.data));
-                transaction.update(ownerRef, { balance: availableFundsBs });
                 transaction.update(paymentRef, { status: 'aprobado' });
             });
             
@@ -324,7 +314,7 @@ export default function VerifyPaymentsPage() {
                         where("paymentDate", "==", paymentData.paymentDate)
                     );
                     
-                    const paidDebtsSnapshot = await transaction.get(paidDebtsQuery);
+                    const paidDebtsSnapshot = await getDocs(paidDebtsQuery);
                     
                     // --- WRITE PHASE ---
                     transaction.update(ownerRef, { balance: newBalance });
