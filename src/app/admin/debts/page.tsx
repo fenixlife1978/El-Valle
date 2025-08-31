@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PlusCircle, MoreHorizontal, Edit, Trash2, Loader2, Info, ArrowLeft, Search, WalletCards, Calculator, Minus, Equal, FileDown, FileCog } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { collection, query, onSnapshot, where, doc, getDoc, writeBatch, updateDoc, deleteDoc, runTransaction, Timestamp, getDocs, addDoc, orderBy } from 'firebase/firestore';
+import { collection, query, onSnapshot, where, doc, getDoc, writeBatch, updateDoc, deleteDoc, runTransaction, Timestamp, getDocs, addDoc, orderBy, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Badge } from '@/components/ui/badge';
 import { differenceInCalendarMonths, format, addMonths } from 'date-fns';
@@ -455,19 +455,25 @@ export default function DebtManagementPage() {
     const handleReconcileAll = async () => {
         setIsReconciling(true);
         toast({ title: 'Iniciando conciliación...', description: 'Este proceso puede tardar unos minutos.' });
-
+    
         try {
             const ownersWithBalanceQuery = query(collection(db, 'owners'), where('balance', '>', 0));
             const ownersSnapshot = await getDocs(ownersWithBalanceQuery);
+            if (activeRate === 0) throw new Error("Tasa de cambio no disponible.");
+    
+            const allOwnersWithBalance = ownersSnapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as Omit<Owner, 'id'>) }));
             let reconciledCount = 0;
-            const reconciliationDate = Timestamp.now();
-
-            for (const ownerDoc of ownersSnapshot.docs) {
-                const owner = { id: ownerDoc.id, ...ownerDoc.data() } as Owner;
-                let availableBalance = owner.balance;
-                if (activeRate === 0) throw new Error("Tasa de cambio no disponible.");
-
+            
+            for (const owner of allOwnersWithBalance) {
                 await runTransaction(db, async (transaction) => {
+                    const ownerRef = doc(db, 'owners', owner.id);
+                    // Re-read owner doc inside transaction to get latest balance
+                    const ownerDoc = await transaction.get(ownerRef);
+                    if (!ownerDoc.exists()) return;
+    
+                    let availableBalance = ownerDoc.data().balance || 0;
+                    if (availableBalance <= 0) return;
+    
                     const debtsQuery = query(
                         collection(db, 'debts'),
                         where('ownerId', '==', owner.id),
@@ -477,36 +483,38 @@ export default function DebtManagementPage() {
                     );
                     const debtsSnapshot = await transaction.get(debtsQuery);
                     if (debtsSnapshot.empty) return;
-
-                    let debtsPaidInTx = 0;
-                    const debtsToUpdate: { ref: any, data: any }[] = [];
-
+                    
+                    const reconciliationDate = Timestamp.now();
+                    const debtsToUpdate = [];
+                    let totalPaidInTx = 0;
+    
                     for (const debtDoc of debtsSnapshot.docs) {
                         const debt = { id: debtDoc.id, ...debtDoc.data() } as Debt;
                         const debtAmountBs = debt.amountUSD * activeRate;
+    
                         if (availableBalance >= debtAmountBs) {
                             availableBalance -= debtAmountBs;
-                            debtsPaidInTx += debtAmountBs;
+                            totalPaidInTx += debtAmountBs;
                             debtsToUpdate.push({
-                                ref: doc(db, 'debts', debt.id),
+                                ref: debtDoc.ref,
                                 data: { status: 'paid', paidAmountUSD: debt.amountUSD, paymentDate: reconciliationDate }
                             });
                         } else {
                             break;
                         }
                     }
-
+    
                     if (debtsToUpdate.length > 0) {
                         debtsToUpdate.forEach(d => transaction.update(d.ref, d.data));
-                        const ownerRef = doc(db, 'owners', owner.id);
                         transaction.update(ownerRef, { balance: availableBalance });
-                        reconciledCount++;
-
+    
                         const paymentRef = doc(collection(db, "payments"));
+                        const ownerData = ownerDoc.data();
+                        const property = (ownerData.properties && ownerData.properties.length > 0) ? ownerData.properties[0] : { street: ownerData.street, house: ownerData.house };
                         transaction.set(paymentRef, {
                             reportedBy: 'admin',
-                            beneficiaries: [{ ownerId: owner.id, house: owner.house, amount: debtsPaidInTx }],
-                            totalAmount: debtsPaidInTx,
+                            beneficiaries: [{ ownerId: owner.id, house: property?.house || 'N/A', street: property?.street || 'N/A', amount: totalPaidInTx }],
+                            totalAmount: totalPaidInTx,
                             exchangeRate: activeRate,
                             paymentDate: reconciliationDate,
                             reportedAt: reconciliationDate,
@@ -516,15 +524,17 @@ export default function DebtManagementPage() {
                             status: 'aprobado',
                             observations: 'Conciliación Automática por Saldo a Favor',
                         });
+                        reconciledCount++;
                     }
                 });
             }
-             toast({
+            
+            toast({
                 title: 'Conciliación Completada',
-                description: `Se conciliaron las cuentas de ${reconciledCount} propietarios.`,
+                description: `Se procesaron las cuentas de ${reconciledCount} propietarios.`,
                 className: 'bg-green-100 border-green-400 text-green-800'
             });
-
+    
         } catch (error) {
              console.error("Error during reconciliation: ", error);
              const errorMessage = error instanceof Error ? error.message : "Ocurrió un error desconocido.";
@@ -651,7 +661,7 @@ export default function DebtManagementPage() {
     
     // Detail View
     if (view === 'detail' && selectedOwner) {
-        const pendingDebts = selectedOwnerDebts.filter(d => d.status === 'pending').sort((a,b) => a.year - b.year || a.month - b.month);
+        const pendingDebts = selectedOwnerDebts.filter(d => d.status === 'pending').sort((a,b) => a.year - b.year || a.month - a.month);
         const paidDebts = selectedOwnerDebts.filter(d => d.status === 'paid').sort((a,b) => b.year - a.year || b.month - a.month);
         
         return (
