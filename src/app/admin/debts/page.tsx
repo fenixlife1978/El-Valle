@@ -190,17 +190,21 @@ export default function DebtManagementPage() {
         toast({ title: 'Iniciando conciliación...', description: 'Este proceso puede tardar unos minutos.' });
 
         try {
-            await runTransaction(db, async (transaction) => {
-                const allOwnersQuery = collection(db, 'owners');
-                const allOwnersSnapshot = await getDocs(allOwnersQuery);
-                let reconciledCount = 0;
+            let reconciledCount = 0;
 
-                for (const ownerDoc of allOwnersSnapshot.docs) {
-                    const ownerData = { id: ownerDoc.id, ...ownerDoc.data() };
-                    const ownerRef = ownerDoc.ref;
-                    let availableBalance = Number(ownerData.balance || 0);
+            for (const ownerData of owners) {
+                const ownerBalance = Number(ownerData.balance || 0);
 
-                    if (availableBalance <= 0) continue;
+                if (ownerBalance <= 0) continue;
+
+                await runTransaction(db, async (transaction) => {
+                    const ownerRef = doc(db, 'owners', ownerData.id);
+                    // Re-fetch owner inside transaction for consistency
+                    const ownerDoc = await transaction.get(ownerRef);
+                    if (!ownerDoc.exists()) return;
+                    
+                    let availableBalance = Number(ownerDoc.data()?.balance || 0);
+                    if (availableBalance <= 0) return;
 
                     const debtsQuery = query(
                         collection(db, 'debts'),
@@ -211,7 +215,7 @@ export default function DebtManagementPage() {
                     );
                     
                     const debtsSnapshot = await getDocs(debtsQuery);
-                    if (debtsSnapshot.empty) continue;
+                    if (debtsSnapshot.empty) return;
                     
                     const reconciliationDate = Timestamp.now();
                     let totalPaidInTx = 0;
@@ -257,18 +261,18 @@ export default function DebtManagementPage() {
                         });
                         reconciledCount++;
                     }
-                }
-    
-                if (reconciledCount > 0) {
-                    toast({
-                        title: 'Conciliación Completada',
-                        description: `Se procesaron las cuentas de ${reconciledCount} propietarios.`,
-                        className: 'bg-green-100 border-green-400 text-green-800'
-                    });
-                } else {
-                     toast({ title: 'Sin Conciliaciones Necesarias', description: 'Ningún propietario tiene saldo suficiente para cubrir sus deudas pendientes.' });
-                }
-            });
+                });
+            }
+
+            if (reconciledCount > 0) {
+                toast({
+                    title: 'Conciliación Completada',
+                    description: `Se procesaron las cuentas de ${reconciledCount} propietarios.`,
+                    className: 'bg-green-100 border-green-400 text-green-800'
+                });
+            } else {
+                 toast({ title: 'Sin Conciliaciones Necesarias', description: 'Ningún propietario tiene saldo suficiente para cubrir sus deudas pendientes.' });
+            }
     
         } catch (error) {
             console.error("Error during reconciliation: ", error);
@@ -277,7 +281,7 @@ export default function DebtManagementPage() {
         } finally {
             setIsReconciling(false);
         }
-    }, [toast, activeRate]);
+    }, [toast, activeRate, owners]);
 
     
     // Filter owners based on search term
@@ -922,4 +926,5 @@ export default function DebtManagementPage() {
 }
 
     
+
 
