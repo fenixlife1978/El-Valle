@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PlusCircle, MoreHorizontal, Edit, Trash2, Loader2, Info, ArrowLeft, Search, WalletCards, Calculator, Minus, Equal, FileDown, FileCog } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, Edit, Trash2, Loader2, Info, ArrowLeft, Search, WalletCards, Calculator, Minus, Equal, FileDown, FileCog, CalendarPlus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { collection, query, onSnapshot, where, doc, getDoc, writeBatch, updateDoc, deleteDoc, runTransaction, Timestamp, getDocs, addDoc, orderBy, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -82,8 +82,10 @@ export default function DebtManagementPage() {
     const [owners, setOwners] = useState<Owner[]>([]);
     const [loading, setLoading] = useState(true);
     const [isReconciling, setIsReconciling] = useState(false);
+    const [isGeneratingMonthlyDebt, setIsGeneratingMonthlyDebt] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [activeRate, setActiveRate] = useState(0);
+    const [condoFee, setCondoFee] = useState(0);
     const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
 
     const [selectedOwner, setSelectedOwner] = useState<Owner | null>(null);
@@ -113,6 +115,7 @@ export default function DebtManagementPage() {
                 if (settingsSnap.exists()) {
                     const settings = settingsSnap.data();
                     setCompanyInfo(settings.companyInfo as CompanyInfo);
+                    setCondoFee(settings.condoFee || 0);
                     const rates = (settings.exchangeRates || []);
                     const activeRateObj = rates.find((r: any) => r.active);
                     if (activeRateObj) {
@@ -192,23 +195,19 @@ export default function DebtManagementPage() {
         try {
             let reconciledCount = 0;
 
-            for (const ownerData of owners) {
-                const ownerBalance = Number(ownerData.balance || 0);
+            for (const owner of owners) {
+                const ownerBalance = Number(owner.balance || 0);
 
                 if (ownerBalance <= 0) continue;
 
                 await runTransaction(db, async (transaction) => {
-                    const ownerRef = doc(db, 'owners', ownerData.id);
-                    // Re-fetch owner inside transaction for consistency
-                    const ownerDoc = await transaction.get(ownerRef);
-                    if (!ownerDoc.exists()) return;
+                    const ownerRef = doc(db, 'owners', owner.id);
                     
-                    let availableBalance = Number(ownerDoc.data()?.balance || 0);
-                    if (availableBalance <= 0) return;
+                    let availableBalance = ownerBalance;
 
                     const debtsQuery = query(
                         collection(db, 'debts'),
-                        where('ownerId', '==', ownerData.id),
+                        where('ownerId', '==', owner.id),
                         where('status', '==', 'pending'),
                         orderBy('year', 'asc'),
                         orderBy('month', 'asc')
@@ -241,14 +240,14 @@ export default function DebtManagementPage() {
                     if (totalPaidInTx > 0) {
                         transaction.update(ownerRef, { balance: availableBalance });
     
-                        const property = (ownerData.properties && ownerData.properties.length > 0)
-                            ? ownerData.properties[0]
-                            : { street: ownerData.street, house: ownerData.house };
+                        const property = (owner.properties && owner.properties.length > 0)
+                            ? owner.properties[0]
+                            : { street: owner.street, house: owner.house };
                         
                         const paymentRef = doc(collection(db, "payments"));
                         transaction.set(paymentRef, {
-                            reportedBy: ownerData.id,
-                            beneficiaries: [{ ownerId: ownerData.id, house: property?.house || 'N/A', street: property?.street || 'N/A', amount: totalPaidInTx }],
+                            reportedBy: owner.id,
+                            beneficiaries: [{ ownerId: owner.id, house: property?.house || 'N/A', street: property?.street || 'N/A', amount: totalPaidInTx }],
                             totalAmount: totalPaidInTx,
                             exchangeRate: activeRate,
                             paymentDate: reconciliationDate,
@@ -284,6 +283,64 @@ export default function DebtManagementPage() {
     }, [toast, activeRate, owners]);
 
     
+    const handleGenerateMonthlyDebt = async () => {
+        setIsGeneratingMonthlyDebt(true);
+        toast({ title: 'Iniciando proceso...', description: 'Generando deudas para el mes en curso.' });
+
+        if (condoFee <= 0) {
+            toast({ variant: 'destructive', title: 'Error de Configuración', description: 'La cuota de condominio no está configurada o es cero.' });
+            setIsGeneratingMonthlyDebt(false);
+            return;
+        }
+
+        try {
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = today.getMonth() + 1;
+
+            const existingDebtsQuery = query(collection(db, 'debts'), where('year', '==', year), where('month', '==', month));
+            const existingDebtsSnapshot = await getDocs(existingDebtsQuery);
+            const ownersWithDebt = new Set(existingDebtsSnapshot.docs.map(doc => doc.data().ownerId));
+
+            const ownersWithoutDebt = owners.filter(owner => !ownersWithDebt.has(owner.id));
+
+            if (ownersWithoutDebt.length === 0) {
+                toast({ title: 'Proceso Completado', description: 'Todos los propietarios ya tienen la deuda del mes en curso.' });
+                setIsGeneratingMonthlyDebt(false);
+                return;
+            }
+
+            const batch = writeBatch(db);
+            ownersWithoutDebt.forEach(owner => {
+                const debtRef = doc(collection(db, 'debts'));
+                batch.set(debtRef, {
+                    ownerId: owner.id,
+                    year: year,
+                    month: month,
+                    amountUSD: condoFee,
+                    description: 'Cuota de Condominio',
+                    status: 'pending'
+                });
+            });
+
+            await batch.commit();
+
+            toast({
+                title: 'Deudas Generadas Exitosamente',
+                description: `Se han generado ${ownersWithoutDebt.length} nuevas deudas para el mes de ${months.find(m => m.value === month)?.label} ${year}.`,
+                className: 'bg-green-100 border-green-400 text-green-800'
+            });
+
+        } catch (error) {
+            console.error("Error generating monthly debt: ", error);
+            const errorMessage = error instanceof Error ? error.message : "Ocurrió un error desconocido.";
+            toast({ variant: 'destructive', title: 'Error al Generar Deudas', description: errorMessage });
+        } finally {
+            setIsGeneratingMonthlyDebt(false);
+        }
+    };
+
+
     // Filter owners based on search term
     const filteredOwners = useMemo(() => {
         if (!searchTerm) return owners;
@@ -605,6 +662,10 @@ export default function DebtManagementPage() {
                         <div className="flex justify-between items-center gap-2 flex-wrap">
                             <CardTitle>Lista de Propietarios</CardTitle>
                             <div className="flex gap-2">
+                                <Button onClick={handleGenerateMonthlyDebt} variant="outline" disabled={isGeneratingMonthlyDebt}>
+                                    {isGeneratingMonthlyDebt ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CalendarPlus className="mr-2 h-4 w-4" />}
+                                    Generar Deuda del Mes
+                                </Button>
                                 <Button onClick={handleReconcileAll} variant="outline" disabled={isReconciling}>
                                     {isReconciling ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <FileCog className="mr-2 h-4 w-4" />}
                                     Pagar Deudas con Saldo a Favor
@@ -924,7 +985,3 @@ export default function DebtManagementPage() {
     // Fallback while loading or if view is invalid
     return null;
 }
-
-    
-
-
