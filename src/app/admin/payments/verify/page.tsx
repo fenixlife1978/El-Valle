@@ -36,6 +36,8 @@ type FullPayment = {
   reference: string;
   reportedBy: string;
   reportedAt?: Timestamp;
+  observations?: string;
+  isReconciled?: boolean; // Flag to check if the payment was used in a reconciliation
 };
 
 type Debt = {
@@ -48,6 +50,7 @@ type Debt = {
     status: 'pending' | 'paid';
     paidAmountUSD?: number;
     paymentDate?: Timestamp;
+    paymentId?: string;
 };
 
 type CompanyInfo = {
@@ -89,7 +92,7 @@ export default function VerifyPaymentsPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<PaymentStatus | 'todos'>('todos');
   const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
-  const [receiptData, setReceiptData] = useState<ReceiptData>(null);
+  const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const [isReceiptPreviewOpen, setIsReceiptPreviewOpen] = useState(false);
   const [paymentToDelete, setPaymentToDelete] = useState<FullPayment | null>(null);
   const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
@@ -136,6 +139,8 @@ export default function VerifyPaymentsPage() {
                     paymentDate: data.paymentDate,
                     reportedBy: data.reportedBy,
                     reportedAt: data.reportedAt,
+                    observations: data.observations,
+                    isReconciled: data.isReconciled
                 });
             });
 
@@ -219,6 +224,7 @@ export default function VerifyPaymentsPage() {
                                         status: 'paid',
                                         paidAmountUSD: debt.amountUSD,
                                         paymentDate: paymentData.paymentDate,
+                                        paymentId: paymentData.id
                                     });
                                 } else {
                                     break; 
@@ -266,9 +272,7 @@ export default function VerifyPaymentsPage() {
 
         const paidDebtsQuery = query(
             collection(db, "debts"),
-            where("ownerId", "==", beneficiaryId),
-            where("status", "==", "paid"),
-            where("paymentDate", "==", payment.paymentDate)
+            where("paymentId", "==", payment.id)
         );
         const paidDebtsSnapshot = await getDocs(paidDebtsQuery);
         const paidDebts = paidDebtsSnapshot.docs.map(doc => doc.data() as Debt);
@@ -310,9 +314,7 @@ export default function VerifyPaymentsPage() {
 
                     const paidDebtsQuery = query(
                         collection(db, "debts"),
-                        where("ownerId", "==", beneficiary.ownerId),
-                        where("status", "==", "paid"),
-                        where("paymentDate", "==", paymentData.paymentDate)
+                        where("paymentId", "==", paymentData.id)
                     );
                     
                     const paidDebtsSnapshot = await getDocs(paidDebtsQuery);
@@ -331,6 +333,7 @@ export default function VerifyPaymentsPage() {
                             status: 'pending',
                             paidAmountUSD: deleteField(),
                             paymentDate: deleteField(),
+                            paymentId: deleteField()
                         });
                     });
                 }
@@ -398,7 +401,7 @@ export default function VerifyPaymentsPage() {
     const totalPaidUSD = paidDebts.reduce((sum, debt) => sum + (debt.paidAmountUSD || debt.amountUSD), 0);
     const conceptText = paidDebts.length > 0 
         ? `Pago cuota(s) ${companyInfo.name || 'Condominio'}: ${paidDebts.map(d => `${monthsLocale[d.month]} ${d.year}`).join(', ')}`
-        : `Abono a saldo a favor`;
+        : payment.observations || `Abono a saldo a favor`;
 
     const tableBody = [
         [
@@ -605,7 +608,7 @@ export default function VerifyPaymentsPage() {
                                     <TableCell>
                                         {receiptData.paidDebts.length > 0 
                                             ? `Pago cuota(s) ${companyInfo.name || 'Condominio'}: ${receiptData.paidDebts.map(d => `${monthsLocale[d.month]} ${d.year}`).join(', ')}`
-                                            : `Abono a saldo a favor`
+                                            : receiptData.payment.observations || `Abono a saldo a favor`
                                         }
                                     </TableCell>
                                     <TableCell className="text-right">

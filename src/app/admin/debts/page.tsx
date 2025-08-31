@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PlusCircle, MoreHorizontal, Edit, Trash2, Loader2, Info, ArrowLeft, Search, WalletCards, Calculator, Minus, Equal, FileDown, FileCog, CalendarPlus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { collection, query, onSnapshot, where, doc, getDoc, writeBatch, updateDoc, deleteDoc, runTransaction, Timestamp, getDocs, addDoc, orderBy, setDoc } from 'firebase/firestore';
+import { collection, query, onSnapshot, where, doc, getDoc, writeBatch, updateDoc, deleteDoc, runTransaction, Timestamp, getDocs, addDoc, orderBy, setDoc, limit, deleteField } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Badge } from '@/components/ui/badge';
 import { differenceInCalendarMonths, format, addMonths } from 'date-fns';
@@ -40,7 +40,17 @@ type Debt = {
     status: 'pending' | 'paid';
     paidAmountUSD?: number;
     paymentDate?: Timestamp;
+    paymentId?: string; // Link to the payment document
 };
+
+type Payment = {
+    id: string;
+    paymentDate: Timestamp;
+    bank: string;
+    paymentMethod: string;
+    reference: string;
+};
+
 
 type View = 'list' | 'detail';
 
@@ -201,8 +211,10 @@ export default function DebtManagementPage() {
         }
         
         let reconciledCount = 0;
+        let processedOwners = 0;
 
         for (const owner of ownersWithBalance) {
+            processedOwners++;
             try {
                 await runTransaction(db, async (transaction) => {
                     const ownerRef = doc(db, 'owners', owner.id);
@@ -223,27 +235,40 @@ export default function DebtManagementPage() {
                     const debtsSnapshot = await getDocs(debtsQuery);
                     if (debtsSnapshot.empty) return;
                     
-                    const reconciliationDate = Timestamp.now();
-                    let totalPaidInTx = 0;
                     let balanceChanged = false;
 
                     for (const debtDoc of debtsSnapshot.docs) {
                         const debt = { id: debtDoc.id, ...debtDoc.data() } as Debt;
                         const debtAmountBs = debt.amountUSD * activeRate;
                         
-                        // Robust floating point comparison by converting to cents
                         const balanceInCents = Math.round(availableBalance * 100);
                         const debtInCents = Math.round(debtAmountBs * 100);
     
                         if (balanceInCents >= debtInCents) {
                             availableBalance -= debtAmountBs;
-                            totalPaidInTx += debtAmountBs;
-    
+                            
+                            const paymentRef = doc(collection(db, "payments"));
+                            transaction.set(paymentRef, {
+                                reportedBy: owner.id,
+                                beneficiaries: [{ ownerId: owner.id, house: owner.house, street: owner.street, amount: debtAmountBs }],
+                                totalAmount: debtAmountBs,
+                                exchangeRate: activeRate,
+                                paymentDate: Timestamp.now(),
+                                reportedAt: Timestamp.now(),
+                                paymentMethod: 'conciliacion',
+                                bank: 'Sistema (Saldo a Favor)',
+                                reference: `CONC-${debt.year}-${debt.month}`,
+                                status: 'aprobado',
+                                observations: `Deuda ${debt.description} ${debt.year}/${debt.month} pagada por conciliación.`,
+                            });
+
                             transaction.update(debtDoc.ref, {
                                 status: 'paid',
                                 paidAmountUSD: debt.amountUSD,
-                                paymentDate: reconciliationDate
+                                paymentDate: Timestamp.now(),
+                                paymentId: paymentRef.id
                             });
+
                             balanceChanged = true;
                         } else {
                             break; 
@@ -252,39 +277,18 @@ export default function DebtManagementPage() {
     
                     if (balanceChanged) {
                         transaction.update(ownerRef, { balance: availableBalance });
-    
-                        const ownerData = ownerDoc.data();
-                        const property = (ownerData.properties && ownerData.properties.length > 0)
-                            ? ownerData.properties[0]
-                            : { street: ownerData.street, house: ownerData.house };
-                        
-                        const paymentRef = doc(collection(db, "payments"));
-                        transaction.set(paymentRef, {
-                            reportedBy: owner.id,
-                            beneficiaries: [{ ownerId: owner.id, house: property?.house || 'N/A', street: property?.street || 'N/A', amount: totalPaidInTx }],
-                            totalAmount: totalPaidInTx,
-                            exchangeRate: activeRate,
-                            paymentDate: reconciliationDate,
-                            reportedAt: reconciliationDate,
-                            paymentMethod: 'conciliacion',
-                            bank: 'Sistema',
-                            reference: `CONC-${reconciliationDate.toMillis()}`,
-                            status: 'aprobado',
-                            observations: 'Conciliación Automática por Saldo a Favor',
-                        });
                         reconciledCount++;
                     }
                 });
             } catch (error) {
-                console.error(`Error processing owner ${owner.id}:`, error);
-                // Continue to the next owner even if one fails
+                console.error(`Error procesando propietario ${owner.id}:`, error);
             }
         }
 
         if (reconciledCount > 0) {
             toast({
                 title: 'Conciliación Completada',
-                description: `Se procesaron las cuentas de ${reconciledCount} propietarios.`,
+                description: `Se procesaron las cuentas de ${reconciledCount} de ${processedOwners} propietarios con saldo.`,
                 className: 'bg-green-100 border-green-400 text-green-800'
             });
         } else {
@@ -436,7 +440,7 @@ export default function DebtManagementPage() {
     
     const confirmDelete = async () => {
         if (!debtToDelete || !selectedOwner) return;
-
+    
         try {
             const ownerRef = doc(db, "owners", selectedOwner.id);
             const debtRef = doc(db, "debts", debtToDelete.id);
@@ -445,23 +449,26 @@ export default function DebtManagementPage() {
                 const ownerDoc = await transaction.get(ownerRef);
                 
                 if (!ownerDoc.exists()) throw "El documento del propietario no existe.";
-
-                if (debtToDelete.status === 'paid') {
+    
+                // If debt was paid, we need to revert the balance and potentially associated payment
+                if (debtToDelete.status === 'paid' && debtToDelete.paidAmountUSD && activeRate > 0) {
                      const currentBalanceBs = ownerDoc.data().balance || 0;
-                     if(activeRate > 0) {
-                        const debtAmountBs = (debtToDelete.paidAmountUSD || debtToDelete.amountUSD) * activeRate;
-                        const newBalanceBs = currentBalanceBs + debtAmountBs;
-                        transaction.update(ownerRef, { balance: newBalanceBs });
-                     } else {
-                        toast({ variant: 'destructive', title: 'Advertencia', description: 'No hay tasa activa. No se pudo recalcular el saldo, pero la deuda será eliminada.' });
+                     const debtAmountBs = debtToDelete.paidAmountUSD * activeRate;
+                     const newBalanceBs = currentBalanceBs + debtAmountBs;
+                     transaction.update(ownerRef, { balance: newBalanceBs });
+    
+                     // If there's a linked payment from a conciliation, delete it too
+                     if (debtToDelete.paymentId) {
+                         const paymentRef = doc(db, "payments", debtToDelete.paymentId);
+                         transaction.delete(paymentRef);
                      }
                 }
                 
                 transaction.delete(debtRef);
             });
-
-            toast({ title: 'Deuda Eliminada', description: 'La deuda ha sido eliminada y el saldo del propietario ha sido actualizado si correspondía.' });
-
+    
+            toast({ title: 'Deuda Eliminada', description: 'La deuda ha sido eliminada y el saldo del propietario ha sido ajustado si correspondía.' });
+    
         } catch (error) {
             console.error("Error deleting debt: ", error);
             const errorMessage = typeof error === 'string' ? error : (error instanceof Error ? error.message : 'No se pudo eliminar la deuda.');
@@ -525,13 +532,8 @@ export default function DebtManagementPage() {
                     if (currentBalanceBs >= debtAmountBs) {
                         currentBalanceBs -= debtAmountBs;
                         const paymentDate = Timestamp.now();
-                        debtData = {
-                            ...debtData,
-                            status: 'paid',
-                            paidAmountUSD: amountUSD,
-                            paymentDate: paymentDate
-                        };
-                        
+
+                        // Create the corresponding payment document
                         const paymentRef = doc(collection(db, "payments"));
                         transaction.set(paymentRef, {
                             reportedBy: selectedOwner.id,
@@ -541,11 +543,19 @@ export default function DebtManagementPage() {
                             paymentDate: paymentDate,
                             reportedAt: paymentDate,
                             paymentMethod: 'conciliacion',
-                            bank: 'Sistema',
+                            bank: 'Sistema (Saldo a Favor)',
                             reference: `CONC-DEBT-${paymentDate.toMillis()}`,
                             status: 'aprobado',
                             observations: 'Pago automático por saldo a favor al crear deuda.',
                         });
+
+                        debtData = {
+                            ...debtData,
+                            status: 'paid',
+                            paidAmountUSD: amountUSD,
+                            paymentDate: paymentDate,
+                            paymentId: paymentRef.id, // Link to the payment document
+                        };
                     }
                     
                     transaction.set(debtRef, debtData);
