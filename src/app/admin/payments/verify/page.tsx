@@ -187,7 +187,6 @@ export default function VerifyPaymentsPage() {
 
                 const paymentData = paymentDoc.data() as FullPayment;
 
-                // Process each beneficiary of the payment
                 for (const beneficiary of paymentData.beneficiaries) {
                     const ownerRef = doc(db, "owners", beneficiary.ownerId);
                     const ownerDoc = await transaction.get(ownerRef);
@@ -209,32 +208,26 @@ export default function VerifyPaymentsPage() {
                     );
                     
                     const debtsSnapshot = await getDocs(debtsQuery);
-                    
                     const pendingDebts: Debt[] = debtsSnapshot.docs.map(doc => ({id: doc.id, ...doc.data()} as Debt));
                     
-                    if (pendingDebts.length > 0) {
-                        for (const debt of pendingDebts) {
-                            const debtAmountBs = debt.amountUSD * paymentData.exchangeRate;
-                            // Business Rule: A debt is only paid if the available funds cover the entire amount. No partial payments.
-                            if (availableFundsBs >= debtAmountBs) {
-                                availableFundsBs -= debtAmountBs;
-                                const debtRef = doc(db, "debts", debt.id);
-                                transaction.update(debtRef, { 
-                                    status: 'paid',
-                                    paidAmountUSD: debt.amountUSD,
-                                    paymentDate: paymentData.paymentDate,
-                                });
-                            } else {
-                                break; 
-                            }
+                    for (const debt of pendingDebts) {
+                        const debtAmountBs = debt.amountUSD * paymentData.exchangeRate;
+                        if (availableFundsBs >= debtAmountBs) {
+                            availableFundsBs -= debtAmountBs;
+                            const debtRef = doc(db, "debts", debt.id);
+                            transaction.update(debtRef, { 
+                                status: 'paid',
+                                paidAmountUSD: debt.amountUSD,
+                                paymentDate: paymentData.paymentDate,
+                            });
+                        } else {
+                            break; 
                         }
                     } 
                     
-                    // Whatever is left in availableFundsBs is the new balance. It remains in Bs.
                     transaction.update(ownerRef, { balance: availableFundsBs });
                 }
 
-                // Finally, mark the payment itself as approved.
                 transaction.update(paymentRef, { status: 'aprobado' });
             });
             
@@ -273,12 +266,11 @@ export default function VerifyPaymentsPage() {
         const property = (ownerData.properties && ownerData.properties.length > 0) ? ownerData.properties[0] : null;
         const ownerUnit = property ? `${property.street} - ${property.house}` : 'N/A';
 
-        // Find all debts paid with this specific payment
         const paidDebtsQuery = query(
             collection(db, "debts"),
             where("ownerId", "==", beneficiaryId),
             where("status", "==", "paid"),
-            where("paymentDate", "==", payment.paymentDate) // Exact match on timestamp
+            where("paymentDate", "==", payment.paymentDate)
         );
         const paidDebtsSnapshot = await getDocs(paidDebtsQuery);
         const paidDebts = paidDebtsSnapshot.docs.map(doc => doc.data() as Debt);
@@ -313,13 +305,11 @@ export default function VerifyPaymentsPage() {
                     const ownerDoc = await transaction.get(ownerRef);
                     if (!ownerDoc.exists()) throw new Error(`Propietario ${beneficiary.ownerId} no encontrado.`);
 
-                    // 1. Revert owner's balance
                     const currentBalance = ownerDoc.data().balance || 0;
                     const paymentAmountForBeneficiary = beneficiary.amount || 0;
                     const newBalance = currentBalance - paymentAmountForBeneficiary;
                     transaction.update(ownerRef, { balance: newBalance });
 
-                    // 2. Find and revert debts that were paid by this specific payment
                     const paidDebtsQuery = query(
                         collection(db, "debts"),
                         where("ownerId", "==", beneficiary.ownerId),
@@ -339,12 +329,10 @@ export default function VerifyPaymentsPage() {
                     });
                 }
 
-                // 3. Delete the payment itself
                 transaction.delete(paymentRef);
             });
             toast({ title: "Pago Revertido", description: "El pago y sus efectos han sido revertidos." });
         } else {
-            // If payment was pending or rejected, just delete it
             await deleteDoc(paymentRef);
             toast({ title: "Pago Eliminado", description: "El registro del pago ha sido eliminado." });
         }
@@ -371,7 +359,6 @@ export default function VerifyPaymentsPage() {
     const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 14;
 
-    // --- Header ---
     if (companyInfo.logo) {
         doc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25);
     }
@@ -385,11 +372,9 @@ export default function VerifyPaymentsPage() {
     
     doc.setLineWidth(0.5).line(margin, margin + 32, pageWidth - margin, margin + 32);
 
-    // --- Title ---
     doc.setFontSize(16).setFont('helvetica', 'bold').text("RECIBO DE PAGO", pageWidth / 2, margin + 45, { align: 'center' });
     doc.setFontSize(10).setFont('helvetica', 'normal').text(`N° de recibo: ${payment.id.substring(0, 10)}`, pageWidth - margin, margin + 50, { align: 'right' });
 
-    // --- Payment Details ---
     let startY = margin + 60;
     doc.setFontSize(10).text(`Nombre del residente: ${ownerName}`, margin, startY);
     startY += 6;
@@ -404,7 +389,6 @@ export default function VerifyPaymentsPage() {
     doc.text(`Fecha del pago: ${format(payment.paymentDate.toDate(), 'dd/MM/yyyy')}`, margin, startY);
     startY += 10;
     
-    // --- Concept Table ---
     const totalPaidUSD = paidDebts.reduce((sum, debt) => sum + (debt.paidAmountUSD || debt.amountUSD), 0);
     const conceptText = paidDebts.length > 0 
         ? `Pago cuota(s) ${companyInfo.name || 'Condominio'}: ${paidDebts.map(d => `${monthsLocale[d.month]} ${d.year}`).join(', ')}`
@@ -431,7 +415,6 @@ export default function VerifyPaymentsPage() {
 
     startY = (doc as any).lastAutoTable.finalY + 15;
 
-    // --- Footer ---
     doc.setFontSize(9).text('Este recibo confirma que su pago ha sido validado conforme a los términos establecidos por la comunidad.', margin, startY);
     startY += 8;
     doc.setFont('helvetica', 'bold').text(`Firma electrónica: '${companyInfo.name} - Condominio'`, margin, startY);
@@ -563,7 +546,6 @@ export default function VerifyPaymentsPage() {
             </CardContent>
         </Card>
 
-        {/* Receipt Preview Dialog */}
         <Dialog open={isReceiptPreviewOpen} onOpenChange={setIsReceiptPreviewOpen}>
             <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col">
                 <DialogHeader>
@@ -574,7 +556,6 @@ export default function VerifyPaymentsPage() {
                 </DialogHeader>
                 {receiptData && companyInfo && (
                      <div className="flex-grow overflow-y-auto pr-4 -mr-4 border rounded-md p-4 bg-white text-black font-sans text-xs">
-                        {/* Header */}
                         <div className="flex justify-between items-start mb-4">
                             <div className="flex items-center gap-4">
                                 {companyInfo.logo && <img src={companyInfo.logo} alt="Logo" className="w-20 h-20 object-contain"/>}
@@ -591,13 +572,11 @@ export default function VerifyPaymentsPage() {
                             </div>
                         </div>
                         <hr className="my-2 border-gray-400"/>
-                        {/* Title */}
                         <div className="text-center my-4">
                             <h2 className="font-bold text-lg">RECIBO DE PAGO</h2>
                             <p className="text-right text-xs">N° de recibo: {receiptData.payment.id.substring(0, 10)}</p>
                         </div>
-                        {/* Details */}
-                        <div className="mb-4 text-xs">
+                         <div className="mb-4 text-xs">
                              <p><strong>Nombre del residente:</strong> {receiptData.ownerName}</p>
                              <p><strong>Unidad:</strong> {receiptData.ownerUnit}</p>
                              <p><strong>Método de pago:</strong> {receiptData.payment.type}</p>
@@ -605,7 +584,6 @@ export default function VerifyPaymentsPage() {
                              <p><strong>N° de Referencia Bancaria:</strong> {receiptData.payment.reference}</p>
                              <p><strong>Fecha del pago:</strong> {format(receiptData.payment.paymentDate.toDate(), 'dd/MM/yyyy')}</p>
                         </div>
-                        {/* Concept Table */}
                         <Table className="text-xs">
                             <TableHeader>
                                 <TableRow className="bg-gray-700 text-white">
@@ -635,7 +613,6 @@ export default function VerifyPaymentsPage() {
                                 </TableRow>
                             </TableBody>
                         </Table>
-                        {/* Footer */}
                         <div className="mt-6 text-center text-gray-600 text-xs">
                              <p className="text-left">Este recibo confirma que su pago ha sido validado conforme a los términos establecidos por la comunidad.</p>
                              <p className="text-left font-bold mt-2">Firma electrónica: '{companyInfo.name} - Condominio'</p>
@@ -653,7 +630,6 @@ export default function VerifyPaymentsPage() {
             </DialogContent>
         </Dialog>
 
-        {/* Delete Confirmation Dialog */}
         <Dialog open={isDeleteConfirmationOpen} onOpenChange={setIsDeleteConfirmationOpen}>
             <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
@@ -671,3 +647,5 @@ export default function VerifyPaymentsPage() {
     </div>
   );
 }
+
+    
