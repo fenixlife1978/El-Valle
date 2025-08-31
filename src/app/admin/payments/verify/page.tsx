@@ -193,6 +193,7 @@ export default function VerifyPaymentsPage() {
                 }
                 const paymentData = paymentDoc.data() as FullPayment;
 
+                // Handle multiple beneficiaries if they exist
                 for (const beneficiary of paymentData.beneficiaries) {
                     const ownerRef = doc(db, "owners", beneficiary.ownerId);
                     const ownerDoc = await transaction.get(ownerRef);
@@ -203,22 +204,46 @@ export default function VerifyPaymentsPage() {
                     const ownerBalanceBs = ownerDoc.data().balance || 0;
                     let availableFundsBs = ownerBalanceBs + beneficiary.amount;
 
-                    if (paymentData.exchangeRate > 0) {
-                        const debtsQuery = query(
-                            collection(db, "debts"),
-                            where("ownerId", "==", beneficiary.ownerId),
-                            where("status", "==", "pending"),
-                            orderBy("year", "asc"),
-                            orderBy("month", "asc")
-                        );
+                    const debtsQuery = query(
+                        collection(db, "debts"),
+                        where("ownerId", "==", beneficiary.ownerId),
+                        where("status", "==", "pending"),
+                        orderBy("year", "asc"),
+                        orderBy("month", "asc")
+                    );
+                    const debtsSnapshot = await getDocs(debtsQuery);
+                    
+                    const paymentAmountInCents = Math.round(beneficiary.amount * 100);
+
+                    // **Exact Match Logic:** Check if payment amount exactly matches a single debt
+                    const matchingDebts = debtsSnapshot.docs.filter(doc => {
+                        const debt = doc.data() as Debt;
+                        const debtAmountInCents = Math.round((debt.amountUSD * paymentData.exchangeRate) * 100);
+                        return debtAmountInCents === paymentAmountInCents;
+                    });
+
+                    if (matchingDebts.length > 0) {
+                        // If there's an exact match, pay the oldest one and stop.
+                        const oldestMatchingDebtRef = matchingDebts[0].ref;
+                        const oldestMatchingDebtData = matchingDebts[0].data() as Debt;
                         
-                        const debtsSnapshot = await getDocs(debtsQuery);
-                        
+                        transaction.update(oldestMatchingDebtRef, {
+                            status: 'paid',
+                            paidAmountUSD: oldestMatchingDebtData.amountUSD,
+                            paymentDate: paymentData.paymentDate,
+                            paymentId: paymentData.id
+                        });
+                         // No change to owner's balance in this case
+                    } else {
+                        // **Standard Logic:** No exact match, so add to balance and pay down debts sequentially.
                         if (!debtsSnapshot.empty) {
                              for (const debtDoc of debtsSnapshot.docs) {
                                 const debt = debtDoc.data() as Debt;
                                 const debtAmountBs = debt.amountUSD * paymentData.exchangeRate;
-                                if (availableFundsBs >= debtAmountBs) {
+                                const debtAmountInCents = Math.round(debtAmountBs * 100);
+                                const availableFundsInCents = Math.round(availableFundsBs * 100);
+
+                                if (availableFundsInCents >= debtAmountInCents) {
                                     availableFundsBs -= debtAmountBs;
                                     transaction.update(debtDoc.ref, {
                                         status: 'paid',
@@ -231,8 +256,8 @@ export default function VerifyPaymentsPage() {
                                 }
                             }
                         }
+                        transaction.update(ownerRef, { balance: availableFundsBs });
                     }
-                    transaction.update(ownerRef, { balance: availableFundsBs });
                 }
                 
                 transaction.update(paymentRef, { status: 'aprobado' });
