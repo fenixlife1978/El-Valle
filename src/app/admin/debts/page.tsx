@@ -465,12 +465,12 @@ export default function DebtManagementPage() {
             let reconciledCount = 0;
 
             for (const ownerData of allOwnersWithBalance) {
-                // Pre-transaction validation
                 if (!ownerData || !ownerData.id) continue;
 
                 await runTransaction(db, async (transaction) => {
                     const ownerRef = doc(db, 'owners', ownerData.id);
                     const ownerDoc = await transaction.get(ownerRef);
+                    
                     if (!ownerDoc.exists()) return;
 
                     let availableBalance = ownerDoc.data().balance || 0;
@@ -484,6 +484,7 @@ export default function DebtManagementPage() {
                         orderBy('month', 'asc')
                     );
                     const debtsSnapshot = await transaction.get(debtsQuery);
+                    
                     if (debtsSnapshot.empty) return;
 
                     const reconciliationDate = Timestamp.now();
