@@ -102,32 +102,109 @@ export default function DebtManagementPage() {
     
     const { toast } = useToast();
 
-    const handleReconcileAll = useCallback(async (ownersToReconcile: Owner[], currentActiveRate: number) => {
-        if (currentActiveRate === 0) {
+    // Fetch All Owners and initial data
+    useEffect(() => {
+        setLoading(true);
+
+        const fetchInitialSettings = async () => {
+             try {
+                const settingsRef = doc(db, 'config', 'mainSettings');
+                const settingsSnap = await getDoc(settingsRef);
+                if (settingsSnap.exists()) {
+                    const settings = settingsSnap.data();
+                    setCompanyInfo(settings.companyInfo as CompanyInfo);
+                    const rates = (settings.exchangeRates || []);
+                    const activeRateObj = rates.find((r: any) => r.active);
+                    if (activeRateObj) {
+                        setActiveRate(activeRateObj.rate);
+                    } else if (rates.length > 0) {
+                        const sortedRates = [...rates].sort((a:any,b:any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                        setActiveRate(sortedRates[0].rate);
+                    }
+                }
+            } catch (error) {
+                console.error("Error fetching settings:", error);
+                toast({ variant: 'destructive', title: 'Error de Carga', description: 'No se pudieron cargar datos críticos.' });
+            }
+        };
+
+        const ownersQuery = query(collection(db, "owners"));
+        const ownersUnsubscribe = onSnapshot(ownersQuery, async (snapshot) => {
+            const ownersData: Owner[] = snapshot.docs.map(doc => {
+                const data = doc.data();
+                return { 
+                    id: doc.id, 
+                    name: data.name, 
+                    house: (data.properties && data.properties.length > 0) ? data.properties[0].house : data.house,
+                    street: (data.properties && data.properties.length > 0) ? data.properties[0].street : data.street,
+                    balance: data.balance || 0,
+                    pendingDebtUSD: 0, // Will be calculated by the debts listener
+                    properties: data.properties,
+                };
+            });
+            setOwners(ownersData);
+            setLoading(false);
+        }, (error) => {
+            console.error("Error fetching owners:", error);
+            toast({ variant: 'destructive', title: 'Error de Carga', description: 'No se pudieron cargar los propietarios.' });
+            setLoading(false);
+        });
+        
+        fetchInitialSettings();
+
+        return () => ownersUnsubscribe();
+
+    }, [toast]);
+
+    // REAL-TIME DEBT LISTENER - This is the key fix for stale data
+    useEffect(() => {
+        const debtsQuery = query(collection(db, "debts"), where("status", "==", "pending"));
+        
+        const unsubscribe = onSnapshot(debtsQuery, (snapshot) => {
+            const debtsByOwner: { [key: string]: number } = {};
+            snapshot.forEach(doc => {
+                const debt = doc.data();
+                debtsByOwner[debt.ownerId] = (debtsByOwner[debt.ownerId] || 0) + debt.amountUSD;
+            });
+            
+            setOwners(prevOwners => prevOwners.map(owner => ({
+                ...owner,
+                pendingDebtUSD: debtsByOwner[owner.id] || 0
+            })));
+
+        }, (error) => {
+            console.error("Error listening to debts:", error);
+            toast({ variant: 'destructive', title: 'Error de Sincronización', description: 'No se pudo actualizar el estado de las deudas en tiempo real.' });
+        });
+
+        return () => unsubscribe();
+    }, [toast]);
+
+    const handleReconcileAll = useCallback(async () => {
+        if (activeRate === 0) {
             toast({ variant: 'destructive', title: 'Error de Configuración', description: 'Tasa de cambio no disponible. No se puede conciliar.' });
             return;
         }
     
         setIsReconciling(true);
-        toast({ title: 'Iniciando conciliación automática...', description: 'Este proceso puede tardar unos minutos.' });
+        toast({ title: 'Iniciando conciliación...', description: 'Este proceso puede tardar unos minutos.' });
     
         try {
             await runTransaction(db, async (transaction) => {
+                const ownersWithBalanceQuery = query(collection(db, 'owners'), where('balance', '>', 0));
+                const ownersWithBalanceSnapshot = await getDocs(ownersWithBalanceQuery);
+    
+                if (ownersWithBalanceSnapshot.empty) {
+                    toast({ title: 'Sin Conciliaciones Necesarias', description: 'Ningún propietario tiene saldo a favor para conciliar.' });
+                    return;
+                }
+    
                 let reconciledCount = 0;
     
-                for (const ownerData of ownersToReconcile) {
-                    // Skip owners with no balance or invalid data
-                    if (!ownerData || !ownerData.id || !ownerData.balance || ownerData.balance <= 0) {
-                        continue;
-                    }
-    
-                    const ownerRef = doc(db, 'owners', ownerData.id);
-                    const freshOwnerDoc = await transaction.get(ownerRef);
-    
-                    if (!freshOwnerDoc.exists()) continue;
-    
-                    let availableBalance = freshOwnerDoc.data().balance || 0;
-                    if (availableBalance <= 0) continue;
+                for (const ownerDoc of ownersWithBalanceSnapshot.docs) {
+                    const ownerData = { id: ownerDoc.id, ...ownerDoc.data() } as Owner;
+                    const ownerRef = ownerDoc.ref;
+                    let availableBalance = ownerData.balance;
     
                     const debtsQuery = query(
                         collection(db, 'debts'),
@@ -136,17 +213,16 @@ export default function DebtManagementPage() {
                         orderBy('year', 'asc'),
                         orderBy('month', 'asc')
                     );
-                    const debtsSnapshot = await getDocs(debtsQuery); // Use getDocs, not transaction.get
+                    const debtsSnapshot = await getDocs(debtsQuery);
     
                     if (debtsSnapshot.empty) continue;
     
                     const reconciliationDate = Timestamp.now();
                     let totalPaidInTx = 0;
-                    let debtsUpdated = false;
     
                     for (const debtDoc of debtsSnapshot.docs) {
                         const debt = { id: debtDoc.id, ...debtDoc.data() } as Debt;
-                        const debtAmountBs = debt.amountUSD * currentActiveRate;
+                        const debtAmountBs = debt.amountUSD * activeRate;
     
                         if (availableBalance >= debtAmountBs) {
                             availableBalance -= debtAmountBs;
@@ -157,13 +233,12 @@ export default function DebtManagementPage() {
                                 paidAmountUSD: debt.amountUSD,
                                 paymentDate: reconciliationDate
                             });
-                            debtsUpdated = true;
                         } else {
-                            break;
+                            break; 
                         }
                     }
     
-                    if (debtsUpdated) {
+                    if (totalPaidInTx > 0) {
                         transaction.update(ownerRef, { balance: availableBalance });
     
                         const property = (ownerData.properties && ownerData.properties.length > 0)
@@ -175,7 +250,7 @@ export default function DebtManagementPage() {
                             reportedBy: 'admin',
                             beneficiaries: [{ ownerId: ownerData.id, house: property?.house || 'N/A', street: property?.street || 'N/A', amount: totalPaidInTx }],
                             totalAmount: totalPaidInTx,
-                            exchangeRate: currentActiveRate,
+                            exchangeRate: activeRate,
                             paymentDate: reconciliationDate,
                             reportedAt: reconciliationDate,
                             paymentMethod: 'conciliacion',
@@ -194,8 +269,6 @@ export default function DebtManagementPage() {
                         description: `Se procesaron las cuentas de ${reconciledCount} propietarios.`,
                         className: 'bg-green-100 border-green-400 text-green-800'
                     });
-                } else {
-                    toast({ title: 'Sin Conciliaciones Necesarias', description: 'Ningún propietario cumplía los criterios para la conciliación automática.' });
                 }
             });
     
@@ -206,80 +279,8 @@ export default function DebtManagementPage() {
         } finally {
             setIsReconciling(false);
         }
-    }, [toast]);
+    }, [toast, activeRate]);
 
-
-    // Fetch All Owners and their debts
-    useEffect(() => {
-        setLoading(true);
-
-        const fetchSettingsAndDebts = async () => {
-             try {
-                const settingsRef = doc(db, 'config', 'mainSettings');
-                const settingsSnap = await getDoc(settingsRef);
-                let currentActiveRate = 0;
-                if (settingsSnap.exists()) {
-                    const settings = settingsSnap.data();
-                    setCompanyInfo(settings.companyInfo as CompanyInfo);
-                    const rates = (settings.exchangeRates || []);
-                    const activeRateObj = rates.find((r: any) => r.active);
-                    if (activeRateObj) {
-                        currentActiveRate = activeRateObj.rate;
-                    } else if (rates.length > 0) {
-                        const sortedRates = [...rates].sort((a:any,b:any) => new Date(b.date).getTime() - new Date(a.date).getTime());
-                        currentActiveRate = sortedRates[0].rate;
-                    }
-                }
-                setActiveRate(currentActiveRate);
-
-                const pendingDebtsQuery = query(collection(db, "debts"), where("status", "==", "pending"));
-                const pendingDebtsSnapshot = await getDocs(pendingDebtsQuery);
-                const debtsByOwner: { [key: string]: number } = {};
-                pendingDebtsSnapshot.forEach(doc => {
-                    const debt = doc.data();
-                    debtsByOwner[debt.ownerId] = (debtsByOwner[debt.ownerId] || 0) + debt.amountUSD;
-                });
-                return {debtsByOwner, currentActiveRate};
-
-            } catch (error) {
-                console.error("Error fetching settings or debts:", error);
-                toast({ variant: 'destructive', title: 'Error de Carga', description: 'No se pudieron cargar datos críticos.' });
-                return {debtsByOwner: {}, currentActiveRate: 0};
-            }
-        };
-
-        const ownersQuery = query(collection(db, "owners"));
-        const ownersUnsubscribe = onSnapshot(ownersQuery, async (snapshot) => {
-            const { debtsByOwner, currentActiveRate } = await fetchSettingsAndDebts();
-            const ownersData: Owner[] = snapshot.docs.map(doc => {
-                const data = doc.data();
-                return { 
-                    id: doc.id, 
-                    name: data.name, 
-                    house: (data.properties && data.properties.length > 0) ? data.properties[0].house : data.house,
-                    street: (data.properties && data.properties.length > 0) ? data.properties[0].street : data.street,
-                    balance: data.balance || 0,
-                    pendingDebtUSD: debtsByOwner[doc.id] || 0,
-                    properties: data.properties,
-                };
-            });
-            setOwners(ownersData);
-            setLoading(false);
-
-            const ownersWithBalance = ownersData.filter(o => o.balance > 0);
-            if (ownersWithBalance.length > 0) {
-                await handleReconcileAll(ownersWithBalance, currentActiveRate);
-            }
-
-        }, (error) => {
-            console.error("Error fetching owners:", error);
-            toast({ variant: 'destructive', title: 'Error de Carga', description: 'No se pudieron cargar los propietarios.' });
-            setLoading(false);
-        });
-        
-        return () => ownersUnsubscribe();
-
-    }, [toast, handleReconcileAll]);
     
     // Filter owners based on search term
     const filteredOwners = useMemo(() => {
@@ -381,7 +382,7 @@ export default function DebtManagementPage() {
                         const newBalanceBs = currentBalanceBs + debtAmountBs;
                         transaction.update(ownerRef, { balance: newBalanceBs });
                      } else {
-                        throw "No hay una tasa de cambio activa para recalcular el saldo.";
+                        toast({ variant: 'destructive', title: 'Advertencia', description: 'No hay tasa activa. No se pudo recalcular el saldo, pero la deuda será eliminada.' });
                      }
                 }
                 
@@ -586,7 +587,7 @@ export default function DebtManagementPage() {
                         <div className="flex justify-between items-center gap-2 flex-wrap">
                             <CardTitle>Lista de Propietarios</CardTitle>
                             <div className="flex gap-2">
-                                <Button onClick={() => handleReconcileAll(owners.filter(o => o.balance > 0), activeRate)} variant="outline" disabled={isReconciling}>
+                                <Button onClick={handleReconcileAll} variant="outline" disabled={isReconciling}>
                                     {isReconciling ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <FileCog className="mr-2 h-4 w-4" />}
                                     Conciliar Manualmente
                                 </Button>
