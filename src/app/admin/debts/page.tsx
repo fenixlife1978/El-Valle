@@ -28,6 +28,7 @@ type Owner = {
     street: string;
     balance: number;
     pendingDebtUSD: number;
+    properties?: { street: string, house: string }[];
 };
 
 type Debt = {
@@ -153,6 +154,7 @@ export default function DebtManagementPage() {
                         street: (data.properties && data.properties.length > 0) ? data.properties[0].street : data.street,
                         balance: data.balance || 0,
                         pendingDebtUSD: debtsByOwner[doc.id] || 0,
+                        properties: data.properties,
                     };
                 });
                 setOwners(ownersData);
@@ -455,25 +457,36 @@ export default function DebtManagementPage() {
     const handleReconcileAll = async () => {
         setIsReconciling(true);
         toast({ title: 'Iniciando conciliación...', description: 'Este proceso puede tardar unos minutos.' });
-    
+
         try {
             if (activeRate === 0) throw new Error("Tasa de cambio no disponible.");
-    
-            let reconciledCount = 0;
-            
+
+            // Phase 1: Collect all necessary data outside the transaction
+            const ownersWithBalanceQuery = query(collection(db, 'owners'), where('balance', '>', 0));
+            const ownersSnapshot = await getDocs(ownersWithBalanceQuery);
+            const ownersToReconcile = ownersSnapshot.docs
+                .map(doc => ({ id: doc.id, ...doc.data() } as Owner))
+                .filter(owner => owner && owner.id); // Validate owner data
+
+            if (ownersToReconcile.length === 0) {
+                toast({ title: 'Sin Acción Requerida', description: 'No se encontraron propietarios con saldo a favor para conciliar.' });
+                setIsReconciling(false);
+                return;
+            }
+
+            // Phase 2: Run the transaction with pre-validated data
             await runTransaction(db, async (transaction) => {
-                const ownersWithBalanceQuery = query(collection(db, 'owners'), where('balance', '>', 0));
-                const ownersSnapshot = await transaction.get(ownersWithBalanceQuery);
-    
-                if (ownersSnapshot.empty) return;
-    
-                for (const ownerDoc of ownersSnapshot.docs) {
-                    const ownerData = { id: ownerDoc.id, ...ownerDoc.data() } as Owner;
-                    const ownerRef = ownerDoc.ref;
-    
-                    let availableBalance = ownerData.balance || 0;
+                let reconciledCount = 0;
+
+                for (const ownerData of ownersToReconcile) {
+                    const ownerRef = doc(db, 'owners', ownerData.id);
+                    // We need to read the latest balance inside the transaction to avoid race conditions
+                    const freshOwnerDoc = await transaction.get(ownerRef);
+                    if (!freshOwnerDoc.exists()) continue;
+
+                    let availableBalance = freshOwnerDoc.data().balance || 0;
                     if (availableBalance <= 0) continue;
-    
+
                     const debtsQuery = query(
                         collection(db, 'debts'),
                         where('ownerId', '==', ownerData.id),
@@ -481,36 +494,37 @@ export default function DebtManagementPage() {
                         orderBy('year', 'asc'),
                         orderBy('month', 'asc')
                     );
+                    // Debts must be fetched inside the transaction
                     const debtsSnapshot = await getDocs(debtsQuery);
-    
                     if (debtsSnapshot.empty) continue;
-    
+                    
                     const reconciliationDate = Timestamp.now();
-                    const debtsToUpdate = [];
                     let totalPaidInTx = 0;
-    
+
                     for (const debtDoc of debtsSnapshot.docs) {
                         const debt = { id: debtDoc.id, ...debtDoc.data() } as Debt;
                         const debtAmountBs = debt.amountUSD * activeRate;
-    
+
                         if (availableBalance >= debtAmountBs) {
                             availableBalance -= debtAmountBs;
                             totalPaidInTx += debtAmountBs;
-                            debtsToUpdate.push({
-                                ref: debtDoc.ref,
-                                data: { status: 'paid', paidAmountUSD: debt.amountUSD, paymentDate: reconciliationDate }
+                            transaction.update(debtDoc.ref, { 
+                                status: 'paid', 
+                                paidAmountUSD: debt.amountUSD, 
+                                paymentDate: reconciliationDate 
                             });
                         } else {
-                            break;
+                            break; 
                         }
                     }
-    
-                    if (debtsToUpdate.length > 0) {
-                        debtsToUpdate.forEach(d => transaction.update(d.ref, d.data));
+
+                    if (totalPaidInTx > 0) {
                         transaction.update(ownerRef, { balance: availableBalance });
-    
+
+                        const property = (ownerData.properties && ownerData.properties.length > 0) 
+                            ? ownerData.properties[0] 
+                            : { street: ownerData.street, house: ownerData.house };
                         const paymentRef = doc(collection(db, "payments"));
-                        const property = (ownerData.properties && ownerData.properties.length > 0) ? ownerData.properties[0] : { street: ownerData.street, house: ownerData.house };
                         transaction.set(paymentRef, {
                             reportedBy: 'admin',
                             beneficiaries: [{ ownerId: ownerData.id, house: property?.house || 'N/A', street: property?.street || 'N/A', amount: totalPaidInTx }],
@@ -527,14 +541,17 @@ export default function DebtManagementPage() {
                         reconciledCount++;
                     }
                 }
+                 if(reconciledCount > 0){
+                    toast({
+                        title: 'Conciliación Completada',
+                        description: `Se procesaron las cuentas de ${reconciledCount} propietarios.`,
+                        className: 'bg-green-100 border-green-400 text-green-800'
+                    });
+                } else {
+                     toast({ title: 'Sin Conciliaciones', description: 'Ningún propietario cumplía los criterios para la conciliación automática.' });
+                }
             });
-    
-            toast({
-                title: 'Conciliación Completada',
-                description: `Se procesaron las cuentas de ${reconciledCount} propietarios.`,
-                className: 'bg-green-100 border-green-400 text-green-800'
-            });
-    
+
         } catch (error) {
             console.error("Error during reconciliation: ", error);
             const errorMessage = error instanceof Error ? error.message : "Ocurrió un error desconocido.";
