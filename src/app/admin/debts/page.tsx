@@ -464,10 +464,9 @@ export default function DebtManagementPage() {
             const allOwnersWithBalance = ownersSnapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as Omit<Owner, 'id'>) }));
             let reconciledCount = 0;
             
-            for (const owner of allOwnersWithBalance) {
+            for (const ownerData of allOwnersWithBalance) {
                 await runTransaction(db, async (transaction) => {
-                    const ownerRef = doc(db, 'owners', owner.id);
-                    // Re-read owner doc inside transaction to get latest balance
+                    const ownerRef = doc(db, 'owners', ownerData.id);
                     const ownerDoc = await transaction.get(ownerRef);
                     if (!ownerDoc.exists()) return;
     
@@ -476,7 +475,7 @@ export default function DebtManagementPage() {
     
                     const debtsQuery = query(
                         collection(db, 'debts'),
-                        where('ownerId', '==', owner.id),
+                        where('ownerId', '==', ownerData.id),
                         where('status', '==', 'pending'),
                         orderBy('year', 'asc'),
                         orderBy('month', 'asc')
@@ -509,11 +508,11 @@ export default function DebtManagementPage() {
                         transaction.update(ownerRef, { balance: availableBalance });
     
                         const paymentRef = doc(collection(db, "payments"));
-                        const ownerData = ownerDoc.data();
-                        const property = (ownerData.properties && ownerData.properties.length > 0) ? ownerData.properties[0] : { street: ownerData.street, house: ownerData.house };
+                        const currentOwnerData = ownerDoc.data();
+                        const property = (currentOwnerData.properties && currentOwnerData.properties.length > 0) ? currentOwnerData.properties[0] : { street: currentOwnerData.street, house: currentOwnerData.house };
                         transaction.set(paymentRef, {
                             reportedBy: 'admin',
-                            beneficiaries: [{ ownerId: owner.id, house: property?.house || 'N/A', street: property?.street || 'N/A', amount: totalPaidInTx }],
+                            beneficiaries: [{ ownerId: ownerData.id, house: property?.house || 'N/A', street: property?.street || 'N/A', amount: totalPaidInTx }],
                             totalAmount: totalPaidInTx,
                             exchangeRate: activeRate,
                             paymentDate: reconciliationDate,
