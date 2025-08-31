@@ -191,7 +191,7 @@ export default function VerifyPaymentsPage() {
                 if (!paymentDoc.exists() || paymentDoc.data().status === 'aprobado') {
                     throw new Error("El pago no existe o ya fue aprobado.");
                 }
-                const paymentData = paymentDoc.data() as FullPayment;
+                const paymentData = { id: paymentDoc.id, ...paymentDoc.data() } as FullPayment;
 
                 // Handle multiple beneficiaries if they exist
                 for (const beneficiary of paymentData.beneficiaries) {
@@ -200,10 +200,7 @@ export default function VerifyPaymentsPage() {
                     if (!ownerDoc.exists()) {
                         throw new Error(`Propietario con ID ${beneficiary.ownerId} no encontrado.`);
                     }
-
-                    const ownerBalanceBs = ownerDoc.data().balance || 0;
-                    let availableFundsBs = ownerBalanceBs + beneficiary.amount;
-
+                    
                     const debtsQuery = query(
                         collection(db, "debts"),
                         where("ownerId", "==", beneficiary.ownerId),
@@ -236,6 +233,8 @@ export default function VerifyPaymentsPage() {
                          // No change to owner's balance in this case
                     } else {
                         // **Standard Logic:** No exact match, so add to balance and pay down debts sequentially.
+                        let availableFundsBs = (ownerDoc.data().balance || 0) + beneficiary.amount;
+
                         if (!debtsSnapshot.empty) {
                              for (const debtDoc of debtsSnapshot.docs) {
                                 const debt = debtDoc.data() as Debt;
@@ -302,6 +301,16 @@ export default function VerifyPaymentsPage() {
         const paidDebtsSnapshot = await getDocs(paidDebtsQuery);
         const paidDebts = paidDebtsSnapshot.docs.map(doc => doc.data() as Debt);
         
+        // If no debts were directly paid by this transaction (e.g., it was only an advance or balance payment)
+        // do not show the receipt preview as there's no clear "concept" to display.
+        if (paidDebts.length === 0) {
+            toast({
+                title: 'Información',
+                description: 'Este pago fue un abono a saldo y no liquidó deudas directamente. No se genera recibo detallado.',
+            });
+            return;
+        }
+
         setReceiptData({ payment, ownerName, ownerUnit, paidDebts });
         setIsReceiptPreviewOpen(true);
     } catch (error) {
