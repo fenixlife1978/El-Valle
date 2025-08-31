@@ -15,7 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import { collection, query, onSnapshot, where, doc, getDoc, writeBatch, updateDoc, deleteDoc, runTransaction, Timestamp, getDocs, addDoc, orderBy, setDoc, limit, deleteField } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Badge } from '@/components/ui/badge';
-import { differenceInCalendarMonths, format, addMonths } from 'date-fns';
+import { differenceInCalendarMonths, format, addMonths, startOfMonth } from 'date-fns';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
@@ -194,13 +194,13 @@ export default function DebtManagementPage() {
     }, [toast]);
 
      const handleReconcileAll = useCallback(async () => {
-        if (activeRate <= 0) {
-            toast({ variant: 'destructive', title: 'Error de Configuración', description: 'Tasa de cambio no disponible o inválida. No se puede conciliar.' });
+        if (activeRate <= 0 || condoFee <= 0) {
+            toast({ variant: 'destructive', title: 'Error de Configuración', description: 'Tasa de cambio y cuota de condominio deben estar configuradas. No se puede conciliar.' });
             return;
         }
 
         setIsReconciling(true);
-        toast({ title: 'Iniciando conciliación...', description: 'Este proceso puede tardar unos minutos.' });
+        toast({ title: 'Iniciando conciliación...', description: 'Procesando deudas y saldos a favor. Esto puede tardar.' });
         
         const ownersWithBalance = owners.filter(o => Number(o.balance) > 0);
 
@@ -212,6 +212,7 @@ export default function DebtManagementPage() {
         
         let reconciledCount = 0;
         let processedOwners = 0;
+        const condoFeeInBs = condoFee * activeRate;
 
         for (const owner of ownersWithBalance) {
             processedOwners++;
@@ -224,6 +225,7 @@ export default function DebtManagementPage() {
                     let availableBalance = Number(ownerDoc.data().balance || 0);
                     if (availableBalance <= 0) return;
 
+                    // --- Phase 1: Pay off existing pending debts ---
                     const debtsQuery = query(
                         collection(db, 'debts'),
                         where('ownerId', '==', owner.id),
@@ -233,51 +235,103 @@ export default function DebtManagementPage() {
                     );
                     
                     const debtsSnapshot = await getDocs(debtsQuery);
-                    if (debtsSnapshot.empty) return;
-                    
                     let balanceChanged = false;
 
-                    for (const debtDoc of debtsSnapshot.docs) {
-                        const debt = { id: debtDoc.id, ...debtDoc.data() } as Debt;
-                        const debtAmountBs = debt.amountUSD * activeRate;
-                        
-                        const balanceInCents = Math.round(availableBalance * 100);
-                        const debtInCents = Math.round(debtAmountBs * 100);
-    
-                        if (balanceInCents >= debtInCents) {
-                            availableBalance -= debtAmountBs;
+                    if (!debtsSnapshot.empty) {
+                        for (const debtDoc of debtsSnapshot.docs) {
+                            const debt = { id: debtDoc.id, ...debtDoc.data() } as Debt;
+                            const debtAmountBs = debt.amountUSD * activeRate;
                             
-                            const paymentRef = doc(collection(db, "payments"));
-                            transaction.set(paymentRef, {
-                                reportedBy: owner.id,
-                                beneficiaries: [{ ownerId: owner.id, house: owner.house, street: owner.street, amount: debtAmountBs }],
-                                totalAmount: debtAmountBs,
-                                exchangeRate: activeRate,
-                                paymentDate: Timestamp.now(),
-                                reportedAt: Timestamp.now(),
-                                paymentMethod: 'conciliacion',
-                                bank: 'Sistema (Saldo a Favor)',
-                                reference: `CONC-${debt.year}-${debt.month}`,
-                                status: 'aprobado',
-                                observations: `Deuda ${debt.description} ${debt.year}/${debt.month} pagada por conciliación.`,
-                            });
+                            if (Math.round(availableBalance * 100) >= Math.round(debtAmountBs * 100)) {
+                                availableBalance -= debtAmountBs;
+                                
+                                const paymentRef = doc(collection(db, "payments"));
+                                transaction.set(paymentRef, {
+                                    reportedBy: owner.id,
+                                    beneficiaries: [{ ownerId: owner.id, house: owner.house, street: owner.street, amount: debtAmountBs }],
+                                    totalAmount: debtAmountBs,
+                                    exchangeRate: activeRate,
+                                    paymentDate: Timestamp.now(),
+                                    reportedAt: Timestamp.now(),
+                                    paymentMethod: 'conciliacion',
+                                    bank: 'Sistema (Saldo a Favor)',
+                                    reference: `CONC-${debt.year}-${debt.month}`,
+                                    status: 'aprobado',
+                                    observations: `Deuda ${debt.description} ${debt.year}/${debt.month} pagada por conciliación.`,
+                                });
 
-                            transaction.update(debtDoc.ref, {
-                                status: 'paid',
-                                paidAmountUSD: debt.amountUSD,
-                                paymentDate: Timestamp.now(),
-                                paymentId: paymentRef.id
-                            });
+                                transaction.update(debtDoc.ref, {
+                                    status: 'paid',
+                                    paidAmountUSD: debt.amountUSD,
+                                    paymentDate: Timestamp.now(),
+                                    paymentId: paymentRef.id
+                                });
 
-                            balanceChanged = true;
-                        } else {
-                            break; 
+                                balanceChanged = true;
+                            } else {
+                                break; 
+                            }
+                        }
+                    }
+
+                    // --- Phase 2: Proactively pay future fees with remaining balance ---
+                    if (Math.round(availableBalance * 100) >= Math.round(condoFeeInBs * 100)) {
+                        const allExistingDebtsQuery = query(collection(db, 'debts'), where('ownerId', '==', owner.id));
+                        const allExistingDebtsSnap = await getDocs(allExistingDebtsQuery);
+                        const existingDebtPeriods = new Set(allExistingDebtsSnap.docs.map(d => `${d.data().year}-${d.data().month}`));
+
+                        const startDate = startOfMonth(new Date());
+
+                        for (let i = 0; i < 12; i++) { // Look ahead 12 months
+                            const futureDebtDate = addMonths(startDate, i);
+                            const futureYear = futureDebtDate.getFullYear();
+                            const futureMonth = futureDebtDate.getMonth() + 1;
+                            const periodKey = `${futureYear}-${futureMonth}`;
+                            
+                            if (existingDebtPeriods.has(periodKey)) continue; // Skip if debt already exists
+
+                            if (Math.round(availableBalance * 100) >= Math.round(condoFeeInBs * 100)) {
+                                availableBalance -= condoFeeInBs;
+                                const paymentDate = Timestamp.now();
+                                const paymentRef = doc(collection(db, 'payments'));
+                                transaction.set(paymentRef, {
+                                    reportedBy: owner.id,
+                                    beneficiaries: [{ ownerId: owner.id, house: owner.house, street: owner.street, amount: condoFeeInBs }],
+                                    totalAmount: condoFeeInBs,
+                                    exchangeRate: activeRate,
+                                    paymentDate: paymentDate,
+                                    reportedAt: paymentDate,
+                                    paymentMethod: 'conciliacion',
+                                    bank: 'Sistema (Adelanto por Saldo)',
+                                    reference: `CONC-ADV-${futureYear}-${futureMonth}`,
+                                    status: 'aprobado',
+                                    observations: `Cuota de ${months.find(m=>m.value === futureMonth)?.label} ${futureYear} pagada por adelanto automático.`
+                                });
+
+                                const debtRef = doc(collection(db, 'debts'));
+                                transaction.set(debtRef, {
+                                    ownerId: owner.id,
+                                    year: futureYear,
+                                    month: futureMonth,
+                                    amountUSD: condoFee,
+                                    description: "Cuota de Condominio (Pagada por adelantado)",
+                                    status: 'paid',
+                                    paidAmountUSD: condoFee,
+                                    paymentDate: paymentDate,
+                                    paymentId: paymentRef.id,
+                                });
+
+                                balanceChanged = true;
+
+                            } else {
+                                break;
+                            }
                         }
                     }
     
                     if (balanceChanged) {
                         transaction.update(ownerRef, { balance: availableBalance });
-                        reconciledCount++;
+                        if(!reconciledCount) reconciledCount++;
                     }
                 });
             } catch (error) {
@@ -292,11 +346,11 @@ export default function DebtManagementPage() {
                 className: 'bg-green-100 border-green-400 text-green-800'
             });
         } else {
-             toast({ title: 'Sin Conciliaciones Necesarias', description: 'Ningún propietario tiene saldo suficiente para cubrir sus deudas pendientes.' });
+             toast({ title: 'Sin Conciliaciones Necesarias', description: 'Ningún propietario tiene saldo suficiente para cubrir deudas pendientes o adelantar cuotas.' });
         }
 
         setIsReconciling(false);
-    }, [toast, activeRate, owners]);
+    }, [toast, activeRate, condoFee, owners]);
 
     
     const handleGenerateMonthlyDebt = async () => {
