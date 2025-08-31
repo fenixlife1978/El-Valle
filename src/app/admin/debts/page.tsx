@@ -180,31 +180,28 @@ export default function DebtManagementPage() {
         return () => unsubscribe();
     }, [toast]);
 
-    const handleReconcileAll = useCallback(async () => {
-        if (activeRate === 0) {
-            toast({ variant: 'destructive', title: 'Error de Configuración', description: 'Tasa de cambio no disponible. No se puede conciliar.' });
+     const handleReconcileAll = useCallback(async () => {
+        if (activeRate <= 0) {
+            toast({ variant: 'destructive', title: 'Error de Configuración', description: 'Tasa de cambio no disponible o inválida. No se puede conciliar.' });
             return;
         }
-    
+
         setIsReconciling(true);
         toast({ title: 'Iniciando conciliación...', description: 'Este proceso puede tardar unos minutos.' });
-    
+
         try {
             await runTransaction(db, async (transaction) => {
                 const allOwnersQuery = collection(db, 'owners');
                 const allOwnersSnapshot = await getDocs(allOwnersQuery);
-    
                 let reconciledCount = 0;
-    
+
                 for (const ownerDoc of allOwnersSnapshot.docs) {
                     const ownerData = { id: ownerDoc.id, ...ownerDoc.data() };
                     const ownerRef = ownerDoc.ref;
                     let availableBalance = Number(ownerData.balance || 0);
 
-                    if (availableBalance <= 0) {
-                        continue;
-                    }
-    
+                    if (availableBalance <= 0) continue;
+
                     const debtsQuery = query(
                         collection(db, 'debts'),
                         where('ownerId', '==', ownerData.id),
@@ -214,14 +211,11 @@ export default function DebtManagementPage() {
                     );
                     
                     const debtsSnapshot = await getDocs(debtsQuery);
-    
-                    if (debtsSnapshot.empty) {
-                        continue;
-                    }
-
+                    if (debtsSnapshot.empty) continue;
+                    
                     const reconciliationDate = Timestamp.now();
                     let totalPaidInTx = 0;
-    
+
                     for (const debtDoc of debtsSnapshot.docs) {
                         const debt = { id: debtDoc.id, ...debtDoc.data() } as Debt;
                         const debtAmountBs = debt.amountUSD * activeRate;
@@ -249,7 +243,7 @@ export default function DebtManagementPage() {
                         
                         const paymentRef = doc(collection(db, "payments"));
                         transaction.set(paymentRef, {
-                            reportedBy: 'admin',
+                            reportedBy: ownerData.id,
                             beneficiaries: [{ ownerId: ownerData.id, house: property?.house || 'N/A', street: property?.street || 'N/A', amount: totalPaidInTx }],
                             totalAmount: totalPaidInTx,
                             exchangeRate: activeRate,
@@ -382,7 +376,7 @@ export default function DebtManagementPage() {
                 if (debtToDelete.status === 'paid') {
                      const currentBalanceBs = ownerDoc.data().balance || 0;
                      if(activeRate > 0) {
-                        const debtAmountBs = debtToDelete.amountUSD * activeRate;
+                        const debtAmountBs = (debtToDelete.paidAmountUSD || debtToDelete.amountUSD) * activeRate;
                         const newBalanceBs = currentBalanceBs + debtAmountBs;
                         transaction.update(ownerRef, { balance: newBalanceBs });
                      } else {
@@ -424,29 +418,21 @@ export default function DebtManagementPage() {
         const monthsToGenerate = differenceInCalendarMonths(endDate, startDate) + 1;
     
         try {
-            const ownerRef = doc(db, "owners", selectedOwner.id);
-            if(activeRate === 0) throw "No hay una tasa de cambio activa o registrada configurada.";
-
+            if (activeRate <= 0) throw "No hay una tasa de cambio activa o registrada configurada.";
+    
             await runTransaction(db, async (transaction) => {
+                const ownerRef = doc(db, "owners", selectedOwner.id);
                 const ownerDoc = await transaction.get(ownerRef);
                 if (!ownerDoc.exists()) throw "El documento del propietario no existe.";
-                
+    
                 let currentBalanceBs = ownerDoc.data().balance || 0;
+                const ownerProperties = ownerDoc.data().properties || [{ street: ownerDoc.data().street, house: ownerDoc.data().house }];
     
                 for (let i = 0; i < monthsToGenerate; i++) {
                     const debtDate = addMonths(startDate, i);
                     const debtYear = debtDate.getFullYear();
                     const debtMonth = debtDate.getMonth() + 1;
                     
-                    const debtData: any = {
-                        ownerId: selectedOwner.id,
-                        year: debtYear,
-                        month: debtMonth,
-                        amountUSD: amountUSD,
-                        description: description,
-                        status: 'pending'
-                    };
-
                     const existingDebtQuery = query(collection(db, 'debts'), 
                         where('ownerId', '==', selectedOwner.id),
                         where('year', '==', debtYear),
@@ -454,18 +440,42 @@ export default function DebtManagementPage() {
                     );
                     const existingDebtSnapshot = await getDocs(existingDebtQuery);
                     
-                    if (existingDebtSnapshot.empty) {
-                        const debtAmountBs = amountUSD * activeRate;
-                        if (currentBalanceBs >= debtAmountBs) {
-                            currentBalanceBs -= debtAmountBs;
-                            debtData.status = 'paid';
-                            debtData.paidAmountUSD = amountUSD;
-                            debtData.paymentDate = Timestamp.now();
-                        }
+                    if (!existingDebtSnapshot.empty) continue;
+    
+                    const debtAmountBs = amountUSD * activeRate;
+                    const debtRef = doc(collection(db, "debts"));
+                    let debtData: any = {
+                        ownerId: selectedOwner.id, year: debtYear, month: debtMonth,
+                        amountUSD: amountUSD, description: description, status: 'pending'
+                    };
+    
+                    if (currentBalanceBs >= debtAmountBs) {
+                        currentBalanceBs -= debtAmountBs;
+                        const paymentDate = Timestamp.now();
+                        debtData = {
+                            ...debtData,
+                            status: 'paid',
+                            paidAmountUSD: amountUSD,
+                            paymentDate: paymentDate
+                        };
                         
-                        const debtRef = doc(collection(db, "debts"));
-                        transaction.set(debtRef, debtData);
+                        const paymentRef = doc(collection(db, "payments"));
+                        transaction.set(paymentRef, {
+                            reportedBy: selectedOwner.id,
+                            beneficiaries: [{ ownerId: selectedOwner.id, house: ownerProperties[0].house, street: ownerProperties[0].street, amount: debtAmountBs }],
+                            totalAmount: debtAmountBs,
+                            exchangeRate: activeRate,
+                            paymentDate: paymentDate,
+                            reportedAt: paymentDate,
+                            paymentMethod: 'conciliacion',
+                            bank: 'Sistema',
+                            reference: `CONC-DEBT-${paymentDate.toMillis()}`,
+                            status: 'aprobado',
+                            observations: 'Pago automático por saldo a favor al crear deuda.',
+                        });
                     }
+                    
+                    transaction.set(debtRef, debtData);
                 }
     
                 transaction.update(ownerRef, { balance: currentBalanceBs });
@@ -759,7 +769,7 @@ export default function DebtManagementPage() {
                                             <TableRow key={debt.id} className="text-muted-foreground">
                                                 <TableCell className="font-medium">{months.find(m => m.value === debt.month)?.label} {debt.year}</TableCell>
                                                 <TableCell>{debt.description}</TableCell>
-                                                <TableCell>Bs. {(debt.amountUSD * activeRate).toLocaleString('es-VE', {minimumFractionDigits: 2})}</TableCell>
+                                                <TableCell>Bs. {((debt.paidAmountUSD || debt.amountUSD) * activeRate).toLocaleString('es-VE', {minimumFractionDigits: 2})}</TableCell>
                                                 <TableCell className="capitalize">
                                                     <Badge variant={'success'}>Pagada</Badge>
                                                 </TableCell>
@@ -912,3 +922,4 @@ export default function DebtManagementPage() {
 }
 
     
+

@@ -206,6 +206,7 @@ export default function VerifyPaymentsPage() {
                             orderBy("year", "asc"),
                             orderBy("month", "asc")
                         );
+                        // IMPORTANT: Debts must be fetched inside the transaction scope using getDocs
                         const debtsSnapshot = await getDocs(debtsQuery);
                         
                         if (!debtsSnapshot.empty) {
@@ -304,7 +305,7 @@ export default function VerifyPaymentsPage() {
 
                     const currentBalance = ownerDoc.data().balance || 0;
                     const paymentAmountForBeneficiary = beneficiary.amount || 0;
-                    const newBalance = currentBalance - paymentAmountForBeneficiary;
+                    let newBalance = currentBalance - paymentAmountForBeneficiary;
                     
 
                     const paidDebtsQuery = query(
@@ -315,6 +316,11 @@ export default function VerifyPaymentsPage() {
                     );
                     
                     const paidDebtsSnapshot = await getDocs(paidDebtsQuery);
+
+                    paidDebtsSnapshot.forEach(debtDoc => {
+                        const debtData = debtDoc.data();
+                        newBalance += (debtData.paidAmountUSD || debtData.amountUSD) * paymentData.exchangeRate;
+                    });
                     
                     // --- WRITE PHASE ---
                     transaction.update(ownerRef, { balance: newBalance });
@@ -649,3 +655,4 @@ export default function VerifyPaymentsPage() {
     </div>
   );
 }
+
