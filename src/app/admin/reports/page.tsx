@@ -330,33 +330,30 @@ export default function ReportsPage() {
         }
 
         const owner = owners.find(o => o.id === selectedOwner);
-        if (!owner) return;
-        
-        if (!owner.properties || owner.properties.length === 0) {
-            toast({ variant: 'destructive', title: 'Error de Datos', description: 'El propietario seleccionado no tiene propiedades registradas.' });
+        if (!owner) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Propietario no encontrado.' });
             return;
         }
 
         setGeneratingReport(true);
         try {
-            const validOwnerProperties = owner.properties.filter(p => p.street && p.house);
+            // FIX: Validate owner properties before querying
+            const validOwnerProperties = (owner.properties || []).filter(p => p.street && p.house);
             if (validOwnerProperties.length === 0) {
-                toast({ variant: 'destructive', title: 'Error de Datos', description: 'El propietario seleccionado no tiene propiedades completas registradas.' });
+                toast({ variant: 'destructive', title: 'Error de Datos', description: 'El propietario seleccionado no tiene propiedades completas registradas para generar el reporte.' });
                 setGeneratingReport(false);
                 return;
             }
-            
+
             // Fetch Payments (all approved payments for the user)
             const paymentsQuery = query(
                 collection(db, "payments"),
                 where("status", "==", "aprobado"),
-                where("beneficiaries", "array-contains-any", 
-                    validOwnerProperties.map(p => ({
-                        ownerId: owner.id,
-                        house: p.house,
-                        street: p.street
-                    }))
-                )
+                where("beneficiaries", "array-contains", { 
+                    ownerId: owner.id, 
+                    house: validOwnerProperties[0].house, 
+                    street: validOwnerProperties[0].street 
+                })
             );
 
             const paymentsSnapshot = await getDocs(paymentsQuery);
