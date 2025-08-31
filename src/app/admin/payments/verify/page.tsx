@@ -34,6 +34,7 @@ type FullPayment = {
   type: PaymentMethod;
   reference: string;
   reportedBy: string;
+  reportedAt?: Timestamp;
 };
 
 type Debt = {
@@ -106,7 +107,7 @@ export default function VerifyPaymentsPage() {
         return ownersMap;
     };
 
-    const q = query(collection(db, "payments"));
+    const q = query(collection(db, "payments"), orderBy('reportedAt', 'desc'));
     
     fetchAllOwners().then(ownersMap => {
         const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -132,7 +133,8 @@ export default function VerifyPaymentsPage() {
                     totalAmount: data.totalAmount,
                     exchangeRate: data.exchangeRate,
                     paymentDate: data.paymentDate,
-                    reportedBy: data.reportedBy
+                    reportedBy: data.reportedBy,
+                    reportedAt: data.reportedAt,
                 });
             });
 
@@ -245,25 +247,22 @@ export default function VerifyPaymentsPage() {
   };
 
   const showReceiptPreview = async (payment: FullPayment) => {
-    const beneficiaryId = payment.beneficiaries?.[0]?.ownerId;
-    if (!beneficiaryId) {
-        toast({ variant: 'destructive', title: 'Error', description: 'El pago no tiene un beneficiario claro.' });
-        return;
-    }
-
     try {
-        const ownerRef = doc(db, 'owners', beneficiaryId);
-        const ownerSnap = await getDoc(ownerRef);
-        
-        if (!ownerSnap.exists()) {
-             toast({ variant: 'destructive', title: 'Error', description: 'No se encontró el propietario beneficiario.' });
+        const ownersMap = new Map<string, {name: string}>();
+        const ownersQuery = query(collection(db, "owners"));
+        const ownersSnapshot = await getDocs(ownersQuery);
+        ownersSnapshot.forEach(doc => {
+            ownersMap.set(doc.id, { name: doc.data().name });
+        });
+
+        const beneficiaryId = payment.beneficiaries?.[0]?.ownerId;
+        if (!beneficiaryId) {
+            toast({ variant: 'destructive', title: 'Error', description: 'El pago no tiene un beneficiario claro.' });
             return;
         }
-        
-        const ownerData = ownerSnap.data();
-        const ownerName = ownerData.name;
-        const property = (ownerData.properties && ownerData.properties.length > 0) ? ownerData.properties[0] : null;
-        const ownerUnit = property ? `${property.street} - ${property.house}` : 'N/A';
+
+        const ownerName = ownersMap.get(beneficiaryId)?.name || 'No disponible';
+        const ownerUnit = payment.unit;
 
         const paidDebtsQuery = query(
             collection(db, "debts"),
@@ -647,3 +646,4 @@ export default function VerifyPaymentsPage() {
         </Dialog>
     </div>
   );
+}
