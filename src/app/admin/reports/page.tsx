@@ -337,10 +337,16 @@ export default function ReportsPage() {
 
         setGeneratingReport(true);
         try {
-            // FIX: Validate owner properties before querying
-            const validOwnerProperties = (owner.properties || []).filter(p => p.street && p.house);
-            if (validOwnerProperties.length === 0) {
-                toast({ variant: 'destructive', title: 'Error de Datos', description: 'El propietario seleccionado no tiene propiedades completas registradas para generar el reporte.' });
+            // Robust property extraction
+            let propertyForQuery: { street: string; house: string; } | null = null;
+            if (owner.properties && owner.properties.length > 0 && owner.properties[0].street && owner.properties[0].house) {
+                propertyForQuery = owner.properties[0];
+            } else if (owner.street && owner.house) {
+                propertyForQuery = { street: owner.street, house: owner.house }; // Legacy fallback
+            }
+
+            if (!propertyForQuery) {
+                toast({ variant: 'destructive', title: 'Error de Datos', description: 'El propietario seleccionado no tiene una propiedad válida registrada para generar el reporte.' });
                 setGeneratingReport(false);
                 return;
             }
@@ -351,8 +357,8 @@ export default function ReportsPage() {
                 where("status", "==", "aprobado"),
                 where("beneficiaries", "array-contains", { 
                     ownerId: owner.id, 
-                    house: validOwnerProperties[0].house, 
-                    street: validOwnerProperties[0].street 
+                    house: propertyForQuery.house, 
+                    street: propertyForQuery.street 
                 })
             );
 
