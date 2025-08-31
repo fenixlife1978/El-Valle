@@ -209,14 +209,14 @@ export default function VerifyPaymentsPage() {
                         orderBy("month", "asc")
                     );
                     
-                    const debtsSnapshot = await getDocs(debtsQuery);
-                    const pendingDebts: Debt[] = debtsSnapshot.docs.map(doc => ({id: doc.id, ...doc.data()} as Debt));
+                    const debtsSnapshot = await transaction.get(debtsQuery);
                     
-                    for (const debt of pendingDebts) {
+                    for (const debtDoc of debtsSnapshot.docs) {
+                        const debt = debtDoc.data() as Debt;
                         const debtAmountBs = debt.amountUSD * paymentData.exchangeRate;
                         if (availableFundsBs >= debtAmountBs) {
                             availableFundsBs -= debtAmountBs;
-                            const debtRef = doc(db, "debts", debt.id);
+                            const debtRef = doc(db, "debts", debtDoc.id);
                             transaction.update(debtRef, { 
                                 status: 'paid',
                                 paidAmountUSD: debt.amountUSD,
@@ -316,7 +316,7 @@ export default function VerifyPaymentsPage() {
                         where("paymentDate", "==", paymentData.paymentDate)
                     );
                     
-                    const paidDebtsSnapshot = await getDocs(paidDebtsQuery);
+                    const paidDebtsSnapshot = await transaction.get(paidDebtsQuery);
                     
                     paidDebtsSnapshot.forEach(debtDoc => {
                         const debtRef = doc(db, "debts", debtDoc.id);
@@ -648,5 +648,3 @@ export default function VerifyPaymentsPage() {
     </div>
   );
 }
-
-    
