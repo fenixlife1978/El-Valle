@@ -206,7 +206,7 @@ export default function VerifyPaymentsPage() {
                             orderBy("year", "asc"),
                             orderBy("month", "asc")
                         );
-                        // IMPORTANT: Debts must be fetched inside the transaction scope using getDocs
+                        
                         const debtsSnapshot = await getDocs(debtsQuery);
                         
                         if (!debtsSnapshot.empty) {
@@ -655,4 +655,3 @@ export default function VerifyPaymentsPage() {
     </div>
   );
 }
-
