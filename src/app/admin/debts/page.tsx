@@ -194,16 +194,22 @@ export default function DebtManagementPage() {
 
         try {
             let reconciledCount = 0;
+            const ownersWithBalance = owners.filter(o => Number(o.balance) > 0);
 
-            for (const owner of owners) {
-                const ownerBalance = Number(owner.balance || 0);
+            if (ownersWithBalance.length === 0) {
+                 toast({ title: 'Sin Saldos a Favor', description: 'Ningún propietario tiene saldo a favor para conciliar.' });
+                 setIsReconciling(false);
+                 return;
+            }
 
-                if (ownerBalance <= 0) continue;
-
+            for (const owner of ownersWithBalance) {
                 await runTransaction(db, async (transaction) => {
                     const ownerRef = doc(db, 'owners', owner.id);
-                    
-                    let availableBalance = ownerBalance;
+                    const ownerDoc = await transaction.get(ownerRef); // Read inside transaction
+                    if (!ownerDoc.exists()) throw new Error(`Propietario ${owner.id} no encontrado.`);
+
+                    let availableBalance = Number(ownerDoc.data().balance || 0);
+                    if (availableBalance <= 0) return;
 
                     const debtsQuery = query(
                         collection(db, 'debts'),
@@ -213,7 +219,7 @@ export default function DebtManagementPage() {
                         orderBy('month', 'asc')
                     );
                     
-                    const debtsSnapshot = await getDocs(debtsQuery);
+                    const debtsSnapshot = await getDocs(debtsQuery); // This read is ok, as it's for a single user inside their transaction
                     if (debtsSnapshot.empty) return;
                     
                     const reconciliationDate = Timestamp.now();
@@ -240,9 +246,10 @@ export default function DebtManagementPage() {
                     if (totalPaidInTx > 0) {
                         transaction.update(ownerRef, { balance: availableBalance });
     
-                        const property = (owner.properties && owner.properties.length > 0)
-                            ? owner.properties[0]
-                            : { street: owner.street, house: owner.house };
+                        const ownerData = ownerDoc.data();
+                        const property = (ownerData.properties && ownerData.properties.length > 0)
+                            ? ownerData.properties[0]
+                            : { street: ownerData.street, house: ownerData.house };
                         
                         const paymentRef = doc(collection(db, "payments"));
                         transaction.set(paymentRef, {
