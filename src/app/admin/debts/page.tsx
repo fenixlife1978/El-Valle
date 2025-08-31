@@ -269,6 +269,8 @@ export default function DebtManagementPage() {
                         description: `Se procesaron las cuentas de ${reconciledCount} propietarios.`,
                         className: 'bg-green-100 border-green-400 text-green-800'
                     });
+                } else {
+                     toast({ title: 'Sin Conciliaciones Necesarias', description: 'Ningún propietario tiene saldo suficiente para cubrir sus deudas pendientes.' });
                 }
             });
     
@@ -589,7 +591,7 @@ export default function DebtManagementPage() {
                             <div className="flex gap-2">
                                 <Button onClick={handleReconcileAll} variant="outline" disabled={isReconciling}>
                                     {isReconciling ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <FileCog className="mr-2 h-4 w-4" />}
-                                    Conciliar Manualmente
+                                    Pagar Deudas con Saldo a Favor
                                 </Button>
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
