@@ -10,9 +10,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PlusCircle, MoreHorizontal, Edit, Trash2, Loader2, Info, ArrowLeft, Search, WalletCards, Calculator, Minus, Equal, FileDown } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, Edit, Trash2, Loader2, Info, ArrowLeft, Search, WalletCards, Calculator, Minus, Equal, FileDown, FileCog } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { collection, query, onSnapshot, where, doc, getDoc, writeBatch, updateDoc, deleteDoc, runTransaction, Timestamp, getDocs } from 'firebase/firestore';
+import { collection, query, onSnapshot, where, doc, getDoc, writeBatch, updateDoc, deleteDoc, runTransaction, Timestamp, getDocs, addDoc, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Badge } from '@/components/ui/badge';
 import { differenceInCalendarMonths, format, addMonths } from 'date-fns';
@@ -38,6 +38,8 @@ type Debt = {
     amountUSD: number;
     description: string;
     status: 'pending' | 'paid';
+    paidAmountUSD?: number;
+    paymentDate?: Timestamp;
 };
 
 type View = 'list' | 'detail';
@@ -79,6 +81,7 @@ export default function DebtManagementPage() {
     const [view, setView] = useState<View>('list');
     const [owners, setOwners] = useState<Owner[]>([]);
     const [loading, setLoading] = useState(true);
+    const [isReconciling, setIsReconciling] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [activeRate, setActiveRate] = useState(0);
     const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
@@ -449,6 +452,89 @@ export default function DebtManagementPage() {
         doc.save('lista_deudas_propietarios.pdf');
     };
 
+    const handleReconcileAll = async () => {
+        setIsReconciling(true);
+        toast({ title: 'Iniciando conciliación...', description: 'Este proceso puede tardar unos minutos.' });
+
+        try {
+            const ownersWithBalanceQuery = query(collection(db, 'owners'), where('balance', '>', 0));
+            const ownersSnapshot = await getDocs(ownersWithBalanceQuery);
+            let reconciledCount = 0;
+            const reconciliationDate = Timestamp.now();
+
+            for (const ownerDoc of ownersSnapshot.docs) {
+                const owner = { id: ownerDoc.id, ...ownerDoc.data() } as Owner;
+                let availableBalance = owner.balance;
+                if (activeRate === 0) throw new Error("Tasa de cambio no disponible.");
+
+                await runTransaction(db, async (transaction) => {
+                    const debtsQuery = query(
+                        collection(db, 'debts'),
+                        where('ownerId', '==', owner.id),
+                        where('status', '==', 'pending'),
+                        orderBy('year', 'asc'),
+                        orderBy('month', 'asc')
+                    );
+                    const debtsSnapshot = await transaction.get(debtsQuery);
+                    if (debtsSnapshot.empty) return;
+
+                    let debtsPaidInTx = 0;
+                    const debtsToUpdate: { ref: any, data: any }[] = [];
+
+                    for (const debtDoc of debtsSnapshot.docs) {
+                        const debt = { id: debtDoc.id, ...debtDoc.data() } as Debt;
+                        const debtAmountBs = debt.amountUSD * activeRate;
+                        if (availableBalance >= debtAmountBs) {
+                            availableBalance -= debtAmountBs;
+                            debtsPaidInTx += debtAmountBs;
+                            debtsToUpdate.push({
+                                ref: doc(db, 'debts', debt.id),
+                                data: { status: 'paid', paidAmountUSD: debt.amountUSD, paymentDate: reconciliationDate }
+                            });
+                        } else {
+                            break;
+                        }
+                    }
+
+                    if (debtsToUpdate.length > 0) {
+                        debtsToUpdate.forEach(d => transaction.update(d.ref, d.data));
+                        const ownerRef = doc(db, 'owners', owner.id);
+                        transaction.update(ownerRef, { balance: availableBalance });
+                        reconciledCount++;
+
+                        const paymentRef = doc(collection(db, "payments"));
+                        transaction.set(paymentRef, {
+                            reportedBy: 'admin',
+                            beneficiaries: [{ ownerId: owner.id, house: owner.house, amount: debtsPaidInTx }],
+                            totalAmount: debtsPaidInTx,
+                            exchangeRate: activeRate,
+                            paymentDate: reconciliationDate,
+                            reportedAt: reconciliationDate,
+                            paymentMethod: 'conciliacion',
+                            bank: 'Sistema',
+                            reference: `CONC-${reconciliationDate.toMillis()}`,
+                            status: 'aprobado',
+                            observations: 'Conciliación Automática por Saldo a Favor',
+                        });
+                    }
+                });
+            }
+             toast({
+                title: 'Conciliación Completada',
+                description: `Se conciliaron las cuentas de ${reconciledCount} propietarios.`,
+                className: 'bg-green-100 border-green-400 text-green-800'
+            });
+
+        } catch (error) {
+             console.error("Error during reconciliation: ", error);
+             const errorMessage = error instanceof Error ? error.message : "Ocurrió un error desconocido.";
+             toast({ variant: 'destructive', title: 'Error de Conciliación', description: errorMessage });
+        } finally {
+             setIsReconciling(false);
+        }
+    };
+
+
     if (loading) {
          return (
             <div className="flex justify-center items-center h-64">
@@ -469,17 +555,23 @@ export default function DebtManagementPage() {
                     <CardHeader>
                         <div className="flex justify-between items-center gap-2 flex-wrap">
                             <CardTitle>Lista de Propietarios</CardTitle>
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button variant="outline">
-                                        <FileDown className="mr-2 h-4 w-4" />
-                                        Exportar
-                                    </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent>
-                                    <DropdownMenuItem onClick={handleExportPDF}>Exportar a PDF</DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
+                            <div className="flex gap-2">
+                                <Button onClick={handleReconcileAll} variant="outline" disabled={isReconciling}>
+                                    {isReconciling ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <FileCog className="mr-2 h-4 w-4" />}
+                                    Conciliar Saldos y Deudas
+                                </Button>
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button variant="outline">
+                                            <FileDown className="mr-2 h-4 w-4" />
+                                            Exportar
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent>
+                                        <DropdownMenuItem onClick={handleExportPDF}>Exportar a PDF</DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            </div>
                         </div>
                         <div className="relative mt-2">
                              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
