@@ -12,9 +12,9 @@ import { CheckCircle2, XCircle, MoreHorizontal, Eye, Printer, Filter, Loader2, T
 import { useToast } from '@/hooks/use-toast';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import { collection, onSnapshot, query, doc, updateDoc, getDoc, writeBatch, runTransaction, where, orderBy, Timestamp, getDocs, addDoc, limit, deleteDoc, deleteField } from 'firebase/firestore';
+import { collection, onSnapshot, query, doc, updateDoc, getDoc, writeBatch, runTransaction, where, orderBy, Timestamp, getDocs, addDoc, limit, deleteDoc, deleteField, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { addMonths, format } from 'date-fns';
+import { addMonths, format, startOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 type PaymentStatus = 'pendiente' | 'aprobado' | 'rechazado';
@@ -37,7 +37,7 @@ type FullPayment = {
   reportedBy: string;
   reportedAt?: Timestamp;
   observations?: string;
-  isReconciled?: boolean; // Flag to check if the payment was used in a reconciliation
+  isReconciled?: boolean;
 };
 
 type Debt = {
@@ -92,6 +92,7 @@ export default function VerifyPaymentsPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<PaymentStatus | 'todos'>('todos');
   const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
+  const [condoFee, setCondoFee] = useState(0);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const [isReceiptPreviewOpen, setIsReceiptPreviewOpen] = useState(false);
   const [paymentToDelete, setPaymentToDelete] = useState<FullPayment | null>(null);
@@ -121,7 +122,6 @@ export default function VerifyPaymentsPage() {
                 const userName = ownersMap.get(data.reportedBy)?.name || (data.beneficiaries?.[0]?.ownerId ? ownersMap.get(data.beneficiaries[0].ownerId)?.name : 'No disponible');
                 const beneficiary = data.beneficiaries?.[0];
                 const unit = beneficiary && beneficiary.street && beneficiary.house ? `${beneficiary.street} - ${beneficiary.house}` : (beneficiary ? beneficiary.house || 'N/A' : 'N/A');
-
 
                 paymentsData.push({
                     id: doc.id,
@@ -158,14 +158,16 @@ export default function VerifyPaymentsPage() {
         setLoading(false);
     });
     
-    const fetchCompanyInfo = async () => {
+    const fetchSettings = async () => {
         const settingsRef = doc(db, 'config', 'mainSettings');
         const docSnap = await getDoc(settingsRef);
         if (docSnap.exists()) {
-            setCompanyInfo(docSnap.data().companyInfo as CompanyInfo);
+            const settings = docSnap.data();
+            setCompanyInfo(settings.companyInfo as CompanyInfo);
+            setCondoFee(settings.condoFee || 0);
         }
     };
-    fetchCompanyInfo();
+    fetchSettings();
 
   }, [toast]);
 
@@ -185,6 +187,11 @@ export default function VerifyPaymentsPage() {
     }
 
     if (newStatus === 'aprobado') {
+        if (condoFee <= 0) {
+            toast({ variant: 'destructive', title: 'Error de Configuración', description: 'La cuota de condominio no está configurada. No se puede aprobar el pago.' });
+            return;
+        }
+
         try {
             await runTransaction(db, async (transaction) => {
                 const paymentDoc = await transaction.get(paymentRef);
@@ -193,69 +200,80 @@ export default function VerifyPaymentsPage() {
                 }
                 const paymentData = { id: paymentDoc.id, ...paymentDoc.data() } as FullPayment;
 
-                // Handle multiple beneficiaries if they exist
                 for (const beneficiary of paymentData.beneficiaries) {
                     const ownerRef = doc(db, "owners", beneficiary.ownerId);
                     const ownerDoc = await transaction.get(ownerRef);
-                    if (!ownerDoc.exists()) {
-                        throw new Error(`Propietario con ID ${beneficiary.ownerId} no encontrado.`);
-                    }
-                    
+                    if (!ownerDoc.exists()) throw new Error(`Propietario con ID ${beneficiary.ownerId} no encontrado.`);
+
+                    let availableFundsBs = beneficiary.amount;
+
+                    // --- PRIORITY 1: LIQUIDATE PENDING DEBTS ---
                     const debtsQuery = query(
-                        collection(db, "debts"),
-                        where("ownerId", "==", beneficiary.ownerId),
-                        where("status", "==", "pending"),
-                        orderBy("year", "asc"),
-                        orderBy("month", "asc")
+                        collection(db, 'debts'),
+                        where('ownerId', '==', beneficiary.ownerId),
+                        where('status', '==', 'pending'),
+                        orderBy('year', 'asc'),
+                        orderBy('month', 'asc')
                     );
                     const debtsSnapshot = await getDocs(debtsQuery);
                     
-                    const paymentAmountInCents = Math.round(beneficiary.amount * 100);
-
-                    // **Exact Match Logic:** Check if payment amount exactly matches a single debt
-                    const matchingDebts = debtsSnapshot.docs.filter(doc => {
-                        const debt = doc.data() as Debt;
-                        const debtAmountInCents = Math.round((debt.amountUSD * paymentData.exchangeRate) * 100);
-                        return debtAmountInCents === paymentAmountInCents;
-                    });
-
-                    if (matchingDebts.length > 0) {
-                        // If there's an exact match, pay the oldest one and stop.
-                        const oldestMatchingDebtRef = matchingDebts[0].ref;
-                        const oldestMatchingDebtData = matchingDebts[0].data() as Debt;
-                        
-                        transaction.update(oldestMatchingDebtRef, {
-                            status: 'paid',
-                            paidAmountUSD: oldestMatchingDebtData.amountUSD,
-                            paymentDate: paymentData.paymentDate,
-                            paymentId: paymentData.id
-                        });
-                         // No change to owner's balance in this case
-                    } else {
-                        // **Standard Logic:** No exact match, so add to balance and pay down debts sequentially.
-                        let availableFundsBs = (ownerDoc.data().balance || 0) + beneficiary.amount;
-
-                        if (!debtsSnapshot.empty) {
-                             for (const debtDoc of debtsSnapshot.docs) {
-                                const debt = debtDoc.data() as Debt;
-                                const debtAmountBs = debt.amountUSD * paymentData.exchangeRate;
-                                const debtAmountInCents = Math.round(debtAmountBs * 100);
-                                const availableFundsInCents = Math.round(availableFundsBs * 100);
-
-                                if (availableFundsInCents >= debtAmountInCents) {
-                                    availableFundsBs -= debtAmountBs;
-                                    transaction.update(debtDoc.ref, {
-                                        status: 'paid',
-                                        paidAmountUSD: debt.amountUSD,
-                                        paymentDate: paymentData.paymentDate,
-                                        paymentId: paymentData.id
-                                    });
-                                } else {
-                                    break; 
-                                }
+                    if (!debtsSnapshot.empty) {
+                        for (const debtDoc of debtsSnapshot.docs) {
+                            const debt = debtDoc.data() as Debt;
+                            const debtAmountBs = debt.amountUSD * paymentData.exchangeRate;
+                            if (availableFundsBs >= debtAmountBs) {
+                                availableFundsBs -= debtAmountBs;
+                                transaction.update(debtDoc.ref, {
+                                    status: 'paid',
+                                    paidAmountUSD: debt.amountUSD,
+                                    paymentDate: paymentData.paymentDate,
+                                    paymentId: paymentData.id
+                                });
+                            } else {
+                                break;
                             }
                         }
-                        transaction.update(ownerRef, { balance: availableFundsBs });
+                    }
+
+                    // --- PRIORITY 2: CREATE AND LIQUIDATE FUTURE DEBTS ---
+                    const condoFeeInBs = condoFee * paymentData.exchangeRate;
+                    if (availableFundsBs >= condoFeeInBs) {
+                        const allExistingDebtsQuery = query(collection(db, 'debts'), where('ownerId', '==', beneficiary.ownerId));
+                        const allExistingDebtsSnap = await getDocs(allExistingDebtsQuery);
+                        const existingDebtPeriods = new Set(allExistingDebtsSnap.docs.map(d => `${d.data().year}-${d.data().month}`));
+                        
+                        const startDate = startOfMonth(new Date());
+
+                        for (let i = 0; i < 24; i++) { // Look ahead 24 months
+                            if (availableFundsBs < condoFeeInBs) break;
+
+                            const futureDebtDate = addMonths(startDate, i);
+                            const futureYear = futureDebtDate.getFullYear();
+                            const futureMonth = futureDebtDate.getMonth() + 1;
+                            const periodKey = `${futureYear}-${futureMonth}`;
+                            
+                            if (existingDebtPeriods.has(periodKey)) continue;
+
+                            availableFundsBs -= condoFeeInBs;
+                            const debtRef = doc(collection(db, 'debts'));
+                            transaction.set(debtRef, {
+                                ownerId: beneficiary.ownerId,
+                                year: futureYear,
+                                month: futureMonth,
+                                amountUSD: condoFee,
+                                description: "Cuota de Condominio (Pagada por adelantado)",
+                                status: 'paid',
+                                paidAmountUSD: condoFee,
+                                paymentDate: paymentData.paymentDate,
+                                paymentId: paymentData.id,
+                            });
+                        }
+                    }
+
+                    // --- PRIORITY 3: ADD REMAINING TO BALANCE ---
+                    if (availableFundsBs > 0) {
+                        const currentBalance = ownerDoc.data().balance || 0;
+                        transaction.update(ownerRef, { balance: currentBalance + availableFundsBs });
                     }
                 }
                 
@@ -263,14 +281,14 @@ export default function VerifyPaymentsPage() {
             });
             
             toast({
-                title: 'Pago Aprobado y Conciliado',
-                description: 'El pago se ha procesado exitosamente. Las deudas han sido saldadas y/o el saldo ha sido actualizado.',
+                title: 'Pago Aprobado y Procesado',
+                description: 'El pago se ha procesado exitosamente, liquidando deudas y/o actualizando el saldo.',
                 className: 'bg-green-100 border-green-400 text-green-800'
             });
 
         } catch (error) {
             console.error("Error processing payment approval: ", error);
-            const errorMessage = error instanceof Error ? error.message : 'No se pudo aprobar y conciliar el pago.';
+            const errorMessage = error instanceof Error ? error.message : 'No se pudo aprobar y procesar el pago.';
             toast({ variant: 'destructive', title: 'Error en la Transacción', description: errorMessage });
         }
     }
@@ -305,16 +323,6 @@ export default function VerifyPaymentsPage() {
         const paidDebtsSnapshot = await getDocs(paidDebtsQuery);
         const paidDebts = paidDebtsSnapshot.docs.map(doc => doc.data() as Debt);
         
-        // If no debts were directly paid by this transaction (e.g., it was only an advance or balance payment)
-        // do not show the receipt preview as there's no clear "concept" to display.
-        if (paidDebts.length === 0 && payment.paymentMethod !== 'adelanto') {
-            toast({
-                title: 'Información',
-                description: 'Este pago fue un abono a saldo y no liquidó deudas directamente. No se genera recibo detallado.',
-            });
-            return;
-        }
-
         setReceiptData({ payment, ownerName, ownerUnit, paidDebts });
         setIsReceiptPreviewOpen(true);
     } catch (error) {
@@ -340,8 +348,8 @@ export default function VerifyPaymentsPage() {
                 
                 const paymentData = { id: paymentDoc.id, ...paymentDoc.data() } as FullPayment;
 
-                 if (!paymentData.id) {
-                    throw new Error("El ID del pago es inválido, no se puede revertir.");
+                if (!paymentData.id) {
+                    throw new Error("El ID del pago es inválido o no se encontró, no se puede revertir.");
                 }
 
                 for (const beneficiary of paymentData.beneficiaries) {
@@ -349,34 +357,33 @@ export default function VerifyPaymentsPage() {
                     const ownerDoc = await transaction.get(ownerRef);
                     if (!ownerDoc.exists()) throw new Error(`Propietario ${beneficiary.ownerId} no encontrado.`);
 
-                    const currentBalance = ownerDoc.data().balance || 0;
-                    const paymentAmountForBeneficiary = beneficiary.amount || 0;
-                    let newBalance = currentBalance - paymentAmountForBeneficiary;
+                    let balanceToRevert = beneficiary.amount || 0;
                     
                     const paidDebtsQuery = query(
                         collection(db, "debts"),
-                        where("paymentId", "==", paymentData.id)
+                        where("paymentId", "==", paymentData.id),
+                        where("ownerId", "==", beneficiary.ownerId)
                     );
                     
                     const paidDebtsSnapshot = await getDocs(paidDebtsQuery);
 
                     paidDebtsSnapshot.forEach(debtDoc => {
                         const debtData = debtDoc.data();
-                        newBalance += (debtData.paidAmountUSD || debtData.amountUSD) * paymentData.exchangeRate;
-                    });
-                    
-                    // --- WRITE PHASE ---
-                    transaction.update(ownerRef, { balance: newBalance });
-
-                    paidDebtsSnapshot.forEach(debtDoc => {
-                        const debtRef = doc(db, "debts", debtDoc.id);
-                        transaction.update(debtRef, { 
+                        const debtAmountBs = (debtData.paidAmountUSD || debtData.amountUSD) * paymentData.exchangeRate;
+                        balanceToRevert -= debtAmountBs;
+                        
+                        // Revert debt to pending
+                        transaction.update(debtDoc.ref, { 
                             status: 'pending',
                             paidAmountUSD: deleteField(),
                             paymentDate: deleteField(),
                             paymentId: deleteField()
                         });
                     });
+                    
+                    // Update owner's balance
+                    const currentBalance = ownerDoc.data().balance || 0;
+                    transaction.update(ownerRef, { balance: currentBalance - balanceToRevert });
                 }
 
                 transaction.delete(paymentRef);
@@ -699,3 +706,5 @@ export default function VerifyPaymentsPage() {
     </div>
   );
 }
+
+    
