@@ -155,7 +155,7 @@ export default function PeopleManagementPage() {
                 // Note: Deleting from Firestore does not delete from Firebase Auth.
                 // This would require a backend function for security reasons.
                 await deleteDoc(doc(db, "owners", ownerToDelete.id));
-                toast({ title: 'Propietario Eliminado', description: `${ownerToDelete.name} ha sido eliminado de Firestore. La cuenta de autenticación debe eliminarse manualmente.` });
+                toast({ title: 'Propietario Eliminado', description: `${ownerToDelete.name} ha sido eliminado de Firestore. La cuenta de autenticación debe eliminarse manually.` });
             } catch (error) {
                 console.error("Error deleting document: ", error);
                 toast({ variant: 'destructive', title: 'Error', description: 'No se pudo eliminar el propietario.' });
@@ -171,16 +171,17 @@ export default function PeopleManagementPage() {
             toast({ variant: 'destructive', title: 'Error de Validación', description: 'Nombre, calle y casa son obligatorios para todas las propiedades.' });
             return;
         }
-
+    
         try {
             const { id, street, house, ...ownerData } = currentOwner;
             
-            const balanceValue = parseFloat(String(ownerData.balance));
+            // CRITICAL FIX: Ensure balance is always stored as a number.
+            const balanceValue = parseFloat(String(ownerData.balance).replace(',', '.') || '0');
             const dataToSave: any = {
                 ...ownerData,
-                balance: isNaN(balanceValue) ? 0 : parseFloat(balanceValue.toFixed(2))
+                balance: isNaN(balanceValue) ? 0 : balanceValue
             };
-
+    
             if (id) { // Editing existing user
                 const ownerRef = doc(db, "owners", id);
                 await updateDoc(ownerRef, dataToSave);
@@ -190,7 +191,7 @@ export default function PeopleManagementPage() {
                     toast({ variant: 'destructive', title: 'Error de Validación', description: 'El correo electrónico es obligatorio para nuevos usuarios.' });
                     return;
                 }
-
+    
                 // Step 1: Create user in Firebase Auth
                 const initialPassword = dataToSave.role === 'administrador' ? 'M110710.m' : '123456';
                 const userCredential = await createUserWithEmailAndPassword(auth, dataToSave.email, initialPassword);

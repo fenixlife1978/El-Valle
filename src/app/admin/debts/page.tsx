@@ -191,20 +191,26 @@ export default function DebtManagementPage() {
     
         try {
             await runTransaction(db, async (transaction) => {
-                const ownersWithBalanceQuery = query(collection(db, 'owners'), where('balance', '>', 0));
-                const ownersWithBalanceSnapshot = await getDocs(ownersWithBalanceQuery);
+                // GET ALL owners, then filter in code to avoid issues with data types in where() clause.
+                const allOwnersQuery = collection(db, 'owners');
+                const allOwnersSnapshot = await getDocs(allOwnersQuery);
+
+                const ownersWithBalance = allOwnersSnapshot.docs.filter(doc => {
+                    const balance = Number(doc.data().balance || 0);
+                    return balance > 0;
+                });
     
-                if (ownersWithBalanceSnapshot.empty) {
+                if (ownersWithBalance.length === 0) {
                     toast({ title: 'Sin Conciliaciones Necesarias', description: 'Ningún propietario tiene saldo a favor para conciliar.' });
                     return;
                 }
     
                 let reconciledCount = 0;
     
-                for (const ownerDoc of ownersWithBalanceSnapshot.docs) {
-                    const ownerData = { id: ownerDoc.id, ...ownerDoc.data() } as Owner;
+                for (const ownerDoc of ownersWithBalance) {
+                    const ownerData = { id: ownerDoc.id, ...ownerDoc.data() };
                     const ownerRef = ownerDoc.ref;
-                    let availableBalance = ownerData.balance;
+                    let availableBalance = Number(ownerData.balance || 0);
     
                     const debtsQuery = query(
                         collection(db, 'debts'),
@@ -213,6 +219,7 @@ export default function DebtManagementPage() {
                         orderBy('year', 'asc'),
                         orderBy('month', 'asc')
                     );
+                    // This get must be inside the transaction to ensure consistency
                     const debtsSnapshot = await getDocs(debtsQuery);
     
                     if (debtsSnapshot.empty) continue;
@@ -658,9 +665,9 @@ export default function DebtManagementPage() {
                                                 )}
                                             </TableCell>
                                             <TableCell>
-                                               {owner.balance > 0 ? (
+                                               {Number(owner.balance) > 0 ? (
                                                     <Badge variant="success">
-                                                        Bs. {owner.balance.toLocaleString('es-VE', {minimumFractionDigits: 2})}
+                                                        Bs. {Number(owner.balance).toLocaleString('es-VE', {minimumFractionDigits: 2})}
                                                     </Badge>
                                                 ) : (
                                                     <Badge variant="outline">Bs. 0,00</Badge>
