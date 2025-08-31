@@ -277,6 +277,10 @@ export default function VerifyPaymentsPage() {
   };
 
   const showReceiptPreview = async (payment: FullPayment) => {
+    if (!payment.id) {
+        toast({ variant: 'destructive', title: 'Error', description: 'ID de pago inválido.' });
+        return;
+    }
     try {
         const ownersMap = new Map<string, {name: string}>();
         const ownersQuery = query(collection(db, "owners"));
@@ -303,7 +307,7 @@ export default function VerifyPaymentsPage() {
         
         // If no debts were directly paid by this transaction (e.g., it was only an advance or balance payment)
         // do not show the receipt preview as there's no clear "concept" to display.
-        if (paidDebts.length === 0) {
+        if (paidDebts.length === 0 && payment.paymentMethod !== 'adelanto') {
             toast({
                 title: 'Información',
                 description: 'Este pago fue un abono a saldo y no liquidó deudas directamente. No se genera recibo detallado.',
@@ -332,9 +336,13 @@ export default function VerifyPaymentsPage() {
         if (paymentToDelete.status === 'aprobado') {
             await runTransaction(db, async (transaction) => {
                 const paymentDoc = await transaction.get(paymentRef);
-                if (!paymentDoc.exists()) throw new Error("El pago ya fue eliminado.");
+                if (!paymentDoc.exists()) throw new Error("El pago ya fue eliminado o no existe.");
                 
-                const paymentData = paymentDoc.data() as FullPayment;
+                const paymentData = { id: paymentDoc.id, ...paymentDoc.data() } as FullPayment;
+
+                 if (!paymentData.id) {
+                    throw new Error("El ID del pago es inválido, no se puede revertir.");
+                }
 
                 for (const beneficiary of paymentData.beneficiaries) {
                     const ownerRef = doc(db, 'owners', beneficiary.ownerId);
@@ -345,7 +353,6 @@ export default function VerifyPaymentsPage() {
                     const paymentAmountForBeneficiary = beneficiary.amount || 0;
                     let newBalance = currentBalance - paymentAmountForBeneficiary;
                     
-
                     const paidDebtsQuery = query(
                         collection(db, "debts"),
                         where("paymentId", "==", paymentData.id)
