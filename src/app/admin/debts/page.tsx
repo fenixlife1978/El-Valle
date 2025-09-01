@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PlusCircle, MoreHorizontal, Edit, Trash2, Loader2, Info, ArrowLeft, Search, WalletCards, Calculator, Minus, Equal, FileDown, FileCog, CalendarPlus } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, Edit, Trash2, Loader2, Info, ArrowLeft, Search, WalletCards, Calculator, Minus, Equal, FileDown, FileCog, CalendarPlus, Building } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { collection, query, onSnapshot, where, doc, getDoc, writeBatch, updateDoc, deleteDoc, runTransaction, Timestamp, getDocs, addDoc, orderBy, setDoc, limit, deleteField } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { differenceInCalendarMonths, format, addMonths, startOfMonth } from 'date-fns';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
 
 type Owner = {
@@ -28,9 +29,15 @@ type Owner = {
     properties?: { street: string, house: string }[];
 };
 
+type Property = {
+    street: string;
+    house: string;
+};
+
 type Debt = {
     id:string;
     ownerId: string;
+    property: Property;
     year: number;
     month: number;
     amountUSD: number;
@@ -38,7 +45,7 @@ type Debt = {
     status: 'pending' | 'paid';
     paidAmountUSD?: number;
     paymentDate?: Timestamp;
-    paymentId?: string; // Link to the payment document
+    paymentId?: string;
 };
 
 type Payment = {
@@ -102,6 +109,7 @@ export default function DebtManagementPage() {
     
     const [isMassDebtDialogOpen, setIsMassDebtDialogOpen] = useState(false);
     const [currentMassDebt, setCurrentMassDebt] = useState<MassDebt>(emptyMassDebt);
+    const [propertyForMassDebt, setPropertyForMassDebt] = useState<Property | null>(null);
     
     const [isEditDebtDialogOpen, setIsEditDebtDialogOpen] = useState(false);
     const [debtToEdit, setDebtToEdit] = useState<Debt | null>(null);
@@ -221,9 +229,6 @@ export default function DebtManagementPage() {
                     let availableBalance = Number(ownerDoc.data().balance || 0);
                     if (availableBalance <= 0) return;
 
-                    const ownerProperty = (owner.properties && owner.properties.length > 0) ? owner.properties[0] : { street: 'N/A', house: 'N/A' };
-
-
                     // --- Phase 1: Pay off existing pending debts ---
                     const debtsQuery = query(
                         collection(db, 'debts'),
@@ -247,7 +252,7 @@ export default function DebtManagementPage() {
                                 const paymentRef = doc(collection(db, "payments"));
                                 transaction.set(paymentRef, {
                                     reportedBy: owner.id,
-                                    beneficiaries: [{ ownerId: owner.id, house: ownerProperty.house, street: ownerProperty.street, amount: debtAmountBs }],
+                                    beneficiaries: [{ ownerId: owner.id, ...debt.property, amount: debtAmountBs }],
                                     totalAmount: debtAmountBs,
                                     exchangeRate: activeRate,
                                     paymentDate: Timestamp.now(),
@@ -256,7 +261,7 @@ export default function DebtManagementPage() {
                                     bank: 'Sistema (Saldo a Favor)',
                                     reference: `CONC-${debt.year}-${debt.month}`,
                                     status: 'aprobado',
-                                    observations: `Cuota de ${months.find(m=>m.value === debt.month)?.label} ${debt.year} pagada por conciliación.`,
+                                    observations: `Cuota de ${months.find(m=>m.value === debt.month)?.label} ${debt.year} pagada por conciliación para ${debt.property.street} - ${debt.property.house}.`,
                                 });
 
                                 transaction.update(debtDoc.ref, {
@@ -274,56 +279,71 @@ export default function DebtManagementPage() {
                     }
 
                     // --- Phase 2: Proactively pay future fees with remaining balance ---
-                    if (Math.round(availableBalance * 100) >= Math.round(condoFeeInBs * 100)) {
+                    if (owner.properties && owner.properties.length > 0 && Math.round(availableBalance * 100) >= Math.round(condoFeeInBs * 100)) {
+                        
                         const allExistingDebtsQuery = query(collection(db, 'debts'), where('ownerId', '==', owner.id));
                         const allExistingDebtsSnap = await getDocs(allExistingDebtsQuery);
-                        const existingDebtPeriods = new Set(allExistingDebtsSnap.docs.map(d => `${d.data().year}-${d.data().month}`));
-
+                        const existingDebtPeriodsByProp = new Map<string, Set<string>>();
+                        allExistingDebtsSnap.docs.forEach(d => {
+                            const debtData = d.data();
+                            const propKey = `${debtData.property.street}-${debtData.property.house}`;
+                            if(!existingDebtPeriodsByProp.has(propKey)) existingDebtPeriodsByProp.set(propKey, new Set());
+                            existingDebtPeriodsByProp.get(propKey)!.add(`${debtData.year}-${debtData.month}`);
+                        });
+                        
                         const startDate = startOfMonth(new Date());
 
-                        for (let i = 0; i < 12; i++) { // Look ahead 12 months
-                            const futureDebtDate = addMonths(startDate, i);
-                            const futureYear = futureDebtDate.getFullYear();
-                            const futureMonth = futureDebtDate.getMonth() + 1;
-                            const periodKey = `${futureYear}-${futureMonth}`;
-                            
-                            if (existingDebtPeriods.has(periodKey)) continue; // Skip if debt already exists
+                        // This logic gets complex with multiple properties. For now, let's just pay for one property at a time.
+                        // A more advanced system might distribute the balance.
+                        for (const property of owner.properties) {
+                             const propKey = `${property.street}-${property.house}`;
+                             const existingDebtsForProp = existingDebtPeriodsByProp.get(propKey) || new Set();
 
-                            if (Math.round(availableBalance * 100) >= Math.round(condoFeeInBs * 100)) {
-                                availableBalance -= condoFeeInBs;
-                                const paymentDate = Timestamp.now();
-                                const paymentRef = doc(collection(db, 'payments'));
-                                transaction.set(paymentRef, {
-                                    reportedBy: owner.id,
-                                    beneficiaries: [{ ownerId: owner.id, house: ownerProperty.house, street: ownerProperty.street, amount: condoFeeInBs }],
-                                    totalAmount: condoFeeInBs,
-                                    exchangeRate: activeRate,
-                                    paymentDate: paymentDate,
-                                    reportedAt: paymentDate,
-                                    paymentMethod: 'conciliacion',
-                                    bank: 'Sistema (Adelanto por Saldo)',
-                                    reference: `CONC-ADV-${futureYear}-${futureMonth}`,
-                                    status: 'aprobado',
-                                    observations: `Cuota de ${months.find(m=>m.value === futureMonth)?.label} ${futureYear} pagada por adelanto automático.`
-                                });
+                             for (let i = 0; i < 12; i++) { // Look ahead 12 months
+                                const futureDebtDate = addMonths(startDate, i);
+                                const futureYear = futureDebtDate.getFullYear();
+                                const futureMonth = futureDebtDate.getMonth() + 1;
+                                const periodKey = `${futureYear}-${futureMonth}`;
+                                
+                                if (existingDebtsForProp.has(periodKey)) continue; // Skip if debt already exists for this prop
 
-                                const debtRef = doc(collection(db, 'debts'));
-                                transaction.set(debtRef, {
-                                    ownerId: owner.id,
-                                    year: futureYear,
-                                    month: futureMonth,
-                                    amountUSD: condoFee,
-                                    description: "Cuota de Condominio (Pagada por adelantado)",
-                                    status: 'paid',
-                                    paidAmountUSD: condoFee,
-                                    paymentDate: paymentDate,
-                                    paymentId: paymentRef.id,
-                                });
+                                if (Math.round(availableBalance * 100) >= Math.round(condoFeeInBs * 100)) {
+                                    availableBalance -= condoFeeInBs;
+                                    const paymentDate = Timestamp.now();
+                                    const paymentRef = doc(collection(db, 'payments'));
+                                    transaction.set(paymentRef, {
+                                        reportedBy: owner.id,
+                                        beneficiaries: [{ ownerId: owner.id, ...property, amount: condoFeeInBs }],
+                                        totalAmount: condoFeeInBs,
+                                        exchangeRate: activeRate,
+                                        paymentDate: paymentDate,
+                                        reportedAt: paymentDate,
+                                        paymentMethod: 'conciliacion',
+                                        bank: 'Sistema (Adelanto por Saldo)',
+                                        reference: `CONC-ADV-${futureYear}-${futureMonth}`,
+                                        status: 'aprobado',
+                                        observations: `Cuota de ${months.find(m=>m.value === futureMonth)?.label} ${futureYear} para ${property.street} - ${property.house} pagada por adelanto automático.`
+                                    });
 
-                                balanceChanged = true;
+                                    const debtRef = doc(collection(db, 'debts'));
+                                    transaction.set(debtRef, {
+                                        ownerId: owner.id,
+                                        property: property,
+                                        year: futureYear,
+                                        month: futureMonth,
+                                        amountUSD: condoFee,
+                                        description: "Cuota de Condominio (Pagada por adelantado)",
+                                        status: 'paid',
+                                        paidAmountUSD: condoFee,
+                                        paymentDate: paymentDate,
+                                        paymentId: paymentRef.id,
+                                    });
 
-                            } else {
-                                break;
+                                    balanceChanged = true;
+
+                                } else {
+                                    break;
+                                }
                             }
                         }
                     }
@@ -369,34 +389,46 @@ export default function DebtManagementPage() {
 
             const existingDebtsQuery = query(collection(db, 'debts'), where('year', '==', year), where('month', '==', month));
             const existingDebtsSnapshot = await getDocs(existingDebtsQuery);
-            const ownersWithDebt = new Set(existingDebtsSnapshot.docs.map(doc => doc.data().ownerId));
+            const ownersWithDebtForProp = new Set(existingDebtsSnapshot.docs.map(doc => {
+                const data = doc.data();
+                return `${data.ownerId}-${data.property.street}-${data.property.house}`;
+            }));
 
-            const ownersWithoutDebt = owners.filter(owner => !ownersWithDebt.has(owner.id));
+            const batch = writeBatch(db);
+            let newDebtsCount = 0;
 
-            if (ownersWithoutDebt.length === 0) {
-                toast({ title: 'Proceso Completado', description: 'Todos los propietarios ya tienen la deuda del mes en curso.' });
+            owners.forEach(owner => {
+                if (owner.properties && owner.properties.length > 0) {
+                    owner.properties.forEach(property => {
+                        const key = `${owner.id}-${property.street}-${property.house}`;
+                        if (!ownersWithDebtForProp.has(key)) {
+                            const debtRef = doc(collection(db, 'debts'));
+                            batch.set(debtRef, {
+                                ownerId: owner.id,
+                                property: property,
+                                year: year,
+                                month: month,
+                                amountUSD: condoFee,
+                                description: 'Cuota de Condominio',
+                                status: 'pending'
+                            });
+                            newDebtsCount++;
+                        }
+                    });
+                }
+            });
+
+            if (newDebtsCount === 0) {
+                 toast({ title: 'Proceso Completado', description: 'Todos los propietarios ya tienen la deuda del mes en curso para todas sus propiedades.' });
                 setIsGeneratingMonthlyDebt(false);
                 return;
             }
-
-            const batch = writeBatch(db);
-            ownersWithoutDebt.forEach(owner => {
-                const debtRef = doc(collection(db, 'debts'));
-                batch.set(debtRef, {
-                    ownerId: owner.id,
-                    year: year,
-                    month: month,
-                    amountUSD: condoFee,
-                    description: 'Cuota de Condominio',
-                    status: 'pending'
-                });
-            });
-
+            
             await batch.commit();
 
             toast({
                 title: 'Deudas Generadas Exitosamente',
-                description: `Se han generado ${ownersWithoutDebt.length} nuevas deudas para el mes de ${months.find(m => m.value === month)?.label} ${year}.`,
+                description: `Se han generado ${newDebtsCount} nuevas deudas para el mes de ${months.find(m => m.value === month)?.label} ${year}.`,
                 className: 'bg-green-100 border-green-400 text-green-800'
             });
 
@@ -449,24 +481,29 @@ export default function DebtManagementPage() {
     }, [view, selectedOwner]);
     
     // Moved from detail view to top level
-    const paymentCalculator = useMemo(() => {
+    const paymentCalculator = (property: Property) => useMemo(() => {
         if (!selectedOwner) return { totalSelectedBs: 0, balanceInFavor: 0, totalToPay: 0, hasSelection: false };
 
-        const pendingDebts = selectedOwnerDebts.filter(d => d.status === 'pending');
-        const totalSelectedDebtUSD = pendingDebts
-            .filter(debt => selectedOwnerDebts.some(d => d.id === debt.id)) // This logic seems redundant, all pendingDebts are in selectedOwnerDebts
-            .reduce((sum, debt) => sum + debt.amountUSD, 0);
+        const pendingDebtsForProperty = selectedOwnerDebts.filter(d => 
+            d.status === 'pending' && 
+            d.property.street === property.street && 
+            d.property.house === property.house
+        );
             
+        const totalSelectedDebtUSD = pendingDebtsForProperty.reduce((sum, debt) => sum + debt.amountUSD, 0);
         const totalSelectedDebtBs = totalSelectedDebtUSD * activeRate;
+        
+        // Balance is applied to the whole owner, not a single property. This is a simplification.
+        // A more complex system might allocate balance. For now, we show the full balance for any payment calculation.
         const totalToPay = Math.max(0, totalSelectedDebtBs - selectedOwner.balance);
 
         return {
             totalSelectedBs: totalSelectedDebtBs,
             balanceInFavor: selectedOwner.balance,
             totalToPay: totalToPay,
-            hasSelection: pendingDebts.length > 0,
+            hasSelection: pendingDebtsForProperty.length > 0,
         };
-    }, [selectedOwnerDebts, activeRate, selectedOwner]);
+    }, [selectedOwnerDebts, activeRate, selectedOwner, property]);
 
 
     const handleManageOwnerDebts = (owner: Owner) => {
@@ -474,9 +511,10 @@ export default function DebtManagementPage() {
         setView('detail');
     };
 
-    const handleAddMassiveDebt = () => {
+    const handleAddMassiveDebt = (property: Property) => {
         if (!selectedOwner) return;
         const today = new Date();
+        setPropertyForMassDebt(property);
         setCurrentMassDebt({
              ...emptyMassDebt,
              fromMonth: today.getMonth() + 1,
@@ -508,14 +546,12 @@ export default function DebtManagementPage() {
                 
                 if (!ownerDoc.exists()) throw "El documento del propietario no existe.";
     
-                // If debt was paid, we need to revert the balance and potentially associated payment
                 if (debtToDelete.status === 'paid' && debtToDelete.paidAmountUSD && activeRate > 0) {
                      const currentBalanceBs = ownerDoc.data().balance || 0;
                      const debtAmountBs = debtToDelete.paidAmountUSD * activeRate;
                      const newBalanceBs = currentBalanceBs + debtAmountBs;
                      transaction.update(ownerRef, { balance: newBalanceBs });
     
-                     // If there's a linked payment from a conciliation, delete it too
                      if (debtToDelete.paymentId) {
                          const paymentRef = doc(db, "payments", debtToDelete.paymentId);
                          transaction.delete(paymentRef);
@@ -538,7 +574,7 @@ export default function DebtManagementPage() {
     }
 
     const handleSaveMassDebt = async () => {
-        if (!selectedOwner) return;
+        if (!selectedOwner || !propertyForMassDebt) return;
         if (!currentMassDebt.description || currentMassDebt.amountUSD <= 0) {
             toast({ variant: 'destructive', title: 'Error de Validación', description: 'La descripción y un monto mayor a cero son obligatorios.' });
             return;
@@ -564,8 +600,6 @@ export default function DebtManagementPage() {
                 if (!ownerDoc.exists()) throw "El documento del propietario no existe.";
     
                 let currentBalanceBs = ownerDoc.data().balance || 0;
-                const ownerProperties = ownerDoc.data().properties || [];
-                const mainProperty = ownerProperties.length > 0 ? ownerProperties[0] : { street: 'N/A', house: 'N/A' };
     
                 for (let i = 0; i < monthsToGenerate; i++) {
                     const debtDate = addMonths(startDate, i);
@@ -574,6 +608,8 @@ export default function DebtManagementPage() {
                     
                     const existingDebtQuery = query(collection(db, 'debts'), 
                         where('ownerId', '==', selectedOwner.id),
+                        where('property.street', '==', propertyForMassDebt.street),
+                        where('property.house', '==', propertyForMassDebt.house),
                         where('year', '==', debtYear),
                         where('month', '==', debtMonth)
                     );
@@ -584,19 +620,23 @@ export default function DebtManagementPage() {
                     const debtAmountBs = amountUSD * activeRate;
                     const debtRef = doc(collection(db, "debts"));
                     let debtData: any = {
-                        ownerId: selectedOwner.id, year: debtYear, month: debtMonth,
-                        amountUSD: amountUSD, description: description, status: 'pending'
+                        ownerId: selectedOwner.id, 
+                        property: propertyForMassDebt,
+                        year: debtYear, 
+                        month: debtMonth,
+                        amountUSD: amountUSD, 
+                        description: description, 
+                        status: 'pending'
                     };
     
                     if (currentBalanceBs >= debtAmountBs) {
                         currentBalanceBs -= debtAmountBs;
                         const paymentDate = Timestamp.now();
 
-                        // Create the corresponding payment document
                         const paymentRef = doc(collection(db, "payments"));
                         transaction.set(paymentRef, {
                             reportedBy: selectedOwner.id,
-                            beneficiaries: [{ ownerId: selectedOwner.id, house: mainProperty.house, street: mainProperty.street, amount: debtAmountBs }],
+                            beneficiaries: [{ ownerId: selectedOwner.id, ...propertyForMassDebt, amount: debtAmountBs }],
                             totalAmount: debtAmountBs,
                             exchangeRate: activeRate,
                             paymentDate: paymentDate,
@@ -605,7 +645,7 @@ export default function DebtManagementPage() {
                             bank: 'Sistema (Saldo a Favor)',
                             reference: `CONC-DEBT-${paymentDate.toMillis()}`,
                             status: 'aprobado',
-                            observations: `Cuota de ${months.find(m=>m.value === debtMonth)?.label} ${debtYear} pagada por conciliación.`,
+                            observations: `Cuota de ${months.find(m=>m.value === debtMonth)?.label} ${debtYear} para ${propertyForMassDebt.street}-${propertyForMassDebt.house} pagada por conciliación.`,
                         });
 
                         debtData = {
@@ -613,7 +653,7 @@ export default function DebtManagementPage() {
                             status: 'paid',
                             paidAmountUSD: amountUSD,
                             paymentDate: paymentDate,
-                            paymentId: paymentRef.id, // Link to the payment document
+                            paymentId: paymentRef.id,
                         };
                     }
                     
@@ -623,7 +663,7 @@ export default function DebtManagementPage() {
                 transaction.update(ownerRef, { balance: currentBalanceBs });
             });
     
-            toast({ title: 'Deudas Generadas', description: `Se procesaron ${monthsToGenerate} meses de deuda. El saldo del propietario fue actualizado.` });
+            toast({ title: 'Deudas Generadas', description: `Se procesaron ${monthsToGenerate} meses de deuda para la propiedad seleccionada. El saldo del propietario fue actualizado.` });
     
         } catch (error) {
             console.error("Error generating mass debts: ", error);
@@ -632,6 +672,7 @@ export default function DebtManagementPage() {
         } finally {
             setIsMassDebtDialogOpen(false);
             setCurrentMassDebt(emptyMassDebt);
+            setPropertyForMassDebt(null);
         }
     };
     
@@ -710,10 +751,10 @@ export default function DebtManagementPage() {
         (doc as any).autoTable({
             head: [['Propietario', 'Ubicación', 'Deuda Pendiente (Bs.)', 'Saldo a Favor (Bs.)']],
             body: filteredOwners.map(o => {
-                const ownerProperty = (o.properties && o.properties.length > 0) ? o.properties[0] : { street: 'N/A', house: 'N/A' };
+                const ownerProperty = (o.properties && o.properties.length > 0) ? o.properties.map(p => `${p.street} - ${p.house}`).join(', ') : 'N/A';
                 const debtDisplay = o.pendingDebtUSD > 0 ? `Bs. ${(o.pendingDebtUSD * activeRate).toLocaleString('es-VE', { minimumFractionDigits: 2 })}` : 'Bs. 0,00';
                 const balanceDisplay = o.balance > 0 ? `Bs. ${o.balance.toLocaleString('es-VE', { minimumFractionDigits: 2 })}` : 'Bs. 0,00';
-                return [o.name, `${ownerProperty.street} - ${ownerProperty.house}`, debtDisplay, balanceDisplay];
+                return [o.name, ownerProperty, debtDisplay, balanceDisplay];
             }),
             startY: margin + 55,
             headStyles: { fillColor: [30, 80, 180] },
@@ -737,7 +778,7 @@ export default function DebtManagementPage() {
             <div className="space-y-8">
                  <div>
                     <h1 className="text-3xl font-bold font-headline">Gestión de Deudas</h1>
-                    <p className="text-muted-foreground">Busque un propietario para ver o registrar sus deudas. La conciliación es automática.</p>
+                    <p className="text-muted-foreground">Busque un propietario para ver o registrar sus deudas por propiedad.</p>
                 </div>
                  <Card>
                     <CardHeader>
@@ -780,7 +821,7 @@ export default function DebtManagementPage() {
                              <TableHeader>
                                 <TableRow>
                                     <TableHead>Propietario</TableHead>
-                                    <TableHead>Ubicación</TableHead>
+                                    <TableHead>Propiedades</TableHead>
                                     <TableHead>Deuda Pendiente (Bs.)</TableHead>
                                     <TableHead>Saldo a Favor (Bs.)</TableHead>
                                     <TableHead className="text-right">Acción</TableHead>
@@ -804,11 +845,11 @@ export default function DebtManagementPage() {
                                     </TableRow>
                                 ) : (
                                     filteredOwners.map((owner) => {
-                                        const ownerProperty = (owner.properties && owner.properties.length > 0) ? owner.properties[0] : { street: 'N/A', house: 'N/A' };
+                                        const ownerProperties = (owner.properties && owner.properties.length > 0) ? owner.properties.map(p => `${p.street} - ${p.house}`).join('; ') : 'N/A';
                                         return (
                                         <TableRow key={owner.id}>
                                             <TableCell className="font-medium">{owner.name}</TableCell>
-                                            <TableCell>{ownerProperty.street} - {ownerProperty.house}</TableCell>
+                                            <TableCell>{ownerProperties}</TableCell>
                                             <TableCell>
                                                {owner.pendingDebtUSD > 0 ? (
                                                     <Badge variant="destructive">
@@ -845,10 +886,6 @@ export default function DebtManagementPage() {
     
     // Detail View
     if (view === 'detail' && selectedOwner) {
-        const pendingDebts = selectedOwnerDebts.filter(d => d.status === 'pending').sort((a,b) => a.year - b.year || a.month - a.month);
-        const paidDebts = selectedOwnerDebts.filter(d => d.status === 'paid').sort((a,b) => b.year - a.year || b.month - a.month);
-        const ownerProperty = (selectedOwner.properties && selectedOwner.properties.length > 0) ? selectedOwner.properties[0] : { street: 'N/A', house: 'N/A' };
-
         return (
             <div className="space-y-8">
                  <Button variant="outline" onClick={() => setView('list')}>
@@ -856,118 +893,142 @@ export default function DebtManagementPage() {
                     Volver a la Lista
                 </Button>
 
-                 <Card>
-                    <CardHeader className="flex flex-row items-center justify-between">
-                        <div>
-                            <CardTitle>Deudas de: <span className="text-primary">{selectedOwner.name}</span></CardTitle>
-                            <CardDescription>Ubicación: {ownerProperty.street} - {ownerProperty.house}</CardDescription>
-                        </div>
-                        <Button onClick={handleAddMassiveDebt}>
-                            <PlusCircle className="mr-2 h-4 w-4" />
-                            Agregar Deuda Masiva
-                        </Button>
+                <Card>
+                    <CardHeader>
+                         <CardTitle>Deudas de: <span className="text-primary">{selectedOwner.name}</span></CardTitle>
+                         <CardDescription>Gestione las deudas para cada propiedad individualmente.</CardDescription>
                     </CardHeader>
-                    <CardContent>
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Período</TableHead>
-                                    <TableHead>Descripción</TableHead>
-                                    <TableHead>Monto (Bs.)</TableHead>
-                                    <TableHead>Estado</TableHead>
-                                    <TableHead className="text-right">Acciones</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {loadingDebts ? (
-                                    <TableRow>
-                                        <TableCell colSpan={5} className="h-24 text-center">
-                                            <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
-                                        </TableCell>
-                                    </TableRow>
-                                ) : selectedOwnerDebts.length === 0 ? (
-                                    <TableRow>
-                                        <TableCell colSpan={5} className="h-24 text-center">
-                                            <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
-                                                <Info className="h-8 w-8" />
-                                                <span>Este propietario no tiene deudas registradas.</span>
-                                            </div>
-                                        </TableCell>
-                                    </TableRow>
-                                ) : (
-                                    <>
-                                        {pendingDebts.map((debt) => (
-                                            <TableRow key={debt.id}>
-                                                <TableCell className="font-medium">{months.find(m => m.value === debt.month)?.label} {debt.year}</TableCell>
-                                                <TableCell>{debt.description}</TableCell>
-                                                <TableCell>Bs. {(debt.amountUSD * activeRate).toLocaleString('es-VE', {minimumFractionDigits: 2})}</TableCell>
-                                                <TableCell className="capitalize">
-                                                    <Badge variant={'warning'}>Pendiente</Badge>
-                                                </TableCell>
-                                                <TableCell className="text-right">
-                                                    <DropdownMenu>
-                                                        <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><span className="sr-only">Abrir menú</span><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                                                        <DropdownMenuContent align="end">
-                                                            <DropdownMenuItem onClick={() => handleEditDebt(debt)}><Edit className="mr-2 h-4 w-4" />Editar</DropdownMenuItem>
-                                                            <DropdownMenuItem onClick={() => handleDeleteDebt(debt)} className="text-destructive"><Trash2 className="mr-2 h-4 w-4" />Eliminar</DropdownMenuItem>
-                                                        </DropdownMenuContent>
-                                                    </DropdownMenu>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                        {paidDebts.map((debt) => (
-                                            <TableRow key={debt.id} className="text-muted-foreground">
-                                                <TableCell className="font-medium">{months.find(m => m.value === debt.month)?.label} {debt.year}</TableCell>
-                                                <TableCell>{debt.description}</TableCell>
-                                                <TableCell>Bs. {((debt.paidAmountUSD || debt.amountUSD) * activeRate).toLocaleString('es-VE', {minimumFractionDigits: 2})}</TableCell>
-                                                <TableCell className="capitalize">
-                                                    <Badge variant={'success'}>Pagada</Badge>
-                                                </TableCell>
-                                                <TableCell className="text-right">
-                                                    <DropdownMenu>
-                                                        <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><span className="sr-only">Abrir menú</span><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                                                        <DropdownMenuContent align="end">
-                                                            <DropdownMenuItem onClick={() => handleEditDebt(debt)}><Edit className="mr-2 h-4 w-4" />Editar</DropdownMenuItem>
-                                                            <DropdownMenuItem onClick={() => handleDeleteDebt(debt)} className="text-destructive"><Trash2 className="mr-2 h-4 w-4" />Eliminar</DropdownMenuItem>
-                                                        </DropdownMenuContent>
-                                                    </DropdownMenu>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </>
-                                )}
-                            </TableBody>
-                        </Table>
-                    </CardContent>
-                    <CardFooter className="p-4 bg-muted/50 border-t">
-                        {paymentCalculator.hasSelection && (
-                        <div className="w-full max-w-md ml-auto space-y-2">
-                             <h3 className="text-lg font-semibold flex items-center"><Calculator className="mr-2 h-5 w-5"/> Calculadora de Pago</h3>
-                             <div className="flex justify-between items-center">
-                                 <span className="text-muted-foreground">Total Seleccionado:</span>
-                                 <span className="font-medium">Bs. {paymentCalculator.totalSelectedBs.toLocaleString('es-VE', {minimumFractionDigits: 2})}</span>
-                             </div>
-                             <div className="flex justify-between items-center text-sm">
-                                 <span className="text-muted-foreground flex items-center"><Minus className="mr-2 h-4 w-4"/> Saldo a Favor:</span>
-                                 <span className="font-medium">Bs. {paymentCalculator.balanceInFavor.toLocaleString('es-VE', {minimumFractionDigits: 2})}</span>
-                             </div>
-                             <hr className="my-1"/>
-                             <div className="flex justify-between items-center text-lg">
-                                 <span className="font-bold flex items-center"><Equal className="mr-2 h-4 w-4"/> TOTAL A PAGAR:</span>
-                                 <span className="font-bold text-primary">Bs. {paymentCalculator.totalToPay.toLocaleString('es-VE', {minimumFractionDigits: 2})}</span>
-                             </div>
-                        </div>
-                        )}
-                    </CardFooter>
                 </Card>
+                
+                {loadingDebts ? (
+                    <div className="flex justify-center items-center h-64">
+                        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                    </div>
+                ) : (selectedOwner.properties && selectedOwner.properties.length > 0) ? (
+                    <Accordion type="multiple" className="w-full space-y-4">
+                        {selectedOwner.properties.map((property) => {
+                             const pendingDebts = selectedOwnerDebts.filter(d => d.status === 'pending' && d.property.street === property.street && d.property.house === property.house).sort((a,b) => a.year - b.year || a.month - a.month);
+                             const paidDebts = selectedOwnerDebts.filter(d => d.status === 'paid' && d.property.street === property.street && d.property.house === property.house).sort((a,b) => b.year - b.year || b.month - b.month);
+                             const calc = paymentCalculator(property);
+
+                            return (
+                            <Card key={`${property.street}-${property.house}`}>
+                                <AccordionItem value={`${property.street}-${property.house}`} className="border-b-0">
+                                    <AccordionTrigger className="p-6 hover:no-underline">
+                                        <div className="flex items-center gap-4 text-left">
+                                             <div className="p-3 bg-muted rounded-md">
+                                                <Building className="h-6 w-6 text-primary"/>
+                                             </div>
+                                             <div>
+                                                <h3 className="text-lg font-semibold">{property.street} - {property.house}</h3>
+                                                <p className="text-sm text-muted-foreground">{pendingDebts.length} deuda(s) pendiente(s).</p>
+                                             </div>
+                                        </div>
+                                    </AccordionTrigger>
+                                    <AccordionContent className="px-6 pb-0">
+                                        <div className="border-t pt-4">
+                                            <div className="flex justify-end mb-4">
+                                                <Button size="sm" onClick={() => handleAddMassiveDebt(property)}>
+                                                    <PlusCircle className="mr-2 h-4 w-4" />
+                                                    Agregar Deuda Masiva a esta Propiedad
+                                                </Button>
+                                            </div>
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow>
+                                                        <TableHead>Período</TableHead>
+                                                        <TableHead>Descripción</TableHead>
+                                                        <TableHead>Monto (Bs.)</TableHead>
+                                                        <TableHead>Estado</TableHead>
+                                                        <TableHead className="text-right">Acciones</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                     {pendingDebts.length === 0 && paidDebts.length === 0 && (
+                                                         <TableRow>
+                                                            <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                                                                No hay deudas registradas para esta propiedad.
+                                                            </TableCell>
+                                                        </TableRow>
+                                                     )}
+                                                     {pendingDebts.map((debt) => (
+                                                        <TableRow key={debt.id}>
+                                                            <TableCell className="font-medium">{months.find(m => m.value === debt.month)?.label} {debt.year}</TableCell>
+                                                            <TableCell>{debt.description}</TableCell>
+                                                            <TableCell>Bs. {(debt.amountUSD * activeRate).toLocaleString('es-VE', {minimumFractionDigits: 2})}</TableCell>
+                                                            <TableCell><Badge variant={'warning'}>Pendiente</Badge></TableCell>
+                                                            <TableCell className="text-right">
+                                                                <DropdownMenu>
+                                                                    <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                                                                    <DropdownMenuContent align="end">
+                                                                        <DropdownMenuItem onClick={() => handleEditDebt(debt)}><Edit className="mr-2 h-4 w-4" />Editar</DropdownMenuItem>
+                                                                        <DropdownMenuItem onClick={() => handleDeleteDebt(debt)} className="text-destructive"><Trash2 className="mr-2 h-4 w-4" />Eliminar</DropdownMenuItem>
+                                                                    </DropdownMenuContent>
+                                                                </DropdownMenu>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                    {paidDebts.map((debt) => (
+                                                        <TableRow key={debt.id} className="text-muted-foreground">
+                                                            <TableCell className="font-medium">{months.find(m => m.value === debt.month)?.label} {debt.year}</TableCell>
+                                                            <TableCell>{debt.description}</TableCell>
+                                                            <TableCell>Bs. {((debt.paidAmountUSD || debt.amountUSD) * activeRate).toLocaleString('es-VE', {minimumFractionDigits: 2})}</TableCell>
+                                                            <TableCell><Badge variant={'success'}>Pagada</Badge></TableCell>
+                                                            <TableCell className="text-right">
+                                                                 <DropdownMenu>
+                                                                    <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                                                                    <DropdownMenuContent align="end">
+                                                                        <DropdownMenuItem onClick={() => handleEditDebt(debt)}><Edit className="mr-2 h-4 w-4" />Editar</DropdownMenuItem>
+                                                                        <DropdownMenuItem onClick={() => handleDeleteDebt(debt)} className="text-destructive"><Trash2 className="mr-2 h-4 w-4" />Eliminar</DropdownMenuItem>
+                                                                    </DropdownMenuContent>
+                                                                </DropdownMenu>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                             {calc.hasSelection && (
+                                                <CardFooter className="p-4 bg-muted/50 border-t mt-4">
+                                                    <div className="w-full max-w-md ml-auto space-y-2">
+                                                        <h3 className="text-lg font-semibold flex items-center"><Calculator className="mr-2 h-5 w-5"/> Calculadora de Pago</h3>
+                                                        <div className="flex justify-between items-center">
+                                                            <span className="text-muted-foreground">Total Pendiente para esta propiedad:</span>
+                                                            <span className="font-medium">Bs. {calc.totalSelectedBs.toLocaleString('es-VE', {minimumFractionDigits: 2})}</span>
+                                                        </div>
+                                                        <div className="flex justify-between items-center text-sm">
+                                                            <span className="text-muted-foreground flex items-center"><Minus className="mr-2 h-4 w-4"/> Saldo a Favor del Propietario:</span>
+                                                            <span className="font-medium">Bs. {calc.balanceInFavor.toLocaleString('es-VE', {minimumFractionDigits: 2})}</span>
+                                                        </div>
+                                                        <hr className="my-1"/>
+                                                        <div className="flex justify-between items-center text-lg">
+                                                            <span className="font-bold flex items-center"><Equal className="mr-2 h-4 w-4"/> TOTAL SUGERIDO A PAGAR:</span>
+                                                            <span className="font-bold text-primary">Bs. {calc.totalToPay.toLocaleString('es-VE', {minimumFractionDigits: 2})}</span>
+                                                        </div>
+                                                    </div>
+                                                </CardFooter>
+                                            )}
+                                        </div>
+                                    </AccordionContent>
+                                </AccordionItem>
+                            </Card>
+                        )})}
+                    </Accordion>
+                ) : (
+                     <Card>
+                        <CardContent className="h-48 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+                            <Info className="h-8 w-8" />
+                            <span>Este propietario no tiene propiedades asignadas.</span>
+                        </CardContent>
+                    </Card>
+                )}
 
                  {/* Mass Debt Dialog */}
                 <Dialog open={isMassDebtDialogOpen} onOpenChange={setIsMassDebtDialogOpen}>
                     <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col">
                         <DialogHeader>
-                            <DialogTitle>Agregar Deudas Masivas</DialogTitle>
+                            <DialogTitle>Agregar Deudas a {propertyForMassDebt?.street} - {propertyForMassDebt?.house}</DialogTitle>
                             <DialogDescription>
-                                Seleccione la fecha de inicio. El sistema generará todas las deudas desde esa fecha hasta hoy.
+                                Seleccione la fecha de inicio. El sistema generará todas las deudas para esta propiedad desde esa fecha hasta hoy.
                             </DialogDescription>
                         </DialogHeader>
                         <div className="flex-grow overflow-y-auto pr-6 -mr-6">
@@ -1070,3 +1131,5 @@ export default function DebtManagementPage() {
     // Fallback while loading or if view is invalid
     return null;
 }
+
+    
