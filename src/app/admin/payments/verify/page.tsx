@@ -194,7 +194,7 @@ export default function VerifyPaymentsPage() {
         }
 
         try {
-            // PHASE 1: UPFRONT READS (NON-TRANSACTIONAL)
+            // PHASE 1: UPFRONT, NON-ATOMIC READS
             const paymentDoc = await getDoc(paymentRef);
             if (!paymentDoc.exists() || paymentDoc.data().status === 'aprobado') {
                 throw new Error("El pago no existe o ya fue aprobado.");
@@ -202,29 +202,23 @@ export default function VerifyPaymentsPage() {
             const paymentData = { id: paymentDoc.id, ...paymentDoc.data() } as FullPayment;
 
             const beneficiaryIds = paymentData.beneficiaries.map(b => b.ownerId);
-            if (beneficiaryIds.length === 0) {
-                throw new Error("El pago no tiene beneficiarios definidos.");
-            }
+            if (beneficiaryIds.length === 0) throw new Error("El pago no tiene beneficiarios definidos.");
 
-            // Fetch all beneficiaries' data
-            const ownersQuery = query(collection(db, 'owners'), where('__name__', 'in', beneficiaryIds));
-            const ownersSnapshot = await getDocs(ownersQuery);
+            const ownersSnapshot = await getDocs(query(collection(db, 'owners'), where('__name__', 'in', beneficiaryIds)));
             const ownersDataMap = new Map(ownersSnapshot.docs.map(d => [d.id, d.data()]));
-
-            // Fetch all pending debts for all beneficiaries
-            const debtsQuery = query(collection(db, 'debts'), where('ownerId', 'in', beneficiaryIds), where('status', '==', 'pending'));
-            const debtsSnapshot = await getDocs(debtsQuery);
-            const debtsByOwner = new Map<string, Debt[]>();
-            debtsSnapshot.forEach(d => {
+            
+            const allDebtsSnapshot = await getDocs(query(collection(db, 'debts'), where('ownerId', 'in', beneficiaryIds)));
+            const allDebtsByOwner = new Map<string, Debt[]>();
+            allDebtsSnapshot.forEach(d => {
                 const debt = { id: d.id, ...d.data() } as Debt;
-                const ownerDebts = debtsByOwner.get(debt.ownerId) || [];
+                const ownerDebts = allDebtsByOwner.get(debt.ownerId) || [];
                 ownerDebts.push(debt);
-                debtsByOwner.set(debt.ownerId, ownerDebts);
+                allDebtsByOwner.set(debt.ownerId, ownerDebts);
             });
             
             // PHASE 2: IN-MEMORY CALCULATIONS
             const batch = writeBatch(db);
-            let specialObservation = '';
+            let finalObservation = paymentData.observations || '';
 
             for (const beneficiary of paymentData.beneficiaries) {
                 const ownerData = ownersDataMap.get(beneficiary.ownerId);
@@ -237,17 +231,16 @@ export default function VerifyPaymentsPage() {
                 const condoFeeInBs = condoFee * paymentData.exchangeRate;
 
                 if ((ownerData.balance || 0) > 0 && beneficiary.amount > 0) {
-                    specialObservation = `Observación Especial:\nMonto de Cuota Condominial cubierto en su totalidad por el pago recibido de Bs. ${beneficiary.amount.toFixed(2)} sumado al saldo a favor que poseía la persona por un monto de Bs. ${(ownerData.balance || 0).toFixed(2)}, cubriendo así la totalidad de la cuota por un monto de Bs. ${(beneficiary.amount + (ownerData.balance || 0)).toFixed(2)} a la tasa de cambio del día de hoy.`;
+                    finalObservation = `Observación Especial:\nMonto de Cuota Condominial cubierto en su totalidad por el pago recibido de Bs. ${beneficiary.amount.toFixed(2)} sumado al saldo a favor que poseía la persona por un monto de Bs. ${(ownerData.balance || 0).toFixed(2)}, cubriendo así la totalidad de la cuota por un monto de Bs. ${(beneficiary.amount + (ownerData.balance || 0)).toFixed(2)} a la tasa de cambio del día de hoy.`;
                 }
 
                 // Settle pending debts
-                const pendingDebts = (debtsByOwner.get(beneficiary.ownerId) || []).sort((a,b) => a.year - b.year || a.month - a.month);
+                const pendingDebts = (allDebtsByOwner.get(beneficiary.ownerId) || []).filter(d => d.status === 'pending').sort((a,b) => a.year - b.year || a.month - a.month);
                 for (const debt of pendingDebts) {
                     const debtAmountBs = debt.amountUSD * paymentData.exchangeRate;
                     if (availableFundsBs >= debtAmountBs) {
                         availableFundsBs -= debtAmountBs;
-                        const debtRef = doc(db, 'debts', debt.id);
-                        batch.update(debtRef, {
+                        batch.update(doc(db, 'debts', debt.id), {
                             status: 'paid', paidAmountUSD: debt.amountUSD,
                             paymentDate: paymentData.paymentDate, paymentId: paymentData.id
                         });
@@ -256,9 +249,7 @@ export default function VerifyPaymentsPage() {
                 
                 // Settle future debts
                 if (availableFundsBs >= condoFeeInBs) {
-                    const allDebtsQuery = query(collection(db, 'debts'), where('ownerId', '==', beneficiary.ownerId));
-                    const allExistingDebtsSnap = await getDocs(allDebtsQuery);
-                    const existingDebtPeriods = new Set(allExistingDebtsSnap.docs.map(d => `${d.data().year}-${d.data().month}`));
+                    const existingDebtPeriods = new Set((allDebtsByOwner.get(beneficiary.ownerId) || []).map(d => `${d.year}-${d.month}`));
                     const startDate = startOfMonth(new Date());
 
                     for (let i = 0; i < 12; i++) {
@@ -280,15 +271,10 @@ export default function VerifyPaymentsPage() {
                     }
                 }
                 
-                // Update owner's final balance
-                const ownerRef = doc(db, 'owners', beneficiary.ownerId);
-                batch.update(ownerRef, { balance: availableFundsBs });
+                batch.update(doc(db, 'owners', beneficiary.ownerId), { balance: availableFundsBs });
             }
 
-            batch.update(paymentRef, { 
-                status: 'aprobado',
-                observations: specialObservation || paymentData.observations || ''
-            });
+            batch.update(paymentRef, { status: 'aprobado', observations: finalObservation });
             
             // PHASE 3: COMMIT ATOMIC WRITES
             await batch.commit();
@@ -696,5 +682,6 @@ export default function VerifyPaymentsPage() {
     </div>
   );
 }
+
 
     
