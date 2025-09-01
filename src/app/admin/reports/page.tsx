@@ -482,7 +482,7 @@ export default function ReportsPage() {
                     const ownerData = owners.find(o => o.id === ownerId);
                     if (!ownerData || ownerDebts.length < parseInt(delinquencyPeriod)) return null;
 
-                    ownerDebts.sort((a, b) => a.year - b.year || a.month - b.month);
+                    ownerDebts.sort((a, b) => a.year - b.year || a.month - a.month);
                     const firstDebt = ownerDebts[0];
                     const lastDebt = ownerDebts[ownerDebts.length - 1];
                     
@@ -549,7 +549,7 @@ export default function ReportsPage() {
                 const ownerDebts = paidDebtsByOwner[owner.id];
                 let period = 'N/A';
                 if (ownerDebts && ownerDebts.length > 0) {
-                    ownerDebts.sort((a, b) => a.year - b.year || a.month - b.month);
+                    ownerDebts.sort((a, b) => a.year - b.year || a.month - a.month);
                     const firstDebt = ownerDebts[0];
                     const lastDebt = ownerDebts[ownerDebts.length - 1];
                     const from = `${monthsLocale[firstDebt.month]} ${firstDebt.year}`;
@@ -630,7 +630,7 @@ export default function ReportsPage() {
 
             setPreviewData({
                 title: `Reporte de Pagos de ${format(dateRange.from, 'dd/MM/yy')} a ${format(dateRange.to, 'dd/MM/yy')}`,
-                headers: ['PROPIETARIO', 'CALLE', 'CASA', 'FECHA DE PAGO', 'REFERENCIA', 'MONTO (BS)'],
+                headers: ['USUARIO', 'CALLE', 'CASA', 'FECHA DE PAGO', 'REFERENCIA', 'MONTO (BS)'],
                 rows: reportRows,
                 filename: `reporte_pagos_${format(dateRange.from, 'yyyy-MM-dd')}_a_${format(dateRange.to, 'yyyy-MM-dd')}`
             });
