@@ -291,7 +291,7 @@ export default function ReportsPage() {
     
     const generateChartPdf = async (chartRef: React.RefObject<HTMLDivElement>, title: string, filename: string) => {
         if (!chartRef.current) return;
-        const canvas = await html2canvas(chartRef.current, { backgroundColor: '#1C1C1E', scale: 2 });
+        const canvas = await html2canvas(chartRef.current, { backgroundColor: '#ffffff', scale: 2 });
         const imgData = canvas.toDataURL('image/png');
         
         const pdf = new jsPDF('portrait'); // Changed to portrait
@@ -613,13 +613,27 @@ export default function ReportsPage() {
             const payments = paymentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Payment));
 
             const reportRows = payments.map(p => {
-                const owner = owners.find(o => o.id === p.reportedBy);
-                const beneficiary = p.beneficiaries?.[0];
-                const street = beneficiary?.street || owner?.street || 'N/A';
-                const house = beneficiary?.house || owner?.house || 'N/A';
+                let userName = 'N/A';
+                let street = 'N/A';
+                let house = 'N/A';
+
+                if (p.beneficiaries && p.beneficiaries.length > 1) {
+                    userName = "Varios Beneficiarios";
+                    street = "Múltiples";
+                    house = "Múltiples";
+                } else if (p.beneficiaries && p.beneficiaries.length === 1) {
+                    const beneficiaryId = p.beneficiaries[0].ownerId;
+                    const owner = owners.find(o => o.id === beneficiaryId);
+                    userName = owner?.name || "Desconocido";
+                    street = p.beneficiaries[0].street || owner?.street || 'N/A';
+                    house = p.beneficiaries[0].house || owner?.house || 'N/A';
+                } else {
+                     const reporter = owners.find(o => o.id === p.reportedBy);
+                     userName = reporter?.name || 'Sistema';
+                }
 
                 return [
-                    owner?.name || 'N/A',
+                    userName,
                     street,
                     house,
                     format(p.paymentDate.toDate(), "dd/MM/yyyy"),
