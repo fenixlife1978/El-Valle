@@ -475,7 +475,7 @@ export default function DebtManagementPage() {
             querySnapshot.forEach((doc) => {
                 debtsData.push({ id: doc.id, ...doc.data() } as Debt);
             });
-            setSelectedOwnerDebts(debtsData.sort((a,b) => b.year - a.year || b.month - a.month));
+            setSelectedOwnerDebts(debtsData.sort((a,b) => b.year - a.year || b.month - b.month));
             setLoadingDebts(false);
         }, (error) => {
             console.error("Error fetching owner debts:", error);
