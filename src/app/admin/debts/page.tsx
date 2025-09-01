@@ -485,21 +485,48 @@ export default function DebtManagementPage() {
         return () => unsubscribe();
     }, [view, selectedOwner]);
     
-    // Moved from detail view to top level
-    const paymentCalculator = (property: Property) => useMemo(() => {
+    // CORRECTION FOR HOOKS RULE: Group debts by property key. This is called once per render.
+    const debtsByProperty = useMemo(() => {
+        const grouped = new Map<string, { pending: Debt[], paid: Debt[] }>();
+        if (!selectedOwner || !selectedOwner.properties) return grouped;
+
+        selectedOwner.properties.forEach(prop => {
+            const key = `${prop.street}-${prop.house}`;
+            grouped.set(key, { pending: [], paid: [] });
+        });
+
+        selectedOwnerDebts.forEach(debt => {
+            const key = `${debt.property.street}-${debt.property.house}`;
+            if (!grouped.has(key)) {
+                 grouped.set(key, { pending: [], paid: [] });
+            }
+            if (debt.status === 'pending') {
+                grouped.get(key)!.pending.push(debt);
+            } else {
+                grouped.get(key)!.paid.push(debt);
+            }
+        });
+        
+        // Sort debts within each group
+        grouped.forEach(value => {
+            value.pending.sort((a,b) => a.year - b.year || a.month - a.month);
+            value.paid.sort((a,b) => b.year - b.year || b.month - b.month);
+        });
+
+        return grouped;
+    }, [selectedOwner, selectedOwnerDebts]);
+
+
+    // CORRECTION FOR HOOKS RULE: This is now a simple function, not a hook.
+    const paymentCalculator = (property: Property) => {
         if (!selectedOwner) return { totalSelectedBs: 0, balanceInFavor: 0, totalToPay: 0, hasSelection: false };
 
-        const pendingDebtsForProperty = selectedOwnerDebts.filter(d => 
-            d.status === 'pending' && 
-            d.property.street === property.street && 
-            d.property.house === property.house
-        );
+        const propKey = `${property.street}-${property.house}`;
+        const pendingDebtsForProperty = debtsByProperty.get(propKey)?.pending || [];
             
         const totalSelectedDebtUSD = pendingDebtsForProperty.reduce((sum, debt) => sum + debt.amountUSD, 0);
         const totalSelectedDebtBs = totalSelectedDebtUSD * activeRate;
         
-        // Balance is applied to the whole owner, not a single property. This is a simplification.
-        // A more complex system might allocate balance. For now, we show the full balance for any payment calculation.
         const totalToPay = Math.max(0, totalSelectedDebtBs - selectedOwner.balance);
 
         return {
@@ -508,8 +535,7 @@ export default function DebtManagementPage() {
             totalToPay: totalToPay,
             hasSelection: pendingDebtsForProperty.length > 0,
         };
-    }, [selectedOwnerDebts, activeRate, selectedOwner, property]);
-
+    };
 
     const handleManageOwnerDebts = (owner: Owner) => {
         setSelectedOwner(owner);
@@ -912,13 +938,13 @@ export default function DebtManagementPage() {
                 ) : (selectedOwner.properties && selectedOwner.properties.length > 0) ? (
                     <Accordion type="multiple" className="w-full space-y-4">
                         {selectedOwner.properties.map((property) => {
-                             const pendingDebts = selectedOwnerDebts.filter(d => d.status === 'pending' && d.property.street === property.street && d.property.house === property.house).sort((a,b) => a.year - b.year || a.month - a.month);
-                             const paidDebts = selectedOwnerDebts.filter(d => d.status === 'paid' && d.property.street === property.street && d.property.house === property.house).sort((a,b) => b.year - b.year || b.month - b.month);
+                             const propKey = `${property.street}-${property.house}`;
+                             const { pending: pendingDebts, paid: paidDebts } = debtsByProperty.get(propKey) || { pending: [], paid: [] };
                              const calc = paymentCalculator(property);
 
                             return (
-                            <Card key={`${property.street}-${property.house}`}>
-                                <AccordionItem value={`${property.street}-${property.house}`} className="border-b-0">
+                            <Card key={propKey}>
+                                <AccordionItem value={propKey} className="border-b-0">
                                     <AccordionTrigger className="p-6 hover:no-underline">
                                         <div className="flex items-center gap-4 text-left">
                                              <div className="p-3 bg-muted rounded-md">
