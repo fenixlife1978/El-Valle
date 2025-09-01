@@ -11,7 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { useToast } from '@/hooks/use-toast';
 import { CalendarIcon, Upload, CheckCircle2, Trash2, PlusCircle, Loader2 } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore';
@@ -34,9 +34,6 @@ type Owner = {
     id: string;
     name: string;
     properties: { street: string, house: string }[];
-    // Legacy fields for backward compatibility
-    street?: string;
-    house?: string;
 };
 
 type ExchangeRate = {
@@ -80,8 +77,7 @@ export default function UnifiedPaymentsPage() {
         const unsubscribe = onSnapshot(q, (querySnapshot) => {
             const ownersData: Owner[] = [];
             querySnapshot.forEach((doc) => {
-                const data = doc.data();
-                ownersData.push({ id: doc.id, name: data.name, properties: data.properties, street: data.street, house: data.house });
+                ownersData.push({ id: doc.id, ...doc.data() } as Owner);
             });
             setOwners(ownersData.sort((a, b) => a.name.localeCompare(b.name)));
         }, (error) => {
@@ -196,7 +192,7 @@ export default function UnifiedPaymentsPage() {
         const newSplits = [...globalSplits];
         if (field === 'ownerId') {
             const owner = owners.find(o => o.id === value);
-            const property = owner?.properties?.[0] || { street: owner?.street, house: owner?.house };
+            const property = owner?.properties?.[0] || { street: '', house: '' };
             newSplits[index] = { ...newSplits[index], ownerId: String(value), street: property?.street, house: property?.house };
         } else {
              (newSplits[index] as any)[field] = value;
@@ -258,14 +254,14 @@ export default function UnifiedPaymentsPage() {
         if (beneficiaryType === 'propio') {
             const owner = owners.find(o => o.id === thirdPartyBeneficiary);
             if(owner) {
-                const property = owner.properties?.[0] || { street: owner.street, house: owner.house };
+                const property = owner.properties?.[0] || { street: '', house: '' };
                 beneficiaries = [{ ownerId: owner.id, amount: Number(totalAmount), street: property.street, house: property.house }];
                 reportedById = owner.id;
             }
         } else if (beneficiaryType === 'terceros') {
             const owner = owners.find(o => o.id === thirdPartyBeneficiary);
             if(owner) {
-                const property = owner.properties?.[0] || { street: owner.street, house: owner.house };
+                const property = owner.properties?.[0] || { street: '', house: '' };
                 beneficiaries = [{ ownerId: owner.id, amount: Number(totalAmount), street: property.street, house: property.house }];
             }
             // reportedBy remains admin
@@ -314,10 +310,6 @@ export default function UnifiedPaymentsPage() {
         const prop = (owner.properties && owner.properties.length > 0) ? owner.properties[0] : null;
         if (prop) {
             return `${owner.name} (${prop.street} - ${prop.house})`;
-        }
-        // Legacy fallback
-        if (owner.street && owner.house) {
-            return `${owner.name} (${owner.street} - ${owner.house})`;
         }
         return owner.name;
     };

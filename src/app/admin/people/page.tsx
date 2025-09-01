@@ -35,9 +35,6 @@ type Owner = {
     email?: string;
     balance: number;
     role: Role;
-    // Legacy fields for backward compatibility
-    street?: string;
-    house?: string;
 };
 
 type CompanyInfo = {
@@ -92,7 +89,7 @@ export default function PeopleManagementPage() {
             
             // Custom sort logic
             const getSortKeys = (owner: Owner) => {
-                const prop = (owner.properties && owner.properties.length > 0) ? owner.properties[0] : { street: owner.street, house: owner.house };
+                const prop = (owner.properties && owner.properties.length > 0) ? owner.properties[0] : { street: 'N/A', house: 'N/A' };
                 const streetNum = parseInt(String(prop.street || '').replace('Calle ', '') || '0');
                 const houseNum = parseInt(String(prop.house || '').replace('Casa ', '') || '0');
                 return { streetNum, houseNum };
@@ -133,12 +130,12 @@ export default function PeopleManagementPage() {
     };
 
     const handleEditOwner = (owner: Owner) => {
-        // Ensure owner has a properties array, converting legacy data if needed
+        // Ensure owner has a properties array
         const editableOwner = {
             ...owner,
             properties: owner.properties && owner.properties.length > 0 
                 ? owner.properties 
-                : [{ street: owner.street || '', house: owner.house || '' }]
+                : [{ street: '', house: '' }]
         };
         setCurrentOwner(editableOwner);
         setIsDialogOpen(true);
@@ -173,7 +170,7 @@ export default function PeopleManagementPage() {
         }
     
         try {
-            const { id, street, house, ...ownerData } = currentOwner;
+            const { id, ...ownerData } = currentOwner;
             
             // CRITICAL FIX: Ensure balance is always stored as a number.
             const balanceValue = parseFloat(String(ownerData.balance).replace(',', '.') || '0');
@@ -253,7 +250,7 @@ export default function PeopleManagementPage() {
     
     const handleExportExcel = () => {
         const dataToExport = owners.flatMap(o => {
-            const properties = (o.properties && o.properties.length > 0) ? o.properties : [{ street: o.street || 'N/A', house: o.house || 'N/A'}];
+            const properties = (o.properties && o.properties.length > 0) ? o.properties : [{ street: 'N/A', house: 'N/A'}];
             return properties.map(p => ({
                 Nombre: o.name,
                 Calle: p.street,
@@ -301,7 +298,7 @@ export default function PeopleManagementPage() {
             body: owners.map(o => {
                 const properties = (o.properties && o.properties.length > 0) 
                     ? o.properties.map(p => `${p.street} - ${p.house}`).join('\n') 
-                    : (o.street && o.house ? `${o.street} - ${o.house}` : 'N/A');
+                    : 'N/A';
                 const balanceNum = parseFloat(String(o.balance));
                 const balanceDisplay = balanceNum > 0 ? `Bs. ${balanceNum.toLocaleString('es-VE', { minimumFractionDigits: 2 })}` : '-';
                 return [o.name, properties, o.email || '-', o.role, balanceDisplay];
@@ -461,7 +458,7 @@ export default function PeopleManagementPage() {
                                             <TableCell>
                                                 {owner.properties && owner.properties.length > 0 
                                                     ? owner.properties.map(p => `${p.street} - ${p.house}`).join(', ') 
-                                                    : (owner.street && owner.house ? `${owner.street} - ${owner.house}` : 'N/A')
+                                                    : 'N/A'
                                                 }
                                             </TableCell>
                                             <TableCell>{owner.email || '-'}</TableCell>
@@ -600,4 +597,5 @@ export default function PeopleManagementPage() {
     );
     
     
+
 

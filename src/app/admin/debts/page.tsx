@@ -23,8 +23,6 @@ import 'jspdf-autotable';
 type Owner = {
     id: string;
     name: string;
-    house: string;
-    street: string;
     balance: number;
     pendingDebtUSD: number;
     properties?: { street: string, house: string }[];
@@ -148,8 +146,6 @@ export default function DebtManagementPage() {
                 return { 
                     id: doc.id, 
                     name: data.name, 
-                    house: (data.properties && data.properties.length > 0) ? data.properties[0].house : data.house,
-                    street: (data.properties && data.properties.length > 0) ? data.properties[0].street : data.street,
                     balance: data.balance || 0,
                     pendingDebtUSD: 0, // Will be calculated by the debts listener
                     properties: data.properties,
@@ -225,6 +221,9 @@ export default function DebtManagementPage() {
                     let availableBalance = Number(ownerDoc.data().balance || 0);
                     if (availableBalance <= 0) return;
 
+                    const ownerProperty = (owner.properties && owner.properties.length > 0) ? owner.properties[0] : { street: 'N/A', house: 'N/A' };
+
+
                     // --- Phase 1: Pay off existing pending debts ---
                     const debtsQuery = query(
                         collection(db, 'debts'),
@@ -248,7 +247,7 @@ export default function DebtManagementPage() {
                                 const paymentRef = doc(collection(db, "payments"));
                                 transaction.set(paymentRef, {
                                     reportedBy: owner.id,
-                                    beneficiaries: [{ ownerId: owner.id, house: owner.house, street: owner.street, amount: debtAmountBs }],
+                                    beneficiaries: [{ ownerId: owner.id, house: ownerProperty.house, street: ownerProperty.street, amount: debtAmountBs }],
                                     totalAmount: debtAmountBs,
                                     exchangeRate: activeRate,
                                     paymentDate: Timestamp.now(),
@@ -296,7 +295,7 @@ export default function DebtManagementPage() {
                                 const paymentRef = doc(collection(db, 'payments'));
                                 transaction.set(paymentRef, {
                                     reportedBy: owner.id,
-                                    beneficiaries: [{ ownerId: owner.id, house: owner.house, street: owner.street, amount: condoFeeInBs }],
+                                    beneficiaries: [{ ownerId: owner.id, house: ownerProperty.house, street: ownerProperty.street, amount: condoFeeInBs }],
                                     totalAmount: condoFeeInBs,
                                     exchangeRate: activeRate,
                                     paymentDate: paymentDate,
@@ -414,10 +413,15 @@ export default function DebtManagementPage() {
     // Filter owners based on search term
     const filteredOwners = useMemo(() => {
         if (!searchTerm) return owners;
-        return owners.filter(owner => 
-            owner.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            String(owner.house).toLowerCase().includes(searchTerm.toLowerCase())
-        );
+        const lowerCaseSearch = searchTerm.toLowerCase();
+        return owners.filter(owner => {
+            const ownerName = owner.name.toLowerCase();
+            const propertiesMatch = owner.properties?.some(p => 
+                String(p.house).toLowerCase().includes(lowerCaseSearch) ||
+                String(p.street).toLowerCase().includes(lowerCaseSearch)
+            );
+            return ownerName.includes(lowerCaseSearch) || propertiesMatch;
+        });
     }, [searchTerm, owners]);
 
     // Fetch Debts for selected owner when view changes to 'detail'
@@ -560,7 +564,8 @@ export default function DebtManagementPage() {
                 if (!ownerDoc.exists()) throw "El documento del propietario no existe.";
     
                 let currentBalanceBs = ownerDoc.data().balance || 0;
-                const ownerProperties = ownerDoc.data().properties || [{ street: ownerDoc.data().street, house: ownerDoc.data().house }];
+                const ownerProperties = ownerDoc.data().properties || [];
+                const mainProperty = ownerProperties.length > 0 ? ownerProperties[0] : { street: 'N/A', house: 'N/A' };
     
                 for (let i = 0; i < monthsToGenerate; i++) {
                     const debtDate = addMonths(startDate, i);
@@ -591,7 +596,7 @@ export default function DebtManagementPage() {
                         const paymentRef = doc(collection(db, "payments"));
                         transaction.set(paymentRef, {
                             reportedBy: selectedOwner.id,
-                            beneficiaries: [{ ownerId: selectedOwner.id, house: ownerProperties[0].house, street: ownerProperties[0].street, amount: debtAmountBs }],
+                            beneficiaries: [{ ownerId: selectedOwner.id, house: mainProperty.house, street: mainProperty.street, amount: debtAmountBs }],
                             totalAmount: debtAmountBs,
                             exchangeRate: activeRate,
                             paymentDate: paymentDate,
@@ -705,9 +710,10 @@ export default function DebtManagementPage() {
         (doc as any).autoTable({
             head: [['Propietario', 'Ubicación', 'Deuda Pendiente (Bs.)', 'Saldo a Favor (Bs.)']],
             body: filteredOwners.map(o => {
+                const ownerProperty = (o.properties && o.properties.length > 0) ? o.properties[0] : { street: 'N/A', house: 'N/A' };
                 const debtDisplay = o.pendingDebtUSD > 0 ? `Bs. ${(o.pendingDebtUSD * activeRate).toLocaleString('es-VE', { minimumFractionDigits: 2 })}` : 'Bs. 0,00';
                 const balanceDisplay = o.balance > 0 ? `Bs. ${o.balance.toLocaleString('es-VE', { minimumFractionDigits: 2 })}` : 'Bs. 0,00';
-                return [o.name, `${o.street} - ${o.house}`, debtDisplay, balanceDisplay];
+                return [o.name, `${ownerProperty.street} - ${ownerProperty.house}`, debtDisplay, balanceDisplay];
             }),
             startY: margin + 55,
             headStyles: { fillColor: [30, 80, 180] },
@@ -762,7 +768,7 @@ export default function DebtManagementPage() {
                         <div className="relative mt-2">
                              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                              <Input 
-                                placeholder="Buscar por nombre o casa..." 
+                                placeholder="Buscar por nombre, calle o casa..." 
                                 className="pl-9"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -797,10 +803,12 @@ export default function DebtManagementPage() {
                                         </TableCell>
                                     </TableRow>
                                 ) : (
-                                    filteredOwners.map((owner) => (
+                                    filteredOwners.map((owner) => {
+                                        const ownerProperty = (owner.properties && owner.properties.length > 0) ? owner.properties[0] : { street: 'N/A', house: 'N/A' };
+                                        return (
                                         <TableRow key={owner.id}>
                                             <TableCell className="font-medium">{owner.name}</TableCell>
-                                            <TableCell>{owner.street} - {owner.house}</TableCell>
+                                            <TableCell>{ownerProperty.street} - {ownerProperty.house}</TableCell>
                                             <TableCell>
                                                {owner.pendingDebtUSD > 0 ? (
                                                     <Badge variant="destructive">
@@ -825,7 +833,7 @@ export default function DebtManagementPage() {
                                                 </Button>
                                             </TableCell>
                                         </TableRow>
-                                    ))
+                                    )})
                                 )}
                             </TableBody>
                         </Table>
@@ -839,7 +847,8 @@ export default function DebtManagementPage() {
     if (view === 'detail' && selectedOwner) {
         const pendingDebts = selectedOwnerDebts.filter(d => d.status === 'pending').sort((a,b) => a.year - b.year || a.month - a.month);
         const paidDebts = selectedOwnerDebts.filter(d => d.status === 'paid').sort((a,b) => b.year - a.year || b.month - a.month);
-        
+        const ownerProperty = (selectedOwner.properties && selectedOwner.properties.length > 0) ? selectedOwner.properties[0] : { street: 'N/A', house: 'N/A' };
+
         return (
             <div className="space-y-8">
                  <Button variant="outline" onClick={() => setView('list')}>
@@ -851,7 +860,7 @@ export default function DebtManagementPage() {
                     <CardHeader className="flex flex-row items-center justify-between">
                         <div>
                             <CardTitle>Deudas de: <span className="text-primary">{selectedOwner.name}</span></CardTitle>
-                            <CardDescription>Ubicación: {selectedOwner.street} - {selectedOwner.house}</CardDescription>
+                            <CardDescription>Ubicación: {ownerProperty.street} - {ownerProperty.house}</CardDescription>
                         </div>
                         <Button onClick={handleAddMassiveDebt}>
                             <PlusCircle className="mr-2 h-4 w-4" />

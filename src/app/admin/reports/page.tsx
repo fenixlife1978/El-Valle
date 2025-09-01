@@ -33,8 +33,6 @@ type Owner = {
     balance: number;
     delinquency: number; 
     status: 'solvente' | 'moroso';
-    street?: string;
-    house?: string;
 };
 
 type Payment = {
@@ -189,8 +187,8 @@ export default function ReportsPage() {
                 for(const debtDoc of allPendingDebtsSnapshot.docs) {
                     const debt = debtDoc.data();
                     const owner = ownersData.find(o => o.id === debt.ownerId);
-                    if(owner) {
-                        const ownerStreet = (owner.properties && owner.properties.length > 0) ? owner.properties[0].street : owner.street;
+                    if(owner && owner.properties && owner.properties.length > 0) {
+                        const ownerStreet = owner.properties[0].street;
                         if (ownerStreet) {
                             debtsByStreet[ownerStreet] = (debtsByStreet[ownerStreet] || 0) + debt.amountUSD;
                         }
@@ -292,7 +290,6 @@ export default function ReportsPage() {
     const generateChartPdf = async (chartRef: React.RefObject<HTMLDivElement>, title: string, filename: string) => {
         if (!chartRef.current) return;
         
-        // Use a dark background for the canvas to match the theme
         const canvas = await html2canvas(chartRef.current, { backgroundColor: '#18181b', scale: 2 });
         const imgData = canvas.toDataURL('image/png');
         
@@ -322,7 +319,6 @@ export default function ReportsPage() {
         const pdfWidth = pageWidth - (margin * 2);
         const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
         
-        // Adjust vertical position to ensure it fits well
         const startY = margin + 50;
         const availableHeight = pageHeight - startY - margin;
         const finalHeight = pdfHeight > availableHeight ? availableHeight : pdfHeight;
@@ -346,19 +342,12 @@ export default function ReportsPage() {
 
         setGeneratingReport(true);
         try {
-            // Robust property extraction
-            let propertyForQuery: { street: string; house: string; } | null = null;
-            if (owner.properties && owner.properties.length > 0 && owner.properties[0].street && owner.properties[0].house) {
-                propertyForQuery = owner.properties[0];
-            } else if (owner.street && owner.house) {
-                propertyForQuery = { street: owner.street, house: owner.house }; // Legacy fallback
+            if (!owner.properties || owner.properties.length === 0) {
+                 toast({ variant: 'destructive', title: 'Error de Datos', description: 'El propietario seleccionado no tiene una propiedad válida registrada para generar el reporte.' });
+                 setGeneratingReport(false);
+                 return;
             }
-
-            if (!propertyForQuery) {
-                toast({ variant: 'destructive', title: 'Error de Datos', description: 'El propietario seleccionado no tiene una propiedad válida registrada para generar el reporte.' });
-                setGeneratingReport(false);
-                return;
-            }
+            const propertyForQuery = owner.properties[0];
 
             // Fetch Payments (all approved payments for the user)
             const paymentsQuery = query(
@@ -425,7 +414,7 @@ export default function ReportsPage() {
                 dateRangeText = `Deudas desde ${monthsLocale[firstDebt.month]} ${firstDebt.year}`;
             }
 
-            const ownerProps = (owner.properties && owner.properties.length > 0) ? owner.properties.map(p => `${p.street} - ${p.house}`).join(', ') : (owner.street && owner.house ? `${owner.street} - ${owner.house}`: 'N/A');
+            const ownerProps = (owner.properties && owner.properties.length > 0) ? owner.properties.map(p => `${p.street} - ${p.house}`).join(', ') : 'N/A';
             const paymentCurrencySymbol = isAdvancePaymentReport ? '$' : 'Bs.';
             const paymentAmountHeader = isAdvancePaymentReport ? 'Monto ($)' : 'Monto (Bs.)';
 
@@ -494,7 +483,7 @@ export default function ReportsPage() {
                     const totalDebtUSD = ownerDebts.reduce((sum, d) => sum + d.amountUSD, 0);
                     const properties = (ownerData.properties && ownerData.properties.length > 0)
                         ? ownerData.properties.map(p => `${p.street} - ${p.house}`).join(', ')
-                        : `${ownerData.street} - ${ownerData.house}`;
+                        : 'N/A';
                     
                     return [
                         ownerData.name,
@@ -548,7 +537,7 @@ export default function ReportsPage() {
             const reportRows = solventOwners.map(owner => {
                 const properties = (owner.properties && owner.properties.length > 0)
                     ? owner.properties.map(p => `${p.street} - ${p.house}`).join(', ')
-                    : (owner.street && owner.house ? `${owner.street} - ${owner.house}` : 'N/A');
+                    : 'N/A';
                 
                 const ownerDebts = paidDebtsByOwner[owner.id];
                 let period = 'N/A';
@@ -587,7 +576,7 @@ export default function ReportsPage() {
             rows: ownersWithBalance.map(o => {
                 const properties = (o.properties && o.properties.length > 0)
                     ? o.properties.map(p => `${p.street} - ${p.house}`).join(', ')
-                    : (o.street && o.house ? `${o.street} - ${o.house}` : 'N/A');
+                    : 'N/A';
                 return [o.name, properties, `Bs. ${o.balance.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`];
             }),
             filename: 'reporte_saldos_favor'
@@ -629,8 +618,8 @@ export default function ReportsPage() {
                     const beneficiaryId = p.beneficiaries[0].ownerId;
                     const owner = owners.find(o => o.id === beneficiaryId);
                     userName = owner?.name || "Desconocido";
-                    street = p.beneficiaries[0].street || owner?.street || 'N/A';
-                    house = p.beneficiaries[0].house || owner?.house || 'N/A';
+                    street = p.beneficiaries[0].street || 'N/A';
+                    house = p.beneficiaries[0].house || 'N/A';
                 } else {
                      const reporter = owners.find(o => o.id === p.reportedBy);
                      userName = reporter?.name || 'Sistema';

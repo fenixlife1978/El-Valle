@@ -35,7 +35,14 @@ export default function AdminDashboardPage() {
     // Fetch stats
     const ownersQuery = query(collection(db, "owners"));
     const ownersUnsubscribe = onSnapshot(ownersQuery, (snapshot) => {
-      setStats(prev => ({ ...prev, totalUnits: snapshot.size }));
+      let totalUnits = 0;
+      snapshot.forEach(doc => {
+          const owner = doc.data();
+          if (owner.properties && owner.properties.length > 0) {
+              totalUnits += owner.properties.length;
+          }
+      });
+      setStats(prev => ({ ...prev, totalUnits }));
     });
 
     const paymentsQuery = query(collection(db, "payments"));
