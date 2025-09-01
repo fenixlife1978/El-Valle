@@ -485,25 +485,28 @@ export default function DebtManagementPage() {
         return () => unsubscribe();
     }, [view, selectedOwner]);
     
-    // CORRECTION FOR HOOKS RULE: Group debts by property key. This is called once per render.
     const debtsByProperty = useMemo(() => {
         const grouped = new Map<string, { pending: Debt[], paid: Debt[] }>();
         if (!selectedOwner || !selectedOwner.properties) return grouped;
 
         selectedOwner.properties.forEach(prop => {
-            const key = `${prop.street}-${prop.house}`;
-            grouped.set(key, { pending: [], paid: [] });
+            if (prop && prop.street && prop.house) {
+                const key = `${prop.street}-${prop.house}`;
+                grouped.set(key, { pending: [], paid: [] });
+            }
         });
 
         selectedOwnerDebts.forEach(debt => {
-            const key = `${debt.property.street}-${debt.property.house}`;
-            if (!grouped.has(key)) {
-                 grouped.set(key, { pending: [], paid: [] });
-            }
-            if (debt.status === 'pending') {
-                grouped.get(key)!.pending.push(debt);
-            } else {
-                grouped.get(key)!.paid.push(debt);
+            if (debt.property && debt.property.street && debt.property.house) {
+                const key = `${debt.property.street}-${debt.property.house}`;
+                if (!grouped.has(key)) {
+                     grouped.set(key, { pending: [], paid: [] });
+                }
+                if (debt.status === 'pending') {
+                    grouped.get(key)!.pending.push(debt);
+                } else {
+                    grouped.get(key)!.paid.push(debt);
+                }
             }
         });
         
@@ -517,7 +520,6 @@ export default function DebtManagementPage() {
     }, [selectedOwner, selectedOwnerDebts]);
 
 
-    // CORRECTION FOR HOOKS RULE: This is now a simple function, not a hook.
     const paymentCalculator = (property: Property) => {
         if (!selectedOwner) return { totalSelectedBs: 0, balanceInFavor: 0, totalToPay: 0, hasSelection: false };
 
