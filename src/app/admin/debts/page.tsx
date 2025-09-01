@@ -391,8 +391,11 @@ export default function DebtManagementPage() {
             const existingDebtsSnapshot = await getDocs(existingDebtsQuery);
             const ownersWithDebtForProp = new Set(existingDebtsSnapshot.docs.map(doc => {
                 const data = doc.data();
-                return `${data.ownerId}-${data.property.street}-${data.property.house}`;
-            }));
+                if (data.property && data.property.street && data.property.house) {
+                    return `${data.ownerId}-${data.property.street}-${data.property.house}`;
+                }
+                return null;
+            }).filter(Boolean));
 
             const batch = writeBatch(db);
             let newDebtsCount = 0;
@@ -400,19 +403,21 @@ export default function DebtManagementPage() {
             owners.forEach(owner => {
                 if (owner.properties && owner.properties.length > 0) {
                     owner.properties.forEach(property => {
-                        const key = `${owner.id}-${property.street}-${property.house}`;
-                        if (!ownersWithDebtForProp.has(key)) {
-                            const debtRef = doc(collection(db, 'debts'));
-                            batch.set(debtRef, {
-                                ownerId: owner.id,
-                                property: property,
-                                year: year,
-                                month: month,
-                                amountUSD: condoFee,
-                                description: 'Cuota de Condominio',
-                                status: 'pending'
-                            });
-                            newDebtsCount++;
+                        if (property && property.street && property.house) {
+                            const key = `${owner.id}-${property.street}-${property.house}`;
+                            if (!ownersWithDebtForProp.has(key)) {
+                                const debtRef = doc(collection(db, 'debts'));
+                                batch.set(debtRef, {
+                                    ownerId: owner.id,
+                                    property: property,
+                                    year: year,
+                                    month: month,
+                                    amountUSD: condoFee,
+                                    description: 'Cuota de Condominio',
+                                    status: 'pending'
+                                });
+                                newDebtsCount++;
+                            }
                         }
                     });
                 }
@@ -449,8 +454,8 @@ export default function DebtManagementPage() {
         return owners.filter(owner => {
             const ownerName = owner.name.toLowerCase();
             const propertiesMatch = owner.properties?.some(p => 
-                String(p.house).toLowerCase().includes(lowerCaseSearch) ||
-                String(p.street).toLowerCase().includes(lowerCaseSearch)
+                p && (String(p.house).toLowerCase().includes(lowerCaseSearch) ||
+                String(p.street).toLowerCase().includes(lowerCaseSearch))
             );
             return ownerName.includes(lowerCaseSearch) || propertiesMatch;
         });
@@ -1131,5 +1136,3 @@ export default function DebtManagementPage() {
     // Fallback while loading or if view is invalid
     return null;
 }
-
-    
