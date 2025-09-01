@@ -224,7 +224,7 @@ export default function VerifyPaymentsPage() {
             
             // PHASE 2: IN-MEMORY CALCULATIONS
             const batch = writeBatch(db);
-            let finalObservation = paymentData.observations || '';
+            let specialObservation = '';
 
             for (const beneficiary of paymentData.beneficiaries) {
                 const ownerData = ownersDataMap.get(beneficiary.ownerId);
@@ -237,7 +237,7 @@ export default function VerifyPaymentsPage() {
                 const condoFeeInBs = condoFee * paymentData.exchangeRate;
 
                 if ((ownerData.balance || 0) > 0 && beneficiary.amount > 0) {
-                     finalObservation = `Observación Especial:\nMonto de Cuota Condominial cubierto en su totalidad por el pago recibido de Bs. ${beneficiary.amount.toFixed(2)} sumado al saldo a favor que poseía la persona por un monto de Bs. ${(ownerData.balance || 0).toFixed(2)}, cubriendo así la totalidad de la cuota por un monto de Bs. ${(beneficiary.amount + (ownerData.balance || 0)).toFixed(2)} a la tasa de cambio del día de hoy.`;
+                    specialObservation = `Observación Especial:\nMonto de Cuota Condominial cubierto en su totalidad por el pago recibido de Bs. ${beneficiary.amount.toFixed(2)} sumado al saldo a favor que poseía la persona por un monto de Bs. ${(ownerData.balance || 0).toFixed(2)}, cubriendo así la totalidad de la cuota por un monto de Bs. ${(beneficiary.amount + (ownerData.balance || 0)).toFixed(2)} a la tasa de cambio del día de hoy.`;
                 }
 
                 // Settle pending debts
@@ -285,7 +285,10 @@ export default function VerifyPaymentsPage() {
                 batch.update(ownerRef, { balance: availableFundsBs });
             }
 
-            batch.update(paymentRef, { status: 'aprobado', observations: finalObservation });
+            batch.update(paymentRef, { 
+                status: 'aprobado',
+                observations: specialObservation || paymentData.observations || ''
+            });
             
             // PHASE 3: COMMIT ATOMIC WRITES
             await batch.commit();
@@ -693,3 +696,5 @@ export default function VerifyPaymentsPage() {
     </div>
   );
 }
+
+    
