@@ -291,10 +291,12 @@ export default function ReportsPage() {
     
     const generateChartPdf = async (chartRef: React.RefObject<HTMLDivElement>, title: string, filename: string) => {
         if (!chartRef.current) return;
-        const canvas = await html2canvas(chartRef.current, { backgroundColor: '#ffffff', scale: 2 });
+        
+        // Use a dark background for the canvas to match the theme
+        const canvas = await html2canvas(chartRef.current, { backgroundColor: '#18181b', scale: 2 });
         const imgData = canvas.toDataURL('image/png');
         
-        const pdf = new jsPDF('portrait'); // Changed to portrait
+        const pdf = new jsPDF('portrait');
         const pageWidth = pdf.internal.pageSize.getWidth();
         const pageHeight = pdf.internal.pageSize.getHeight();
         const margin = 14;
@@ -319,9 +321,13 @@ export default function ReportsPage() {
         const imgProps = pdf.getImageProperties(imgData);
         const pdfWidth = pageWidth - (margin * 2);
         const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-        const finalHeight = pdfHeight > (pageHeight - margin * 4) ? (pageHeight - margin * 4) : pdfHeight;
         
-        pdf.addImage(imgData, 'PNG', margin, margin + 50, pdfWidth, finalHeight);
+        // Adjust vertical position to ensure it fits well
+        const startY = margin + 50;
+        const availableHeight = pageHeight - startY - margin;
+        const finalHeight = pdfHeight > availableHeight ? availableHeight : pdfHeight;
+        
+        pdf.addImage(imgData, 'PNG', margin, startY, pdfWidth, finalHeight);
 
         pdf.save(`${filename}.pdf`);
     };
@@ -362,10 +368,8 @@ export default function ReportsPage() {
                     ownerId: owner.id, 
                     house: propertyForQuery.house, 
                     street: propertyForQuery.street,
-                    amount: owner.balance // This seems incorrect, query should not depend on balance. Removing.
                 })
             );
-
             const paymentsSnapshot = await getDocs(paymentsQuery);
             const allPayments = paymentsSnapshot.docs.map(doc => doc.data() as Payment);
 
@@ -482,7 +486,7 @@ export default function ReportsPage() {
                     const ownerData = owners.find(o => o.id === ownerId);
                     if (!ownerData || ownerDebts.length < parseInt(delinquencyPeriod)) return null;
 
-                    ownerDebts.sort((a, b) => a.year - b.year || a.month - a.month);
+                    ownerDebts.sort((a, b) => a.year - b.year || a.month - b.month);
                     const firstDebt = ownerDebts[0];
                     const lastDebt = ownerDebts[ownerDebts.length - 1];
                     
@@ -549,7 +553,7 @@ export default function ReportsPage() {
                 const ownerDebts = paidDebtsByOwner[owner.id];
                 let period = 'N/A';
                 if (ownerDebts && ownerDebts.length > 0) {
-                    ownerDebts.sort((a, b) => a.year - b.year || a.month - a.month);
+                    ownerDebts.sort((a, b) => a.year - b.year || a.month - b.month);
                     const firstDebt = ownerDebts[0];
                     const lastDebt = ownerDebts[ownerDebts.length - 1];
                     const from = `${monthsLocale[firstDebt.month]} ${firstDebt.year}`;
