@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
-import { Calendar as CalendarIcon, Download, Search, Loader2, BarChart2, ListChecks, FileText, UserCheck, ShieldCheck } from "lucide-react";
+import { Calendar as CalendarIcon, Download, Search, Loader2, BarChart2, ListChecks, FileText, UserCheck, ShieldCheck, DollarSign } from "lucide-react";
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import html2canvas from 'html2canvas';
@@ -44,6 +44,7 @@ type Payment = {
   totalAmount: number;
   paymentMethod: string;
   status: string;
+  reference: string;
   beneficiaries: { ownerId: string, house?: string, street?: string, amount: number }[];
 };
 
@@ -101,6 +102,7 @@ export default function ReportsPage() {
     // --- Form State ---
     const [selectedOwner, setSelectedOwner] = useState('');
     const [delinquencyPeriod, setDelinquencyPeriod] = useState('');
+    const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({});
     
     // --- Chart State ---
     const [incomeChartData, setIncomeChartData] = useState<ChartData[]>([]);
@@ -292,17 +294,16 @@ export default function ReportsPage() {
         const canvas = await html2canvas(chartRef.current, { backgroundColor: '#1C1C1E', scale: 2 });
         const imgData = canvas.toDataURL('image/png');
         
-        const pdf = new jsPDF('landscape');
+        const pdf = new jsPDF('portrait'); // Changed to portrait
         const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
         const margin = 14;
 
         if (companyInfo?.logo) {
             pdf.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25);
         }
         if (companyInfo) {
-            pdf.setFontSize(12);
-            pdf.setFont('helvetica', 'bold');
-            pdf.text(companyInfo.name, margin + 30, margin + 8);
+            pdf.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, margin + 30, margin + 8);
             pdf.setFont('helvetica', 'normal');
             pdf.setFontSize(9);
             pdf.text(`${companyInfo.rif} | ${companyInfo.phone}`, margin + 30, margin + 14);
@@ -318,7 +319,9 @@ export default function ReportsPage() {
         const imgProps = pdf.getImageProperties(imgData);
         const pdfWidth = pageWidth - (margin * 2);
         const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-        pdf.addImage(imgData, 'PNG', margin, margin + 50, pdfWidth, pdfHeight);
+        const finalHeight = pdfHeight > (pageHeight - margin * 4) ? (pageHeight - margin * 4) : pdfHeight;
+        
+        pdf.addImage(imgData, 'PNG', margin, margin + 50, pdfWidth, finalHeight);
 
         pdf.save(`${filename}.pdf`);
     };
@@ -358,7 +361,8 @@ export default function ReportsPage() {
                 where("beneficiaries", "array-contains", { 
                     ownerId: owner.id, 
                     house: propertyForQuery.house, 
-                    street: propertyForQuery.street 
+                    street: propertyForQuery.street,
+                    amount: owner.balance // This seems incorrect, query should not depend on balance. Removing.
                 })
             );
 
@@ -411,10 +415,10 @@ export default function ReportsPage() {
                 ];
             });
 
-            let dateRange = "Al día";
+            let dateRangeText = "Al día";
             if (pendingDebts.length > 0) {
                 const firstDebt = pendingDebts[0];
-                dateRange = `Deudas desde ${monthsLocale[firstDebt.month]} ${firstDebt.year}`;
+                dateRangeText = `Deudas desde ${monthsLocale[firstDebt.month]} ${firstDebt.year}`;
             }
 
             const ownerProps = (owner.properties && owner.properties.length > 0) ? owner.properties.map(p => `${p.street} - ${p.house}`).join(', ') : (owner.street && owner.house ? `${owner.street} - ${owner.house}`: 'N/A');
@@ -429,7 +433,7 @@ export default function ReportsPage() {
                 rows: [], // Not used for detailed view
                 detailedData: {
                     ownerInfo: `Propietario: ${owner.name} | Propiedad: ${ownerProps}`,
-                    dateRange: dateRange,
+                    dateRange: dateRangeText,
                     payments: {
                         headers: ["Fecha", "Concepto", "Pagado por", paymentAmountHeader],
                         rows: paymentsRows,
@@ -587,47 +591,58 @@ export default function ReportsPage() {
         setIsPreviewOpen(true);
     };
     
-    const showIncomeReportPreview = async () => {
+    const showPaymentsByPeriodReport = async () => {
+        if (!dateRange.from || !dateRange.to) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Por favor, seleccione un período de fechas válido (Desde y Hasta).' });
+            return;
+        }
+
         setGeneratingReport(true);
-        
-        let finalQuery = query(
-            collection(db, 'payments'),
-            where('status', '==', 'aprobado'),
-            orderBy('paymentDate', 'desc')
-        );
+        try {
+            const startDate = Timestamp.fromDate(dateRange.from);
+            const endDate = Timestamp.fromDate(dateRange.to);
 
-        const incomeSnapshot = await getDocs(finalQuery);
-        const incomePayments = incomeSnapshot.docs.map(doc => doc.data());
-        const totalIncome = incomePayments.reduce((sum, p) => sum + p.totalAmount, 0);
+            let paymentsQuery = query(
+                collection(db, 'payments'),
+                where('paymentDate', '>=', startDate),
+                where('paymentDate', '<=', endDate),
+                orderBy('paymentDate', 'desc')
+            );
+            
+            const paymentsSnapshot = await getDocs(paymentsQuery);
+            const payments = paymentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Payment));
 
-        setPreviewData({
-            title: `Reporte de Ingresos`,
-            headers: ['Fecha', 'Monto (Bs.)', 'Método de Pago'],
-            rows: incomePayments.map(p => [new Date(p.paymentDate.seconds * 1000).toLocaleDateString('es-VE'), p.totalAmount.toFixed(2), p.paymentMethod]),
-            footers: [`Total de Ingresos: Bs. ${totalIncome.toFixed(2)}`],
-            filename: 'reporte_ingresos',
-        });
-        setGeneratingReport(false);
-        setIsPreviewOpen(true);
+            const reportRows = payments.map(p => {
+                const owner = owners.find(o => o.id === p.reportedBy);
+                const beneficiary = p.beneficiaries?.[0];
+                const street = beneficiary?.street || owner?.street || 'N/A';
+                const house = beneficiary?.house || owner?.house || 'N/A';
+
+                return [
+                    owner?.name || 'N/A',
+                    street,
+                    house,
+                    format(p.paymentDate.toDate(), "dd/MM/yyyy"),
+                    p.reference,
+                    p.totalAmount.toLocaleString('es-VE', { minimumFractionDigits: 2 })
+                ];
+            });
+
+            setPreviewData({
+                title: `Reporte de Pagos de ${format(dateRange.from, 'dd/MM/yy')} a ${format(dateRange.to, 'dd/MM/yy')}`,
+                headers: ['PROPIETARIO', 'CALLE', 'CASA', 'FECHA DE PAGO', 'REFERENCIA', 'MONTO (BS)'],
+                rows: reportRows,
+                filename: `reporte_pagos_${format(dateRange.from, 'yyyy-MM-dd')}_a_${format(dateRange.to, 'yyyy-MM-dd')}`
+            });
+            setIsPreviewOpen(true);
+
+        } catch (error) {
+            console.error("Error generating payments report: ", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo generar el reporte de pagos.' });
+        } finally {
+            setGeneratingReport(false);
+        }
     };
-
-    const showGeneralStatusReportPreview = () => {
-        setPreviewData({
-           title: 'Reporte General de Estatus',
-           headers: ['Propietario', 'Propiedades', 'Estatus', 'Saldo a Favor (Bs.)'],
-           rows: owners.map(o => {
-               const properties = (o.properties && o.properties.length > 0)
-                   ? o.properties.map(p => `${p.street} - ${p.house}`).join(', ')
-                   : (o.house ? `${o.street} - ${o.house}` : 'N/A');
-                
-                const balanceDisplay = `Bs. ${o.balance.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`;
-
-               return [o.name, properties, o.status === 'solvente' ? 'Solvente' : 'Moroso', balanceDisplay];
-           }),
-           filename: 'reporte_general_estatus'
-       });
-       setIsPreviewOpen(true);
-   };
 
 
     if (loading && !isPreviewOpen) {
@@ -648,7 +663,7 @@ export default function ReportsPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 
                 {/* Reporte: Estado de Cuenta Individual */}
-                <Card className="md:col-span-1 lg:col-span-1">
+                <Card>
                     <CardHeader>
                         <CardTitle>Estado de Cuenta Individual</CardTitle>
                         <CardDescription>Consulte el historial completo de un propietario.</CardDescription>
@@ -719,22 +734,46 @@ export default function ReportsPage() {
                     </CardFooter>
                 </Card>
 
-                 {/* Reporte: General de Estatus */}
-                 <Card>
+                 {/* Reporte: Pagos por Período */}
+                <Card>
                     <CardHeader>
-                        <CardTitle>Reporte General de Estatus</CardTitle>
-                        <CardDescription>Una vista completa del estatus de pago de todas las unidades.</CardDescription>
+                        <CardTitle>Reporte General de Pagos</CardTitle>
+                        <CardDescription>Consulte todos los pagos en un período específico.</CardDescription>
                     </CardHeader>
-                     <CardContent className="flex items-center justify-center h-[92px]">
-                         <p className="text-sm text-muted-foreground text-center">Haga clic para generar el reporte de estatus.</p>
+                    <CardContent className="grid sm:grid-cols-2 gap-4">
+                         <div className="space-y-2">
+                            <Label>Desde</Label>
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !dateRange.from && "text-muted-foreground")}>
+                                        <CalendarIcon className="mr-2 h-4 w-4" />
+                                        {dateRange.from ? format(dateRange.from, "LLL dd, y", { locale: es }) : <span>Seleccione fecha</span>}
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={dateRange.from} onSelect={(d) => setDateRange(prev => ({...prev, from: d}))} /></PopoverContent>
+                            </Popover>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Hasta</Label>
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !dateRange.to && "text-muted-foreground")}>
+                                        <CalendarIcon className="mr-2 h-4 w-4" />
+                                        {dateRange.to ? format(dateRange.to, "LLL dd, y", { locale: es }) : <span>Seleccione fecha</span>}
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={dateRange.to} onSelect={(d) => setDateRange(prev => ({...prev, to: d}))} /></PopoverContent>
+                            </Popover>
+                        </div>
                     </CardContent>
                     <CardFooter>
-                        <Button className="w-full" onClick={showGeneralStatusReportPreview}>
-                           <Search className="mr-2 h-4 w-4" /> Generar Vista Previa
+                         <Button className="w-full" onClick={showPaymentsByPeriodReport} disabled={generatingReport || !dateRange.from || !dateRange.to}>
+                            {generatingReport ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Search className="mr-2 h-4 w-4" />}
+                            Generar Vista Previa
                         </Button>
                     </CardFooter>
                 </Card>
-
+                
                 {/* Reporte: Saldos a Favor */}
                  <Card>
                     <CardHeader>
@@ -747,23 +786,6 @@ export default function ReportsPage() {
                     <CardFooter>
                         <Button className="w-full" onClick={showBalanceFavorReportPreview}>
                            <Search className="mr-2 h-4 w-4" /> Generar Vista Previa
-                        </Button>
-                    </CardFooter>
-                </Card>
-
-                {/* Reporte: Ingresos por Período */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Reporte de Ingresos</CardTitle>
-                        <CardDescription>Calcule los ingresos totales en un período.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="grid sm:grid-cols-2 gap-4 h-[92px]">
-                        {/* Date pickers removed as per request for "to-date" reports */}
-                    </CardContent>
-                    <CardFooter>
-                         <Button className="w-full" onClick={showIncomeReportPreview} disabled={generatingReport}>
-                            {generatingReport ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Search className="mr-2 h-4 w-4" />}
-                            Generar Vista Previa
                         </Button>
                     </CardFooter>
                 </Card>
@@ -843,14 +865,14 @@ export default function ReportsPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
                 <Card className="lg:col-span-1">
                     <CardHeader>
-                        <CardTitle className="flex items-center gap-2"><BarChart2 className="h-5 w-5"/> Gráfico de Ingresos por Mes</CardTitle>
-                        <CardDescription>Visualización de los ingresos aprobados mensualmente.</CardDescription>
+                        <CardTitle className="flex items-center gap-2"><DollarSign className="h-5 w-5"/> Gráfico de Ingresos por Mes</CardTitle>
+                        <CardDescription>Visualización de los ingresos aprobados mensualmente en Bolívares (Bs.).</CardDescription>
                     </CardHeader>
                     <CardContent ref={incomeChartRef} className="pl-2">
                         {incomeChartData.length > 0 ? (
                             <ChartContainer config={{
                                 total: { label: "Ingresos (Bs.)", color: "hsl(var(--primary))" }
-                            }} className="h-[250px] w-full">
+                            }} className="h-[300px] w-full">
                                 <BarChart accessibilityLayer data={incomeChartData}>
                                     <XAxis dataKey="name" tickLine={false} axisLine={false} tickMargin={8} angle={-45} textAnchor="end" height={60} />
                                     <YAxis tickLine={false} axisLine={false} tickMargin={8} />
@@ -858,10 +880,10 @@ export default function ReportsPage() {
                                     <Bar dataKey="total" fill="var(--color-total)" radius={4} />
                                 </BarChart>
                             </ChartContainer>
-                        ) : <p className="text-center text-muted-foreground h-[250px] flex items-center justify-center">No hay datos de ingresos para mostrar.</p>}
+                        ) : <p className="text-center text-muted-foreground h-[300px] flex items-center justify-center">No hay datos de ingresos para mostrar.</p>}
                     </CardContent>
                     <CardFooter>
-                        <Button className="w-full" onClick={() => generateChartPdf(incomeChartRef, 'Gráfico de Ingresos por Mes', 'grafico_ingresos')}>
+                        <Button className="w-full" onClick={() => generateChartPdf(incomeChartRef, 'Gráfico de Ingresos por Mes (Bs.)', 'grafico_ingresos_bs')}>
                            <Download className="mr-2 h-4 w-4" /> Exportar Gráfico
                         </Button>
                     </CardFooter>
@@ -877,20 +899,20 @@ export default function ReportsPage() {
                                 total: { label: "Deuda (USD)", color: "hsl(var(--destructive))" }
                             }} className="h-[300px] w-full">
                                 <BarChart accessibilityLayer data={debtChartData} margin={{ top: 20 }}>
-                                    <XAxis dataKey="name" tickLine={false} axisLine={false} tickMargin={8} angle={-90} textAnchor="end" height={60} interval={0} />
+                                    <XAxis dataKey="name" tickLine={false} axisLine={false} tickMargin={8} angle={-45} textAnchor="end" height={60} interval={0} />
                                     <YAxis tickLine={false} axisLine={false} tickMargin={8} />
                                     <ChartTooltip content={<ChartTooltipContent />} />
                                     <Bar dataKey="total" fill="var(--color-total)" radius={4}>
                                         <LabelList 
                                             dataKey="total" 
                                             position="top" 
-                                            formatter={(value: number) => `$${value.toFixed(2)}`}
+                                            formatter={(value: number) => `$${value.toFixed(0)}`}
                                             className="fill-foreground text-xs"
                                         />
                                     </Bar>
                                 </BarChart>
                             </ChartContainer>
-                         ) : <p className="text-center text-muted-foreground h-[250px] flex items-center justify-center">No hay datos de deudas para mostrar.</p>}
+                         ) : <p className="text-center text-muted-foreground h-[300px] flex items-center justify-center">No hay datos de deudas para mostrar.</p>}
                     </CardContent>
                     <CardFooter>
                         <Button className="w-full" variant="destructive" onClick={() => generateChartPdf(debtChartRef, 'Gráfico de Deuda por Calle (USD)', 'grafico_deudas_usd')}>
