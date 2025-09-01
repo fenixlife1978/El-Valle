@@ -174,6 +174,7 @@ export default function VerifyPaymentsPage() {
 
   const handleStatusChange = async (id: string, newStatus: PaymentStatus) => {
     const paymentRef = doc(db, 'payments', id);
+    let specialObservation = '';
 
     if (newStatus === 'rechazado') {
         try {
@@ -199,7 +200,6 @@ export default function VerifyPaymentsPage() {
                     throw new Error("El pago no existe o ya fue aprobado.");
                 }
                 const paymentData = { id: paymentDoc.id, ...paymentDoc.data() } as FullPayment;
-                let specialObservation = '';
 
                 for (const beneficiary of paymentData.beneficiaries) {
                     const ownerRef = doc(db, "owners", beneficiary.ownerId);
@@ -352,9 +352,9 @@ export default function VerifyPaymentsPage() {
                 const paymentDoc = await transaction.get(paymentRef);
                 if (!paymentDoc.exists()) throw new Error("El pago ya fue eliminado o no existe.");
                 
-                const paymentData = { id: paymentDoc.id, ...paymentDoc.data() } as FullPayment;
+                const paymentData = paymentDoc.data() as FullPayment;
 
-                if (!paymentData.id) {
+                if (!paymentDoc.id) {
                     throw new Error("El ID del pago es inválido o no se encontró, no se puede revertir.");
                 }
 
@@ -367,7 +367,7 @@ export default function VerifyPaymentsPage() {
                     
                     const paidDebtsQuery = query(
                         collection(db, "debts"),
-                        where("paymentId", "==", paymentData.id),
+                        where("paymentId", "==", paymentDoc.id),
                         where("ownerId", "==", beneficiary.ownerId)
                     );
                     
