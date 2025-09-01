@@ -203,7 +203,7 @@ export default function VerifyPaymentsPage() {
 
             const beneficiaryIds = paymentData.beneficiaries.map(b => b.ownerId);
             if (beneficiaryIds.length === 0) throw new Error("El pago no tiene beneficiarios definidos.");
-
+            
             const ownersSnapshot = await getDocs(query(collection(db, 'owners'), where('__name__', 'in', beneficiaryIds)));
             const ownersDataMap = new Map(ownersSnapshot.docs.map(d => [d.id, d.data()]));
             
@@ -682,6 +682,3 @@ export default function VerifyPaymentsPage() {
     </div>
   );
 }
-
-
-    
