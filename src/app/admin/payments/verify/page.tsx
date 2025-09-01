@@ -235,15 +235,13 @@ export default function VerifyPaymentsPage() {
 
                 let availableFundsBs = beneficiary.amount + (ownerData.balance || 0);
                 const condoFeeInBs = condoFee * paymentData.exchangeRate;
-                let specialObsTriggered = false;
 
                 if ((ownerData.balance || 0) > 0 && beneficiary.amount > 0) {
-                     specialObsTriggered = true;
                      finalObservation = `Observación Especial:\nMonto de Cuota Condominial cubierto en su totalidad por el pago recibido de Bs. ${beneficiary.amount.toFixed(2)} sumado al saldo a favor que poseía la persona por un monto de Bs. ${(ownerData.balance || 0).toFixed(2)}, cubriendo así la totalidad de la cuota por un monto de Bs. ${(beneficiary.amount + (ownerData.balance || 0)).toFixed(2)} a la tasa de cambio del día de hoy.`;
                 }
 
                 // Settle pending debts
-                const pendingDebts = (debtsByOwner.get(beneficiary.ownerId) || []).sort((a,b) => a.year - b.year || a.month - b.month);
+                const pendingDebts = (debtsByOwner.get(beneficiary.ownerId) || []).sort((a,b) => a.year - b.year || a.month - a.month);
                 for (const debt of pendingDebts) {
                     const debtAmountBs = debt.amountUSD * paymentData.exchangeRate;
                     if (availableFundsBs >= debtAmountBs) {
