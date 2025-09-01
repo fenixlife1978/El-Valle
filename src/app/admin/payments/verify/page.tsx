@@ -52,7 +52,6 @@ type Debt = {
     status: 'pending' | 'paid';
     paidAmountUSD?: number;
     paymentDate?: Timestamp;
-    paymentId?: string;
 };
 
 type CompanyInfo = {
@@ -188,7 +187,7 @@ export default function VerifyPaymentsPage() {
         }
         return;
     }
-
+    
     if (newStatus === 'aprobado') {
         if (condoFee <= 0) {
             toast({ variant: 'destructive', title: 'Error de Configuración', description: 'La cuota de condominio no está configurada. No se puede aprobar el pago.' });
@@ -196,58 +195,123 @@ export default function VerifyPaymentsPage() {
         }
 
         try {
-            // This is a complex operation that modifies multiple documents.
-            // A transaction is the safest way to ensure atomicity.
-            await runTransaction(db, async (transaction) => {
-                // PHASE 1: READ ALL NECESSARY DOCUMENTS
-                const paymentDoc = await transaction.get(paymentRef);
-                if (!paymentDoc.exists() || paymentDoc.data().status === 'aprobado') {
-                    throw new Error("El pago no existe o ya fue aprobado.");
-                }
-                const paymentData = paymentDoc.data() as FullPayment;
+            // PHASE 1: READ ALL NECESSARY DATA (NON-TRANSACTIONAL)
+            const paymentDoc = await getDoc(paymentRef);
+            if (!paymentDoc.exists() || paymentDoc.data().status === 'aprobado') {
+                throw new Error("El pago no existe o ya fue aprobado.");
+            }
+            const paymentData = { id: paymentDoc.id, ...paymentDoc.data() } as FullPayment;
 
-                const allBeneficiaryRefs = paymentData.beneficiaries.map(b => doc(db, 'owners', b.ownerId));
-                const allOwnerDocs = await transaction.getAll(...allBeneficiaryRefs);
+            const batch = writeBatch(db);
 
-                // PHASE 2: PROCESS LOGIC AND PREPARE WRITES
-                for (let i = 0; i < paymentData.beneficiaries.length; i++) {
-                    const beneficiary = paymentData.beneficiaries[i];
-                    const ownerDoc = allOwnerDocs[i];
+            for (const beneficiary of paymentData.beneficiaries) {
+                const ownerRef = doc(db, 'owners', beneficiary.ownerId);
+                const ownerDoc = await getDoc(ownerRef);
 
-                    if (!ownerDoc.exists()) {
-                        throw new Error(`Propietario con ID ${beneficiary.ownerId} no encontrado.`);
-                    }
-                    
-                    const ownerData = ownerDoc.data();
-                    const ownerBalance = ownerData.balance || 0;
-                    const availableFundsBs = beneficiary.amount + ownerBalance;
-                    
-                    if (ownerBalance > 0 && beneficiary.amount > 0) {
-                         specialObservation = `Observación Especial:\nMonto de Cuota Condominial cubierto en su totalidad por el pago recibido de Bs. ${beneficiary.amount.toFixed(2)} sumado al saldo a favor que poseía la persona por un monto de Bs. ${ownerBalance.toFixed(2)}, cubriendo así la totalidad de la cuota por un monto de Bs. ${(beneficiary.amount + ownerBalance).toFixed(2)} a la tasa de cambio del día de hoy.`;
-                    }
-
-                    // For simplicity and to avoid complex transactional reads, we'll just add the funds to the balance.
-                    // A separate, robust reconciliation process (like the one in `debts` page) will handle debt settlement.
-                    transaction.update(ownerDoc.ref, { balance: availableFundsBs });
+                if (!ownerDoc.exists()) {
+                    console.error(`Propietario con ID ${beneficiary.ownerId} no encontrado. Saltando...`);
+                    continue; // Skip this beneficiary if not found
                 }
 
-                // PHASE 3: WRITE ALL CHANGES
-                transaction.update(paymentRef, {
-                    status: 'aprobado',
-                    observations: specialObservation || paymentData.observations || ''
-                });
+                const ownerData = ownerDoc.data();
+                let availableFundsBs = beneficiary.amount + (ownerData.balance || 0);
+                const condoFeeInBs = condoFee * paymentData.exchangeRate;
+                
+                if ((ownerData.balance || 0) > 0 && beneficiary.amount > 0) {
+                     specialObservation = `Observación Especial:\nMonto de Cuota Condominial cubierto en su totalidad por el pago recibido de Bs. ${beneficiary.amount.toFixed(2)} sumado al saldo a favor que poseía la persona por un monto de Bs. ${(ownerData.balance || 0).toFixed(2)}, cubriendo así la totalidad de la cuota por un monto de Bs. ${(beneficiary.amount + (ownerData.balance || 0)).toFixed(2)} a la tasa de cambio del día de hoy.`;
+                }
+
+                // Fetch all pending debts for this owner
+                const debtsQuery = query(
+                    collection(db, 'debts'),
+                    where('ownerId', '==', beneficiary.ownerId),
+                    where('status', '==', 'pending'),
+                    orderBy('year', 'asc'),
+                    orderBy('month', 'asc')
+                );
+                const debtsSnapshot = await getDocs(debtsQuery);
+
+                // PHASE 2: CALCULATE WRITES IN MEMORY
+                // Settle pending debts first
+                if (!debtsSnapshot.empty) {
+                    for (const debtDoc of debtsSnapshot.docs) {
+                        const debt = { id: debtDoc.id, ...debtDoc.data() } as Debt;
+                        const debtAmountBs = debt.amountUSD * paymentData.exchangeRate;
+
+                        if (availableFundsBs >= debtAmountBs) {
+                            availableFundsBs -= debtAmountBs;
+                            batch.update(debtDoc.ref, {
+                                status: 'paid',
+                                paidAmountUSD: debt.amountUSD,
+                                paymentDate: paymentData.paymentDate,
+                                paymentId: paymentData.id
+                            });
+                        } else {
+                            break;
+                        }
+                    }
+                }
+
+                // Settle future debts with remaining funds
+                if (availableFundsBs >= condoFeeInBs) {
+                    const allExistingDebtsQuery = query(collection(db, 'debts'), where('ownerId', '==', beneficiary.ownerId));
+                    const allExistingDebtsSnap = await getDocs(allExistingDebtsQuery);
+                    const existingDebtPeriods = new Set(allExistingDebtsSnap.docs.map(d => `${d.data().year}-${d.data().month}`));
+
+                    const startDate = startOfMonth(new Date());
+
+                    for (let i = 0; i < 12; i++) { // Look ahead 12 months
+                        const futureDebtDate = addMonths(startDate, i);
+                        const futureYear = futureDebtDate.getFullYear();
+                        const futureMonth = futureDebtDate.getMonth() + 1;
+                        const periodKey = `${futureYear}-${futureMonth}`;
+
+                        if (existingDebtPeriods.has(periodKey)) continue;
+
+                        if (availableFundsBs >= condoFeeInBs) {
+                            availableFundsBs -= condoFeeInBs;
+                            
+                            const newDebtRef = doc(collection(db, 'debts'));
+                            batch.set(newDebtRef, {
+                                ownerId: beneficiary.ownerId,
+                                year: futureYear,
+                                month: futureMonth,
+                                amountUSD: condoFee,
+                                description: `Cuota de Condominio (Pagada por adelantado con pago ${paymentData.id.substring(0,5)})`,
+                                status: 'paid',
+                                paidAmountUSD: condoFee,
+                                paymentDate: paymentData.paymentDate,
+                                paymentId: paymentData.id
+                            });
+                        } else {
+                            break;
+                        }
+                    }
+                }
+                
+                // Update owner's final balance
+                batch.update(ownerRef, { balance: availableFundsBs });
+            }
+
+            // Finally, update the payment status
+            batch.update(paymentRef, {
+                status: 'aprobado',
+                observations: specialObservation || paymentData.observations || ''
             });
+
+            // PHASE 3: COMMIT ALL WRITES AT ONCE
+            await batch.commit();
 
             toast({
                 title: 'Pago Aprobado y Procesado',
-                description: 'El saldo del propietario ha sido actualizado. Las deudas se pueden conciliar desde la página de Gestión de Deudas.',
+                description: 'El saldo del propietario y las deudas han sido actualizados.',
                 className: 'bg-green-100 border-green-400 text-green-800'
             });
 
         } catch (error) {
             console.error("Error processing payment approval: ", error);
             const errorMessage = error instanceof Error ? error.message : 'No se pudo aprobar y procesar el pago.';
-            toast({ variant: 'destructive', title: 'Error en la Transacción', description: errorMessage });
+            toast({ variant: 'destructive', title: 'Error en la Operación', description: errorMessage });
         }
     }
   };
@@ -304,10 +368,10 @@ export default function VerifyPaymentsPage() {
                 const paymentDoc = await transaction.get(paymentRef);
                 if (!paymentDoc.exists()) throw new Error("El pago ya fue eliminado o no existe.");
                 
-                const paymentData = paymentDoc.data() as FullPayment;
+                const paymentData = { id: paymentDoc.id, ...paymentDoc.data() } as FullPayment;
 
                 // CRITICAL VALIDATION
-                if (!paymentDoc.id) {
+                if (!paymentData.id) {
                     throw new Error("El ID del pago es inválido o no se encontró, no se puede revertir.");
                 }
 
