@@ -194,10 +194,11 @@ export default function VerifyPaymentsPage() {
         }
 
         try {
-            // PHASE 1: UPFRONT, NON-ATOMIC READS
+            // --- PHASE 1: COMPREHENSIVE UPFRONT READS ---
             const paymentDoc = await getDoc(paymentRef);
             if (!paymentDoc.exists() || paymentDoc.data().status === 'aprobado') {
-                throw new Error("El pago no existe o ya fue aprobado.");
+                toast({ title: 'Operación Cancelada', description: 'El pago no existe o ya fue aprobado anteriormente.' });
+                return;
             }
             const paymentData = { id: paymentDoc.id, ...paymentDoc.data() } as FullPayment;
 
@@ -206,8 +207,9 @@ export default function VerifyPaymentsPage() {
             
             const ownersSnapshot = await getDocs(query(collection(db, 'owners'), where('__name__', 'in', beneficiaryIds)));
             const ownersDataMap = new Map(ownersSnapshot.docs.map(d => [d.id, d.data()]));
-            
-            const allDebtsSnapshot = await getDocs(query(collection(db, 'debts'), where('ownerId', 'in', beneficiaryIds)));
+
+            const allOwnerDebtsQuery = query(collection(db, 'debts'), where('ownerId', 'in', beneficiaryIds));
+            const allDebtsSnapshot = await getDocs(allOwnerDebtsQuery);
             const allDebtsByOwner = new Map<string, Debt[]>();
             allDebtsSnapshot.forEach(d => {
                 const debt = { id: d.id, ...d.data() } as Debt;
@@ -216,7 +218,7 @@ export default function VerifyPaymentsPage() {
                 allDebtsByOwner.set(debt.ownerId, ownerDebts);
             });
             
-            // PHASE 2: IN-MEMORY CALCULATIONS
+            // --- PHASE 2: IN-MEMORY CALCULATIONS ---
             const batch = writeBatch(db);
             let finalObservation = paymentData.observations || '';
 
@@ -240,19 +242,20 @@ export default function VerifyPaymentsPage() {
                     const debtAmountBs = debt.amountUSD * paymentData.exchangeRate;
                     if (availableFundsBs >= debtAmountBs) {
                         availableFundsBs -= debtAmountBs;
-                        batch.update(doc(db, 'debts', debt.id), {
+                        const debtRef = doc(db, 'debts', debt.id);
+                        batch.update(debtRef, {
                             status: 'paid', paidAmountUSD: debt.amountUSD,
                             paymentDate: paymentData.paymentDate, paymentId: paymentData.id
                         });
                     }
                 }
                 
-                // Settle future debts
+                // Settle future debts (using pre-fetched data)
                 if (availableFundsBs >= condoFeeInBs) {
                     const existingDebtPeriods = new Set((allDebtsByOwner.get(beneficiary.ownerId) || []).map(d => `${d.year}-${d.month}`));
                     const startDate = startOfMonth(new Date());
 
-                    for (let i = 0; i < 12; i++) {
+                    for (let i = 0; i < 12; i++) { // Look ahead 12 months
                         const futureDebtDate = addMonths(startDate, i);
                         const futureYear = futureDebtDate.getFullYear();
                         const futureMonth = futureDebtDate.getMonth() + 1;
@@ -271,12 +274,13 @@ export default function VerifyPaymentsPage() {
                     }
                 }
                 
-                batch.update(doc(db, 'owners', beneficiary.ownerId), { balance: availableFundsBs });
+                const ownerRef = doc(db, 'owners', beneficiary.ownerId);
+                batch.update(ownerRef, { balance: availableFundsBs });
             }
 
             batch.update(paymentRef, { status: 'aprobado', observations: finalObservation });
             
-            // PHASE 3: COMMIT ATOMIC WRITES
+            // --- PHASE 3: COMMIT ATOMIC WRITES ---
             await batch.commit();
 
             toast({
@@ -682,7 +686,3 @@ export default function VerifyPaymentsPage() {
     </div>
   );
 }
-
-    
-
-  
