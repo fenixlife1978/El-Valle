@@ -8,19 +8,6 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  images: {
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 'placehold.co',
-        port: '',
-        pathname: '/**',
-      },
-    ],
-  },
-  devIndicators: {
-    allowedDevOrigins: ['https://*.cloudworkstations.dev'],
-  },
 };
 
 export default nextConfig;
