@@ -12,7 +12,7 @@ import { CheckCircle2, XCircle, MoreHorizontal, Eye, Printer, Filter, Loader2, T
 import { useToast } from '@/hooks/use-toast';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import { collection, onSnapshot, query, doc, updateDoc, getDoc, writeBatch, runTransaction, where, orderBy, Timestamp, getDocs, addDoc, limit, deleteDoc, deleteField, setDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, doc, updateDoc, getDoc, writeBatch, where, orderBy, Timestamp, getDocs, deleteDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { addMonths, format, startOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -52,6 +52,7 @@ type Debt = {
     status: 'pending' | 'paid';
     paidAmountUSD?: number;
     paymentDate?: Timestamp;
+    paymentId?: string;
 };
 
 type CompanyInfo = {
@@ -205,7 +206,8 @@ export default function VerifyPaymentsPage() {
             const beneficiaryIds = paymentData.beneficiaries.map(b => b.ownerId);
             if (beneficiaryIds.length === 0) throw new Error("El pago no tiene beneficiarios definidos.");
             
-            const ownersSnapshot = await getDocs(query(collection(db, 'owners'), where('__name__', 'in', beneficiaryIds)));
+            const ownersQuery = query(collection(db, 'owners'), where('__name__', 'in', beneficiaryIds));
+            const ownersSnapshot = await getDocs(ownersQuery);
             const ownersDataMap = new Map(ownersSnapshot.docs.map(d => [d.id, d.data()]));
 
             const allOwnerDebtsQuery = query(collection(db, 'debts'), where('ownerId', 'in', beneficiaryIds));
@@ -324,7 +326,7 @@ export default function VerifyPaymentsPage() {
             where("paymentId", "==", payment.id)
         );
         const paidDebtsSnapshot = await getDocs(paidDebtsQuery);
-        const paidDebts = paidDebtsSnapshot.docs.map(doc => doc.data() as Debt);
+        const paidDebts = paidDebtsSnapshot.docs.map(doc => ({id: doc.id, ...doc.data()}) as Debt);
         
         setReceiptData({ payment, ownerName, ownerUnit, paidDebts });
         setIsReceiptPreviewOpen(true);
@@ -345,29 +347,42 @@ export default function VerifyPaymentsPage() {
 
     try {
         if (paymentToDelete.status === 'aprobado') {
-            await runTransaction(db, async (transaction) => {
-                const paymentDoc = await transaction.get(paymentRef);
-                if (!paymentDoc.exists()) throw new Error("El pago ya fue eliminado o no existe.");
-                
-                const paymentData = { id: paymentDoc.id, ...paymentDoc.data() } as FullPayment;
+             const batch = writeBatch(db);
 
-                if (!paymentData.id) {
-                    throw new Error("El ID del pago es inválido o no se encontró, no se puede revertir.");
+            // Revert owner balances
+            for (const beneficiary of paymentToDelete.beneficiaries) {
+                const ownerRef = doc(db, 'owners', beneficiary.ownerId);
+                const ownerDoc = await getDoc(ownerRef);
+                if (ownerDoc.exists()) {
+                    const currentBalance = ownerDoc.data().balance || 0;
+                    const amountToRevert = beneficiary.amount || 0;
+                    batch.update(ownerRef, { balance: currentBalance - amountToRevert });
                 }
+            }
 
-                for (const beneficiary of paymentData.beneficiaries) {
-                    const ownerRef = doc(db, 'owners', beneficiary.ownerId);
-                    const ownerDoc = await transaction.get(ownerRef);
-                    if (ownerDoc.exists()) {
-                         const currentBalance = ownerDoc.data().balance || 0;
-                         const amountToRevert = beneficiary.amount || 0;
-                         transaction.update(ownerRef, { balance: currentBalance - amountToRevert });
-                    }
+            // Un-pay associated debts
+            const debtsToRevertQuery = query(collection(db, 'debts'), where('paymentId', '==', paymentToDelete.id));
+            const debtsToRevertSnapshot = await getDocs(debtsToRevertQuery);
+            debtsToRevertSnapshot.forEach(debtDoc => {
+                if (debtDoc.data().description.includes('Pagada por adelantado')) {
+                    // If it was an advance payment debt, delete it entirely
+                    batch.delete(debtDoc.ref);
+                } else {
+                    // Otherwise, revert it to pending
+                    batch.update(debtDoc.ref, {
+                        status: 'pending',
+                        paidAmountUSD: null,
+                        paymentDate: null,
+                        paymentId: null,
+                    });
                 }
-
-                transaction.delete(paymentRef);
             });
-            toast({ title: "Pago Revertido", description: "El pago ha sido eliminado y el saldo del propietario ha sido ajustado." });
+            
+            // Delete the payment itself
+            batch.delete(paymentRef);
+            await batch.commit();
+
+            toast({ title: "Pago Revertido", description: "El pago ha sido eliminado y las deudas y saldos han sido revertidos." });
 
         } else {
             await deleteDoc(paymentRef);
@@ -686,3 +701,5 @@ export default function VerifyPaymentsPage() {
     </div>
   );
 }
+
+    
