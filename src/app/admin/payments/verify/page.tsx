@@ -204,8 +204,14 @@ export default function VerifyPaymentsPage() {
                     const ownerRef = doc(db, "owners", beneficiary.ownerId);
                     const ownerDoc = await transaction.get(ownerRef);
                     if (!ownerDoc.exists()) throw new Error(`Propietario con ID ${beneficiary.ownerId} no encontrado.`);
+                    
+                    const ownerBalance = ownerDoc.data().balance || 0;
+                    let availableFundsBs = beneficiary.amount + ownerBalance;
+                    let specialObservation = '';
 
-                    let availableFundsBs = beneficiary.amount;
+                     if (ownerBalance > 0 && beneficiary.amount > 0) {
+                        specialObservation = `Observación Especial:\nMonto de Cuota Condominial cubierto en su totalidad por el pago recibido de Bs. ${beneficiary.amount.toFixed(2)} sumado al saldo a favor que poseía la persona por un monto de Bs. ${ownerBalance.toFixed(2)}, cubriendo así la totalidad de la cuota por un monto de Bs. ${(beneficiary.amount + ownerBalance).toFixed(2)} a la tasa de cambio del día de hoy.`;
+                    }
 
                     // --- PRIORITY 1: LIQUIDATE PENDING DEBTS ---
                     const debtsQuery = query(
@@ -271,13 +277,13 @@ export default function VerifyPaymentsPage() {
                     }
 
                     // --- PRIORITY 3: ADD REMAINING TO BALANCE ---
-                    if (availableFundsBs > 0) {
-                        const currentBalance = ownerDoc.data().balance || 0;
-                        transaction.update(ownerRef, { balance: currentBalance + availableFundsBs });
-                    }
+                    transaction.update(ownerRef, { balance: availableFundsBs });
                 }
                 
-                transaction.update(paymentRef, { status: 'aprobado' });
+                transaction.update(paymentRef, { 
+                    status: 'aprobado',
+                    observations: specialObservation || paymentData.observations || ''
+                });
             });
             
             toast({
@@ -621,7 +627,7 @@ export default function VerifyPaymentsPage() {
                                     <p className="font-bold">{companyInfo.name}</p>
                                     <p>{companyInfo.rif}</p>
                                     <p>{companyInfo.address}</p>
-                                    <p>Teléfono: {companyInfo.phone}</p>
+                                    <p>Teléfono: ${companyInfo.phone}</p>
                                 </div>
                             </div>
                             <div className="text-right">
