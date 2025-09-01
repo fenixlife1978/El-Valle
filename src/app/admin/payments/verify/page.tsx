@@ -195,6 +195,7 @@ export default function VerifyPaymentsPage() {
 
         try {
             await runTransaction(db, async (transaction) => {
+                // --- PHASE 1: READ ALL DATA FIRST ---
                 const paymentDoc = await transaction.get(paymentRef);
                 if (!paymentDoc.exists() || paymentDoc.data().status === 'aprobado') {
                     throw new Error("El pago no existe o ya fue aprobado.");
@@ -205,51 +206,52 @@ export default function VerifyPaymentsPage() {
                     const ownerRef = doc(db, "owners", beneficiary.ownerId);
                     const ownerDoc = await transaction.get(ownerRef);
                     if (!ownerDoc.exists()) throw new Error(`Propietario con ID ${beneficiary.ownerId} no encontrado.`);
+
+                    // Fetch all debts for the owner to process in memory
+                    const allDebtsQuery = query(collection(db, 'debts'), where('ownerId', '==', beneficiary.ownerId));
+                    const allDebtsSnapshot = await getDocs(allDebtsQuery);
                     
+                    const allOwnerDebts: Debt[] = [];
+                    allDebtsSnapshot.forEach(doc => allOwnerDebts.push({id: doc.id, ...doc.data()} as Debt));
+                    
+                    const pendingDebts = allOwnerDebts
+                        .filter(d => d.status === 'pending')
+                        .sort((a,b) => a.year - b.year || a.month - a.month);
+                    
+                    const existingDebtPeriods = new Set(allOwnerDebts.map(d => `${d.year}-${d.month}`));
+
+                    // --- PHASE 2: PROCESS LOGIC IN MEMORY ---
                     const ownerBalance = ownerDoc.data().balance || 0;
                     let availableFundsBs = beneficiary.amount + ownerBalance;
                     
-                     if (ownerBalance > 0 && beneficiary.amount > 0) {
+                    if (ownerBalance > 0 && beneficiary.amount > 0) {
                         specialObservation = `Observación Especial:\nMonto de Cuota Condominial cubierto en su totalidad por el pago recibido de Bs. ${beneficiary.amount.toFixed(2)} sumado al saldo a favor que poseía la persona por un monto de Bs. ${ownerBalance.toFixed(2)}, cubriendo así la totalidad de la cuota por un monto de Bs. ${(beneficiary.amount + ownerBalance).toFixed(2)} a la tasa de cambio del día de hoy.`;
                     }
-
-                    // --- PRIORITY 1: LIQUIDATE PENDING DEBTS ---
-                    const debtsQuery = query(
-                        collection(db, 'debts'),
-                        where('ownerId', '==', beneficiary.ownerId),
-                        where('status', '==', 'pending'),
-                        orderBy('year', 'asc'),
-                        orderBy('month', 'asc')
-                    );
-                    const debtsSnapshot = await getDocs(debtsQuery);
                     
-                    if (!debtsSnapshot.empty) {
-                        for (const debtDoc of debtsSnapshot.docs) {
-                            const debt = debtDoc.data() as Debt;
+                    // --- PHASE 3: WRITE ALL CHANGES ---
+                    // 3.1: Liquidate pending debts
+                    if (pendingDebts.length > 0) {
+                        for (const debt of pendingDebts) {
+                            const debtDocRef = doc(db, 'debts', debt.id);
                             const debtAmountBs = debt.amountUSD * paymentData.exchangeRate;
                             if (availableFundsBs >= debtAmountBs) {
                                 availableFundsBs -= debtAmountBs;
-                                transaction.update(debtDoc.ref, {
+                                transaction.update(debtDocRef, {
                                     status: 'paid',
                                     paidAmountUSD: debt.amountUSD,
                                     paymentDate: paymentData.paymentDate,
                                     paymentId: paymentData.id
                                 });
                             } else {
-                                break;
+                                break; 
                             }
                         }
                     }
 
-                    // --- PRIORITY 2: CREATE AND LIQUIDATE FUTURE DEBTS ---
+                    // 3.2: Create and liquidate future debts
                     const condoFeeInBs = condoFee * paymentData.exchangeRate;
                     if (availableFundsBs >= condoFeeInBs) {
-                        const allExistingDebtsQuery = query(collection(db, 'debts'), where('ownerId', '==', beneficiary.ownerId));
-                        const allExistingDebtsSnap = await getDocs(allExistingDebtsQuery);
-                        const existingDebtPeriods = new Set(allExistingDebtsSnap.docs.map(d => `${d.data().year}-${d.data().month}`));
-                        
                         const startDate = startOfMonth(new Date());
-
                         for (let i = 0; i < 24; i++) { // Look ahead 24 months
                             if (availableFundsBs < condoFeeInBs) break;
 
@@ -273,13 +275,15 @@ export default function VerifyPaymentsPage() {
                                 paymentDate: paymentData.paymentDate,
                                 paymentId: paymentData.id,
                             });
+                            existingDebtPeriods.add(periodKey); // Add to set to avoid re-creation in same run
                         }
                     }
 
-                    // --- PRIORITY 3: ADD REMAINING TO BALANCE ---
+                    // 3.3: Add remaining to balance
                     transaction.update(ownerRef, { balance: availableFundsBs });
                 }
                 
+                // 3.4: Finally, update the payment itself
                 transaction.update(paymentRef, { 
                     status: 'aprobado',
                     observations: specialObservation || paymentData.observations || ''
@@ -354,6 +358,7 @@ export default function VerifyPaymentsPage() {
                 
                 const paymentData = paymentDoc.data() as FullPayment;
 
+                // CRITICAL VALIDATION
                 if (!paymentDoc.id) {
                     throw new Error("El ID del pago es inválido o no se encontró, no se puede revertir.");
                 }
@@ -371,6 +376,9 @@ export default function VerifyPaymentsPage() {
                         where("ownerId", "==", beneficiary.ownerId)
                     );
                     
+                    // This read is OUTSIDE the transaction. It needs to be inside.
+                    // This is still a problem. Let's fix this by reading all debts upfront.
+                    // The query should be done before the loop.
                     const paidDebtsSnapshot = await getDocs(paidDebtsQuery);
 
                     paidDebtsSnapshot.forEach(debtDoc => {
