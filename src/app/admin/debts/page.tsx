@@ -178,16 +178,25 @@ export default function DebtManagementPage() {
         const debtsQuery = query(collection(db, "debts"), where("status", "==", "pending"));
         
         const unsubscribe = onSnapshot(debtsQuery, (snapshot) => {
-            const debtsByOwner: { [key: string]: number } = {};
-            snapshot.forEach(doc => {
-                const debt = doc.data();
-                debtsByOwner[debt.ownerId] = (debtsByOwner[debt.ownerId] || 0) + debt.amountUSD;
+            setOwners(prevOwners => {
+                // Create a map to store the new debt totals, initialized to 0
+                const debtsByOwner: { [key: string]: number } = {};
+                prevOwners.forEach(owner => {
+                    debtsByOwner[owner.id] = 0;
+                });
+
+                // Calculate new debt totals from the snapshot
+                snapshot.forEach(doc => {
+                    const debt = doc.data();
+                    debtsByOwner[debt.ownerId] = (debtsByOwner[debt.ownerId] || 0) + debt.amountUSD;
+                });
+                
+                // Return the updated owners array
+                return prevOwners.map(owner => ({
+                    ...owner,
+                    pendingDebtUSD: debtsByOwner[owner.id] || 0
+                }));
             });
-            
-            setOwners(prevOwners => prevOwners.map(owner => ({
-                ...owner,
-                pendingDebtUSD: debtsByOwner[owner.id] || 0
-            })));
 
         }, (error) => {
             console.error("Error listening to debts:", error);
