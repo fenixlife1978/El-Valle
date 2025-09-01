@@ -199,6 +199,7 @@ export default function VerifyPaymentsPage() {
                     throw new Error("El pago no existe o ya fue aprobado.");
                 }
                 const paymentData = { id: paymentDoc.id, ...paymentDoc.data() } as FullPayment;
+                let specialObservation = '';
 
                 for (const beneficiary of paymentData.beneficiaries) {
                     const ownerRef = doc(db, "owners", beneficiary.ownerId);
@@ -207,8 +208,7 @@ export default function VerifyPaymentsPage() {
                     
                     const ownerBalance = ownerDoc.data().balance || 0;
                     let availableFundsBs = beneficiary.amount + ownerBalance;
-                    let specialObservation = '';
-
+                    
                      if (ownerBalance > 0 && beneficiary.amount > 0) {
                         specialObservation = `Observación Especial:\nMonto de Cuota Condominial cubierto en su totalidad por el pago recibido de Bs. ${beneficiary.amount.toFixed(2)} sumado al saldo a favor que poseía la persona por un monto de Bs. ${ownerBalance.toFixed(2)}, cubriendo así la totalidad de la cuota por un monto de Bs. ${(beneficiary.amount + ownerBalance).toFixed(2)} a la tasa de cambio del día de hoy.`;
                     }
@@ -712,5 +712,3 @@ export default function VerifyPaymentsPage() {
     </div>
   );
 }
-
-    
