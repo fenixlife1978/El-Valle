@@ -257,7 +257,7 @@ export default function DebtManagementPage() {
                                     bank: 'Sistema (Saldo a Favor)',
                                     reference: `CONC-${debt.year}-${debt.month}`,
                                     status: 'aprobado',
-                                    observations: `Deuda ${debt.description} ${debt.year}/${debt.month} pagada por conciliación.`,
+                                    observations: `Cuota de ${months.find(m=>m.value === debt.month)?.label} ${debt.year} pagada por conciliación.`,
                                 });
 
                                 transaction.update(debtDoc.ref, {
@@ -600,7 +600,7 @@ export default function DebtManagementPage() {
                             bank: 'Sistema (Saldo a Favor)',
                             reference: `CONC-DEBT-${paymentDate.toMillis()}`,
                             status: 'aprobado',
-                            observations: 'Pago automático por saldo a favor al crear deuda.',
+                            observations: `Cuota de ${months.find(m=>m.value === debtMonth)?.label} ${debtYear} pagada por conciliación.`,
                         });
 
                         debtData = {
