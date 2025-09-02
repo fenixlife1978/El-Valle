@@ -129,20 +129,20 @@ export default function VerifyPaymentsPage() {
         snapshot.forEach(doc => {
             const data = doc.data();
 
-            let userName = 'Propietario no identificado'; // Fallback text
-            const beneficiary = data.beneficiaries?.[0];
-            if (beneficiary?.ownerName) {
-                userName = beneficiary.ownerName; 
-            } else if (data.reportedBy && ownersMap.has(data.reportedBy)) {
-                userName = ownersMap.get(data.reportedBy)!;
+            const firstBeneficiary = data.beneficiaries?.[0];
+            
+            let userName = 'Beneficiario no identificado'; // Fallback text
+            if (firstBeneficiary?.ownerName) {
+                userName = firstBeneficiary.ownerName;
+            } else if (firstBeneficiary?.ownerId && ownersMap.has(firstBeneficiary.ownerId)) {
+                userName = ownersMap.get(firstBeneficiary.ownerId)!;
             }
 
             let unit = 'N/A';
-            if (data.beneficiaries?.length === 1) {
-                const b = data.beneficiaries[0];
-                unit = b && b.street && b.house ? `${b.street} - ${b.house}` : 'N/A';
-            } else if (data.beneficiaries?.length > 1) {
+            if (data.beneficiaries?.length > 1) {
                 unit = "Múltiples Propiedades";
+            } else if (firstBeneficiary) {
+                unit = firstBeneficiary && firstBeneficiary.street && firstBeneficiary.house ? `${firstBeneficiary.street} - ${firstBeneficiary.house}` : 'N/A';
             }
 
             paymentsData.push({
@@ -303,7 +303,7 @@ export default function VerifyPaymentsPage() {
         return;
     }
     try {
-        const ownerName = payment.user || 'Propietario no identificado';
+        const ownerName = payment.user || 'Beneficiario no identificado';
         
         const ownerUnitSummary = payment.beneficiaries.length > 1 
             ? "Múltiples Propiedades" 
@@ -421,7 +421,7 @@ export default function VerifyPaymentsPage() {
     doc.setFontSize(10).setFont('helvetica', 'normal').text(`N° de recibo: ${payment.id.substring(0, 10)}`, pageWidth - margin, margin + 50, { align: 'right' });
 
     let startY = margin + 60;
-    doc.setFontSize(10).text(`Nombre del Propietario: ${ownerName}`, margin, startY);
+    doc.setFontSize(10).text(`Nombre del Beneficiario: ${ownerName}`, margin, startY);
     startY += 6;
     doc.text(`Método de pago: ${payment.type}`, margin, startY);
     startY += 6;
@@ -511,7 +511,7 @@ export default function VerifyPaymentsPage() {
                 <Table>
                     <TableHeader>
                         <TableRow>
-                            <TableHead>Usuario</TableHead>
+                            <TableHead>Beneficiario</TableHead>
                             <TableHead>Unidad</TableHead>
                             <TableHead>Monto</TableHead>
                             <TableHead>Fecha</TableHead>
@@ -629,7 +629,7 @@ export default function VerifyPaymentsPage() {
                             <p className="text-right text-xs">N° de recibo: {receiptData.payment.id.substring(0, 10)}</p>
                         </div>
                          <div className="mb-4 text-xs">
-                             <p><strong>Propietario:</strong> {receiptData.ownerName}</p>
+                             <p><strong>Beneficiario:</strong> {receiptData.ownerName}</p>
                              <p><strong>Método de pago:</strong> {receiptData.payment.type}</p>
                              <p><strong>Banco Emisor:</strong> {receiptData.payment.bank}</p>
                              <p><strong>N° de Referencia:</strong> {receiptData.payment.reference}</p>

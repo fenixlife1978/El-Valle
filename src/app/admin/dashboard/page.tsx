@@ -94,16 +94,21 @@ export default function AdminDashboardPage() {
         const paymentsData: Payment[] = [];
         snapshot.forEach(doc => {
             const data = doc.data();
-            const beneficiary = data.beneficiaries?.[0];
+            const firstBeneficiary = data.beneficiaries?.[0];
             
-            let userName = 'Propietario no identificado'; // Fallback text
-            if (beneficiary?.ownerName) {
-                userName = beneficiary.ownerName;
-            } else if (beneficiary?.ownerId && ownersMap.has(beneficiary.ownerId)) {
-                userName = ownersMap.get(beneficiary.ownerId)!;
+            let userName = 'Beneficiario no identificado'; // Fallback text
+            if (firstBeneficiary?.ownerName) {
+                userName = firstBeneficiary.ownerName;
+            } else if (firstBeneficiary?.ownerId && ownersMap.has(firstBeneficiary.ownerId)) {
+                userName = ownersMap.get(firstBeneficiary.ownerId)!;
             }
 
-            const unit = beneficiary ? `${beneficiary.street || 'N/A'} - ${beneficiary.house || 'N/A'}` : 'N/A';
+            let unit = 'N/A';
+            if (data.beneficiaries?.length > 1) {
+                unit = "Múltiples Propiedades";
+            } else if (firstBeneficiary) {
+                unit = `${firstBeneficiary.street || 'N/A'} - ${firstBeneficiary.house || 'N/A'}`;
+            }
 
             paymentsData.push({ 
                 id: doc.id,

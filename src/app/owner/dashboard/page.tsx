@@ -318,7 +318,7 @@ export default function OwnerDashboardPage() {
 
     // --- Payment Details ---
     let startY = margin + 60;
-    doc.setFontSize(10).text(`Nombre del residente: ${ownerName}`, margin, startY);
+    doc.setFontSize(10).text(`Nombre del Beneficiario: ${ownerName}`, margin, startY);
     startY += 6;
     doc.text(`Unidad: ${ownerUnit}`, margin, startY);
     startY += 6;
@@ -583,7 +583,7 @@ export default function OwnerDashboardPage() {
                         </div>
                         {/* Details */}
                          <div className="mb-4 text-xs">
-                             <p><strong>Nombre del residente:</strong> {receiptData.ownerName}</p>
+                             <p><strong>Beneficiario:</strong> {receiptData.ownerName}</p>
                              <p><strong>Unidad:</strong> {receiptData.ownerUnit}</p>
                              <p><strong>Método de pago:</strong> {receiptData.payment.type}</p>
                              <p><strong>Banco Emisor:</strong> {receiptData.payment.bank}</p>
