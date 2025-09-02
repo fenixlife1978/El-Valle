@@ -38,98 +38,95 @@ export default function AdminDashboardPage() {
   const [ownersMap, setOwnersMap] = useState<Map<string, string>>(new Map());
 
   useEffect(() => {
-    // Pre-fetch all owners to create a map of ID -> Name
+    setLoading(true);
+
     const ownersQuery = query(collection(db, "owners"));
     const ownersUnsubscribe = onSnapshot(ownersQuery, (snapshot) => {
         const newOwnersMap = new Map<string, string>();
-        snapshot.forEach(doc => {
-            newOwnersMap.set(doc.id, doc.data().name);
-        });
-        setOwnersMap(newOwnersMap);
-        
         let totalUnits = 0;
         snapshot.forEach(doc => {
+            newOwnersMap.set(doc.id, doc.data().name);
             const owner = doc.data();
             if (owner.properties && owner.properties.length > 0) {
                 totalUnits += owner.properties.length;
             }
         });
+        setOwnersMap(newOwnersMap);
         setStats(prev => ({ ...prev, totalUnits }));
+
+        // Ensure dependent listeners are re-established only when the map's content fundamentally changes
+        if (newOwnersMap.size > 0) {
+            
+            const paymentsQuery = query(collection(db, "payments"));
+            const paymentsUnsubscribe = onSnapshot(paymentsQuery, (snapshot) => {
+                let monthTotalBs = 0;
+                let monthTotalUsd = 0;
+                let pendingCount = 0;
+                const now = new Date();
+                snapshot.forEach(doc => {
+                    const payment = doc.data();
+                    const paymentDate = new Date(payment.paymentDate.seconds * 1000);
+                    
+                    if (payment.status === 'aprobado' && payment.paymentMethod !== 'adelanto' && payment.paymentMethod !== 'conciliacion' && paymentDate.getMonth() === now.getMonth() && paymentDate.getFullYear() === now.getFullYear()) {
+                        const amountBs = Number(payment.totalAmount);
+                        monthTotalBs += amountBs;
+                        if (payment.exchangeRate && payment.exchangeRate > 0) {
+                            monthTotalUsd += amountBs / payment.exchangeRate;
+                        }
+                    }
+                    if (payment.status === 'pendiente') {
+                        pendingCount++;
+                    }
+                });
+                setStats(prev => ({ ...prev, paymentsThisMonthBs: monthTotalBs, paymentsThisMonthUsd: monthTotalUsd, pendingPayments: pendingCount }));
+            });
+
+            const recentPaymentsQuery = query(collection(db, "payments"), orderBy('reportedAt', 'desc'), limit(5));
+            const recentPaymentsUnsubscribe = onSnapshot(recentPaymentsQuery, (snapshot) => {
+                const paymentsData: Payment[] = [];
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    const firstBeneficiary = data.beneficiaries?.[0];
+                    
+                    let userName = 'Beneficiario no identificado';
+                    if (firstBeneficiary?.ownerName) {
+                        userName = firstBeneficiary.ownerName;
+                    } else if (firstBeneficiary?.ownerId && newOwnersMap.has(firstBeneficiary.ownerId)) {
+                        userName = newOwnersMap.get(firstBeneficiary.ownerId)!;
+                    }
+
+                    let unit = 'N/A';
+                    if (data.beneficiaries?.length > 1) {
+                        unit = "Múltiples Propiedades";
+                    } else if (firstBeneficiary) {
+                        unit = `${firstBeneficiary.street || 'N/A'} - ${firstBeneficiary.house || 'N/A'}`;
+                    }
+
+                    paymentsData.push({ 
+                        id: doc.id,
+                        user: userName,
+                        unit: unit,
+                        amount: data.totalAmount,
+                        date: new Date(data.paymentDate.seconds * 1000).toISOString(),
+                        bank: data.bank,
+                        type: data.paymentMethod,
+                        status: data.status,
+                    });
+                });
+                setRecentPayments(paymentsData);
+                setLoading(false);
+            });
+
+            // Return cleanup functions for payment listeners
+            return () => {
+                paymentsUnsubscribe();
+                recentPaymentsUnsubscribe();
+            };
+        }
     });
 
     return () => ownersUnsubscribe();
   }, []);
-
-  useEffect(() => {
-    if (ownersMap.size === 0) return; // Wait until owners are loaded
-
-    setLoading(true);
-
-    const paymentsQuery = query(collection(db, "payments"));
-    const paymentsUnsubscribe = onSnapshot(paymentsQuery, (snapshot) => {
-        let monthTotalBs = 0;
-        let monthTotalUsd = 0;
-        let pendingCount = 0;
-        const now = new Date();
-        snapshot.forEach(doc => {
-            const payment = doc.data();
-            const paymentDate = new Date(payment.paymentDate.seconds * 1000);
-            
-            if (payment.status === 'aprobado' && payment.paymentMethod !== 'adelanto' && payment.paymentMethod !== 'conciliacion' && paymentDate.getMonth() === now.getMonth() && paymentDate.getFullYear() === now.getFullYear()) {
-                const amountBs = Number(payment.totalAmount);
-                monthTotalBs += amountBs;
-                if (payment.exchangeRate && payment.exchangeRate > 0) {
-                    monthTotalUsd += amountBs / payment.exchangeRate;
-                }
-            }
-            if (payment.status === 'pendiente') {
-                pendingCount++;
-            }
-        });
-        setStats(prev => ({ ...prev, paymentsThisMonthBs: monthTotalBs, paymentsThisMonthUsd: monthTotalUsd, pendingPayments: pendingCount }));
-    });
-
-    const recentPaymentsQuery = query(collection(db, "payments"), orderBy('reportedAt', 'desc'), limit(5));
-    const recentPaymentsUnsubscribe = onSnapshot(recentPaymentsQuery, (snapshot) => {
-        const paymentsData: Payment[] = [];
-        snapshot.forEach(doc => {
-            const data = doc.data();
-            const firstBeneficiary = data.beneficiaries?.[0];
-            
-            let userName = 'Beneficiario no identificado'; // Fallback text
-            if (firstBeneficiary?.ownerName) {
-                userName = firstBeneficiary.ownerName;
-            } else if (firstBeneficiary?.ownerId && ownersMap.has(firstBeneficiary.ownerId)) {
-                userName = ownersMap.get(firstBeneficiary.ownerId)!;
-            }
-
-            let unit = 'N/A';
-            if (data.beneficiaries?.length > 1) {
-                unit = "Múltiples Propiedades";
-            } else if (firstBeneficiary) {
-                unit = `${firstBeneficiary.street || 'N/A'} - ${firstBeneficiary.house || 'N/A'}`;
-            }
-
-            paymentsData.push({ 
-                id: doc.id,
-                user: userName,
-                unit: unit,
-                amount: data.totalAmount,
-                date: new Date(data.paymentDate.seconds * 1000).toISOString(),
-                bank: data.bank,
-                type: data.paymentMethod,
-                status: data.status,
-            });
-        });
-        setRecentPayments(paymentsData);
-        setLoading(false);
-    });
-
-    return () => {
-      paymentsUnsubscribe();
-      recentPaymentsUnsubscribe();
-    }
-  }, [ownersMap]);
 
   return (
     <div className="space-y-8">
