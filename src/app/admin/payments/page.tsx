@@ -266,21 +266,13 @@ export default function UnifiedPaymentsPage() {
             });
             return;
         }
+        
         setLoading(true);
 
-        try {
-            // This is certain to exist because of validateForm()
-            const fileToUpload = receiptFile!; 
-            
-            // Upload receipt to Firebase Storage
-            const receiptFileName = `${Date.now()}_${fileToUpload.name}`;
-            const receiptRef = storageRef(storage, `receipts/${receiptFileName}`);
-            await uploadBytes(receiptRef, fileToUpload);
-            const receiptFileUrl = await getDownloadURL(receiptRef);
-            
-            let reportedById = beneficiaryType === 'propio' ? selectedOwner!.id : 'admin_user';
-
-            const paymentData = {
+        // --- Store all data needed for async processing ---
+        const dataForProcessing = {
+            fileToUpload: receiptFile!,
+            paymentData: {
                 paymentDate,
                 exchangeRate,
                 paymentMethod,
@@ -290,35 +282,48 @@ export default function UnifiedPaymentsPage() {
                 beneficiaryType,
                 beneficiaries: beneficiarySplits.map(s => ({
                     ownerId: selectedOwner!.id,
-                    ownerName: selectedOwner!.name, // Storing name for reliability
+                    ownerName: selectedOwner!.name,
                     street: s.property.street,
                     house: s.property.house,
                     amount: Number(s.amount)
                 })),
-                receiptFileUrl,
                 receiptFileName: receiptFile?.name,
                 status: 'pendiente',
                 reportedAt: serverTimestamp(),
-                reportedBy: reportedById,
+                reportedBy: beneficiaryType === 'propio' ? selectedOwner!.id : 'admin_user',
+            }
+        };
+
+        // --- UI Feedback & Reset ---
+        toast({
+            title: 'Reporte Enviado',
+            description: 'Tu reporte de pago ha sido enviado para revisión.',
+            className: 'bg-green-100 border-green-400 text-green-800'
+        });
+        resetForm();
+        setLoading(false); // Release button immediately
+
+        // --- Async processing in the background ---
+        try {
+            const receiptFileName = `${Date.now()}_${dataForProcessing.fileToUpload.name}`;
+            const receiptRef = storageRef(storage, `receipts/${receiptFileName}`);
+            await uploadBytes(receiptRef, dataForProcessing.fileToUpload);
+            const receiptFileUrl = await getDownloadURL(receiptRef);
+            
+            const finalPaymentData = {
+                ...dataForProcessing.paymentData,
+                receiptFileUrl,
             };
 
-            await addDoc(collection(db, "payments"), paymentData);
-            toast({
-                title: 'Reporte Enviado',
-                description: 'Tu reporte de pago ha sido enviado para revisión.',
-                className: 'bg-green-100 border-green-400 text-green-800'
-            });
-            resetForm();
-
+            await addDoc(collection(db, "payments"), finalPaymentData);
+            // No success toast here, as it was already shown to the user.
         } catch (error) {
-            console.error("Error adding payment: ", error);
+            console.error("Error adding payment in background: ", error);
              toast({
                 variant: 'destructive',
                 title: 'Error en el servidor',
-                description: 'No se pudo guardar el reporte de pago.',
+                description: 'No se pudo guardar el reporte de pago. Por favor, inténtelo de nuevo.',
             });
-        } finally {
-            setLoading(false);
         }
     };
 
