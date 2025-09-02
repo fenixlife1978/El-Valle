@@ -17,7 +17,7 @@ import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore';
 import { db, storage } from '@/lib/firebase';
-import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
+import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 // --- Static Data ---
@@ -258,7 +258,7 @@ export default function UnifiedPaymentsPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!validateForm() || !receiptFile) {
+        if (!validateForm()) {
             toast({
                 variant: 'destructive',
                 title: 'Error de validación',
@@ -269,10 +269,13 @@ export default function UnifiedPaymentsPage() {
         setLoading(true);
 
         try {
+            // This is certain to exist because of validateForm()
+            const fileToUpload = receiptFile!; 
+            
             // Upload receipt to Firebase Storage
-            const receiptFileName = `${Date.now()}_${receiptFile.name}`;
+            const receiptFileName = `${Date.now()}_${fileToUpload.name}`;
             const receiptRef = storageRef(storage, `receipts/${receiptFileName}`);
-            await uploadBytes(receiptRef, receiptFile);
+            await uploadBytes(receiptRef, fileToUpload);
             const receiptFileUrl = await getDownloadURL(receiptRef);
             
             let reportedById = beneficiaryType === 'propio' ? selectedOwner!.id : 'admin_user';
