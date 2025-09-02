@@ -179,19 +179,23 @@ export default function DebtManagementPage() {
         
         const unsubscribe = onSnapshot(debtsQuery, (snapshot) => {
             setOwners(prevOwners => {
-                // Create a map to store the new debt totals, initialized to 0
+                // Create a map to store the new debt totals, initialized to 0 for all owners.
+                // This is crucial to reset the debt for users who no longer have pending debts.
                 const debtsByOwner: { [key: string]: number } = {};
                 prevOwners.forEach(owner => {
                     debtsByOwner[owner.id] = 0;
                 });
 
-                // Calculate new debt totals from the snapshot
+                // Recalculate debt totals only for owners who have pending debts in the snapshot.
                 snapshot.forEach(doc => {
                     const debt = doc.data();
-                    debtsByOwner[debt.ownerId] = (debtsByOwner[debt.ownerId] || 0) + debt.amountUSD;
+                    if (debt.ownerId) {
+                        debtsByOwner[debt.ownerId] = (debtsByOwner[debt.ownerId] || 0) + debt.amountUSD;
+                    }
                 });
                 
-                // Return the updated owners array
+                // Return the updated owners array with the refreshed debt totals.
+                // Owners with no pending debts will correctly show 0.
                 return prevOwners.map(owner => ({
                     ...owner,
                     pendingDebtUSD: debtsByOwner[owner.id] || 0
@@ -295,9 +299,11 @@ export default function DebtManagementPage() {
                         const existingDebtPeriodsByProp = new Map<string, Set<string>>();
                         allExistingDebtsSnap.docs.forEach(d => {
                             const debtData = d.data();
-                            const propKey = `${debtData.property.street}-${debtData.property.house}`;
-                            if(!existingDebtPeriodsByProp.has(propKey)) existingDebtPeriodsByProp.set(propKey, new Set());
-                            existingDebtPeriodsByProp.get(propKey)!.add(`${debtData.year}-${debtData.month}`);
+                            if (debtData.property && debtData.property.street && debtData.property.house) {
+                                const propKey = `${debtData.property.street}-${debtData.property.house}`;
+                                if(!existingDebtPeriodsByProp.has(propKey)) existingDebtPeriodsByProp.set(propKey, new Set());
+                                existingDebtPeriodsByProp.get(propKey)!.add(`${debtData.year}-${debtData.month}`);
+                            }
                         });
                         
                         const startDate = startOfMonth(new Date());
@@ -305,6 +311,7 @@ export default function DebtManagementPage() {
                         // This logic gets complex with multiple properties. For now, let's just pay for one property at a time.
                         // A more advanced system might distribute the balance.
                         for (const property of owner.properties) {
+                             if (!property || !property.street || !property.house) continue;
                              const propKey = `${property.street}-${property.house}`;
                              const existingDebtsForProp = existingDebtPeriodsByProp.get(propKey) || new Set();
 
@@ -412,6 +419,7 @@ export default function DebtManagementPage() {
             owners.forEach(owner => {
                 if (owner.properties && owner.properties.length > 0) {
                     owner.properties.forEach(property => {
+                        // Defensive check to ensure property object is valid
                         if (property && property.street && property.house) {
                             const key = `${owner.id}-${property.street}-${property.house}`;
                             if (!ownersWithDebtForProp.has(key)) {
@@ -494,10 +502,12 @@ export default function DebtManagementPage() {
         return () => unsubscribe();
     }, [view, selectedOwner]);
     
+    // Group debts by property for the detailed view
     const debtsByProperty = useMemo(() => {
         const grouped = new Map<string, { pending: Debt[], paid: Debt[] }>();
         if (!selectedOwner || !selectedOwner.properties) return grouped;
 
+        // Initialize map with all properties of the owner
         selectedOwner.properties.forEach(prop => {
             if (prop && prop.street && prop.house) {
                 const key = `${prop.street}-${prop.house}`;
@@ -505,7 +515,9 @@ export default function DebtManagementPage() {
             }
         });
 
+        // Group debts into the map
         selectedOwnerDebts.forEach(debt => {
+            // Defensive check: only process debts with valid property info
             if (debt.property && debt.property.street && debt.property.house) {
                 const key = `${debt.property.street}-${debt.property.house}`;
                 if (!grouped.has(key)) {
@@ -529,8 +541,9 @@ export default function DebtManagementPage() {
     }, [selectedOwner, selectedOwnerDebts]);
 
 
-    const paymentCalculator = (property: Property) => {
-        if (!selectedOwner) return { totalSelectedBs: 0, balanceInFavor: 0, totalToPay: 0, hasSelection: false };
+    // Calculate payment details for a specific property
+    const paymentCalculator = useCallback((property: Property) => {
+        if (!selectedOwner || activeRate <= 0) return { totalSelectedBs: 0, balanceInFavor: 0, totalToPay: 0, hasSelection: false };
 
         const propKey = `${property.street}-${property.house}`;
         const pendingDebtsForProperty = debtsByProperty.get(propKey)?.pending || [];
@@ -546,7 +559,7 @@ export default function DebtManagementPage() {
             totalToPay: totalToPay,
             hasSelection: pendingDebtsForProperty.length > 0,
         };
-    };
+    }, [debtsByProperty, selectedOwner, activeRate]);
 
     const handleManageOwnerDebts = (owner: Owner) => {
         setSelectedOwner(owner);
@@ -948,7 +961,8 @@ export default function DebtManagementPage() {
                     </div>
                 ) : (selectedOwner.properties && selectedOwner.properties.length > 0) ? (
                     <Accordion type="multiple" className="w-full space-y-4">
-                        {selectedOwner.properties.map((property) => {
+                        {selectedOwner.properties.map((property, index) => {
+                             if (!property || !property.street || !property.house) return null;
                              const propKey = `${property.street}-${property.house}`;
                              const { pending: pendingDebts, paid: paidDebts } = debtsByProperty.get(propKey) || { pending: [], paid: [] };
                              const calc = paymentCalculator(property);
@@ -1173,3 +1187,4 @@ export default function DebtManagementPage() {
     // Fallback while loading or if view is invalid
     return null;
 }
+
