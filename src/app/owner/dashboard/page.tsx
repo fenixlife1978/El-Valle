@@ -33,6 +33,7 @@ type Payment = {
     exchangeRate: number;
     paymentDate: Timestamp;
     reference: string;
+    beneficiaries: { ownerId: string, ownerName: string, house?: string, street?: string, amount: number }[];
 };
 
 type UserData = {
@@ -222,6 +223,7 @@ export default function OwnerDashboardPage() {
                     exchangeRate: data.exchangeRate,
                     paymentDate: data.paymentDate,
                     reference: data.reference,
+                    beneficiaries: data.beneficiaries,
                 });
             });
             const sortedPayments = paymentsData.sort((a,b) => {
@@ -266,6 +268,10 @@ export default function OwnerDashboardPage() {
     if (!userData) return;
 
     try {
+        const ownerName = (payment.beneficiaries && payment.beneficiaries.length > 0) 
+            ? payment.beneficiaries[0].ownerName 
+            : userData.name;
+
         const paidDebtsQuery = query(
             collection(db, "debts"),
             where("paymentId", "==", payment.id)
@@ -275,7 +281,7 @@ export default function OwnerDashboardPage() {
         
         setReceiptData({ 
             payment, 
-            ownerName: userData.name, 
+            ownerName: ownerName,
             ownerUnit: userData.unit,
             paidDebts
         });
@@ -633,4 +639,3 @@ export default function OwnerDashboardPage() {
   );
 }
 
-    

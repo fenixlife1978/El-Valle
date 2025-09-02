@@ -20,7 +20,7 @@ import { es } from 'date-fns/locale';
 type PaymentStatus = 'pendiente' | 'aprobado' | 'rechazado';
 type PaymentMethod = 'transferencia' | 'movil' | 'adelanto' | 'conciliacion';
 
-type Beneficiary = { ownerId: string; amount: number; street?: string; house?: string; };
+type Beneficiary = { ownerId: string; ownerName: string; amount: number; street?: string; house?: string; };
 
 type FullPayment = {
   id: string;
@@ -105,67 +105,53 @@ export default function VerifyPaymentsPage() {
   useEffect(() => {
     setLoading(true);
 
-    const fetchAllOwners = async () => {
-        const ownersQuery = query(collection(db, "owners"));
-        const ownersSnapshot = await getDocs(ownersQuery);
-        const ownersMap = new Map<string, {name: string, properties: any[]}>();
-        ownersSnapshot.forEach(doc => {
-            ownersMap.set(doc.id, { name: doc.data().name, properties: doc.data().properties || [] });
-        });
-        return ownersMap;
-    };
-
     const q = query(collection(db, "payments"), orderBy('reportedAt', 'desc'));
     
-    fetchAllOwners().then(ownersMap => {
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const paymentsData: FullPayment[] = [];
-            snapshot.forEach(doc => {
-                const data = doc.data();
-                const ownerId = data.reportedBy;
-                const ownerInfo = ownerId ? ownersMap.get(ownerId) : null;
-                const userName = ownerInfo?.name || '';
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+        const paymentsData: FullPayment[] = [];
+        snapshot.forEach(doc => {
+            const data = doc.data();
 
-                let unit = 'N/A';
-                if (data.beneficiaries?.length === 1) {
-                    const b = data.beneficiaries[0];
-                    unit = b && b.street && b.house ? `${b.street} - ${b.house}` : (ownerInfo?.properties?.[0] ? `${ownerInfo.properties[0].street} - ${ownerInfo.properties[0].house}`: 'N/A');
-                } else if (data.beneficiaries?.length > 1) {
-                    unit = "Múltiples Propiedades";
-                }
+            let userName = 'No identificado';
+            if (data.beneficiaries && data.beneficiaries.length > 0) {
+                // Use the name from the first beneficiary, as it's the primary owner of the payment
+                userName = data.beneficiaries[0].ownerName || userName;
+            }
 
-                paymentsData.push({
-                    id: doc.id,
-                    user: userName,
-                    unit: unit,
-                    amount: data.totalAmount,
-                    date: new Date(data.paymentDate.seconds * 1000).toISOString(),
-                    bank: data.bank,
-                    type: data.paymentMethod,
-                    reference: data.reference,
-                    status: data.status,
-                    beneficiaries: data.beneficiaries,
-                    totalAmount: data.totalAmount,
-                    exchangeRate: data.exchangeRate,
-                    paymentDate: data.paymentDate,
-                    reportedBy: data.reportedBy,
-                    reportedAt: data.reportedAt,
-                    observations: data.observations,
-                    isReconciled: data.isReconciled
-                });
+            let unit = 'N/A';
+            if (data.beneficiaries?.length === 1) {
+                const b = data.beneficiaries[0];
+                unit = b && b.street && b.house ? `${b.street} - ${b.house}` : 'N/A';
+            } else if (data.beneficiaries?.length > 1) {
+                unit = "Múltiples Propiedades";
+            }
+
+            paymentsData.push({
+                id: doc.id,
+                user: userName,
+                unit: unit,
+                amount: data.totalAmount,
+                date: new Date(data.paymentDate.seconds * 1000).toISOString(),
+                bank: data.bank,
+                type: data.paymentMethod,
+                reference: data.reference,
+                status: data.status,
+                beneficiaries: data.beneficiaries,
+                totalAmount: data.totalAmount,
+                exchangeRate: data.exchangeRate,
+                paymentDate: data.paymentDate,
+                reportedBy: data.reportedBy,
+                reportedAt: data.reportedAt,
+                observations: data.observations,
+                isReconciled: data.isReconciled
             });
-
-            setPayments(paymentsData);
-            setLoading(false);
-        }, (error) => {
-            console.error("Error fetching payments: ", error);
-            toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron cargar los pagos.' });
-            setLoading(false);
         });
-        return unsubscribe;
-    }).catch(error => {
-        console.error("Error fetching owners map: ", error);
-        toast({ variant: 'destructive', title: 'Error Crítico', description: 'No se pudieron cargar los datos de los propietarios.' });
+
+        setPayments(paymentsData);
+        setLoading(false);
+    }, (error) => {
+        console.error("Error fetching payments: ", error);
+        toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron cargar los pagos.' });
         setLoading(false);
     });
     
@@ -180,6 +166,7 @@ export default function VerifyPaymentsPage() {
     };
     fetchSettings();
 
+    return () => unsubscribe();
   }, [toast]);
 
 
@@ -241,7 +228,6 @@ export default function VerifyPaymentsPage() {
                 }
 
                 let availableFundsBs = beneficiary.amount + (ownerData.balance || 0);
-                const condoFeeInBs = condoFee * paymentData.exchangeRate;
 
                 // Settle pending debts for the specific property of the beneficiary
                 const pendingDebts = (allDebtsByOwner.get(beneficiary.ownerId) || [])
@@ -298,15 +284,7 @@ export default function VerifyPaymentsPage() {
         return;
     }
     try {
-        const ownersMap = new Map<string, {name: string}>();
-        const ownersQuery = query(collection(db, "owners"));
-        const ownersSnapshot = await getDocs(ownersQuery);
-        ownersSnapshot.forEach(doc => {
-            ownersMap.set(doc.id, { name: doc.data().name });
-        });
-
-        const primaryOwnerId = payment.reportedBy;
-        const ownerName = ownersMap.get(primaryOwnerId)?.name || '';
+        const ownerName = (payment.beneficiaries && payment.beneficiaries.length > 0) ? payment.beneficiaries[0].ownerName : 'No identificado';
         
         const ownerUnitSummary = payment.beneficiaries.length > 1 
             ? "Múltiples Propiedades" 
@@ -321,7 +299,7 @@ export default function VerifyPaymentsPage() {
         
         setReceiptData({ 
             payment, 
-            ownerName, 
+            ownerName: ownerName,
             ownerUnit: ownerUnitSummary, 
             paidDebts 
         });

@@ -71,21 +71,14 @@ export default function AdminDashboardPage() {
     });
 
     const fetchRecentPayments = async () => {
-        const ownersSnapshot = await getDocs(collection(db, "owners"));
-        const ownersMap = new Map<string, {name: string}>();
-        ownersSnapshot.forEach(doc => {
-            ownersMap.set(doc.id, { name: doc.data().name });
-        });
-
         const recentPaymentsQuery = query(collection(db, "payments"), orderBy('reportedAt', 'desc'), limit(5));
         const recentPaymentsUnsubscribe = onSnapshot(recentPaymentsQuery, (snapshot) => {
           const paymentsData: Payment[] = [];
           snapshot.forEach(doc => {
             const data = doc.data();
-            const ownerId = data.reportedBy;
             const beneficiary = data.beneficiaries?.[0];
             
-            const userName = ownersMap.get(ownerId)?.name || '';
+            const userName = beneficiary?.ownerName || 'No identificado';
             const unit = beneficiary ? `${beneficiary.street || 'N/A'} - ${beneficiary.house || 'N/A'}` : 'N/A';
 
             paymentsData.push({ 

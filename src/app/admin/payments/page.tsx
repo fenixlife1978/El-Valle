@@ -280,6 +280,7 @@ export default function UnifiedPaymentsPage() {
             beneficiaryType,
             beneficiaries: beneficiarySplits.map(s => ({
                 ownerId: selectedOwner!.id,
+                ownerName: selectedOwner!.name,
                 street: s.property.street,
                 house: s.property.house,
                 amount: Number(s.amount)
