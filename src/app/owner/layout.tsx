@@ -12,7 +12,7 @@ import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
 const ownerNavItems: NavItem[] = [
     { href: "/owner/dashboard", icon: Home, label: "Dashboard" },
     { 
-      href: "/admin/payments", 
+      href: "/owner/payments", 
       icon: Landmark, 
       label: "Mis Pagos",
       items: [
