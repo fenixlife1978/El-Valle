@@ -21,6 +21,11 @@ type Payment = {
   status: 'aprobado' | 'pendiente' | 'rechazado';
 };
 
+type Owner = {
+    id: string;
+    name: string;
+};
+
 export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
@@ -30,20 +35,35 @@ export default function AdminDashboardPage() {
     totalUnits: 0,
   });
   const [recentPayments, setRecentPayments] = useState<Payment[]>([]);
+  const [ownersMap, setOwnersMap] = useState<Map<string, string>>(new Map());
 
   useEffect(() => {
-    // Fetch stats
+    // Pre-fetch all owners to create a map of ID -> Name
     const ownersQuery = query(collection(db, "owners"));
     const ownersUnsubscribe = onSnapshot(ownersQuery, (snapshot) => {
-      let totalUnits = 0;
-      snapshot.forEach(doc => {
-          const owner = doc.data();
-          if (owner.properties && owner.properties.length > 0) {
-              totalUnits += owner.properties.length;
-          }
-      });
-      setStats(prev => ({ ...prev, totalUnits }));
+        const newOwnersMap = new Map<string, string>();
+        snapshot.forEach(doc => {
+            newOwnersMap.set(doc.id, doc.data().name);
+        });
+        setOwnersMap(newOwnersMap);
+        
+        let totalUnits = 0;
+        snapshot.forEach(doc => {
+            const owner = doc.data();
+            if (owner.properties && owner.properties.length > 0) {
+                totalUnits += owner.properties.length;
+            }
+        });
+        setStats(prev => ({ ...prev, totalUnits }));
     });
+
+    return () => ownersUnsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (ownersMap.size === 0) return; // Wait until owners are loaded
+
+    setLoading(true);
 
     const paymentsQuery = query(collection(db, "payments"));
     const paymentsUnsubscribe = onSnapshot(paymentsQuery, (snapshot) => {
@@ -55,7 +75,6 @@ export default function AdminDashboardPage() {
             const payment = doc.data();
             const paymentDate = new Date(payment.paymentDate.seconds * 1000);
             
-            // Exclude advance and reconciliation payments from monthly totals
             if (payment.status === 'aprobado' && payment.paymentMethod !== 'adelanto' && payment.paymentMethod !== 'conciliacion' && paymentDate.getMonth() === now.getMonth() && paymentDate.getFullYear() === now.getFullYear()) {
                 const amountBs = Number(payment.totalAmount);
                 monthTotalBs += amountBs;
@@ -70,15 +89,21 @@ export default function AdminDashboardPage() {
         setStats(prev => ({ ...prev, paymentsThisMonthBs: monthTotalBs, paymentsThisMonthUsd: monthTotalUsd, pendingPayments: pendingCount }));
     });
 
-    const fetchRecentPayments = async () => {
-        const recentPaymentsQuery = query(collection(db, "payments"), orderBy('reportedAt', 'desc'), limit(5));
-        const recentPaymentsUnsubscribe = onSnapshot(recentPaymentsQuery, (snapshot) => {
-          const paymentsData: Payment[] = [];
-          snapshot.forEach(doc => {
+    const recentPaymentsQuery = query(collection(db, "payments"), orderBy('reportedAt', 'desc'), limit(5));
+    const recentPaymentsUnsubscribe = onSnapshot(recentPaymentsQuery, (snapshot) => {
+        const paymentsData: Payment[] = [];
+        snapshot.forEach(doc => {
             const data = doc.data();
             const beneficiary = data.beneficiaries?.[0];
             
-            const userName = beneficiary?.ownerName || 'No identificado';
+            // New reliable logic to get user name
+            let userName = 'Cargando...';
+            if (beneficiary?.ownerName) {
+                userName = beneficiary.ownerName; // Priority: Use the name stored in the payment
+            } else if (beneficiary?.ownerId && ownersMap.has(beneficiary.ownerId)) {
+                userName = ownersMap.get(beneficiary.ownerId)!; // Fallback: Use the owner map
+            }
+
             const unit = beneficiary ? `${beneficiary.street || 'N/A'} - ${beneficiary.house || 'N/A'}` : 'N/A';
 
             paymentsData.push({ 
@@ -91,22 +116,16 @@ export default function AdminDashboardPage() {
                 type: data.paymentMethod,
                 status: data.status,
             });
-          });
-          setRecentPayments(paymentsData);
-          setLoading(false);
         });
-
-        return recentPaymentsUnsubscribe;
-    };
-
-    const unsubscribePromise = fetchRecentPayments();
+        setRecentPayments(paymentsData);
+        setLoading(false);
+    });
 
     return () => {
-      ownersUnsubscribe();
       paymentsUnsubscribe();
-      unsubscribePromise.then(unsub => unsub());
+      recentPaymentsUnsubscribe();
     }
-  }, []);
+  }, [ownersMap]);
 
   return (
     <div className="space-y-8">

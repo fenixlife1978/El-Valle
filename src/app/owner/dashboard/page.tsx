@@ -268,7 +268,7 @@ export default function OwnerDashboardPage() {
     if (!userData) return;
 
     try {
-        const ownerName = (payment.beneficiaries && payment.beneficiaries.length > 0) 
+        const ownerName = (payment.beneficiaries && payment.beneficiaries.length > 0 && payment.beneficiaries[0].ownerName) 
             ? payment.beneficiaries[0].ownerName 
             : userData.name;
 
@@ -283,7 +283,7 @@ export default function OwnerDashboardPage() {
             payment, 
             ownerName: ownerName,
             ownerUnit: userData.unit,
-            paidDebts
+            paidDebts 
         });
         setIsReceiptPreviewOpen(true);
     } catch (error) {
@@ -638,4 +638,3 @@ export default function OwnerDashboardPage() {
     </div>
   );
 }
-

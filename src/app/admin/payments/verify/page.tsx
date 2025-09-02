@@ -101,8 +101,25 @@ export default function VerifyPaymentsPage() {
   const [paymentToDelete, setPaymentToDelete] = useState<FullPayment | null>(null);
   const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
   const { toast } = useToast();
+  const [ownersMap, setOwnersMap] = useState<Map<string, string>>(new Map());
 
   useEffect(() => {
+    // Pre-fetch all owners to create a map of ID -> Name
+    const ownersQuery = query(collection(db, "owners"));
+    const ownersUnsubscribe = onSnapshot(ownersQuery, (snapshot) => {
+        const newOwnersMap = new Map<string, string>();
+        snapshot.forEach(doc => {
+            newOwnersMap.set(doc.id, doc.data().name);
+        });
+        setOwnersMap(newOwnersMap);
+    });
+
+    return () => ownersUnsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (ownersMap.size === 0) return; // Don't fetch payments until owners are loaded
+
     setLoading(true);
 
     const q = query(collection(db, "payments"), orderBy('reportedAt', 'desc'));
@@ -112,10 +129,13 @@ export default function VerifyPaymentsPage() {
         snapshot.forEach(doc => {
             const data = doc.data();
 
-            let userName = 'No identificado';
-            if (data.beneficiaries && data.beneficiaries.length > 0) {
-                // Use the name from the first beneficiary, as it's the primary owner of the payment
-                userName = data.beneficiaries[0].ownerName || userName;
+            let userName = 'Cargando...';
+            // New reliable logic to get user name
+            const beneficiary = data.beneficiaries?.[0];
+            if (beneficiary?.ownerName) {
+                userName = beneficiary.ownerName; // Priority: Use the name stored in the payment
+            } else if (data.reportedBy && ownersMap.has(data.reportedBy)) {
+                userName = ownersMap.get(data.reportedBy)!; // Fallback for older records: Use the owner map based on reportedBy
             }
 
             let unit = 'N/A';
@@ -167,7 +187,7 @@ export default function VerifyPaymentsPage() {
     fetchSettings();
 
     return () => unsubscribe();
-  }, [toast]);
+  }, [toast, ownersMap]);
 
 
   const handleStatusChange = async (id: string, newStatus: PaymentStatus) => {
@@ -284,7 +304,7 @@ export default function VerifyPaymentsPage() {
         return;
     }
     try {
-        const ownerName = (payment.beneficiaries && payment.beneficiaries.length > 0) ? payment.beneficiaries[0].ownerName : 'No identificado';
+        const ownerName = payment.user || 'Propietario no Identificado';
         
         const ownerUnitSummary = payment.beneficiaries.length > 1 
             ? "Múltiples Propiedades" 
