@@ -265,7 +265,7 @@ export default function DebtManagementPage() {
                                 const paymentRef = doc(collection(db, "payments"));
                                 transaction.set(paymentRef, {
                                     reportedBy: owner.id,
-                                    beneficiaries: [{ ownerId: owner.id, ...debt.property, amount: debtAmountBs }],
+                                    beneficiaries: [{ ownerId: owner.id, ownerName: owner.name, ...debt.property, amount: debtAmountBs }],
                                     totalAmount: debtAmountBs,
                                     exchangeRate: activeRate,
                                     paymentDate: Timestamp.now(),
@@ -329,7 +329,7 @@ export default function DebtManagementPage() {
                                     const paymentRef = doc(collection(db, 'payments'));
                                     transaction.set(paymentRef, {
                                         reportedBy: owner.id,
-                                        beneficiaries: [{ ownerId: owner.id, ...property, amount: condoFeeInBs }],
+                                        beneficiaries: [{ ownerId: owner.id, ownerName: owner.name, ...property, amount: condoFeeInBs }],
                                         totalAmount: condoFeeInBs,
                                         exchangeRate: activeRate,
                                         paymentDate: paymentDate,
@@ -691,7 +691,7 @@ export default function DebtManagementPage() {
                         const paymentRef = doc(collection(db, "payments"));
                         transaction.set(paymentRef, {
                             reportedBy: selectedOwner.id,
-                            beneficiaries: [{ ownerId: selectedOwner.id, ...propertyForMassDebt, amount: debtAmountBs }],
+                            beneficiaries: [{ ownerId: selectedOwner.id, ownerName: selectedOwner.name, ...propertyForMassDebt, amount: debtAmountBs }],
                             totalAmount: debtAmountBs,
                             exchangeRate: activeRate,
                             paymentDate: paymentDate,
@@ -1187,4 +1187,3 @@ export default function DebtManagementPage() {
     // Fallback while loading or if view is invalid
     return null;
 }
-
