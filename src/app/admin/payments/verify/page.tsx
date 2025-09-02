@@ -45,6 +45,7 @@ type FullPayment = {
 type Debt = {
     id: string;
     ownerId: string;
+    property: { street: string; house: string; };
     year: number;
     month: number;
     amountUSD: number;
@@ -67,7 +68,7 @@ type CompanyInfo = {
 type ReceiptData = {
     payment: FullPayment;
     ownerName: string; 
-    ownerUnit: string;
+    ownerUnit: string; // This can represent the primary unit or a summary
     paidDebts: Debt[];
 } | null;
 
@@ -107,9 +108,9 @@ export default function VerifyPaymentsPage() {
     const fetchAllOwners = async () => {
         const ownersQuery = query(collection(db, "owners"));
         const ownersSnapshot = await getDocs(ownersQuery);
-        const ownersMap = new Map<string, {name: string}>();
+        const ownersMap = new Map<string, {name: string, properties: any[]}>();
         ownersSnapshot.forEach(doc => {
-            ownersMap.set(doc.id, { name: doc.data().name });
+            ownersMap.set(doc.id, { name: doc.data().name, properties: doc.data().properties || [] });
         });
         return ownersMap;
     };
@@ -121,9 +122,17 @@ export default function VerifyPaymentsPage() {
             const paymentsData: FullPayment[] = [];
             snapshot.forEach(doc => {
                 const data = doc.data();
-                const userName = ownersMap.get(data.reportedBy)?.name || (data.beneficiaries?.[0]?.ownerId ? ownersMap.get(data.beneficiaries[0].ownerId)?.name : 'No disponible');
-                const beneficiary = data.beneficiaries?.[0];
-                const unit = beneficiary && beneficiary.street && beneficiary.house ? `${beneficiary.street} - ${beneficiary.house}` : (beneficiary ? beneficiary.house || 'N/A' : 'N/A');
+                const ownerId = data.beneficiaries?.[0]?.ownerId;
+                const ownerInfo = ownerId ? ownersMap.get(ownerId) : null;
+                const userName = ownerInfo?.name || ownersMap.get(data.reportedBy)?.name || 'No disponible';
+
+                let unit = 'N/A';
+                if (data.beneficiaries?.length === 1) {
+                    const b = data.beneficiaries[0];
+                    unit = b && b.street && b.house ? `${b.street} - ${b.house}` : (ownerInfo?.properties?.[0] ? `${ownerInfo.properties[0].street} - ${ownerInfo.properties[0].house}`: 'N/A');
+                } else if (data.beneficiaries?.length > 1) {
+                    unit = "Múltiples Propiedades";
+                }
 
                 paymentsData.push({
                     id: doc.id,
@@ -267,7 +276,9 @@ export default function VerifyPaymentsPage() {
                             availableFundsBs -= condoFeeInBs;
                             const newDebtRef = doc(collection(db, 'debts'));
                             batch.set(newDebtRef, {
-                                ownerId: beneficiary.ownerId, year: futureYear, month: futureMonth,
+                                ownerId: beneficiary.ownerId,
+                                property: ownerData.properties?.[0] || {}, // Assign to first property as fallback
+                                year: futureYear, month: futureMonth,
                                 amountUSD: condoFee, description: `Cuota de Condominio (Pagada por adelantado)`,
                                 status: 'paid', paidAmountUSD: condoFee,
                                 paymentDate: paymentData.paymentDate, paymentId: paymentData.id
@@ -312,15 +323,16 @@ export default function VerifyPaymentsPage() {
             ownersMap.set(doc.id, { name: doc.data().name });
         });
 
-        const beneficiaryId = payment.beneficiaries?.[0]?.ownerId;
-        if (!beneficiaryId) {
-            toast({ variant: 'destructive', title: 'Error', description: 'El pago no tiene un beneficiario claro.' });
-            return;
-        }
+        // Use reportedBy as the primary owner for the receipt title/info
+        const primaryOwnerId = payment.reportedBy;
+        const ownerName = ownersMap.get(primaryOwnerId)?.name || 'No disponible';
+        
+        // A summary of units for the title
+        const ownerUnitSummary = payment.beneficiaries.length > 1 
+            ? "Múltiples Propiedades" 
+            : (payment.unit || 'N/A');
 
-        const ownerName = ownersMap.get(beneficiaryId)?.name || 'No disponible';
-        const ownerUnit = payment.unit;
-
+        // Fetch all debts that were paid by this specific payment
         const paidDebtsQuery = query(
             collection(db, "debts"),
             where("paymentId", "==", payment.id)
@@ -328,7 +340,12 @@ export default function VerifyPaymentsPage() {
         const paidDebtsSnapshot = await getDocs(paidDebtsQuery);
         const paidDebts = paidDebtsSnapshot.docs.map(doc => ({id: doc.id, ...doc.data()}) as Debt);
         
-        setReceiptData({ payment, ownerName, ownerUnit, paidDebts });
+        setReceiptData({ 
+            payment, 
+            ownerName, 
+            ownerUnit: ownerUnitSummary, 
+            paidDebts 
+        });
         setIsReceiptPreviewOpen(true);
     } catch (error) {
         console.error("Error generating receipt preview: ", error);
@@ -406,7 +423,7 @@ export default function VerifyPaymentsPage() {
 
   const handleDownloadPdf = () => {
     if (!receiptData || !companyInfo) return;
-    const { payment, ownerName, ownerUnit, paidDebts } = receiptData;
+    const { payment, ownerName, paidDebts } = receiptData;
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 14;
@@ -428,9 +445,7 @@ export default function VerifyPaymentsPage() {
     doc.setFontSize(10).setFont('helvetica', 'normal').text(`N° de recibo: ${payment.id.substring(0, 10)}`, pageWidth - margin, margin + 50, { align: 'right' });
 
     let startY = margin + 60;
-    doc.setFontSize(10).text(`Nombre del residente: ${ownerName}`, margin, startY);
-    startY += 6;
-    doc.text(`Unidad: ${ownerUnit}`, margin, startY);
+    doc.setFontSize(10).text(`Nombre del Propietario: ${ownerName}`, margin, startY);
     startY += 6;
     doc.text(`Método de pago: ${payment.type}`, margin, startY);
     startY += 6;
@@ -441,23 +456,23 @@ export default function VerifyPaymentsPage() {
     doc.text(`Fecha del pago: ${format(payment.paymentDate.toDate(), 'dd/MM/yyyy')}`, margin, startY);
     startY += 10;
     
-    const totalPaidUSD = paidDebts.reduce((sum, debt) => sum + (debt.paidAmountUSD || debt.amountUSD), 0);
-    const conceptText = paidDebts.length > 0 
-        ? `Pago cuota(s) ${companyInfo.name || 'Condominio'}: ${paidDebts.map(d => `${monthsLocale[d.month]} ${d.year}`).join(', ')}`
-        : payment.observations || `Abono a saldo a favor`;
-
-    const tableBody = [
-        [
-            conceptText,
-            totalPaidUSD.toFixed(2),
-            `${payment.exchangeRate.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`,
-            payment.amount.toLocaleString('es-VE', { minimumFractionDigits: 2 })
-        ]
-    ];
+    const tableBody = paidDebts.map(debt => {
+        const debtAmountBs = (debt.paidAmountUSD || debt.amountUSD) * payment.exchangeRate;
+        const propertyLabel = debt.property ? `${debt.property.street} - ${debt.property.house}` : 'N/A';
+        const periodLabel = `${monthsLocale[debt.month]} ${debt.year}`;
+        const concept = `${debt.description} (${propertyLabel})`;
+        
+        return [
+            periodLabel,
+            concept,
+            `$${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}`,
+            `Bs. ${debtAmountBs.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`
+        ];
+    });
 
     (doc as any).autoTable({
         startY: startY,
-        head: [['Concepto', 'Monto ($)', 'Tasa Aplicada (Bs/$)', 'Monto Pagado (Bs)']],
+        head: [['Período', 'Concepto (Propiedad)', 'Monto ($)', 'Monto Pagado (Bs)']],
         body: tableBody,
         theme: 'striped',
         headStyles: { fillColor: [44, 62, 80], textColor: 255 },
@@ -465,9 +480,17 @@ export default function VerifyPaymentsPage() {
         didDrawPage: (data: any) => { startY = data.cursor.y; }
     });
 
-    startY = (doc as any).lastAutoTable.finalY + 15;
+    startY = (doc as any).lastAutoTable.finalY + 8;
+    
+    // Totals Section
+    doc.setFontSize(11).setFont('helvetica', 'bold');
+    doc.text('TOTAL PAGADO:', pageWidth - margin - 50, startY, { align: 'left' });
+    doc.text(`Bs. ${payment.totalAmount.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`, pageWidth - margin, startY, { align: 'right' });
 
-    doc.setFontSize(9).text('Este recibo confirma que su pago ha sido validado conforme a los términos establecidos por la comunidad.', margin, startY);
+    startY += 10;
+
+    // Footer Section
+    doc.setFontSize(9).setFont('helvetica', 'normal').text('Este recibo confirma que el pago ha sido validado para la(s) cuota(s) y propiedad(es) aquí detalladas.', margin, startY);
     startY += 8;
     doc.setFont('helvetica', 'bold').text(`Firma electrónica: '${companyInfo.name} - Condominio'`, margin, startY);
     startY += 10;
@@ -616,7 +639,7 @@ export default function VerifyPaymentsPage() {
                                     <p className="font-bold">{companyInfo.name}</p>
                                     <p>{companyInfo.rif}</p>
                                     <p>{companyInfo.address}</p>
-                                    <p>Teléfono: ${companyInfo.phone}</p>
+                                    <p>Teléfono: {companyInfo.phone}</p>
                                 </div>
                             </div>
                             <div className="text-right">
@@ -630,47 +653,40 @@ export default function VerifyPaymentsPage() {
                             <p className="text-right text-xs">N° de recibo: {receiptData.payment.id.substring(0, 10)}</p>
                         </div>
                          <div className="mb-4 text-xs">
-                             <p><strong>Nombre del residente:</strong> {receiptData.ownerName}</p>
-                             <p><strong>Unidad:</strong> {receiptData.ownerUnit}</p>
+                             <p><strong>Propietario:</strong> {receiptData.ownerName}</p>
                              <p><strong>Método de pago:</strong> {receiptData.payment.type}</p>
                              <p><strong>Banco Emisor:</strong> {receiptData.payment.bank}</p>
-                             <p><strong>N° de Referencia Bancaria:</strong> {receiptData.payment.reference}</p>
+                             <p><strong>N° de Referencia:</strong> {receiptData.payment.reference}</p>
                              <p><strong>Fecha del pago:</strong> {format(receiptData.payment.paymentDate.toDate(), 'dd/MM/yyyy')}</p>
                         </div>
                         <Table className="text-xs">
                             <TableHeader>
                                 <TableRow className="bg-gray-700 text-white">
-                                    <TableHead className="text-white">Concepto</TableHead>
+                                    <TableHead className="text-white">Período</TableHead>
+                                    <TableHead className="text-white">Concepto (Propiedad)</TableHead>
                                     <TableHead className="text-white text-right">Monto ($)</TableHead>
-                                    <TableHead className="text-white text-right">Tasa Aplicada (Bs/$)</TableHead>
                                     <TableHead className="text-white text-right">Monto Pagado (Bs)</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                <TableRow>
-                                    <TableCell>
-                                        {receiptData.paidDebts.length > 0 
-                                            ? `Pago cuota(s) ${companyInfo.name || 'Condominio'}: ${receiptData.paidDebts.map(d => `${monthsLocale[d.month]} ${d.year}`).join(', ')}`
-                                            : receiptData.payment.observations || `Abono a saldo a favor`
-                                        }
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        {receiptData.paidDebts.reduce((sum, debt) => sum + (debt.paidAmountUSD || debt.amountUSD), 0).toFixed(2)}
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        {receiptData.payment.exchangeRate.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
-                                    </TableCell>
-                                    <TableCell className="text-right font-bold">
-                                        {receiptData.payment.amount.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
-                                    </TableCell>
-                                </TableRow>
+                                {receiptData.paidDebts.map((debt, index) => (
+                                    <TableRow key={index}>
+                                        <TableCell>{monthsLocale[debt.month]} {debt.year}</TableCell>
+                                        <TableCell>{debt.description} ({debt.property.street} - {debt.property.house})</TableCell>
+                                        <TableCell className="text-right">${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}</TableCell>
+                                        <TableCell className="text-right">Bs. {((debt.paidAmountUSD || debt.amountUSD) * receiptData.payment.exchangeRate).toLocaleString('es-VE', { minimumFractionDigits: 2 })}</TableCell>
+                                    </TableRow>
+                                ))}
                             </TableBody>
                         </Table>
-                        <div className="mt-6 text-center text-gray-600 text-xs">
-                             <p className="text-left">Este recibo confirma que su pago ha sido validado conforme a los términos establecidos por la comunidad.</p>
+                         <div className="text-right font-bold mt-2 pr-4">
+                            Total Pagado: Bs. {receiptData.payment.totalAmount.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                         </div>
+                        <div className="mt-6 text-center text-gray-600 text-[10px]">
+                             <p className="text-left">Este recibo confirma que el pago ha sido validado para la(s) cuota(s) y propiedad(es) aquí detalladas.</p>
                              <p className="text-left font-bold mt-2">Firma electrónica: '{companyInfo.name} - Condominio'</p>
                              <hr className="my-4 border-gray-400"/>
-                             <p className="italic text-xs">Este recibo se generó de manera automática y es válido sin firma manuscrita.</p>
+                             <p className="italic">Este recibo se generó de manera automática y es válido sin firma manuscrita.</p>
                         </div>
                     </div>
                 )}
@@ -701,5 +717,3 @@ export default function VerifyPaymentsPage() {
     </div>
   );
 }
-
-    
