@@ -54,7 +54,7 @@ export default function AdminDashboardPage() {
         setOwnersMap(newOwnersMap);
         setStats(prev => ({ ...prev, totalUnits }));
 
-        // Ensure dependent listeners are re-established only when the map's content fundamentally changes
+        // The dependency on ownersMap.size ensures this runs only when owners are loaded
         if (newOwnersMap.size > 0) {
             
             const paymentsQuery = query(collection(db, "payments"));
