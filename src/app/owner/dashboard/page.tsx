@@ -45,6 +45,7 @@ type UserData = {
 type Debt = {
     id: string;
     ownerId: string;
+    property: { street: string; house: string; };
     year: number;
     month: number;
     amountUSD: number;
@@ -52,6 +53,7 @@ type Debt = {
     status: 'pending' | 'paid';
     paidAmountUSD?: number;
     paymentDate?: Timestamp;
+    paymentId?: string;
 };
 
 type CompanyInfo = {
@@ -266,12 +268,10 @@ export default function OwnerDashboardPage() {
     try {
         const paidDebtsQuery = query(
             collection(db, "debts"),
-            where("ownerId", "==", userData.id),
-            where("status", "==", "paid"),
-            where("paymentDate", "==", payment.paymentDate)
+            where("paymentId", "==", payment.id)
         );
         const paidDebtsSnapshot = await getDocs(paidDebtsQuery);
-        const paidDebts = paidDebtsSnapshot.docs.map(doc => doc.data() as Debt);
+        const paidDebts = paidDebtsSnapshot.docs.map(doc => ({id: doc.id, ...doc.data()}) as Debt);
         
         setReceiptData({ 
             payment, 
@@ -325,24 +325,23 @@ export default function OwnerDashboardPage() {
     doc.text(`Fecha del pago: ${format(payment.paymentDate.toDate(), 'dd/MM/yyyy')}`, margin, startY);
     startY += 10;
     
-    // --- Concept Table ---
-    const totalPaidUSD = paidDebts.reduce((sum, debt) => sum + (debt.paidAmountUSD || debt.amountUSD), 0);
-    const conceptText = paidDebts.length > 0 
-        ? `Pago cuota(s) ${companyInfo.name || 'Condominio'}: ${paidDebts.map(d => `${monthsLocale[d.month]} ${d.year}`).join(', ')}`
-        : `Abono a saldo a favor`;
-
-    const tableBody = [
-        [
-            conceptText,
-            totalPaidUSD.toFixed(2),
-            `${payment.exchangeRate.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`,
-            payment.amount.toLocaleString('es-VE', { minimumFractionDigits: 2 })
-        ]
-    ];
+    const tableBody = paidDebts.map(debt => {
+        const debtAmountBs = (debt.paidAmountUSD || debt.amountUSD) * payment.exchangeRate;
+        const propertyLabel = debt.property ? `${debt.property.street} - ${debt.property.house}` : 'N/A';
+        const periodLabel = `${monthsLocale[debt.month]} ${debt.year}`;
+        const concept = `${debt.description} (${propertyLabel})`;
+        
+        return [
+            periodLabel,
+            concept,
+            `$${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}`,
+            `Bs. ${debtAmountBs.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`
+        ];
+    });
 
     (doc as any).autoTable({
         startY: startY,
-        head: [['Concepto', 'Monto ($)', 'Tasa Aplicada (Bs/$)', 'Monto Pagado (Bs)']],
+        head: [['Período', 'Concepto (Propiedad)', 'Monto ($)', 'Monto Pagado (Bs)']],
         body: tableBody,
         theme: 'striped',
         headStyles: { fillColor: [44, 62, 80], textColor: 255 },
@@ -350,7 +349,14 @@ export default function OwnerDashboardPage() {
         didDrawPage: (data: any) => { startY = data.cursor.y; }
     });
 
-    startY = (doc as any).lastAutoTable.finalY + 15;
+    startY = (doc as any).lastAutoTable.finalY + 8;
+    
+    // Totals Section
+    doc.setFontSize(11).setFont('helvetica', 'bold');
+    doc.text('TOTAL PAGADO:', pageWidth - margin - 50, startY, { align: 'left' });
+    doc.text(`Bs. ${payment.amount.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`, pageWidth - margin, startY, { align: 'right' });
+
+    startY += 10;
 
     // --- Footer ---
     doc.setFontSize(9).text('Este recibo confirma que su pago ha sido validado conforme a los términos establecidos por la comunidad.', margin, startY);
@@ -582,32 +588,30 @@ export default function OwnerDashboardPage() {
                         <Table className="text-xs">
                             <TableHeader>
                                 <TableRow className="bg-gray-700 text-white">
-                                    <TableHead className="text-white">Concepto</TableHead>
+                                    <TableHead className="text-white">Período</TableHead>
+                                    <TableHead className="text-white">Concepto (Propiedad)</TableHead>
                                     <TableHead className="text-white text-right">Monto ($)</TableHead>
-                                    <TableHead className="text-white text-right">Tasa Aplicada (Bs/$)</TableHead>
                                     <TableHead className="text-white text-right">Monto Pagado (Bs)</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                <TableRow>
-                                    <TableCell>
-                                        {receiptData.paidDebts.length > 0 
-                                            ? `Pago cuota(s) ${companyInfo.name || 'Condominio'}: ${receiptData.paidDebts.map(d => `${monthsLocale[d.month]} ${d.year}`).join(', ')}`
-                                            : `Abono a saldo a favor`
-                                        }
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        {receiptData.paidDebts.reduce((sum, debt) => sum + (debt.paidAmountUSD || debt.amountUSD), 0).toFixed(2)}
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        {receiptData.payment.exchangeRate.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
-                                    </TableCell>
-                                    <TableCell className="text-right font-bold">
-                                        {receiptData.payment.amount.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
-                                    </TableCell>
-                                </TableRow>
+                                {receiptData.paidDebts.length > 0 ? receiptData.paidDebts.map((debt, index) => (
+                                    <TableRow key={index}>
+                                        <TableCell>{monthsLocale[debt.month]} {debt.year}</TableCell>
+                                        <TableCell>{debt.description} ({debt.property.street} - {debt.property.house})</TableCell>
+                                        <TableCell className="text-right">${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}</TableCell>
+                                        <TableCell className="text-right">Bs. {((debt.paidAmountUSD || debt.amountUSD) * receiptData.payment.exchangeRate).toLocaleString('es-VE', { minimumFractionDigits: 2 })}</TableCell>
+                                    </TableRow>
+                                )) : (
+                                     <TableRow>
+                                        <TableCell colSpan={4} className="text-center">No hay detalles de deudas para este pago.</TableCell>
+                                    </TableRow>
+                                )}
                             </TableBody>
                         </Table>
+                         <div className="text-right font-bold mt-2 pr-4">
+                            Total Pagado: Bs. {receiptData.payment.amount.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                         </div>
                         {/* Footer */}
                         <div className="mt-6 text-center text-gray-600 text-xs">
                              <p className="text-left">Este recibo confirma que su pago ha sido validado conforme a los términos establecidos por la comunidad.</p>
@@ -628,3 +632,5 @@ export default function OwnerDashboardPage() {
     </div>
   );
 }
+
+    

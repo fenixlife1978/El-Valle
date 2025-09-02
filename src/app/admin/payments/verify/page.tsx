@@ -122,9 +122,9 @@ export default function VerifyPaymentsPage() {
             const paymentsData: FullPayment[] = [];
             snapshot.forEach(doc => {
                 const data = doc.data();
-                const ownerId = data.beneficiaries?.[0]?.ownerId;
+                const ownerId = data.beneficiaries?.[0]?.ownerId || data.reportedBy;
                 const ownerInfo = ownerId ? ownersMap.get(ownerId) : null;
-                const userName = ownerInfo?.name || ownersMap.get(data.reportedBy)?.name || 'No disponible';
+                const userName = ownerInfo?.name || 'No disponible';
 
                 let unit = 'N/A';
                 if (data.beneficiaries?.length === 1) {
@@ -323,16 +323,13 @@ export default function VerifyPaymentsPage() {
             ownersMap.set(doc.id, { name: doc.data().name });
         });
 
-        // Use reportedBy as the primary owner for the receipt title/info
         const primaryOwnerId = payment.reportedBy;
         const ownerName = ownersMap.get(primaryOwnerId)?.name || 'No disponible';
         
-        // A summary of units for the title
         const ownerUnitSummary = payment.beneficiaries.length > 1 
             ? "Múltiples Propiedades" 
             : (payment.unit || 'N/A');
 
-        // Fetch all debts that were paid by this specific payment
         const paidDebtsQuery = query(
             collection(db, "debts"),
             where("paymentId", "==", payment.id)
@@ -669,14 +666,18 @@ export default function VerifyPaymentsPage() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {receiptData.paidDebts.map((debt, index) => (
+                                {receiptData.paidDebts.length > 0 ? receiptData.paidDebts.map((debt, index) => (
                                     <TableRow key={index}>
                                         <TableCell>{monthsLocale[debt.month]} {debt.year}</TableCell>
                                         <TableCell>{debt.description} ({debt.property.street} - {debt.property.house})</TableCell>
                                         <TableCell className="text-right">${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}</TableCell>
                                         <TableCell className="text-right">Bs. {((debt.paidAmountUSD || debt.amountUSD) * receiptData.payment.exchangeRate).toLocaleString('es-VE', { minimumFractionDigits: 2 })}</TableCell>
                                     </TableRow>
-                                ))}
+                                )) : (
+                                    <TableRow>
+                                        <TableCell colSpan={4} className="text-center">No hay detalles de deudas para este pago.</TableCell>
+                                    </TableRow>
+                                )}
                             </TableBody>
                         </Table>
                          <div className="text-right font-bold mt-2 pr-4">
@@ -717,3 +718,5 @@ export default function VerifyPaymentsPage() {
     </div>
   );
 }
+
+    
