@@ -12,7 +12,7 @@ import { CheckCircle2, XCircle, MoreHorizontal, Eye, Printer, Filter, Loader2, T
 import { useToast } from '@/hooks/use-toast';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import { collection, onSnapshot, query, doc, updateDoc, getDoc, writeBatch, where, orderBy, Timestamp, getDocs, deleteDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, doc, updateDoc, getDoc, writeBatch, where, orderBy, Timestamp, getDocs, deleteField, deleteDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { addMonths, format, startOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -124,7 +124,7 @@ export default function VerifyPaymentsPage() {
                 const data = doc.data();
                 const ownerId = data.reportedBy;
                 const ownerInfo = ownerId ? ownersMap.get(ownerId) : null;
-                const userName = ownerInfo?.name || 'Propietario no identificado';
+                const userName = ownerInfo?.name || '';
 
                 let unit = 'N/A';
                 if (data.beneficiaries?.length === 1) {
@@ -306,7 +306,7 @@ export default function VerifyPaymentsPage() {
         });
 
         const primaryOwnerId = payment.reportedBy;
-        const ownerName = ownersMap.get(primaryOwnerId)?.name || 'Propietario no identificado';
+        const ownerName = ownersMap.get(primaryOwnerId)?.name || '';
         
         const ownerUnitSummary = payment.beneficiaries.length > 1 
             ? "Múltiples Propiedades" 

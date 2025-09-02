@@ -70,7 +70,6 @@ export default function AdminDashboardPage() {
         setStats(prev => ({ ...prev, paymentsThisMonthBs: monthTotalBs, paymentsThisMonthUsd: monthTotalUsd, pendingPayments: pendingCount }));
     });
 
-    // Fetch recent payments with owner info
     const fetchRecentPayments = async () => {
         const ownersSnapshot = await getDocs(collection(db, "owners"));
         const ownersMap = new Map<string, {name: string}>();
@@ -86,7 +85,7 @@ export default function AdminDashboardPage() {
             const ownerId = data.reportedBy;
             const beneficiary = data.beneficiaries?.[0];
             
-            const userName = ownersMap.get(ownerId)?.name || 'Propietario no identificado';
+            const userName = ownersMap.get(ownerId)?.name || '';
             const unit = beneficiary ? `${beneficiary.street || 'N/A'} - ${beneficiary.house || 'N/A'}` : 'N/A';
 
             paymentsData.push({ 
@@ -107,12 +106,12 @@ export default function AdminDashboardPage() {
         return recentPaymentsUnsubscribe;
     };
 
-    const unsubscribe = fetchRecentPayments();
+    const unsubscribePromise = fetchRecentPayments();
 
     return () => {
       ownersUnsubscribe();
       paymentsUnsubscribe();
-      unsubscribe.then(unsub => unsub());
+      unsubscribePromise.then(unsub => unsub());
     }
   }, []);
 
