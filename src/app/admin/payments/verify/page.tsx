@@ -129,13 +129,12 @@ export default function VerifyPaymentsPage() {
         snapshot.forEach(doc => {
             const data = doc.data();
 
-            let userName = 'Cargando...';
-            // New reliable logic to get user name
+            let userName = 'Propietario no identificado'; // Fallback text
             const beneficiary = data.beneficiaries?.[0];
             if (beneficiary?.ownerName) {
-                userName = beneficiary.ownerName; // Priority: Use the name stored in the payment
+                userName = beneficiary.ownerName; 
             } else if (data.reportedBy && ownersMap.has(data.reportedBy)) {
-                userName = ownersMap.get(data.reportedBy)!; // Fallback for older records: Use the owner map based on reportedBy
+                userName = ownersMap.get(data.reportedBy)!;
             }
 
             let unit = 'N/A';
@@ -304,7 +303,7 @@ export default function VerifyPaymentsPage() {
         return;
     }
     try {
-        const ownerName = payment.user || 'Propietario no Identificado';
+        const ownerName = payment.user || 'Propietario no identificado';
         
         const ownerUnitSummary = payment.beneficiaries.length > 1 
             ? "Múltiples Propiedades" 

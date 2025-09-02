@@ -96,12 +96,11 @@ export default function AdminDashboardPage() {
             const data = doc.data();
             const beneficiary = data.beneficiaries?.[0];
             
-            // New reliable logic to get user name
-            let userName = 'Cargando...';
+            let userName = 'Propietario no identificado'; // Fallback text
             if (beneficiary?.ownerName) {
-                userName = beneficiary.ownerName; // Priority: Use the name stored in the payment
+                userName = beneficiary.ownerName;
             } else if (beneficiary?.ownerId && ownersMap.has(beneficiary.ownerId)) {
-                userName = ownersMap.get(beneficiary.ownerId)!; // Fallback: Use the owner map
+                userName = ownersMap.get(beneficiary.ownerId)!;
             }
 
             const unit = beneficiary ? `${beneficiary.street || 'N/A'} - ${beneficiary.house || 'N/A'}` : 'N/A';
