@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -40,6 +41,7 @@ type FullPayment = {
   reportedAt?: Timestamp;
   observations?: string;
   isReconciled?: boolean;
+  receiptFileUrl?: string;
 };
 
 type Debt = {
@@ -72,6 +74,12 @@ type ReceiptData = {
     paidDebts: Debt[];
 } | null;
 
+type ReceiptPreviewData = {
+    url: string;
+    title: string;
+    details: { label: string; value: string }[];
+};
+
 const statusVariantMap: { [key in PaymentStatus]: 'warning' | 'success' | 'destructive' } = {
   pendiente: 'warning',
   aprobado: 'success',
@@ -97,6 +105,8 @@ export default function VerifyPaymentsPage() {
   const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
   const [condoFee, setCondoFee] = useState(0);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
+  const [isReceiptPdfPreviewOpen, setIsReceiptPdfPreviewOpen] = useState(false);
+  const [receiptPreviewData, setReceiptPreviewData] = useState<ReceiptPreviewData | null>(null);
   const [isReceiptPreviewOpen, setIsReceiptPreviewOpen] = useState(false);
   const [paymentToDelete, setPaymentToDelete] = useState<FullPayment | null>(null);
   const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
@@ -162,7 +172,8 @@ export default function VerifyPaymentsPage() {
                 reportedBy: data.reportedBy,
                 reportedAt: data.reportedAt,
                 observations: data.observations,
-                isReconciled: data.isReconciled
+                isReconciled: data.isReconciled,
+                receiptFileUrl: data.receiptFileUrl,
             });
         });
 
@@ -297,7 +308,22 @@ export default function VerifyPaymentsPage() {
     }
   };
 
-  const showReceiptPreview = async (payment: FullPayment) => {
+  const handleShowReceipt = (payment: FullPayment) => {
+    if (!payment.receiptFileUrl) return;
+    setReceiptPreviewData({
+        url: payment.receiptFileUrl,
+        title: `Comprobante de ${payment.user}`,
+        details: [
+            { label: 'Monto', value: `Bs. ${payment.amount.toLocaleString('es-VE', {minimumFractionDigits: 2})}` },
+            { label: 'Fecha', value: new Date(payment.date).toLocaleDateString('es-VE') },
+            { label: 'Banco', value: payment.bank },
+            { label: 'Referencia', value: payment.reference },
+        ]
+    });
+    setIsReceiptPreviewOpen(true);
+  }
+
+  const showReceiptPdfPreview = async (payment: FullPayment) => {
     if (!payment.id) {
         toast({ variant: 'destructive', title: 'Error', description: 'ID de pago inválido.' });
         return;
@@ -322,7 +348,7 @@ export default function VerifyPaymentsPage() {
             ownerUnit: ownerUnitSummary, 
             paidDebts 
         });
-        setIsReceiptPreviewOpen(true);
+        setIsReceiptPdfPreviewOpen(true);
     } catch (error) {
         console.error("Error generating receipt preview: ", error);
         toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron cargar los datos para el recibo.' });
@@ -475,7 +501,7 @@ export default function VerifyPaymentsPage() {
     doc.setFontSize(8).setFont('helvetica', 'italic').text('Este recibo se generó de manera automática y es válido sin firma manuscrita.', pageWidth / 2, startY, { align: 'center'});
 
     doc.save(`Recibo_de_Pago_${payment.id.substring(0,7)}.pdf`);
-    setIsReceiptPreviewOpen(false);
+    setIsReceiptPdfPreviewOpen(false);
   };
 
   const filteredPayments = payments.filter(p => filter === 'todos' || p.status === filter);
@@ -572,12 +598,12 @@ export default function VerifyPaymentsPage() {
                                                     </DropdownMenuItem>
                                                 </>
                                             )}
-                                            <DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => handleShowReceipt(payment)} disabled={!payment.receiptFileUrl}>
                                                 <Eye className="mr-2 h-4 w-4" />
                                                 Ver Comprobante
                                             </DropdownMenuItem>
                                             {payment.status === 'aprobado' && (
-                                                <DropdownMenuItem onClick={() => showReceiptPreview(payment)}>
+                                                <DropdownMenuItem onClick={() => showReceiptPdfPreview(payment)}>
                                                     <Printer className="mr-2 h-4 w-4" />
                                                     Generar Recibo
                                                 </DropdownMenuItem>
@@ -598,6 +624,31 @@ export default function VerifyPaymentsPage() {
         </Card>
 
         <Dialog open={isReceiptPreviewOpen} onOpenChange={setIsReceiptPreviewOpen}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>{receiptPreviewData?.title}</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                    <div className="aspect-w-16 aspect-h-9 rounded-md overflow-hidden bg-muted">
+                        <img src={receiptPreviewData?.url} alt="Comprobante de pago" className="w-full h-full object-contain"/>
+                    </div>
+                    <div className="space-y-1 text-sm">
+                        {receiptPreviewData?.details.map(detail => (
+                             <div key={detail.label} className="flex justify-between">
+                                <span className="text-muted-foreground">{detail.label}:</span>
+                                <span className="font-medium">{detail.value}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+                <DialogFooter>
+                     <Button variant="outline" onClick={() => setIsReceiptPreviewOpen(false)}>Cerrar</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+
+
+        <Dialog open={isReceiptPdfPreviewOpen} onOpenChange={setIsReceiptPdfPreviewOpen}>
             <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col">
                 <DialogHeader>
                     <DialogTitle>Vista Previa del Recibo</DialogTitle>
@@ -615,7 +666,7 @@ export default function VerifyPaymentsPage() {
                                     <p className="font-bold">{companyInfo.name}</p>
                                     <p>{companyInfo.rif}</p>
                                     <p>{companyInfo.address}</p>
-                                    <p>Teléfono: {companyInfo.phone}</p>
+                                    <p>Teléfono: ${companyInfo.phone}</p>
                                 </div>
                             </div>
                             <div className="text-right">
@@ -672,7 +723,7 @@ export default function VerifyPaymentsPage() {
                 )}
                 </div>
                 <DialogFooter className="mt-auto pt-4 border-t">
-                    <Button variant="outline" onClick={() => setIsReceiptPreviewOpen(false)}>Cerrar</Button>
+                    <Button variant="outline" onClick={() => setIsReceiptPdfPreviewOpen(false)}>Cerrar</Button>
                     <Button onClick={handleDownloadPdf}>
                         <Printer className="mr-2 h-4 w-4"/> Descargar PDF
                     </Button>

@@ -1,4 +1,5 @@
 
+
 'use client';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,8 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db, storage } from '@/lib/firebase';
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 // --- Static Data ---
@@ -256,7 +258,7 @@ export default function UnifiedPaymentsPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!validateForm()) {
+        if (!validateForm() || !receiptFile) {
             toast({
                 variant: 'destructive',
                 title: 'Error de validación',
@@ -266,33 +268,37 @@ export default function UnifiedPaymentsPage() {
         }
         setLoading(true);
 
-        const receiptFileUrl = "mock-receipt-url"; // Placeholder for storage URL
-        
-        let reportedById = beneficiaryType === 'propio' ? selectedOwner!.id : 'admin_user';
-
-        const paymentData = {
-            paymentDate,
-            exchangeRate,
-            paymentMethod,
-            bank: bank === 'otro' ? otherBank : bank,
-            reference,
-            totalAmount: Number(totalAmount),
-            beneficiaryType,
-            beneficiaries: beneficiarySplits.map(s => ({
-                ownerId: selectedOwner!.id,
-                ownerName: selectedOwner!.name, // Storing name for reliability
-                street: s.property.street,
-                house: s.property.house,
-                amount: Number(s.amount)
-            })),
-            receiptFileUrl,
-            receiptFileName: receiptFile?.name,
-            status: 'pendiente',
-            reportedAt: serverTimestamp(),
-            reportedBy: reportedById,
-        };
-
         try {
+            // Upload receipt to Firebase Storage
+            const receiptFileName = `${Date.now()}_${receiptFile.name}`;
+            const receiptRef = storageRef(storage, `receipts/${receiptFileName}`);
+            await uploadBytes(receiptRef, receiptFile);
+            const receiptFileUrl = await getDownloadURL(receiptRef);
+            
+            let reportedById = beneficiaryType === 'propio' ? selectedOwner!.id : 'admin_user';
+
+            const paymentData = {
+                paymentDate,
+                exchangeRate,
+                paymentMethod,
+                bank: bank === 'otro' ? otherBank : bank,
+                reference,
+                totalAmount: Number(totalAmount),
+                beneficiaryType,
+                beneficiaries: beneficiarySplits.map(s => ({
+                    ownerId: selectedOwner!.id,
+                    ownerName: selectedOwner!.name, // Storing name for reliability
+                    street: s.property.street,
+                    house: s.property.house,
+                    amount: Number(s.amount)
+                })),
+                receiptFileUrl,
+                receiptFileName: receiptFile?.name,
+                status: 'pendiente',
+                reportedAt: serverTimestamp(),
+                reportedBy: reportedById,
+            };
+
             await addDoc(collection(db, "payments"), paymentData);
             toast({
                 title: 'Reporte Enviado',
@@ -300,6 +306,7 @@ export default function UnifiedPaymentsPage() {
                 className: 'bg-green-100 border-green-400 text-green-800'
             });
             resetForm();
+
         } catch (error) {
             console.error("Error adding payment: ", error);
              toast({
