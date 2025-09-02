@@ -122,9 +122,9 @@ export default function VerifyPaymentsPage() {
             const paymentsData: FullPayment[] = [];
             snapshot.forEach(doc => {
                 const data = doc.data();
-                const ownerId = data.beneficiaries?.[0]?.ownerId || data.reportedBy;
+                const ownerId = data.reportedBy;
                 const ownerInfo = ownerId ? ownersMap.get(ownerId) : null;
-                const userName = ownerInfo?.name || 'No disponible';
+                const userName = ownerInfo?.name || 'Propietario no identificado';
 
                 let unit = 'N/A';
                 if (data.beneficiaries?.length === 1) {
@@ -306,7 +306,7 @@ export default function VerifyPaymentsPage() {
         });
 
         const primaryOwnerId = payment.reportedBy;
-        const ownerName = ownersMap.get(primaryOwnerId)?.name || 'No disponible';
+        const ownerName = ownersMap.get(primaryOwnerId)?.name || 'Propietario no identificado';
         
         const ownerUnitSummary = payment.beneficiaries.length > 1 
             ? "Múltiples Propiedades" 
@@ -367,9 +367,9 @@ export default function VerifyPaymentsPage() {
                     // Otherwise, revert it to pending
                     batch.update(debtDoc.ref, {
                         status: 'pending',
-                        paidAmountUSD: null,
-                        paymentDate: null,
-                        paymentId: null,
+                        paymentDate: deleteField(),
+                        paidAmountUSD: deleteField(),
+                        paymentId: deleteField()
                     });
                 }
             });
@@ -539,7 +539,7 @@ export default function VerifyPaymentsPage() {
                         ) : (
                             filteredPayments.map((payment) => (
                             <TableRow key={payment.id}>
-                                <TableCell className="font-medium">{payment.user || 'No disponible'}</TableCell>
+                                <TableCell className="font-medium">{payment.user}</TableCell>
                                 <TableCell>{payment.unit}</TableCell>
                                 <TableCell>
                                     {payment.type === 'adelanto' 
@@ -588,7 +588,7 @@ export default function VerifyPaymentsPage() {
                                              <DropdownMenuItem onClick={() => handleDeletePayment(payment)} className="text-destructive">
                                                 <Trash2 className="mr-2 h-4 w-4" />
                                                 Eliminar
-                                            </DropdownMenuItem>
+                                             </DropdownMenuItem>
                                         </DropdownMenuContent>
                                     </DropdownMenu>
                                 </TableCell>
