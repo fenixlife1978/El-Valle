@@ -243,12 +243,15 @@ export default function VerifyPaymentsPage() {
                 let availableFundsBs = beneficiary.amount + (ownerData.balance || 0);
                 const condoFeeInBs = condoFee * paymentData.exchangeRate;
 
-                if ((ownerData.balance || 0) > 0 && beneficiary.amount > 0) {
-                    finalObservation = `Observación Especial:\nMonto de Cuota Condominial cubierto en su totalidad por el pago recibido de Bs. ${beneficiary.amount.toFixed(2)} sumado al saldo a favor que poseía la persona por un monto de Bs. ${(ownerData.balance || 0).toFixed(2)}, cubriendo así la totalidad de la cuota por un monto de Bs. ${(beneficiary.amount + (ownerData.balance || 0)).toFixed(2)} a la tasa de cambio del día de hoy.`;
-                }
+                // Settle pending debts for the specific property of the beneficiary
+                const pendingDebts = (allDebtsByOwner.get(beneficiary.ownerId) || [])
+                    .filter(d => 
+                        d.status === 'pending' && 
+                        d.property.street === beneficiary.street && 
+                        d.property.house === beneficiary.house
+                    )
+                    .sort((a,b) => a.year - b.year || a.month - a.month);
 
-                // Settle pending debts
-                const pendingDebts = (allDebtsByOwner.get(beneficiary.ownerId) || []).filter(d => d.status === 'pending').sort((a,b) => a.year - b.year || a.month - a.month);
                 for (const debt of pendingDebts) {
                     const debtAmountBs = debt.amountUSD * paymentData.exchangeRate;
                     if (availableFundsBs >= debtAmountBs) {
@@ -261,37 +264,16 @@ export default function VerifyPaymentsPage() {
                     }
                 }
                 
-                // Settle future debts (using pre-fetched data)
-                if (availableFundsBs >= condoFeeInBs) {
-                    const existingDebtPeriods = new Set((allDebtsByOwner.get(beneficiary.ownerId) || []).map(d => `${d.year}-${d.month}`));
-                    const startDate = startOfMonth(new Date());
-
-                    for (let i = 0; i < 12; i++) { // Look ahead 12 months
-                        const futureDebtDate = addMonths(startDate, i);
-                        const futureYear = futureDebtDate.getFullYear();
-                        const futureMonth = futureDebtDate.getMonth() + 1;
-                        if (existingDebtPeriods.has(`${futureYear}-${futureMonth}`)) continue;
-
-                        if (availableFundsBs >= condoFeeInBs) {
-                            availableFundsBs -= condoFeeInBs;
-                            const newDebtRef = doc(collection(db, 'debts'));
-                            batch.set(newDebtRef, {
-                                ownerId: beneficiary.ownerId,
-                                property: ownerData.properties?.[0] || {}, // Assign to first property as fallback
-                                year: futureYear, month: futureMonth,
-                                amountUSD: condoFee, description: `Cuota de Condominio (Pagada por adelantado)`,
-                                status: 'paid', paidAmountUSD: condoFee,
-                                paymentDate: paymentData.paymentDate, paymentId: paymentData.id
-                            });
-                        } else { break; }
-                    }
+                // If there's an existing balance and it was used, add a note.
+                if ((ownerData.balance || 0) > 0 && beneficiary.amount > 0 && availableFundsBs < (ownerData.balance || 0)) {
+                    finalObservation += ` Se utilizó un saldo a favor de Bs. ${(ownerData.balance || 0).toFixed(2)} para completar este pago.`;
                 }
-                
+
                 const ownerRef = doc(db, 'owners', beneficiary.ownerId);
                 batch.update(ownerRef, { balance: availableFundsBs });
             }
 
-            batch.update(paymentRef, { status: 'aprobado', observations: finalObservation });
+            batch.update(paymentRef, { status: 'aprobado', observations: finalObservation.trim() });
             
             // --- PHASE 3: COMMIT ATOMIC WRITES ---
             await batch.commit();
@@ -706,7 +688,7 @@ export default function VerifyPaymentsPage() {
                 <DialogHeader>
                     <DialogTitle>¿Está seguro?</DialogTitle>
                     <DialogDescription>
-                        Esta acción no se puede deshacer. Esto eliminará permanentemente el registro del pago. Si el pago ya fue aprobado, se revertirán las deudas y el saldo del propietario afectado.
+                        Esta acción no se puede deshacer. Esto eliminará permanentemente el registro del pago. Si el pago ya fue aprobado, se revertirán las deudas y saldos del propietario afectado.
                     </DialogDescription>
                 </DialogHeader>
                 <DialogFooter>
@@ -718,5 +700,3 @@ export default function VerifyPaymentsPage() {
     </div>
   );
 }
-
-    
