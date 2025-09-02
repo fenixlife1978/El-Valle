@@ -41,6 +41,7 @@ type UserData = {
     unit: string;
     name: string;
     balance: number;
+    properties: { street: string, house: string }[];
 };
 
 type Debt = {
@@ -149,6 +150,7 @@ export default function OwnerDashboardPage() {
                     const ownerData = { 
                         id: userSnap.id, 
                         name: data.name,
+                        properties: data.properties || [],
                         unit: (data.properties && data.properties.length > 0) ? `${data.properties[0].street} - ${data.properties[0].house}` : 'N/A',
                         balance: data.balance || 0,
                     } as UserData;
@@ -203,35 +205,45 @@ export default function OwnerDashboardPage() {
             });
         });
 
+        // This query needs to be updated to find payments where the user is a beneficiary
         const paymentsQuery = query(
             collection(db, "payments"),
-            where("reportedBy", "==", userId)
+            where("beneficiaries", "array-contains-any", userData?.properties.map(p => ({
+                ownerId: userId,
+                ownerName: userData.name,
+                street: p.street,
+                house: p.house,
+            })))
         );
+
         const paymentsUnsubscribe = onSnapshot(paymentsQuery, (snapshot) => {
             const paymentsData: Payment[] = [];
             snapshot.forEach((doc) => {
                 const data = doc.data();
-                paymentsData.push({
-                    id: doc.id,
-                    date: new Date(data.paymentDate.seconds * 1000).toISOString(),
-                    amount: data.totalAmount,
-                    bank: data.bank,
-                    type: data.paymentMethod,
-                    ref: data.reference,
-                    status: data.status,
-                    reportedAt: data.reportedAt,
-                    exchangeRate: data.exchangeRate,
-                    paymentDate: data.paymentDate,
-                    reference: data.reference,
-                    beneficiaries: data.beneficiaries,
-                });
+                // Double check if this user is truly in the beneficiaries list
+                 if (data.beneficiaries.some((b: any) => b.ownerId === userId)) {
+                    paymentsData.push({
+                        id: doc.id,
+                        date: new Date(data.paymentDate.seconds * 1000).toISOString(),
+                        amount: data.totalAmount,
+                        bank: data.bank,
+                        type: data.paymentMethod,
+                        ref: data.reference,
+                        status: data.status,
+                        reportedAt: data.reportedAt,
+                        exchangeRate: data.exchangeRate,
+                        paymentDate: data.paymentDate,
+                        reference: data.reference,
+                        beneficiaries: data.beneficiaries,
+                    });
+                }
             });
             const sortedPayments = paymentsData.sort((a,b) => {
                 const dateA = a.reportedAt?.toMillis() || 0;
                 const dateB = b.reportedAt?.toMillis() || 0;
                 return dateB - dateA;
             });
-            setPayments(sortedPayments.slice(0, 5));
+            setPayments(sortedPayments.slice(0, 10)); // Show more payments if needed
         });
         
         return () => {
@@ -240,7 +252,7 @@ export default function OwnerDashboardPage() {
             paymentsUnsubscribe();
         };
 
-    }, [user, authLoading, router]);
+    }, [user, authLoading, router, userData]);
     
     const handleDebtSelection = (debtId: string) => {
         setSelectedDebts(prev => 
