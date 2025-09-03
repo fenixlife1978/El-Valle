@@ -217,10 +217,6 @@ export default function VerifyPaymentsPage() {
                 if (!exchangeRate || exchangeRate <= 0) throw new Error('La tasa de cambio para este pago es inválida o no está definida.');
                 if (condoFee <= 0) throw new Error('La cuota de condominio no está configurada.');
                 
-                let finalObservation = paymentData.observations || '';
-                
-                // This logic assumes ONE beneficiary for simplicity of the flow. 
-                // Complex multi-beneficiary payments would need a different approach.
                 const beneficiary = paymentData.beneficiaries[0];
                 if (!beneficiary) throw new Error('El pago no tiene un beneficiario definido.');
 
@@ -229,7 +225,8 @@ export default function VerifyPaymentsPage() {
                 if (!ownerDoc.exists()) throw new Error(`El propietario ${beneficiary.ownerId} no fue encontrado.`);
                 
                 const ownerData = ownerDoc.data();
-                let availableFundsBs = paymentData.totalAmount + (ownerData.balance || 0);
+                const initialBalance = ownerData.balance || 0;
+                let availableFundsBs = paymentData.totalAmount + initialBalance;
                 
                 // --- 1. Liquidate Pending Debts ---
                 const debtsQuery = query(
@@ -241,9 +238,6 @@ export default function VerifyPaymentsPage() {
                 );
                 const debtsSnapshot = await getDocs(debtsQuery);
                 
-                let debtsPaidInTx = 0;
-                let paidDebtsText = [];
-
                 if (!debtsSnapshot.empty) {
                     for (const debtDoc of debtsSnapshot.docs) {
                         const debt = { id: debtDoc.id, ...debtDoc.data() } as Debt;
@@ -255,8 +249,6 @@ export default function VerifyPaymentsPage() {
                                 status: 'paid', paidAmountUSD: debt.amountUSD,
                                 paymentDate: paymentData.paymentDate, paymentId: paymentData.id,
                             });
-                            debtsPaidInTx++;
-                            paidDebtsText.push(`${monthsLocale[debt.month]} ${debt.year}`);
                         } else {
                             break; 
                         }
@@ -265,8 +257,6 @@ export default function VerifyPaymentsPage() {
                 
                 // --- 2 & 3. Create and Liquidate Future Debts ---
                 const condoFeeInBs = condoFee * exchangeRate;
-                let futureDebtsPaidCount = 0;
-                let futurePaidDebtsText = [];
                 if (availableFundsBs >= condoFeeInBs) {
                     const allExistingDebtsQuery = query(collection(db, 'debts'), where('ownerId', '==', beneficiary.ownerId));
                     const allExistingDebtsSnap = await getDocs(allExistingDebtsQuery);
@@ -274,7 +264,6 @@ export default function VerifyPaymentsPage() {
 
                     const startDate = startOfMonth(new Date());
 
-                    // Assuming owner has one primary property for future debts
                     const propertyForFutureDebts = ownerData.properties?.[0];
 
                     if (propertyForFutureDebts) {
@@ -288,9 +277,7 @@ export default function VerifyPaymentsPage() {
 
                             if (availableFundsBs >= condoFeeInBs) {
                                 availableFundsBs -= condoFeeInBs;
-                                futureDebtsPaidCount++;
-                                futurePaidDebtsText.push(`${monthsLocale[futureMonth]} ${futureYear}`);
-
+                                
                                 const debtRef = doc(collection(db, 'debts'));
                                 transaction.set(debtRef, {
                                     ownerId: beneficiary.ownerId,
@@ -309,22 +296,11 @@ export default function VerifyPaymentsPage() {
                 }
                 
                 // --- 4. Update Balance and generate Observation Note ---
-                const balanceUsed = (ownerData.balance || 0) - availableFundsBs + paymentData.totalAmount;
-                if(debtsPaidInTx > 0 || futureDebtsPaidCount > 0){
-                     if(balanceUsed > 0 && balanceUsed < paymentData.totalAmount) {
-                         const note = `Esta deuda ha sido liquidada mediante la aplicación de un saldo a favor previamente registrado por un monto de Bs. ${balanceUsed.toLocaleString('es-VE', {minimumFractionDigits: 2})}, complementado con el pago actual de Bs. ${paymentData.totalAmount.toLocaleString('es-VE', {minimumFractionDigits: 2})}. El total abonado corresponde a Bs. ${(balanceUsed + paymentData.totalAmount).toLocaleString('es-VE', {minimumFractionDigits: 2})}, cubriendo la totalidad del monto adeudado.`;
-                         finalObservation = finalObservation ? `${finalObservation}\n${note}` : note;
-                     }
-                } else if(availableFundsBs > (ownerData.balance || 0)) {
-                    // This case handles when the payment is not enough to cover any debt
-                    const note = `Abono a Saldo a Favor.`;
-                    finalObservation = finalObservation ? `${finalObservation}\n${note}` : note;
-                }
-
-                const balanceNote = `Pago por Bs. ${paymentData.totalAmount.toLocaleString('es-VE', {minimumFractionDigits: 2})}. Saldo Anterior: Bs. ${(ownerData.balance || 0).toLocaleString('es-VE', {minimumFractionDigits: 2})}. Saldo Final: Bs. ${availableFundsBs.toLocaleString('es-VE', {minimumFractionDigits: 2})}.`;
-                finalObservation = finalObservation ? `${finalObservation}\n${balanceNote}` : balanceNote;
-                transaction.update(ownerRef, { balance: availableFundsBs });
-                transaction.update(paymentRef, { status: 'aprobado', observations: finalObservation.trim() });
+                const finalBalance = availableFundsBs;
+                const observationNote = `Pago por Bs. ${paymentData.totalAmount.toLocaleString('es-VE', {minimumFractionDigits: 2})}. Saldo Anterior: Bs. ${initialBalance.toLocaleString('es-VE', {minimumFractionDigits: 2})}, Saldo Final: Bs. ${finalBalance.toLocaleString('es-VE', {minimumFractionDigits: 2})}.`;
+                
+                transaction.update(ownerRef, { balance: finalBalance });
+                transaction.update(paymentRef, { status: 'aprobado', observations: observationNote });
             });
     
             toast({
