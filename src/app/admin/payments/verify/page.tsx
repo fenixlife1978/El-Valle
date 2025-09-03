@@ -13,7 +13,7 @@ import { CheckCircle2, XCircle, MoreHorizontal, Printer, Filter, Loader2, Trash2
 import { useToast } from '@/hooks/use-toast';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import { collection, onSnapshot, query, doc, updateDoc, getDoc, writeBatch, where, orderBy, Timestamp, getDocs, deleteField, deleteDoc, runTransaction } from 'firebase/firestore';
+import { collection, onSnapshot, query, doc, updateDoc, getDoc, writeBatch, where, orderBy, Timestamp, getDocs, deleteField, deleteDoc, runTransaction, addDoc, startOfMonth, addMonths } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -214,89 +214,95 @@ export default function VerifyPaymentsPage() {
     
                 const paymentData = { id: paymentDoc.id, ...paymentDoc.data() } as FullPayment;
                 const exchangeRate = paymentData.exchangeRate;
-                if (!exchangeRate || exchangeRate <= 0) {
-                    throw new Error('La tasa de cambio para este pago es inválida o no está definida.');
-                }
-    
+                if (!exchangeRate || exchangeRate <= 0) throw new Error('La tasa de cambio para este pago es inválida o no está definida.');
+                if (condoFee <= 0) throw new Error('La cuota de condominio no está configurada.');
+                
                 let finalObservation = paymentData.observations || '';
-                let wasCreditedToBalance = false;
-    
-                for (const beneficiary of paymentData.beneficiaries) {
-                    const ownerRef = doc(db, 'owners', beneficiary.ownerId);
-                    const ownerDoc = await transaction.get(ownerRef);
-                    if (!ownerDoc.exists()) {
-                        console.warn(`Saltando beneficiario no encontrado: ${beneficiary.ownerId}`);
-                        continue;
+                
+                // This logic assumes ONE beneficiary for simplicity of the flow. 
+                // Complex multi-beneficiary payments would need a different approach.
+                const beneficiary = paymentData.beneficiaries[0];
+                if (!beneficiary) throw new Error('El pago no tiene un beneficiario definido.');
+
+                const ownerRef = doc(db, 'owners', beneficiary.ownerId);
+                const ownerDoc = await transaction.get(ownerRef);
+                if (!ownerDoc.exists()) throw new Error(`El propietario ${beneficiary.ownerId} no fue encontrado.`);
+                
+                const ownerData = ownerDoc.data();
+                let availableFundsBs = paymentData.totalAmount + (ownerData.balance || 0);
+                
+                // --- 1. Liquidate Pending Debts ---
+                const debtsQuery = query(
+                    collection(db, 'debts'),
+                    where('ownerId', '==', beneficiary.ownerId),
+                    where('status', '==', 'pending'),
+                    orderBy('year', 'asc'),
+                    orderBy('month', 'asc')
+                );
+                const debtsSnapshot = await getDocs(debtsQuery);
+
+                if (!debtsSnapshot.empty) {
+                    for (const debtDoc of debtsSnapshot.docs) {
+                        const debt = { id: debtDoc.id, ...debtDoc.data() } as Debt;
+                        const debtAmountBs = debt.amountUSD * exchangeRate;
+                        
+                        if (availableFundsBs >= debtAmountBs) {
+                            availableFundsBs -= debtAmountBs;
+                            transaction.update(debtDoc.ref, {
+                                status: 'paid', paidAmountUSD: debt.amountUSD,
+                                paymentDate: paymentData.paymentDate, paymentId: paymentData.id,
+                            });
+                        } else {
+                            break; 
+                        }
                     }
-    
-                    const ownerData = ownerDoc.data();
-                    const balanceInFavor = ownerData.balance || 0;
-                    let totalFundsForPayment = beneficiary.amount + balanceInFavor;
-    
-                    const debtsQuery = query(
-                        collection(db, 'debts'),
-                        where('ownerId', '==', beneficiary.ownerId),
-                        where('status', '==', 'pending'),
-                        where('property.street', '==', beneficiary.street),
-                        where('property.house', '==', beneficiary.house),
-                        orderBy('year', 'asc'),
-                        orderBy('month', 'asc')
-                    );
-                    const debtsSnapshot = await getDocs(debtsQuery);
-    
-                    if (debtsSnapshot.empty) {
-                        // No pending debts, add full amount to balance
-                        transaction.update(ownerRef, { balance: totalFundsForPayment });
-                        finalObservation = finalObservation ? `${finalObservation}\n` : '';
-                        finalObservation += `Abono a Saldo a Favor por Bs. ${beneficiary.amount.toLocaleString('es-VE', {minimumFractionDigits: 2})}. No se encontraron deudas pendientes.`;
-                        wasCreditedToBalance = true;
-                        continue;
-                    }
-    
-                    const oldestDebt = debtsSnapshot.docs[0].data() as Debt;
-                    const oldestDebtAmountBs = oldestDebt.amountUSD * exchangeRate;
-    
-                    if (totalFundsForPayment < oldestDebtAmountBs) {
-                        // Not enough to cover even the oldest debt, so credit everything to balance
-                        transaction.update(ownerRef, { balance: totalFundsForPayment });
-                        finalObservation = finalObservation ? `${finalObservation}\n` : '';
-                        finalObservation += `Abono a Saldo a Favor por Bs. ${beneficiary.amount.toLocaleString('es-VE', {minimumFractionDigits: 2})}, por ser insuficiente para cubrir la deuda más antigua.`;
-                        wasCreditedToBalance = true;
-                    } else {
-                        // Sufficient funds, proceed to pay debts
-                        let balanceUsed = 0;
-                        for (const debtDoc of debtsSnapshot.docs) {
-                            const debt = { id: debtDoc.id, ...debtDoc.data() } as Debt;
-                            const debtAmountBs = debt.amountUSD * exchangeRate;
-    
-                            if (totalFundsForPayment >= debtAmountBs) {
-                                if (balanceInFavor > 0) {
-                                    const amountFromBalance = Math.min(debtAmountBs, balanceInFavor - balanceUsed);
-                                    balanceUsed += amountFromBalance;
-                                }
-                                totalFundsForPayment -= debtAmountBs;
-                                transaction.update(debtDoc.ref, {
-                                    status: 'paid',
-                                    paidAmountUSD: debt.amountUSD,
-                                    paymentDate: paymentData.paymentDate,
-                                    paymentId: paymentData.id,
+                }
+                
+                // --- 2 & 3. Create and Liquidate Future Debts ---
+                const condoFeeInBs = condoFee * exchangeRate;
+                if (availableFundsBs >= condoFeeInBs) {
+                    const allExistingDebtsQuery = query(collection(db, 'debts'), where('ownerId', '==', beneficiary.ownerId));
+                    const allExistingDebtsSnap = await getDocs(allExistingDebtsQuery);
+                    const existingDebtPeriods = new Set(allExistingDebtsSnap.docs.map(d => `${d.data().year}-${d.data().month}`));
+
+                    const startDate = startOfMonth(new Date());
+
+                    // Assuming owner has one primary property for future debts
+                    const propertyForFutureDebts = ownerData.properties?.[0];
+
+                    if (propertyForFutureDebts) {
+                         for (let i = 0; i < 24; i++) { // Look ahead 24 months
+                            const futureDebtDate = addMonths(startDate, i);
+                            const futureYear = futureDebtDate.getFullYear();
+                            const futureMonth = futureDebtDate.getMonth() + 1;
+                            const periodKey = `${futureYear}-${futureMonth}`;
+                            
+                            if (existingDebtPeriods.has(periodKey)) continue;
+
+                            if (availableFundsBs >= condoFeeInBs) {
+                                availableFundsBs -= condoFeeInBs;
+
+                                const debtRef = doc(collection(db, 'debts'));
+                                transaction.set(debtRef, {
+                                    ownerId: beneficiary.ownerId,
+                                    property: propertyForFutureDebts,
+                                    year: futureYear, month: futureMonth,
+                                    amountUSD: condoFee,
+                                    description: "Cuota de Condominio (Pagada por adelantado)",
+                                    status: 'paid', paidAmountUSD: condoFee,
+                                    paymentDate: paymentData.paymentDate, paymentId: paymentData.id,
                                 });
                             } else {
                                 break;
                             }
                         }
-    
-                        if (balanceUsed > 0) {
-                            const note = `Esta deuda ha sido liquidada mediante la aplicación de un saldo a favor previamente registrado por un monto de Bs. ${balanceUsed.toLocaleString('es-VE', {minimumFractionDigits: 2})}, complementado con el pago actual de Bs. ${beneficiary.amount.toLocaleString('es-VE', {minimumFractionDigits: 2})}.`;
-                            finalObservation = finalObservation ? `${finalObservation}\n${note}` : note;
-                        }
-    
-                        transaction.update(ownerRef, { balance: totalFundsForPayment });
                     }
                 }
                 
-                // If the payment was only a credit to balance, the payment itself should still be marked 'aprobado'
-                // but no debts will be linked to it. The observation field will clarify this.
+                // --- 4. Update Balance ---
+                const balanceNote = `Pago por Bs. ${paymentData.totalAmount.toLocaleString('es-VE', {minimumFractionDigits: 2})}. Saldo Anterior: Bs. ${(ownerData.balance || 0).toLocaleString('es-VE', {minimumFractionDigits: 2})}. Saldo Final: Bs. ${availableFundsBs.toLocaleString('es-VE', {minimumFractionDigits: 2})}.`;
+                finalObservation = finalObservation ? `${finalObservation}\n${balanceNote}` : balanceNote;
+                transaction.update(ownerRef, { balance: availableFundsBs });
                 transaction.update(paymentRef, { status: 'aprobado', observations: finalObservation.trim() });
             });
     
