@@ -241,9 +241,9 @@ export default function UnifiedPaymentsPage() {
     const validateForm = async (): Promise<{ isValid: boolean, error?: string }> => {
         const newErrors: FormErrors = {};
 
-        // Nivel 1: Validación de campos obligatorios
+        // Level 1: Mandatory fields validation
         if (!paymentDate) newErrors.paymentDate = 'La fecha es obligatoria.';
-        if (!exchangeRate || exchangeRate <= 0) newErrors.exchangeRate = 'Se requiere una tasa de cambio válida.';
+        if (!exchangeRate || exchangeRate <= 0) newErrors.exchangeRate = 'Se requiere una tasa de cambio válida para la fecha.';
         if (!paymentMethod) newErrors.paymentMethod = 'Seleccione un tipo de pago.';
         if (!bank) newErrors.bank = 'Seleccione un banco.';
         if (!receiptFile) newErrors.receiptFile = 'El comprobante es obligatorio.';
@@ -251,9 +251,9 @@ export default function UnifiedPaymentsPage() {
         if (!selectedOwner) newErrors.beneficiary = 'Debe seleccionar un beneficiario.';
         if (beneficiarySplits.length === 0) newErrors.splits = 'Debe asignar el monto a al menos una propiedad.';
         if (beneficiarySplits.some(s => !s.property || !s.amount || Number(s.amount) <= 0)) newErrors.splits = 'Debe completar un monto válido para cada propiedad.';
+        
+        // Level 2: Format validation
         if (Math.abs(balance) > 0.01) newErrors.balance = 'El monto total debe coincidir con el total asignado.';
-
-        // Nivel 2: Validación de formato
         if (!/^\d{6,}$/.test(reference)) newErrors.reference = 'La referencia debe tener al menos 6 dígitos.';
         if (bank === 'otro' && !otherBank) newErrors.otherBank = 'Especifique el nombre del banco.';
         
@@ -263,7 +263,7 @@ export default function UnifiedPaymentsPage() {
             return { isValid: false, error: newErrors[firstErrorKey] };
         }
 
-        // Nivel 3: Validación de duplicados
+        // Level 3: Duplicate validation
         try {
             const q = query(collection(db, "payments"), 
                 where("reference", "==", reference),
@@ -294,11 +294,13 @@ export default function UnifiedPaymentsPage() {
             return;
         }
         
+        // At this point, validation passed, receiptFile is guaranteed to be non-null
+        const fileToUpload = receiptFile!;
+        
         try {
-            // All validations passed, proceed with upload and save
-            const receiptFileName = `${Date.now()}_${receiptFile!.name}`;
+            const receiptFileName = `${Date.now()}_${fileToUpload.name}`;
             const fileRef = storageRef(storage, `receipts/${receiptFileName}`);
-            const uploadTask = uploadBytesResumable(fileRef, receiptFile!);
+            const uploadTask = uploadBytesResumable(fileRef, fileToUpload);
 
             uploadTask.on('state_changed',
                 (snapshot) => {
@@ -307,47 +309,51 @@ export default function UnifiedPaymentsPage() {
                 },
                 (error) => {
                     console.error("Upload failed:", error);
-                    toast({ variant: "destructive", title: "Error de Subida", description: "No se pudo subir el comprobante." });
-                    setLoading(false); // Liberate UI on upload error
+                    toast({ variant: "destructive", title: "Error de Subida", description: "No se pudo subir el comprobante. Por favor, intente de nuevo." });
+                    setLoading(false);
                 },
                 async () => {
-                    // Upload completed successfully, now get the download URL
-                    const receiptFileUrl = await getDownloadURL(uploadTask.snapshot.ref);
+                    try {
+                        const receiptFileUrl = await getDownloadURL(uploadTask.snapshot.ref);
 
-                    // Create payment document in Firestore
-                    const paymentData = {
-                        paymentDate: Timestamp.fromDate(paymentDate!),
-                        exchangeRate: exchangeRate,
-                        paymentMethod: paymentMethod,
-                        bank: bank === 'otro' ? otherBank : bank,
-                        reference: reference,
-                        totalAmount: Number(totalAmount),
-                        beneficiaryType: beneficiaryType,
-                        beneficiaries: beneficiarySplits.map(s => ({
-                            ownerId: selectedOwner!.id,
-                            ownerName: selectedOwner!.name,
-                            street: s.property.street,
-                            house: s.property.house,
-                            amount: Number(s.amount)
-                        })),
-                        receiptFileName: receiptFile!.name,
-                        receiptFileUrl: receiptFileUrl,
-                        status: 'pendiente' as 'pendiente',
-                        reportedAt: serverTimestamp(),
-                        reportedBy: beneficiaryType === 'propio' ? selectedOwner!.id : 'admin_user',
-                    };
+                        const paymentData = {
+                            paymentDate: Timestamp.fromDate(paymentDate!),
+                            exchangeRate: exchangeRate,
+                            paymentMethod: paymentMethod,
+                            bank: bank === 'otro' ? otherBank : bank,
+                            reference: reference,
+                            totalAmount: Number(totalAmount),
+                            beneficiaryType: beneficiaryType,
+                            beneficiaries: beneficiarySplits.map(s => ({
+                                ownerId: selectedOwner!.id,
+                                ownerName: selectedOwner!.name,
+                                street: s.property.street,
+                                house: s.property.house,
+                                amount: Number(s.amount)
+                            })),
+                            receiptFileName: fileToUpload.name,
+                            receiptFileUrl: receiptFileUrl,
+                            status: 'pendiente' as 'pendiente',
+                            reportedAt: serverTimestamp(),
+                            reportedBy: beneficiaryType === 'propio' ? selectedOwner!.id : 'admin_user',
+                        };
 
-                    await addDoc(collection(db, "payments"), paymentData);
+                        await addDoc(collection(db, "payments"), paymentData);
 
-                    toast({ title: 'Reporte Enviado', description: 'Tu reporte ha sido enviado para revisión.', className: 'bg-green-100 border-green-400 text-green-800' });
-                    resetForm();
-                    setLoading(false);
+                        toast({ title: 'Reporte Enviado', description: 'Tu reporte ha sido enviado para revisión.', className: 'bg-green-100 border-green-400 text-green-800' });
+                        resetForm();
+                    } catch (dbError) {
+                        console.error("Error saving payment to Firestore: ", dbError);
+                        toast({ variant: "destructive", title: "Error de Guardado", description: "El comprobante se subió, pero no se pudo guardar el reporte. Por favor, contacte a soporte." });
+                    } finally {
+                        setLoading(false);
+                    }
                 }
             );
 
         } catch (error) {
-            console.error("Error submitting payment: ", error);
-            toast({ variant: "destructive", title: "Error en el Envío", description: "No se pudo guardar el reporte de pago." });
+            console.error("Error initiating payment submission: ", error);
+            toast({ variant: "destructive", title: "Error Inesperado", description: "No se pudo iniciar el proceso de envío." });
             setLoading(false);
         }
     };
@@ -496,7 +502,7 @@ export default function UnifiedPaymentsPage() {
                             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CheckCircle2 className="mr-2 h-4 w-4"/>}
                             Enviar Reporte
                         </Button>
-                        {loading && uploadProgress > 0 && (
+                        {loading && (
                             <div className="w-full md:w-[200px] space-y-1">
                                 <Progress value={uploadProgress} className="h-2 w-full" />
                                 <p className="text-xs text-muted-foreground text-center">Subiendo... {Math.round(uploadProgress)}%</p>
