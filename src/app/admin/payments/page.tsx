@@ -18,6 +18,7 @@ import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc, wh
 import { db, storage } from '@/lib/firebase';
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Progress } from '@/components/ui/progress';
 
 // --- Static Data ---
 const venezuelanBanks = [
@@ -47,7 +48,6 @@ type ExchangeRate = {
 type BeneficiaryType = 'propio' | 'terceros';
 type PaymentMethod = 'movil' | 'transferencia' | '';
 type BeneficiarySplit = { property: { street: string, house: string }; amount: number | string; };
-type FormErrors = { [key: string]: string | undefined };
 
 export default function UnifiedPaymentsPage() {
     const { toast } = useToast();
@@ -59,7 +59,6 @@ export default function UnifiedPaymentsPage() {
     const [paymentDate, setPaymentDate] = useState<Date | undefined>();
     const [exchangeRate, setExchangeRate] = useState<number | null>(null);
     const [exchangeRateMessage, setExchangeRateMessage] = useState('');
-    const [condoFee, setCondoFee] = useState<number | null>(null);
     const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('');
     const [bank, setBank] = useState('');
     const [otherBank, setOtherBank] = useState('');
@@ -67,13 +66,12 @@ export default function UnifiedPaymentsPage() {
     const [receiptFile, setReceiptFile] = useState<File | null>(null);
     const [beneficiaryType, setBeneficiaryType] = useState<BeneficiaryType>('propio');
     const [totalAmount, setTotalAmount] = useState<number | string>('');
+    const [uploadProgress, setUploadProgress] = useState(0);
     
     // State for the new beneficiary selection flow
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedOwner, setSelectedOwner] = useState<Owner | null>(null);
     const [beneficiarySplits, setBeneficiarySplits] = useState<BeneficiarySplit[]>([]);
-
-    const [errors, setErrors] = useState<FormErrors>({});
 
     // --- Data Fetching ---
     useEffect(() => {
@@ -99,7 +97,6 @@ export default function UnifiedPaymentsPage() {
                 const docSnap = await getDoc(settingsRef);
                 if (docSnap.exists()) {
                     const settings = docSnap.data();
-                    setCondoFee(settings.condoFee || 0);
 
                     if (paymentDate) {
                         setExchangeRate(null);
@@ -172,7 +169,7 @@ export default function UnifiedPaymentsPage() {
         setSearchTerm('');
         setSelectedOwner(null);
         setBeneficiarySplits([]);
-        setErrors({});
+        setUploadProgress(0);
     }
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -234,42 +231,68 @@ export default function UnifiedPaymentsPage() {
         }
         setBeneficiarySplits(newSplits);
     };
+    
+    const validateForm = async (): Promise<{ isValid: boolean, error?: string }> => {
+        // Level A: Required fields validation
+        if (!paymentDate) return { isValid: false, error: 'La fecha del pago es obligatoria.' };
+        if (!exchangeRate || exchangeRate <= 0) return { isValid: false, error: 'Se requiere una tasa de cambio válida para la fecha seleccionada.' };
+        if (!paymentMethod) return { isValid: false, error: 'Debe seleccionar un tipo de pago.' };
+        if (!bank) return { isValid: false, error: 'Debe seleccionar un banco.' };
+        if (bank === 'otro' && !otherBank.trim()) return { isValid: false, error: 'Debe especificar el nombre del otro banco.' };
+        if (!totalAmount || Number(totalAmount) <= 0) return { isValid: false, error: 'El monto total debe ser mayor a cero.' };
+        if (!receiptFile) return { isValid: false, error: 'El comprobante de pago es obligatorio.' };
+        if (!selectedOwner) return { isValid: false, error: 'Debe seleccionar un beneficiario.' };
+        if (beneficiarySplits.length === 0) return { isValid: false, error: 'Debe asignar el monto a al menos una propiedad.' };
+        if (beneficiarySplits.some(s => !s.property || !s.amount || Number(s.amount) <= 0)) return { isValid: false, error: 'Debe completar un monto válido para cada propiedad.' };
+        if (Math.abs(balance) > 0.01) return { isValid: false, error: 'El monto total no coincide con la suma de los montos asignados.' };
+        
+        // Level B: Format validation
+        if (!/^\d{6,}$/.test(reference)) {
+            return { isValid: false, error: 'La referencia debe tener al menos 6 dígitos.' };
+        }
+        
+        // Level C: Duplicate validation
+        try {
+            const q = query(collection(db, "payments"), 
+                where("reference", "==", reference),
+                where("totalAmount", "==", Number(totalAmount)),
+                where("paymentDate", "==", Timestamp.fromDate(paymentDate))
+            );
+            const querySnapshot = await getDocs(q);
+            if (!querySnapshot.empty) {
+                return { isValid: false, error: 'Ya existe un reporte de pago con esta misma referencia, monto y fecha.' };
+            }
+        } catch (dbError) {
+             console.error("Error checking for duplicates:", dbError);
+             return { isValid: false, error: "No se pudo verificar si el pago ya existe. Intente de nuevo." };
+        }
+
+        return { isValid: true };
+    };
+
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
+        setUploadProgress(0);
 
-        const newErrors: FormErrors = {};
-        if (!paymentDate) newErrors.paymentDate = 'La fecha es obligatoria.';
-        if (!exchangeRate || exchangeRate <= 0) newErrors.exchangeRate = 'Se requiere una tasa de cambio válida para la fecha.';
-        if (!paymentMethod) newErrors.paymentMethod = 'Seleccione un tipo de pago.';
-        if (!bank) newErrors.bank = 'Seleccione un banco.';
-        if (bank === 'otro' && !otherBank) newErrors.otherBank = 'Especifique el nombre del banco.';
-        if (!reference || reference.length < 6) newErrors.reference = 'La referencia debe tener al menos 6 dígitos.';
-        if (!receiptFile) newErrors.receiptFile = 'El comprobante es obligatorio.';
-        if (!totalAmount || Number(totalAmount) <= 0) newErrors.totalAmount = 'El monto debe ser mayor a cero.';
-        if (!selectedOwner) newErrors.beneficiary = 'Debe seleccionar un beneficiario.';
-        if (beneficiarySplits.length === 0) newErrors.splits = 'Debe asignar el monto a al menos una propiedad.';
-        if (beneficiarySplits.some(s => !s.property || !s.amount || Number(s.amount) <= 0)) newErrors.splits = 'Debe completar un monto válido para cada propiedad.';
-        if (Math.abs(balance) > 0.01) newErrors.balance = 'El monto total debe coincidir con el total asignado.';
-
-        setErrors(newErrors);
-
-        if (Object.keys(newErrors).length > 0) {
-            toast({ variant: 'destructive', title: 'Error de Validación', description: Object.values(newErrors)[0] });
-            setLoading(false);
-            return;
-        }
-        
         try {
+             // 1. Validate form before doing anything else
+            const validation = await validateForm();
+            if (!validation.isValid) {
+                toast({ variant: 'destructive', title: 'Error de Validación', description: validation.error });
+                setLoading(false);
+                return;
+            }
+            
+            // 2. Upload file with progress tracking
             const receiptFileName = `${Date.now()}_${receiptFile!.name}`;
             const fileRef = storageRef(storage, `receipts/${receiptFileName}`);
+            const uploadTask = await uploadBytes(fileRef, receiptFile!);
             
-            // Upload file
-            await uploadBytes(fileRef, receiptFile!);
-            const receiptFileUrl = await getDownloadURL(fileRef);
-            
-            // Prepare and save data
+            const receiptFileUrl = await getDownloadURL(uploadTask.ref);
+
+            // 3. Prepare and save data to Firestore
             const paymentData = {
                 paymentDate: Timestamp.fromDate(paymentDate!),
                 exchangeRate: exchangeRate,
@@ -294,7 +317,12 @@ export default function UnifiedPaymentsPage() {
             
             await addDoc(collection(db, "payments"), paymentData);
             
-            toast({ title: 'Reporte Enviado', description: 'Tu reporte ha sido enviado para revisión.', className: 'bg-green-100 border-green-400 text-green-800' });
+            // 4. Success feedback and form reset
+            toast({ 
+                title: 'Reporte Enviado', 
+                description: 'Tu reporte ha sido enviado para revisión.', 
+                className: 'bg-green-100 border-green-400 text-green-800' 
+            });
             resetForm();
 
         } catch (error) {
@@ -320,58 +348,51 @@ export default function UnifiedPaymentsPage() {
                              <Label htmlFor="paymentDate">1. Fecha del Pago</Label>
                              <Popover>
                                 <PopoverTrigger asChild>
-                                    <Button id="paymentDate" variant={"outline"} className={cn("w-full justify-start", !paymentDate && "text-muted-foreground", errors.paymentDate && "border-destructive")}>
+                                    <Button id="paymentDate" variant={"outline"} className={cn("w-full justify-start", !paymentDate && "text-muted-foreground")}>
                                         <CalendarIcon className="mr-2 h-4 w-4" />
                                         {paymentDate ? format(paymentDate, "PPP", { locale: es }) : <span>Seleccione una fecha</span>}
                                     </Button>
                                 </PopoverTrigger>
                                 <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={paymentDate} onSelect={setPaymentDate} initialFocus locale={es} disabled={(date) => date > new Date()} /></PopoverContent>
                             </Popover>
-                             {errors.paymentDate && <p className="text-sm text-destructive">{errors.paymentDate}</p>}
                         </div>
                         <div className="space-y-2">
                             <Label>2. Tasa de Cambio (Bs. por USD)</Label>
-                            <Input type="text" value={exchangeRate ? `Bs. ${exchangeRate.toFixed(2)}` : exchangeRateMessage || 'Seleccione una fecha'} readOnly className={cn("bg-muted/50", errors.exchangeRate && "border-destructive")} />
-                            {errors.exchangeRate && <p className="text-sm text-destructive">{errors.exchangeRate}</p>}
+                            <Input type="text" value={exchangeRate ? `Bs. ${exchangeRate.toFixed(2)}` : exchangeRateMessage || 'Seleccione una fecha'} readOnly className={cn("bg-muted/50")} />
                         </div>
                         <div className="space-y-2">
                            <Label htmlFor="paymentMethod">3. Tipo de Pago</Label>
-                           <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}>
-                                <SelectTrigger id="paymentMethod" className={cn(errors.paymentMethod && "border-destructive")}><SelectValue placeholder="Seleccione..." /></SelectTrigger>
+                           <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as PaymentMethod)} disabled={loading}>
+                                <SelectTrigger id="paymentMethod"><SelectValue placeholder="Seleccione..." /></SelectTrigger>
                                 <SelectContent><SelectItem value="transferencia">Transferencia</SelectItem><SelectItem value="movil">Pago Móvil</SelectItem></SelectContent>
                            </Select>
-                           {errors.paymentMethod && <p className="text-sm text-destructive">{errors.paymentMethod}</p>}
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="bank">4. Banco Emisor</Label>
-                             <Select value={bank} onValueChange={setBank}>
-                                <SelectTrigger id="bank" className={cn(errors.bank && "border-destructive")}><SelectValue placeholder="Seleccione un banco..." /></SelectTrigger>
+                             <Select value={bank} onValueChange={setBank} disabled={loading}>
+                                <SelectTrigger id="bank"><SelectValue placeholder="Seleccione un banco..." /></SelectTrigger>
                                 <SelectContent>{venezuelanBanks.map(b => <SelectItem key={b.value} value={b.value}>{b.label}</SelectItem>)}</SelectContent>
                             </Select>
-                            {errors.bank && <p className="text-sm text-destructive">{errors.bank}</p>}
                         </div>
                         {bank === 'otro' && (
                             <div className="space-y-2 md:col-span-2">
                                 <Label htmlFor="otherBank">Nombre del Otro Banco</Label>
-                                <Input id="otherBank" value={otherBank} onChange={(e) => setOtherBank(e.target.value)} className={cn(errors.otherBank && "border-destructive")} />
-                                {errors.otherBank && <p className="text-sm text-destructive">{errors.otherBank}</p>}
+                                <Input id="otherBank" value={otherBank} onChange={(e) => setOtherBank(e.target.value)} disabled={loading}/>
                             </div>
                         )}
                         <div className="space-y-2">
                              <Label htmlFor="reference">5. Referencia (Últimos 6 dígitos o más)</Label>
-                             <Input id="reference" value={reference} onChange={(e) => setReference(e.target.value.replace(/\D/g, ''))} className={cn(errors.reference && "border-destructive")} />
-                             {errors.reference && <p className="text-sm text-destructive">{errors.reference}</p>}
+                             <Input id="reference" value={reference} onChange={(e) => setReference(e.target.value.replace(/\D/g, ''))} disabled={loading}/>
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="receiptFile">6. Comprobante de Pago</Label>
                             <div className="flex items-center gap-4">
-                                <Button type="button" variant="outline" onClick={() => receiptFileRef.current?.click()} className="flex-1">
+                                <Button type="button" variant="outline" onClick={() => receiptFileRef.current?.click()} className="flex-1" disabled={loading}>
                                     <Upload className="mr-2 h-4 w-4"/>{receiptFile ? 'Cambiar archivo' : 'Subir archivo'}
                                 </Button>
                                 {receiptFile && <p className="text-sm text-muted-foreground truncate">{receiptFile.name}</p>}
                             </div>
                             <input type="file" ref={receiptFileRef} onChange={handleFileChange} accept="image/jpeg,image/png,application/pdf" className="hidden"/>
-                            {errors.receiptFile && <p className="text-sm text-destructive">{errors.receiptFile}</p>}
                         </div>
                     </CardContent>
                 </Card>
@@ -382,15 +403,14 @@ export default function UnifiedPaymentsPage() {
                         <div className="grid md:grid-cols-2 gap-6">
                             <div className="space-y-3">
                                 <Label>7. Tipo de Pago</Label>
-                                <RadioGroup value={beneficiaryType} onValueChange={(v) => setBeneficiaryType(v as BeneficiaryType)} className="flex gap-4">
+                                <RadioGroup value={beneficiaryType} onValueChange={(v) => setBeneficiaryType(v as BeneficiaryType)} className="flex gap-4" disabled={loading}>
                                     <div className="flex items-center space-x-2"><RadioGroupItem value="propio" id="r-propio" /><Label htmlFor="r-propio">Pago Propio</Label></div>
                                     <div className="flex items-center space-x-2"><RadioGroupItem value="terceros" id="r-terceros" /><Label htmlFor="r-terceros">Pago a Terceros</Label></div>
                                 </RadioGroup>
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="totalAmount">8. Monto Total del Pago (Bs.)</Label>
-                                <Input id="totalAmount" type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} placeholder="0.00" className={cn(errors.totalAmount && "border-destructive")} />
-                                {errors.totalAmount && <p className="text-sm text-destructive">{errors.totalAmount}</p>}
+                                <Input id="totalAmount" type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} placeholder="0.00" disabled={loading}/>
                             </div>
                         </div>
 
@@ -401,36 +421,35 @@ export default function UnifiedPaymentsPage() {
                                     <Label htmlFor="owner-search">Buscar Beneficiario</Label>
                                     <div className="relative">
                                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                        <Input id="owner-search" placeholder="Buscar por nombre o casa (mín. 3 caracteres)..." className="pl-9" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                                        <Input id="owner-search" placeholder="Buscar por nombre o casa (mín. 3 caracteres)..." className="pl-9" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} disabled={loading}/>
                                     </div>
                                     {searchTerm.length >= 3 && filteredOwners.length > 0 && (
                                         <Card className="border rounded-md">
                                             <ScrollArea className="h-48">{filteredOwners.map(owner => (<div key={owner.id} onClick={() => handleOwnerSelect(owner)} className="p-3 hover:bg-muted cursor-pointer border-b last:border-b-0"><p className="font-medium">{owner.name}</p><p className="text-sm text-muted-foreground">{owner.properties?.map(p => `${p.street}-${p.house}`).join(', ')}</p></div>))}</ScrollArea>
                                         </Card>
                                     )}
-                                    {errors.beneficiary && <p className="text-sm text-destructive">{errors.beneficiary}</p>}
                                 </div>
                             ) : (
                                 <Card className="bg-muted/50 p-4 space-y-4">
                                     <div className='flex items-center justify-between'>
                                         <div><p className="font-semibold text-primary">{selectedOwner.name}</p><p className="text-sm text-muted-foreground">{selectedOwner.properties?.map(p => `${p.street}-${p.house}`).join(', ')}</p></div>
-                                        <Button variant="ghost" size="icon" onClick={resetOwnerSelection}><XCircle className="h-5 w-5 text-destructive"/></Button>
+                                        <Button variant="ghost" size="icon" onClick={resetOwnerSelection} disabled={loading}><XCircle className="h-5 w-5 text-destructive"/></Button>
                                     </div>
 
                                     {beneficiarySplits.map((split, index) => (
                                         <div key={index} className="flex items-center gap-2">
                                             <div className="flex-1">
-                                                <Select onValueChange={(v) => handleSplitChange(index, 'property', selectedOwner.properties.find(p => `${p.street}-${p.house}` === v))} value={`${split.property.street}-${split.property.house}`}>
+                                                <Select onValueChange={(v) => handleSplitChange(index, 'property', selectedOwner.properties.find(p => `${p.street}-${p.house}` === v))} value={`${split.property.street}-${split.property.house}`} disabled={loading}>
                                                     <SelectTrigger><SelectValue/></SelectTrigger>
                                                     <SelectContent>{selectedOwner.properties.map(p => (<SelectItem key={`${p.street}-${p.house}`} value={`${p.street}-${p.house}`} disabled={beneficiarySplits.some(s => s.property.street === p.street && s.property.house === p.house && s.property !== split.property)}>{`${p.street} - ${p.house}`}</SelectItem>))}</SelectContent>
                                                 </Select>
                                             </div>
-                                            <div className="w-40"><Input type="number" placeholder="Monto (Bs.)" value={split.amount} onChange={(e) => handleSplitChange(index, 'amount', e.target.value)} /></div>
-                                            <Button type="button" variant="ghost" size="icon" onClick={() => removeSplit(index)} disabled={beneficiarySplits.length <= 1}><Trash2 className="h-4 w-4 text-destructive"/></Button>
+                                            <div className="w-40"><Input type="number" placeholder="Monto (Bs.)" value={split.amount} onChange={(e) => handleSplitChange(index, 'amount', e.target.value)} disabled={loading}/></div>
+                                            <Button type="button" variant="ghost" size="icon" onClick={() => removeSplit(index)} disabled={beneficiarySplits.length <= 1 || loading}><Trash2 className="h-4 w-4 text-destructive"/></Button>
                                         </div>
                                     ))}
                                     {selectedOwner.properties && selectedOwner.properties.length > beneficiarySplits.length && (
-                                        <Button type="button" variant="outline" size="sm" onClick={addSplit}><PlusCircle className="mr-2 h-4 w-4"/>Asignar a otra propiedad</Button>
+                                        <Button type="button" variant="outline" size="sm" onClick={addSplit} disabled={loading}><PlusCircle className="mr-2 h-4 w-4"/>Asignar a otra propiedad</Button>
                                     )}
 
                                     <div className="p-4 bg-background/50 rounded-lg space-y-2 mt-4">
@@ -438,16 +457,20 @@ export default function UnifiedPaymentsPage() {
                                         <div className="flex justify-between text-sm"><span>Total Asignado:</span><span>Bs. {assignedTotal.toFixed(2)}</span></div>
                                         <div className={cn("flex justify-between text-sm font-bold", balance !== 0 ? 'text-destructive' : 'text-green-600')}><span>Balance:</span><span>Bs. {balance.toFixed(2)}</span></div>
                                     </div>
-                                    {errors.splits && <p className="text-sm text-destructive">{errors.splits}</p>}
-                                    {errors.balance && <p className="text-sm text-destructive">{errors.balance}</p>}
                                 </Card>
                             )}
                         </div>
                     </CardContent>
-                    <CardFooter>
-                         <Button type="submit" className="w-full md:w-auto ml-auto" disabled={loading}>
+                    <CardFooter className='flex flex-col items-end gap-4'>
+                        {loading && (
+                            <div className="w-full space-y-2">
+                                <Label className="text-sm text-muted-foreground">Subiendo comprobante...</Label>
+                                <Progress value={uploadProgress} className="w-full" />
+                            </div>
+                         )}
+                         <Button type="submit" className="w-full md:w-auto" disabled={loading}>
                             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CheckCircle2 className="mr-2 h-4 w-4"/>}
-                            Enviar Reporte
+                            {loading ? 'Enviando...' : 'Enviar Reporte'}
                         </Button>
                     </CardFooter>
                 </Card>
