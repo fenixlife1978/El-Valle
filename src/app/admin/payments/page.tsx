@@ -15,7 +15,7 @@ import { CalendarIcon, Upload, CheckCircle2, Trash2, PlusCircle, Loader2, Search
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc, where, getDocs, Timestamp } from 'firebase/firestore';
 import { db, storage } from '@/lib/firebase';
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -269,11 +269,42 @@ export default function UnifiedPaymentsPage() {
         
         setLoading(true);
 
-        // --- Store all data needed for async processing ---
+        // --- ANTI-DUPLICATE CHECK ---
+        try {
+            const paymentTimestamp = Timestamp.fromDate(paymentDate!);
+            const q = query(collection(db, "payments"), 
+                where("reference", "==", reference),
+                where("totalAmount", "==", Number(totalAmount)),
+                where("paymentDate", "==", paymentTimestamp)
+            );
+            const querySnapshot = await getDocs(q);
+
+            if (!querySnapshot.empty) {
+                toast({
+                    variant: "destructive",
+                    title: "Pago Duplicado",
+                    description: "Ya existe un reporte de pago con estos mismos datos (fecha, monto y referencia).",
+                });
+                setLoading(false);
+                return;
+            }
+        } catch (error) {
+            console.error("Error checking for duplicates:", error);
+            toast({
+                variant: "destructive",
+                title: "Error de Verificación",
+                description: "No se pudo comprobar si el pago es duplicado. Inténtelo de nuevo.",
+            });
+            setLoading(false);
+            return;
+        }
+        
+        // --- INSTANT UI FEEDBACK & ASYNC PROCESSING ---
+        // Store all data needed for async processing
         const dataForProcessing = {
             fileToUpload: receiptFile!,
             paymentData: {
-                paymentDate,
+                paymentDate: Timestamp.fromDate(paymentDate!),
                 exchangeRate,
                 paymentMethod,
                 bank: bank === 'otro' ? otherBank : bank,
@@ -294,7 +325,7 @@ export default function UnifiedPaymentsPage() {
             }
         };
 
-        // --- UI Feedback & Reset ---
+        // UI Feedback & Reset
         toast({
             title: 'Reporte Enviado',
             description: 'Tu reporte de pago ha sido enviado para revisión.',
@@ -303,28 +334,30 @@ export default function UnifiedPaymentsPage() {
         resetForm();
         setLoading(false); // Release button immediately
 
-        // --- Async processing in the background ---
-        try {
-            const receiptFileName = `${Date.now()}_${dataForProcessing.fileToUpload.name}`;
-            const receiptRef = storageRef(storage, `receipts/${receiptFileName}`);
-            await uploadBytes(receiptRef, dataForProcessing.fileToUpload);
-            const receiptFileUrl = await getDownloadURL(receiptRef);
-            
-            const finalPaymentData = {
-                ...dataForProcessing.paymentData,
-                receiptFileUrl,
-            };
+        // Async processing in the background
+        (async () => {
+            try {
+                const receiptFileName = `${Date.now()}_${dataForProcessing.fileToUpload.name}`;
+                const receiptRef = storageRef(storage, `receipts/${receiptFileName}`);
+                await uploadBytes(receiptRef, dataForProcessing.fileToUpload);
+                const receiptFileUrl = await getDownloadURL(receiptRef);
+                
+                const finalPaymentData = {
+                    ...dataForProcessing.paymentData,
+                    receiptFileUrl,
+                };
 
-            await addDoc(collection(db, "payments"), finalPaymentData);
-            // No success toast here, as it was already shown to the user.
-        } catch (error) {
-            console.error("Error adding payment in background: ", error);
-             toast({
-                variant: 'destructive',
-                title: 'Error en el servidor',
-                description: 'No se pudo guardar el reporte de pago. Por favor, inténtelo de nuevo.',
-            });
-        }
+                await addDoc(collection(db, "payments"), finalPaymentData);
+                // No success toast here, as it was already shown to the user.
+            } catch (error) {
+                console.error("Error adding payment in background: ", error);
+                 toast({
+                    variant: 'destructive',
+                    title: 'Error en el servidor',
+                    description: 'No se pudo guardar el reporte de pago. Por favor, inténtelo de nuevo.',
+                });
+            }
+        })();
     };
 
     return (
