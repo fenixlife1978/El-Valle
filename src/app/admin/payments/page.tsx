@@ -1,5 +1,4 @@
 
-
 'use client';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { Button } from "@/components/ui/button";
@@ -300,8 +299,8 @@ export default function UnifiedPaymentsPage() {
             return;
         }
         
-        // --- INSTANT UI FEEDBACK & ASYNC PROCESSING ---
-        // Store all data needed for async processing
+        // --- DATA CAPTURE (CRITICAL FIX) ---
+        // Capture all necessary data BEFORE resetting the form.
         const dataForProcessing = {
             fileToUpload: receiptFile!,
             paymentData: {
@@ -326,7 +325,8 @@ export default function UnifiedPaymentsPage() {
             }
         };
 
-        // UI Feedback & Reset
+        // --- UI FEEDBACK & RESET ---
+        // This now happens after data is securely captured.
         toast({
             title: 'Reporte Enviado',
             description: 'Tu reporte de pago ha sido enviado para revisión.',
@@ -335,7 +335,8 @@ export default function UnifiedPaymentsPage() {
         resetForm();
         setLoading(false); // Release button immediately
 
-        // Async processing in the background
+        // --- ASYNC PROCESSING ---
+        // This runs in the background using the captured data.
         (async () => {
             try {
                 const receiptFileName = `${Date.now()}_${dataForProcessing.fileToUpload.name}`;
