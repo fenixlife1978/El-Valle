@@ -377,9 +377,12 @@ export default function OwnerDashboardPage() {
     }
     
     // Totals Section
+    const totalLabel = "TOTAL PAGADO:";
+    const totalValue = `Bs. ${payment.amount.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`;
     doc.setFontSize(11).setFont('helvetica', 'bold');
-    doc.text('TOTAL PAGADO:', pageWidth - margin - 50, startY, { align: 'left' });
-    doc.text(`Bs. ${payment.amount.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`, pageWidth - margin, startY, { align: 'right' });
+    const totalValueWidth = doc.getStringUnitWidth(totalValue) * 11 / doc.internal.scaleFactor;
+    doc.text(totalValue, pageWidth - margin, startY, { align: 'right' });
+    doc.text(totalLabel, pageWidth - margin - totalValueWidth - 2, startY, { align: 'right' });
 
     startY += 10;
 
