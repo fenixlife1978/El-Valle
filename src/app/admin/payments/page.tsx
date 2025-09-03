@@ -277,8 +277,9 @@ export default function UnifiedPaymentsPage() {
         if (beneficiarySplits.length === 0) return { isValid: false, error: 'Debe asignar el monto a al menos una propiedad.' };
         if (beneficiarySplits.some(s => !s.property || !s.amount || Number(s.amount) <= 0)) return { isValid: false, error: 'Debe completar un monto válido para cada propiedad.' };
         
+        // This is the corrected validation logic.
         if (Math.abs(balance) > 0.01) {
-             return { isValid: false, error: 'El monto total no coincide con la suma de los montos asignados.' };
+             return { isValid: false, error: `El monto total (Bs. ${Number(totalAmount).toFixed(2)}) no coincide con la suma de los montos asignados (Bs. ${assignedTotal.toFixed(2)}).` };
         }
         
         // Level B: Format validation
@@ -314,7 +315,7 @@ export default function UnifiedPaymentsPage() {
         try {
             const validation = await validateForm();
             if (!validation.isValid) {
-                toast({ variant: 'destructive', title: 'Error de Validación', description: validation.error });
+                toast({ variant: 'destructive', title: 'Error de Validación', description: validation.error, duration: 6000 });
                 setLoading(false);
                 return;
             }
@@ -369,8 +370,8 @@ export default function UnifiedPaymentsPage() {
             await addDoc(collection(db, "payments"), paymentData);
             
             toast({ 
-                title: 'Reporte Enviado', 
-                description: 'Tu reporte ha sido enviado para revisión.', 
+                title: 'Reporte Enviado Exitosamente', 
+                description: 'Tu reporte ha sido enviado para revisión por el administrador.', 
                 className: 'bg-green-100 border-green-400 text-green-800' 
             });
             resetForm();
@@ -556,5 +557,3 @@ export default function UnifiedPaymentsPage() {
         </div>
     );
 }
-
-    
