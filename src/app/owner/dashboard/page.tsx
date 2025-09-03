@@ -334,6 +334,8 @@ export default function OwnerDashboardPage() {
     doc.text(`N° de Referencia Bancaria: ${payment.reference}`, margin, startY);
     startY += 6;
     doc.text(`Fecha del pago: ${format(payment.paymentDate.toDate(), 'dd/MM/yyyy')}`, margin, startY);
+    startY += 6;
+    doc.text(`Tasa de Cambio Aplicada: Bs. ${payment.exchangeRate.toLocaleString('es-VE', { minimumFractionDigits: 2 })} por USD`, margin, startY);
     startY += 10;
     
     const tableBody = paidDebts.map(debt => {
@@ -350,17 +352,29 @@ export default function OwnerDashboardPage() {
         ];
     });
 
-    (doc as any).autoTable({
-        startY: startY,
-        head: [['Período', 'Concepto (Propiedad)', 'Monto ($)', 'Monto Pagado (Bs)']],
-        body: tableBody,
-        theme: 'striped',
-        headStyles: { fillColor: [44, 62, 80], textColor: 255 },
-        styles: { fontSize: 9, cellPadding: 2.5 },
-        didDrawPage: (data: any) => { startY = data.cursor.y; }
-    });
-
-    startY = (doc as any).lastAutoTable.finalY + 8;
+    if (paidDebts.length > 0) {
+        (doc as any).autoTable({
+            startY: startY,
+            head: [['Período', 'Concepto (Propiedad)', 'Monto ($)', 'Monto Pagado (Bs)']],
+            body: tableBody,
+            theme: 'striped',
+            headStyles: { fillColor: [44, 62, 80], textColor: 255 },
+            styles: { fontSize: 9, cellPadding: 2.5 },
+            didDrawPage: (data: any) => { startY = data.cursor.y; }
+        });
+        startY = (doc as any).lastAutoTable.finalY + 8;
+    } else {
+        (doc as any).autoTable({
+            startY: startY,
+            head: [['Concepto', 'Monto Pagado (Bs)']],
+            body: [['Abono a Saldo a Favor', `Bs. ${payment.amount.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`]],
+            theme: 'striped',
+            headStyles: { fillColor: [44, 62, 80], textColor: 255 },
+            styles: { fontSize: 9, cellPadding: 2.5 },
+            didDrawPage: (data: any) => { startY = data.cursor.y; }
+        });
+        startY = (doc as any).lastAutoTable.finalY + 8;
+    }
     
     // Totals Section
     doc.setFontSize(11).setFont('helvetica', 'bold');
@@ -563,42 +577,39 @@ export default function OwnerDashboardPage() {
                     </DialogDescription>
                 </DialogHeader>
                 {receiptData && companyInfo && (
-                     <div className="flex-grow overflow-y-auto pr-4 -mr-4 border rounded-md p-4 bg-white text-black font-sans text-xs">
+                     <div className="flex-grow overflow-y-auto pr-4 -mr-4 border rounded-md p-4 bg-white text-black font-sans text-xs space-y-4">
                         {/* Header */}
-                        <div className="flex justify-between items-start mb-4">
+                        <div className="flex justify-between items-start">
                             <div className="flex items-center gap-4">
                                 {companyInfo.logo && <img src={companyInfo.logo} alt="Logo" className="w-20 h-20 object-contain"/>}
                                 <div>
                                     <p className="font-bold">{companyInfo.name}</p>
                                     <p>{companyInfo.rif}</p>
                                     <p>{companyInfo.address}</p>
-                                    <p>Teléfono: ${companyInfo.phone}</p>
+                                    <p>Teléfono: {companyInfo.phone}</p>
                                 </div>
                             </div>
                             <div className="text-right">
-                                <p>Fecha de Emisión:</p>
-                                <p className="font-bold">{format(new Date(), 'dd/MM/yyyy')}</p>
+                                <p className="font-bold text-lg">RECIBO DE PAGO</p>
+                                <p><strong>Fecha Emisión:</strong> {format(new Date(), 'dd/MM/yyyy')}</p>
+                                <p><strong>N° Recibo:</strong> {receiptData.payment.id.substring(0, 10)}</p>
                             </div>
                         </div>
                         <hr className="my-2 border-gray-400"/>
-                        {/* Title */}
-                        <div className="text-center my-4">
-                            <h2 className="font-bold text-lg">RECIBO DE PAGO</h2>
-                            <p className="text-right text-xs">N° de recibo: {receiptData.payment.id.substring(0, 10)}</p>
-                        </div>
                         {/* Details */}
-                         <div className="mb-4 text-xs">
-                             <p><strong>Beneficiario:</strong> {receiptData.ownerName}</p>
-                             <p><strong>Unidad:</strong> {receiptData.ownerUnit}</p>
-                             <p><strong>Método de pago:</strong> {receiptData.payment.type}</p>
-                             <p><strong>Banco Emisor:</strong> {receiptData.payment.bank}</p>
-                             <p><strong>N° de Referencia Bancaria:</strong> {receiptData.payment.reference}</p>
-                             <p><strong>Fecha del pago:</strong> {format(receiptData.payment.paymentDate.toDate(), 'dd/MM/yyyy')}</p>
+                         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                             <p><strong>Beneficiario:</strong></p><p>{receiptData.ownerName}</p>
+                             <p><strong>Unidad:</strong></p><p>{receiptData.ownerUnit}</p>
+                             <p><strong>Método de pago:</strong></p><p>{receiptData.payment.type}</p>
+                             <p><strong>Banco Emisor:</strong></p><p>{receiptData.payment.bank}</p>
+                             <p><strong>N° de Referencia:</strong></p><p>{receiptData.payment.reference}</p>
+                             <p><strong>Fecha del pago:</strong></p><p>{format(receiptData.payment.paymentDate.toDate(), 'dd/MM/yyyy')}</p>
+                             <p><strong>Tasa de Cambio Aplicada:</strong></p><p>Bs. {receiptData.payment.exchangeRate.toLocaleString('es-VE', { minimumFractionDigits: 2 })} por USD</p>
                         </div>
                         {/* Concept Table */}
                         <Table className="text-xs">
                             <TableHeader>
-                                <TableRow className="bg-gray-700 text-white">
+                                <TableRow className="bg-gray-700 text-white hover:bg-gray-800">
                                     <TableHead className="text-white">Período</TableHead>
                                     <TableHead className="text-white">Concepto (Propiedad)</TableHead>
                                     <TableHead className="text-white text-right">Monto ($)</TableHead>
@@ -607,7 +618,7 @@ export default function OwnerDashboardPage() {
                             </TableHeader>
                             <TableBody>
                                 {receiptData.paidDebts.length > 0 ? receiptData.paidDebts.map((debt, index) => (
-                                    <TableRow key={index}>
+                                    <TableRow key={index} className="even:bg-gray-100">
                                         <TableCell>{monthsLocale[debt.month]} {debt.year}</TableCell>
                                         <TableCell>{debt.description} ({debt.property.street} - {debt.property.house})</TableCell>
                                         <TableCell className="text-right">${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}</TableCell>
@@ -615,7 +626,8 @@ export default function OwnerDashboardPage() {
                                     </TableRow>
                                 )) : (
                                      <TableRow>
-                                        <TableCell colSpan={4} className="text-center">No hay detalles de deudas para este pago.</TableCell>
+                                        <TableCell colSpan={2}>Abono a Saldo a Favor</TableCell>
+                                        <TableCell colSpan={2} className="text-right">Bs. {receiptData.payment.amount.toLocaleString('es-VE', { minimumFractionDigits: 2 })}</TableCell>
                                     </TableRow>
                                 )}
                             </TableBody>
@@ -624,7 +636,7 @@ export default function OwnerDashboardPage() {
                             Total Pagado: Bs. {receiptData.payment.amount.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
                          </div>
                         {/* Footer */}
-                        <div className="mt-6 text-center text-gray-600 text-xs">
+                        <div className="mt-6 text-center text-gray-600 text-[10px]">
                              <p className="text-left">Este recibo confirma que su pago ha sido validado conforme a los términos establecidos por la comunidad.</p>
                              <p className="text-left font-bold mt-2">Firma electrónica: '{companyInfo.name} - Condominio'</p>
                              <hr className="my-4 border-gray-400"/>

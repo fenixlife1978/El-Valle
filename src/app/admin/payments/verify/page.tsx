@@ -451,6 +451,9 @@ export default function VerifyPaymentsPage() {
     doc.text(`N° de Referencia Bancaria: ${payment.reference}`, margin, startY);
     startY += 6;
     doc.text(`Fecha del pago: ${format(payment.paymentDate.toDate(), 'dd/MM/yyyy')}`, margin, startY);
+    startY += 6;
+    doc.text(`Tasa de Cambio Aplicada: Bs. ${payment.exchangeRate.toLocaleString('es-VE', { minimumFractionDigits: 2 })} por USD`, margin, startY);
+
     startY += 10;
     
     const tableBody = paidDebts.map(debt => {
@@ -648,37 +651,35 @@ export default function VerifyPaymentsPage() {
                 </DialogHeader>
                 <div className="flex-grow overflow-y-auto pr-4 -mr-4">
                 {receiptData && companyInfo && (
-                     <div className="border rounded-md p-4 bg-white text-black font-sans text-xs">
-                        <div className="flex justify-between items-start mb-4">
+                     <div className="border rounded-md p-4 bg-white text-black font-sans text-xs space-y-4">
+                        <div className="flex justify-between items-start">
                             <div className="flex items-center gap-4">
                                 {companyInfo.logo && <img src={companyInfo.logo} alt="Logo" className="w-20 h-20 object-contain"/>}
                                 <div>
                                     <p className="font-bold">{companyInfo.name}</p>
                                     <p>{companyInfo.rif}</p>
                                     <p>{companyInfo.address}</p>
-                                    <p>Teléfono: ${companyInfo.phone}</p>
+                                    <p>Teléfono: {companyInfo.phone}</p>
                                 </div>
                             </div>
                             <div className="text-right">
-                                <p>Fecha de Emisión:</p>
-                                <p className="font-bold">{format(new Date(), 'dd/MM/yyyy')}</p>
+                                <p className="font-bold text-lg">RECIBO DE PAGO</p>
+                                <p><strong>Fecha Emisión:</strong> {format(new Date(), 'dd/MM/yyyy')}</p>
+                                <p><strong>N° Recibo:</strong> {receiptData.payment.id.substring(0, 10)}</p>
                             </div>
                         </div>
                         <hr className="my-2 border-gray-400"/>
-                        <div className="text-center my-4">
-                            <h2 className="font-bold text-lg">RECIBO DE PAGO</h2>
-                            <p className="text-right text-xs">N° de recibo: {receiptData.payment.id.substring(0, 10)}</p>
-                        </div>
-                         <div className="mb-4 text-xs">
-                             <p><strong>Beneficiario:</strong> {receiptData.ownerName}</p>
-                             <p><strong>Método de pago:</strong> {receiptData.payment.type}</p>
-                             <p><strong>Banco Emisor:</strong> {receiptData.payment.bank}</p>
-                             <p><strong>N° de Referencia:</strong> {receiptData.payment.reference}</p>
-                             <p><strong>Fecha del pago:</strong> {format(receiptData.payment.paymentDate.toDate(), 'dd/MM/yyyy')}</p>
+                         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                             <p><strong>Beneficiario:</strong></p><p>{receiptData.ownerName}</p>
+                             <p><strong>Método de pago:</strong></p><p>{receiptData.payment.type}</p>
+                             <p><strong>Banco Emisor:</strong></p><p>{receiptData.payment.bank}</p>
+                             <p><strong>N° de Referencia:</strong></p><p>{receiptData.payment.reference}</p>
+                             <p><strong>Fecha del pago:</strong></p><p>{format(receiptData.payment.paymentDate.toDate(), 'dd/MM/yyyy')}</p>
+                             <p><strong>Tasa de Cambio Aplicada:</strong></p><p>Bs. {receiptData.payment.exchangeRate.toLocaleString('es-VE', { minimumFractionDigits: 2 })} por USD</p>
                         </div>
                         <Table className="text-xs">
                             <TableHeader>
-                                <TableRow className="bg-gray-700 text-white">
+                                <TableRow className="bg-gray-700 text-white hover:bg-gray-800">
                                     <TableHead className="text-white">Período</TableHead>
                                     <TableHead className="text-white">Concepto (Propiedad)</TableHead>
                                     <TableHead className="text-white text-right">Monto ($)</TableHead>
@@ -687,7 +688,7 @@ export default function VerifyPaymentsPage() {
                             </TableHeader>
                             <TableBody>
                                 {receiptData.paidDebts.length > 0 ? receiptData.paidDebts.map((debt, index) => (
-                                    <TableRow key={index}>
+                                    <TableRow key={index} className="even:bg-gray-100">
                                         <TableCell>{monthsLocale[debt.month]} {debt.year}</TableCell>
                                         <TableCell>{debt.description} ({debt.property ? `${debt.property.street} - ${debt.property.house}`: 'N/A'})</TableCell>
                                         <TableCell className="text-right">${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}</TableCell>
@@ -695,7 +696,8 @@ export default function VerifyPaymentsPage() {
                                     </TableRow>
                                 )) : (
                                     <TableRow>
-                                        <TableCell colSpan={4} className="text-center">Abono a Saldo a Favor</TableCell>
+                                        <TableCell colSpan={2}>Abono a Saldo a Favor</TableCell>
+                                        <TableCell colSpan={2} className="text-right">Bs. {receiptData.payment.totalAmount.toLocaleString('es-VE', { minimumFractionDigits: 2 })}</TableCell>
                                     </TableRow>
                                 )}
                             </TableBody>
@@ -744,9 +746,3 @@ export default function VerifyPaymentsPage() {
     </div>
   );
 }
-
-    
-
-    
-
-
