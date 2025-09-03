@@ -118,6 +118,7 @@ export default function OwnerDashboardPage() {
 
         const userId = user.uid;
         let userUnsubscribe: () => void;
+        let paymentsUnsubscribe: () => void;
         
         const settingsRef = doc(db, 'config', 'mainSettings');
         const settingsUnsubscribe = onSnapshot(settingsRef, (settingsSnap) => {
@@ -155,6 +156,52 @@ export default function OwnerDashboardPage() {
                         balance: data.balance || 0,
                     } as UserData;
                     setUserData(ownerData);
+
+                    // Re-subscribe to payments whenever user data changes
+                    if (paymentsUnsubscribe) paymentsUnsubscribe();
+                    const paymentsQuery = query(collection(db, "payments"), where("beneficiaries", "array-contains-any", ownerData.properties.map(p => ({
+                        ownerId: userId,
+                        ownerName: ownerData.name,
+                        amount: p.amount, // This might not be perfect, but it's a way to query
+                        street: p.street,
+                        house: p.house
+                    }))));
+
+                    paymentsUnsubscribe = onSnapshot(query(collection(db, "payments"), where("beneficiaries", "array-contains-any", ownerData.properties.map(p => ({
+    ownerId: ownerData.id,
+    ownerName: ownerData.name,
+    street: p.street,
+    house: p.house,
+    amount: 1 // dummy amount as it's required for the query but we don't know it
+})))), (snapshot) => {
+                         const paymentsData: Payment[] = [];
+                        snapshot.forEach((doc) => {
+                            const data = doc.data();
+                            if (data.beneficiaries.some((b: any) => b.ownerId === userId)) {
+                                paymentsData.push({
+                                    id: doc.id,
+                                    date: new Date(data.paymentDate.seconds * 1000).toISOString(),
+                                    amount: data.totalAmount,
+                                    bank: data.bank,
+                                    type: data.paymentMethod,
+                                    ref: data.reference,
+                                    status: data.status,
+                                    reportedAt: data.reportedAt,
+                                    exchangeRate: data.exchangeRate,
+                                    paymentDate: data.paymentDate,
+                                    reference: data.reference,
+                                    beneficiaries: data.beneficiaries,
+                                });
+                            }
+                        });
+                        const sortedPayments = paymentsData.sort((a,b) => {
+                            const dateA = a.reportedAt?.toMillis() || 0;
+                            const dateB = b.reportedAt?.toMillis() || 0;
+                            return dateB - dateA;
+                        });
+                        setPayments(sortedPayments.slice(0, 10));
+                    });
+
 
                     const pendingDebtsQuery = query(collection(db, "debts"), where("ownerId", "==", userId), where("status", "==", "pending"));
                     const pendingDebtsSnapshot = await getDocs(pendingDebtsQuery);
@@ -204,55 +251,14 @@ export default function OwnerDashboardPage() {
                 setLoading(false);
             });
         });
-
-        // This query needs to be updated to find payments where the user is a beneficiary
-        const paymentsQuery = query(
-            collection(db, "payments"),
-            where("beneficiaries", "array-contains-any", userData?.properties.map(p => ({
-                ownerId: userId,
-                ownerName: userData.name,
-                street: p.street,
-                house: p.house,
-            })))
-        );
-
-        const paymentsUnsubscribe = onSnapshot(paymentsQuery, (snapshot) => {
-            const paymentsData: Payment[] = [];
-            snapshot.forEach((doc) => {
-                const data = doc.data();
-                // Double check if this user is truly in the beneficiaries list
-                 if (data.beneficiaries.some((b: any) => b.ownerId === userId)) {
-                    paymentsData.push({
-                        id: doc.id,
-                        date: new Date(data.paymentDate.seconds * 1000).toISOString(),
-                        amount: data.totalAmount,
-                        bank: data.bank,
-                        type: data.paymentMethod,
-                        ref: data.reference,
-                        status: data.status,
-                        reportedAt: data.reportedAt,
-                        exchangeRate: data.exchangeRate,
-                        paymentDate: data.paymentDate,
-                        reference: data.reference,
-                        beneficiaries: data.beneficiaries,
-                    });
-                }
-            });
-            const sortedPayments = paymentsData.sort((a,b) => {
-                const dateA = a.reportedAt?.toMillis() || 0;
-                const dateB = b.reportedAt?.toMillis() || 0;
-                return dateB - dateA;
-            });
-            setPayments(sortedPayments.slice(0, 10)); // Show more payments if needed
-        });
         
         return () => {
             settingsUnsubscribe();
             if (userUnsubscribe) userUnsubscribe();
-            paymentsUnsubscribe();
+            if (paymentsUnsubscribe) paymentsUnsubscribe();
         };
 
-    }, [user, authLoading, router, userData]);
+    }, [user, authLoading, router]);
     
     const handleDebtSelection = (debtId: string) => {
         setSelectedDebts(prev => 

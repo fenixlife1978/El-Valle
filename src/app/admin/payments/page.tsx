@@ -200,6 +200,7 @@ export default function UnifiedPaymentsPage() {
         if (owner.properties && owner.properties.length > 0) {
             setBeneficiarySplits([{ property: owner.properties[0], amount: '' }]);
         } else {
+             toast({ variant: 'destructive', title: 'Propietario sin Propiedades', description: 'Este propietario no tiene propiedades asignadas y no puede recibir pagos.' });
             setBeneficiarySplits([]);
         }
     };
@@ -249,7 +250,7 @@ export default function UnifiedPaymentsPage() {
         if (!totalAmount || Number(totalAmount) <= 0) newErrors.totalAmount = 'El monto debe ser mayor a cero.';
         if (!selectedOwner) newErrors.beneficiary = 'Debe seleccionar un beneficiario.';
         if (beneficiarySplits.length === 0) newErrors.splits = 'Debe asignar el monto a al menos una propiedad.';
-        if (beneficiarySplits.some(s => !s.property || !s.amount)) newErrors.splits = 'Debe completar los datos para cada propiedad asignada.';
+        if (beneficiarySplits.some(s => !s.property || !s.amount || Number(s.amount) <= 0)) newErrors.splits = 'Debe completar los datos y un monto válido para cada propiedad asignada.';
         if (Math.abs(balance) > 0.01) newErrors.balance = 'El monto total debe coincidir con el total asignado.';
 
         setErrors(newErrors);
@@ -460,7 +461,7 @@ export default function UnifiedPaymentsPage() {
                                     </div>
                                     {searchTerm.length >= 3 && filteredOwners.length > 0 && (
                                         <Card className="border rounded-md">
-                                            <ScrollArea className="h-48">{filteredOwners.map(owner => (<div key={owner.id} onClick={() => handleOwnerSelect(owner)} className="p-3 hover:bg-muted cursor-pointer border-b last:border-b-0"><p className="font-medium">{owner.name}</p><p className="text-sm text-muted-foreground">{owner.properties.map(p => `${p.street}-${p.house}`).join(', ')}</p></div>))}</ScrollArea>
+                                            <ScrollArea className="h-48">{filteredOwners.map(owner => (<div key={owner.id} onClick={() => handleOwnerSelect(owner)} className="p-3 hover:bg-muted cursor-pointer border-b last:border-b-0"><p className="font-medium">{owner.name}</p><p className="text-sm text-muted-foreground">{owner.properties?.map(p => `${p.street}-${p.house}`).join(', ')}</p></div>))}</ScrollArea>
                                         </Card>
                                     )}
                                     {errors.beneficiary && <p className="text-sm text-destructive">{errors.beneficiary}</p>}
@@ -468,7 +469,7 @@ export default function UnifiedPaymentsPage() {
                             ) : (
                                 <Card className="bg-muted/50 p-4 space-y-4">
                                     <div className='flex items-center justify-between'>
-                                        <div><p className="font-semibold text-primary">{selectedOwner.name}</p><p className="text-sm text-muted-foreground">{selectedOwner.properties.map(p => `${p.street}-${p.house}`).join(', ')}</p></div>
+                                        <div><p className="font-semibold text-primary">{selectedOwner.name}</p><p className="text-sm text-muted-foreground">{selectedOwner.properties?.map(p => `${p.street}-${p.house}`).join(', ')}</p></div>
                                         <Button variant="ghost" size="icon" onClick={resetOwnerSelection}><XCircle className="h-5 w-5 text-destructive"/></Button>
                                     </div>
 
@@ -484,7 +485,7 @@ export default function UnifiedPaymentsPage() {
                                             <Button type="button" variant="ghost" size="icon" onClick={() => removeSplit(index)} disabled={beneficiarySplits.length <= 1}><Trash2 className="h-4 w-4 text-destructive"/></Button>
                                         </div>
                                     ))}
-                                    {selectedOwner.properties.length > beneficiarySplits.length && (
+                                    {selectedOwner.properties && selectedOwner.properties.length > beneficiarySplits.length && (
                                         <Button type="button" variant="outline" size="sm" onClick={addSplit}><PlusCircle className="mr-2 h-4 w-4"/>Asignar a otra propiedad</Button>
                                     )}
 

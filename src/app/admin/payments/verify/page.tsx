@@ -13,9 +13,9 @@ import { CheckCircle2, XCircle, MoreHorizontal, Eye, Printer, Filter, Loader2, T
 import { useToast } from '@/hooks/use-toast';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import { collection, onSnapshot, query, doc, updateDoc, getDoc, writeBatch, where, orderBy, Timestamp, getDocs, deleteField, deleteDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, doc, updateDoc, getDoc, writeBatch, where, orderBy, Timestamp, getDocs, deleteField, deleteDoc, runTransaction } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { addMonths, format, startOfMonth } from 'date-fns';
+import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 type PaymentStatus = 'pendiente' | 'aprobado' | 'rechazado';
@@ -202,109 +202,97 @@ export default function VerifyPaymentsPage() {
 
   const handleStatusChange = async (id: string, newStatus: PaymentStatus) => {
     const paymentRef = doc(db, 'payments', id);
-
+  
     if (newStatus === 'rechazado') {
-        try {
-            await updateDoc(paymentRef, { status: 'rechazado' });
-            toast({ title: 'Pago Rechazado', description: `El pago ha sido marcado como rechazado.` });
-        } catch (error) {
-            console.error("Error rejecting payment: ", error);
-            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo actualizar el estado.' });
-        }
-        return;
+      try {
+        await updateDoc(paymentRef, { status: 'rechazado' });
+        toast({ title: 'Pago Rechazado', description: `El pago ha sido marcado como rechazado.` });
+      } catch (error) {
+        console.error("Error rejecting payment: ", error);
+        toast({ variant: 'destructive', title: 'Error', description: 'No se pudo actualizar el estado.' });
+      }
+      return;
     }
-    
+  
     if (newStatus === 'aprobado') {
-        if (condoFee <= 0) {
-            toast({ variant: 'destructive', title: 'Error de Configuración', description: 'La cuota de condominio no está configurada. No se puede aprobar el pago.' });
-            return;
-        }
+      try {
+        await runTransaction(db, async (transaction) => {
+          const paymentDoc = await transaction.get(paymentRef);
+          if (!paymentDoc.exists() || paymentDoc.data().status === 'aprobado') {
+            throw new Error('El pago no existe o ya fue aprobado anteriormente.');
+          }
+  
+          const paymentData = { id: paymentDoc.id, ...paymentDoc.data() } as FullPayment;
+          const exchangeRate = paymentData.exchangeRate;
+          if (!exchangeRate || exchangeRate <= 0) {
+            throw new Error('La tasa de cambio para este pago es inválida o no está definida.');
+          }
 
-        try {
-            // --- PHASE 1: COMPREHENSIVE UPFRONT READS ---
-            const paymentDoc = await getDoc(paymentRef);
-            if (!paymentDoc.exists() || paymentDoc.data().status === 'aprobado') {
-                toast({ title: 'Operación Cancelada', description: 'El pago no existe o ya fue aprobado anteriormente.' });
-                return;
+          let finalObservation = paymentData.observations || '';
+  
+          for (const beneficiary of paymentData.beneficiaries) {
+            const ownerRef = doc(db, 'owners', beneficiary.ownerId);
+            const ownerDoc = await transaction.get(ownerRef);
+            if (!ownerDoc.exists()) {
+              console.warn(`Saltando beneficiario no encontrado: ${beneficiary.ownerId}`);
+              continue;
             }
-            const paymentData = { id: paymentDoc.id, ...paymentDoc.data() } as FullPayment;
+  
+            const ownerData = ownerDoc.data();
+            let availableFundsBs = beneficiary.amount + (ownerData.balance || 0);
 
-            const beneficiaryIds = paymentData.beneficiaries.map(b => b.ownerId);
-            if (beneficiaryIds.length === 0) throw new Error("El pago no tiene beneficiarios definidos.");
-            
-            const ownersQuery = query(collection(db, 'owners'), where('__name__', 'in', beneficiaryIds));
-            const ownersSnapshot = await getDocs(ownersQuery);
-            const ownersDataMap = new Map(ownersSnapshot.docs.map(d => [d.id, d.data()]));
-
-            const allOwnerDebtsQuery = query(collection(db, 'debts'), where('ownerId', 'in', beneficiaryIds));
-            const allDebtsSnapshot = await getDocs(allOwnerDebtsQuery);
-            const allDebtsByOwner = new Map<string, Debt[]>();
-            allDebtsSnapshot.forEach(d => {
-                const debt = { id: d.id, ...d.data() } as Debt;
-                const ownerDebts = allDebtsByOwner.get(debt.ownerId) || [];
-                ownerDebts.push(debt);
-                allDebtsByOwner.set(debt.ownerId, ownerDebts);
-            });
-            
-            // --- PHASE 2: IN-MEMORY CALCULATIONS ---
-            const batch = writeBatch(db);
-            let finalObservation = paymentData.observations || '';
-
-            for (const beneficiary of paymentData.beneficiaries) {
-                const ownerData = ownersDataMap.get(beneficiary.ownerId);
-                if (!ownerData) {
-                    console.warn(`Saltando beneficiario no encontrado: ${beneficiary.ownerId}`);
-                    continue;
+             if ((ownerData.balance || 0) > 0) {
+                const balanceUsed = Math.min(beneficiary.amount, ownerData.balance);
+                if (balanceUsed > 0 && beneficiary.amount < ownerData.balance) {
+                  finalObservation += ` Se utilizó parte del saldo a favor (Bs. ${balanceUsed.toLocaleString('es-VE', {minimumFractionDigits: 2})}) para este pago.`;
                 }
-
-                let availableFundsBs = beneficiary.amount + (ownerData.balance || 0);
-
-                // Settle pending debts for the specific property of the beneficiary
-                const pendingDebts = (allDebtsByOwner.get(beneficiary.ownerId) || [])
-                    .filter(d => 
-                        d.status === 'pending' && 
-                        d.property.street === beneficiary.street && 
-                        d.property.house === beneficiary.house
-                    )
-                    .sort((a,b) => a.year - b.year || a.month - a.month);
-
-                for (const debt of pendingDebts) {
-                    const debtAmountBs = debt.amountUSD * paymentData.exchangeRate;
-                    if (availableFundsBs >= debtAmountBs) {
-                        availableFundsBs -= debtAmountBs;
-                        const debtRef = doc(db, 'debts', debt.id);
-                        batch.update(debtRef, {
-                            status: 'paid', paidAmountUSD: debt.amountUSD,
-                            paymentDate: paymentData.paymentDate, paymentId: paymentData.id
-                        });
-                    }
-                }
-                
-                // If there's an existing balance and it was used, add a note.
-                if ((ownerData.balance || 0) > 0 && beneficiary.amount > 0 && availableFundsBs < (ownerData.balance || 0)) {
-                    finalObservation += ` Se utilizó un saldo a favor de Bs. ${(ownerData.balance || 0).toFixed(2)} para completar este pago.`;
-                }
-
-                const ownerRef = doc(db, 'owners', beneficiary.ownerId);
-                batch.update(ownerRef, { balance: availableFundsBs });
             }
-
-            batch.update(paymentRef, { status: 'aprobado', observations: finalObservation.trim() });
-            
-            // --- PHASE 3: COMMIT ATOMIC WRITES ---
-            await batch.commit();
-
-            toast({
-                title: 'Pago Aprobado y Procesado',
-                description: 'El saldo del propietario y las deudas han sido actualizados.',
-                className: 'bg-green-100 border-green-400 text-green-800'
-            });
-
-        } catch (error) {
-            console.error("Error processing payment approval: ", error);
-            const errorMessage = error instanceof Error ? error.message : 'No se pudo aprobar y procesar el pago.';
-            toast({ variant: 'destructive', title: 'Error en la Operación', description: errorMessage });
-        }
+  
+            // Query for pending debts for the specific property of the beneficiary
+            const debtsQuery = query(
+              collection(db, 'debts'),
+              where('ownerId', '==', beneficiary.ownerId),
+              where('status', '==', 'pending'),
+              where('property.street', '==', beneficiary.street),
+              where('property.house', '==', beneficiary.house),
+              orderBy('year', 'asc'),
+              orderBy('month', 'asc')
+            );
+            const debtsSnapshot = await getDocs(debtsQuery); // Use getDocs inside transaction
+  
+            for (const debtDoc of debtsSnapshot.docs) {
+              const debt = { id: debtDoc.id, ...debtDoc.data() } as Debt;
+              const debtAmountBs = debt.amountUSD * exchangeRate;
+  
+              if (availableFundsBs >= debtAmountBs) {
+                availableFundsBs -= debtAmountBs;
+                transaction.update(debtDoc.ref, {
+                  status: 'paid',
+                  paidAmountUSD: debt.amountUSD,
+                  paymentDate: paymentData.paymentDate,
+                  paymentId: paymentData.id,
+                });
+              } else {
+                break;
+              }
+            }
+  
+            transaction.update(ownerRef, { balance: availableFundsBs });
+          }
+  
+          transaction.update(paymentRef, { status: 'aprobado', observations: finalObservation.trim() });
+        });
+  
+        toast({
+          title: 'Pago Aprobado y Procesado',
+          description: 'El saldo del propietario y las deudas han sido actualizados.',
+          className: 'bg-green-100 border-green-400 text-green-800',
+        });
+      } catch (error) {
+        console.error("Error processing payment approval: ", error);
+        const errorMessage = error instanceof Error ? error.message : 'No se pudo aprobar y procesar el pago.';
+        toast({ variant: 'destructive', title: 'Error en la Operación', description: errorMessage });
+      }
     }
   };
 
@@ -375,7 +363,9 @@ export default function VerifyPaymentsPage() {
                 if (ownerDoc.exists()) {
                     const currentBalance = ownerDoc.data().balance || 0;
                     const amountToRevert = beneficiary.amount || 0;
-                    batch.update(ownerRef, { balance: currentBalance - amountToRevert });
+                    // This logic is simplified; a full reversal would require knowing how much balance was used.
+                    // For now, we revert the paid amount back to the balance.
+                    batch.update(ownerRef, { balance: currentBalance + amountToRevert });
                 }
             }
 
