@@ -482,9 +482,9 @@ export default function UnifiedPaymentsPage() {
                             Enviar Reporte
                         </Button>
                         {loading && (
-                            <div className="w-full md:w-auto">
+                            <div className="w-full md:w-[200px] space-y-1">
                                 <Progress value={uploadProgress} className="h-2 w-full" />
-                                <p className="text-xs text-muted-foreground mt-1 text-right">Subiendo... {Math.round(uploadProgress)}%</p>
+                                <p className="text-xs text-muted-foreground text-center">Subiendo... {Math.round(uploadProgress)}%</p>
                             </div>
                         )}
                     </CardFooter>
@@ -493,5 +493,3 @@ export default function UnifiedPaymentsPage() {
         </div>
     );
 }
-
-    
