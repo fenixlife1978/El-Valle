@@ -244,7 +244,11 @@ export default function UnifiedPaymentsPage() {
         if (!selectedOwner) return { isValid: false, error: 'Debe seleccionar un beneficiario.' };
         if (beneficiarySplits.length === 0) return { isValid: false, error: 'Debe asignar el monto a al menos una propiedad.' };
         if (beneficiarySplits.some(s => !s.property || !s.amount || Number(s.amount) <= 0)) return { isValid: false, error: 'Debe completar un monto válido para cada propiedad.' };
-        if (Math.abs(balance) > 0.01) return { isValid: false, error: 'El monto total no coincide con la suma de los montos asignados.' };
+        
+        // Corrected Balance Validation
+        if (Math.abs(balance) > 0.01) {
+             return { isValid: false, error: 'El monto total no coincide con la suma de los montos asignados.' };
+        }
         
         // Level B: Format validation
         if (!/^\d{6,}$/.test(reference)) {
@@ -277,15 +281,13 @@ export default function UnifiedPaymentsPage() {
         setUploadProgress(0);
 
         try {
-             // 1. Validate form before doing anything else
             const validation = await validateForm();
             if (!validation.isValid) {
                 toast({ variant: 'destructive', title: 'Error de Validación', description: validation.error });
                 setLoading(false);
                 return;
             }
-            
-            // 2. Upload file with progress tracking
+
             const receiptFileName = `${Date.now()}_${receiptFile!.name}`;
             const fileRef = storageRef(storage, `receipts/${receiptFileName}`);
             const uploadTask = uploadBytesResumable(fileRef, receiptFile!);
@@ -311,7 +313,6 @@ export default function UnifiedPaymentsPage() {
                 );
             });
 
-            // 3. Prepare and save data to Firestore
             const paymentData = {
                 paymentDate: Timestamp.fromDate(paymentDate!),
                 exchangeRate: exchangeRate,
@@ -336,7 +337,6 @@ export default function UnifiedPaymentsPage() {
             
             await addDoc(collection(db, "payments"), paymentData);
             
-            // 4. Success feedback and form reset
             toast({ 
                 title: 'Reporte Enviado', 
                 description: 'Tu reporte ha sido enviado para revisión.', 
@@ -499,5 +499,3 @@ export default function UnifiedPaymentsPage() {
         </div>
     );
 }
-
-    
