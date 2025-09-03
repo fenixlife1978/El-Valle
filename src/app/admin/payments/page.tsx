@@ -16,7 +16,7 @@ import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc, where, getDocs, Timestamp } from 'firebase/firestore';
 import { db, storage } from '@/lib/firebase';
-import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
+import { ref as storageRef, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
 
@@ -288,9 +288,28 @@ export default function UnifiedPaymentsPage() {
             // 2. Upload file with progress tracking
             const receiptFileName = `${Date.now()}_${receiptFile!.name}`;
             const fileRef = storageRef(storage, `receipts/${receiptFileName}`);
-            const uploadTask = await uploadBytes(fileRef, receiptFile!);
-            
-            const receiptFileUrl = await getDownloadURL(uploadTask.ref);
+            const uploadTask = uploadBytesResumable(fileRef, receiptFile!);
+
+            const receiptFileUrl = await new Promise<string>((resolve, reject) => {
+                uploadTask.on('state_changed',
+                    (snapshot) => {
+                        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                        setUploadProgress(progress);
+                    },
+                    (error) => {
+                        console.error("Upload failed:", error);
+                        reject("Falló la subida del comprobante.");
+                    },
+                    async () => {
+                        try {
+                            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+                            resolve(downloadURL);
+                        } catch (error) {
+                            reject("No se pudo obtener la URL del archivo.");
+                        }
+                    }
+                );
+            });
 
             // 3. Prepare and save data to Firestore
             const paymentData = {
@@ -327,9 +346,11 @@ export default function UnifiedPaymentsPage() {
 
         } catch (error) {
             console.error("Error submitting payment: ", error);
-            toast({ variant: "destructive", title: "Error Inesperado", description: "No se pudo enviar el reporte. Por favor, intente de nuevo." });
+            const errorMessage = typeof error === 'string' ? error : "No se pudo enviar el reporte. Por favor, intente de nuevo.";
+            toast({ variant: "destructive", title: "Error Inesperado", description: errorMessage });
         } finally {
             setLoading(false);
+            setUploadProgress(0);
         }
     };
 
@@ -348,7 +369,7 @@ export default function UnifiedPaymentsPage() {
                              <Label htmlFor="paymentDate">1. Fecha del Pago</Label>
                              <Popover>
                                 <PopoverTrigger asChild>
-                                    <Button id="paymentDate" variant={"outline"} className={cn("w-full justify-start", !paymentDate && "text-muted-foreground")}>
+                                    <Button id="paymentDate" variant={"outline"} className={cn("w-full justify-start", !paymentDate && "text-muted-foreground")} disabled={loading}>
                                         <CalendarIcon className="mr-2 h-4 w-4" />
                                         {paymentDate ? format(paymentDate, "PPP", { locale: es }) : <span>Seleccione una fecha</span>}
                                     </Button>
@@ -463,9 +484,9 @@ export default function UnifiedPaymentsPage() {
                     </CardContent>
                     <CardFooter className='flex flex-col items-end gap-4'>
                         {loading && (
-                            <div className="w-full space-y-2">
-                                <Label className="text-sm text-muted-foreground">Subiendo comprobante...</Label>
+                            <div className="w-full space-y-2 text-center">
                                 <Progress value={uploadProgress} className="w-full" />
+                                <p className="text-sm text-muted-foreground">Subiendo comprobante... {Math.round(uploadProgress)}%</p>
                             </div>
                          )}
                          <Button type="submit" className="w-full md:w-auto" disabled={loading}>
@@ -478,3 +499,5 @@ export default function UnifiedPaymentsPage() {
         </div>
     );
 }
+
+    
