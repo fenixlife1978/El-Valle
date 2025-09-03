@@ -195,7 +195,6 @@ export default function UnifiedPaymentsPage() {
     const handleOwnerSelect = (owner: Owner) => {
         setSelectedOwner(owner);
         setSearchTerm('');
-        // Default to assigning the full amount to the first property
         if (owner.properties && owner.properties.length > 0) {
             setBeneficiarySplits([{ property: owner.properties[0], amount: '' }]);
         } else {
@@ -238,7 +237,6 @@ export default function UnifiedPaymentsPage() {
 
     const validateForm = (): boolean => {
         const newErrors: FormErrors = {};
-
         if (!paymentDate) newErrors.paymentDate = 'La fecha es obligatoria.';
         if (!exchangeRate) newErrors.exchangeRate = 'Se requiere una tasa de cambio válida.';
         if (!paymentMethod) newErrors.paymentMethod = 'Seleccione un tipo de pago.';
@@ -251,116 +249,82 @@ export default function UnifiedPaymentsPage() {
         if (beneficiarySplits.length === 0) newErrors.splits = 'Debe asignar el monto a al menos una propiedad.';
         if (beneficiarySplits.some(s => !s.property || !s.amount || Number(s.amount) <= 0)) newErrors.splits = 'Debe completar los datos y un monto válido para cada propiedad asignada.';
         if (Math.abs(balance) > 0.01) newErrors.balance = 'El monto total debe coincidir con el total asignado.';
-
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setLoading(true);
-
         if (!validateForm()) {
-            toast({
-                variant: 'destructive',
-                title: 'Error de validación',
-                description: 'Por favor, corrija los errores en el formulario.',
-            });
-            setLoading(false);
+            toast({ variant: 'destructive', title: 'Error de validación', description: 'Por favor, corrija los errores en el formulario.' });
             return;
         }
-        
-        // Capture local variables from state to prevent race conditions with async operations
-        const paymentTimestamp = Timestamp.fromDate(paymentDate!);
-        const currentReference = reference;
-        const currentTotalAmount = Number(totalAmount);
-        const fileToUpload = receiptFile!;
-        const paymentDetails = {
-            paymentDate: paymentTimestamp,
-            exchangeRate,
-            paymentMethod,
-            bank: bank === 'otro' ? otherBank : bank,
-            reference: currentReference,
-            totalAmount: currentTotalAmount,
-            beneficiaryType,
-            beneficiaries: beneficiarySplits.map(s => ({
-                ownerId: selectedOwner!.id,
-                ownerName: selectedOwner!.name,
-                street: s.property.street,
-                house: s.property.house,
-                amount: Number(s.amount)
-            })),
-            receiptFileName: fileToUpload.name,
-            status: 'pendiente' as 'pendiente',
-            reportedAt: serverTimestamp(),
-            reportedBy: beneficiaryType === 'propio' ? selectedOwner!.id : 'admin_user',
-        };
 
+        setLoading(true);
 
-        // --- ANTI-DUPLICATE CHECK ---
+        const localPaymentDate = paymentDate!;
+        const localReference = reference;
+        const localTotalAmount = Number(totalAmount);
+        const localExchangeRate = exchangeRate!;
+        const localPaymentMethod = paymentMethod;
+        const localBank = bank;
+        const localOtherBank = otherBank;
+        const localBeneficiaryType = beneficiaryType;
+        const localSelectedOwner = selectedOwner!;
+        const localBeneficiarySplits = beneficiarySplits;
+        const localReceiptFile = receiptFile!;
+
         try {
             const q = query(collection(db, "payments"), 
-                where("reference", "==", currentReference),
-                where("totalAmount", "==", currentTotalAmount),
-                where("paymentDate", "==", paymentTimestamp)
+                where("reference", "==", localReference),
+                where("totalAmount", "==", localTotalAmount),
+                where("paymentDate", "==", Timestamp.fromDate(localPaymentDate))
             );
             const querySnapshot = await getDocs(q);
 
             if (!querySnapshot.empty) {
-                toast({
-                    variant: "destructive",
-                    title: "Pago Duplicado",
-                    description: "Ya existe un reporte de pago con estos mismos datos (fecha, monto y referencia).",
-                });
+                toast({ variant: "destructive", title: "Pago Duplicado", description: "Ya existe un reporte de pago con estos mismos datos." });
                 setLoading(false);
                 return;
             }
+
+            const paymentData = {
+                paymentDate: Timestamp.fromDate(localPaymentDate),
+                exchangeRate: localExchangeRate,
+                paymentMethod: localPaymentMethod,
+                bank: localBank === 'otro' ? localOtherBank : localBank,
+                reference: localReference,
+                totalAmount: localTotalAmount,
+                beneficiaryType: localBeneficiaryType,
+                beneficiaries: localBeneficiarySplits.map(s => ({
+                    ownerId: localSelectedOwner.id,
+                    ownerName: localSelectedOwner.name,
+                    street: s.property.street,
+                    house: s.property.house,
+                    amount: Number(s.amount)
+                })),
+                receiptFileName: localReceiptFile.name,
+                status: 'pendiente' as 'pendiente',
+                reportedAt: serverTimestamp(),
+                reportedBy: localBeneficiaryType === 'propio' ? localSelectedOwner.id : 'admin_user',
+            };
+
+            const receiptFileName = `${Date.now()}_${localReceiptFile.name}`;
+            const receiptRef = storageRef(storage, `receipts/${receiptFileName}`);
+            await uploadBytes(receiptRef, localReceiptFile);
+            const receiptFileUrl = await getDownloadURL(receiptRef);
+
+            await addDoc(collection(db, "payments"), { ...paymentData, receiptFileUrl });
+            
+            toast({ title: 'Reporte Enviado', description: 'Tu reporte ha sido enviado para revisión.', className: 'bg-green-100 border-green-400 text-green-800' });
+            resetForm();
+
         } catch (error) {
-            console.error("Error checking for duplicates:", error);
-            toast({
-                variant: "destructive",
-                title: "Error de Verificación",
-                description: "No se pudo comprobar si el pago es duplicado. Inténtelo de nuevo.",
-            });
+            console.error("Error submitting payment: ", error);
+            toast({ variant: "destructive", title: "Error en el Envío", description: "No se pudo guardar el reporte de pago. Inténtelo de nuevo." });
+        } finally {
             setLoading(false);
-            return;
         }
-        
-        
-        // --- UI FEEDBACK & RESET ---
-        toast({
-            title: 'Reporte Enviado',
-            description: 'Tu reporte de pago ha sido enviado para revisión.',
-            className: 'bg-green-100 border-green-400 text-green-800'
-        });
-        resetForm();
-        setLoading(false); // Release button immediately
-
-        // --- ASYNC PROCESSING ---
-        // This runs in the background using the captured data.
-        (async () => {
-            try {
-                const receiptFileName = `${Date.now()}_${fileToUpload.name}`;
-                const receiptRef = storageRef(storage, `receipts/${receiptFileName}`);
-                await uploadBytes(receiptRef, fileToUpload);
-                const receiptFileUrl = await getDownloadURL(receiptRef);
-                
-                const finalPaymentData = {
-                    ...paymentDetails,
-                    receiptFileUrl,
-                };
-
-                await addDoc(collection(db, "payments"), finalPaymentData);
-                // No success toast here, as it was already shown to the user.
-            } catch (error) {
-                console.error("Error adding payment in background: ", error);
-                 toast({
-                    variant: 'destructive',
-                    title: 'Error en el servidor',
-                    description: 'No se pudo guardar el reporte de pago. Por favor, inténtelo de nuevo.',
-                });
-            }
-        })();
     };
 
     return (
