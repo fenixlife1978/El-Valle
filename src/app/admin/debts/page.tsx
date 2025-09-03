@@ -634,44 +634,46 @@ export default function DebtManagementPage() {
             toast({ variant: 'destructive', title: 'Error de Validación', description: 'La descripción y un monto mayor a cero son obligatorios.' });
             return;
         }
-    
+
         const { fromMonth, fromYear, amountUSD, description } = currentMassDebt;
         const startDate = new Date(fromYear, fromMonth - 1, 1);
         const endDate = new Date();
-    
+
         if (startDate > endDate) {
             toast({ variant: 'destructive', title: 'Error de Fecha', description: 'La fecha "Desde" no puede ser futura.' });
             return;
         }
-    
+
         const monthsToGenerate = differenceInCalendarMonths(endDate, startDate) + 1;
-    
+
         try {
             if (activeRate <= 0) throw "No hay una tasa de cambio activa o registrada configurada.";
-    
+            
+            // Fetch all debts for the property just once to check for existence in memory
+            const existingDebtsQuery = query(collection(db, 'debts'), 
+                where('ownerId', '==', selectedOwner.id),
+                where('property.street', '==', propertyForMassDebt.street),
+                where('property.house', '==', propertyForMassDebt.house)
+            );
+            const existingDebtsSnapshot = await getDocs(existingDebtQuery);
+            const existingDebtPeriods = new Set(existingDebtsSnapshot.docs.map(d => `${d.data().year}-${d.data().month}`));
+
             await runTransaction(db, async (transaction) => {
                 const ownerRef = doc(db, "owners", selectedOwner.id);
                 const ownerDoc = await transaction.get(ownerRef);
                 if (!ownerDoc.exists()) throw "El documento del propietario no existe.";
-    
+
                 let currentBalanceBs = ownerDoc.data().balance || 0;
-    
+
                 for (let i = 0; i < monthsToGenerate; i++) {
                     const debtDate = addMonths(startDate, i);
                     const debtYear = debtDate.getFullYear();
                     const debtMonth = debtDate.getMonth() + 1;
                     
-                    const existingDebtQuery = query(collection(db, 'debts'), 
-                        where('ownerId', '==', selectedOwner.id),
-                        where('property.street', '==', propertyForMassDebt.street),
-                        where('property.house', '==', propertyForMassDebt.house),
-                        where('year', '==', debtYear),
-                        where('month', '==', debtMonth)
-                    );
-                    const existingDebtSnapshot = await getDocs(existingDebtQuery);
-                    
-                    if (!existingDebtSnapshot.empty) continue;
-    
+                    if (existingDebtPeriods.has(`${debtYear}-${debtMonth}`)) {
+                        continue; // Skip if debt already exists
+                    }
+
                     const debtAmountBs = amountUSD * activeRate;
                     const debtRef = doc(collection(db, "debts"));
                     let debtData: any = {
@@ -683,7 +685,7 @@ export default function DebtManagementPage() {
                         description: description, 
                         status: 'pending'
                     };
-    
+
                     if (currentBalanceBs >= debtAmountBs) {
                         currentBalanceBs -= debtAmountBs;
                         const paymentDate = Timestamp.now();
@@ -714,12 +716,12 @@ export default function DebtManagementPage() {
                     
                     transaction.set(debtRef, debtData);
                 }
-    
+
                 transaction.update(ownerRef, { balance: currentBalanceBs });
             });
-    
+
             toast({ title: 'Deudas Generadas', description: `Se procesaron ${monthsToGenerate} meses de deuda para la propiedad seleccionada. El saldo del propietario fue actualizado.` });
-    
+
         } catch (error) {
             console.error("Error generating mass debts: ", error);
             const errorMessage = typeof error === 'string' ? error : (error instanceof Error ? error.message : 'No se pudieron guardar las deudas.');
