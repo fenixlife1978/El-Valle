@@ -160,29 +160,30 @@ export default function OwnerDashboardPage() {
                     // Re-subscribe to payments whenever user data changes
                     if (paymentsUnsubscribe) paymentsUnsubscribe();
                     
-                    // Corrected, more robust query:
                     const paymentsQuery = query(collection(db, "payments"), orderBy('reportedAt', 'desc'));
                     
                     paymentsUnsubscribe = onSnapshot(paymentsQuery, (snapshot) => {
                          const paymentsData: Payment[] = [];
                         snapshot.forEach((doc) => {
                             const data = doc.data();
-                            // Client-side filter to find payments for the current user
-                            if (data.beneficiaries.some((b: any) => b.ownerId === userId)) {
-                                paymentsData.push({
-                                    id: doc.id,
-                                    date: new Date(data.paymentDate.seconds * 1000).toISOString(),
-                                    amount: data.totalAmount,
-                                    bank: data.bank,
-                                    type: data.paymentMethod,
-                                    ref: data.reference,
-                                    status: data.status,
-                                    reportedAt: data.reportedAt,
-                                    exchangeRate: data.exchangeRate,
-                                    paymentDate: data.paymentDate,
-                                    reference: data.reference,
-                                    beneficiaries: data.beneficiaries,
-                                });
+                            if (data.beneficiaries && Array.isArray(data.beneficiaries)) {
+                                const isBeneficiary = data.beneficiaries.some((b: any) => b.ownerId === userId);
+                                if (isBeneficiary) {
+                                    paymentsData.push({
+                                        id: doc.id,
+                                        date: new Date(data.paymentDate.seconds * 1000).toISOString(),
+                                        amount: data.totalAmount,
+                                        bank: data.bank,
+                                        type: data.paymentMethod,
+                                        ref: data.reference,
+                                        status: data.status,
+                                        reportedAt: data.reportedAt,
+                                        exchangeRate: data.exchangeRate,
+                                        paymentDate: data.paymentDate,
+                                        reference: data.reference,
+                                        beneficiaries: data.beneficiaries,
+                                    });
+                                }
                             }
                         });
                         setPayments(paymentsData.slice(0, 10)); // Keep showing only the last 10
