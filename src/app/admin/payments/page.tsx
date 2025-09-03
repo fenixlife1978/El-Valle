@@ -16,9 +16,8 @@ import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc, where, getDocs, Timestamp } from 'firebase/firestore';
 import { db, storage } from '@/lib/firebase';
-import { ref as storageRef, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Progress } from '@/components/ui/progress';
 
 // --- Static Data ---
 const venezuelanBanks = [
@@ -54,7 +53,6 @@ export default function UnifiedPaymentsPage() {
     const { toast } = useToast();
     const [owners, setOwners] = useState<Owner[]>([]);
     const [loading, setLoading] = useState(false);
-    const [uploadProgress, setUploadProgress] = useState(0);
     const receiptFileRef = useRef<HTMLInputElement>(null);
 
     // --- Form State ---
@@ -175,7 +173,6 @@ export default function UnifiedPaymentsPage() {
         setSelectedOwner(null);
         setBeneficiarySplits([]);
         setErrors({});
-        setUploadProgress(0);
     }
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -238,122 +235,72 @@ export default function UnifiedPaymentsPage() {
         setBeneficiarySplits(newSplits);
     };
 
-    const validateForm = async (): Promise<{ isValid: boolean, error?: string }> => {
-        const newErrors: FormErrors = {};
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
 
-        // Level 1: Mandatory fields validation
+        const newErrors: FormErrors = {};
         if (!paymentDate) newErrors.paymentDate = 'La fecha es obligatoria.';
         if (!exchangeRate || exchangeRate <= 0) newErrors.exchangeRate = 'Se requiere una tasa de cambio válida para la fecha.';
         if (!paymentMethod) newErrors.paymentMethod = 'Seleccione un tipo de pago.';
         if (!bank) newErrors.bank = 'Seleccione un banco.';
+        if (bank === 'otro' && !otherBank) newErrors.otherBank = 'Especifique el nombre del banco.';
+        if (!reference || reference.length < 6) newErrors.reference = 'La referencia debe tener al menos 6 dígitos.';
         if (!receiptFile) newErrors.receiptFile = 'El comprobante es obligatorio.';
         if (!totalAmount || Number(totalAmount) <= 0) newErrors.totalAmount = 'El monto debe ser mayor a cero.';
         if (!selectedOwner) newErrors.beneficiary = 'Debe seleccionar un beneficiario.';
         if (beneficiarySplits.length === 0) newErrors.splits = 'Debe asignar el monto a al menos una propiedad.';
         if (beneficiarySplits.some(s => !s.property || !s.amount || Number(s.amount) <= 0)) newErrors.splits = 'Debe completar un monto válido para cada propiedad.';
-        
-        // Level 2: Format validation
         if (Math.abs(balance) > 0.01) newErrors.balance = 'El monto total debe coincidir con el total asignado.';
-        if (!/^\d{6,}$/.test(reference)) newErrors.reference = 'La referencia debe tener al menos 6 dígitos.';
-        if (bank === 'otro' && !otherBank) newErrors.otherBank = 'Especifique el nombre del banco.';
-        
+
         setErrors(newErrors);
+
         if (Object.keys(newErrors).length > 0) {
-            const firstErrorKey = Object.keys(newErrors)[0] as keyof FormErrors;
-            return { isValid: false, error: newErrors[firstErrorKey] };
-        }
-
-        // Level 3: Duplicate validation
-        try {
-            const q = query(collection(db, "payments"), 
-                where("reference", "==", reference),
-                where("totalAmount", "==", Number(totalAmount)),
-                where("paymentDate", "==", Timestamp.fromDate(paymentDate!))
-            );
-            const querySnapshot = await getDocs(q);
-            if (!querySnapshot.empty) {
-                return { isValid: false, error: "Ya existe un reporte de pago con estos mismos datos." };
-            }
-        } catch (error) {
-            console.error("Error validando duplicado:", error);
-            return { isValid: false, error: "Error al verificar duplicados. Intente de nuevo." };
-        }
-
-        return { isValid: true };
-    };
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setLoading(true);
-        setUploadProgress(0);
-
-        const validationResult = await validateForm();
-        if (!validationResult.isValid) {
-            toast({ variant: 'destructive', title: 'Error de Validación', description: validationResult.error });
+            toast({ variant: 'destructive', title: 'Error de Validación', description: Object.values(newErrors)[0] });
             setLoading(false);
             return;
         }
         
-        // At this point, validation passed, receiptFile is guaranteed to be non-null
-        const fileToUpload = receiptFile!;
-        
         try {
-            const receiptFileName = `${Date.now()}_${fileToUpload.name}`;
+            const receiptFileName = `${Date.now()}_${receiptFile!.name}`;
             const fileRef = storageRef(storage, `receipts/${receiptFileName}`);
-            const uploadTask = uploadBytesResumable(fileRef, fileToUpload);
-
-            uploadTask.on('state_changed',
-                (snapshot) => {
-                    const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-                    setUploadProgress(progress);
-                },
-                (error) => {
-                    console.error("Upload failed:", error);
-                    toast({ variant: "destructive", title: "Error de Subida", description: "No se pudo subir el comprobante. Por favor, intente de nuevo." });
-                    setLoading(false);
-                },
-                async () => {
-                    try {
-                        const receiptFileUrl = await getDownloadURL(uploadTask.snapshot.ref);
-
-                        const paymentData = {
-                            paymentDate: Timestamp.fromDate(paymentDate!),
-                            exchangeRate: exchangeRate,
-                            paymentMethod: paymentMethod,
-                            bank: bank === 'otro' ? otherBank : bank,
-                            reference: reference,
-                            totalAmount: Number(totalAmount),
-                            beneficiaryType: beneficiaryType,
-                            beneficiaries: beneficiarySplits.map(s => ({
-                                ownerId: selectedOwner!.id,
-                                ownerName: selectedOwner!.name,
-                                street: s.property.street,
-                                house: s.property.house,
-                                amount: Number(s.amount)
-                            })),
-                            receiptFileName: fileToUpload.name,
-                            receiptFileUrl: receiptFileUrl,
-                            status: 'pendiente' as 'pendiente',
-                            reportedAt: serverTimestamp(),
-                            reportedBy: beneficiaryType === 'propio' ? selectedOwner!.id : 'admin_user',
-                        };
-
-                        await addDoc(collection(db, "payments"), paymentData);
-
-                        toast({ title: 'Reporte Enviado', description: 'Tu reporte ha sido enviado para revisión.', className: 'bg-green-100 border-green-400 text-green-800' });
-                        resetForm();
-                    } catch (dbError) {
-                        console.error("Error saving payment to Firestore: ", dbError);
-                        toast({ variant: "destructive", title: "Error de Guardado", description: "El comprobante se subió, pero no se pudo guardar el reporte. Por favor, contacte a soporte." });
-                    } finally {
-                        setLoading(false);
-                    }
-                }
-            );
+            
+            // Upload file
+            await uploadBytes(fileRef, receiptFile!);
+            const receiptFileUrl = await getDownloadURL(fileRef);
+            
+            // Prepare and save data
+            const paymentData = {
+                paymentDate: Timestamp.fromDate(paymentDate!),
+                exchangeRate: exchangeRate,
+                paymentMethod: paymentMethod,
+                bank: bank === 'otro' ? otherBank : bank,
+                reference: reference,
+                totalAmount: Number(totalAmount),
+                beneficiaryType: beneficiaryType,
+                beneficiaries: beneficiarySplits.map(s => ({
+                    ownerId: selectedOwner!.id,
+                    ownerName: selectedOwner!.name,
+                    street: s.property.street,
+                    house: s.property.house,
+                    amount: Number(s.amount)
+                })),
+                receiptFileName: receiptFile!.name,
+                receiptFileUrl: receiptFileUrl,
+                status: 'pendiente' as 'pendiente',
+                reportedAt: serverTimestamp(),
+                reportedBy: beneficiaryType === 'propio' ? selectedOwner!.id : 'admin_user',
+            };
+            
+            await addDoc(collection(db, "payments"), paymentData);
+            
+            toast({ title: 'Reporte Enviado', description: 'Tu reporte ha sido enviado para revisión.', className: 'bg-green-100 border-green-400 text-green-800' });
+            resetForm();
 
         } catch (error) {
-            console.error("Error initiating payment submission: ", error);
-            toast({ variant: "destructive", title: "Error Inesperado", description: "No se pudo iniciar el proceso de envío." });
+            console.error("Error submitting payment: ", error);
+            toast({ variant: "destructive", title: "Error Inesperado", description: "No se pudo enviar el reporte. Por favor, intente de nuevo." });
+        } finally {
             setLoading(false);
         }
     };
@@ -497,22 +444,14 @@ export default function UnifiedPaymentsPage() {
                             )}
                         </div>
                     </CardContent>
-                    <CardFooter className="flex-col items-end gap-2">
-                         <Button type="submit" className="w-full md:w-auto" disabled={loading}>
+                    <CardFooter>
+                         <Button type="submit" className="w-full md:w-auto ml-auto" disabled={loading}>
                             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CheckCircle2 className="mr-2 h-4 w-4"/>}
                             Enviar Reporte
                         </Button>
-                        {loading && (
-                            <div className="w-full md:w-[200px] space-y-1">
-                                <Progress value={uploadProgress} className="h-2 w-full" />
-                                <p className="text-xs text-muted-foreground text-center">Subiendo... {Math.round(uploadProgress)}%</p>
-                            </div>
-                        )}
                     </CardFooter>
                 </Card>
             </form>
         </div>
     );
 }
-
-    
