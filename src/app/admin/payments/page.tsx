@@ -262,97 +262,62 @@ export default function UnifiedPaymentsPage() {
 
         setLoading(true);
 
-        // --- Data Capture ---
-        // Capture all necessary state into local variables immediately.
-        // This prevents issues with the state being reset before the async operations complete.
-        const dataForProcessing = {
-            paymentDate,
-            exchangeRate,
-            paymentMethod,
-            bank,
-            otherBank,
-            reference,
-            totalAmount: Number(totalAmount),
-            beneficiaryType,
-            selectedOwner,
-            beneficiarySplits,
-            receiptFile,
-        };
+        try {
+            // 1. Check for duplicates
+            const q = query(collection(db, "payments"), 
+                where("reference", "==", reference),
+                where("totalAmount", "==", Number(totalAmount)),
+                where("paymentDate", "==", Timestamp.fromDate(paymentDate!))
+            );
+            const querySnapshot = await getDocs(q);
 
-        // --- UI Feedback & Reset ---
-        // Provide immediate feedback to the user and reset the form.
-        // The async processing will happen in the background.
-        toast({ title: 'Reporte Enviado', description: 'Tu reporte ha sido enviado para revisión.', className: 'bg-green-100 border-green-400 text-green-800' });
-        resetForm();
-        setLoading(false);
-
-
-        // --- Async Background Processing ---
-        // Use a self-invoking async function to handle the heavy lifting
-        // without blocking the main thread or the UI.
-        (async () => {
-            try {
-                const {
-                    paymentDate, reference, totalAmount, receiptFile, selectedOwner,
-                    exchangeRate, paymentMethod, bank, otherBank, beneficiaryType, beneficiarySplits
-                } = dataForProcessing;
-
-                if (!paymentDate || !receiptFile || !selectedOwner) {
-                     throw new Error("Datos esenciales no fueron capturados correctamente.");
-                }
-
-                // 1. Check for duplicates
-                const q = query(collection(db, "payments"), 
-                    where("reference", "==", reference),
-                    where("totalAmount", "==", totalAmount),
-                    where("paymentDate", "==", Timestamp.fromDate(paymentDate))
-                );
-                const querySnapshot = await getDocs(q);
-
-                if (!querySnapshot.empty) {
-                    toast({ variant: "destructive", title: "Pago Duplicado", description: "Ya existe un reporte de pago con estos mismos datos." });
-                    return; // Stop processing
-                }
-
-                // 2. Upload receipt to Storage
-                const receiptFileName = `${Date.now()}_${receiptFile.name}`;
-                const receiptRef = storageRef(storage, `receipts/${receiptFileName}`);
-                await uploadBytes(receiptRef, receiptFile);
-                const receiptFileUrl = await getDownloadURL(receiptRef);
-
-                // 3. Create payment document in Firestore
-                const paymentData = {
-                    paymentDate: Timestamp.fromDate(paymentDate),
-                    exchangeRate: exchangeRate,
-                    paymentMethod: paymentMethod,
-                    bank: bank === 'otro' ? otherBank : bank,
-                    reference: reference,
-                    totalAmount: totalAmount,
-                    beneficiaryType: beneficiaryType,
-                    beneficiaries: beneficiarySplits.map(s => ({
-                        ownerId: selectedOwner.id,
-                        ownerName: selectedOwner.name,
-                        street: s.property.street,
-                        house: s.property.house,
-                        amount: Number(s.amount)
-                    })),
-                    receiptFileName: receiptFile.name,
-                    receiptFileUrl: receiptFileUrl,
-                    status: 'pendiente' as 'pendiente',
-                    reportedAt: serverTimestamp(),
-                    reportedBy: beneficiaryType === 'propio' ? selectedOwner.id : 'admin_user',
-                };
-                
-                await addDoc(collection(db, "payments"), paymentData);
-                
-                // No success toast here, as it was already shown to the user.
-                // We only show a toast on failure of the background task.
-
-            } catch (error) {
-                console.error("Error submitting payment in background: ", error);
-                toast({ variant: "destructive", title: "Error en el Envío", description: "No se pudo guardar el reporte de pago. Por favor, inténtelo de nuevo o contacte al administrador." });
+            if (!querySnapshot.empty) {
+                toast({ variant: "destructive", title: "Pago Duplicado", description: "Ya existe un reporte de pago con estos mismos datos." });
+                setLoading(false);
+                return; // Stop processing
             }
-        })();
+
+            // 2. Upload receipt to Storage
+            const receiptFileName = `${Date.now()}_${receiptFile!.name}`;
+            const receiptRef = storageRef(storage, `receipts/${receiptFileName}`);
+            await uploadBytes(receiptRef, receiptFile!);
+            const receiptFileUrl = await getDownloadURL(receiptRef);
+
+            // 3. Create payment document in Firestore
+            const paymentData = {
+                paymentDate: Timestamp.fromDate(paymentDate!),
+                exchangeRate: exchangeRate,
+                paymentMethod: paymentMethod,
+                bank: bank === 'otro' ? otherBank : bank,
+                reference: reference,
+                totalAmount: Number(totalAmount),
+                beneficiaryType: beneficiaryType,
+                beneficiaries: beneficiarySplits.map(s => ({
+                    ownerId: selectedOwner!.id,
+                    ownerName: selectedOwner!.name,
+                    street: s.property.street,
+                    house: s.property.house,
+                    amount: Number(s.amount)
+                })),
+                receiptFileName: receiptFile!.name,
+                receiptFileUrl: receiptFileUrl,
+                status: 'pendiente' as 'pendiente',
+                reportedAt: serverTimestamp(),
+                reportedBy: beneficiaryType === 'propio' ? selectedOwner!.id : 'admin_user',
+            };
+            
+            await addDoc(collection(db, "payments"), paymentData);
+
+            // 4. Show success and reset form
+            toast({ title: 'Reporte Enviado', description: 'Tu reporte ha sido enviado para revisión.', className: 'bg-green-100 border-green-400 text-green-800' });
+            resetForm();
+
+        } catch (error) {
+            console.error("Error submitting payment: ", error);
+            toast({ variant: "destructive", title: "Error en el Envío", description: "No se pudo guardar el reporte de pago. Por favor, inténtelo de nuevo o contacte al administrador." });
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -505,5 +470,3 @@ export default function UnifiedPaymentsPage() {
         </div>
     );
 }
-
-    
