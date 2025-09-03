@@ -10,15 +10,13 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { useToast } from '@/hooks/use-toast';
-import { CalendarIcon, Upload, CheckCircle2, Trash2, PlusCircle, Loader2, Search, XCircle, Wand2 } from 'lucide-react';
+import { CalendarIcon, CheckCircle2, Trash2, PlusCircle, Loader2, Search, XCircle, Wand2 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc, where, getDocs, Timestamp } from 'firebase/firestore';
-import { db, storage } from '@/lib/firebase';
-import { ref as storageRef, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+import { db } from '@/lib/firebase';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Progress } from '@/components/ui/progress';
 import { inferPaymentDetails } from '@/ai/flows/infer-payment-details';
 import { Textarea } from '@/components/ui/textarea';
 
@@ -56,7 +54,6 @@ export default function UnifiedPaymentsPage() {
     const { toast } = useToast();
     const [owners, setOwners] = useState<Owner[]>([]);
     const [loading, setLoading] = useState(false);
-    const receiptFileRef = useRef<HTMLInputElement>(null);
 
     // --- Form State ---
     const [paymentDate, setPaymentDate] = useState<Date | undefined>();
@@ -66,10 +63,8 @@ export default function UnifiedPaymentsPage() {
     const [bank, setBank] = useState('');
     const [otherBank, setOtherBank] = useState('');
     const [reference, setReference] = useState('');
-    const [receiptFile, setReceiptFile] = useState<File | null>(null);
     const [beneficiaryType, setBeneficiaryType] = useState<BeneficiaryType>('propio');
     const [totalAmount, setTotalAmount] = useState<number | string>('');
-    const [uploadProgress, setUploadProgress] = useState(0);
     
     // State for the AI feature
     const [aiPrompt, setAiPrompt] = useState('');
@@ -169,33 +164,13 @@ export default function UnifiedPaymentsPage() {
         setBank('');
         setOtherBank('');
         setReference('');
-        setReceiptFile(null);
-        if(receiptFileRef.current) receiptFileRef.current.value = '';
         setBeneficiaryType('propio');
         setTotalAmount('');
         setSearchTerm('');
         setSelectedOwner(null);
         setBeneficiarySplits([]);
-        setUploadProgress(0);
         setAiPrompt('');
     }
-
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf'];
-            const maxSize = 5 * 1024 * 1024; // 5MB
-            if (!allowedTypes.includes(file.type)) {
-                toast({ variant: 'destructive', title: 'Archivo no permitido', description: 'El tipo de archivo debe ser JPG, PNG o PDF.' });
-                return;
-            }
-            if (file.size > maxSize) {
-                toast({ variant: 'destructive', title: 'Archivo demasiado grande', description: 'El tamaño del archivo no debe exceder los 5MB.' });
-                return;
-            }
-            setReceiptFile(file);
-        }
-    };
     
     const handleOwnerSelect = (owner: Owner) => {
         setSelectedOwner(owner);
@@ -272,7 +247,6 @@ export default function UnifiedPaymentsPage() {
         if (!bank) return { isValid: false, error: 'Debe seleccionar un banco.' };
         if (bank === 'otro' && !otherBank.trim()) return { isValid: false, error: 'Debe especificar el nombre del otro banco.' };
         if (!totalAmount || Number(totalAmount) <= 0) return { isValid: false, error: 'El monto total debe ser mayor a cero.' };
-        if (!receiptFile) return { isValid: false, error: 'El comprobante de pago es obligatorio.' };
         if (!selectedOwner) return { isValid: false, error: 'Debe seleccionar un beneficiario.' };
         if (beneficiarySplits.length === 0) return { isValid: false, error: 'Debe asignar el monto a al menos una propiedad.' };
         if (beneficiarySplits.some(s => !s.property || !s.amount || Number(s.amount) <= 0)) return { isValid: false, error: 'Debe completar un monto válido para cada propiedad.' };
@@ -310,7 +284,6 @@ export default function UnifiedPaymentsPage() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
-        setUploadProgress(0);
 
         try {
             const validation = await validateForm();
@@ -319,31 +292,6 @@ export default function UnifiedPaymentsPage() {
                 setLoading(false);
                 return;
             }
-
-            const receiptFileName = `${Date.now()}_${receiptFile!.name}`;
-            const fileRef = storageRef(storage, `receipts/${receiptFileName}`);
-            const uploadTask = uploadBytesResumable(fileRef, receiptFile!);
-
-            const receiptFileUrl = await new Promise<string>((resolve, reject) => {
-                uploadTask.on('state_changed',
-                    (snapshot) => {
-                        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-                        setUploadProgress(progress);
-                    },
-                    (error) => {
-                        console.error("Upload failed:", error);
-                        reject("Falló la subida del comprobante.");
-                    },
-                    async () => {
-                        try {
-                            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-                            resolve(downloadURL);
-                        } catch (error) {
-                            reject("No se pudo obtener la URL del archivo.");
-                        }
-                    }
-                );
-            });
 
             const paymentData = {
                 paymentDate: Timestamp.fromDate(paymentDate!),
@@ -360,8 +308,6 @@ export default function UnifiedPaymentsPage() {
                     house: s.property.house,
                     amount: Number(s.amount)
                 })),
-                receiptFileName: receiptFile!.name,
-                receiptFileUrl: receiptFileUrl,
                 status: 'pendiente' as 'pendiente',
                 reportedAt: serverTimestamp(),
                 reportedBy: beneficiaryType === 'propio' ? selectedOwner!.id : 'admin_user',
@@ -382,7 +328,6 @@ export default function UnifiedPaymentsPage() {
             toast({ variant: "destructive", title: "Error Inesperado", description: errorMessage });
         } finally {
             setLoading(false);
-            setUploadProgress(0);
         }
     };
 
@@ -459,19 +404,9 @@ export default function UnifiedPaymentsPage() {
                                 <Input id="otherBank" value={otherBank} onChange={(e) => setOtherBank(e.target.value)} disabled={loading}/>
                             </div>
                         )}
-                        <div className="space-y-2">
+                        <div className="space-y-2 md:col-span-2">
                              <Label htmlFor="reference">5. Referencia (Últimos 6 dígitos o más)</Label>
                              <Input id="reference" value={reference} onChange={(e) => setReference(e.target.value.replace(/\D/g, ''))} disabled={loading}/>
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="receiptFile">6. Comprobante de Pago</Label>
-                            <div className="flex items-center gap-4">
-                                <Button type="button" variant="outline" onClick={() => receiptFileRef.current?.click()} className="flex-1" disabled={loading}>
-                                    <Upload className="mr-2 h-4 w-4"/>{receiptFile ? 'Cambiar archivo' : 'Subir archivo'}
-                                </Button>
-                                {receiptFile && <p className="text-sm text-muted-foreground truncate">{receiptFile.name}</p>}
-                            </div>
-                            <input type="file" ref={receiptFileRef} onChange={handleFileChange} accept="image/jpeg,image/png,application/pdf" className="hidden"/>
                         </div>
                     </CardContent>
                 </Card>
@@ -481,20 +416,20 @@ export default function UnifiedPaymentsPage() {
                     <CardContent className="space-y-6">
                         <div className="grid md:grid-cols-2 gap-6">
                             <div className="space-y-3">
-                                <Label>7. Tipo de Pago</Label>
+                                <Label>6. Tipo de Pago</Label>
                                 <RadioGroup value={beneficiaryType} onValueChange={(v) => setBeneficiaryType(v as BeneficiaryType)} className="flex gap-4" disabled={loading}>
                                     <div className="flex items-center space-x-2"><RadioGroupItem value="propio" id="r-propio" /><Label htmlFor="r-propio">Pago Propio</Label></div>
                                     <div className="flex items-center space-x-2"><RadioGroupItem value="terceros" id="r-terceros" /><Label htmlFor="r-terceros">Pago a Terceros</Label></div>
                                 </RadioGroup>
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="totalAmount">8. Monto Total del Pago (Bs.)</Label>
+                                <Label htmlFor="totalAmount">7. Monto Total del Pago (Bs.)</Label>
                                 <Input id="totalAmount" type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} placeholder="0.00" disabled={loading}/>
                             </div>
                         </div>
 
                         <div className="space-y-4">
-                            <Label className="font-semibold">9. Asignación de Montos</Label>
+                            <Label className="font-semibold">8. Asignación de Montos</Label>
                             {!selectedOwner ? (
                                 <div className='space-y-2'>
                                     <Label htmlFor="owner-search">Buscar Beneficiario</Label>
@@ -541,12 +476,6 @@ export default function UnifiedPaymentsPage() {
                         </div>
                     </CardContent>
                     <CardFooter className='flex flex-col items-end gap-4'>
-                        {loading && (
-                            <div className="w-full space-y-2 text-center">
-                                <Progress value={uploadProgress} className="w-full" />
-                                <p className="text-sm text-muted-foreground">Subiendo comprobante... {Math.round(uploadProgress)}%</p>
-                            </div>
-                         )}
                          <Button type="submit" className="w-full md:w-auto" disabled={loading}>
                             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CheckCircle2 className="mr-2 h-4 w-4"/>}
                             {loading ? 'Enviando...' : 'Enviar Reporte'}
@@ -557,3 +486,5 @@ export default function UnifiedPaymentsPage() {
         </div>
     );
 }
+
+    
