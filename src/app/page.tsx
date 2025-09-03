@@ -21,7 +21,7 @@ export default function WelcomePage() {
             <div className="w-full max-w-3xl">
                  <Card className="bg-card/50">
                     <CardHeader>
-                        <CardTitle className="text-center text-2xl">¿Cómo deseas ingresar?</CardTitle>
+                        <CardTitle>¿Cómo deseas ingresar?</CardTitle>
                     </CardHeader>
                     <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <Card 
