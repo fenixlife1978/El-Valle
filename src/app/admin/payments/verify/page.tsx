@@ -205,91 +205,111 @@ export default function VerifyPaymentsPage() {
     }
   
     if (newStatus === 'aprobado') {
-      try {
-        await runTransaction(db, async (transaction) => {
-          const paymentDoc = await transaction.get(paymentRef);
-          if (!paymentDoc.exists() || paymentDoc.data().status === 'aprobado') {
-            throw new Error('El pago no existe o ya fue aprobado anteriormente.');
-          }
-  
-          const paymentData = { id: paymentDoc.id, ...paymentDoc.data() } as FullPayment;
-          const exchangeRate = paymentData.exchangeRate;
-          if (!exchangeRate || exchangeRate <= 0) {
-            throw new Error('La tasa de cambio para este pago es inválida o no está definida.');
-          }
-
-          let finalObservation = paymentData.observations || '';
-  
-          for (const beneficiary of paymentData.beneficiaries) {
-            const ownerRef = doc(db, 'owners', beneficiary.ownerId);
-            const ownerDoc = await transaction.get(ownerRef);
-            if (!ownerDoc.exists()) {
-              console.warn(`Saltando beneficiario no encontrado: ${beneficiary.ownerId}`);
-              continue;
-            }
-  
-            const ownerData = ownerDoc.data();
-            const balanceInFavor = ownerData.balance || 0;
-            let availableFundsBs = beneficiary.amount + balanceInFavor;
-            let balanceUsed = 0;
-
-            const debtsQuery = query(
-              collection(db, 'debts'),
-              where('ownerId', '==', beneficiary.ownerId),
-              where('status', '==', 'pending'),
-              where('property.street', '==', beneficiary.street),
-              where('property.house', '==', beneficiary.house),
-              orderBy('year', 'asc'),
-              orderBy('month', 'asc')
-            );
-            const debtsSnapshot = await getDocs(debtsQuery); 
-  
-            for (const debtDoc of debtsSnapshot.docs) {
-              const debt = { id: debtDoc.id, ...debtDoc.data() } as Debt;
-              const debtAmountBs = debt.amountUSD * exchangeRate;
-  
-              if (availableFundsBs >= debtAmountBs) {
-                  let amountFromBalance = 0;
-                  if(balanceInFavor > 0) {
-                      amountFromBalance = Math.min(debtAmountBs, balanceInFavor);
-                      balanceUsed += amountFromBalance;
-                  }
-
-                  availableFundsBs -= debtAmountBs;
-
-                  transaction.update(debtDoc.ref, {
-                    status: 'paid',
-                    paidAmountUSD: debt.amountUSD,
-                    paymentDate: paymentData.paymentDate,
-                    paymentId: paymentData.id,
-                  });
-              } else {
-                break;
-              }
-            }
-
-            if (balanceUsed > 0) {
-                const totalAbonado = balanceUsed + beneficiary.amount;
-                const notaExplicativa = `Esta deuda ha sido liquidada mediante la aplicación de un saldo a favor previamente registrado por un monto de Bs. ${balanceUsed.toLocaleString('es-VE', {minimumFractionDigits: 2})}, complementado con el pago actual de Bs. ${beneficiary.amount.toLocaleString('es-VE', {minimumFractionDigits: 2})}. El total abonado corresponde a Bs. ${totalAbonado.toLocaleString('es-VE', {minimumFractionDigits: 2})}, cubriendo la totalidad del monto adeudado.`;
-                finalObservation = finalObservation ? `${finalObservation}\n${notaExplicativa}` : notaExplicativa;
-            }
-  
-            transaction.update(ownerRef, { balance: availableFundsBs });
-          }
-  
-          transaction.update(paymentRef, { status: 'aprobado', observations: finalObservation.trim() });
-        });
-  
-        toast({
-          title: 'Pago Aprobado y Procesado',
-          description: 'El saldo del propietario y las deudas han sido actualizados.',
-          className: 'bg-green-100 border-green-400 text-green-800',
-        });
-      } catch (error) {
-        console.error("Error processing payment approval: ", error);
-        const errorMessage = error instanceof Error ? error.message : 'No se pudo aprobar y procesar el pago.';
-        toast({ variant: 'destructive', title: 'Error en la Operación', description: errorMessage });
-      }
+        try {
+            await runTransaction(db, async (transaction) => {
+                const paymentDoc = await transaction.get(paymentRef);
+                if (!paymentDoc.exists() || paymentDoc.data().status === 'aprobado') {
+                    throw new Error('El pago no existe o ya fue aprobado anteriormente.');
+                }
+    
+                const paymentData = { id: paymentDoc.id, ...paymentDoc.data() } as FullPayment;
+                const exchangeRate = paymentData.exchangeRate;
+                if (!exchangeRate || exchangeRate <= 0) {
+                    throw new Error('La tasa de cambio para este pago es inválida o no está definida.');
+                }
+    
+                let finalObservation = paymentData.observations || '';
+                let wasCreditedToBalance = false;
+    
+                for (const beneficiary of paymentData.beneficiaries) {
+                    const ownerRef = doc(db, 'owners', beneficiary.ownerId);
+                    const ownerDoc = await transaction.get(ownerRef);
+                    if (!ownerDoc.exists()) {
+                        console.warn(`Saltando beneficiario no encontrado: ${beneficiary.ownerId}`);
+                        continue;
+                    }
+    
+                    const ownerData = ownerDoc.data();
+                    const balanceInFavor = ownerData.balance || 0;
+                    let totalFundsForPayment = beneficiary.amount + balanceInFavor;
+    
+                    const debtsQuery = query(
+                        collection(db, 'debts'),
+                        where('ownerId', '==', beneficiary.ownerId),
+                        where('status', '==', 'pending'),
+                        where('property.street', '==', beneficiary.street),
+                        where('property.house', '==', beneficiary.house),
+                        orderBy('year', 'asc'),
+                        orderBy('month', 'asc')
+                    );
+                    const debtsSnapshot = await getDocs(debtsQuery);
+    
+                    if (debtsSnapshot.empty) {
+                        // No pending debts, add full amount to balance
+                        transaction.update(ownerRef, { balance: totalFundsForPayment });
+                        finalObservation = finalObservation ? `${finalObservation}\n` : '';
+                        finalObservation += `Abono a Saldo a Favor por Bs. ${beneficiary.amount.toLocaleString('es-VE', {minimumFractionDigits: 2})}. No se encontraron deudas pendientes.`;
+                        wasCreditedToBalance = true;
+                        continue;
+                    }
+    
+                    const oldestDebt = debtsSnapshot.docs[0].data() as Debt;
+                    const oldestDebtAmountBs = oldestDebt.amountUSD * exchangeRate;
+    
+                    if (totalFundsForPayment < oldestDebtAmountBs) {
+                        // Not enough to cover even the oldest debt, so credit everything to balance
+                        transaction.update(ownerRef, { balance: totalFundsForPayment });
+                        finalObservation = finalObservation ? `${finalObservation}\n` : '';
+                        finalObservation += `Abono a Saldo a Favor por Bs. ${beneficiary.amount.toLocaleString('es-VE', {minimumFractionDigits: 2})}, por ser insuficiente para cubrir la deuda más antigua.`;
+                        wasCreditedToBalance = true;
+                    } else {
+                        // Sufficient funds, proceed to pay debts
+                        let balanceUsed = 0;
+                        for (const debtDoc of debtsSnapshot.docs) {
+                            const debt = { id: debtDoc.id, ...debtDoc.data() } as Debt;
+                            const debtAmountBs = debt.amountUSD * exchangeRate;
+    
+                            if (totalFundsForPayment >= debtAmountBs) {
+                                if (balanceInFavor > 0) {
+                                    const amountFromBalance = Math.min(debtAmountBs, balanceInFavor - balanceUsed);
+                                    balanceUsed += amountFromBalance;
+                                }
+                                totalFundsForPayment -= debtAmountBs;
+                                transaction.update(debtDoc.ref, {
+                                    status: 'paid',
+                                    paidAmountUSD: debt.amountUSD,
+                                    paymentDate: paymentData.paymentDate,
+                                    paymentId: paymentData.id,
+                                });
+                            } else {
+                                break;
+                            }
+                        }
+    
+                        if (balanceUsed > 0) {
+                            const note = `Esta deuda ha sido liquidada mediante la aplicación de un saldo a favor previamente registrado por un monto de Bs. ${balanceUsed.toLocaleString('es-VE', {minimumFractionDigits: 2})}, complementado con el pago actual de Bs. ${beneficiary.amount.toLocaleString('es-VE', {minimumFractionDigits: 2})}.`;
+                            finalObservation = finalObservation ? `${finalObservation}\n${note}` : note;
+                        }
+    
+                        transaction.update(ownerRef, { balance: totalFundsForPayment });
+                    }
+                }
+                
+                // If the payment was only a credit to balance, the payment itself should still be marked 'aprobado'
+                // but no debts will be linked to it. The observation field will clarify this.
+                transaction.update(paymentRef, { status: 'aprobado', observations: finalObservation.trim() });
+            });
+    
+            toast({
+                title: 'Pago Aprobado y Procesado',
+                description: 'El saldo del propietario y las deudas han sido actualizados.',
+                className: 'bg-green-100 border-green-400 text-green-800',
+            });
+        } catch (error) {
+            console.error("Error processing payment approval: ", error);
+            const errorMessage = error instanceof Error ? error.message : 'No se pudo aprobar y procesar el pago.';
+            toast({ variant: 'destructive', title: 'Error en la Operación', description: errorMessage });
+        }
     }
   };
 
@@ -444,17 +464,30 @@ export default function VerifyPaymentsPage() {
         ];
     });
 
-    (doc as any).autoTable({
-        startY: startY,
-        head: [['Período', 'Concepto (Propiedad)', 'Monto ($)', 'Monto Pagado (Bs)']],
-        body: tableBody,
-        theme: 'striped',
-        headStyles: { fillColor: [44, 62, 80], textColor: 255 },
-        styles: { fontSize: 9, cellPadding: 2.5 },
-        didDrawPage: (data: any) => { startY = data.cursor.y; }
-    });
-
-    startY = (doc as any).lastAutoTable.finalY + 8;
+    if (paidDebts.length > 0) {
+        (doc as any).autoTable({
+            startY: startY,
+            head: [['Período', 'Concepto (Propiedad)', 'Monto ($)', 'Monto Pagado (Bs)']],
+            body: tableBody,
+            theme: 'striped',
+            headStyles: { fillColor: [44, 62, 80], textColor: 255 },
+            styles: { fontSize: 9, cellPadding: 2.5 },
+            didDrawPage: (data: any) => { startY = data.cursor.y; }
+        });
+        startY = (doc as any).lastAutoTable.finalY + 8;
+    } else {
+         // If no debts were paid, show a generic concept
+        (doc as any).autoTable({
+            startY: startY,
+            head: [['Concepto', 'Monto Pagado (Bs)']],
+            body: [['Abono a Saldo a Favor', `Bs. ${payment.totalAmount.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`]],
+            theme: 'striped',
+            headStyles: { fillColor: [44, 62, 80], textColor: 255 },
+            styles: { fontSize: 9, cellPadding: 2.5 },
+            didDrawPage: (data: any) => { startY = data.cursor.y; }
+        });
+        startY = (doc as any).lastAutoTable.finalY + 8;
+    }
     
     // Totals Section
     doc.setFontSize(11).setFont('helvetica', 'bold');
@@ -659,7 +692,7 @@ export default function VerifyPaymentsPage() {
                                     </TableRow>
                                 )) : (
                                     <TableRow>
-                                        <TableCell colSpan={4} className="text-center">No hay detalles de deudas para este pago.</TableCell>
+                                        <TableCell colSpan={4} className="text-center">Abono a Saldo a Favor</TableCell>
                                     </TableRow>
                                 )}
                             </TableBody>
