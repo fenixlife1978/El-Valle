@@ -689,7 +689,7 @@ export default function VerifyPaymentsPage() {
                                 {receiptData.paidDebts.length > 0 ? receiptData.paidDebts.map((debt, index) => (
                                     <TableRow key={index}>
                                         <TableCell>{monthsLocale[debt.month]} {debt.year}</TableCell>
-                                        <TableCell>{debt.description} ({debt.property.street} - {debt.property.house})</TableCell>
+                                        <TableCell>{debt.description} ({debt.property ? `${debt.property.street} - ${debt.property.house}`: 'N/A'})</TableCell>
                                         <TableCell className="text-right">${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}</TableCell>
                                         <TableCell className="text-right">Bs. {((debt.paidAmountUSD || debt.amountUSD) * receiptData.payment.exchangeRate).toLocaleString('es-VE', { minimumFractionDigits: 2 })}</TableCell>
                                     </TableRow>
@@ -748,4 +748,5 @@ export default function VerifyPaymentsPage() {
     
 
     
+
 
