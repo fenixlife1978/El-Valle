@@ -16,8 +16,9 @@ import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc, where, getDocs, Timestamp } from 'firebase/firestore';
 import { db, storage } from '@/lib/firebase';
-import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
+import { ref as storageRef, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Progress } from '@/components/ui/progress';
 
 // --- Static Data ---
 const venezuelanBanks = [
@@ -53,6 +54,7 @@ export default function UnifiedPaymentsPage() {
     const { toast } = useToast();
     const [owners, setOwners] = useState<Owner[]>([]);
     const [loading, setLoading] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState(0);
     const receiptFileRef = useRef<HTMLInputElement>(null);
 
     // --- Form State ---
@@ -173,6 +175,7 @@ export default function UnifiedPaymentsPage() {
         setSelectedOwner(null);
         setBeneficiarySplits([]);
         setErrors({});
+        setUploadProgress(0);
     }
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -259,63 +262,77 @@ export default function UnifiedPaymentsPage() {
             toast({ variant: 'destructive', title: 'Error de validación', description: 'Por favor, corrija los errores en el formulario.' });
             return;
         }
-
+        
         setLoading(true);
+        setUploadProgress(0);
 
         try {
-            // 1. Check for duplicates
+            // Check for duplicates
             const q = query(collection(db, "payments"), 
                 where("reference", "==", reference),
                 where("totalAmount", "==", Number(totalAmount)),
                 where("paymentDate", "==", Timestamp.fromDate(paymentDate!))
             );
             const querySnapshot = await getDocs(q);
-
             if (!querySnapshot.empty) {
                 toast({ variant: "destructive", title: "Pago Duplicado", description: "Ya existe un reporte de pago con estos mismos datos." });
                 setLoading(false);
-                return; // Stop processing
+                return;
             }
 
-            // 2. Upload receipt to Storage
+            // Upload receipt with progress
             const receiptFileName = `${Date.now()}_${receiptFile!.name}`;
-            const receiptRef = storageRef(storage, `receipts/${receiptFileName}`);
-            await uploadBytes(receiptRef, receiptFile!);
-            const receiptFileUrl = await getDownloadURL(receiptRef);
+            const fileRef = storageRef(storage, `receipts/${receiptFileName}`);
+            const uploadTask = uploadBytesResumable(fileRef, receiptFile!);
 
-            // 3. Create payment document in Firestore
-            const paymentData = {
-                paymentDate: Timestamp.fromDate(paymentDate!),
-                exchangeRate: exchangeRate,
-                paymentMethod: paymentMethod,
-                bank: bank === 'otro' ? otherBank : bank,
-                reference: reference,
-                totalAmount: Number(totalAmount),
-                beneficiaryType: beneficiaryType,
-                beneficiaries: beneficiarySplits.map(s => ({
-                    ownerId: selectedOwner!.id,
-                    ownerName: selectedOwner!.name,
-                    street: s.property.street,
-                    house: s.property.house,
-                    amount: Number(s.amount)
-                })),
-                receiptFileName: receiptFile!.name,
-                receiptFileUrl: receiptFileUrl,
-                status: 'pendiente' as 'pendiente',
-                reportedAt: serverTimestamp(),
-                reportedBy: beneficiaryType === 'propio' ? selectedOwner!.id : 'admin_user',
-            };
-            
-            await addDoc(collection(db, "payments"), paymentData);
+            uploadTask.on('state_changed',
+                (snapshot) => {
+                    const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                    setUploadProgress(progress);
+                },
+                (error) => {
+                    console.error("Upload failed:", error);
+                    toast({ variant: "destructive", title: "Error de Subida", description: "No se pudo subir el comprobante." });
+                    setLoading(false);
+                },
+                async () => {
+                    // Upload completed successfully, now get the download URL
+                    const receiptFileUrl = await getDownloadURL(uploadTask.snapshot.ref);
 
-            // 4. Show success and reset form
-            toast({ title: 'Reporte Enviado', description: 'Tu reporte ha sido enviado para revisión.', className: 'bg-green-100 border-green-400 text-green-800' });
-            resetForm();
+                    // Create payment document in Firestore
+                    const paymentData = {
+                        paymentDate: Timestamp.fromDate(paymentDate!),
+                        exchangeRate: exchangeRate,
+                        paymentMethod: paymentMethod,
+                        bank: bank === 'otro' ? otherBank : bank,
+                        reference: reference,
+                        totalAmount: Number(totalAmount),
+                        beneficiaryType: beneficiaryType,
+                        beneficiaries: beneficiarySplits.map(s => ({
+                            ownerId: selectedOwner!.id,
+                            ownerName: selectedOwner!.name,
+                            street: s.property.street,
+                            house: s.property.house,
+                            amount: Number(s.amount)
+                        })),
+                        receiptFileName: receiptFile!.name,
+                        receiptFileUrl: receiptFileUrl,
+                        status: 'pendiente' as 'pendiente',
+                        reportedAt: serverTimestamp(),
+                        reportedBy: beneficiaryType === 'propio' ? selectedOwner!.id : 'admin_user',
+                    };
+
+                    await addDoc(collection(db, "payments"), paymentData);
+
+                    toast({ title: 'Reporte Enviado', description: 'Tu reporte ha sido enviado para revisión.', className: 'bg-green-100 border-green-400 text-green-800' });
+                    resetForm();
+                    setLoading(false);
+                }
+            );
 
         } catch (error) {
             console.error("Error submitting payment: ", error);
-            toast({ variant: "destructive", title: "Error en el Envío", description: "No se pudo guardar el reporte de pago. Por favor, inténtelo de nuevo o contacte al administrador." });
-        } finally {
+            toast({ variant: "destructive", title: "Error en el Envío", description: "No se pudo guardar el reporte de pago." });
             setLoading(false);
         }
     };
@@ -459,14 +476,22 @@ export default function UnifiedPaymentsPage() {
                             )}
                         </div>
                     </CardContent>
-                    <CardFooter>
-                         <Button type="submit" className="w-full md:w-auto ml-auto" disabled={loading || (Math.abs(balance) > 0.01) || !selectedOwner}>
+                    <CardFooter className="flex-col items-end gap-2">
+                         <Button type="submit" className="w-full md:w-auto" disabled={loading || (Math.abs(balance) > 0.01) || !selectedOwner}>
                             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CheckCircle2 className="mr-2 h-4 w-4"/>}
                             Enviar Reporte
                         </Button>
+                        {loading && (
+                            <div className="w-full md:w-auto">
+                                <Progress value={uploadProgress} className="h-2 w-full" />
+                                <p className="text-xs text-muted-foreground mt-1 text-right">Subiendo... {Math.round(uploadProgress)}%</p>
+                            </div>
+                        )}
                     </CardFooter>
                 </Card>
             </form>
         </div>
     );
 }
+
+    
