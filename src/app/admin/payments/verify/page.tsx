@@ -297,7 +297,7 @@ export default function VerifyPaymentsPage() {
                 
                 // --- 4. Update Balance and generate Observation Note ---
                 const finalBalance = availableFundsBs;
-                const observationNote = `Pago por Bs. ${paymentData.totalAmount.toLocaleString('es-VE', {minimumFractionDigits: 2})}. Saldo Anterior: Bs. ${initialBalance.toLocaleString('es-VE', {minimumFractionDigits: 2})}, Saldo Final: Bs. ${finalBalance.toLocaleString('es-VE', {minimumFractionDigits: 2})}.`;
+                const observationNote = `Pago por Bs. ${paymentData.totalAmount.toLocaleString('es-VE', {minimumFractionDigits: 2})}. Saldo Anterior: Bs. ${initialBalance.toLocaleString('es-VE', {minimumFractionDigits: 2})}, Saldo a Favor Actual después de este recibo: Bs. ${finalBalance.toLocaleString('es-VE', {minimumFractionDigits: 2})}.`;
                 
                 transaction.update(ownerRef, { balance: finalBalance });
                 transaction.update(paymentRef, { status: 'aprobado', observations: observationNote });
@@ -748,3 +748,4 @@ export default function VerifyPaymentsPage() {
     
 
     
+
