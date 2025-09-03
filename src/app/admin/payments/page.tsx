@@ -258,23 +258,50 @@ export default function UnifiedPaymentsPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        setLoading(true);
+
         if (!validateForm()) {
             toast({
                 variant: 'destructive',
                 title: 'Error de validación',
                 description: 'Por favor, corrija los errores en el formulario.',
             });
+            setLoading(false);
             return;
         }
         
-        setLoading(true);
+        // Capture local variables from state to prevent race conditions with async operations
+        const paymentTimestamp = Timestamp.fromDate(paymentDate!);
+        const currentReference = reference;
+        const currentTotalAmount = Number(totalAmount);
+        const fileToUpload = receiptFile!;
+        const paymentDetails = {
+            paymentDate: paymentTimestamp,
+            exchangeRate,
+            paymentMethod,
+            bank: bank === 'otro' ? otherBank : bank,
+            reference: currentReference,
+            totalAmount: currentTotalAmount,
+            beneficiaryType,
+            beneficiaries: beneficiarySplits.map(s => ({
+                ownerId: selectedOwner!.id,
+                ownerName: selectedOwner!.name,
+                street: s.property.street,
+                house: s.property.house,
+                amount: Number(s.amount)
+            })),
+            receiptFileName: fileToUpload.name,
+            status: 'pendiente' as 'pendiente',
+            reportedAt: serverTimestamp(),
+            reportedBy: beneficiaryType === 'propio' ? selectedOwner!.id : 'admin_user',
+        };
+
 
         // --- ANTI-DUPLICATE CHECK ---
         try {
-            const paymentTimestamp = Timestamp.fromDate(paymentDate!);
             const q = query(collection(db, "payments"), 
-                where("reference", "==", reference),
-                where("totalAmount", "==", Number(totalAmount)),
+                where("reference", "==", currentReference),
+                where("totalAmount", "==", currentTotalAmount),
                 where("paymentDate", "==", paymentTimestamp)
             );
             const querySnapshot = await getDocs(q);
@@ -299,34 +326,8 @@ export default function UnifiedPaymentsPage() {
             return;
         }
         
-        // --- DATA CAPTURE (CRITICAL FIX) ---
-        // Capture all necessary data BEFORE resetting the form.
-        const dataForProcessing = {
-            fileToUpload: receiptFile!,
-            paymentData: {
-                paymentDate: Timestamp.fromDate(paymentDate!),
-                exchangeRate,
-                paymentMethod,
-                bank: bank === 'otro' ? otherBank : bank,
-                reference,
-                totalAmount: Number(totalAmount),
-                beneficiaryType,
-                beneficiaries: beneficiarySplits.map(s => ({
-                    ownerId: selectedOwner!.id,
-                    ownerName: selectedOwner!.name,
-                    street: s.property.street,
-                    house: s.property.house,
-                    amount: Number(s.amount)
-                })),
-                receiptFileName: receiptFile?.name,
-                status: 'pendiente',
-                reportedAt: serverTimestamp(),
-                reportedBy: beneficiaryType === 'propio' ? selectedOwner!.id : 'admin_user',
-            }
-        };
-
+        
         // --- UI FEEDBACK & RESET ---
-        // This now happens after data is securely captured.
         toast({
             title: 'Reporte Enviado',
             description: 'Tu reporte de pago ha sido enviado para revisión.',
@@ -339,13 +340,13 @@ export default function UnifiedPaymentsPage() {
         // This runs in the background using the captured data.
         (async () => {
             try {
-                const receiptFileName = `${Date.now()}_${dataForProcessing.fileToUpload.name}`;
+                const receiptFileName = `${Date.now()}_${fileToUpload.name}`;
                 const receiptRef = storageRef(storage, `receipts/${receiptFileName}`);
-                await uploadBytes(receiptRef, dataForProcessing.fileToUpload);
+                await uploadBytes(receiptRef, fileToUpload);
                 const receiptFileUrl = await getDownloadURL(receiptRef);
                 
                 const finalPaymentData = {
-                    ...dataForProcessing.paymentData,
+                    ...paymentDetails,
                     receiptFileUrl,
                 };
 
