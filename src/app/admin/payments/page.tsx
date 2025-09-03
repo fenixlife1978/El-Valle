@@ -184,11 +184,11 @@ export default function UnifiedPaymentsPage() {
             const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf'];
             const maxSize = 5 * 1024 * 1024; // 5MB
             if (!allowedTypes.includes(file.type)) {
-                toast({ variant: 'destructive', title: 'Archivo no permitido' });
+                toast({ variant: 'destructive', title: 'Archivo no permitido', description: 'El tipo de archivo debe ser JPG, PNG o PDF.' });
                 return;
             }
             if (file.size > maxSize) {
-                toast({ variant: 'destructive', title: 'Archivo demasiado grande' });
+                toast({ variant: 'destructive', title: 'Archivo demasiado grande', description: 'El tamaño del archivo no debe exceder los 5MB.' });
                 return;
             }
             setReceiptFile(file);
@@ -238,36 +238,33 @@ export default function UnifiedPaymentsPage() {
         setBeneficiarySplits(newSplits);
     };
 
-    const validateForm = (): boolean => {
+    const validateForm = async (): Promise<{ isValid: boolean, error?: string }> => {
         const newErrors: FormErrors = {};
+
+        // Nivel 1: Validación de campos obligatorios
         if (!paymentDate) newErrors.paymentDate = 'La fecha es obligatoria.';
-        if (!exchangeRate) newErrors.exchangeRate = 'Se requiere una tasa de cambio válida.';
+        if (!exchangeRate || exchangeRate <= 0) newErrors.exchangeRate = 'Se requiere una tasa de cambio válida.';
         if (!paymentMethod) newErrors.paymentMethod = 'Seleccione un tipo de pago.';
         if (!bank) newErrors.bank = 'Seleccione un banco.';
-        if (bank === 'otro' && !otherBank) newErrors.otherBank = 'Especifique el nombre del banco.';
-        if (!/^\d{6,}$/.test(reference)) newErrors.reference = 'La referencia debe tener al menos 6 dígitos.';
         if (!receiptFile) newErrors.receiptFile = 'El comprobante es obligatorio.';
         if (!totalAmount || Number(totalAmount) <= 0) newErrors.totalAmount = 'El monto debe ser mayor a cero.';
         if (!selectedOwner) newErrors.beneficiary = 'Debe seleccionar un beneficiario.';
         if (beneficiarySplits.length === 0) newErrors.splits = 'Debe asignar el monto a al menos una propiedad.';
-        if (beneficiarySplits.some(s => !s.property || !s.amount || Number(s.amount) <= 0)) newErrors.splits = 'Debe completar los datos y un monto válido para cada propiedad asignada.';
+        if (beneficiarySplits.some(s => !s.property || !s.amount || Number(s.amount) <= 0)) newErrors.splits = 'Debe completar un monto válido para cada propiedad.';
         if (Math.abs(balance) > 0.01) newErrors.balance = 'El monto total debe coincidir con el total asignado.';
-        setErrors(newErrors);
-        return Object.keys(newErrors).length === 0;
-    };
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!validateForm()) {
-            toast({ variant: 'destructive', title: 'Error de validación', description: 'Por favor, corrija los errores en el formulario.' });
-            return;
-        }
+        // Nivel 2: Validación de formato
+        if (!/^\d{6,}$/.test(reference)) newErrors.reference = 'La referencia debe tener al menos 6 dígitos.';
+        if (bank === 'otro' && !otherBank) newErrors.otherBank = 'Especifique el nombre del banco.';
         
-        setLoading(true);
-        setUploadProgress(0);
+        setErrors(newErrors);
+        if (Object.keys(newErrors).length > 0) {
+            const firstErrorKey = Object.keys(newErrors)[0] as keyof FormErrors;
+            return { isValid: false, error: newErrors[firstErrorKey] };
+        }
 
+        // Nivel 3: Validación de duplicados
         try {
-            // Check for duplicates
             const q = query(collection(db, "payments"), 
                 where("reference", "==", reference),
                 where("totalAmount", "==", Number(totalAmount)),
@@ -275,12 +272,30 @@ export default function UnifiedPaymentsPage() {
             );
             const querySnapshot = await getDocs(q);
             if (!querySnapshot.empty) {
-                toast({ variant: "destructive", title: "Pago Duplicado", description: "Ya existe un reporte de pago con estos mismos datos." });
-                setLoading(false);
-                return;
+                return { isValid: false, error: "Ya existe un reporte de pago con estos mismos datos." };
             }
+        } catch (error) {
+            console.error("Error validando duplicado:", error);
+            return { isValid: false, error: "Error al verificar duplicados. Intente de nuevo." };
+        }
 
-            // Upload receipt with progress
+        return { isValid: true };
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        setUploadProgress(0);
+
+        const validationResult = await validateForm();
+        if (!validationResult.isValid) {
+            toast({ variant: 'destructive', title: 'Error de Validación', description: validationResult.error });
+            setLoading(false);
+            return;
+        }
+        
+        try {
+            // All validations passed, proceed with upload and save
             const receiptFileName = `${Date.now()}_${receiptFile!.name}`;
             const fileRef = storageRef(storage, `receipts/${receiptFileName}`);
             const uploadTask = uploadBytesResumable(fileRef, receiptFile!);
@@ -293,7 +308,7 @@ export default function UnifiedPaymentsPage() {
                 (error) => {
                     console.error("Upload failed:", error);
                     toast({ variant: "destructive", title: "Error de Subida", description: "No se pudo subir el comprobante." });
-                    setLoading(false);
+                    setLoading(false); // Liberate UI on upload error
                 },
                 async () => {
                     // Upload completed successfully, now get the download URL
@@ -477,11 +492,11 @@ export default function UnifiedPaymentsPage() {
                         </div>
                     </CardContent>
                     <CardFooter className="flex-col items-end gap-2">
-                         <Button type="submit" className="w-full md:w-auto" disabled={loading || (Math.abs(balance) > 0.01) || !selectedOwner}>
+                         <Button type="submit" className="w-full md:w-auto" disabled={loading}>
                             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CheckCircle2 className="mr-2 h-4 w-4"/>}
                             Enviar Reporte
                         </Button>
-                        {loading && (
+                        {loading && uploadProgress > 0 && (
                             <div className="w-full md:w-[200px] space-y-1">
                                 <Progress value={uploadProgress} className="h-2 w-full" />
                                 <p className="text-xs text-muted-foreground text-center">Subiendo... {Math.round(uploadProgress)}%</p>
@@ -493,3 +508,5 @@ export default function UnifiedPaymentsPage() {
         </div>
     );
 }
+
+    
