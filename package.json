@@ -5,8 +5,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "genkit:dev": "genkit start -- tsx src/ai/flows/community-updates.ts",
-    "genkit:watch": "genkit start -- tsx --watch src/ai/flows/community-updates.ts",
+    "genkit:dev": "genkit start -- tsx src/ai/flows/community-updates.ts src/ai/flows/infer-payment-details.ts",
+    "genkit:watch": "genkit start -- tsx --watch src/ai/flows/community-updates.ts src/ai/flows/infer-payment-details.ts",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",

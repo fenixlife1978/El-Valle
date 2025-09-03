@@ -10,8 +10,8 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { useToast } from '@/hooks/use-toast';
-import { CalendarIcon, Upload, CheckCircle2, Trash2, PlusCircle, Loader2, Search, XCircle } from 'lucide-react';
-import { format } from 'date-fns';
+import { CalendarIcon, Upload, CheckCircle2, Trash2, PlusCircle, Loader2, Search, XCircle, Wand2 } from 'lucide-react';
+import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc, where, getDocs, Timestamp } from 'firebase/firestore';
@@ -19,6 +19,9 @@ import { db, storage } from '@/lib/firebase';
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
+import { inferPaymentDetails } from '@/ai/flows/infer-payment-details';
+import { Textarea } from '@/components/ui/textarea';
+
 
 // --- Static Data ---
 const venezuelanBanks = [
@@ -68,6 +71,10 @@ export default function UnifiedPaymentsPage() {
     const [totalAmount, setTotalAmount] = useState<number | string>('');
     const [uploadProgress, setUploadProgress] = useState(0);
     
+    // State for the AI feature
+    const [aiPrompt, setAiPrompt] = useState('');
+    const [isInferring, setIsInferring] = useState(false);
+
     // State for the new beneficiary selection flow
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedOwner, setSelectedOwner] = useState<Owner | null>(null);
@@ -170,6 +177,7 @@ export default function UnifiedPaymentsPage() {
         setSelectedOwner(null);
         setBeneficiarySplits([]);
         setUploadProgress(0);
+        setAiPrompt('');
     }
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -231,6 +239,30 @@ export default function UnifiedPaymentsPage() {
         }
         setBeneficiarySplits(newSplits);
     };
+
+     const handleInferDetails = async () => {
+        if (!aiPrompt.trim()) {
+            toast({ variant: 'destructive', title: 'Texto Vacío', description: 'Por favor, ingrese una descripción del pago.' });
+            return;
+        }
+        setIsInferring(true);
+        try {
+            const result = await inferPaymentDetails({ text: aiPrompt });
+            setTotalAmount(result.totalAmount);
+            setReference(result.reference);
+            setPaymentMethod(result.paymentMethod as PaymentMethod);
+            setBank(result.bank);
+            // Dates from AI are 'yyyy-MM-dd', parseISO handles this without timezone shifts.
+            setPaymentDate(parseISO(result.paymentDate));
+
+            toast({ title: 'Datos Extraídos', description: 'Los campos del formulario han sido actualizados.', className: 'bg-green-100 border-green-400 text-green-800' });
+        } catch (error) {
+            console.error("Error inferring payment details:", error);
+            toast({ variant: 'destructive', title: 'Error de IA', description: 'No se pudieron extraer los detalles. Por favor, llene los campos manualmente.' });
+        } finally {
+            setIsInferring(false);
+        }
+    };
     
     const validateForm = async (): Promise<{ isValid: boolean, error?: string }> => {
         // Level A: Required fields validation
@@ -245,7 +277,6 @@ export default function UnifiedPaymentsPage() {
         if (beneficiarySplits.length === 0) return { isValid: false, error: 'Debe asignar el monto a al menos una propiedad.' };
         if (beneficiarySplits.some(s => !s.property || !s.amount || Number(s.amount) <= 0)) return { isValid: false, error: 'Debe completar un monto válido para cada propiedad.' };
         
-        // Corrected Balance Validation
         if (Math.abs(balance) > 0.01) {
              return { isValid: false, error: 'El monto total no coincide con la suma de los montos asignados.' };
         }
@@ -361,6 +392,32 @@ export default function UnifiedPaymentsPage() {
                 <p className="text-muted-foreground">Formulario único para registrar pagos propios o a terceros.</p>
             </div>
             
+             <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <Wand2 />
+                        Asistente de IA para Llenado Rápido
+                    </CardTitle>
+                    <CardDescription>
+                        Pega aquí los detalles de un pago (ej. de un capture o mensaje de WhatsApp) y la IA llenará los campos por ti.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                     <Textarea
+                        placeholder="Ej: Pago móvil Banesco por 4500 Bs con ref 012345 del día de ayer."
+                        value={aiPrompt}
+                        onChange={(e) => setAiPrompt(e.target.value)}
+                        className="mb-4"
+                        rows={3}
+                        disabled={isInferring || loading}
+                    />
+                    <Button onClick={handleInferDetails} disabled={isInferring || loading}>
+                        {isInferring ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Wand2 className="mr-2 h-4 w-4"/>}
+                        Analizar con IA
+                    </Button>
+                </CardContent>
+            </Card>
+
             <form onSubmit={handleSubmit}>
                 <Card className="mb-6">
                     <CardHeader><CardTitle>Detalles de la Transacción</CardTitle></CardHeader>
