@@ -650,7 +650,7 @@ export default function DebtManagementPage() {
             if (activeRate <= 0) throw "No hay una tasa de cambio activa o registrada configurada.";
             
             // Fetch all debts for the property just once to check for existence in memory
-            const existingDebtsQuery = query(collection(db, 'debts'), 
+            const existingDebtQuery = query(collection(db, 'debts'), 
                 where('ownerId', '==', selectedOwner.id),
                 where('property.street', '==', propertyForMassDebt.street),
                 where('property.house', '==', propertyForMassDebt.house)
