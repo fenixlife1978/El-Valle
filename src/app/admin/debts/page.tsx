@@ -209,10 +209,12 @@ export default function DebtManagementPage() {
         const unsubscribe = onSnapshot(debtsQuery, (snapshot) => {
             setOwners(prevOwners => {
                 const debtsByOwner: { [key: string]: number } = {};
+                // Initialize all owners with 0 debt
                 prevOwners.forEach(owner => {
                     debtsByOwner[owner.id] = 0;
                 });
 
+                // Calculate pending debt only for those who have it
                 snapshot.forEach(doc => {
                     const debt = doc.data();
                     if (debt.ownerId) {
@@ -220,6 +222,7 @@ export default function DebtManagementPage() {
                     }
                 });
                 
+                // Map the new debts to the owners
                 return prevOwners.map(owner => ({
                     ...owner,
                     pendingDebtUSD: debtsByOwner[owner.id] || 0
