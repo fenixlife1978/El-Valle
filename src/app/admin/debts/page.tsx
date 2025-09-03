@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PlusCircle, MoreHorizontal, Edit, Trash2, Loader2, Info, ArrowLeft, Search, WalletCards, Calculator, Minus, Equal, FileDown, FileCog, CalendarPlus, Building } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, Edit, Trash2, Loader2, Info, ArrowLeft, Search, WalletCards, Calculator, Minus, Equal, FileDown, FileCog, CalendarPlus, Building, RefreshCw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { collection, query, onSnapshot, where, doc, getDoc, writeBatch, updateDoc, deleteDoc, runTransaction, Timestamp, getDocs, addDoc, orderBy, setDoc, limit, deleteField } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -119,6 +119,35 @@ export default function DebtManagementPage() {
     const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
     
     const { toast } = useToast();
+    
+    const forceUpdateDebtState = useCallback(async (showToast = false) => {
+        if(showToast) toast({ title: "Sincronizando...", description: "Recalculando todas las deudas pendientes." });
+        
+        const debtsQuery = query(collection(db, "debts"), where("status", "==", "pending"));
+        const snapshot = await getDocs(debtsQuery);
+        
+        setOwners(prevOwners => {
+            const debtsByOwner: { [key: string]: number } = {};
+            prevOwners.forEach(owner => {
+                debtsByOwner[owner.id] = 0;
+            });
+
+            snapshot.forEach(doc => {
+                const debt = doc.data();
+                if (debt.ownerId) {
+                    debtsByOwner[debt.ownerId] = (debtsByOwner[debt.ownerId] || 0) + debt.amountUSD;
+                }
+            });
+            
+            return prevOwners.map(owner => ({
+                ...owner,
+                pendingDebtUSD: debtsByOwner[owner.id] || 0
+            }));
+        });
+        if(showToast) toast({ title: "Saldos Sincronizados", description: "Las deudas pendientes se han actualizado.", className: "bg-green-100 border-green-400 text-green-800" });
+
+    }, [toast]);
+
 
     // Fetch All Owners and initial data
     useEffect(() => {
@@ -173,20 +202,17 @@ export default function DebtManagementPage() {
 
     }, [toast]);
 
-    // REAL-TIME DEBT LISTENER - This is the key fix for stale data
+    // REAL-TIME DEBT LISTENER
     useEffect(() => {
         const debtsQuery = query(collection(db, "debts"), where("status", "==", "pending"));
         
         const unsubscribe = onSnapshot(debtsQuery, (snapshot) => {
             setOwners(prevOwners => {
-                // Create a map to store the new debt totals, initialized to 0 for all owners.
-                // This is crucial to reset the debt for users who no longer have pending debts.
                 const debtsByOwner: { [key: string]: number } = {};
                 prevOwners.forEach(owner => {
                     debtsByOwner[owner.id] = 0;
                 });
 
-                // Recalculate debt totals only for owners who have pending debts in the snapshot.
                 snapshot.forEach(doc => {
                     const debt = doc.data();
                     if (debt.ownerId) {
@@ -194,8 +220,6 @@ export default function DebtManagementPage() {
                     }
                 });
                 
-                // Return the updated owners array with the refreshed debt totals.
-                // Owners with no pending debts will correctly show 0.
                 return prevOwners.map(owner => ({
                     ...owner,
                     pendingDebtUSD: debtsByOwner[owner.id] || 0
@@ -308,8 +332,6 @@ export default function DebtManagementPage() {
                         
                         const startDate = startOfMonth(new Date());
 
-                        // This logic gets complex with multiple properties. For now, let's just pay for one property at a time.
-                        // A more advanced system might distribute the balance.
                         for (const property of owner.properties) {
                              if (!property || !property.street || !property.house) continue;
                              const propKey = `${property.street}-${property.house}`;
@@ -649,7 +671,6 @@ export default function DebtManagementPage() {
         try {
             if (activeRate <= 0) throw "No hay una tasa de cambio activa o registrada configurada.";
             
-            // Fetch all debts for the property just once to check for existence in memory
             const existingDebtQuery = query(collection(db, 'debts'), 
                 where('ownerId', '==', selectedOwner.id),
                 where('property.street', '==', propertyForMassDebt.street),
@@ -841,14 +862,18 @@ export default function DebtManagementPage() {
                     <CardHeader>
                         <div className="flex justify-between items-center gap-2 flex-wrap">
                             <CardTitle>Lista de Propietarios</CardTitle>
-                            <div className="flex gap-2">
+                            <div className="flex gap-2 flex-wrap">
+                                 <Button onClick={() => forceUpdateDebtState(true)} variant="outline">
+                                    <RefreshCw className="mr-2 h-4 w-4" />
+                                    Sincronizar Saldos
+                                </Button>
                                 <Button onClick={handleGenerateMonthlyDebt} variant="outline" disabled={isGeneratingMonthlyDebt}>
                                     {isGeneratingMonthlyDebt ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CalendarPlus className="mr-2 h-4 w-4" />}
                                     Generar Deuda del Mes
                                 </Button>
                                 <Button onClick={handleReconcileAll} variant="outline" disabled={isReconciling}>
                                     {isReconciling ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <FileCog className="mr-2 h-4 w-4" />}
-                                    Pagar Deudas con Saldo a Favor
+                                    Pagar Deudas con Saldo
                                 </Button>
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
@@ -1189,5 +1214,3 @@ export default function DebtManagementPage() {
     // Fallback while loading or if view is invalid
     return null;
 }
-
-    
