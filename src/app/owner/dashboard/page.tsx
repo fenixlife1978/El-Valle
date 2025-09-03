@@ -159,24 +159,15 @@ export default function OwnerDashboardPage() {
 
                     // Re-subscribe to payments whenever user data changes
                     if (paymentsUnsubscribe) paymentsUnsubscribe();
-                    const paymentsQuery = query(collection(db, "payments"), where("beneficiaries", "array-contains-any", ownerData.properties.map(p => ({
-                        ownerId: userId,
-                        ownerName: ownerData.name,
-                        amount: p.amount, // This might not be perfect, but it's a way to query
-                        street: p.street,
-                        house: p.house
-                    }))));
-
-                    paymentsUnsubscribe = onSnapshot(query(collection(db, "payments"), where("beneficiaries", "array-contains-any", ownerData.properties.map(p => ({
-    ownerId: ownerData.id,
-    ownerName: ownerData.name,
-    street: p.street,
-    house: p.house,
-    amount: 1 // dummy amount as it's required for the query but we don't know it
-})))), (snapshot) => {
+                    
+                    // Corrected, more robust query:
+                    const paymentsQuery = query(collection(db, "payments"), orderBy('reportedAt', 'desc'));
+                    
+                    paymentsUnsubscribe = onSnapshot(paymentsQuery, (snapshot) => {
                          const paymentsData: Payment[] = [];
                         snapshot.forEach((doc) => {
                             const data = doc.data();
+                            // Client-side filter to find payments for the current user
                             if (data.beneficiaries.some((b: any) => b.ownerId === userId)) {
                                 paymentsData.push({
                                     id: doc.id,
@@ -194,12 +185,7 @@ export default function OwnerDashboardPage() {
                                 });
                             }
                         });
-                        const sortedPayments = paymentsData.sort((a,b) => {
-                            const dateA = a.reportedAt?.toMillis() || 0;
-                            const dateB = b.reportedAt?.toMillis() || 0;
-                            return dateB - dateA;
-                        });
-                        setPayments(sortedPayments.slice(0, 10));
+                        setPayments(paymentsData.slice(0, 10)); // Keep showing only the last 10
                     });
 
 
@@ -585,7 +571,7 @@ export default function OwnerDashboardPage() {
                                     <p className="font-bold">{companyInfo.name}</p>
                                     <p>{companyInfo.rif}</p>
                                     <p>{companyInfo.address}</p>
-                                    <p>Teléfono: {companyInfo.phone}</p>
+                                    <p>Teléfono: ${companyInfo.phone}</p>
                                 </div>
                             </div>
                             <div className="text-right">
