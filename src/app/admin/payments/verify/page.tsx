@@ -229,16 +229,10 @@ export default function VerifyPaymentsPage() {
             }
   
             const ownerData = ownerDoc.data();
-            let availableFundsBs = beneficiary.amount + (ownerData.balance || 0);
+            const balanceInFavor = ownerData.balance || 0;
+            let availableFundsBs = beneficiary.amount + balanceInFavor;
+            let balanceUsed = 0;
 
-             if ((ownerData.balance || 0) > 0) {
-                const balanceUsed = Math.min(beneficiary.amount, ownerData.balance);
-                if (balanceUsed > 0 && beneficiary.amount < ownerData.balance) {
-                  finalObservation += ` Se utilizó parte del saldo a favor (Bs. ${balanceUsed.toLocaleString('es-VE', {minimumFractionDigits: 2})}) para este pago.`;
-                }
-            }
-  
-            // Query for pending debts for the specific property of the beneficiary
             const debtsQuery = query(
               collection(db, 'debts'),
               where('ownerId', '==', beneficiary.ownerId),
@@ -248,23 +242,36 @@ export default function VerifyPaymentsPage() {
               orderBy('year', 'asc'),
               orderBy('month', 'asc')
             );
-            const debtsSnapshot = await getDocs(debtsQuery); // Use getDocs inside transaction
+            const debtsSnapshot = await getDocs(debtsQuery); 
   
             for (const debtDoc of debtsSnapshot.docs) {
               const debt = { id: debtDoc.id, ...debtDoc.data() } as Debt;
               const debtAmountBs = debt.amountUSD * exchangeRate;
   
               if (availableFundsBs >= debtAmountBs) {
-                availableFundsBs -= debtAmountBs;
-                transaction.update(debtDoc.ref, {
-                  status: 'paid',
-                  paidAmountUSD: debt.amountUSD,
-                  paymentDate: paymentData.paymentDate,
-                  paymentId: paymentData.id,
-                });
+                  let amountFromBalance = 0;
+                  if(balanceInFavor > 0) {
+                      amountFromBalance = Math.min(debtAmountBs, balanceInFavor);
+                      balanceUsed += amountFromBalance;
+                  }
+
+                  availableFundsBs -= debtAmountBs;
+
+                  transaction.update(debtDoc.ref, {
+                    status: 'paid',
+                    paidAmountUSD: debt.amountUSD,
+                    paymentDate: paymentData.paymentDate,
+                    paymentId: paymentData.id,
+                  });
               } else {
                 break;
               }
+            }
+
+            if (balanceUsed > 0) {
+                const totalAbonado = balanceUsed + beneficiary.amount;
+                const notaExplicativa = `Esta deuda ha sido liquidada mediante la aplicación de un saldo a favor previamente registrado por un monto de Bs. ${balanceUsed.toLocaleString('es-VE', {minimumFractionDigits: 2})}, complementado con el pago actual de Bs. ${beneficiary.amount.toLocaleString('es-VE', {minimumFractionDigits: 2})}. El total abonado corresponde a Bs. ${totalAbonado.toLocaleString('es-VE', {minimumFractionDigits: 2})}, cubriendo la totalidad del monto adeudado.`;
+                finalObservation = finalObservation ? `${finalObservation}\n${notaExplicativa}` : notaExplicativa;
             }
   
             transaction.update(ownerRef, { balance: availableFundsBs });
@@ -455,6 +462,17 @@ export default function VerifyPaymentsPage() {
     doc.text(`Bs. ${payment.totalAmount.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`, pageWidth - margin, startY, { align: 'right' });
 
     startY += 10;
+    
+    // Observations Section
+    if (payment.observations) {
+        doc.setFontSize(9).setFont('helvetica', 'italic');
+        const splitObservations = doc.splitTextToSize(payment.observations, pageWidth - margin * 2);
+        doc.text("Observaciones:", margin, startY);
+        startY += 5;
+        doc.text(splitObservations, margin, startY);
+        startY += (splitObservations.length * 4) + 4;
+    }
+
 
     // Footer Section
     doc.setFontSize(9).setFont('helvetica', 'normal').text('Este recibo confirma que el pago ha sido validado para la(s) cuota(s) y propiedad(es) aquí detalladas.', margin, startY);
@@ -649,6 +667,12 @@ export default function VerifyPaymentsPage() {
                          <div className="text-right font-bold mt-2 pr-4">
                             Total Pagado: Bs. {receiptData.payment.totalAmount.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
                          </div>
+                         {receiptData.payment.observations && (
+                            <div className="mt-4 p-2 border-t text-xs">
+                                <p className="font-bold">Observaciones:</p>
+                                <p className="italic whitespace-pre-wrap">{receiptData.payment.observations}</p>
+                            </div>
+                         )}
                         <div className="mt-6 text-center text-gray-600 text-[10px]">
                              <p className="text-left">Este recibo confirma que el pago ha sido validado para la(s) cuota(s) y propiedad(es) aquí detalladas.</p>
                              <p className="text-left font-bold mt-2">Firma electrónica: '{companyInfo.name} - Condominio'</p>
