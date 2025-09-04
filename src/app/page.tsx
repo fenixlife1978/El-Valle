@@ -1,8 +1,8 @@
-
 'use client';
 
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Building, User } from 'lucide-react';
 
 export default function WelcomePage() {
@@ -20,26 +20,28 @@ export default function WelcomePage() {
             </div>
             <div className="w-full max-w-3xl">
                  <Card>
-                    <CardHeader>
+                    <CardHeader className="text-center">
                         <CardTitle>¿Cómo deseas ingresar?</CardTitle>
                     </CardHeader>
                     <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <Card 
-                            className="p-6 text-center hover:border-primary cursor-pointer"
+                        <Button 
+                            variant="outline"
+                            className="h-auto p-6 text-left flex flex-col items-center justify-center space-y-2"
                             onClick={() => handleRoleSelection('owner')}
                         >
-                            <User className="mx-auto h-16 w-16 text-primary mb-4"/>
+                            <User className="h-16 w-16 text-primary mb-4"/>
                             <h3 className="text-xl font-semibold font-headline">Soy Propietario</h3>
-                            <p className="text-sm text-muted-foreground mt-1">Accede a tu cuenta y gestiona tus propiedades y pagos.</p>
-                        </Card>
-                        <Card 
-                             className="p-6 text-center hover:border-primary cursor-pointer"
+                            <p className="text-sm text-muted-foreground font-normal whitespace-normal text-center">Accede a tu cuenta y gestiona tus propiedades y pagos.</p>
+                        </Button>
+                        <Button 
+                            variant="outline"
+                            className="h-auto p-6 text-left flex flex-col items-center justify-center space-y-2"
                             onClick={() => handleRoleSelection('admin')}
                         >
-                            <Building className="mx-auto h-16 w-16 text-primary mb-4"/>
+                            <Building className="h-16 w-16 text-primary mb-4"/>
                             <h3 className="text-xl font-semibold font-headline">Soy Administrador</h3>
-                            <p className="text-sm text-muted-foreground mt-1">Administra el condominio, gestiona pagos y más.</p>
-                        </Card>
+                            <p className="text-sm text-muted-foreground font-normal whitespace-normal text-center">Administra el condominio, gestiona pagos y más.</p>
+                        </Button>
                     </CardContent>
                 </Card>
             </div>
