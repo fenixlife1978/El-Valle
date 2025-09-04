@@ -19,7 +19,7 @@ export default function WelcomePage() {
                 <p className="text-muted-foreground mt-2 text-lg">Tu plataforma de gestión de condominios.</p>
             </div>
             <div className="w-full max-w-3xl">
-                 <Card className="bg-card/50">
+                 <Card>
                     <CardHeader>
                         <CardTitle>¿Cómo deseas ingresar?</CardTitle>
                     </CardHeader>
