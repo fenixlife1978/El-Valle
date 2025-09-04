@@ -25,7 +25,7 @@ export default function WelcomePage() {
                     </CardHeader>
                     <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <Card 
-                            className="p-6 text-center hover:bg-card/80 hover:border-primary cursor-pointer transition-all duration-300 transform hover:-translate-y-1"
+                            className="p-6 text-center hover:border-primary cursor-pointer"
                             onClick={() => handleRoleSelection('owner')}
                         >
                             <User className="mx-auto h-16 w-16 text-primary mb-4"/>
@@ -33,7 +33,7 @@ export default function WelcomePage() {
                             <p className="text-sm text-muted-foreground mt-1">Accede a tu cuenta y gestiona tus propiedades y pagos.</p>
                         </Card>
                         <Card 
-                             className="p-6 text-center hover:bg-card/80 hover:border-primary cursor-pointer transition-all duration-300 transform hover:-translate-y-1"
+                             className="p-6 text-center hover:border-primary cursor-pointer"
                             onClick={() => handleRoleSelection('admin')}
                         >
                             <Building className="mx-auto h-16 w-16 text-primary mb-4"/>
