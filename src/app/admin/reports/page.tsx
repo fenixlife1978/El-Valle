@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
-import { Calendar as CalendarIcon, Download, Search, Loader2, BarChart2, ListChecks, FileText, UserCheck, ShieldCheck, DollarSign } from "lucide-react";
+import { Calendar as CalendarIcon, Download, Search, Loader2, BarChart2, ListChecks, FileText, UserCheck, ShieldCheck, DollarSign, Eye, EyeOff } from "lucide-react";
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import html2canvas from 'html2canvas';
@@ -101,6 +101,7 @@ export default function ReportsPage() {
     const [selectedOwner, setSelectedOwner] = useState('');
     const [delinquencyPeriod, setDelinquencyPeriod] = useState('');
     const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({});
+    const [showUsdInDelinquency, setShowUsdInDelinquency] = useState(true);
     
     // --- Chart State ---
     const [incomeChartData, setIncomeChartData] = useState<ChartData[]>([]);
@@ -470,6 +471,11 @@ export default function ReportsPage() {
                 debtsByOwner[debt.ownerId].push(debt);
             }
 
+            const baseHeaders = ['PROPIETARIO', 'PROPIEDAD', 'PERIODO (DESDE - HASTA)', 'MESES ADEUDADOS'];
+            if (showUsdInDelinquency) {
+                baseHeaders.push('MONTO EN DÓLARES');
+            }
+
             const reportRows = Object.entries(debtsByOwner)
                 .map(([ownerId, ownerDebts]) => {
                     const ownerData = owners.find(o => o.id === ownerId);
@@ -480,24 +486,30 @@ export default function ReportsPage() {
                     const lastDebt = ownerDebts[ownerDebts.length - 1];
                     
                     const period = `${monthsLocale[firstDebt.month]} ${firstDebt.year} - ${monthsLocale[lastDebt.month]} ${lastDebt.year}`;
-                    const totalDebtUSD = ownerDebts.reduce((sum, d) => sum + d.amountUSD, 0);
+                    
                     const properties = (ownerData.properties && ownerData.properties.length > 0)
                         ? ownerData.properties.map(p => `${p.street} - ${p.house}`).join(', ')
                         : 'N/A';
                     
-                    return [
+                    const rowData: (string|number)[] = [
                         ownerData.name,
                         properties,
                         period,
-                        ownerDebts.length,
-                        totalDebtUSD.toFixed(2)
+                        ownerDebts.length
                     ];
+
+                    if (showUsdInDelinquency) {
+                        const totalDebtUSD = ownerDebts.reduce((sum, d) => sum + d.amountUSD, 0);
+                        rowData.push(totalDebtUSD.toFixed(2));
+                    }
+                    
+                    return rowData;
                 })
                 .filter(row => row !== null) as (string|number)[][];
 
             setPreviewData({
                 title: `Reporte de Morosidad (${delinquencyPeriod} o más meses)`,
-                headers: ['PROPIETARIO', 'PROPIEDAD', 'PERIODO (DESDE - HASTA)', 'MESES ADEUDADOS', 'MONTO EN DÓLARES'],
+                headers: baseHeaders,
                 rows: reportRows,
                 filename: `reporte_morosidad_${delinquencyPeriod}_meses`
             });
@@ -523,6 +535,8 @@ export default function ReportsPage() {
                 return;
             }
 
+            // This logic assumes that if a user is solvent, their last paid debt correctly reflects their solvency period.
+            // A more robust check might query ALL debts and ensure no pending ones exist.
             const debtsQuery = query(collection(db, 'debts'), where('ownerId', 'in', ownerIds), where('status', '==', 'paid'));
             const debtsSnapshot = await getDocs(debtsQuery);
             const paidDebtsByOwner: { [ownerId: string]: Debt[] } = {};
@@ -705,16 +719,26 @@ export default function ReportsPage() {
                     <CardContent className="space-y-4">
                        <div className="space-y-2">
                             <Label htmlFor="delinquency-period">Período de Morosidad</Label>
-                            <Select value={delinquencyPeriod} onValueChange={setDelinquencyPeriod}>
-                                <SelectTrigger id="delinquency-period">
-                                    <SelectValue placeholder="Seleccione período..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="1">1 o más meses</SelectItem>
-                                    <SelectItem value="2">2 o más meses</SelectItem>
-                                    <SelectItem value="3">3 o más meses</SelectItem>
-                                </SelectContent>
-                            </Select>
+                             <div className="flex items-center gap-2">
+                                <Select value={delinquencyPeriod} onValueChange={setDelinquencyPeriod}>
+                                    <SelectTrigger id="delinquency-period">
+                                        <SelectValue placeholder="Seleccione período..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="1">1 o más meses</SelectItem>
+                                        <SelectItem value="2">2 o más meses</SelectItem>
+                                        <SelectItem value="3">3 o más meses</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                <Button 
+                                    variant="outline" 
+                                    size="icon" 
+                                    onClick={() => setShowUsdInDelinquency(!showUsdInDelinquency)}
+                                    title={showUsdInDelinquency ? "Ocultar Monto en USD" : "Mostrar Monto en USD"}
+                                >
+                                    {showUsdInDelinquency ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                </Button>
+                            </div>
                         </div>
                     </CardContent>
                     <CardFooter>
