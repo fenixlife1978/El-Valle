@@ -428,6 +428,7 @@ export default function DebtManagementPage() {
             const year = today.getFullYear();
             const month = today.getMonth() + 1;
 
+            // This query now fetches ALL debts for the period, regardless of status.
             const existingDebtsQuery = query(collection(db, 'debts'), where('year', '==', year), where('month', '==', month));
             const existingDebtsSnapshot = await getDocs(existingDebtsQuery);
             const ownersWithDebtForProp = new Set(existingDebtsSnapshot.docs.map(doc => {
@@ -444,9 +445,9 @@ export default function DebtManagementPage() {
             owners.forEach(owner => {
                 if (owner.properties && owner.properties.length > 0) {
                     owner.properties.forEach(property => {
-                        // Defensive check to ensure property object is valid
                         if (property && property.street && property.house) {
                             const key = `${owner.id}-${property.street}-${property.house}`;
+                            // If a debt (paid or pending) already exists for this property this month, skip.
                             if (!ownersWithDebtForProp.has(key)) {
                                 const debtRef = doc(collection(db, 'debts'));
                                 batch.set(debtRef, {
@@ -466,7 +467,7 @@ export default function DebtManagementPage() {
             });
 
             if (newDebtsCount === 0) {
-                 toast({ title: 'Proceso Completado', description: 'Todos los propietarios ya tienen la deuda del mes en curso para todas sus propiedades.' });
+                 toast({ title: 'Proceso Completado', description: 'Todos los propietarios ya tienen una deuda (pagada o pendiente) para el mes en curso.' });
                 setIsGeneratingMonthlyDebt(false);
                 return;
             }

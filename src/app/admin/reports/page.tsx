@@ -517,7 +517,7 @@ export default function ReportsPage() {
             const solventOwners = owners.filter(o => o.status === 'solvente');
             const ownerIds = solventOwners.map(o => o.id);
             if (ownerIds.length === 0) {
-                setPreviewData({ title: 'Reporte de Solvencia', headers: ['PROPIETARIO', 'PROPIEDAD', 'ESTADO', 'PERIODO (DESDE - HASTA)'], rows: [], filename: 'reporte_solvencia' });
+                setPreviewData({ title: 'Reporte de Solvencia', headers: ['PROPIETARIO', 'PROPIEDAD', 'ESTADO', 'SOLVENTE HASTA'], rows: [], filename: 'reporte_solvencia' });
                 setIsPreviewOpen(true);
                 setGeneratingReport(false);
                 return;
@@ -540,14 +540,14 @@ export default function ReportsPage() {
                     : 'N/A';
                 
                 const ownerDebts = paidDebtsByOwner[owner.id];
-                let period = 'N/A';
+                let period = 'Sin pagos registrados';
                 if (ownerDebts && ownerDebts.length > 0) {
-                    ownerDebts.sort((a, b) => a.year - b.year || a.month - b.month);
-                    const firstDebt = ownerDebts[0];
-                    const lastDebt = ownerDebts[ownerDebts.length - 1];
-                    const from = `${monthsLocale[firstDebt.month]} ${firstDebt.year}`;
-                    const to = `${monthsLocale[lastDebt.month]} ${lastDebt.year}`;
-                    period = `${from} - ${to}`;
+                    ownerDebts.sort((a, b) => {
+                        if (a.year !== b.year) return b.year - a.year;
+                        return b.month - a.month;
+                    });
+                    const lastPaidDebt = ownerDebts[0];
+                    period = `${monthsLocale[lastPaidDebt.month]} ${lastPaidDebt.year}`;
                 }
 
                 return [owner.name, properties, 'Solvente', period];
@@ -555,7 +555,7 @@ export default function ReportsPage() {
 
             setPreviewData({
                 title: 'Reporte de Solvencia',
-                headers: ['PROPIETARIO', 'PROPIEDAD', 'ESTADO', 'PERIODO (DESDE - HASTA)'],
+                headers: ['PROPIETARIO', 'PROPIEDAD', 'ESTADO', 'SOLVENTE HASTA'],
                 rows: reportRows,
                 filename: 'reporte_solvencia'
             });
