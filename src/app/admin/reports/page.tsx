@@ -43,7 +43,7 @@ type Payment = {
   paymentMethod: string;
   status: string;
   reference: string;
-  beneficiaries: { ownerId: string, house?: string, street?: string, amount: number }[];
+  beneficiaries: { ownerId: string, ownerName: string, house?: string, street?: string, amount: number }[];
 };
 
 type Debt = {
@@ -124,7 +124,7 @@ export default function ReportsPage() {
             setLoading(true);
             try {
                 // Fetch Owners
-                const ownersQuery = query(collection(db, 'owners'), orderBy('name'));
+                const ownersQuery = query(collection(db, 'owners'), where('name', '!=', 'EDWIN AGUIAR'), orderBy('name'));
                 const ownersSnapshot = await getDocs(ownersQuery);
                 let ownersData = ownersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), delinquency: 0, status: 'solvente' })) as Owner[];
                 
@@ -134,6 +134,7 @@ export default function ReportsPage() {
                 const debtCountsByOwner: {[key: string]: number} = {};
                 allPendingDebtsSnapshot.forEach(doc => {
                     const debt = doc.data();
+                     if (debt.ownerId === ADMIN_USER_ID) return;
                     debtCountsByOwner[debt.ownerId] = (debtCountsByOwner[debt.ownerId] || 0) + 1;
                 });
 
@@ -147,7 +148,7 @@ export default function ReportsPage() {
                     };
                 });
                 
-                setOwners(ownersData.filter(o => o.id !== ADMIN_USER_ID)); // Exclude admin
+                setOwners(ownersData);
 
                 // Fetch Settings for Rate and Company Info
                 const settingsRef = doc(db, 'config', 'mainSettings');
@@ -357,21 +358,23 @@ export default function ReportsPage() {
         setGeneratingReport(true);
         try {
             if (!owner.properties || owner.properties.length === 0) {
-                 toast({ variant: 'destructive', title: 'Error de Datos', description: 'El propietario seleccionado no tiene una propiedad válida registrada para generar el reporte.' });
+                 toast({ variant: 'destructive', title: 'Error de Datos', description: 'El propietario seleccionado no tiene propiedades registradas.' });
                  setGeneratingReport(false);
                  return;
             }
 
-            // Fetch Payments for ALL properties of the owner
+            // Fetch Payments for the owner
             const paymentsQuery = query(
                 collection(db, "payments"),
                 where("status", "==", "aprobado"),
                 where("beneficiaries", "array-contains-any", owner.properties.map(p => ({
-                    ownerId: owner.id, house: p.house, street: p.street
+                    ownerId: owner.id, house: p.house, street: p.street, ownerName: owner.name, amount: 0
                 })))
             );
+            
             const paymentsSnapshot = await getDocs(paymentsQuery);
-            const allPayments = paymentsSnapshot.docs.map(doc => doc.data() as Payment);
+            const allPayments = paymentsSnapshot.docs.map(doc => doc.data() as Payment)
+                .filter(p => p.beneficiaries.some(b => b.ownerId === owner.id));
 
             let totalPaid = 0;
             let isAdvancePaymentReport = false;
@@ -381,7 +384,6 @@ export default function ReportsPage() {
                     const beneficiary = p.beneficiaries.find(b => b.ownerId === owner.id);
                     const amountForOwner = beneficiary?.amount || p.totalAmount;
                     totalPaid += amountForOwner;
-                    const paidByOwner = owners.find(o => o.id === p.reportedBy);
                     
                     const isAdvance = p.paymentMethod === 'adelanto';
                     if (isAdvance) isAdvancePaymentReport = true;
@@ -392,7 +394,7 @@ export default function ReportsPage() {
                     return [
                         format(p.paymentDate.toDate(), "dd/MM/yyyy"),
                         p.paymentMethod === 'adelanto' ? 'Pago por Adelantado' : "Pago de Condominio",
-                        paidByOwner?.name || 'N/A',
+                        p.reference,
                         `${currencySymbol} ${amountForOwner.toLocaleString(locale, {minimumFractionDigits: 2})}`
                     ];
                 });
@@ -425,7 +427,11 @@ export default function ReportsPage() {
                 dateRangeText = `Deudas desde ${monthsLocale[firstDebt.month]} ${firstDebt.year}`;
             }
 
-            const ownerProps = (owner.properties && owner.properties.length > 0) ? owner.properties.map(p => `${p.street} - ${p.house}`).join(', ') : 'N/A';
+            const ownerProps = (owner.properties && owner.properties.length > 0) 
+                ? owner.properties.map(p => `  - ${p.street} - ${p.house}`).join('\n') 
+                : 'N/A';
+            const ownerInfoText = `Propietario: ${owner.name}\nPropiedades:\n${ownerProps}`;
+
             const paymentCurrencySymbol = isAdvancePaymentReport ? '$' : 'Bs.';
             const paymentAmountHeader = isAdvancePaymentReport ? 'Monto ($)' : 'Monto (Bs.)';
 
@@ -436,10 +442,10 @@ export default function ReportsPage() {
                 headers: [], // Not used for detailed view
                 rows: [], // Not used for detailed view
                 detailedData: {
-                    ownerInfo: `Propietario: ${owner.name}\nPropiedades: ${ownerProps}`,
+                    ownerInfo: ownerInfoText,
                     dateRange: dateRangeText,
                     payments: {
-                        headers: ["Fecha", "Concepto", "Pagado por", paymentAmountHeader],
+                        headers: ["Fecha", "Concepto", "Referencia", paymentAmountHeader],
                         rows: paymentsRows,
                         total: totalPaid,
                         currency: paymentCurrencySymbol,
@@ -475,7 +481,7 @@ export default function ReportsPage() {
             
             const debtsByOwner: { [ownerId: string]: Debt[] } = {};
             for (const debt of allPendingDebts) {
-                if (debt.ownerId === ADMIN_USER_ID) continue; // Exclude admin
+                if (debt.ownerId === ADMIN_USER_ID) continue;
                 if (!debtsByOwner[debt.ownerId]) {
                     debtsByOwner[debt.ownerId] = [];
                 }
@@ -575,7 +581,12 @@ export default function ReportsPage() {
                     });
                     const lastPaidDebt = ownerDebts[0];
                     period = `${monthsLocale[lastPaidDebt.month]} ${lastPaidDebt.year}`;
+                } else {
+                    const now = new Date();
+                    const monthLabel = monthsLocale[now.getMonth()] || ''; // Get previous month for solvency
+                    period = `${monthLabel} ${now.getFullYear()}`;
                 }
+
 
                 return [owner.name, properties, 'Solvente', period];
             });
@@ -645,7 +656,7 @@ export default function ReportsPage() {
                             userName = owner.name;
                             properties = owner.properties.map(prop => `${prop.street} - ${prop.house}`).join('\n');
                         } else {
-                            userName = 'Desconocido';
+                            userName = p.beneficiaries[0].ownerName || 'Desconocido';
                         }
                     }
 
@@ -845,9 +856,8 @@ export default function ReportsPage() {
                         {previewData?.isDetailedStatement && previewData.detailedData ? (
                             <div className="space-y-6">
                                 <div className="whitespace-pre-wrap">
-                                    <h3 className="font-semibold">{previewData.detailedData.ownerInfo.split('\n')[0]}</h3>
-                                    {previewData.detailedData.ownerInfo.split('\n').slice(1).map((line, i) => <p key={i} className="text-sm text-muted-foreground">{line}</p>)}
-                                    <p className="text-sm text-muted-foreground">{previewData.detailedData.dateRange}</p>
+                                    {previewData.detailedData.ownerInfo.split('\n').map((line, i) => i === 0 ? <h3 key={i} className="font-semibold">{line}</h3> : <p key={i} className="text-sm text-muted-foreground">{line}</p>)}
+                                    <p className="text-sm text-muted-foreground mt-1">{previewData.detailedData.dateRange}</p>
                                 </div>
                                 <div>
                                     <h4 className="font-semibold mb-2">Resumen de Pagos</h4>

@@ -218,7 +218,7 @@ export default function DebtManagementPage() {
                 // Calculate pending debt only for those who have it
                 snapshot.forEach(doc => {
                     const debt = doc.data();
-                    if (debt.ownerId) {
+                    if (debt.ownerId && debt.ownerId !== ADMIN_USER_ID) {
                         debtsByOwner[debt.ownerId] = (debtsByOwner[debt.ownerId] || 0) + debt.amountUSD;
                     }
                 });
@@ -444,10 +444,10 @@ export default function DebtManagementPage() {
 
             const ownersToProcess = owners.filter(owner => owner.id !== ADMIN_USER_ID);
 
-            ownersToProcess.forEach(owner => {
+            for (const owner of ownersToProcess) {
                 if (owner.properties && owner.properties.length > 0) {
-                    owner.properties.forEach(property => {
-                        if (property && property.street && property.house) {
+                    for (const property of owner.properties) {
+                         if (property && property.street && property.house) {
                             const key = `${owner.id}-${property.street}-${property.house}`;
                             if (!ownersWithDebtForProp.has(key)) {
                                 const debtRef = doc(collection(db, 'debts'));
@@ -463,9 +463,9 @@ export default function DebtManagementPage() {
                                 newDebtsCount++;
                             }
                         }
-                    });
+                    }
                 }
-            });
+            }
 
             if (newDebtsCount === 0) {
                  toast({ title: 'Proceso Completado', description: 'Todos los propietarios ya tienen una deuda (pagada o pendiente) para el mes en curso.' });
@@ -676,6 +676,7 @@ export default function DebtManagementPage() {
         try {
             if (activeRate <= 0) throw "No hay una tasa de cambio activa o registrada configurada.";
             
+            // 1. Fetch all existing debts for this property to avoid duplicates
             const existingDebtQuery = query(collection(db, 'debts'), 
                 where('ownerId', '==', selectedOwner.id),
                 where('property.street', '==', propertyForMassDebt.street),
@@ -683,7 +684,10 @@ export default function DebtManagementPage() {
             );
             const existingDebtsSnapshot = await getDocs(existingDebtQuery);
             const existingDebtPeriods = new Set(existingDebtsSnapshot.docs.map(d => `${d.data().year}-${d.data().month}`));
+            
+            let newDebtsCreated = 0;
 
+            // 2. Start transaction
             await runTransaction(db, async (transaction) => {
                 const ownerRef = doc(db, "owners", selectedOwner.id);
                 const ownerDoc = await transaction.get(ownerRef);
@@ -691,15 +695,17 @@ export default function DebtManagementPage() {
 
                 let currentBalanceBs = ownerDoc.data().balance || 0;
 
+                // 3. Loop through months and create debts only if they don't exist
                 for (let i = 0; i < monthsToGenerate; i++) {
                     const debtDate = addMonths(startDate, i);
                     const debtYear = debtDate.getFullYear();
                     const debtMonth = debtDate.getMonth() + 1;
                     
                     if (existingDebtPeriods.has(`${debtYear}-${debtMonth}`)) {
-                        continue; // Skip if debt already exists
+                        continue; // Skip if debt already exists for this month
                     }
 
+                    newDebtsCreated++;
                     const debtAmountBs = amountUSD * activeRate;
                     const debtRef = doc(collection(db, "debts"));
                     let debtData: any = {
@@ -712,6 +718,7 @@ export default function DebtManagementPage() {
                         status: 'pending'
                     };
 
+                    // 4. Use balance to pay if available
                     if (currentBalanceBs >= debtAmountBs) {
                         currentBalanceBs -= debtAmountBs;
                         const paymentDate = Timestamp.now();
@@ -742,11 +749,12 @@ export default function DebtManagementPage() {
                     
                     transaction.set(debtRef, debtData);
                 }
-
+                
+                // 5. Update final owner balance
                 transaction.update(ownerRef, { balance: currentBalanceBs });
             });
 
-            toast({ title: 'Deudas Generadas', description: `Se procesaron ${monthsToGenerate} meses de deuda para la propiedad seleccionada. El saldo del propietario fue actualizado.` });
+            toast({ title: 'Proceso Completado', description: `Se procesaron ${monthsToGenerate} meses y se generaron ${newDebtsCreated} nuevas deudas. El saldo del propietario fue actualizado.` });
 
         } catch (error) {
             console.error("Error generating mass debts: ", error);
@@ -801,7 +809,7 @@ export default function DebtManagementPage() {
         const monthsCount = differenceInCalendarMonths(endDate, startDate) + 1;
         const fromDateStr = months.find(m => m.value === fromMonth)?.label + ` ${fromYear}`;
         const toDateStr = months.find(m => m.value === endDate.getMonth() + 1)?.label + ` ${endDate.getFullYear()}`;
-        return `Se generarán ${monthsCount} deudas desde ${fromDateStr} hasta ${toDateStr}.`;
+        return `Se generarán deudas para los meses sin registro previo desde ${fromDateStr} hasta ${toDateStr}.`;
     }, [currentMassDebt.fromMonth, currentMassDebt.fromYear]);
 
     const handleExportPDF = () => {
@@ -1116,7 +1124,7 @@ export default function DebtManagementPage() {
                         <DialogHeader>
                             <DialogTitle>Agregar Deudas a {propertyForMassDebt?.street} - {propertyForMassDebt?.house}</DialogTitle>
                             <DialogDescription>
-                                Seleccione la fecha de inicio. El sistema generará todas las deudas para esta propiedad desde esa fecha hasta hoy.
+                                Seleccione la fecha de inicio. El sistema generará deudas para los meses sin registro previo desde esa fecha hasta hoy.
                             </DialogDescription>
                         </DialogHeader>
                         <div className="flex-grow overflow-y-auto pr-6 -mr-6">

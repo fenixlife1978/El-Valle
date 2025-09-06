@@ -152,7 +152,7 @@ export default function PeopleManagementPage() {
                 // Note: Deleting from Firestore does not delete from Firebase Auth.
                 // This would require a backend function for security reasons.
                 await deleteDoc(doc(db, "owners", ownerToDelete.id));
-                toast({ title: 'Propietario Eliminado', description: `${ownerToDelete.name} ha sido eliminado de Firestore. La cuenta de autenticación debe eliminarse manually.` });
+                toast({ title: 'Propietario Eliminado', description: `${ownerToDelete.name} ha sido eliminado de Firestore. La cuenta de autenticación debe eliminarse manualmente.` });
             } catch (error) {
                 console.error("Error deleting document: ", error);
                 toast({ variant: 'destructive', title: 'Error', description: 'No se pudo eliminar el propietario.' });
@@ -183,7 +183,7 @@ export default function PeopleManagementPage() {
                 await updateDoc(ownerRef, dataToSave);
                 toast({ title: 'Propietario Actualizado', description: 'Los datos han sido guardados en la base de datos.' });
             } else { // Adding new user
-                if (dataToSave.email) { // Email is optional, only create auth user if provided
+                if (dataToSave.email && dataToSave.email.trim() !== '') { // Email is optional, only create auth user if provided
                     const initialPassword = dataToSave.role === 'administrador' ? 'M110710.m' : '123456';
                     try {
                         const userCredential = await createUserWithEmailAndPassword(auth, dataToSave.email, initialPassword);
