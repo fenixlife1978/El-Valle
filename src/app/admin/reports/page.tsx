@@ -44,6 +44,7 @@ type Payment = {
   status: string;
   reference: string;
   beneficiaries: { ownerId: string, ownerName: string, house?: string, street?: string, amount: number }[];
+  observations?: string;
 };
 
 type Debt = {
@@ -81,8 +82,9 @@ type ReportPreviewData = {
     detailedData?: {
         payments: { headers: string[], rows: (string|number)[][], total: number, currency: 'Bs.' | '$' };
         debts: { headers: string[], rows: (string|number)[][], total: number };
-        ownerInfo: { name: string, properties: string };
+        ownerInfo: { name: string, properties: string, balance: number };
         dateRange: string;
+        diagnosis?: string;
     }
 };
 
@@ -247,32 +249,29 @@ export default function ReportsPage() {
         startY += 20;
     
         if (data.isDetailedStatement && data.detailedData) {
-            const { ownerInfo, dateRange, payments, debts } = data.detailedData;
+            const { ownerInfo, dateRange, payments, debts, diagnosis } = data.detailedData;
             doc.setFontSize(9).setFont('helvetica', 'normal');
             doc.text(`Propietario: ${ownerInfo.name}`, margin, startY);
             doc.text(`Propiedades: ${ownerInfo.properties}`, margin, startY + 10);
             doc.text(`Período: ${dateRange}`, margin, startY + 20);
             startY += 35;
     
-            // Payments Table
-            doc.setFontSize(10).setFont('helvetica', 'bold');
-            doc.text("Resumen de Pagos", margin, startY);
-            startY += 5;
-            (doc as any).autoTable({
-                head: [payments.headers],
-                body: payments.rows,
-                startY: startY,
-                theme: 'striped',
-                headStyles: { fillColor: [40, 167, 69], fontSize: 8, halign: 'center' },
-                styles: { fontSize: 8, cellPadding: 3 },
-                columnStyles: { 3: { halign: 'right' } }
-            });
-            startY = (doc as any).lastAutoTable.finalY + 5;
-            doc.setFontSize(9).setFont('helvetica', 'bold');
-            doc.text(`Total Pagado: ${payments.currency} ${payments.total.toLocaleString('es-VE', {minimumFractionDigits: 2})}`, pageWidth - margin, startY, { align: 'right' });
-            startY += 20;
-    
-            // Debts Table
+            if (payments.rows.length > 0) {
+                doc.setFontSize(10).setFont('helvetica', 'bold');
+                doc.text("Resumen de Últimos Pagos", margin, startY);
+                startY += 5;
+                (doc as any).autoTable({
+                    head: [payments.headers],
+                    body: payments.rows,
+                    startY: startY,
+                    theme: 'striped',
+                    headStyles: { fillColor: [40, 167, 69], fontSize: 8, halign: 'center' },
+                    styles: { fontSize: 8, cellPadding: 3 },
+                    columnStyles: { 3: { halign: 'right' } }
+                });
+                startY = (doc as any).lastAutoTable.finalY + 15;
+            }
+            
             if(debts.rows.length > 0) {
                 doc.setFontSize(10).setFont('helvetica', 'bold');
                 doc.text("Resumen de Deudas Pendientes", margin, startY);
@@ -291,7 +290,25 @@ export default function ReportsPage() {
                 doc.setTextColor('#D32F2F');
                 doc.text(`Total Adeudado: $${debts.total.toLocaleString('en-US', {minimumFractionDigits: 2})}`, pageWidth - margin, startY, { align: 'right' });
                 doc.setTextColor(0);
+                startY += 15;
             }
+
+            if (ownerInfo.balance > 0) {
+                doc.setFontSize(9).setFont('helvetica', 'bold');
+                doc.setTextColor('#28a745');
+                doc.text(`Saldo a Favor: Bs. ${ownerInfo.balance.toLocaleString('es-VE', {minimumFractionDigits: 2})}`, pageWidth - margin, startY, { align: 'right' });
+                doc.setTextColor(0);
+                startY += 15;
+            }
+
+            if (diagnosis) {
+                doc.setFontSize(9).setFont('helvetica', 'italic');
+                const splitDiagnosis = doc.splitTextToSize(diagnosis, pageWidth - margin * 2);
+                doc.text("Observaciones y Diagnóstico:", margin, startY);
+                startY += 10;
+                doc.text(splitDiagnosis, margin, startY);
+            }
+
         } else {
              (doc as any).autoTable({ 
                 head: [data.headers], 
@@ -375,45 +392,32 @@ export default function ReportsPage() {
             }
 
             // Fetch all debts (paid and pending) for the owner
-            const allDebtsQuery = query(
-                collection(db, "debts"), 
-                where("ownerId", "==", owner.id), 
-                orderBy("year", "asc"), 
-                orderBy("month", "asc")
-            );
+            const allDebtsQuery = query(collection(db, "debts"), where("ownerId", "==", owner.id));
             const allDebtsSnapshot = await getDocs(allDebtsQuery);
             const allOwnerDebts = allDebtsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Debt));
             
             const paidDebtsByPaymentId: { [key: string]: Debt[] } = {};
             allOwnerDebts.forEach(debt => {
                 if(debt.status === 'paid' && debt.paymentId) {
-                    if(!paidDebtsByPaymentId[debt.paymentId]) {
-                        paidDebtsByPaymentId[debt.paymentId] = [];
-                    }
+                    if(!paidDebtsByPaymentId[debt.paymentId]) paidDebtsByPaymentId[debt.paymentId] = [];
                     paidDebtsByPaymentId[debt.paymentId].push(debt);
                 }
             });
 
-            // Fetch Payments for the owner, approved only, ordered by most recent
+            // Fetch Payments for the owner, approved only, ordered by most recent, limit to last 3
             const paymentsQuery = query(
                 collection(db, "payments"),
                 where("status", "==", "aprobado"),
-                where("beneficiaries", "array-contains-any", owner.properties.map(p => ({
-                    ownerId: owner.id,
-                    ownerName: owner.name,
-                    street: p.street,
-                    house: p.house
-                }))),
-                orderBy("paymentDate", "desc")
+                where("beneficiaries", "array-contains-any", owner.properties.map(p => ({ ownerId: owner.id, ownerName: owner.name, street: p.street, house: p.house }))),
+                orderBy("paymentDate", "desc"),
+                limit(3)
             );
             
             const paymentsSnapshot = await getDocs(paymentsQuery);
-            const allPayments = paymentsSnapshot.docs.map(doc => ({id: doc.id, ...doc.data()} as Payment));
-
+            const last3Payments = paymentsSnapshot.docs.map(doc => ({id: doc.id, ...doc.data()} as Payment));
+            
             let totalPaid = 0;
-            const paymentsRows = allPayments
-                .slice(0, 3) // Take only the last 3
-                .map(p => {
+            const paymentsRows = last3Payments.map(p => {
                     const beneficiary = p.beneficiaries.find(b => b.ownerId === owner.id);
                     const amountForOwner = beneficiary?.amount || p.totalAmount;
                     totalPaid += amountForOwner;
@@ -423,6 +427,8 @@ export default function ReportsPage() {
                     if(paidDebtsForThisPayment && paidDebtsForThisPayment.length > 0) {
                         const periods = paidDebtsForThisPayment.map(d => `${monthsLocale[d.month].substring(0,3)} ${d.year}`).join(', ');
                         concept = `Pago Cuota(s): ${periods}`;
+                    } else if (p.observations) {
+                        concept = p.observations;
                     }
 
                     return [
@@ -447,6 +453,7 @@ export default function ReportsPage() {
 
             let dateRangeText = "Al día";
             if (pendingDebts.length > 0) {
+                pendingDebts.sort((a,b) => a.year - b.year || a.month - b.month);
                 const firstDebt = pendingDebts[0];
                 dateRangeText = `Deudas desde ${monthsLocale[firstDebt.month]} ${firstDebt.year}`;
             }
@@ -454,14 +461,24 @@ export default function ReportsPage() {
             const ownerProps = (owner.properties && owner.properties.length > 0) 
                 ? owner.properties.map(p => `${p.street} - ${p.house}`).join('; ') 
                 : 'N/A';
-            const ownerInfo = { name: owner.name, properties: ownerProps };
+            const ownerInfo = { name: owner.name, properties: ownerProps, balance: owner.balance };
             
+            let diagnosis = "Estado de cuenta completo. ";
+            if(totalDebtUSD > 0) {
+                diagnosis += `El propietario presenta una deuda de ${pendingDebts.length} mes(es). `;
+            } else {
+                diagnosis += "El propietario se encuentra solvente. ";
+            }
+            if(owner.balance > 0) {
+                diagnosis += `Posee un saldo a favor de Bs. ${owner.balance.toLocaleString('es-VE', {minimumFractionDigits: 2})}.`;
+            }
+
             setPreviewData({
                 title: `Estado de Cuenta Detallado`,
                 filename: `estado_cuenta_detallado_${owner.name.replace(/\s/g, '_')}`,
                 isDetailedStatement: true,
-                headers: [], // Not used for detailed view
-                rows: [], // Not used for detailed view
+                headers: [],
+                rows: [],
                 detailedData: {
                     ownerInfo: ownerInfo,
                     dateRange: dateRangeText,
@@ -475,7 +492,8 @@ export default function ReportsPage() {
                         headers: ["Período", "Descripción", "Monto ($)", "Estado"],
                         rows: debtsRows,
                         total: totalDebtUSD
-                    }
+                    },
+                    diagnosis: diagnosis,
                 }
             });
             setIsPreviewOpen(true);
@@ -881,23 +899,33 @@ export default function ReportsPage() {
                                     <p className="text-sm text-muted-foreground">{`Propiedades: ${previewData.detailedData.ownerInfo.properties}`}</p>
                                     <p className="text-sm text-muted-foreground mt-1">{`Período: ${previewData.detailedData.dateRange}`}</p>
                                 </div>
+                                {previewData.detailedData.payments.rows.length > 0 && (
                                 <div>
-                                    <h4 className="font-semibold mb-2">Resumen de Pagos</h4>
+                                    <h4 className="font-semibold mb-2">Resumen de Últimos Pagos</h4>
                                     <Table>
                                         <TableHeader><TableRow>{previewData.detailedData.payments.headers.map((h, i) => <TableHead key={i}>{h}</TableHead>)}</TableRow></TableHeader>
                                         <TableBody>{previewData.detailedData.payments.rows.map((r, i) => <TableRow key={i}>{r.map((c, j) => <TableCell key={j} className={j === 3 ? 'text-right' : ''}>{c}</TableCell>)}</TableRow>)}</TableBody>
                                     </Table>
-                                     <p className="text-right font-bold mt-2">Total Pagado: {previewData.detailedData.payments.currency} {previewData.detailedData.payments.total.toLocaleString('es-VE', {minimumFractionDigits: 2})}</p>
                                 </div>
+                                )}
                                 {previewData.detailedData.debts.rows.length > 0 && (
                                     <div>
-                                        <h4 className="font-semibold mb-2">Resumen de Deudas Pendientes</h4>
+                                        <h4 className="font-semibold mb-2 mt-4">Resumen de Deudas Pendientes</h4>
                                         <Table>
                                             <TableHeader><TableRow>{previewData.detailedData.debts.headers.map((h, i) => <TableHead key={i}>{h}</TableHead>)}</TableRow></TableHeader>
                                             <TableBody>{previewData.detailedData.debts.rows.map((r, i) => <TableRow key={i}>{r.map((c, j) => <TableCell key={j} className={j === 2 ? 'text-right' : ''}>{c}</TableCell>)}</TableRow>)}</TableBody>
                                         </Table>
                                         <p className="text-right font-bold mt-2 text-destructive">Total Adeudado: ${previewData.detailedData.debts.total.toLocaleString('en-US', {minimumFractionDigits: 2})}</p>
                                     </div>
+                                )}
+                                {previewData.detailedData.ownerInfo.balance > 0 && (
+                                     <p className="text-right font-bold mt-2 text-green-600">Saldo a Favor: Bs. {previewData.detailedData.ownerInfo.balance.toLocaleString('es-VE', {minimumFractionDigits: 2})}</p>
+                                )}
+                                {previewData.detailedData.diagnosis && (
+                                     <div className="mt-4 pt-4 border-t">
+                                        <h4 className="font-semibold mb-2">Observaciones y Diagnóstico</h4>
+                                        <p className="text-sm text-muted-foreground italic">{previewData.detailedData.diagnosis}</p>
+                                     </div>
                                 )}
                             </div>
                         ) : (
