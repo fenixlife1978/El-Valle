@@ -54,6 +54,7 @@ type Debt = {
     amountUSD: number;
     description: string;
     status: 'pending' | 'paid';
+    paymentId?: string;
 };
 
 type ChartData = {
@@ -373,15 +374,31 @@ export default function ReportsPage() {
                  return;
             }
 
-            // Fetch Payments for the owner
-            const paymentsQuery = query(collection(db, "payments"), where("status", "==", "aprobado"));
+            // Fetch all debts (paid and pending) for the owner
+            const allDebtsQuery = query(collection(db, "debts"), where("ownerId", "==", owner.id), orderBy("year", "asc"), orderBy("month", "asc"));
+            const allDebtsSnapshot = await getDocs(allDebtsQuery);
+            const allOwnerDebts = allDebtsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Debt));
+            
+            const paidDebtsByPaymentId: { [key: string]: Debt[] } = {};
+            allOwnerDebts.forEach(debt => {
+                if(debt.status === 'paid' && debt.paymentId) {
+                    if(!paidDebtsByPaymentId[debt.paymentId]) {
+                        paidDebtsByPaymentId[debt.paymentId] = [];
+                    }
+                    paidDebtsByPaymentId[debt.paymentId].push(debt);
+                }
+            });
+
+            // Fetch Payments for the owner, approved only
+            const paymentsQuery = query(collection(db, "payments"), 
+                where("status", "==", "aprobado"), 
+                where("beneficiaries", "array-contains", { ownerId: owner.id, ownerName: owner.name })
+            );
             
             const paymentsSnapshot = await getDocs(paymentsQuery);
-            const allPayments = paymentsSnapshot.docs.map(doc => doc.data() as Payment)
-                .filter(p => p.beneficiaries.some(b => b.ownerId === owner.id));
+            const allPayments = paymentsSnapshot.docs.map(doc => ({id: doc.id, ...doc.data()} as Payment));
 
             let totalPaid = 0;
-            let isAdvancePaymentReport = false;
             const paymentsRows = allPayments
                 .sort((a, b) => a.paymentDate.toMillis() - b.paymentDate.toMillis())
                 .map(p => {
@@ -389,32 +406,23 @@ export default function ReportsPage() {
                     const amountForOwner = beneficiary?.amount || p.totalAmount;
                     totalPaid += amountForOwner;
                     
-                    const isAdvance = p.paymentMethod === 'adelanto';
-                    if (isAdvance) isAdvancePaymentReport = true;
-                    
-                    const currencySymbol = isAdvance ? '$' : 'Bs.';
-                    const locale = isAdvance ? 'en-US' : 'es-VE';
+                    const paidDebtsForThisPayment = paidDebtsByPaymentId[p.id];
+                    let concept = "Abono a Saldo a Favor";
+                    if(paidDebtsForThisPayment && paidDebtsForThisPayment.length > 0) {
+                        const periods = paidDebtsForThisPayment.map(d => `${monthsLocale[d.month].substring(0,3)} ${d.year}`).join(', ');
+                        concept = `Pago Cuota(s): ${periods}`;
+                    }
 
                     return [
                         format(p.paymentDate.toDate(), "dd/MM/yyyy"),
-                        p.paymentMethod === 'adelanto' ? 'Pago por Adelantado' : "Pago de Condominio",
+                        concept,
                         p.reference,
-                        `${currencySymbol} ${amountForOwner.toLocaleString(locale, {minimumFractionDigits: 2})}`
+                        `Bs. ${amountForOwner.toLocaleString('es-VE', {minimumFractionDigits: 2})}`
                     ];
                 });
 
-            // Fetch ONLY PENDING Debts, ordered chronologically
-            const debtsQuery = query(
-                collection(db, "debts"),
-                where("ownerId", "==", owner.id),
-                where("status", "==", "pending"),
-                orderBy("year", "asc"),
-                orderBy("month", "asc")
-            );
-            const debtSnapshot = await getDocs(debtsQuery);
+            const pendingDebts = allOwnerDebts.filter(d => d.status === 'pending');
             let totalDebtUSD = 0;
-            const pendingDebts = debtSnapshot.docs.map(doc => doc.data() as Debt);
-            
             const debtsRows = pendingDebts.map(d => {
                 totalDebtUSD += d.amountUSD;
                 return [
@@ -435,10 +443,7 @@ export default function ReportsPage() {
                 ? owner.properties.map(p => `${p.street} - ${p.house}`).join('; ') 
                 : 'N/A';
             const ownerInfo = { name: owner.name, properties: ownerProps };
-
-            const paymentCurrencySymbol = isAdvancePaymentReport ? '$' : 'Bs.';
-            const paymentAmountHeader = isAdvancePaymentReport ? 'Monto ($)' : 'Monto (Bs.)';
-
+            
             setPreviewData({
                 title: `Estado de Cuenta Detallado`,
                 filename: `estado_cuenta_detallado_${owner.name.replace(/\s/g, '_')}`,
@@ -449,10 +454,10 @@ export default function ReportsPage() {
                     ownerInfo: ownerInfo,
                     dateRange: dateRangeText,
                     payments: {
-                        headers: ["Fecha", "Concepto", "Referencia", paymentAmountHeader],
+                        headers: ["Fecha", "Concepto", "Referencia", "Monto (Bs.)"],
                         rows: paymentsRows,
                         total: totalPaid,
-                        currency: paymentCurrencySymbol,
+                        currency: 'Bs.',
                     },
                     debts: {
                         headers: ["Período", "Descripción", "Monto ($)", "Estado"],
