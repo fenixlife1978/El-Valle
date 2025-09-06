@@ -18,7 +18,7 @@ import { Calendar as CalendarIcon, Download, Search, Loader2, BarChart2, ListChe
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import html2canvas from 'html2canvas';
-import { collection, getDocs, query, where, doc, getDoc, orderBy, Timestamp } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, getDoc, orderBy, Timestamp, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend, LabelList } from 'recharts';
@@ -375,7 +375,12 @@ export default function ReportsPage() {
             }
 
             // Fetch all debts (paid and pending) for the owner
-            const allDebtsQuery = query(collection(db, "debts"), where("ownerId", "==", owner.id), orderBy("year", "asc"), orderBy("month", "asc"));
+            const allDebtsQuery = query(
+                collection(db, "debts"), 
+                where("ownerId", "==", owner.id), 
+                orderBy("year", "asc"), 
+                orderBy("month", "asc")
+            );
             const allDebtsSnapshot = await getDocs(allDebtsQuery);
             const allOwnerDebts = allDebtsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Debt));
             
@@ -390,9 +395,16 @@ export default function ReportsPage() {
             });
 
             // Fetch Payments for the owner, approved only
-            const paymentsQuery = query(collection(db, "payments"), 
-                where("status", "==", "aprobado"), 
-                where("beneficiaries", "array-contains", { ownerId: owner.id, ownerName: owner.name })
+            const paymentsQuery = query(
+                collection(db, "payments"),
+                where("status", "==", "aprobado"),
+                where("beneficiaries", "array-contains-any", owner.properties.map(p => ({
+                    ownerId: owner.id,
+                    ownerName: owner.name,
+                    street: p.street,
+                    house: p.house
+                }))),
+                orderBy("paymentDate", "desc")
             );
             
             const paymentsSnapshot = await getDocs(paymentsQuery);
@@ -400,7 +412,7 @@ export default function ReportsPage() {
 
             let totalPaid = 0;
             const paymentsRows = allPayments
-                .sort((a, b) => a.paymentDate.toMillis() - b.paymentDate.toMillis())
+                .slice(0, 10) // Take only the last 10
                 .map(p => {
                     const beneficiary = p.beneficiaries.find(b => b.ownerId === owner.id);
                     const amountForOwner = beneficiary?.amount || p.totalAmount;
