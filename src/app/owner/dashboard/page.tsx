@@ -201,12 +201,12 @@ export default function OwnerDashboardPage() {
                         totalDebtUSD += debt.amountUSD;
                     });
                     
-                    const sortedPendingDebts = pendingDebtsData.sort((a,b) => a.year - b.year || a.month - a.month);
+                    const sortedPendingDebts = pendingDebtsData.sort((a,b) => b.year - a.year || b.month - a.month);
                     setDebts(sortedPendingDebts);
                     
                     if (totalDebtUSD > 0) {
                         setSolvencyStatus('moroso');
-                        const oldestDebt = sortedPendingDebts[0];
+                        const oldestDebt = sortedPendingDebts[sortedPendingDebts.length - 1];
                         if (oldestDebt) {
                             const monthLabel = monthsLocale[oldestDebt.month] || '';
                             setSolvencyPeriod(`Desde ${monthLabel} ${oldestDebt.year}`);
