@@ -232,14 +232,18 @@ export default function VerifyPaymentsPage() {
                 const debtsQuery = query(
                     collection(db, 'debts'),
                     where('ownerId', '==', beneficiary.ownerId),
-                    where('status', '==', 'pending'),
-                    orderBy('year', 'asc'),
-                    orderBy('month', 'asc')
+                    where('status', '==', 'pending')
                 );
                 const debtsSnapshot = await getDocs(debtsQuery);
+                const sortedDebts = debtsSnapshot.docs.sort((a, b) => {
+                    const dataA = a.data();
+                    const dataB = b.data();
+                    if (dataA.year !== dataB.year) return dataA.year - dataB.year;
+                    return dataA.month - dataB.month;
+                });
                 
-                if (!debtsSnapshot.empty) {
-                    for (const debtDoc of debtsSnapshot.docs) {
+                if (sortedDebts.length > 0) {
+                    for (const debtDoc of sortedDebts) {
                         const debt = { id: debtDoc.id, ...debtDoc.data() } as Debt;
                         const debtAmountBs = debt.amountUSD * exchangeRate;
                         
