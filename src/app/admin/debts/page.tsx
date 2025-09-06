@@ -91,6 +91,7 @@ const months = [
 
 const years = Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - i);
 
+const ADMIN_USER_ID = 'G2jhcEnp05TcvjYj8SwhzVCHbW83'; // EDWIN AGUIAR's ID
 
 export default function DebtManagementPage() {
     const [view, setView] = useState<View>('list');
@@ -187,7 +188,7 @@ export default function DebtManagementPage() {
                     pendingDebtUSD: 0, // Will be calculated by the debts listener
                     properties: data.properties,
                 };
-            });
+            }).filter(owner => owner.id !== ADMIN_USER_ID); // Exclude admin
             setOwners(ownersData);
             setLoading(false);
         }, (error) => {
@@ -246,7 +247,7 @@ export default function DebtManagementPage() {
         setIsReconciling(true);
         toast({ title: 'Iniciando conciliación...', description: 'Procesando deudas y saldos a favor. Esto puede tardar.' });
         
-        const ownersWithBalance = owners.filter(o => Number(o.balance) > 0);
+        const ownersWithBalance = owners.filter(o => Number(o.balance) > 0 && o.id !== ADMIN_USER_ID);
 
         if (ownersWithBalance.length === 0) {
              toast({ title: 'Sin Saldos a Favor', description: 'Ningún propietario tiene saldo a favor para conciliar.' });
@@ -428,7 +429,6 @@ export default function DebtManagementPage() {
             const year = today.getFullYear();
             const month = today.getMonth() + 1;
 
-            // This query now fetches ALL debts for the period, regardless of status.
             const existingDebtsQuery = query(collection(db, 'debts'), where('year', '==', year), where('month', '==', month));
             const existingDebtsSnapshot = await getDocs(existingDebtsQuery);
             const ownersWithDebtForProp = new Set(existingDebtsSnapshot.docs.map(doc => {
@@ -442,12 +442,13 @@ export default function DebtManagementPage() {
             const batch = writeBatch(db);
             let newDebtsCount = 0;
 
-            owners.forEach(owner => {
+            const ownersToProcess = owners.filter(owner => owner.id !== ADMIN_USER_ID);
+
+            ownersToProcess.forEach(owner => {
                 if (owner.properties && owner.properties.length > 0) {
                     owner.properties.forEach(property => {
                         if (property && property.street && property.house) {
                             const key = `${owner.id}-${property.street}-${property.house}`;
-                            // If a debt (paid or pending) already exists for this property this month, skip.
                             if (!ownersWithDebtForProp.has(key)) {
                                 const debtRef = doc(collection(db, 'debts'));
                                 batch.set(debtRef, {
@@ -518,7 +519,7 @@ export default function DebtManagementPage() {
             querySnapshot.forEach((doc) => {
                 debtsData.push({ id: doc.id, ...doc.data() } as Debt);
             });
-            setSelectedOwnerDebts(debtsData.sort((a,b) => b.year - a.year || b.month - b.month));
+            setSelectedOwnerDebts(debtsData.sort((a,b) => b.year - b.year || b.month - b.month));
             setLoadingDebts(false);
         }, (error) => {
             console.error("Error fetching owner debts:", error);

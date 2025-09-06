@@ -1,5 +1,4 @@
 
-      
 'use client';
 
 import { useState, useMemo, useRef, useEffect } from 'react';
@@ -65,6 +64,7 @@ const getHousesForStreet = (street: string) => {
     return Array.from({ length: houseCount }, (_, i) => `Casa ${i + 1}`);
 };
 
+const ADMIN_USER_ID = 'G2jhcEnp05TcvjYj8SwhzVCHbW83'; // EDWIN AGUIAR's ID
 
 export default function PeopleManagementPage() {
     const [owners, setOwners] = useState<Owner[]>([]);
@@ -172,7 +172,6 @@ export default function PeopleManagementPage() {
         try {
             const { id, ...ownerData } = currentOwner;
             
-            // CRITICAL FIX: Ensure balance is always stored as a number.
             const balanceValue = parseFloat(String(ownerData.balance).replace(',', '.') || '0');
             const dataToSave: any = {
                 ...ownerData,
@@ -184,28 +183,32 @@ export default function PeopleManagementPage() {
                 await updateDoc(ownerRef, dataToSave);
                 toast({ title: 'Propietario Actualizado', description: 'Los datos han sido guardados en la base de datos.' });
             } else { // Adding new user
-                if (!dataToSave.email) {
-                    toast({ variant: 'destructive', title: 'Error de Validación', description: 'El correo electrónico es obligatorio para nuevos usuarios.' });
-                    return;
+                if (dataToSave.email) { // Email is optional, only create auth user if provided
+                    const initialPassword = dataToSave.role === 'administrador' ? 'M110710.m' : '123456';
+                    try {
+                        const userCredential = await createUserWithEmailAndPassword(auth, dataToSave.email, initialPassword);
+                        const newUserId = userCredential.user.uid;
+                        const userRef = doc(db, "owners", newUserId);
+                        await setDoc(userRef, dataToSave);
+                        toast({ title: 'Propietario Agregado', description: 'La nueva persona ha sido guardada con cuenta de autenticación.' });
+                    } catch (error: any) {
+                        if (error.code === 'auth/email-already-in-use') {
+                            toast({ variant: 'destructive', title: 'Error de Autenticación', description: 'El correo electrónico ya está registrado. No se pudo crear la cuenta de autenticación, pero el propietario se guardará sin acceso.' });
+                            // Save without auth if email exists
+                            await addDoc(collection(db, "owners"), dataToSave);
+                        } else {
+                            throw error; // Rethrow other auth errors
+                        }
+                    }
+                } else { // No email provided, just save to Firestore
+                    await addDoc(collection(db, "owners"), dataToSave);
+                    toast({ title: 'Propietario Agregado', description: 'La nueva persona ha sido guardada sin cuenta de autenticación.' });
                 }
-    
-                // Step 1: Create user in Firebase Auth
-                const initialPassword = dataToSave.role === 'administrador' ? 'M110710.m' : '123456';
-                const userCredential = await createUserWithEmailAndPassword(auth, dataToSave.email, initialPassword);
-                const newUserId = userCredential.user.uid;
-                
-                // Step 2: Create user document in Firestore with the UID from Auth
-                const userRef = doc(db, "owners", newUserId);
-                await setDoc(userRef, dataToSave);
-                
-                toast({ title: 'Propietario Agregado', description: 'La nueva persona ha sido guardada en la base de datos y en el sistema de autenticación.' });
             }
         } catch (error: any) {
             console.error("Error saving owner: ", error);
             let description = 'No se pudieron guardar los cambios en la base de datos.';
-            if (error.code === 'auth/email-already-in-use') {
-                description = 'El correo electrónico ya está registrado. Por favor, use otro.';
-            } else if (error.code === 'auth/weak-password') {
+            if (error.code === 'auth/weak-password') {
                 description = 'La contraseña es demasiado débil.';
             }
             toast({ variant: 'destructive', title: 'Error', description });
@@ -250,6 +253,7 @@ export default function PeopleManagementPage() {
     
     const handleExportExcel = () => {
         const dataToExport = owners.flatMap(o => {
+            if (o.id === ADMIN_USER_ID) return []; // Exclude admin
             const properties = (o.properties && o.properties.length > 0) ? o.properties : [{ street: 'N/A', house: 'N/A'}];
             return properties.map(p => ({
                 Nombre: o.name,
@@ -295,7 +299,7 @@ export default function PeopleManagementPage() {
 
         (doc as any).autoTable({
             head: [['Nombre', 'Propiedades', 'Email', 'Rol', 'Saldo a Favor (Bs.)']],
-            body: owners.map(o => {
+            body: owners.filter(o => o.id !== ADMIN_USER_ID).map(o => { // Exclude admin
                 const properties = (o.properties && o.properties.length > 0) 
                     ? o.properties.map(p => `${p.street} - ${p.house}`).join('\n') 
                     : 'N/A';
@@ -330,13 +334,13 @@ export default function PeopleManagementPage() {
                 
                 const ownersMap: { [key: string]: Partial<Owner> } = {};
                 (json as any[]).forEach(item => {
-                    if (!item.name || !item.email) return;
-                    const key = item.email.toLowerCase();
+                    if (!item.name) return; // Name is the minimum requirement
+                    const key = (item.email || item.name).toLowerCase(); // Use name as key if email is missing
                     if (!ownersMap[key]) {
                         const balanceNum = parseFloat(item.balance);
                         ownersMap[key] = {
                             name: item.name,
-                            email: item.email,
+                            email: item.email || undefined,
                             balance: isNaN(balanceNum) ? 0 : parseFloat(balanceNum.toFixed(2)),
                             role: (item.role === 'administrador' || item.role === 'propietario') ? item.role : 'propietario',
                             properties: []
@@ -351,16 +355,27 @@ export default function PeopleManagementPage() {
                 
                 let successCount = 0;
                 for (const ownerData of newOwners) {
-                    if (ownerData.properties && ownerData.properties.length > 0 && ownerData.email) {
+                    if (ownerData.name === 'EDWIN AGUIAR') continue; // Skip admin
+                    if (ownerData.properties && ownerData.properties.length > 0) {
                          try {
-                            const initialPassword = ownerData.role === 'administrador' ? 'M110710.m' : '123456';
-                            const userCredential = await createUserWithEmailAndPassword(auth, ownerData.email, initialPassword);
-                            const newUserId = userCredential.user.uid;
-                            const userRef = doc(db, "owners", newUserId);
-                            await setDoc(userRef, ownerData);
+                             if (ownerData.email) {
+                                const initialPassword = ownerData.role === 'administrador' ? 'M110710.m' : '123456';
+                                const userCredential = await createUserWithEmailAndPassword(auth, ownerData.email, initialPassword);
+                                const newUserId = userCredential.user.uid;
+                                const userRef = doc(db, "owners", newUserId);
+                                await setDoc(userRef, ownerData);
+                             } else {
+                                await addDoc(collection(db, "owners"), ownerData);
+                             }
                             successCount++;
                          } catch (error: any) {
-                             console.warn(`Could not import user ${ownerData.email}: ${error.message}`);
+                             if (error.code === 'auth/email-already-in-use') {
+                                 console.warn(`Could not create auth for ${ownerData.email}, user already exists. Saving data to Firestore.`);
+                                 await addDoc(collection(db, "owners"), ownerData);
+                                 successCount++;
+                             } else {
+                                console.warn(`Could not import user ${ownerData.email || ownerData.name}: ${error.message}`);
+                             }
                          }
                     }
                 }
@@ -450,9 +465,7 @@ export default function PeopleManagementPage() {
                                         </TableCell>
                                     </TableRow>
                                 ) : (
-                                    owners.map((owner) => {
-                                        const balanceNum = parseFloat(String(owner.balance));
-                                        return (
+                                    owners.map((owner) => (
                                         <TableRow key={owner.id}>
                                             <TableCell className="font-medium">{owner.name}</TableCell>
                                             <TableCell>
@@ -464,8 +477,8 @@ export default function PeopleManagementPage() {
                                             <TableCell>{owner.email || '-'}</TableCell>
                                             <TableCell className="capitalize">{owner.role}</TableCell>
                                             <TableCell>
-                                                 {balanceNum > 0
-                                                    ? `Bs. ${balanceNum.toLocaleString('es-VE', { minimumFractionDigits: 2 })}` 
+                                                 {owner.balance > 0
+                                                    ? `Bs. ${owner.balance.toLocaleString('es-VE', { minimumFractionDigits: 2 })}` 
                                                     : '-'}
                                             </TableCell>
                                             <TableCell className="text-right">
@@ -481,15 +494,17 @@ export default function PeopleManagementPage() {
                                                             <Edit className="mr-2 h-4 w-4" />
                                                             Editar
                                                         </DropdownMenuItem>
-                                                        <DropdownMenuItem onClick={() => handleDeleteOwner(owner)} className="text-destructive focus:text-destructive focus:bg-destructive/10">
-                                                            <Trash2 className="mr-2 h-4 w-4" />
-                                                            Eliminar
-                                                        </DropdownMenuItem>
+                                                        {owner.id !== ADMIN_USER_ID && ( // Prevent admin deletion
+                                                            <DropdownMenuItem onClick={() => handleDeleteOwner(owner)} className="text-destructive focus:text-destructive focus:bg-destructive/10">
+                                                                <Trash2 className="mr-2 h-4 w-4" />
+                                                                Eliminar
+                                                            </DropdownMenuItem>
+                                                        )}
                                                     </DropdownMenuContent>
                                                 </DropdownMenu>
                                             </TableCell>
                                         </TableRow>
-                                    )})
+                                    ))
                                 )}
                             </TableBody>
                         </Table>
@@ -512,9 +527,10 @@ export default function PeopleManagementPage() {
                                 <Input id="name" value={currentOwner.name} onChange={handleInputChange} />
                             </div>
                              <div className="space-y-2">
-                                <Label htmlFor="email">Email</Label>
+                                <Label htmlFor="email">Email (Opcional)</Label>
                                 <Input id="email" type="email" value={currentOwner.email || ''} onChange={handleInputChange} disabled={!!currentOwner.id} />
                                 {currentOwner.id && <p className="text-xs text-muted-foreground">El email no se puede cambiar para un usuario existente.</p>}
+                                {!currentOwner.id && <p className="text-xs text-muted-foreground">Si se provee, se creará una cuenta de acceso.</p>}
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="role">Rol</Label>
@@ -595,7 +611,3 @@ export default function PeopleManagementPage() {
 
         </div>
     );
-    
-    
-
-

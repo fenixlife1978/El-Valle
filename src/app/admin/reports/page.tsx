@@ -90,6 +90,7 @@ const monthsLocale: { [key: number]: string } = {
     7: 'Julio', 8: 'Agosto', 9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre'
 };
 
+const ADMIN_USER_ID = 'G2jhcEnp05TcvjYj8SwhzVCHbW83'; // EDWIN AGUIAR's ID
 
 export default function ReportsPage() {
     const { toast } = useToast();
@@ -146,7 +147,7 @@ export default function ReportsPage() {
                     };
                 });
                 
-                setOwners(ownersData);
+                setOwners(ownersData.filter(o => o.id !== ADMIN_USER_ID)); // Exclude admin
 
                 // Fetch Settings for Rate and Company Info
                 const settingsRef = doc(db, 'config', 'mainSettings');
@@ -160,7 +161,6 @@ export default function ReportsPage() {
                     if (activeRateObj) {
                         activeRateValue = activeRateObj.rate;
                     } else if (rates.length > 0) {
-                        // Fallback to the most recent rate if none is active
                         const sortedRates = [...rates].sort((a:any,b:any) => new Date(b.date).getTime() - new Date(a.date).getTime());
                         activeRateValue = sortedRates[0].rate;
                     }
@@ -187,6 +187,7 @@ export default function ReportsPage() {
                 const debtsByStreet: {[key: string]: number} = {};
                 for(const debtDoc of allPendingDebtsSnapshot.docs) {
                     const debt = debtDoc.data();
+                     if (debt.ownerId === ADMIN_USER_ID) continue;
                     const owner = ownersData.find(o => o.id === debt.ownerId);
                     if(owner && owner.properties && owner.properties.length > 0) {
                         const ownerStreet = owner.properties[0].street;
@@ -271,7 +272,19 @@ export default function ReportsPage() {
             startY += 10;
     
         } else {
-            (doc as any).autoTable({ head: [data.headers], body: data.rows, startY });
+             (doc as any).autoTable({ 
+                head: [data.headers], 
+                body: data.rows, 
+                startY,
+                styles: {
+                    cellPadding: 2,
+                    fontSize: 8
+                },
+                headStyles: {
+                    fillColor: [30, 80, 180],
+                    fontSize: 8
+                }
+            });
             if (data.footers) {
                 const finalY = (doc as any).lastAutoTable.finalY;
                 doc.setFontSize(12).setFont('helvetica', 'bold').text(data.footers.join(' | '), margin, finalY + 15);
@@ -348,17 +361,14 @@ export default function ReportsPage() {
                  setGeneratingReport(false);
                  return;
             }
-            const propertyForQuery = owner.properties[0];
 
-            // Fetch Payments (all approved payments for the user)
+            // Fetch Payments for ALL properties of the owner
             const paymentsQuery = query(
                 collection(db, "payments"),
                 where("status", "==", "aprobado"),
-                where("beneficiaries", "array-contains", { 
-                    ownerId: owner.id, 
-                    house: propertyForQuery.house, 
-                    street: propertyForQuery.street,
-                })
+                where("beneficiaries", "array-contains-any", owner.properties.map(p => ({
+                    ownerId: owner.id, house: p.house, street: p.street
+                })))
             );
             const paymentsSnapshot = await getDocs(paymentsQuery);
             const allPayments = paymentsSnapshot.docs.map(doc => doc.data() as Payment);
@@ -426,7 +436,7 @@ export default function ReportsPage() {
                 headers: [], // Not used for detailed view
                 rows: [], // Not used for detailed view
                 detailedData: {
-                    ownerInfo: `Propietario: ${owner.name} | Propiedad: ${ownerProps}`,
+                    ownerInfo: `Propietario: ${owner.name}\nPropiedades: ${ownerProps}`,
                     dateRange: dateRangeText,
                     payments: {
                         headers: ["Fecha", "Concepto", "Pagado por", paymentAmountHeader],
@@ -465,15 +475,16 @@ export default function ReportsPage() {
             
             const debtsByOwner: { [ownerId: string]: Debt[] } = {};
             for (const debt of allPendingDebts) {
+                if (debt.ownerId === ADMIN_USER_ID) continue; // Exclude admin
                 if (!debtsByOwner[debt.ownerId]) {
                     debtsByOwner[debt.ownerId] = [];
                 }
                 debtsByOwner[debt.ownerId].push(debt);
             }
 
-            const baseHeaders = ['PROPIETARIO', 'PROPIEDAD', 'PERIODO (DESDE - HASTA)', 'MESES ADEUDADOS'];
+            const baseHeaders = ['PROPIETARIO', 'PROPIEDADES', 'PERIODO (DESDE - HASTA)', 'MESES ADEUDADOS'];
             if (showUsdInDelinquency) {
-                baseHeaders.push('MONTO EN DÓLARES');
+                baseHeaders.push('MONTO EN DÓLARES ($)');
             }
 
             const reportRows = Object.entries(debtsByOwner)
@@ -481,14 +492,14 @@ export default function ReportsPage() {
                     const ownerData = owners.find(o => o.id === ownerId);
                     if (!ownerData || ownerDebts.length < parseInt(delinquencyPeriod)) return null;
 
-                    ownerDebts.sort((a, b) => a.year - b.year || a.month - b.month);
+                    ownerDebts.sort((a, b) => a.year - b.year || a.month - a.month);
                     const firstDebt = ownerDebts[0];
                     const lastDebt = ownerDebts[ownerDebts.length - 1];
                     
                     const period = `${monthsLocale[firstDebt.month]} ${firstDebt.year} - ${monthsLocale[lastDebt.month]} ${lastDebt.year}`;
                     
-                    const properties = (ownerData.properties && ownerData.properties.length > 0)
-                        ? ownerData.properties.map(p => `${p.street} - ${p.house}`).join(', ')
+                    const properties = (ownerData.properties && ownerData.properties.length > 0) 
+                        ? ownerData.properties.map(p => `${p.street} - ${p.house}`).join('\n')
                         : 'N/A';
                     
                     const rowData: (string|number)[] = [
@@ -526,18 +537,20 @@ export default function ReportsPage() {
     const showSolvencyReportPreview = async () => {
         setGeneratingReport(true);
         try {
-            const solventOwners = owners.filter(o => o.status === 'solvente');
+            const solventOwners = owners.filter(o => o.status === 'solvente' && o.id !== ADMIN_USER_ID);
             const ownerIds = solventOwners.map(o => o.id);
             if (ownerIds.length === 0) {
-                setPreviewData({ title: 'Reporte de Solvencia', headers: ['PROPIETARIO', 'PROPIEDAD', 'ESTADO', 'SOLVENTE HASTA'], rows: [], filename: 'reporte_solvencia' });
+                setPreviewData({ title: 'Reporte de Solvencia', headers: ['PROPIETARIO', 'PROPIEDADES', 'ESTADO', 'SOLVENTE HASTA'], rows: [], filename: 'reporte_solvencia' });
                 setIsPreviewOpen(true);
                 setGeneratingReport(false);
                 return;
             }
 
-            // This logic assumes that if a user is solvent, their last paid debt correctly reflects their solvency period.
-            // A more robust check might query ALL debts and ensure no pending ones exist.
-            const debtsQuery = query(collection(db, 'debts'), where('ownerId', 'in', ownerIds), where('status', '==', 'paid'));
+            const debtsQuery = query(
+                collection(db, 'debts'), 
+                where('ownerId', 'in', ownerIds),
+                where('status', '==', 'paid')
+            );
             const debtsSnapshot = await getDocs(debtsQuery);
             const paidDebtsByOwner: { [ownerId: string]: Debt[] } = {};
             debtsSnapshot.forEach(doc => {
@@ -549,14 +562,14 @@ export default function ReportsPage() {
             });
 
             const reportRows = solventOwners.map(owner => {
-                const properties = (owner.properties && owner.properties.length > 0)
-                    ? owner.properties.map(p => `${p.street} - ${p.house}`).join(', ')
+                const properties = (owner.properties && owner.properties.length > 0) 
+                    ? owner.properties.map(p => `${p.street} - ${p.house}`).join('\n') 
                     : 'N/A';
                 
                 const ownerDebts = paidDebtsByOwner[owner.id];
                 let period = 'Sin pagos registrados';
                 if (ownerDebts && ownerDebts.length > 0) {
-                    ownerDebts.sort((a, b) => {
+                     ownerDebts.sort((a, b) => {
                         if (a.year !== b.year) return b.year - a.year;
                         return b.month - a.month;
                     });
@@ -569,7 +582,7 @@ export default function ReportsPage() {
 
             setPreviewData({
                 title: 'Reporte de Solvencia',
-                headers: ['PROPIETARIO', 'PROPIEDAD', 'ESTADO', 'SOLVENTE HASTA'],
+                headers: ['PROPIETARIO', 'PROPIEDADES', 'ESTADO', 'SOLVENTE HASTA'],
                 rows: reportRows,
                 filename: 'reporte_solvencia'
             });
@@ -583,13 +596,13 @@ export default function ReportsPage() {
     };
 
     const showBalanceFavorReportPreview = () => {
-        const ownersWithBalance = owners.filter(o => o.balance > 0);
+        const ownersWithBalance = owners.filter(o => o.balance > 0 && o.id !== ADMIN_USER_ID);
         setPreviewData({
             title: 'Reporte de Saldos a Favor',
             headers: ['Propietario', 'Propiedades', 'Saldo a Favor (Bs.)'],
             rows: ownersWithBalance.map(o => {
-                const properties = (o.properties && o.properties.length > 0)
-                    ? o.properties.map(p => `${p.street} - ${p.house}`).join(', ')
+                const properties = (o.properties && o.properties.length > 0) 
+                    ? o.properties.map(p => `${p.street} - ${p.house}`).join('\n') 
                     : 'N/A';
                 return [o.name, properties, `Bs. ${o.balance.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`];
             }),
@@ -619,39 +632,35 @@ export default function ReportsPage() {
             const paymentsSnapshot = await getDocs(paymentsQuery);
             const payments = paymentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Payment));
 
-            const reportRows = payments.map(p => {
-                let userName = 'N/A';
-                let street = 'N/A';
-                let house = 'N/A';
+            const reportRows = payments
+                .filter(p => !p.beneficiaries.some(b => b.ownerId === ADMIN_USER_ID)) // Exclude admin payments
+                .map(p => {
+                    let userName = 'N/A';
+                    let properties = 'N/A';
 
-                if (p.beneficiaries && p.beneficiaries.length > 1) {
-                    userName = "Varios Beneficiarios";
-                    street = "Múltiples";
-                    house = "Múltiples";
-                } else if (p.beneficiaries && p.beneficiaries.length === 1) {
-                    const beneficiaryId = p.beneficiaries[0].ownerId;
-                    const owner = owners.find(o => o.id === beneficiaryId);
-                    userName = owner?.name || "Desconocido";
-                    street = p.beneficiaries[0].street || 'N/A';
-                    house = p.beneficiaries[0].house || 'N/A';
-                } else {
-                     const reporter = owners.find(o => o.id === p.reportedBy);
-                     userName = reporter?.name || 'Sistema';
-                }
+                    if (p.beneficiaries && p.beneficiaries.length > 0) {
+                        const beneficiaryId = p.beneficiaries[0].ownerId;
+                        const owner = owners.find(o => o.id === beneficiaryId);
+                        if (owner) {
+                            userName = owner.name;
+                            properties = owner.properties.map(prop => `${prop.street} - ${prop.house}`).join('\n');
+                        } else {
+                            userName = 'Desconocido';
+                        }
+                    }
 
-                return [
-                    userName,
-                    street,
-                    house,
-                    format(p.paymentDate.toDate(), "dd/MM/yyyy"),
-                    p.reference,
-                    p.totalAmount.toLocaleString('es-VE', { minimumFractionDigits: 2 })
-                ];
-            });
+                    return [
+                        userName,
+                        properties,
+                        format(p.paymentDate.toDate(), "dd/MM/yyyy"),
+                        p.reference,
+                        p.totalAmount.toLocaleString('es-VE', { minimumFractionDigits: 2 })
+                    ];
+                });
 
             setPreviewData({
                 title: `Reporte de Pagos de ${format(dateRange.from, 'dd/MM/yy')} a ${format(dateRange.to, 'dd/MM/yy')}`,
-                headers: ['USUARIO', 'CALLE', 'CASA', 'FECHA DE PAGO', 'REFERENCIA', 'MONTO (BS)'],
+                headers: ['PROPIETARIO', 'PROPIEDADES', 'FECHA DE PAGO', 'REFERENCIA', 'MONTO (BS)'],
                 rows: reportRows,
                 filename: `reporte_pagos_${format(dateRange.from, 'yyyy-MM-dd')}_a_${format(dateRange.to, 'yyyy-MM-dd')}`
             });
@@ -835,8 +844,9 @@ export default function ReportsPage() {
                     <div className="max-h-[60vh] overflow-y-auto">
                         {previewData?.isDetailedStatement && previewData.detailedData ? (
                             <div className="space-y-6">
-                                <div>
-                                    <h3 className="font-semibold">{previewData.detailedData.ownerInfo}</h3>
+                                <div className="whitespace-pre-wrap">
+                                    <h3 className="font-semibold">{previewData.detailedData.ownerInfo.split('\n')[0]}</h3>
+                                    {previewData.detailedData.ownerInfo.split('\n').slice(1).map((line, i) => <p key={i} className="text-sm text-muted-foreground">{line}</p>)}
                                     <p className="text-sm text-muted-foreground">{previewData.detailedData.dateRange}</p>
                                 </div>
                                 <div>
@@ -848,7 +858,7 @@ export default function ReportsPage() {
                                      <p className="text-right font-bold mt-2">Total Pagado: {previewData.detailedData.payments.currency} {previewData.detailedData.payments.total.toLocaleString('es-VE', {minimumFractionDigits: 2})}</p>
                                 </div>
                                 <div>
-                                    <h4 className="font-semibold mb-2">Resumen de Deudas</h4>
+                                    <h4 className="font-semibold mb-2">Resumen de Deudas Pendientes</h4>
                                     <Table>
                                         <TableHeader><TableRow>{previewData.detailedData.debts.headers.map((h, i) => <TableHead key={i}>{h}</TableHead>)}</TableRow></TableHeader>
                                         <TableBody>{previewData.detailedData.debts.rows.map((r, i) => <TableRow key={i}>{r.map((c, j) => <TableCell key={j}>{c}</TableCell>)}</TableRow>)}</TableBody>
@@ -869,7 +879,7 @@ export default function ReportsPage() {
                                     {previewData?.rows.map((row, rowIndex) => (
                                         <TableRow key={rowIndex}>
                                             {row.map((cell, cellIndex) => (
-                                                <TableCell key={cellIndex}>{cell}</TableCell>
+                                                <TableCell key={cellIndex} className="whitespace-pre-wrap">{cell}</TableCell>
                                             ))}
                                         </TableRow>
                                     ))}
