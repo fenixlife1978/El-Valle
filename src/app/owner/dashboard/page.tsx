@@ -160,33 +160,39 @@ export default function OwnerDashboardPage() {
                     // Re-subscribe to payments whenever user data changes
                     if (paymentsUnsubscribe) paymentsUnsubscribe();
                     
-                    const paymentsQuery = query(collection(db, "payments"), orderBy('reportedAt', 'desc'));
+                    const paymentsQuery = query(
+                        collection(db, "payments"), 
+                        where("beneficiaries", "array-contains-any", ownerData.properties.map(p => ({
+                            ownerId: ownerData.id,
+                            ownerName: ownerData.name,
+                            street: p.street,
+                            house: p.house
+                        }))),
+                        where('status', '==', 'aprobado'),
+                        orderBy('paymentDate', 'desc'),
+                        limit(3)
+                    );
                     
                     paymentsUnsubscribe = onSnapshot(paymentsQuery, (snapshot) => {
                          const paymentsData: Payment[] = [];
                         snapshot.forEach((doc) => {
                             const data = doc.data();
-                            if (data.beneficiaries && Array.isArray(data.beneficiaries)) {
-                                const isBeneficiary = data.beneficiaries.some((b: any) => b.ownerId === userId);
-                                if (isBeneficiary) {
-                                    paymentsData.push({
-                                        id: doc.id,
-                                        date: new Date(data.paymentDate.seconds * 1000).toISOString(),
-                                        amount: data.totalAmount,
-                                        bank: data.bank,
-                                        type: data.paymentMethod,
-                                        ref: data.reference,
-                                        status: data.status,
-                                        reportedAt: data.reportedAt,
-                                        exchangeRate: data.exchangeRate,
-                                        paymentDate: data.paymentDate,
-                                        reference: data.reference,
-                                        beneficiaries: data.beneficiaries,
-                                    });
-                                }
-                            }
+                            paymentsData.push({
+                                id: doc.id,
+                                date: new Date(data.paymentDate.seconds * 1000).toISOString(),
+                                amount: data.totalAmount,
+                                bank: data.bank,
+                                type: data.paymentMethod,
+                                ref: data.reference,
+                                status: data.status,
+                                reportedAt: data.reportedAt,
+                                exchangeRate: data.exchangeRate,
+                                paymentDate: data.paymentDate,
+                                reference: data.reference,
+                                beneficiaries: data.beneficiaries,
+                            });
                         });
-                        setPayments(paymentsData.slice(0, 10)); // Keep showing only the last 10
+                        setPayments(paymentsData);
                     });
 
 
@@ -514,7 +520,7 @@ export default function OwnerDashboardPage() {
         </div>
 
         <div>
-            <h2 className="text-2xl font-bold mb-4 font-headline">Mis Últimos Pagos</h2>
+            <h2 className="text-2xl font-bold mb-4 font-headline">Mis Últimos Pagos Aprobados</h2>
             <Card>
                 <Table>
                 <TableHeader>
@@ -531,7 +537,7 @@ export default function OwnerDashboardPage() {
                     {loading ? (
                         <TableRow><TableCell colSpan={6} className="h-24 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto"/></TableCell></TableRow>
                     ) : payments.length === 0 ? (
-                        <TableRow><TableCell colSpan={6} className="h-24 text-center text-muted-foreground">No tienes pagos registrados.</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={6} className="h-24 text-center text-muted-foreground">No tienes pagos aprobados recientemente.</TableCell></TableRow>
                     ) : (
                     payments.map((payment) => (
                     <TableRow key={payment.id}>
