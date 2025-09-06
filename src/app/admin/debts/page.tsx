@@ -271,19 +271,28 @@ export default function DebtManagementPage() {
                     if (availableBalance <= 0) return;
 
                     // --- Phase 1: Pay off existing pending debts ---
+                    // Fetch all pending debts for the owner without complex ordering on the server
                     const debtsQuery = query(
                         collection(db, 'debts'),
                         where('ownerId', '==', owner.id),
-                        where('status', '==', 'pending'),
-                        orderBy('year', 'asc'),
-                        orderBy('month', 'asc')
+                        where('status', '==', 'pending')
                     );
                     
                     const debtsSnapshot = await getDocs(debtsQuery);
+                    // Sort the documents client-side
+                    const sortedDebts = debtsSnapshot.docs.sort((a, b) => {
+                        const dataA = a.data();
+                        const dataB = b.data();
+                        if (dataA.year !== dataB.year) {
+                            return dataA.year - dataB.year;
+                        }
+                        return dataA.month - dataB.month;
+                    });
+                    
                     let balanceChanged = false;
 
-                    if (!debtsSnapshot.empty) {
-                        for (const debtDoc of debtsSnapshot.docs) {
+                    if (sortedDebts.length > 0) {
+                        for (const debtDoc of sortedDebts) {
                             const debt = { id: debtDoc.id, ...debtDoc.data() } as Debt;
                             const debtAmountBs = debt.amountUSD * activeRate;
                             
@@ -1227,3 +1236,5 @@ export default function DebtManagementPage() {
     // Fallback while loading or if view is invalid
     return null;
 }
+
+    
