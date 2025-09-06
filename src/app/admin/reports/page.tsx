@@ -394,7 +394,7 @@ export default function ReportsPage() {
                 }
             });
 
-            // Fetch Payments for the owner, approved only
+            // Fetch Payments for the owner, approved only, ordered by most recent
             const paymentsQuery = query(
                 collection(db, "payments"),
                 where("status", "==", "aprobado"),
@@ -412,7 +412,7 @@ export default function ReportsPage() {
 
             let totalPaid = 0;
             const paymentsRows = allPayments
-                .slice(0, 10) // Take only the last 10
+                .slice(0, 3) // Take only the last 3
                 .map(p => {
                     const beneficiary = p.beneficiaries.find(b => b.ownerId === owner.id);
                     const amountForOwner = beneficiary?.amount || p.totalAmount;
