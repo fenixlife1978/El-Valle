@@ -80,7 +80,7 @@ type ReportPreviewData = {
     detailedData?: {
         payments: { headers: string[], rows: (string|number)[][], total: number, currency: 'Bs.' | '$' };
         debts: { headers: string[], rows: (string|number)[][], total: number };
-        ownerInfo: string;
+        ownerInfo: { name: string, properties: string };
         dateRange: string;
     }
 };
@@ -210,90 +210,100 @@ export default function ReportsPage() {
     }, [toast]);
 
     const generatePdf = (data: ReportPreviewData) => {
-        const doc = new jsPDF();
+        const doc = new jsPDF({
+            orientation: 'portrait',
+            unit: 'px',
+            format: 'letter'
+        });
         const pageHeight = doc.internal.pageSize.getHeight();
         const pageWidth = doc.internal.pageSize.getWidth();
-        const margin = 14;
+        const margin = 24;
+        let startY = 0;
     
+        // --- Header ---
         if (companyInfo?.logo) {
-            doc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25);
+            doc.addImage(companyInfo.logo, 'PNG', margin, margin, 50, 50);
         }
         if (companyInfo) {
-            doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, margin + 30, margin + 8);
-            doc.setFontSize(9).setFont('helvetica', 'normal');
-            doc.text(`${companyInfo.rif} | ${companyInfo.phone}`, margin + 30, margin + 14);
-            doc.text(companyInfo.address, margin + 30, margin + 19);
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'bold');
+            doc.text(companyInfo.name, margin + 60, margin + 15);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(8);
+            doc.text(`${companyInfo.rif} | ${companyInfo.phone}`, margin + 60, margin + 25);
+            doc.text(companyInfo.address, margin + 60, margin + 35);
         }
-        doc.setFontSize(10);
-        doc.text(`Fecha de Emisión:`, pageWidth - margin, margin + 8, { align: 'right' });
-        doc.setFont('helvetica', 'bold').text(new Date().toLocaleString('es-VE'), pageWidth - margin, margin + 13, { align: 'right' });
+        doc.setFontSize(8);
+        doc.text(`Fecha de Emisión: ${new Date().toLocaleString('es-VE')}`, pageWidth - margin, margin, { align: 'right' });
     
-        doc.setLineWidth(0.5).line(margin, margin + 32, pageWidth - margin, margin + 32);
-    
-        doc.setFontSize(16).setFont('helvetica', 'bold').text(data.title, pageWidth / 2, margin + 45, { align: 'center' });
-    
-        let startY = margin + 55;
+        startY = margin + 60;
+        doc.setLineWidth(0.5);
+        doc.line(margin, startY, pageWidth - margin, startY);
+        startY += 10;
+        
+        doc.setFontSize(14).setFont('helvetica', 'bold');
+        doc.text(data.title, pageWidth / 2, startY, { align: 'center' });
+        startY += 20;
     
         if (data.isDetailedStatement && data.detailedData) {
             const { ownerInfo, dateRange, payments, debts } = data.detailedData;
-            doc.setFontSize(10).setFont('helvetica', 'normal');
-            doc.text(ownerInfo, margin, startY);
-            doc.text(dateRange, margin, startY + 5);
-            startY += 15;
+            doc.setFontSize(9).setFont('helvetica', 'normal');
+            doc.text(`Propietario: ${ownerInfo.name}`, margin, startY);
+            doc.text(`Propiedades: ${ownerInfo.properties}`, margin, startY + 10);
+            doc.text(`Período: ${dateRange}`, margin, startY + 20);
+            startY += 35;
     
             // Payments Table
-            doc.setFontSize(12).setFont('helvetica', 'bold').text("Resumen de Pagos", margin, startY);
+            doc.setFontSize(10).setFont('helvetica', 'bold');
+            doc.text("Resumen de Pagos", margin, startY);
             startY += 5;
             (doc as any).autoTable({
                 head: [payments.headers],
                 body: payments.rows,
-                startY,
-                headStyles: { fillColor: [40, 167, 69] },
-                didDrawPage: (hookData: any) => { startY = hookData.cursor?.y || startY; }
+                startY: startY,
+                theme: 'striped',
+                headStyles: { fillColor: [40, 167, 69], fontSize: 8, halign: 'center' },
+                styles: { fontSize: 8, cellPadding: 3 },
+                columnStyles: { 3: { halign: 'right' } }
             });
             startY = (doc as any).lastAutoTable.finalY + 5;
-            const balanceBs = data.detailedData ? (owners.find(o => o.id === selectedOwner)?.balance || 0) : 0;
-            const balanceText = balanceBs > 0 ? `(Saldo a Favor aplicado: Bs. ${balanceBs.toLocaleString('es-VE', {minimumFractionDigits: 2})})` : '';
-            const paymentCurrencySymbol = payments.currency;
-            doc.setFontSize(10).setFont('helvetica', 'bold').text(`Total Pagado: ${paymentCurrencySymbol} ${payments.total.toLocaleString('es-VE', {minimumFractionDigits: 2})} ${balanceText}`, pageWidth - margin, startY, { align: 'right' });
-            startY += 10;
+            doc.setFontSize(9).setFont('helvetica', 'bold');
+            doc.text(`Total Pagado: ${payments.currency} ${payments.total.toLocaleString('es-VE', {minimumFractionDigits: 2})}`, pageWidth - margin, startY, { align: 'right' });
+            startY += 20;
     
             // Debts Table
-            doc.setFontSize(12).setFont('helvetica', 'bold').text("Resumen de Deudas", margin, startY);
-            startY += 5;
-            (doc as any).autoTable({
-                head: [debts.headers],
-                body: debts.rows,
-                startY,
-                headStyles: { fillColor: [220, 53, 69] },
-                didDrawPage: (hookData: any) => { startY = hookData.cursor?.y || startY; }
-            });
-            startY = (doc as any).lastAutoTable.finalY + 5;
-            doc.setFontSize(10).setFont('helvetica', 'bold').text(`Total Adeudado: $${debts.total.toLocaleString('en-US', {minimumFractionDigits: 2})}`, pageWidth - margin, startY, { align: 'right' });
-            startY += 10;
-    
+            if(debts.rows.length > 0) {
+                doc.setFontSize(10).setFont('helvetica', 'bold');
+                doc.text("Resumen de Deudas Pendientes", margin, startY);
+                startY += 5;
+                (doc as any).autoTable({
+                    head: [debts.headers],
+                    body: debts.rows,
+                    startY,
+                    theme: 'striped',
+                    headStyles: { fillColor: [220, 53, 69], fontSize: 8, halign: 'center' },
+                    styles: { fontSize: 8, cellPadding: 3 },
+                    columnStyles: { 2: { halign: 'right' } }
+                });
+                startY = (doc as any).lastAutoTable.finalY + 5;
+                doc.setFontSize(9).setFont('helvetica', 'bold');
+                doc.setTextColor('#D32F2F');
+                doc.text(`Total Adeudado: $${debts.total.toLocaleString('en-US', {minimumFractionDigits: 2})}`, pageWidth - margin, startY, { align: 'right' });
+                doc.setTextColor(0);
+            }
         } else {
              (doc as any).autoTable({ 
                 head: [data.headers], 
                 body: data.rows, 
                 startY,
-                styles: {
-                    cellPadding: 2,
-                    fontSize: 8
-                },
-                headStyles: {
-                    fillColor: [30, 80, 180],
-                    fontSize: 8
-                }
+                styles: { cellPadding: 2, fontSize: 8 },
+                headStyles: { fillColor: [30, 80, 180], fontSize: 8 }
             });
-            if (data.footers) {
-                const finalY = (doc as any).lastAutoTable.finalY;
-                doc.setFontSize(12).setFont('helvetica', 'bold').text(data.footers.join(' | '), margin, finalY + 15);
-            }
         }
     
         doc.save(`${data.filename}.pdf`);
     };
+    
 
     const handleExportPreview = () => {
         if (!previewData) return;
@@ -364,13 +374,7 @@ export default function ReportsPage() {
             }
 
             // Fetch Payments for the owner
-            const paymentsQuery = query(
-                collection(db, "payments"),
-                where("status", "==", "aprobado"),
-                where("beneficiaries", "array-contains-any", owner.properties.map(p => ({
-                    ownerId: owner.id, house: p.house, street: p.street, ownerName: owner.name, amount: 0
-                })))
-            );
+            const paymentsQuery = query(collection(db, "payments"), where("status", "==", "aprobado"));
             
             const paymentsSnapshot = await getDocs(paymentsQuery);
             const allPayments = paymentsSnapshot.docs.map(doc => doc.data() as Payment)
@@ -428,9 +432,9 @@ export default function ReportsPage() {
             }
 
             const ownerProps = (owner.properties && owner.properties.length > 0) 
-                ? owner.properties.map(p => `  - ${p.street} - ${p.house}`).join('\n') 
+                ? owner.properties.map(p => `${p.street} - ${p.house}`).join('; ') 
                 : 'N/A';
-            const ownerInfoText = `Propietario: ${owner.name}\nPropiedades:\n${ownerProps}`;
+            const ownerInfo = { name: owner.name, properties: ownerProps };
 
             const paymentCurrencySymbol = isAdvancePaymentReport ? '$' : 'Bs.';
             const paymentAmountHeader = isAdvancePaymentReport ? 'Monto ($)' : 'Monto (Bs.)';
@@ -442,7 +446,7 @@ export default function ReportsPage() {
                 headers: [], // Not used for detailed view
                 rows: [], // Not used for detailed view
                 detailedData: {
-                    ownerInfo: ownerInfoText,
+                    ownerInfo: ownerInfo,
                     dateRange: dateRangeText,
                     payments: {
                         headers: ["Fecha", "Concepto", "Referencia", paymentAmountHeader],
@@ -855,26 +859,29 @@ export default function ReportsPage() {
                     <div className="max-h-[60vh] overflow-y-auto">
                         {previewData?.isDetailedStatement && previewData.detailedData ? (
                             <div className="space-y-6">
-                                <div className="whitespace-pre-wrap">
-                                    {previewData.detailedData.ownerInfo.split('\n').map((line, i) => i === 0 ? <h3 key={i} className="font-semibold">{line}</h3> : <p key={i} className="text-sm text-muted-foreground">{line}</p>)}
-                                    <p className="text-sm text-muted-foreground mt-1">{previewData.detailedData.dateRange}</p>
+                                <div className="space-y-1">
+                                    <h3 className="font-semibold">{`Propietario: ${previewData.detailedData.ownerInfo.name}`}</h3>
+                                    <p className="text-sm text-muted-foreground">{`Propiedades: ${previewData.detailedData.ownerInfo.properties}`}</p>
+                                    <p className="text-sm text-muted-foreground mt-1">{`Período: ${previewData.detailedData.dateRange}`}</p>
                                 </div>
                                 <div>
                                     <h4 className="font-semibold mb-2">Resumen de Pagos</h4>
                                     <Table>
                                         <TableHeader><TableRow>{previewData.detailedData.payments.headers.map((h, i) => <TableHead key={i}>{h}</TableHead>)}</TableRow></TableHeader>
-                                        <TableBody>{previewData.detailedData.payments.rows.map((r, i) => <TableRow key={i}>{r.map((c, j) => <TableCell key={j}>{c}</TableCell>)}</TableRow>)}</TableBody>
+                                        <TableBody>{previewData.detailedData.payments.rows.map((r, i) => <TableRow key={i}>{r.map((c, j) => <TableCell key={j} className={j === 3 ? 'text-right' : ''}>{c}</TableCell>)}</TableRow>)}</TableBody>
                                     </Table>
                                      <p className="text-right font-bold mt-2">Total Pagado: {previewData.detailedData.payments.currency} {previewData.detailedData.payments.total.toLocaleString('es-VE', {minimumFractionDigits: 2})}</p>
                                 </div>
-                                <div>
-                                    <h4 className="font-semibold mb-2">Resumen de Deudas Pendientes</h4>
-                                    <Table>
-                                        <TableHeader><TableRow>{previewData.detailedData.debts.headers.map((h, i) => <TableHead key={i}>{h}</TableHead>)}</TableRow></TableHeader>
-                                        <TableBody>{previewData.detailedData.debts.rows.map((r, i) => <TableRow key={i}>{r.map((c, j) => <TableCell key={j}>{c}</TableCell>)}</TableRow>)}</TableBody>
-                                    </Table>
-                                    <p className="text-right font-bold mt-2">Total Adeudado: ${previewData.detailedData.debts.total.toLocaleString('en-US', {minimumFractionDigits: 2})}</p>
-                                </div>
+                                {previewData.detailedData.debts.rows.length > 0 && (
+                                    <div>
+                                        <h4 className="font-semibold mb-2">Resumen de Deudas Pendientes</h4>
+                                        <Table>
+                                            <TableHeader><TableRow>{previewData.detailedData.debts.headers.map((h, i) => <TableHead key={i}>{h}</TableHead>)}</TableRow></TableHeader>
+                                            <TableBody>{previewData.detailedData.debts.rows.map((r, i) => <TableRow key={i}>{r.map((c, j) => <TableCell key={j} className={j === 2 ? 'text-right' : ''}>{c}</TableCell>)}</TableRow>)}</TableBody>
+                                        </Table>
+                                        <p className="text-right font-bold mt-2 text-destructive">Total Adeudado: ${previewData.detailedData.debts.total.toLocaleString('en-US', {minimumFractionDigits: 2})}</p>
+                                    </div>
+                                )}
                             </div>
                         ) : (
                             <Table>
