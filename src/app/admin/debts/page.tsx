@@ -893,10 +893,6 @@ export default function DebtManagementPage() {
                                     {isGeneratingMonthlyDebt ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CalendarPlus className="mr-2 h-4 w-4" />}
                                     Generar Deuda del Mes
                                 </Button>
-                                <Button onClick={handleReconcileAll} variant="outline" disabled={isReconciling}>
-                                    {isReconciling ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <FileCog className="mr-2 h-4 w-4" />}
-                                    Pagar Deudas con Saldo
-                                </Button>
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
                                         <Button variant="outline">
