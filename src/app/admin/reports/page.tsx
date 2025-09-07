@@ -527,79 +527,6 @@ export default function ReportsPage() {
             setGeneratingReport(false);
         }
     };
-
-    const showDelinquencyReportPreview = async () => {
-        if (!delinquencyPeriod) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Por favor, seleccione un período de morosidad.' });
-            return;
-        }
-        setGeneratingReport(true);
-
-        try {
-            const debtsQuery = query(collection(db, 'debts'), where('status', '==', 'pending'));
-            const debtsSnapshot = await getDocs(debtsQuery);
-            const allPendingDebts = debtsSnapshot.docs.map(doc => doc.data() as Debt);
-            
-            const debtsByOwner: { [ownerId: string]: Debt[] } = {};
-            for (const debt of allPendingDebts) {
-                if (debt.ownerId === ADMIN_USER_ID) continue;
-                if (!debtsByOwner[debt.ownerId]) {
-                    debtsByOwner[debt.ownerId] = [];
-                }
-                debtsByOwner[debt.ownerId].push(debt);
-            }
-
-            const baseHeaders = ['PROPIETARIO', 'PROPIEDADES', 'PERIODO (DESDE - HASTA)', 'MESES ADEUDADOS'];
-            if (showUsdInDelinquency) {
-                baseHeaders.push('MONTO EN DÓLARES ($)');
-            }
-
-            const reportRows = Object.entries(debtsByOwner)
-                .map(([ownerId, ownerDebts]) => {
-                    const ownerData = owners.find(o => o.id === ownerId);
-                    if (!ownerData || ownerDebts.length < parseInt(delinquencyPeriod)) return null;
-
-                    ownerDebts.sort((a, b) => a.year - b.year || a.month - b.month);
-                    const firstDebt = ownerDebts[0];
-                    const lastDebt = ownerDebts[ownerDebts.length - 1];
-                    
-                    const period = `${monthsLocale[firstDebt.month]} ${firstDebt.year} - ${monthsLocale[lastDebt.month]} ${lastDebt.year}`;
-                    
-                    const properties = (ownerData.properties && ownerData.properties.length > 0) 
-                        ? ownerData.properties.map(p => `${p.street} - ${p.house}`).join('\n')
-                        : 'N/A';
-                    
-                    const rowData: (string|number)[] = [
-                        ownerData.name,
-                        properties,
-                        period,
-                        ownerDebts.length
-                    ];
-
-                    if (showUsdInDelinquency) {
-                        const totalDebtUSD = ownerDebts.reduce((sum, d) => sum + d.amountUSD, 0);
-                        rowData.push(totalDebtUSD.toFixed(2));
-                    }
-                    
-                    return rowData;
-                })
-                .filter(row => row !== null) as (string|number)[][];
-
-            setPreviewData({
-                title: `Reporte de Morosidad (${delinquencyPeriod} o más meses)`,
-                headers: baseHeaders,
-                rows: reportRows,
-                filename: `reporte_morosidad_${delinquencyPeriod}_meses`
-            });
-            setIsPreviewOpen(true);
-
-        } catch (error) {
-            console.error("Error generating delinquency report: ", error);
-            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo generar el reporte de morosidad.' });
-        } finally {
-            setGeneratingReport(false);
-        }
-    }
     
     const showSolvencyReportPreview = async () => {
         setGeneratingReport(true);
@@ -783,45 +710,6 @@ export default function ReportsPage() {
                     </CardContent>
                     <CardFooter>
                         <Button className="w-full" onClick={generateIndividualStatement} disabled={!selectedOwner || generatingReport}>
-                            {generatingReport ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Search className="mr-2 h-4 w-4" />} 
-                            Generar Vista Previa
-                        </Button>
-                    </CardFooter>
-                </Card>
-
-                {/* Reporte: Morosidad por Periodo */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Reporte de Morosidad</CardTitle>
-                        <CardDescription>Liste los propietarios con pagos pendientes.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                       <div className="space-y-2">
-                            <Label htmlFor="delinquency-period">Período de Morosidad</Label>
-                             <div className="flex items-center gap-2">
-                                <Select value={delinquencyPeriod} onValueChange={setDelinquencyPeriod}>
-                                    <SelectTrigger id="delinquency-period">
-                                        <SelectValue placeholder="Seleccione período..." />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="1">1 o más meses</SelectItem>
-                                        <SelectItem value="2">2 o más meses</SelectItem>
-                                        <SelectItem value="3">3 o más meses</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                                <Button 
-                                    variant="outline" 
-                                    size="icon" 
-                                    onClick={() => setShowUsdInDelinquency(!showUsdInDelinquency)}
-                                    title={showUsdInDelinquency ? "Ocultar Monto en USD" : "Mostrar Monto en USD"}
-                                >
-                                    {showUsdInDelinquency ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                                </Button>
-                            </div>
-                        </div>
-                    </CardContent>
-                    <CardFooter>
-                         <Button className="w-full" onClick={showDelinquencyReportPreview} disabled={!delinquencyPeriod || generatingReport}>
                             {generatingReport ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Search className="mr-2 h-4 w-4" />} 
                             Generar Vista Previa
                         </Button>
