@@ -81,6 +81,7 @@ export default function HistoricalPaymentsPage() {
     const [selectedOwner, setSelectedOwner] = useState<Owner | null>(null);
     const [selectedProperty, setSelectedProperty] = useState<{ street: string, house: string } | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
+    const [historySearchTerm, setHistorySearchTerm] = useState('');
 
     const [paymentToDelete, setPaymentToDelete] = useState<FullHistoricalPayment | null>(null);
     const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
@@ -122,6 +123,18 @@ export default function HistoricalPaymentsPage() {
             owner.name.toLowerCase().includes(searchTerm.toLowerCase())
         );
     }, [searchTerm, owners]);
+
+    const filteredHistoricalPayments = useMemo(() => {
+        if (!historySearchTerm) return historicalPayments;
+        const lowerCaseSearch = historySearchTerm.toLowerCase();
+        return historicalPayments.filter(payment =>
+            payment.ownerName.toLowerCase().includes(lowerCaseSearch) ||
+            (payment.property.street && payment.property.street.toLowerCase().includes(lowerCaseSearch)) ||
+            (payment.property.house && payment.property.house.toLowerCase().includes(lowerCaseSearch)) ||
+            (payment.referenceNumber && payment.referenceNumber.toLowerCase().includes(lowerCaseSearch))
+        );
+    }, [historySearchTerm, historicalPayments]);
+
 
     const handleAddPayment = () => {
         setCurrentPayment(emptyPayment);
@@ -231,6 +244,15 @@ export default function HistoricalPaymentsPage() {
             <Card>
                 <CardHeader>
                     <CardTitle>Historial de Pagos</CardTitle>
+                    <div className="relative mt-2">
+                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                         <Input
+                            placeholder="Buscar por propietario, propiedad, referencia..."
+                            className="pl-9"
+                            value={historySearchTerm}
+                            onChange={(e) => setHistorySearchTerm(e.target.value)}
+                         />
+                    </div>
                 </CardHeader>
                 <CardContent>
                     <Table>
@@ -248,10 +270,10 @@ export default function HistoricalPaymentsPage() {
                         <TableBody>
                             {loading ? (
                                 <TableRow><TableCell colSpan={7} className="h-24 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto"/></TableCell></TableRow>
-                            ) : historicalPayments.length === 0 ? (
-                                <TableRow><TableCell colSpan={7} className="h-24 text-center">No hay pagos históricos registrados.</TableCell></TableRow>
+                            ) : filteredHistoricalPayments.length === 0 ? (
+                                <TableRow><TableCell colSpan={7} className="h-24 text-center">No hay pagos históricos que coincidan con la búsqueda.</TableCell></TableRow>
                             ) : (
-                                historicalPayments.map(p => (
+                                filteredHistoricalPayments.map(p => (
                                     <TableRow key={p.id}>
                                         <TableCell>{p.ownerName}</TableCell>
                                         <TableCell>{p.property.street} - {p.property.house}</TableCell>
