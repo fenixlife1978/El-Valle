@@ -28,15 +28,7 @@ const adminNavItems: NavItem[] = [
       ]
     },
     { href: "/admin/debts", icon: CircleDollarSign, label: "Gestión de Deudas" },
-    { 
-      href: "/admin/reports", 
-      icon: FileSearch, 
-      label: "Consultas y Reportes",
-      items: [
-        { href: "/admin/reports", label: "Reportes Generales" },
-        { href: "/admin/reports/delinquency", label: "Reporte de Morosidad" },
-      ]
-    },
+    { href: "/admin/reports", icon: FileSearch, label: "Consultas y Reportes" },
     { href: "/admin/people", icon: Users, label: "Personas" },
     { href: "/admin/settings", icon: Settings, label: "Configuración" },
 ];
