@@ -67,7 +67,10 @@ export default function AdminDashboardPage() {
                     const payment = doc.data();
                     const paymentDate = new Date(payment.paymentDate.seconds * 1000);
                     
-                    if (payment.status === 'aprobado' && payment.paymentMethod !== 'adelanto' && payment.paymentMethod !== 'conciliacion' && paymentDate.getMonth() === now.getMonth() && paymentDate.getFullYear() === now.getFullYear()) {
+                    // Exclude 'adelanto', 'conciliacion', and 'pago-historico' from monthly income
+                    const isIncomePayment = !['adelanto', 'conciliacion', 'pago-historico'].includes(payment.paymentMethod);
+
+                    if (payment.status === 'aprobado' && isIncomePayment && paymentDate.getMonth() === now.getMonth() && paymentDate.getFullYear() === now.getFullYear()) {
                         const amountBs = Number(payment.totalAmount);
                         monthTotalBs += amountBs;
                         if (payment.exchangeRate && payment.exchangeRate > 0) {
@@ -235,3 +238,4 @@ export default function AdminDashboardPage() {
     </div>
   );
 }
+

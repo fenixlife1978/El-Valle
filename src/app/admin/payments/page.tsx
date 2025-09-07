@@ -47,7 +47,7 @@ type ExchangeRate = {
 
 // --- Type Definitions ---
 type BeneficiaryType = 'propio' | 'terceros';
-type PaymentMethod = 'movil' | 'transferencia' | '';
+type PaymentMethod = 'movil' | 'transferencia' | 'pago-historico' | '';
 type BeneficiarySplit = { property: { street: string, house: string }; amount: number | string; };
 
 export default function UnifiedPaymentsPage() {
@@ -388,7 +388,10 @@ export default function UnifiedPaymentsPage() {
                            <Label htmlFor="paymentMethod">3. Tipo de Pago</Label>
                            <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as PaymentMethod)} disabled={loading}>
                                 <SelectTrigger id="paymentMethod"><SelectValue placeholder="Seleccione..." /></SelectTrigger>
-                                <SelectContent><SelectItem value="transferencia">Transferencia</SelectItem><SelectItem value="movil">Pago Móvil</SelectItem></SelectContent>
+                                <SelectContent>
+                                    <SelectItem value="transferencia">Transferencia</SelectItem>
+                                    <SelectItem value="movil">Pago Móvil</SelectItem>
+                                </SelectContent>
                            </Select>
                         </div>
                         <div className="space-y-2">
@@ -487,4 +490,3 @@ export default function UnifiedPaymentsPage() {
     );
 }
 
-    
