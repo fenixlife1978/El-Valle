@@ -145,7 +145,7 @@ export default function ReportsPage() {
                  setCompanyInfo(settings.companyInfo);
                  const rates = settings.exchangeRates || [];
                  const activeRateObj = rates.find((r: any) => r.active);
-                 rate = activeRateObj ? activeRateObj.rate : (rates[0]?.rate || 0);
+                 rate = activeRateObj ? activeRateObj.rate : (rates.length > 0 ? rates[0]?.rate : 0);
                  setActiveRate(rate);
             }
 
@@ -205,24 +205,27 @@ export default function ReportsPage() {
             const ownerHistorical = allHistoricalPayments.filter(h => h.ownerId === owner.id);
 
             const pendingDebts = ownerDebts.filter(d => d.status === 'pending');
+            const mainPendingDebts = pendingDebts.filter(d => d.description.toLowerCase().includes('condominio'));
             
-            let status: 'Solvente' | 'Moroso' = pendingDebts.length > 0 ? 'Moroso' : 'Solvente';
+            let status: 'Solvente' | 'Moroso' = mainPendingDebts.length > 0 ? 'Moroso' : 'Solvente';
             let period = '';
 
-            const allPaidPeriods = new Set<string>();
-            ownerDebts.filter(d => d.status === 'paid').forEach(d => allPaidPeriods.add(`${d.year}-${d.month}`));
-            ownerHistorical.forEach(h => allPaidPeriods.add(`${h.referenceYear}-${h.referenceMonth}`));
-
             if (status === 'Moroso') {
-                const sortedPending = [...pendingDebts].sort((a,b) => a.year - b.year || a.month - b.month);
+                const sortedPending = [...mainPendingDebts].sort((a,b) => a.year - b.year || a.month - b.month);
                 const firstDebt = sortedPending[0];
                 const lastDebt = sortedPending[sortedPending.length - 1];
                 period = `${monthsLocale[firstDebt.month]}/${firstDebt.year} - ${monthsLocale[lastDebt.month]}/${lastDebt.year}`;
             } else {
-                 if (allPaidPeriods.size > 0) {
+                const allPaidPeriods = new Set<string>();
+                ownerDebts.filter(d => d.status === 'paid').forEach(d => allPaidPeriods.add(`${d.year}-${String(d.month).padStart(2, '0')}`));
+                ownerHistorical.forEach(h => allPaidPeriods.add(`${h.referenceYear}-${String(h.referenceMonth).padStart(2, '0')}`));
+
+                if (allPaidPeriods.size > 0) {
                     const lastPaidPeriod = Array.from(allPaidPeriods).sort().pop()!;
                     const [year, month] = lastPaidPeriod.split('-').map(Number);
-                    period = `${monthsLocale[month]}/${year}`;
+                    period = `Hasta ${monthsLocale[month]}/${year}`;
+                } else {
+                    period = "Solvente (Sin Pagos)";
                 }
             }
             
@@ -255,7 +258,7 @@ export default function ReportsPage() {
                 balance: owner.balance,
                 status,
                 period,
-                monthsOwed: status === 'Moroso' ? pendingDebts.filter(d => d.description.toLowerCase().includes('condominio')).length : undefined,
+                monthsOwed: status === 'Moroso' ? mainPendingDebts.length : undefined,
             };
         }).filter(row => {
             const statusMatch = integralStatusFilter === 'todos' || row.status.toLowerCase() === integralStatusFilter;
@@ -300,7 +303,7 @@ export default function ReportsPage() {
 
     const handleExportIntegral = (format: 'pdf' | 'excel') => {
         const data = integralReportData;
-        const headers = [["Propietario", "Propiedad", "Monto Pagado (Bs)", "Tasa Prom. (Bs/$)", "Saldo a Favor (Bs)", "Estado", "Período", "Meses Adeudados"]];
+        const headers = [["Propietario", "Propiedad", "Monto Pagado (Bs)", "Tasa Prom. (Bs/$)", "Saldo a Favor (Bs)", "Estado", "Período Solvencia", "Meses Adeudados"]];
         const body = data.map(row => [
             row.name, row.properties,
             row.paidAmount > 0 ? row.paidAmount.toLocaleString('es-VE', {minimumFractionDigits: 2}) : '',
@@ -346,7 +349,7 @@ export default function ReportsPage() {
             XLSX.utils.sheet_add_json(worksheet, data.map(row => ({
                  "Propietario": row.name, "Propiedad": row.properties, "Monto Pagado (Bs)": row.paidAmount,
                  "Tasa Prom. (Bs/$)": row.avgRate, "Saldo a Favor (Bs)": row.balance, "Estado": row.status,
-                 "Período": row.period, "Meses Adeudados": row.monthsOwed || ''
+                 "Período Solvencia": row.period, "Meses Adeudados": row.monthsOwed || ''
             })), { origin: "A6", skipHeader: true });
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Reporte Integral");
