@@ -102,18 +102,24 @@ export default function DelinquencyReportPage() {
                     setOwnersMap(newOwnersMap);
                 });
 
-                // Fetch Debts
-                const debtsQuery = query(collection(db, "debts"), where("status", "==", "pending"), orderBy("year", "desc"), orderBy("month", "desc"));
+                // Fetch Debts - Simplified query
+                const debtsQuery = query(collection(db, "debts"), where("status", "==", "pending"));
                 const debtsUnsubscribe = onSnapshot(debtsQuery, (snapshot) => {
-                    setAllDebts(snapshot.docs.map(doc => {
+                    const debtsData = snapshot.docs.map(doc => {
                         const debtData = doc.data();
                         return {
                             id: doc.id,
                             ...debtData,
                             ownerName: ownersMap.get(debtData.ownerId)?.name || 'Propietario no encontrado',
                         } as FullDebt;
-                    }));
-                     setLoading(false);
+                    });
+                     // Sort locally
+                    const sortedDebts = debtsData.sort((a, b) => {
+                        if (b.year !== a.year) return b.year - a.year;
+                        return b.month - a.month;
+                    });
+                    setAllDebts(sortedDebts);
+                    setLoading(false);
                 });
 
                 return () => {
