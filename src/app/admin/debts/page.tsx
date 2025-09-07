@@ -692,18 +692,29 @@ export default function DebtManagementPage() {
         try {
             if (activeRate <= 0) throw "No hay una tasa de cambio activa o registrada configurada.";
             
-            // 1. Fetch all existing debts for this property to avoid duplicates
             const existingDebtQuery = query(collection(db, 'debts'), 
                 where('ownerId', '==', selectedOwner.id),
                 where('property.street', '==', propertyForMassDebt.street),
                 where('property.house', '==', propertyForMassDebt.house)
             );
-            const existingDebtsSnapshot = await getDocs(existingDebtQuery);
+            const existingHistoricalPaymentQuery = query(collection(db, 'historical_payments'), 
+                where('ownerId', '==', selectedOwner.id),
+                where('property.street', '==', propertyForMassDebt.street),
+                where('property.house', '==', propertyForMassDebt.house)
+            );
+            
+            const [existingDebtsSnapshot, existingHistoricalSnapshot] = await Promise.all([
+                getDocs(existingDebtQuery),
+                getDocs(existingHistoricalPaymentQuery)
+            ]);
+            
             const existingDebtPeriods = new Set(existingDebtsSnapshot.docs.map(d => `${d.data().year}-${d.data().month}`));
+            existingHistoricalSnapshot.forEach(d => {
+                existingDebtPeriods.add(`${d.data().referenceYear}-${d.data().referenceMonth}`);
+            });
             
             let newDebtsCreated = 0;
 
-            // 2. Start transaction
             await runTransaction(db, async (transaction) => {
                 const ownerRef = doc(db, "owners", selectedOwner.id);
                 const ownerDoc = await transaction.get(ownerRef);
@@ -711,14 +722,13 @@ export default function DebtManagementPage() {
 
                 let currentBalanceBs = ownerDoc.data().balance || 0;
 
-                // 3. Loop through months and create debts only if they don't exist
                 for (let i = 0; i < monthsToGenerate; i++) {
                     const debtDate = addMonths(startDate, i);
                     const debtYear = debtDate.getFullYear();
                     const debtMonth = debtDate.getMonth() + 1;
                     
                     if (existingDebtPeriods.has(`${debtYear}-${debtMonth}`)) {
-                        continue; // Skip if debt already exists for this month
+                        continue; 
                     }
 
                     newDebtsCreated++;
@@ -734,7 +744,6 @@ export default function DebtManagementPage() {
                         status: 'pending'
                     };
 
-                    // 4. Use balance to pay if available
                     if (currentBalanceBs >= debtAmountBs) {
                         currentBalanceBs -= debtAmountBs;
                         const paymentDate = Timestamp.now();
@@ -766,7 +775,6 @@ export default function DebtManagementPage() {
                     transaction.set(debtRef, debtData);
                 }
                 
-                // 5. Update final owner balance
                 transaction.update(ownerRef, { balance: currentBalanceBs });
             });
 

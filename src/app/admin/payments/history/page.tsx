@@ -186,6 +186,7 @@ export default function HistoricalPaymentsPage() {
                 where('year', '==', currentPayment.referenceYear),
                 where('month', '==', currentPayment.referenceMonth)
             );
+            
             const existingDebtSnapshot = await getDocs(debtsQuery);
             if (!existingDebtSnapshot.empty && !currentPayment.id) {
                 toast({ variant: 'destructive', title: 'Mes ya registrado', description: 'Ya existe una deuda (pagada o pendiente) para este propietario y período.' });
