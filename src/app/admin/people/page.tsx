@@ -3,13 +3,13 @@
 
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PlusCircle, MoreHorizontal, Edit, Trash2, FileUp, FileDown, Loader2, MinusCircle, KeyRound } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, Edit, Trash2, FileUp, FileDown, Loader2, MinusCircle, KeyRound, Search } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import * as XLSX from 'xlsx';
@@ -74,6 +74,7 @@ export default function PeopleManagementPage() {
     const [currentOwner, setCurrentOwner] = useState<Omit<Owner, 'id'> & { id?: string; balance: number | string; }>(emptyOwner);
     const [ownerToDelete, setOwnerToDelete] = useState<Owner | null>(null);
     const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
+    const [searchTerm, setSearchTerm] = useState('');
     const importFileRef = useRef<HTMLInputElement>(null);
     const { toast } = useToast();
 
@@ -123,6 +124,19 @@ export default function PeopleManagementPage() {
 
         return () => unsubscribe();
     }, [toast]);
+    
+    const filteredOwners = useMemo(() => {
+        if (!searchTerm) return owners;
+        const lowerCaseSearch = searchTerm.toLowerCase();
+        return owners.filter(owner => {
+            const ownerName = owner.name.toLowerCase();
+            const propertiesMatch = owner.properties?.some(p => 
+                (p.house && String(p.house).toLowerCase().includes(lowerCaseSearch)) ||
+                (p.street && String(p.street).toLowerCase().includes(lowerCaseSearch))
+            );
+            return ownerName.includes(lowerCaseSearch) || propertiesMatch;
+        });
+    }, [searchTerm, owners]);
 
     const handleAddOwner = () => {
         setCurrentOwner(emptyOwner);
@@ -438,6 +452,18 @@ export default function PeopleManagementPage() {
             </div>
 
             <Card>
+                <CardHeader>
+                    <CardTitle>Lista de Propietarios</CardTitle>
+                    <div className="relative mt-2">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            placeholder="Buscar por nombre, calle o casa..."
+                            className="pl-9"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
+                </CardHeader>
                 <CardContent className="p-0">
                     <div className="overflow-x-auto">
                         <Table>
@@ -458,14 +484,14 @@ export default function PeopleManagementPage() {
                                             <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
                                         </TableCell>
                                     </TableRow>
-                                ) : owners.length === 0 ? (
+                                ) : filteredOwners.length === 0 ? (
                                     <TableRow>
                                         <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                                            No hay personas registradas.
+                                            No se encontraron personas que coincidan con la búsqueda.
                                         </TableCell>
                                     </TableRow>
                                 ) : (
-                                    owners.map((owner) => (
+                                    filteredOwners.map((owner) => (
                                         <TableRow key={owner.id}>
                                             <TableCell className="font-medium">{owner.name}</TableCell>
                                             <TableCell>
@@ -611,3 +637,5 @@ export default function PeopleManagementPage() {
 
         </div>
     );
+
+    
