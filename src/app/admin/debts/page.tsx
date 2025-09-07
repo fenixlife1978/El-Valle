@@ -64,6 +64,8 @@ type MassDebt = {
     amountUSD: number;
     fromMonth: number;
     fromYear: number;
+    toMonth: number;
+    toYear: number;
 };
 
 type CompanyInfo = {
@@ -80,6 +82,8 @@ const emptyMassDebt: MassDebt = {
     amountUSD: 25, 
     fromMonth: new Date().getMonth() + 1,
     fromYear: new Date().getFullYear(),
+    toMonth: new Date().getMonth() + 1,
+    toYear: new Date().getFullYear(),
 };
 
 const months = [
@@ -89,7 +93,8 @@ const months = [
     { value: 10, label: 'Octubre' }, { value: 11, label: 'Noviembre' }, { value: 12, label: 'Diciembre' }
 ];
 
-const years = Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - i);
+const years = Array.from({ length: 10 }, (_, i) => new Date().getFullYear() + 5 - i);
+
 
 const ADMIN_USER_ID = 'G2jhcEnp05TcvjYj8SwhzVCHbW83'; // EDWIN AGUIAR's ID
 
@@ -610,6 +615,8 @@ export default function DebtManagementPage() {
              ...emptyMassDebt,
              fromMonth: today.getMonth() + 1,
              fromYear: today.getFullYear(),
+             toMonth: today.getMonth() + 1,
+             toYear: today.getFullYear(),
         });
         setIsMassDebtDialogOpen(true);
     };
@@ -671,12 +678,12 @@ export default function DebtManagementPage() {
             return;
         }
 
-        const { fromMonth, fromYear, amountUSD, description } = currentMassDebt;
+        const { fromMonth, fromYear, toMonth, toYear, amountUSD, description } = currentMassDebt;
         const startDate = new Date(fromYear, fromMonth - 1, 1);
-        const endDate = new Date();
+        const endDate = new Date(toYear, toMonth - 1, 1);
 
         if (startDate > endDate) {
-            toast({ variant: 'destructive', title: 'Error de Fecha', description: 'La fecha "Desde" no puede ser futura.' });
+            toast({ variant: 'destructive', title: 'Error de Fecha', description: 'La fecha "Desde" no puede ser posterior a la fecha "Hasta".' });
             return;
         }
 
@@ -806,20 +813,22 @@ export default function DebtManagementPage() {
         });
     };
     
-    const handleMassDebtSelectChange = (field: 'fromYear' | 'fromMonth') => (value: string) => {
+    const handleMassDebtSelectChange = (field: 'fromYear' | 'fromMonth' | 'toYear' | 'toMonth') => (value: string) => {
         setCurrentMassDebt({ ...currentMassDebt, [field]: parseInt(value) });
     };
 
     const periodDescription = useMemo(() => {
-        const { fromMonth, fromYear } = currentMassDebt;
+        const { fromMonth, fromYear, toMonth, toYear } = currentMassDebt;
         const startDate = new Date(fromYear, fromMonth - 1, 1);
-        const endDate = new Date();
-        if (startDate > endDate) return "La fecha de inicio no puede ser futura.";
+        const endDate = new Date(toYear, toMonth - 1, 1);
+        if (startDate > endDate) return "La fecha de inicio no puede ser posterior a la fecha final.";
+        
         const monthsCount = differenceInCalendarMonths(endDate, startDate) + 1;
         const fromDateStr = months.find(m => m.value === fromMonth)?.label + ` ${fromYear}`;
-        const toDateStr = months.find(m => m.value === endDate.getMonth() + 1)?.label + ` ${endDate.getFullYear()}`;
-        return `Se generarán deudas para los meses sin registro previo desde ${fromDateStr} hasta ${toDateStr}.`;
-    }, [currentMassDebt.fromMonth, currentMassDebt.fromYear]);
+        const toDateStr = months.find(m => m.value === toMonth)?.label + ` ${toYear}`;
+        
+        return `Se generarán ${monthsCount} deuda(s) para los meses sin registro previo desde ${fromDateStr} hasta ${toDateStr}.`;
+    }, [currentMassDebt]);
 
     const handleExportPDF = () => {
         const doc = new jsPDF();
@@ -1129,7 +1138,7 @@ export default function DebtManagementPage() {
                         <DialogHeader>
                             <DialogTitle>Agregar Deudas a {propertyForMassDebt?.street} - {propertyForMassDebt?.house}</DialogTitle>
                             <DialogDescription>
-                                Seleccione la fecha de inicio. El sistema generará deudas para los meses sin registro previo desde esa fecha hasta hoy.
+                                Seleccione el rango de fechas. El sistema generará deudas para los meses sin registro previo en ese período.
                             </DialogDescription>
                         </DialogHeader>
                         <div className="flex-grow overflow-y-auto pr-6 -mr-6">
@@ -1149,6 +1158,22 @@ export default function DebtManagementPage() {
                                     <div className="space-y-2">
                                         <Label htmlFor="fromMonth">Desde el Mes</Label>
                                         <Select onValueChange={handleMassDebtSelectChange('fromMonth')} value={String(currentMassDebt.fromMonth)}>
+                                            <SelectTrigger><SelectValue/></SelectTrigger>
+                                            <SelectContent>{months.map(m => <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>)}</SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="toYear">Hasta el Año</Label>
+                                        <Select onValueChange={handleMassDebtSelectChange('toYear')} value={String(currentMassDebt.toYear)}>
+                                            <SelectTrigger><SelectValue/></SelectTrigger>
+                                            <SelectContent>{years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="toMonth">Hasta el Mes</Label>
+                                        <Select onValueChange={handleMassDebtSelectChange('toMonth')} value={String(currentMassDebt.toMonth)}>
                                             <SelectTrigger><SelectValue/></SelectTrigger>
                                             <SelectContent>{months.map(m => <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>)}</SelectContent>
                                         </Select>
@@ -1232,5 +1257,7 @@ export default function DebtManagementPage() {
     // Fallback while loading or if view is invalid
     return null;
 }
+
+    
 
     
