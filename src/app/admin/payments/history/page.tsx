@@ -277,114 +277,115 @@ export default function HistoricalPaymentsPage() {
             </Card>
 
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent className="sm:max-w-2xl">
+                <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
                     <DialogHeader>
                         <DialogTitle>{currentPayment.id ? 'Editar' : 'Registrar'} Pago Histórico</DialogTitle>
                         <DialogDescription>Complete todos los campos para registrar el pago.</DialogDescription>
                     </DialogHeader>
-                    <div className="grid gap-6 py-4">
-                        {!selectedOwner ? (
-                             <div className='space-y-2'>
-                                <Label htmlFor="owner-search">1. Buscar Propietario</Label>
-                                <div className="relative">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                    <Input id="owner-search" placeholder="Buscar por nombre (mín. 3 caracteres)..." className="pl-9" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                    <div className="flex-grow overflow-y-auto pr-6 -mr-6">
+                        <div className="grid gap-6 py-4">
+                            {!selectedOwner ? (
+                                <div className='space-y-2'>
+                                    <Label htmlFor="owner-search">1. Buscar Propietario</Label>
+                                    <div className="relative">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                        <Input id="owner-search" placeholder="Buscar por nombre (mín. 3 caracteres)..." className="pl-9" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                                    </div>
+                                    {searchTerm.length >= 3 && filteredOwners.length > 0 && (
+                                        <Card className="border rounded-md">
+                                            <ScrollArea className="h-48">{filteredOwners.map(owner => (<div key={owner.id} onClick={() => handleSelectOwner(owner)} className="p-3 hover:bg-muted cursor-pointer border-b last:border-b-0"><p className="font-medium">{owner.name}</p></div>))}</ScrollArea>
+                                        </Card>
+                                    )}
                                 </div>
-                                {searchTerm.length >= 3 && filteredOwners.length > 0 && (
-                                    <Card className="border rounded-md">
-                                        <ScrollArea className="h-48">{filteredOwners.map(owner => (<div key={owner.id} onClick={() => handleSelectOwner(owner)} className="p-3 hover:bg-muted cursor-pointer border-b last:border-b-0"><p className="font-medium">{owner.name}</p></div>))}</ScrollArea>
-                                    </Card>
-                                )}
-                            </div>
-                        ) : (
-                             <Card className="bg-muted/50 p-4 space-y-4">
-                                <div className='flex items-center justify-between'>
-                                    <div><p className="font-semibold text-primary">{selectedOwner.name}</p></div>
-                                    <Button variant="ghost" size="icon" onClick={() => setSelectedOwner(null)}><XCircle className="h-5 w-5 text-destructive"/></Button>
-                                </div>
-                                 <div className="space-y-2">
-                                    <Label>Propiedad</Label>
-                                     <Select onValueChange={(v) => setSelectedProperty(selectedOwner.properties.find(p => `${p.street}-${p.house}` === v) || null)} value={selectedProperty ? `${selectedProperty.street}-${selectedProperty.house}` : ''}>
-                                        <SelectTrigger><SelectValue placeholder="Seleccione una propiedad..." /></SelectTrigger>
-                                        <SelectContent>{selectedOwner.properties.map(p => (<SelectItem key={`${p.street}-${p.house}`} value={`${p.street}-${p.house}`}>{`${p.street} - ${p.house}`}</SelectItem>))}</SelectContent>
+                            ) : (
+                                <Card className="bg-muted/50 p-4 space-y-4">
+                                    <div className='flex items-center justify-between'>
+                                        <div><p className="font-semibold text-primary">{selectedOwner.name}</p></div>
+                                        <Button variant="ghost" size="icon" onClick={() => setSelectedOwner(null)}><XCircle className="h-5 w-5 text-destructive"/></Button>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>Propiedad</Label>
+                                        <Select onValueChange={(v) => setSelectedProperty(selectedOwner.properties.find(p => `${p.street}-${p.house}` === v) || null)} value={selectedProperty ? `${selectedProperty.street}-${selectedProperty.house}` : ''}>
+                                            <SelectTrigger><SelectValue placeholder="Seleccione una propiedad..." /></SelectTrigger>
+                                            <SelectContent>{selectedOwner.properties.map(p => (<SelectItem key={`${p.street}-${p.house}`} value={`${p.street}-${p.house}`}>{`${p.street} - ${p.house}`}</SelectItem>))}</SelectContent>
+                                        </Select>
+                                    </div>
+                                </Card>
+                            )}
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label>Mes de Referencia</Label>
+                                    <Select value={String(currentPayment.referenceMonth)} onValueChange={(v) => setCurrentPayment(p => ({...p, referenceMonth: Number(v)}))}>
+                                        <SelectTrigger><SelectValue/></SelectTrigger>
+                                        <SelectContent>{months.map(m => <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>)}</SelectContent>
                                     </Select>
                                 </div>
-                             </Card>
-                        )}
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                             <div className="space-y-2">
-                                <Label>Mes de Referencia</Label>
-                                <Select value={String(currentPayment.referenceMonth)} onValueChange={(v) => setCurrentPayment(p => ({...p, referenceMonth: Number(v)}))}>
-                                    <SelectTrigger><SelectValue/></SelectTrigger>
-                                    <SelectContent>{months.map(m => <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>)}</SelectContent>
-                                </Select>
+                                <div className="space-y-2">
+                                    <Label>Año de Referencia</Label>
+                                    <Select value={String(currentPayment.referenceYear)} onValueChange={(v) => setCurrentPayment(p => ({...p, referenceYear: Number(v)}))}>
+                                        <SelectTrigger><SelectValue/></SelectTrigger>
+                                        <SelectContent>{years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                </div>
                             </div>
-                             <div className="space-y-2">
-                                <Label>Año de Referencia</Label>
-                                 <Select value={String(currentPayment.referenceYear)} onValueChange={(v) => setCurrentPayment(p => ({...p, referenceYear: Number(v)}))}>
-                                    <SelectTrigger><SelectValue/></SelectTrigger>
-                                    <SelectContent>{years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
-                                </Select>
-                            </div>
-                        </div>
 
-                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label>Fecha de Pago</Label>
+                                    <Popover>
+                                        <PopoverTrigger asChild>
+                                            <Button variant={"outline"} className={cn("w-full justify-start", !currentPayment.paymentDate && "text-muted-foreground")}>
+                                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                                {currentPayment.paymentDate ? format(currentPayment.paymentDate, "PPP", { locale: es }) : <span>Seleccione fecha</span>}
+                                            </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={currentPayment.paymentDate} onSelect={(d) => setCurrentPayment(p=>({...p, paymentDate: d}))} initialFocus locale={es} /></PopoverContent>
+                                    </Popover>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="amount">Monto Pagado (Bs.)</Label>
+                                    <Input id="amount" type="number" value={currentPayment.amount} onChange={(e) => setCurrentPayment(p => ({...p, amount: Number(e.target.value)}))} />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label>Tipo de Pago</Label>
+                                    <Select value={currentPayment.paymentType} onValueChange={(v) => setCurrentPayment(p => ({...p, paymentType: v as PaymentType}))}>
+                                        <SelectTrigger><SelectValue/></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="Actual">Actual</SelectItem>
+                                            <SelectItem value="Pasado">Pasado</SelectItem>
+                                            <SelectItem value="Adelantado">Adelantado</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Método de Pago</Label>
+                                    <Select value={currentPayment.paymentMethod} onValueChange={(v) => setCurrentPayment(p => ({...p, paymentMethod: v}))}>
+                                        <SelectTrigger><SelectValue placeholder="Seleccione..."/></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="Transferencia">Transferencia</SelectItem>
+                                            <SelectItem value="Efectivo">Efectivo</SelectItem>
+                                            <SelectItem value="Pago móvil">Pago móvil</SelectItem>
+                                            <SelectItem value="Otro">Otro</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+                            
                             <div className="space-y-2">
-                                <Label>Fecha de Pago</Label>
-                                <Popover>
-                                    <PopoverTrigger asChild>
-                                        <Button variant={"outline"} className={cn("w-full justify-start", !currentPayment.paymentDate && "text-muted-foreground")}>
-                                            <CalendarIcon className="mr-2 h-4 w-4" />
-                                            {currentPayment.paymentDate ? format(currentPayment.paymentDate, "PPP", { locale: es }) : <span>Seleccione fecha</span>}
-                                        </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={currentPayment.paymentDate} onSelect={(d) => setCurrentPayment(p=>({...p, paymentDate: d}))} initialFocus locale={es} /></PopoverContent>
-                                </Popover>
+                                <Label htmlFor="referenceNumber">Referencia / Comprobante</Label>
+                                <Input id="referenceNumber" value={currentPayment.referenceNumber} onChange={(e) => setCurrentPayment(p => ({...p, referenceNumber: e.target.value}))} />
                             </div>
-                             <div className="space-y-2">
-                                <Label htmlFor="amount">Monto Pagado (Bs.)</Label>
-                                <Input id="amount" type="number" value={currentPayment.amount} onChange={(e) => setCurrentPayment(p => ({...p, amount: Number(e.target.value)}))} />
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="space-y-2">
-                                <Label>Tipo de Pago</Label>
-                                <Select value={currentPayment.paymentType} onValueChange={(v) => setCurrentPayment(p => ({...p, paymentType: v as PaymentType}))}>
-                                    <SelectTrigger><SelectValue/></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="Actual">Actual</SelectItem>
-                                        <SelectItem value="Pasado">Pasado</SelectItem>
-                                        <SelectItem value="Adelantado">Adelantado</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                             <div className="space-y-2">
-                                <Label>Método de Pago</Label>
-                                <Select value={currentPayment.paymentMethod} onValueChange={(v) => setCurrentPayment(p => ({...p, paymentMethod: v}))}>
-                                    <SelectTrigger><SelectValue placeholder="Seleccione..."/></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="Transferencia">Transferencia</SelectItem>
-                                        <SelectItem value="Efectivo">Efectivo</SelectItem>
-                                        <SelectItem value="Pago móvil">Pago móvil</SelectItem>
-                                        <SelectItem value="Otro">Otro</SelectItem>
-                                    </SelectContent>
-                                </Select>
+                                <Label htmlFor="observations">Observaciones</Label>
+                                <Input id="observations" value={currentPayment.observations} onChange={(e) => setCurrentPayment(p => ({...p, observations: e.target.value}))} maxLength={250} />
                             </div>
                         </div>
-                        
-                        <div className="space-y-2">
-                            <Label htmlFor="referenceNumber">Referencia / Comprobante</Label>
-                            <Input id="referenceNumber" value={currentPayment.referenceNumber} onChange={(e) => setCurrentPayment(p => ({...p, referenceNumber: e.target.value}))} />
-                        </div>
-                         <div className="space-y-2">
-                            <Label htmlFor="observations">Observaciones</Label>
-                            <Input id="observations" value={currentPayment.observations} onChange={(e) => setCurrentPayment(p => ({...p, observations: e.target.value}))} maxLength={250} />
-                        </div>
-
                     </div>
-                    <DialogFooter>
+                    <DialogFooter className="mt-auto pt-4 border-t">
                         <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
                         <Button onClick={handleSavePayment} disabled={isSubmitting}>
                             {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
