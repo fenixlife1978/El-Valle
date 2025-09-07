@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Loader2, FileDown, Search, ArrowUpDown, Check, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { collection, query, getDocs, doc, getDoc } from 'firebase/firestore';
+import { collection, query, getDocs, doc, getDoc, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -384,3 +384,5 @@ export default function DelinquencyReportPage() {
         </div>
     );
 }
+
+    
