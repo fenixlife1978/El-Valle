@@ -51,8 +51,9 @@ export default function DelinquencyReportPage() {
     const [searchTerm, setSearchTerm] = useState('');
     const [sortConfig, setSortConfig] = useState<{ key: SortKey, direction: SortDirection }>({ key: 'name', direction: 'asc' });
 
-    // --- Selection State ---
+    // --- Selection and Export State ---
     const [selectedOwners, setSelectedOwners] = useState<Set<string>>(new Set());
+    const [includeAmounts, setIncludeAmounts] = useState(true);
 
     const { toast } = useToast();
 
@@ -220,16 +221,23 @@ export default function DelinquencyReportPage() {
         doc.setFontSize(10).text(`Fecha de Emisión: ${new Date().toLocaleDateString('es-VE')}`, pageWidth - margin, margin + 8, { align: 'right' });
         
         doc.setFontSize(16).setFont('helvetica', 'bold').text("Reporte de Morosidad", pageWidth / 2, margin + 45, { align: 'center' });
+        
+        const head = includeAmounts 
+            ? [['Propietario', 'Propiedades', 'Meses Adeudados', 'Deuda (USD)', 'Deuda (Bs.)']]
+            : [['Propietario', 'Propiedades', 'Meses Adeudados']];
+        
+        const body = data.map(o => {
+            const row = [o.name, o.properties, o.monthsOwed];
+            if (includeAmounts) {
+                row.push(`$${o.debtAmountUSD.toFixed(2)}`);
+                row.push(`Bs. ${(o.debtAmountUSD * activeRate).toLocaleString('es-VE', { minimumFractionDigits: 2 })}`);
+            }
+            return row;
+        });
 
         (doc as any).autoTable({
-            head: [['Propietario', 'Propiedades', 'Meses Adeudados', 'Deuda (USD)', 'Deuda (Bs.)']],
-            body: data.map(o => [
-                o.name,
-                o.properties,
-                o.monthsOwed,
-                `$${o.debtAmountUSD.toFixed(2)}`,
-                `Bs. ${(o.debtAmountUSD * activeRate).toLocaleString('es-VE', { minimumFractionDigits: 2 })}`
-            ]),
+            head: head,
+            body: body,
             startY: margin + 55,
             headStyles: { fillColor: [220, 53, 69] },
             styles: { cellPadding: 2, fontSize: 8 },
@@ -245,13 +253,23 @@ export default function DelinquencyReportPage() {
             return;
         }
 
-        const worksheet = XLSX.utils.json_to_sheet(data.map(o => ({
-            'Propietario': o.name,
-            'Propiedades': o.properties,
-            'Meses Adeudados': o.monthsOwed,
-            'Deuda (USD)': o.debtAmountUSD,
-            'Deuda (Bs.)': o.debtAmountUSD * activeRate
-        })));
+        const dataToExport = data.map(o => {
+            const baseData = {
+                'Propietario': o.name,
+                'Propiedades': o.properties,
+                'Meses Adeudados': o.monthsOwed,
+            };
+            if (includeAmounts) {
+                return {
+                    ...baseData,
+                    'Deuda (USD)': o.debtAmountUSD,
+                    'Deuda (Bs.)': o.debtAmountUSD * activeRate
+                };
+            }
+            return baseData;
+        });
+
+        const worksheet = XLSX.utils.json_to_sheet(dataToExport);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Morosidad");
         XLSX.writeFile(workbook, `reporte_morosidad_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
@@ -277,7 +295,7 @@ export default function DelinquencyReportPage() {
             <Card>
                 <CardHeader>
                     <CardTitle>Filtros y Controles</CardTitle>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-4 items-end">
                         <div className="space-y-2">
                             <Label>Antigüedad de Deuda</Label>
                             <Select value={filterType} onValueChange={setFilterType}>
@@ -308,6 +326,12 @@ export default function DelinquencyReportPage() {
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                                 <Input placeholder="Buscar por nombre o propiedad..." className="pl-9" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                             </div>
+                        </div>
+                         <div className="flex items-center space-x-2">
+                            <Checkbox id="include-amounts" checked={includeAmounts} onCheckedChange={(checked) => setIncludeAmounts(Boolean(checked))} />
+                            <Label htmlFor="include-amounts" className="cursor-pointer">
+                                Incluir montos en el reporte
+                            </Label>
                         </div>
                     </div>
                 </CardHeader>
@@ -384,5 +408,3 @@ export default function DelinquencyReportPage() {
         </div>
     );
 }
-
-    
