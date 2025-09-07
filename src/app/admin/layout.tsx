@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -9,6 +10,7 @@ import {
     CircleDollarSign,
     Calculator,
     CalendarPlus,
+    History,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
@@ -24,6 +26,7 @@ const adminNavItems: NavItem[] = [
         { href: "/admin/payments/advance", label: "Registrar Adelanto" },
         { href: "/admin/payments/verify", label: "Verificar Pagos" },
         { href: "/admin/payments/calculator", label: "Calculadora de Pagos" },
+        { href: "/admin/payments/history", label: "Pagos Históricos" },
       ]
     },
     { href: "/admin/debts", icon: CircleDollarSign, label: "Gestión de Deudas" },
