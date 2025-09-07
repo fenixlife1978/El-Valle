@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -604,29 +605,27 @@ export default function ReportsPage() {
         setGeneratingReport(true);
         try {
             const solventOwners = owners.filter(o => o.status === 'solvente' && o.id !== ADMIN_USER_ID);
-            const ownerIds = solventOwners.map(o => o.id);
-            if (ownerIds.length === 0) {
+            
+            if (solventOwners.length === 0) {
                 setPreviewData({ title: 'Reporte de Solvencia', headers: ['PROPIETARIO', 'PROPIEDADES', 'ESTADO', 'SOLVENTE HASTA'], rows: [], filename: 'reporte_solvencia' });
                 setIsPreviewOpen(true);
                 setGeneratingReport(false);
                 return;
             }
-
-            const debtsQuery = query(
-                collection(db, 'debts'), 
-                where('ownerId', 'in', ownerIds),
-                where('status', '==', 'paid')
-            );
-            const debtsSnapshot = await getDocs(debtsQuery);
+    
+            // Fetch all paid debts in one go
+            const paidDebtsQuery = query(collection(db, 'debts'), where('status', '==', 'paid'));
+            const paidDebtsSnapshot = await getDocs(paidDebtsQuery);
             const paidDebtsByOwner: { [ownerId: string]: Debt[] } = {};
-            debtsSnapshot.forEach(doc => {
+            
+            paidDebtsSnapshot.forEach(doc => {
                 const debt = doc.data() as Debt;
                 if (!paidDebtsByOwner[debt.ownerId]) {
                     paidDebtsByOwner[debt.ownerId] = [];
                 }
                 paidDebtsByOwner[debt.ownerId].push(debt);
             });
-
+    
             const reportRows = solventOwners.map(owner => {
                 const properties = (owner.properties && owner.properties.length > 0) 
                     ? owner.properties.map(p => `${p.street} - ${p.house}`).join('\n') 
@@ -646,11 +645,10 @@ export default function ReportsPage() {
                     const monthLabel = monthsLocale[now.getMonth()] || ''; // Get previous month for solvency
                     period = `${monthLabel} ${now.getFullYear()}`;
                 }
-
-
+    
                 return [owner.name, properties, 'Solvente', period];
             });
-
+    
             setPreviewData({
                 title: 'Reporte de Solvencia',
                 headers: ['PROPIETARIO', 'PROPIEDADES', 'ESTADO', 'SOLVENTE HASTA'],
@@ -658,6 +656,7 @@ export default function ReportsPage() {
                 filename: 'reporte_solvencia'
             });
             setIsPreviewOpen(true);
+    
         } catch (error) {
             console.error("Error generating solvency report:", error);
             toast({ variant: 'destructive', title: 'Error', description: 'No se pudo generar el reporte de solvencia.' });
@@ -1045,4 +1044,3 @@ export default function ReportsPage() {
         </div>
     );
 }
-
