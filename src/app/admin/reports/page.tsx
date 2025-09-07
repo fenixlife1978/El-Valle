@@ -200,23 +200,35 @@ export default function ReportsPage() {
 
 
     const integralReportData = useMemo<IntegralReportRow[]>(() => {
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth() + 1;
+
         return owners.map(owner => {
             const ownerDebts = allDebts.filter(d => d.ownerId === owner.id);
             const ownerHistorical = allHistoricalPayments.filter(h => h.ownerId === owner.id);
-
-            const pendingDebts = ownerDebts.filter(d => d.status === 'pending');
-            const mainPendingDebts = pendingDebts.filter(d => d.description.toLowerCase().includes('condominio'));
             
-            let status: 'Solvente' | 'Moroso' = mainPendingDebts.length > 0 ? 'Moroso' : 'Solvente';
+            const pendingDebts = ownerDebts.filter(d => {
+                if (d.status !== 'pending') return false;
+                // If it's a regular debt, it always counts.
+                if (!d.description.toLowerCase().includes('ajuste')) return true;
+                
+                // If it's an adjustment debt, check if its month has passed or is the current month.
+                const debtDate = new Date(d.year, d.month - 1);
+                const currentDate = new Date(currentYear, currentMonth - 1);
+                return debtDate <= currentDate;
+            });
+            
+            let status: 'Solvente' | 'Moroso' = pendingDebts.length > 0 ? 'Moroso' : 'Solvente';
             let period = '';
 
             if (status === 'Moroso') {
-                const sortedPending = [...mainPendingDebts].sort((a,b) => a.year - b.year || a.month - b.month);
+                const sortedPending = [...pendingDebts].sort((a,b) => a.year - b.year || a.month - b.month);
                 const firstDebt = sortedPending[0];
                 const lastDebt = sortedPending[sortedPending.length - 1];
                 period = `${monthsLocale[firstDebt.month]}/${firstDebt.year} - ${monthsLocale[lastDebt.month]}/${lastDebt.year}`;
             } else {
-                const allPaidPeriods = new Set<string>();
+                 const allPaidPeriods = new Set<string>();
                 ownerDebts.filter(d => d.status === 'paid').forEach(d => allPaidPeriods.add(`${d.year}-${String(d.month).padStart(2, '0')}`));
                 ownerHistorical.forEach(h => allPaidPeriods.add(`${h.referenceYear}-${String(h.referenceMonth).padStart(2, '0')}`));
 
@@ -258,7 +270,7 @@ export default function ReportsPage() {
                 balance: owner.balance,
                 status,
                 period,
-                monthsOwed: status === 'Moroso' ? mainPendingDebts.length : undefined,
+                monthsOwed: status === 'Moroso' ? pendingDebts.length : undefined,
             };
         }).filter(row => {
             const statusMatch = integralStatusFilter === 'todos' || row.status.toLowerCase() === integralStatusFilter;
