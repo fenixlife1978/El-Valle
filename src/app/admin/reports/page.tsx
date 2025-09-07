@@ -136,7 +136,7 @@ export default function ReportsPage() {
                 getDocs(ownersQuery),
                 getDocs(paymentsQuery),
                 getDocs(debtsQuery),
-                getDocs(historicalSnapshot)
+                getDocs(historicalPaymentsQuery)
             ]);
 
             let rate = 0;
