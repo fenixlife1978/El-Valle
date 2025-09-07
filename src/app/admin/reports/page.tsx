@@ -162,14 +162,19 @@ export default function ReportsPage() {
                 }
             }
             
-            const fromDate = integralDateRange.from ? Timestamp.fromDate(integralDateRange.from) : null;
-            const toDate = integralDateRange.to ? Timestamp.fromDate(integralDateRange.to) : null;
+            const fromDate = integralDateRange.from;
+            const toDate = integralDateRange.to;
+
+            if(fromDate) fromDate.setHours(0,0,0,0);
+            if(toDate) toDate.setHours(23,59,59,999);
 
             const ownerPayments = allPayments.filter(p => {
                 const isOwnerPayment = p.beneficiaries.some(b => b.ownerId === owner.id);
                 if (!isOwnerPayment) return false;
-                if (fromDate && p.paymentDate < fromDate) return false;
-                if (toDate && p.paymentDate > toDate) return false;
+
+                const paymentDate = p.paymentDate.toDate();
+                if (fromDate && paymentDate < fromDate) return false;
+                if (toDate && paymentDate > toDate) return false;
                 return true;
             });
 
@@ -210,23 +215,41 @@ export default function ReportsPage() {
         ]);
 
         const filename = `reporte_integral_${new Date().toISOString().split('T')[0]}`;
+        const emissionDate = format(new Date(), "dd/MM/yyyy 'a las' HH:mm:ss", { locale: es });
+        let periodString = "Período: Todos";
+        if (integralDateRange.from && integralDateRange.to) {
+            periodString = `Período: Desde ${format(integralDateRange.from, 'P', { locale: es })} hasta ${format(integralDateRange.to, 'P', { locale: es })}`;
+        } else if (integralDateRange.from) {
+            periodString = `Período: Desde ${format(integralDateRange.from, 'P', { locale: es })}`;
+        } else if (integralDateRange.to) {
+            periodString = `Período: Hasta ${format(integralDateRange.to, 'P', { locale: es })}`;
+        }
+
 
         if (format === 'pdf') {
             const doc = new jsPDF({ orientation: 'landscape' });
-             if (companyInfo?.logo) {
-                doc.addImage(companyInfo.logo, 'PNG', 40, 25, 40, 40);
+            let startY = 15;
+            if (companyInfo?.logo) {
+                doc.addImage(companyInfo.logo, 'PNG', 15, startY, 20, 20);
             }
             if (companyInfo) {
-                doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, 90, 40);
+                doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, 40, startY + 5);
             }
-            doc.setFontSize(10).setFont('helvetica', 'normal').text('Reporte Integral de Propietarios', 90, 55);
-
+            
+            doc.setFontSize(14).setFont('helvetica', 'bold').text('Reporte Integral de Propietarios', doc.internal.pageSize.getWidth() / 2, startY + 15, { align: 'center'});
+            
+            startY += 25;
+            doc.setFontSize(9).setFont('helvetica', 'normal');
+            doc.text(periodString, 15, startY);
+            doc.text(`Fecha de Emisión: ${emissionDate}`, doc.internal.pageSize.getWidth() - 15, startY, { align: 'right'});
+            
+            startY += 10;
             (doc as any).autoTable({
                 head: headers,
                 body: body,
-                startY: 80,
+                startY: startY,
                 headStyles: { fillColor: [30, 80, 180] },
-                styles: { fontSize: 8, cellPadding: 4 },
+                styles: { fontSize: 8, cellPadding: 1.5 },
                 columnStyles: {
                     2: { halign: 'right' },
                     3: { halign: 'right' },
@@ -236,7 +259,25 @@ export default function ReportsPage() {
             });
             doc.save(`${filename}.pdf`);
         } else {
-            const worksheet = XLSX.utils.aoa_to_sheet([...headers, ...body]);
+            const headerData = [
+                ["Reporte Integral de Propietarios"],
+                [periodString],
+                [`Fecha de Emisión: ${emissionDate}`],
+                [] // Empty row for spacing
+            ];
+            const worksheet = XLSX.utils.aoa_to_sheet(headerData);
+            XLSX.utils.sheet_add_aoa(worksheet, headers, { origin: "A5" });
+            XLSX.utils.sheet_add_json(worksheet, data.map(row => ({
+                 "Propietario": row.name, 
+                 "Propiedad": row.properties,
+                 "Monto Pagado (Bs)": row.paidAmount,
+                 "Tasa Prom. (Bs/$)": row.avgRate,
+                 "Saldo a Favor (Bs)": row.balance,
+                 "Estado": row.status,
+                 "Período": row.period,
+                 "Meses Adeudados": row.monthsOwed || ''
+            })), { origin: "A6", skipHeader: true });
+
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Reporte Integral");
             XLSX.writeFile(workbook, `${filename}.xlsx`);
