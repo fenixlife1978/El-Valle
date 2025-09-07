@@ -10,11 +10,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from '@/hooks/use-toast';
-import { Upload, Save, Calendar as CalendarIcon, PlusCircle, Loader2, AlertTriangle, Wand2, MoreHorizontal, Edit, FileCog, UserCircle } from 'lucide-react';
+import { Upload, Save, Calendar as CalendarIcon, PlusCircle, Loader2, AlertTriangle, Wand2, MoreHorizontal, Edit, FileCog, UserCircle, RefreshCw } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
-import { doc, getDoc, setDoc, updateDoc, arrayUnion, onSnapshot, writeBatch, collection, query, where, getDocs, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, arrayUnion, onSnapshot, writeBatch, collection, query, where, getDocs, serverTimestamp, Timestamp, addDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
@@ -263,11 +263,11 @@ export default function SettingsPage() {
 
         try {
             const settingsRef = doc(db, 'config', 'mainSettings');
-            // Basic info update
             await updateDoc(settingsRef, {
                 adminProfile,
                 companyInfo,
                 condoFee: newCondoFee,
+                lastCondoFee: lastCondoFee // Store the fee that was active before this save
             });
             
             toast({
@@ -276,40 +276,103 @@ export default function SettingsPage() {
                 className: 'bg-green-100 border-green-400 text-green-800'
             });
 
-            // If fee changed, run mass update of pending debts
+            // If fee changed, now we enable the adjustment button
             if (isFeeChanged) {
-                toast({
-                    title: 'Actualizando Deudas Pendientes...',
-                    description: 'Este proceso puede tardar unos segundos.'
+                 toast({
+                    title: 'Cuota Actualizada',
+                    description: 'Puede proceder a ajustar las deudas por adelantado si es necesario.',
+                    className: 'bg-blue-100 border-blue-400 text-blue-800'
                 });
-
-                const debtsQuery = query(collection(db, "debts"), where("status", "==", "pending"));
-                const debtsSnapshot = await getDocs(debtsQuery);
-
-                if (!debtsSnapshot.empty) {
-                    const batch = writeBatch(db);
-                    debtsSnapshot.forEach(doc => {
-                        batch.update(doc.ref, { amountUSD: newCondoFee });
-                    });
-                    await batch.commit();
-                    toast({
-                        title: 'Deudas Sincronizadas',
-                        description: `Se actualizaron ${debtsSnapshot.size} deudas pendientes a la nueva cuota de $${newCondoFee.toFixed(2)}.`,
-                        className: 'bg-blue-100 border-blue-400 text-blue-800'
-                    });
-                }
-                setLastCondoFee(newCondoFee); // Update the last known fee in state
-                setIsFeeChanged(false);
             }
-
+             setLastCondoFee(newCondoFee); // Update the last known fee in state
+             // We keep isFeeChanged true until the adjustment is run, or it's changed back.
+             
         } catch(error) {
-             console.error("Error saving settings or updating debts:", error);
-             toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron guardar los cambios o actualizar las deudas.' });
+             console.error("Error saving settings:", error);
+             toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron guardar los cambios.' });
         } finally {
             setSaving(false);
         }
     };
     
+    const handleFeeAdjustment = async () => {
+        setIsAdjustmentRunning(true);
+        toast({ title: 'Iniciando ajuste...', description: 'Buscando pagos adelantados para ajustar.' });
+
+        const newCondoFee = Number(condoFee);
+
+        try {
+            const paidAdvanceQuery = query(
+                collection(db, "debts"),
+                where("status", "==", "paid"),
+                where("description", "==", "Cuota de Condominio (Pagada por adelantado)")
+            );
+            const advanceDebtsSnapshot = await getDocs(paidAdvanceQuery);
+            
+            const adjustmentQuery = query(
+                collection(db, "debts"),
+                where("description", "==", "Ajuste por aumento de cuota")
+            );
+            const adjustmentDebtsSnapshot = await getDocs(adjustmentQuery);
+            const existingAdjustments = new Set(
+                adjustmentDebtsSnapshot.docs.map(d => `${d.data().ownerId}-${d.data().year}-${d.data().month}`)
+            );
+            
+            if (advanceDebtsSnapshot.empty) {
+                toast({ title: 'No se requieren ajustes', description: 'No se encontraron pagos por adelantado.' });
+                setIsAdjustmentRunning(false);
+                return;
+            }
+
+            const batch = writeBatch(db);
+            let adjustmentsCreated = 0;
+
+            advanceDebtsSnapshot.forEach(doc => {
+                const debt = { id: doc.id, ...doc.data() } as Debt;
+                const paidAmount = debt.paidAmountUSD || debt.amountUSD;
+                
+                // Check if an adjustment is needed and if it doesn't already exist
+                const adjustmentKey = `${debt.ownerId}-${debt.year}-${debt.month}`;
+                if (paidAmount < newCondoFee && !existingAdjustments.has(adjustmentKey)) {
+                    const difference = newCondoFee - paidAmount;
+                    const adjustmentDebtRef = doc(collection(db, "debts"));
+                    
+                    batch.set(adjustmentDebtRef, {
+                        ownerId: debt.ownerId,
+                        property: (doc.data() as any).property, // Firestore data is untyped here, so we cast
+                        year: debt.year,
+                        month: debt.month,
+                        amountUSD: difference,
+                        description: "Ajuste por aumento de cuota",
+                        status: "pending",
+                        createdAt: serverTimestamp()
+                    });
+                    adjustmentsCreated++;
+                }
+            });
+
+            if (adjustmentsCreated > 0) {
+                await batch.commit();
+                toast({
+                    title: 'Ajuste Completado',
+                    description: `Se han generado ${adjustmentsCreated} nuevas deudas por ajuste de cuota.`,
+                    className: 'bg-green-100 border-green-400 text-green-800'
+                });
+            } else {
+                toast({ title: 'No se requieren nuevos ajustes', description: 'Todos los pagos por adelantado ya están al día o ajustados.' });
+            }
+
+        } catch (error) {
+            console.error("Error during fee adjustment: ", error);
+            const errorMessage = error instanceof Error ? error.message : "Ocurrió un error desconocido.";
+            toast({ variant: 'destructive', title: 'Error en el Ajuste', description: errorMessage });
+        } finally {
+            setIsAdjustmentRunning(false);
+            setIsFeeChanged(false); // Reset fee change status after running adjustment
+        }
+    };
+
+
     if (loading) {
         return (
             <div className="flex justify-center items-center h-full">
@@ -414,22 +477,28 @@ export default function SettingsPage() {
                             <CardDescription>Define el monto de la cuota. Al guardar, todas las deudas pendientes se actualizarán a este nuevo monto.</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <div className="space-y-2">
-                                <Label htmlFor="condoFee">Monto de la Cuota Mensual (USD)</Label>
-                                <Input 
-                                    id="condoFee" 
-                                    type="number" 
-                                    value={condoFee} 
-                                    onChange={handleCondoFeeChange}
-                                    placeholder="0.00"
-                                />
+                           <div className="flex items-end gap-4">
+                                <div className="space-y-2 flex-grow">
+                                    <Label htmlFor="condoFee">Monto de la Cuota Mensual (USD)</Label>
+                                    <Input 
+                                        id="condoFee" 
+                                        type="number" 
+                                        value={condoFee} 
+                                        onChange={handleCondoFeeChange}
+                                        placeholder="0.00"
+                                    />
+                                </div>
+                                 <Button onClick={handleFeeAdjustment} disabled={!isFeeChanged || isAdjustmentRunning} variant="outline">
+                                    {isAdjustmentRunning ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <RefreshCw className="mr-2 h-4 w-4"/>}
+                                    Ajustar Deudas por Aumento
+                                </Button>
                             </div>
                         </CardContent>
                         <CardFooter>
                             <div className="p-4 bg-muted/50 rounded-lg flex items-start gap-3 text-sm text-muted-foreground w-full">
                                 <AlertTriangle className="h-5 w-5 mt-0.5 text-orange-500 shrink-0"/>
                                 <div>
-                                    <p><strong>Aviso Importante:</strong> Al cambiar y guardar esta cuota, el sistema actualizará el valor de **todas** las deudas pendientes existentes al nuevo monto de forma inmediata y permanente.</p>
+                                    <p><strong>Aviso Importante:</strong> Al guardar un cambio en la cuota, las deudas pendientes **no se actualizarán automáticamente**. Use el botón "Ajustar Deudas" para generar los cargos por diferencia a quienes pagaron por adelantado.</p>
                                 </div>
                             </div>
                         </CardFooter>
