@@ -34,7 +34,6 @@ const adminNavItems: NavItem[] = [
       label: "Consultas y Reportes",
       items: [
         { href: "/admin/reports", label: "Reportes Generales" },
-        { href: "/admin/reports/delinquency", label: "Reporte de Morosidad" },
       ]
     },
     { href: "/admin/people", icon: Users, label: "Personas" },
@@ -48,3 +47,5 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         </DashboardLayout>
     );
 }
+
+    

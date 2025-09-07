@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -128,7 +127,7 @@ export default function ReportsPage() {
 
     useEffect(() => {
         const fetchData = async () => {
-            if (!loading) return; // Prevent re-fetching if not loading
+            setLoading(true);
             try {
                 // Fetch Owners
                 const ownersQuery = query(collection(db, 'owners'), where('name', '!=', 'EDWIN AGUIAR'), orderBy('name'));
@@ -220,7 +219,7 @@ export default function ReportsPage() {
             }
         };
         fetchData();
-    }, []);
+    }, [toast]);
 
     const generatePdf = (data: ReportPreviewData) => {
         const doc = new jsPDF({
@@ -422,21 +421,11 @@ export default function ReportsPage() {
                     ownerName: owner.name,
                     street: p.street,
                     house: p.house,
-                    amount: p.amount // This field might not exist on property, so this query is problematic.
                 }))),
                 orderBy("paymentDate", "desc"),
                 limit(3)
             );
 
-            // A better query strategy is to fetch payments by ownerId and then filter in the client
-            const ownerPaymentsQuery = query(collection(db, 'payments'), 
-              where('status', '==', 'aprobado'),
-              where('beneficiaries.0.ownerId', '==', owner.id), // This assumes owner is always the first beneficiary which is not guaranteed
-              orderBy('paymentDate', 'desc')
-            );
-            
-            // The best client-side strategy is to filter from a broader fetch if indexes are an issue
-            // but for this case, let's make the query less complex.
              const clientFilteredPayments = [];
              const allPaymentsForOwnerQuery = query(collection(db, 'payments'), where('status', '==', 'aprobado'), orderBy('paymentDate', 'desc'));
              const allPaymentsSnapshot = await getDocs(allPaymentsForOwnerQuery);
@@ -953,3 +942,5 @@ export default function ReportsPage() {
         </div>
     );
 }
+
+    
