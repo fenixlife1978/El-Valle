@@ -90,6 +90,11 @@ const monthsLocale: { [key: number]: string } = {
     7: 'Julio', 8: 'Agosto', 9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre'
 };
 
+const formatToTwoDecimals = (num: number) => {
+    const truncated = Math.trunc(num * 100) / 100;
+    return truncated.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
 
 export default function VerifyPaymentsPage() {
   const [payments, setPayments] = useState<FullPayment[]>([]);
@@ -239,7 +244,7 @@ export default function VerifyPaymentsPage() {
                     const dataA = a.data();
                     const dataB = b.data();
                     if (dataA.year !== dataB.year) return dataA.year - dataB.year;
-                    return dataA.month - dataB.month;
+                    return dataB.month - dataA.month;
                 });
                 
                 if (sortedDebts.length > 0) {
@@ -301,7 +306,7 @@ export default function VerifyPaymentsPage() {
                 
                 // --- 4. Update Balance and generate Observation Note ---
                 const finalBalance = availableFundsBs;
-                const observationNote = `Pago por Bs. ${paymentData.totalAmount.toLocaleString('es-VE', {minimumFractionDigits: 2})}. Saldo Anterior: Bs. ${initialBalance.toLocaleString('es-VE', {minimumFractionDigits: 2})}, Saldo a Favor Actual después de este recibo: Bs. ${finalBalance.toLocaleString('es-VE', {minimumFractionDigits: 2})}.`;
+                const observationNote = `Pago por Bs. ${formatToTwoDecimals(paymentData.totalAmount)}. Saldo Anterior: Bs. ${formatToTwoDecimals(initialBalance)}, Saldo a Favor Actual después de este recibo: Bs. ${formatToTwoDecimals(finalBalance)}.`;
                 
                 transaction.update(ownerRef, { balance: finalBalance });
                 transaction.update(paymentRef, { status: 'aprobado', observations: observationNote });
@@ -456,7 +461,7 @@ export default function VerifyPaymentsPage() {
     startY += 6;
     doc.text(`Fecha del pago: ${format(payment.paymentDate.toDate(), 'dd/MM/yyyy')}`, margin, startY);
     startY += 6;
-    doc.text(`Tasa de Cambio Aplicada: Bs. ${payment.exchangeRate.toLocaleString('es-VE', { minimumFractionDigits: 2 })} por USD`, margin, startY);
+    doc.text(`Tasa de Cambio Aplicada: Bs. ${formatToTwoDecimals(payment.exchangeRate)} por USD`, margin, startY);
 
     startY += 10;
     
@@ -470,7 +475,7 @@ export default function VerifyPaymentsPage() {
             periodLabel,
             concept,
             `$${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}`,
-            `Bs. ${debtAmountBs.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`
+            `Bs. ${formatToTwoDecimals(debtAmountBs)}`
         ];
     });
 
@@ -490,7 +495,7 @@ export default function VerifyPaymentsPage() {
         (doc as any).autoTable({
             startY: startY,
             head: [['Concepto', 'Monto Pagado (Bs)']],
-            body: [['Abono a Saldo a Favor', `Bs. ${payment.totalAmount.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`]],
+            body: [['Abono a Saldo a Favor', `Bs. ${formatToTwoDecimals(payment.totalAmount)}`]],
             theme: 'striped',
             headStyles: { fillColor: [44, 62, 80], textColor: 255 },
             styles: { fontSize: 9, cellPadding: 2.5 },
@@ -501,7 +506,7 @@ export default function VerifyPaymentsPage() {
     
     // Totals Section
     const totalLabel = "TOTAL PAGADO:";
-    const totalValue = `Bs. ${payment.totalAmount.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`;
+    const totalValue = `Bs. ${formatToTwoDecimals(payment.totalAmount)}`;
     doc.setFontSize(11).setFont('helvetica', 'bold');
     const totalValueWidth = doc.getStringUnitWidth(totalValue) * 11 / doc.internal.scaleFactor;
     doc.text(totalValue, pageWidth - margin, startY, { align: 'right' });
@@ -596,8 +601,8 @@ export default function VerifyPaymentsPage() {
                                 <TableCell>{payment.unit}</TableCell>
                                 <TableCell>
                                     {payment.type === 'adelanto' 
-                                        ? `$ ${payment.amount.toLocaleString('en-US', {minimumFractionDigits: 2})}`
-                                        : `Bs. ${payment.amount.toLocaleString('es-VE', {minimumFractionDigits: 2})}`
+                                        ? `$ ${formatToTwoDecimals(payment.amount)}`
+                                        : `Bs. ${formatToTwoDecimals(payment.amount)}`
                                     }
                                 </TableCell>
                                 <TableCell>{new Date(payment.date).toLocaleDateString('es-VE')}</TableCell>
@@ -683,7 +688,7 @@ export default function VerifyPaymentsPage() {
                              <p><strong>Banco Emisor:</strong></p><p>{receiptData.payment.bank}</p>
                              <p><strong>N° de Referencia:</strong></p><p>{receiptData.payment.reference}</p>
                              <p><strong>Fecha del pago:</strong></p><p>{format(receiptData.payment.paymentDate.toDate(), 'dd/MM/yyyy')}</p>
-                             <p><strong>Tasa de Cambio Aplicada:</strong></p><p>Bs. {receiptData.payment.exchangeRate.toLocaleString('es-VE', { minimumFractionDigits: 2 })} por USD</p>
+                             <p><strong>Tasa de Cambio Aplicada:</strong></p><p>Bs. {formatToTwoDecimals(receiptData.payment.exchangeRate)} por USD</p>
                         </div>
                         <Table className="text-xs">
                             <TableHeader>
@@ -700,18 +705,18 @@ export default function VerifyPaymentsPage() {
                                         <TableCell>{monthsLocale[debt.month]} {debt.year}</TableCell>
                                         <TableCell>{debt.description} ({debt.property ? `${debt.property.street} - ${debt.property.house}`: 'N/A'})</TableCell>
                                         <TableCell className="text-right">${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}</TableCell>
-                                        <TableCell className="text-right">Bs. {((debt.paidAmountUSD || debt.amountUSD) * receiptData.payment.exchangeRate).toLocaleString('es-VE', { minimumFractionDigits: 2 })}</TableCell>
+                                        <TableCell className="text-right">Bs. {formatToTwoDecimals((debt.paidAmountUSD || debt.amountUSD) * receiptData.payment.exchangeRate)}</TableCell>
                                     </TableRow>
                                 )) : (
                                     <TableRow>
                                         <TableCell colSpan={2}>Abono a Saldo a Favor</TableCell>
-                                        <TableCell colSpan={2} className="text-right">Bs. {receiptData.payment.totalAmount.toLocaleString('es-VE', { minimumFractionDigits: 2 })}</TableCell>
+                                        <TableCell colSpan={2} className="text-right">Bs. {formatToTwoDecimals(receiptData.payment.totalAmount)}</TableCell>
                                     </TableRow>
                                 )}
                             </TableBody>
                         </Table>
                          <div className="text-right font-bold mt-2 pr-4">
-                            Total Pagado: Bs. {receiptData.payment.totalAmount.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                            Total Pagado: Bs. {formatToTwoDecimals(receiptData.payment.totalAmount)}
                          </div>
                          {receiptData.payment.observations && (
                             <div className="mt-4 p-2 border-t text-xs">

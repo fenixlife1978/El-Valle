@@ -88,6 +88,11 @@ const monthsLocale: { [key: number]: string } = {
     7: 'Julio', 8: 'Agosto', 9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre'
 };
 
+const formatToTwoDecimals = (num: number) => {
+    const truncated = Math.trunc(num * 100) / 100;
+    return truncated.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
 export default function OwnerDashboardPage() {
     const [user, authLoading] = useAuthState(auth);
     const router = useRouter();
@@ -341,7 +346,7 @@ export default function OwnerDashboardPage() {
     startY += 6;
     doc.text(`Fecha del pago: ${format(payment.paymentDate.toDate(), 'dd/MM/yyyy')}`, margin, startY);
     startY += 6;
-    doc.text(`Tasa de Cambio Aplicada: Bs. ${payment.exchangeRate.toLocaleString('es-VE', { minimumFractionDigits: 2 })} por USD`, margin, startY);
+    doc.text(`Tasa de Cambio Aplicada: Bs. ${formatToTwoDecimals(payment.exchangeRate)} por USD`, margin, startY);
     startY += 10;
     
     const tableBody = paidDebts.map(debt => {
@@ -354,7 +359,7 @@ export default function OwnerDashboardPage() {
             periodLabel,
             concept,
             `$${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}`,
-            `Bs. ${debtAmountBs.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`
+            `Bs. ${formatToTwoDecimals(debtAmountBs)}`
         ];
     });
 
@@ -373,7 +378,7 @@ export default function OwnerDashboardPage() {
         (doc as any).autoTable({
             startY: startY,
             head: [['Concepto', 'Monto Pagado (Bs)']],
-            body: [['Abono a Saldo a Favor', `Bs. ${payment.amount.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`]],
+            body: [['Abono a Saldo a Favor', `Bs. ${formatToTwoDecimals(payment.amount)}`]],
             theme: 'striped',
             headStyles: { fillColor: [44, 62, 80], textColor: 255 },
             styles: { fontSize: 9, cellPadding: 2.5 },
@@ -384,7 +389,7 @@ export default function OwnerDashboardPage() {
     
     // Totals Section
     const totalLabel = "TOTAL PAGADO:";
-    const totalValue = `Bs. ${payment.amount.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`;
+    const totalValue = `Bs. ${formatToTwoDecimals(payment.amount)}`;
     doc.setFontSize(11).setFont('helvetica', 'bold');
     const totalValueWidth = doc.getStringUnitWidth(totalValue) * 11 / doc.internal.scaleFactor;
     doc.text(totalValue, pageWidth - margin, startY, { align: 'right' });
@@ -435,13 +440,13 @@ export default function OwnerDashboardPage() {
                     <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                              <p className="text-xs text-destructive">Deuda Total Pendiente</p>
-                             <p className="text-2xl font-bold text-destructive">${dashboardStats.totalDebtUSD.toLocaleString('en-US', {minimumFractionDigits: 2})}</p>
-                             <p className="text-sm text-muted-foreground">~ Bs. {(dashboardStats.totalDebtUSD * dashboardStats.exchangeRate).toLocaleString('es-VE', {minimumFractionDigits: 2})}</p>
+                             <p className="text-2xl font-bold text-destructive">${dashboardStats.totalDebtUSD.toFixed(2)}</p>
+                             <p className="text-sm text-muted-foreground">~ Bs. {formatToTwoDecimals(dashboardStats.totalDebtUSD * dashboardStats.exchangeRate)}</p>
                         </div>
                         <div>
                             <p className="text-xs text-success">Saldo a Favor</p>
-                            <p className="text-2xl font-bold text-success">Bs. {dashboardStats.balanceInFavor.toLocaleString('es-VE', {minimumFractionDigits: 2})}</p>
-                            <p className="text-sm text-muted-foreground">~ ${dashboardStats.exchangeRate > 0 ? (dashboardStats.balanceInFavor / dashboardStats.exchangeRate).toLocaleString('en-US', {minimumFractionDigits: 2}) : '0.00'}</p>
+                            <p className="text-2xl font-bold text-success">Bs. {formatToTwoDecimals(dashboardStats.balanceInFavor)}</p>
+                            <p className="text-sm text-muted-foreground">~ ${dashboardStats.exchangeRate > 0 ? formatToTwoDecimals(dashboardStats.balanceInFavor / dashboardStats.exchangeRate) : '0,00'}</p>
                         </div>
                     </div>
                 </div>
@@ -455,7 +460,7 @@ export default function OwnerDashboardPage() {
             </CardHeader>
             <CardContent className="px-6 pb-6">
                  <div className="text-xs text-muted-foreground">
-                    Tasa de cambio del día: Bs. {dashboardStats.exchangeRate.toLocaleString('es-VE', {minimumFractionDigits: 2})} por USD
+                    Tasa de cambio del día: Bs. {formatToTwoDecimals(dashboardStats.exchangeRate)} por USD
                  </div>
             </CardContent>
         </Card>
@@ -490,7 +495,7 @@ export default function OwnerDashboardPage() {
                         </TableCell>
                         <TableCell className="font-medium">{monthsLocale[debt.month]} {debt.year}</TableCell>
                         <TableCell>{debt.description}</TableCell>
-                        <TableCell className="text-right">Bs. {(debt.amountUSD * dashboardStats.exchangeRate).toLocaleString('es-VE', {minimumFractionDigits: 2})}</TableCell>
+                        <TableCell className="text-right">Bs. {formatToTwoDecimals(debt.amountUSD * dashboardStats.exchangeRate)}</TableCell>
                     </TableRow>
                     )))}
                 </TableBody>
@@ -501,16 +506,16 @@ export default function OwnerDashboardPage() {
                              <h3 className="text-lg font-semibold flex items-center"><Calculator className="mr-2 h-5 w-5"/> Calculadora de Pago</h3>
                              <div className="flex justify-between items-center">
                                  <span className="text-muted-foreground">Total Seleccionado:</span>
-                                 <span className="font-medium">Bs. {paymentCalculator.totalSelectedBs.toLocaleString('es-VE', {minimumFractionDigits: 2})}</span>
+                                 <span className="font-medium">Bs. {formatToTwoDecimals(paymentCalculator.totalSelectedBs)}</span>
                              </div>
                              <div className="flex justify-between items-center text-sm">
                                  <span className="text-muted-foreground flex items-center"><Minus className="mr-2 h-4 w-4"/> Saldo a Favor:</span>
-                                 <span className="font-medium">Bs. {paymentCalculator.balanceInFavor.toLocaleString('es-VE', {minimumFractionDigits: 2})}</span>
+                                 <span className="font-medium">Bs. {formatToTwoDecimals(paymentCalculator.balanceInFavor)}</span>
                              </div>
                              <hr className="my-1"/>
                              <div className="flex justify-between items-center text-lg">
                                  <span className="font-bold flex items-center"><Equal className="mr-2 h-4 w-4"/> TOTAL A PAGAR:</span>
-                                 <span className="font-bold text-primary">Bs. {paymentCalculator.totalToPay.toLocaleString('es-VE', {minimumFractionDigits: 2})}</span>
+                                 <span className="font-bold text-primary">Bs. {formatToTwoDecimals(paymentCalculator.totalToPay)}</span>
                              </div>
                         </div>
                     </CardFooter>
@@ -544,8 +549,8 @@ export default function OwnerDashboardPage() {
                         <TableCell>{new Date(payment.date).toLocaleDateString('es-VE')}</TableCell>
                         <TableCell>
                             {payment.type === 'adelanto' 
-                                ? `$ ${payment.amount.toLocaleString('en-US', {minimumFractionDigits: 2})}`
-                                : `Bs. ${payment.amount.toLocaleString('es-VE', {minimumFractionDigits: 2})}`
+                                ? `$ ${formatToTwoDecimals(payment.amount)}`
+                                : `Bs. ${formatToTwoDecimals(payment.amount)}`
                             }
                         </TableCell>
                         <TableCell>{payment.bank}</TableCell>
@@ -613,7 +618,7 @@ export default function OwnerDashboardPage() {
                              <p><strong>Banco Emisor:</strong></p><p>{receiptData.payment.bank}</p>
                              <p><strong>N° de Referencia:</strong></p><p>{receiptData.payment.reference}</p>
                              <p><strong>Fecha del pago:</strong></p><p>{format(receiptData.payment.paymentDate.toDate(), 'dd/MM/yyyy')}</p>
-                             <p><strong>Tasa de Cambio Aplicada:</strong></p><p>Bs. {receiptData.payment.exchangeRate.toLocaleString('es-VE', { minimumFractionDigits: 2 })} por USD</p>
+                             <p><strong>Tasa de Cambio Aplicada:</strong></p><p>Bs. {formatToTwoDecimals(receiptData.payment.exchangeRate)} por USD</p>
                         </div>
                         {/* Concept Table */}
                         <Table className="text-xs">
@@ -631,18 +636,18 @@ export default function OwnerDashboardPage() {
                                         <TableCell>{monthsLocale[debt.month]} {debt.year}</TableCell>
                                         <TableCell>{debt.description} ({debt.property.street} - {debt.property.house})</TableCell>
                                         <TableCell className="text-right">${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}</TableCell>
-                                        <TableCell className="text-right">Bs. {((debt.paidAmountUSD || debt.amountUSD) * receiptData.payment.exchangeRate).toLocaleString('es-VE', { minimumFractionDigits: 2 })}</TableCell>
+                                        <TableCell className="text-right">Bs. {formatToTwoDecimals((debt.paidAmountUSD || debt.amountUSD) * receiptData.payment.exchangeRate)}</TableCell>
                                     </TableRow>
                                 )) : (
                                      <TableRow>
                                         <TableCell colSpan={2}>Abono a Saldo a Favor</TableCell>
-                                        <TableCell colSpan={2} className="text-right">Bs. {receiptData.payment.amount.toLocaleString('es-VE', { minimumFractionDigits: 2 })}</TableCell>
+                                        <TableCell colSpan={2} className="text-right">Bs. {formatToTwoDecimals(receiptData.payment.amount)}</TableCell>
                                     </TableRow>
                                 )}
                             </TableBody>
                         </Table>
                          <div className="text-right font-bold mt-2 pr-4">
-                            Total Pagado: Bs. {receiptData.payment.amount.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                            Total Pagado: Bs. {formatToTwoDecimals(receiptData.payment.amount)}
                          </div>
                         {/* Footer */}
                         <div className="mt-6 text-center text-gray-600 text-[10px]">
@@ -664,3 +669,4 @@ export default function OwnerDashboardPage() {
     </div>
   );
 }
+

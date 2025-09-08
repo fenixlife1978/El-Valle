@@ -66,6 +66,11 @@ const getHousesForStreet = (street: string) => {
 
 const ADMIN_USER_ID = 'G2jhcEnp05TcvjYj8SwhzVCHbW83'; // EDWIN AGUIAR's ID
 
+const formatToTwoDecimals = (num: number) => {
+    const truncated = Math.trunc(num * 100) / 100;
+    return truncated.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
 export default function PeopleManagementPage() {
     const [owners, setOwners] = useState<Owner[]>([]);
     const [loading, setLoading] = useState(true);
@@ -318,7 +323,7 @@ export default function PeopleManagementPage() {
                     ? o.properties.map(p => `${p.street} - ${p.house}`).join('\n') 
                     : 'N/A';
                 const balanceNum = parseFloat(String(o.balance));
-                const balanceDisplay = balanceNum > 0 ? `Bs. ${balanceNum.toLocaleString('es-VE', { minimumFractionDigits: 2 })}` : '-';
+                const balanceDisplay = balanceNum > 0 ? `Bs. ${formatToTwoDecimals(balanceNum)}` : '-';
                 return [o.name, properties, o.email || '-', o.role, balanceDisplay];
             }),
             startY: margin + 55,
@@ -504,7 +509,7 @@ export default function PeopleManagementPage() {
                                             <TableCell className="capitalize">{owner.role}</TableCell>
                                             <TableCell>
                                                  {owner.balance > 0
-                                                    ? `Bs. ${owner.balance.toLocaleString('es-VE', { minimumFractionDigits: 2 })}` 
+                                                    ? `Bs. ${formatToTwoDecimals(owner.balance)}` 
                                                     : '-'}
                                             </TableCell>
                                             <TableCell className="text-right">
@@ -625,7 +630,7 @@ export default function PeopleManagementPage() {
                     <DialogHeader>
                         <DialogTitle>¿Estás seguro?</DialogTitle>
                         <DialogDescription>
-                            Esta acción no se puede deshacer. Esto eliminará permanentemente a <span className="font-semibold">{ownerToDelete?.name}</span> de la base de datos de la app. La cuenta de autenticación deberá ser eliminada manualmente desde la consola de Firebase.
+                            Esta acción no se puede deshacer. Esto eliminará permanentemente a <span className="font-semibold">{ownerToDelete?.name}</span> de la base de datos de la app. La cuenta de autenticación deberá ser eliminada manually desde la consola de Firebase.
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>

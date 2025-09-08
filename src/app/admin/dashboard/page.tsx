@@ -26,6 +26,12 @@ type Owner = {
     name: string;
 };
 
+const formatToTwoDecimals = (num: number) => {
+    const truncated = Math.trunc(num * 100) / 100;
+    return truncated.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
+
 export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
@@ -144,8 +150,8 @@ export default function AdminDashboardPage() {
           <CardContent>
             {loading ? <Loader2 className="h-6 w-6 animate-spin" /> : (
               <div>
-                <div className="text-2xl font-bold">Bs. {stats.paymentsThisMonthBs.toLocaleString('es-VE', {minimumFractionDigits: 2})}</div>
-                <p className="text-xs text-muted-foreground">~ ${stats.paymentsThisMonthUsd.toLocaleString('en-US', {minimumFractionDigits: 2})}</p>
+                <div className="text-2xl font-bold">Bs. {formatToTwoDecimals(stats.paymentsThisMonthBs)}</div>
+                <p className="text-xs text-muted-foreground">~ ${formatToTwoDecimals(stats.paymentsThisMonthUsd)}</p>
               </div>
             )}
           </CardContent>
@@ -206,8 +212,8 @@ export default function AdminDashboardPage() {
                     <TableCell>{payment.unit}</TableCell>
                     <TableCell>
                         {payment.type === 'adelanto' 
-                            ? `$ ${payment.amount.toLocaleString('en-US', {minimumFractionDigits: 2})}`
-                            : `Bs. ${payment.amount.toLocaleString('es-VE', {minimumFractionDigits: 2})}`
+                            ? `$ ${formatToTwoDecimals(payment.amount)}`
+                            : `Bs. ${formatToTwoDecimals(payment.amount)}`
                         }
                     </TableCell>
                     <TableCell>{new Date(payment.date).toLocaleDateString('es-VE')}</TableCell>

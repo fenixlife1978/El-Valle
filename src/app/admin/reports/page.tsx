@@ -94,6 +94,11 @@ const monthsLocale: { [key: number]: string } = {
 type SortKey = 'name' | 'debtAmountUSD' | 'monthsOwed';
 type SortDirection = 'asc' | 'desc';
 
+const formatToTwoDecimals = (num: number) => {
+    const truncated = Math.trunc(num * 100) / 100;
+    return truncated.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
 
 export default function ReportsPage() {
     const { toast } = useToast();
@@ -211,14 +216,13 @@ export default function ReportsPage() {
             
             const pendingDebts = ownerDebts.filter(d => {
                 if (d.status !== 'pending') return false;
-                
-                // If it's an adjustment debt, check if its month has passed or is the current month.
+                // For adjustment debts, only consider them if the month has passed or is current
                 if (d.description.toLowerCase().includes('ajuste')) {
                     const debtDate = new Date(d.year, d.month - 1);
                     const currentDate = new Date(currentYear, currentMonth - 1);
                     return debtDate <= currentDate;
                 }
-                // If it's a regular debt, it always counts.
+                // Regular debts are always considered pending.
                 return true;
             });
             
@@ -328,9 +332,9 @@ export default function ReportsPage() {
         const headers = [["Propietario", "Propiedad", "Fecha Últ. Pago", "Monto Pagado (Bs)", "Tasa Prom. (Bs/$)", "Saldo a Favor (Bs)", "Estado", "Período Solvencia", "Meses Adeudados"]];
         const body = data.map(row => [
             row.name, row.properties, row.lastPaymentDate,
-            row.paidAmount > 0 ? row.paidAmount.toLocaleString('es-VE', {minimumFractionDigits: 2}) : '',
-            row.avgRate > 0 ? row.avgRate.toLocaleString('es-VE', {minimumFractionDigits: 2}) : '',
-            row.balance > 0 ? row.balance.toLocaleString('es-VE', {minimumFractionDigits: 2}) : '',
+            row.paidAmount > 0 ? formatToTwoDecimals(row.paidAmount) : '',
+            row.avgRate > 0 ? formatToTwoDecimals(row.avgRate) : '',
+            row.balance > 0 ? formatToTwoDecimals(row.balance) : '',
             row.status, row.period, row.monthsOwed || ''
         ]);
 
@@ -420,7 +424,7 @@ export default function ReportsPage() {
             const row: (string|number)[] = [o.name, o.properties, o.monthsOwed];
             if (includeDelinquencyAmounts) {
                 row.push(`$${o.debtAmountUSD.toFixed(2)}`);
-                row.push(`Bs. ${(o.debtAmountUSD * activeRate).toLocaleString('es-VE', { minimumFractionDigits: 2 })}`);
+                row.push(`Bs. ${formatToTwoDecimals(o.debtAmountUSD * activeRate)}`);
             }
             return row;
         });
@@ -550,9 +554,9 @@ export default function ReportsPage() {
                                             <TableCell className="font-medium">{row.name}</TableCell>
                                             <TableCell>{row.properties}</TableCell>
                                             <TableCell>{row.lastPaymentDate}</TableCell>
-                                            <TableCell className="text-right">{row.paidAmount > 0 ? `Bs. ${row.paidAmount.toLocaleString('es-VE', {minimumFractionDigits: 2})}`: ''}</TableCell>
-                                            <TableCell className="text-right">{row.avgRate > 0 ? `Bs. ${row.avgRate.toLocaleString('es-VE', {minimumFractionDigits: 2})}`: ''}</TableCell>
-                                            <TableCell className="text-right">{row.balance > 0 ? `Bs. ${row.balance.toLocaleString('es-VE', {minimumFractionDigits: 2})}`: ''}</TableCell>
+                                            <TableCell className="text-right">{row.paidAmount > 0 ? `Bs. ${formatToTwoDecimals(row.paidAmount)}`: ''}</TableCell>
+                                            <TableCell className="text-right">{row.avgRate > 0 ? `Bs. ${formatToTwoDecimals(row.avgRate)}`: ''}</TableCell>
+                                            <TableCell className="text-right">{row.balance > 0 ? `Bs. ${formatToTwoDecimals(row.balance)}`: ''}</TableCell>
                                             <TableCell>
                                                 <span className={cn('font-semibold', row.status === 'Moroso' ? 'text-destructive' : 'text-green-600')}>{row.status}</span>
                                             </TableCell>

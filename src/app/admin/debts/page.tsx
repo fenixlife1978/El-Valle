@@ -95,6 +95,11 @@ const months = [
 
 const years = Array.from({ length: 10 }, (_, i) => new Date().getFullYear() + 5 - i);
 
+const formatToTwoDecimals = (num: number) => {
+    const truncated = Math.trunc(num * 100) / 100;
+    return truncated.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
 
 const ADMIN_USER_ID = 'G2jhcEnp05TcvjYj8SwhzVCHbW83'; // EDWIN AGUIAR's ID
 
@@ -869,8 +874,8 @@ export default function DebtManagementPage() {
             head: [['Propietario', 'Ubicación', 'Deuda Pendiente (Bs.)', 'Saldo a Favor (Bs.)']],
             body: filteredOwners.map(o => {
                 const ownerProperty = (o.properties && o.properties.length > 0) ? o.properties.map(p => `${p.street} - ${p.house}`).join(', ') : 'N/A';
-                const debtDisplay = o.pendingDebtUSD > 0 ? `Bs. ${(o.pendingDebtUSD * activeRate).toLocaleString('es-VE', { minimumFractionDigits: 2 })}` : 'Bs. 0,00';
-                const balanceDisplay = o.balance > 0 ? `Bs. ${o.balance.toLocaleString('es-VE', { minimumFractionDigits: 2 })}` : 'Bs. 0,00';
+                const debtDisplay = o.pendingDebtUSD > 0 ? `Bs. ${formatToTwoDecimals(o.pendingDebtUSD * activeRate)}` : 'Bs. 0,00';
+                const balanceDisplay = o.balance > 0 ? `Bs. ${formatToTwoDecimals(o.balance)}` : 'Bs. 0,00';
                 return [o.name, ownerProperty, debtDisplay, balanceDisplay];
             }),
             startY: margin + 55,
@@ -970,7 +975,7 @@ export default function DebtManagementPage() {
                                             <TableCell>
                                                {owner.pendingDebtUSD > 0 ? (
                                                     <Badge variant="destructive">
-                                                        Bs. {(owner.pendingDebtUSD * activeRate).toLocaleString('es-VE', {minimumFractionDigits: 2})}
+                                                        Bs. {formatToTwoDecimals(owner.pendingDebtUSD * activeRate)}
                                                     </Badge>
                                                 ) : (
                                                     <Badge variant="outline">Bs. 0,00</Badge>
@@ -979,7 +984,7 @@ export default function DebtManagementPage() {
                                             <TableCell>
                                                {Number(owner.balance) > 0 ? (
                                                     <Badge variant="success">
-                                                        Bs. {Number(owner.balance).toLocaleString('es-VE', {minimumFractionDigits: 2})}
+                                                        Bs. {formatToTwoDecimals(Number(owner.balance))}
                                                     </Badge>
                                                 ) : (
                                                     <Badge variant="outline">Bs. 0,00</Badge>
@@ -1073,7 +1078,7 @@ export default function DebtManagementPage() {
                                                         <TableRow key={debt.id}>
                                                             <TableCell className="font-medium">{months.find(m => m.value === debt.month)?.label} {debt.year}</TableCell>
                                                             <TableCell>{debt.description}</TableCell>
-                                                            <TableCell>Bs. {(debt.amountUSD * activeRate).toLocaleString('es-VE', {minimumFractionDigits: 2})}</TableCell>
+                                                            <TableCell>Bs. {formatToTwoDecimals(debt.amountUSD * activeRate)}</TableCell>
                                                             <TableCell><Badge variant={'warning'}>Pendiente</Badge></TableCell>
                                                             <TableCell className="text-right">
                                                                 <DropdownMenu>
@@ -1090,7 +1095,7 @@ export default function DebtManagementPage() {
                                                         <TableRow key={debt.id} className="text-muted-foreground">
                                                             <TableCell className="font-medium">{months.find(m => m.value === debt.month)?.label} {debt.year}</TableCell>
                                                             <TableCell>{debt.description}</TableCell>
-                                                            <TableCell>Bs. {((debt.paidAmountUSD || debt.amountUSD) * activeRate).toLocaleString('es-VE', {minimumFractionDigits: 2})}</TableCell>
+                                                            <TableCell>Bs. {formatToTwoDecimals((debt.paidAmountUSD || debt.amountUSD) * activeRate)}</TableCell>
                                                             <TableCell><Badge variant={'success'}>Pagada</Badge></TableCell>
                                                             <TableCell className="text-right">
                                                                  <DropdownMenu>
@@ -1111,16 +1116,16 @@ export default function DebtManagementPage() {
                                                         <h3 className="text-lg font-semibold flex items-center"><Calculator className="mr-2 h-5 w-5"/> Calculadora de Pago</h3>
                                                         <div className="flex justify-between items-center">
                                                             <span className="text-muted-foreground">Total Pendiente para esta propiedad:</span>
-                                                            <span className="font-medium">Bs. {calc.totalSelectedBs.toLocaleString('es-VE', {minimumFractionDigits: 2})}</span>
+                                                            <span className="font-medium">Bs. {formatToTwoDecimals(calc.totalSelectedBs)}</span>
                                                         </div>
                                                         <div className="flex justify-between items-center text-sm">
                                                             <span className="text-muted-foreground flex items-center"><Minus className="mr-2 h-4 w-4"/> Saldo a Favor del Propietario:</span>
-                                                            <span className="font-medium">Bs. {calc.balanceInFavor.toLocaleString('es-VE', {minimumFractionDigits: 2})}</span>
+                                                            <span className="font-medium">Bs. {formatToTwoDecimals(calc.balanceInFavor)}</span>
                                                         </div>
                                                         <hr className="my-1"/>
                                                         <div className="flex justify-between items-center text-lg">
                                                             <span className="font-bold flex items-center"><Equal className="mr-2 h-4 w-4"/> TOTAL SUGERIDO A PAGAR:</span>
-                                                            <span className="font-bold text-primary">Bs. {calc.totalToPay.toLocaleString('es-VE', {minimumFractionDigits: 2})}</span>
+                                                            <span className="font-bold text-primary">Bs. {formatToTwoDecimals(calc.totalToPay)}</span>
                                                         </div>
                                                     </div>
                                                 </CardFooter>
@@ -1269,3 +1274,4 @@ export default function DebtManagementPage() {
     
 
     
+
