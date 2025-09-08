@@ -628,11 +628,12 @@ export default function ReportsPage() {
             totalPaidBs += p.totalAmount;
         });
         const paymentBody = approvedPayments.map(p => {
+            const paymentRate = p.exchangeRate || activeRate;
             return [
                 format(p.paymentDate.toDate(), 'dd-MM-yyyy'),
-                `Pago cuota(s) ${(p.beneficiaries.map(b => `${b.street}-${b.house}`)).join(', ')}`, // Simplified concept
-                p.reportedBy === selectedIndividual.id ? selectedIndividual.name : 'Usuario Administrador',
-                formatToTwoDecimals(p.totalAmount)
+                `Pago cuota(s) ${(p.beneficiaries.map(b => `${b.street}-${b.house}`)).join(', ')}`,
+                `$${formatToTwoDecimals(p.totalAmount / paymentRate)}`,
+                `Bs. ${formatToTwoDecimals(p.totalAmount)}`,
             ];
         });
     
@@ -640,6 +641,7 @@ export default function ReportsPage() {
         const ownerDebts = allDebts.filter(d => d.ownerId === selectedIndividual.id);
         const debtBody = ownerDebts.sort((a,b) => a.year - b.year || a.month - a.month).map(d => [
             `${(Object.values(monthsLocale)[d.month -1] || '')} ${d.year}`,
+            d.description,
             `$${d.amountUSD.toFixed(2)}`,
             d.status === 'paid' ? 'Pagada' : 'Pendiente'
         ]);
@@ -659,19 +661,24 @@ export default function ReportsPage() {
                     console.error("Error adding logo to PDF:", e);
                 }
             }
-            doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, margin + 25, margin + 8);
-            doc.setFontSize(9).setFont('helvetica', 'normal');
-            doc.text(`Propietario: ${selectedIndividual.name}`, margin + 25, margin + 14);
-            doc.text(`Propiedad(es): ${(selectedIndividual.properties || []).map(p => `${p.street}-${p.house}`).join(', ')}`, margin + 25, margin + 19);
-            doc.text(`Reporte generado el: ${emissionDate}`, margin + 25, margin + 24);
+            doc.setFontSize(11).setFont('helvetica', 'bold').text('ESTADO DE CUENTA', pageWidth / 2, margin + 8, { align: 'center'});
             
-            let startY = margin + 35;
+            doc.setFontSize(9).setFont('helvetica', 'normal');
+            doc.text(`${companyInfo.name} | ${companyInfo.rif}`, margin, margin + 25);
+            doc.text(`Propietario: ${selectedIndividual.name}`, margin, margin + 30);
+            doc.text(`Propiedad(es): ${(selectedIndividual.properties || []).map(p => `${p.street}-${p.house}`).join(', ')}`, margin, margin + 35);
+            
+            doc.text(`Fecha: ${format(new Date(), "dd/MM/yyyy")}`, pageWidth - margin, margin + 30, { align: 'right'});
+            doc.text(`Tasa del día: ${formatToTwoDecimals(activeRate)}`, pageWidth - margin, margin + 35, { align: 'right'});
+
+            
+            let startY = margin + 45;
     
             // Payment Summary
             doc.setFontSize(11).setFont('helvetica', 'bold').text('Resumen de Pagos', margin, startY);
             startY += 5;
             (doc as any).autoTable({
-                head: [['Fecha', 'Concepto', 'Pagado por', 'Monto (Bs)']],
+                head: [['Fecha', 'Concepto', 'Monto ($)', 'Monto (Bs)']],
                 body: paymentBody,
                 startY: startY,
                 theme: 'striped',
@@ -688,14 +695,14 @@ export default function ReportsPage() {
             doc.setFontSize(11).setFont('helvetica', 'bold').text('Resumen de Deudas', margin, startY);
             startY += 5;
              (doc as any).autoTable({
-                head: [['Período', 'Monto ($)', 'Estado']],
+                head: [['Período', 'Concepto', 'Monto ($)', 'Estado']],
                 body: debtBody,
                 startY: startY,
                 theme: 'striped',
-                headStyles: { fillColor: [34, 139, 34] },
+                headStyles: { fillColor: [220, 53, 69] },
                 styles: { fontSize: 8 },
                 foot: [[
-                    { content: 'Total Adeudado', colSpan: 1, styles: { halign: 'right', fontStyle: 'bold' } },
+                    { content: 'Total Adeudado', colSpan: 2, styles: { halign: 'right', fontStyle: 'bold' } },
                     { content: `$${totalDebtUsd.toFixed(2)}`, styles: { fontStyle: 'bold' } },
                     ''
                 ]]
@@ -705,17 +712,28 @@ export default function ReportsPage() {
             // Balance Footer
             doc.setFontSize(11).setFont('helvetica', 'bold');
             doc.text(`Saldo a Favor Actual: Bs. ${formatToTwoDecimals(selectedIndividual.balance)}`, margin, startY);
+            startY += 10;
+
+            // Legal Disclaimer
+            doc.setFontSize(8).setFont('helvetica', 'italic');
+            const disclaimer = "Los montos en bolívares expresados en las deudas, son producto de la conversión aplicada a la tasa del día de hoy por lo que dichos montos variarán según vaya cambiando la tasa al día de pago.";
+            const splitDisclaimer = doc.splitTextToSize(disclaimer, pageWidth - margin * 2);
+            doc.text(splitDisclaimer, margin, startY);
     
             doc.save(`${filename}.pdf`);
         } else { // Excel
-            const paymentWorksheetData = approvedPayments.map(p => ({
-                'Fecha': format(p.paymentDate.toDate(), 'dd-MM-yyyy'),
-                'Concepto': `Pago cuota(s) ${(p.beneficiaries.map(b => `${b.street}-${b.house}`)).join(', ')}`,
-                'Pagado por': p.reportedBy === selectedIndividual.id ? selectedIndividual.name : 'Usuario Administrador',
-                'Monto (Bs)': p.totalAmount
-            }));
+             const paymentWorksheetData = approvedPayments.map(p => {
+                const paymentRate = p.exchangeRate || activeRate;
+                return {
+                    'Fecha': format(p.paymentDate.toDate(), 'dd-MM-yyyy'),
+                    'Concepto': `Pago cuota(s) ${(p.beneficiaries.map(b => `${b.street}-${b.house}`)).join(', ')}`,
+                    'Monto (USD)': p.totalAmount / paymentRate,
+                    'Monto (Bs)': p.totalAmount
+                };
+            });
              const debtWorksheetData = ownerDebts.sort((a,b) => a.year - b.year || a.month - a.month).map(d => ({
                 'Período': `${(Object.values(monthsLocale)[d.month -1] || '')} ${d.year}`,
+                'Concepto': d.description,
                 'Monto (USD)': d.amountUSD,
                 'Estado': d.status === 'paid' ? 'Pagada' : 'Pendiente'
             }));
@@ -804,7 +822,7 @@ export default function ReportsPage() {
             </div>
             
             <Tabs defaultValue="integral" className="w-full">
-                <TabsList className="grid w-full grid-cols-2 md:grid-cols-5">
+                <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
                     <TabsTrigger value="integral">Integral</TabsTrigger>
                     <TabsTrigger value="individual">Ficha Individual</TabsTrigger>
                     <TabsTrigger value="delinquency">Morosidad</TabsTrigger>
@@ -1261,5 +1279,3 @@ export default function ReportsPage() {
         </div>
     );
 }
-
-    
