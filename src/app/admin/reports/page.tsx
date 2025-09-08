@@ -648,14 +648,14 @@ export default function ReportsPage() {
             try { doc.addImage(companyInfo.logo, 'PNG', margin, margin, 20, 20); } 
             catch (e) { console.error("Error adding logo to PDF:", e); }
         }
-        doc.setFontSize(16).setFont('helvetica', 'bold').text('ESTADO DE CUENTA', pageWidth - margin, margin + 8, { align: 'right'});
+        doc.setFontSize(16).setFont('helvetica', 'bold').text('ESTADO DE CUENTA', pageWidth / 2, margin + 15, { align: 'center'});
         
         doc.setFontSize(9).setFont('helvetica', 'normal');
         doc.text(`${companyInfo.name} | ${companyInfo.rif}`, margin, margin + 25);
         doc.text(`Propietario: ${selectedIndividual.name}`, margin, margin + 30);
         doc.text(`Propiedad(es): ${(selectedIndividual.properties || []).map(p => `${p.street}-${p.house}`).join(', ')}`, margin, margin + 35);
         
-        const dateText = `Fecha: ${format(new Date(), "dd/MM/yyyy")}`;
+        const dateText = `Fecha: ${format(new Date(), "dd/MM/yyyy 'a las' HH:mm:ss")}`;
         
         doc.setFontSize(9).setFont('helvetica', 'normal');
         doc.text(dateText, pageWidth - margin, margin + 30, { align: 'right'});
