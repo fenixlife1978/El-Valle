@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -81,7 +80,7 @@ type IntegralReportRow = {
     paidAmount: number;
     avgRate: number;
     balance: number;
-    status: 'Solvente' | 'Moroso';
+    status: 'Solvente' | 'No Solvente';
     period: string;
     monthsOwed?: number;
 };
@@ -278,10 +277,10 @@ export default function ReportsPage() {
                 return true;
             });
             
-            let status: 'Solvente' | 'Moroso' = pendingDebts.length > 0 ? 'Moroso' : 'Solvente';
+            let status: 'Solvente' | 'No Solvente' = pendingDebts.length > 0 ? 'No Solvente' : 'Solvente';
             let period = '';
 
-            if (status === 'Moroso') {
+            if (status === 'No Solvente') {
                 const sortedPending = [...pendingDebts].sort((a,b) => a.year - b.year || a.month - a.month);
                 const firstDebt = sortedPending[0];
                 const lastDebt = sortedPending[sortedPending.length - 1];
@@ -336,10 +335,10 @@ export default function ReportsPage() {
                 balance: owner.balance,
                 status,
                 period,
-                monthsOwed: status === 'Moroso' ? pendingDebts.length : undefined,
+                monthsOwed: status === 'No Solvente' ? pendingDebts.length : undefined,
             };
         }).filter(row => {
-            const statusMatch = integralStatusFilter === 'todos' || row.status.toLowerCase() === integralStatusFilter;
+            const statusMatch = integralStatusFilter === 'todos' || row.status.toLowerCase().replace(' ', '') === integralStatusFilter.replace(' ', '');
             const ownerMatch = !integralOwnerFilter || row.name.toLowerCase().includes(integralOwnerFilter.toLowerCase());
             return statusMatch && ownerMatch;
         });
@@ -494,7 +493,7 @@ export default function ReportsPage() {
         }
 
         if (formatType === 'pdf') {
-            const doc = new jsPDF({ orientation: 'landscape' });
+            const doc = new jsPDF({ orientation: 'portrait' });
             const pageWidth = doc.internal.pageSize.getWidth();
             let startY = 15;
             if (companyInfo?.logo) doc.addImage(companyInfo.logo, 'PNG', 15, startY, 20, 20);
@@ -513,15 +512,15 @@ export default function ReportsPage() {
                 head: headers, body: body, startY: startY,
                 headStyles: { fillColor: [30, 80, 180] }, 
                 styles: { fontSize: 7, cellPadding: 1.5, overflow: 'linebreak' },
-                columnStyles: { 
+                 columnStyles: { 
                     0: { cellWidth: 30 },
                     1: { cellWidth: 25 },
                     2: { cellWidth: 20 },
                     3: { halign: 'right', cellWidth: 20 },
                     4: { halign: 'right', cellWidth: 20 }, 
                     5: { halign: 'right', cellWidth: 20 },
-                    6: { cellWidth: 15 },
-                    7: { cellWidth: 20 },
+                    6: { cellWidth: 20 },
+                    7: { cellWidth: 'auto' },
                     8: { halign: 'center', cellWidth: 15 } 
                 }
             });
@@ -611,10 +610,10 @@ export default function ReportsPage() {
             p.beneficiaries.some(b => b.ownerId === selectedIndividual.id) && p.status === 'aprobado'
         );
         let totalPaidBs = 0;
-        let totalPaidUsd = 0;
-        const paymentBody = approvedPayments.map(p => {
+        approvedPayments.forEach(p => {
             totalPaidBs += p.totalAmount;
-            totalPaidUsd += p.exchangeRate ? (p.totalAmount / p.exchangeRate) : 0;
+        });
+        const paymentBody = approvedPayments.map(p => {
             return [
                 format(p.paymentDate.toDate(), 'dd-MM-yyyy'),
                 `Pago cuota(s) ${(p.beneficiaries.map(b => `${b.street}-${b.house}`)).join(', ')}`, // Simplified concept
@@ -662,11 +661,11 @@ export default function ReportsPage() {
                 body: paymentBody,
                 startY: startY,
                 theme: 'striped',
-                headStyles: { fillColor: [22, 163, 74], textColor: 255 },
+                headStyles: { fillColor: [34, 139, 34] },
                 styles: { fontSize: 8 },
                 foot: [[
                     { content: 'Total Pagado', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } },
-                    { content: `Bs. ${formatToTwoDecimals(totalPaidBs)} ($${totalPaidUsd.toFixed(2)})`, styles: { fontStyle: 'bold' } }
+                    { content: `Bs. ${formatToTwoDecimals(totalPaidBs)}`, styles: { fontStyle: 'bold' } }
                 ]]
             });
             startY = (doc as any).lastAutoTable.finalY + 10;
@@ -679,7 +678,7 @@ export default function ReportsPage() {
                 body: debtBody,
                 startY: startY,
                 theme: 'striped',
-                headStyles: { fillColor: [22, 163, 74], textColor: 255 },
+                headStyles: { fillColor: [34, 139, 34] },
                 styles: { fontSize: 8 },
                 foot: [[
                     { content: 'Total Adeudado', colSpan: 1, styles: { halign: 'right', fontStyle: 'bold' } },
@@ -695,32 +694,24 @@ export default function ReportsPage() {
     
             doc.save(`${filename}.pdf`);
         } else { // Excel
-            // Excel export logic would be more complex to match this specific layout. 
-            // For now, we provide a simpler table export.
-             const history = individualHistory.map(item => {
-                if (item.type === 'debt') {
-                    return {
-                        'Fecha': `${monthsLocale[item.month]} ${item.year}`,
-                        'Concepto': item.description,
-                        'Monto (USD)': item.amountUSD,
-                        'Monto (Bs)': (item.amountUSD * activeRate),
-                        'Estado': item.status === 'paid' ? 'Pagada' : 'Pendiente'
-                    };
-                } else { // payment
-                    const paymentRate = item.exchangeRate || activeRate;
-                    return {
-                        'Fecha': format(item.paymentDate.toDate(), 'dd/MM/yyyy'),
-                        'Concepto': 'Pago Aprobado',
-                        'Monto (USD)': item.totalAmount / paymentRate,
-                        'Monto (Bs)': item.totalAmount,
-                        'Estado': 'Aplicado'
-                    };
-                }
-            });
+            const paymentWorksheetData = approvedPayments.map(p => ({
+                'Fecha': format(p.paymentDate.toDate(), 'dd-MM-yyyy'),
+                'Concepto': `Pago cuota(s) ${(p.beneficiaries.map(b => `${b.street}-${b.house}`)).join(', ')}`,
+                'Pagado por': p.reportedBy === selectedIndividual.id ? selectedIndividual.name : 'Usuario Administrador',
+                'Monto (Bs)': p.totalAmount
+            }));
+             const debtWorksheetData = ownerDebts.sort((a,b) => a.year - b.year || a.month - a.month).map(d => ({
+                'Período': `${(Object.values(monthsLocale)[d.month -1] || '')} ${d.year}`,
+                'Monto (USD)': d.amountUSD,
+                'Estado': d.status === 'paid' ? 'Pagada' : 'Pendiente'
+            }));
 
-            const worksheet = XLSX.utils.json_to_sheet(history);
+            const paymentWs = XLSX.utils.json_to_sheet(paymentWorksheetData);
+            const debtWs = XLSX.utils.json_to_sheet(debtWorksheetData);
+            
             const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, worksheet, "Estado de Cuenta");
+            XLSX.utils.book_append_sheet(workbook, paymentWs, "Resumen de Pagos");
+            XLSX.utils.book_append_sheet(workbook, debtWs, "Resumen de Deudas");
             XLSX.writeFile(workbook, `${filename}.xlsx`);
         }
     };
@@ -824,7 +815,7 @@ export default function ReportsPage() {
                                         <SelectContent>
                                             <SelectItem value="todos">Todos</SelectItem>
                                             <SelectItem value="solvente">Solvente</SelectItem>
-                                            <SelectItem value="moroso">Moroso</SelectItem>
+                                            <SelectItem value="nosolvente">No Solvente</SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
@@ -887,7 +878,7 @@ export default function ReportsPage() {
                                             <TableCell className="text-right">{row.avgRate > 0 ? `Bs. ${formatToTwoDecimals(row.avgRate)}`: ''}</TableCell>
                                             <TableCell className="text-right">{row.balance > 0 ? `Bs. ${formatToTwoDecimals(row.balance)}`: ''}</TableCell>
                                             <TableCell>
-                                                <span className={cn('font-semibold', row.status === 'Moroso' ? 'text-destructive' : 'text-green-600')}>{row.status}</span>
+                                                <span className={cn('font-semibold', row.status === 'No Solvente' ? 'text-destructive' : 'text-green-600')}>{row.status}</span>
                                             </TableCell>
                                             <TableCell>{row.period}</TableCell>
                                             <TableCell className="text-center">{row.monthsOwed || ''}</TableCell>
@@ -1258,4 +1249,3 @@ export default function ReportsPage() {
 }
 
     
-
