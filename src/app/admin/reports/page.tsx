@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -115,7 +116,7 @@ const formatToTwoDecimals = (num: number) => {
     if (typeof num !== 'number' || isNaN(num)) {
         return '0,00';
     }
-    const truncated = Math.floor(num * 100) / 100;
+    const truncated = Math.trunc(num * 100) / 100;
     return truncated.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
@@ -611,8 +612,7 @@ export default function ReportsPage() {
                     item.description,
                     item.status === 'paid' ? 'Pagada' : 'Pendiente',
                     `$${formatToTwoDecimals(item.amountUSD)}`,
-                    `Bs. ${formatToTwoDecimals(item.amountUSD * activeRate)}`,
-                    `Bs. ${formatToTwoDecimals(activeRate)}`
+                    `Bs. ${formatToTwoDecimals(item.amountUSD * activeRate)}`
                 ];
             } else { // payment
                 const paymentRate = item.exchangeRate || activeRate;
@@ -621,13 +621,12 @@ export default function ReportsPage() {
                     'Pago Aprobado',
                     'Aplicado',
                     `$${formatToTwoDecimals(item.totalAmount / paymentRate)}`,
-                    `Bs. ${formatToTwoDecimals(item.totalAmount)}`,
-                    `Bs. ${formatToTwoDecimals(paymentRate)}`
+                    `Bs. ${formatToTwoDecimals(item.totalAmount)}`
                 ];
             }
         });
 
-        const headers = [['Fecha', 'Concepto', 'Estado', 'Monto (USD)', 'Monto (Bs)', 'Tasa Aplicada (Bs)']];
+        const headers = [['Fecha', 'Concepto', 'Estado', 'Monto (USD)', 'Monto (Bs)']];
 
         if (formatType === 'pdf') {
             const doc = new jsPDF();
@@ -673,7 +672,7 @@ export default function ReportsPage() {
             XLSX.utils.sheet_add_aoa(worksheet, headers, { origin: 'A9' });
             XLSX.utils.sheet_add_json(worksheet, historyBody.map(row => ({
                 'Fecha': row[0], 'Concepto': row[1], 'Estado': row[2], 
-                'Monto (USD)': row[3], 'Monto (Bs)': row[4], 'Tasa Aplicada (Bs)': row[5]
+                'Monto (USD)': row[3], 'Monto (Bs)': row[4]
             })), { origin: 'A10', skipHeader: true });
 
             const workbook = XLSX.utils.book_new();
@@ -925,7 +924,6 @@ export default function ReportsPage() {
                                                             <TableHead>Concepto</TableHead>
                                                             <TableHead className="text-right">Monto (USD)</TableHead>
                                                             <TableHead className="text-right">Monto (Bs)</TableHead>
-                                                            <TableHead className="text-right">Tasa (Bs)</TableHead>
                                                             <TableHead className="text-right">Estado</TableHead>
                                                         </TableRow>
                                                     </TableHeader>
@@ -939,7 +937,6 @@ export default function ReportsPage() {
                                                                     <TableCell>{item.description}</TableCell>
                                                                     <TableCell className="text-right">${formatToTwoDecimals(item.amountUSD)}</TableCell>
                                                                     <TableCell className="text-right text-destructive">- Bs. {formatToTwoDecimals(item.amountUSD * activeRate)}</TableCell>
-                                                                    <TableCell className="text-right">Bs. {formatToTwoDecimals(activeRate)}</TableCell>
                                                                     <TableCell className="text-right">
                                                                         {item.status === 'paid' ? <Badge variant="success">Pagada</Badge> : <Badge variant="destructive">Pendiente</Badge>}
                                                                     </TableCell>
@@ -953,7 +950,6 @@ export default function ReportsPage() {
                                                                     <TableCell>Pago Aprobado</TableCell>
                                                                     <TableCell className="text-right">${formatToTwoDecimals(item.totalAmount / paymentRate)}</TableCell>
                                                                     <TableCell className="text-right text-green-500">+ Bs. {formatToTwoDecimals(item.totalAmount)}</TableCell>
-                                                                    <TableCell className="text-right">Bs. {formatToTwoDecimals(paymentRate)}</TableCell>
                                                                     <TableCell className="text-right"><Badge variant="outline">Aplicado</Badge></TableCell>
                                                                 </TableRow>
                                                             )
