@@ -352,7 +352,7 @@ export default function ReportsPage() {
                 monthsOwed: status === 'No Solvente' ? pendingDebts.length : undefined,
             };
         }).filter(row => {
-            const statusMatch = integralStatusFilter === 'todos' || row.status.toLowerCase().replace(' ', '') === integralStatusFilter.replace(' ', '');
+            const statusMatch = integralStatusFilter === 'todos' || row.status.toLowerCase().replace(' ', '') === integralStatusFilter.toLowerCase().replace(' ', '');
             const ownerMatch = !integralOwnerFilter || row.name.toLowerCase().includes(integralOwnerFilter.toLowerCase());
             return statusMatch && ownerMatch;
         });
@@ -410,7 +410,11 @@ export default function ReportsPage() {
         }, {} as { [key: string]: number });
         
         return Object.entries(debtsByStreet).map(([name, TotalDeuda]) => ({ name, TotalDeuda: parseFloat(TotalDeuda.toFixed(2)) }))
-            .sort((a, b) => b.TotalDeuda - a.TotalDeuda);
+            .sort((a, b) => {
+                const streetNumA = parseInt(a.name.replace('Calle ', ''));
+                const streetNumB = parseInt(b.name.replace('Calle ', ''));
+                return streetNumA - streetNumB;
+            });
     }, [allDebts, chartsDateRange]);
 
     const incomeByStreetChartData = useMemo(() => {
@@ -440,7 +444,11 @@ export default function ReportsPage() {
         }, {} as { [key: string]: number });
 
         return Object.entries(incomeByStreet).map(([name, TotalIngresos]) => ({ name, TotalIngresos: parseFloat(TotalIngresos.toFixed(2)) }))
-            .sort((a, b) => b.TotalIngresos - a.TotalIngresos);
+            .sort((a, b) => {
+                const streetNumA = parseInt(a.name.replace('Calle ', ''));
+                const streetNumB = parseInt(b.name.replace('Calle ', ''));
+                return streetNumA - streetNumB;
+            });
     }, [allPayments, chartsDateRange, activeRate]);
 
 
@@ -624,15 +632,12 @@ export default function ReportsPage() {
             p.beneficiaries.some(b => b.ownerId === selectedIndividual.id) && p.status === 'aprobado'
         );
         let totalPaidBs = 0;
-        approvedPayments.forEach(p => {
-            totalPaidBs += p.totalAmount;
-        });
         const paymentBody = approvedPayments.map(p => {
-            const paymentRate = p.exchangeRate || activeRate;
+            totalPaidBs += p.totalAmount;
             return [
                 format(p.paymentDate.toDate(), 'dd-MM-yyyy'),
-                `Pago cuota(s) ${(p.beneficiaries.map(b => `${b.street}-${b.house}`)).join(', ')}`,
-                `$${formatToTwoDecimals(p.totalAmount / paymentRate)}`,
+                `Pago cuota(s)`, // Simplified concept
+                p.reportedBy === selectedIndividual.id ? 'Propietario' : 'Administrador', // Who paid
                 `Bs. ${formatToTwoDecimals(p.totalAmount)}`,
             ];
         });
@@ -643,10 +648,11 @@ export default function ReportsPage() {
             `${(Object.values(monthsLocale)[d.month -1] || '')} ${d.year}`,
             d.description,
             `$${d.amountUSD.toFixed(2)}`,
+            `Bs. ${formatToTwoDecimals(d.amountUSD * activeRate)}`,
             d.status === 'paid' ? 'Pagada' : 'Pendiente'
         ]);
         const totalDebtUsd = ownerDebts.filter(d => d.status === 'pending').reduce((acc, d) => acc + d.amountUSD, 0);
-    
+        const totalDebtBs = totalDebtUsd * activeRate;
     
         if (formatType === 'pdf') {
             const doc = new jsPDF();
@@ -670,7 +676,6 @@ export default function ReportsPage() {
             
             doc.text(`Fecha: ${format(new Date(), "dd/MM/yyyy")}`, pageWidth - margin, margin + 30, { align: 'right'});
             doc.text(`Tasa del día: ${formatToTwoDecimals(activeRate)}`, pageWidth - margin, margin + 35, { align: 'right'});
-
             
             let startY = margin + 45;
     
@@ -678,11 +683,11 @@ export default function ReportsPage() {
             doc.setFontSize(11).setFont('helvetica', 'bold').text('Resumen de Pagos', margin, startY);
             startY += 5;
             (doc as any).autoTable({
-                head: [['Fecha', 'Concepto', 'Monto ($)', 'Monto (Bs)']],
+                head: [['Fecha', 'Concepto', 'Pagado por', 'Monto (Bs)']],
                 body: paymentBody,
                 startY: startY,
                 theme: 'striped',
-                headStyles: { fillColor: [34, 139, 34] },
+                headStyles: { fillColor: [30, 80, 180] },
                 styles: { fontSize: 8 },
                 foot: [[
                     { content: 'Total Pagado', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } },
@@ -695,15 +700,16 @@ export default function ReportsPage() {
             doc.setFontSize(11).setFont('helvetica', 'bold').text('Resumen de Deudas', margin, startY);
             startY += 5;
              (doc as any).autoTable({
-                head: [['Período', 'Concepto', 'Monto ($)', 'Estado']],
+                head: [['Período', 'Concepto', 'Monto ($)', 'Monto (Bs.)', 'Estado']],
                 body: debtBody,
                 startY: startY,
                 theme: 'striped',
-                headStyles: { fillColor: [220, 53, 69] },
+                headStyles: { fillColor: [30, 80, 180] },
                 styles: { fontSize: 8 },
                 foot: [[
                     { content: 'Total Adeudado', colSpan: 2, styles: { halign: 'right', fontStyle: 'bold' } },
                     { content: `$${totalDebtUsd.toFixed(2)}`, styles: { fontStyle: 'bold' } },
+                    { content: `Bs. ${formatToTwoDecimals(totalDebtBs)}`, styles: { fontStyle: 'bold' } },
                     ''
                 ]]
             });
@@ -726,7 +732,7 @@ export default function ReportsPage() {
                 const paymentRate = p.exchangeRate || activeRate;
                 return {
                     'Fecha': format(p.paymentDate.toDate(), 'dd-MM-yyyy'),
-                    'Concepto': `Pago cuota(s) ${(p.beneficiaries.map(b => `${b.street}-${b.house}`)).join(', ')}`,
+                    'Concepto': `Pago cuota(s)`,
                     'Monto (USD)': p.totalAmount / paymentRate,
                     'Monto (Bs)': p.totalAmount
                 };
@@ -735,6 +741,7 @@ export default function ReportsPage() {
                 'Período': `${(Object.values(monthsLocale)[d.month -1] || '')} ${d.year}`,
                 'Concepto': d.description,
                 'Monto (USD)': d.amountUSD,
+                'Monto (Bs.)': d.amountUSD * activeRate,
                 'Estado': d.status === 'paid' ? 'Pagada' : 'Pendiente'
             }));
 
@@ -782,22 +789,23 @@ export default function ReportsPage() {
         }
     };
 
-    const handleExportChart = async (formatType: 'pdf' | 'excel') => {
-        const chartElement = document.getElementById('debt-chart-container');
+    const handleExportChart = async (chartId: string, title: string, formatType: 'pdf' | 'excel') => {
+        const chartElement = document.getElementById(chartId);
         if (!chartElement) return;
 
         const { default: html2canvas } = await import('html2canvas');
         const canvas = await html2canvas(chartElement);
         const imgData = canvas.toDataURL('image/png');
-        const filename = `grafico_deudas_por_calle_${format(new Date(), 'yyyy-MM-dd')}`;
+        const filename = `${title.toLowerCase().replace(/\s/g, '_')}_${format(new Date(), 'yyyy-MM-dd')}`;
+        const data = chartId === 'debt-chart-container' ? debtsByStreetChartData : incomeByStreetChartData;
 
         if (formatType === 'pdf') {
             const doc = new jsPDF();
-            doc.setFontSize(16).setFont('helvetica', 'bold').text("Deuda Total por Calle (USD)", doc.internal.pageSize.getWidth() / 2, 20, { align: 'center' });
+            doc.setFontSize(16).setFont('helvetica', 'bold').text(title, doc.internal.pageSize.getWidth() / 2, 20, { align: 'center' });
             doc.addImage(imgData, 'PNG', 15, 30, 180, 100);
             doc.save(`${filename}.pdf`);
         } else { // excel
-            const worksheet = XLSX.utils.json_to_sheet(debtsByStreetChartData);
+            const worksheet = XLSX.utils.json_to_sheet(data);
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Datos del Gráfico");
             XLSX.writeFile(workbook, `${filename}.xlsx`);
@@ -1229,7 +1237,13 @@ export default function ReportsPage() {
                         </CardHeader>
                         <CardContent className="space-y-8">
                              <div id="debt-chart-container" className="p-4 bg-background rounded-lg">
-                                <h3 className="font-semibold mb-4">Deuda Pendiente por Calle (USD)</h3>
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="font-semibold">Deuda Pendiente por Calle (USD)</h3>
+                                    <div className="flex gap-2">
+                                        <Button size="sm" variant="outline" onClick={() => handleExportChart('debt-chart-container', 'Deuda por Calle', 'pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
+                                        <Button size="sm" variant="outline" onClick={() => handleExportChart('debt-chart-container', 'Deuda por Calle', 'excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
+                                    </div>
+                                </div>
                                 {debtsByStreetChartData.length > 0 ? (
                                 <ResponsiveContainer width="100%" height={300}>
                                     <BarChart data={debtsByStreetChartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
@@ -1249,7 +1263,13 @@ export default function ReportsPage() {
                                 )}
                              </div>
                              <div id="income-chart-container" className="p-4 bg-background rounded-lg">
-                                <h3 className="font-semibold mb-4">Ingresos por Calle (USD)</h3>
+                                <div className="flex justify-between items-center mb-4">
+                                     <h3 className="font-semibold">Ingresos por Calle (USD)</h3>
+                                      <div className="flex gap-2">
+                                        <Button size="sm" variant="outline" onClick={() => handleExportChart('income-chart-container', 'Ingresos por Calle', 'pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
+                                        <Button size="sm" variant="outline" onClick={() => handleExportChart('income-chart-container', 'Ingresos por Calle', 'excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
+                                    </div>
+                                </div>
                                 {incomeByStreetChartData.length > 0 ? (
                                 <ResponsiveContainer width="100%" height={300}>
                                     <BarChart data={incomeByStreetChartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
@@ -1268,10 +1288,6 @@ export default function ReportsPage() {
                                     <p className="text-center text-muted-foreground py-8">No hay datos de ingresos para mostrar en el período seleccionado.</p>
                                 )}
                              </div>
-                             <div className="flex justify-end gap-2">
-                                <Button variant="outline" onClick={() => handleExportChart('pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
-                                <Button variant="outline" onClick={() => handleExportChart('excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
-                            </div>
                         </CardContent>
                      </Card>
                  </TabsContent>
@@ -1279,3 +1295,5 @@ export default function ReportsPage() {
         </div>
     );
 }
+
+    
