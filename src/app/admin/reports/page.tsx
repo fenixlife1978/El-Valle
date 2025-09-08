@@ -6,7 +6,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -226,7 +226,7 @@ export default function ReportsPage() {
             let period = '';
 
             if (status === 'Moroso') {
-                const sortedPending = [...pendingDebts].sort((a,b) => a.year - b.year || a.month - b.month);
+                const sortedPending = [...pendingDebts].sort((a,b) => a.year - b.year || a.month - a.month);
                 const firstDebt = sortedPending[0];
                 const lastDebt = sortedPending[sortedPending.length - 1];
                 period = `${monthsLocale[firstDebt.month]}/${firstDebt.year} - ${monthsLocale[lastDebt.month]}/${lastDebt.year}`;
@@ -346,20 +346,36 @@ export default function ReportsPage() {
         }
 
         if (format === 'pdf') {
-            const doc = new jsPDF({ orientation: 'landscape' });
+            const doc = new jsPDF({ orientation: 'portrait' });
+            const pageWidth = doc.internal.pageSize.getWidth();
             let startY = 15;
             if (companyInfo?.logo) doc.addImage(companyInfo.logo, 'PNG', 15, startY, 20, 20);
             if (companyInfo) doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, 40, startY + 5);
-            doc.setFontSize(14).setFont('helvetica', 'bold').text('Reporte Integral de Propietarios', doc.internal.pageSize.getWidth() / 2, startY + 15, { align: 'center'});
+
+            doc.setFontSize(16).setFont('helvetica', 'bold').text('Reporte Integral de Propietarios', pageWidth / 2, startY + 15, { align: 'center'});
+            
             startY += 25;
             doc.setFontSize(9).setFont('helvetica', 'normal');
             doc.text(periodString, 15, startY);
-            doc.text(`Fecha de Emisión: ${emissionDate}`, doc.internal.pageSize.getWidth() - 15, startY, { align: 'right'});
+            doc.text(`Fecha de Emisión: ${emissionDate}`, pageWidth - 15, startY, { align: 'right'});
+            
             startY += 10;
+            
             (doc as any).autoTable({
                 head: headers, body: body, startY: startY,
-                headStyles: { fillColor: [30, 80, 180] }, styles: { fontSize: 8, cellPadding: 1.5 },
-                columnStyles: { 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right' }, 8: { halign: 'center' } }
+                headStyles: { fillColor: [30, 80, 180] }, 
+                styles: { fontSize: 7, cellPadding: 1.5, overflow: 'linebreak' },
+                columnStyles: { 
+                    0: { cellWidth: 30 },
+                    1: { cellWidth: 25 },
+                    2: { cellWidth: 20 },
+                    3: { halign: 'right', cellWidth: 20 },
+                    4: { halign: 'right', cellWidth: 20 }, 
+                    5: { halign: 'right', cellWidth: 20 },
+                    6: { cellWidth: 15 },
+                    7: { cellWidth: 20 },
+                    8: { halign: 'center', cellWidth: 15 } 
+                }
             });
             doc.save(`${filename}.pdf`);
         } else {
