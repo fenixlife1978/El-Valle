@@ -69,6 +69,7 @@ type IntegralReportRow = {
     ownerId: string;
     name: string;
     properties: string;
+    lastPaymentDate: string;
     paidAmount: number;
     avgRate: number;
     balance: number;
@@ -210,13 +211,15 @@ export default function ReportsPage() {
             
             const pendingDebts = ownerDebts.filter(d => {
                 if (d.status !== 'pending') return false;
-                // If it's a regular debt, it always counts.
-                if (!d.description.toLowerCase().includes('ajuste')) return true;
                 
                 // If it's an adjustment debt, check if its month has passed or is the current month.
-                const debtDate = new Date(d.year, d.month - 1);
-                const currentDate = new Date(currentYear, currentMonth - 1);
-                return debtDate <= currentDate;
+                if (d.description.toLowerCase().includes('ajuste')) {
+                    const debtDate = new Date(d.year, d.month - 1);
+                    const currentDate = new Date(currentYear, currentMonth - 1);
+                    return debtDate <= currentDate;
+                }
+                // If it's a regular debt, it always counts.
+                return true;
             });
             
             let status: 'Solvente' | 'Moroso' = pendingDebts.length > 0 ? 'Moroso' : 'Solvente';
@@ -261,10 +264,17 @@ export default function ReportsPage() {
             const totalRateWeight = ownerPayments.reduce((sum, p) => sum + ((p.exchangeRate || 0) * p.totalAmount), 0);
             const avgRate = totalPaid > 0 ? totalRateWeight / totalPaid : 0;
             
+            let lastPaymentDate = '';
+            if(ownerPayments.length > 0) {
+                const lastPayment = ownerPayments.sort((a,b) => b.paymentDate.toMillis() - a.paymentDate.toMillis())[0];
+                lastPaymentDate = format(lastPayment.paymentDate.toDate(), 'dd/MM/yyyy');
+            }
+
             return {
                 ownerId: owner.id,
                 name: owner.name,
                 properties: (owner.properties || []).map(p => `${p.street}-${p.house}`).join(', '),
+                lastPaymentDate,
                 paidAmount: totalPaid,
                 avgRate: avgRate,
                 balance: owner.balance,
@@ -315,9 +325,9 @@ export default function ReportsPage() {
 
     const handleExportIntegral = (format: 'pdf' | 'excel') => {
         const data = integralReportData;
-        const headers = [["Propietario", "Propiedad", "Monto Pagado (Bs)", "Tasa Prom. (Bs/$)", "Saldo a Favor (Bs)", "Estado", "Período Solvencia", "Meses Adeudados"]];
+        const headers = [["Propietario", "Propiedad", "Fecha Últ. Pago", "Monto Pagado (Bs)", "Tasa Prom. (Bs/$)", "Saldo a Favor (Bs)", "Estado", "Período Solvencia", "Meses Adeudados"]];
         const body = data.map(row => [
-            row.name, row.properties,
+            row.name, row.properties, row.lastPaymentDate,
             row.paidAmount > 0 ? row.paidAmount.toLocaleString('es-VE', {minimumFractionDigits: 2}) : '',
             row.avgRate > 0 ? row.avgRate.toLocaleString('es-VE', {minimumFractionDigits: 2}) : '',
             row.balance > 0 ? row.balance.toLocaleString('es-VE', {minimumFractionDigits: 2}) : '',
@@ -349,7 +359,7 @@ export default function ReportsPage() {
             (doc as any).autoTable({
                 head: headers, body: body, startY: startY,
                 headStyles: { fillColor: [30, 80, 180] }, styles: { fontSize: 8, cellPadding: 1.5 },
-                columnStyles: { 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' }, 7: { halign: 'center' } }
+                columnStyles: { 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right' }, 8: { halign: 'center' } }
             });
             doc.save(`${filename}.pdf`);
         } else {
@@ -359,7 +369,7 @@ export default function ReportsPage() {
             const worksheet = XLSX.utils.aoa_to_sheet(headerData);
             XLSX.utils.sheet_add_aoa(worksheet, headers, { origin: "A5" });
             XLSX.utils.sheet_add_json(worksheet, data.map(row => ({
-                 "Propietario": row.name, "Propiedad": row.properties, "Monto Pagado (Bs)": row.paidAmount,
+                 "Propietario": row.name, "Propiedad": row.properties, "Fecha Últ. Pago": row.lastPaymentDate, "Monto Pagado (Bs)": row.paidAmount,
                  "Tasa Prom. (Bs/$)": row.avgRate, "Saldo a Favor (Bs)": row.balance, "Estado": row.status,
                  "Período Solvencia": row.period, "Meses Adeudados": row.monthsOwed || ''
             })), { origin: "A6", skipHeader: true });
@@ -509,6 +519,7 @@ export default function ReportsPage() {
                                     <TableRow>
                                         <TableHead>Propietario</TableHead>
                                         <TableHead>Propiedad</TableHead>
+                                        <TableHead>Fecha Últ. Pago</TableHead>
                                         <TableHead className="text-right">Monto Pagado</TableHead>
                                         <TableHead className="text-right">Tasa Prom.</TableHead>
                                         <TableHead className="text-right">Saldo a Favor</TableHead>
@@ -522,6 +533,7 @@ export default function ReportsPage() {
                                         <TableRow key={row.ownerId}>
                                             <TableCell className="font-medium">{row.name}</TableCell>
                                             <TableCell>{row.properties}</TableCell>
+                                            <TableCell>{row.lastPaymentDate}</TableCell>
                                             <TableCell className="text-right">{row.paidAmount > 0 ? `Bs. ${row.paidAmount.toLocaleString('es-VE', {minimumFractionDigits: 2})}`: ''}</TableCell>
                                             <TableCell className="text-right">{row.avgRate > 0 ? `Bs. ${row.avgRate.toLocaleString('es-VE', {minimumFractionDigits: 2})}`: ''}</TableCell>
                                             <TableCell className="text-right">{row.balance > 0 ? `Bs. ${row.balance.toLocaleString('es-VE', {minimumFractionDigits: 2})}`: ''}</TableCell>
