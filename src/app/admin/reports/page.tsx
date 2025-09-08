@@ -653,7 +653,12 @@ export default function ReportsPage() {
         doc.text(`Propiedad(es): ${(selectedIndividual.properties || []).map(p => `${p.street}-${p.house}`).join(', ')}`, margin, margin + 35);
         
         doc.text(`Fecha: ${format(new Date(), "dd/MM/yyyy")}`, pageWidth - margin, margin + 30, { align: 'right'});
+        
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(255, 0, 0); // Red color
         doc.text(`Tasa del día: ${formatToTwoDecimals(activeRate)}`, pageWidth - margin, margin + 35, { align: 'right'});
+        doc.setTextColor(0, 0, 0); // Reset color
+        doc.setFont('helvetica', 'normal');
         
         let startY = margin + 45;
 
@@ -707,10 +712,13 @@ export default function ReportsPage() {
         startY += 10;
 
         // Legal Disclaimer
-        doc.setFontSize(8).setFont('helvetica', 'italic');
+        doc.setFontSize(9).setFont('helvetica', 'bold');
+        doc.setTextColor(255, 0, 0); // Red Color
         const disclaimer = "Los montos en bolívares expresados en las deudas, son producto de la conversión aplicada a la tasa del día de hoy por lo que dichos montos variarán según vaya cambiando la tasa al día de pago.";
         const splitDisclaimer = doc.splitTextToSize(disclaimer, pageWidth - margin * 2);
         doc.text(splitDisclaimer, margin, startY);
+        doc.setTextColor(0,0,0); // Reset color
+        doc.setFont('helvetica', 'normal');
 
         doc.save(`${filename}.pdf`);
     };
