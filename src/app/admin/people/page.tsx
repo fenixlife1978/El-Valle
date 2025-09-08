@@ -67,6 +67,7 @@ const getHousesForStreet = (street: string) => {
 const ADMIN_USER_ID = 'G2jhcEnp05TcvjYj8SwhzVCHbW83'; // EDWIN AGUIAR's ID
 
 const formatToTwoDecimals = (num: number) => {
+    if (typeof num !== 'number' || isNaN(num)) return '0,00';
     const truncated = Math.trunc(num * 100) / 100;
     return truncated.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
@@ -96,8 +97,8 @@ export default function PeopleManagementPage() {
             // Custom sort logic
             const getSortKeys = (owner: Owner) => {
                 const prop = (owner.properties && owner.properties.length > 0) ? owner.properties[0] : { street: 'N/A', house: 'N/A' };
-                const streetNum = parseInt(String(prop.street || '').replace('Calle ', '') || '0');
-                const houseNum = parseInt(String(prop.house || '').replace('Casa ', '') || '0');
+                const streetNum = parseInt(String(prop.street || '').replace('Calle ', '') || '999');
+                const houseNum = parseInt(String(prop.house || '').replace('Casa ', '') || '999');
                 return { streetNum, houseNum };
             };
 
@@ -644,3 +645,4 @@ export default function PeopleManagementPage() {
     );
 
     
+

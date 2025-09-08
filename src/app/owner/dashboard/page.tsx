@@ -89,6 +89,7 @@ const monthsLocale: { [key: number]: string } = {
 };
 
 const formatToTwoDecimals = (num: number) => {
+    if (typeof num !== 'number' || isNaN(num)) return '0,00';
     const truncated = Math.trunc(num * 100) / 100;
     return truncated.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
@@ -398,6 +399,10 @@ export default function OwnerDashboardPage() {
     startY += 10;
 
     // --- Footer ---
+    const legalNote = 'Todo propietario que requiera de firma y sello húmedo deberá imprimir éste recibo y hacerlo llegar al condominio para su respectiva estampa.';
+    doc.setFontSize(8).setFont('helvetica', 'normal').text(legalNote, margin, startY);
+    startY += 8;
+
     doc.setFontSize(9).text('Este recibo confirma que su pago ha sido validado conforme a los términos establecidos por la comunidad.', margin, startY);
     startY += 8;
     doc.setFont('helvetica', 'bold').text(`Firma electrónica: '${companyInfo.name} - Condominio'`, margin, startY);
@@ -650,11 +655,12 @@ export default function OwnerDashboardPage() {
                             Total Pagado: Bs. {formatToTwoDecimals(receiptData.payment.amount)}
                          </div>
                         {/* Footer */}
-                        <div className="mt-6 text-center text-gray-600 text-[10px]">
+                        <div className="mt-6 text-gray-600 text-[10px] space-y-2">
+                             <p className="text-left text-[11px] font-semibold">Todo propietario que requiera de firma y sello húmedo deberá imprimir éste recibo y hacerlo llegar al condominio para su respectiva estampa.</p>
                              <p className="text-left">Este recibo confirma que su pago ha sido validado conforme a los términos establecidos por la comunidad.</p>
                              <p className="text-left font-bold mt-2">Firma electrónica: '{companyInfo.name} - Condominio'</p>
                              <hr className="my-4 border-gray-400"/>
-                             <p className="italic text-xs">Este recibo se generó de manera automática y es válido sin firma manuscrita.</p>
+                             <p className="italic text-center">Este recibo se generó de manera automática y es válido sin firma manuscrita.</p>
                         </div>
                     </div>
                 )}

@@ -166,7 +166,7 @@ export default function ReportsPage() {
         setLoading(true);
         try {
             const settingsRef = doc(db, 'config', 'mainSettings');
-            const ownersQuery = query(collection(db, 'owners'), where('name', '!=', 'EDWIN AGUIAR'), orderBy('name'));
+            const ownersQuery = query(collection(db, 'owners'), where('name', '!=', 'EDWIN AGUIAR'));
             const paymentsQuery = query(collection(db, 'payments'));
             const debtsQuery = query(collection(db, 'debts'));
             const historicalPaymentsQuery = query(collection(db, 'historical_payments'));
@@ -260,20 +260,34 @@ export default function ReportsPage() {
         const currentYear = now.getFullYear();
         const currentMonth = now.getMonth() + 1;
 
-        return owners.map(owner => {
+        const getSortKeys = (owner: Owner) => {
+            const prop = (owner.properties && owner.properties.length > 0) ? owner.properties[0] : { street: 'N/A', house: 'N/A' };
+            const streetNum = parseInt(String(prop.street || '').replace('Calle ', '') || '999');
+            const houseNum = parseInt(String(prop.house || '').replace('Casa ', '') || '999');
+            return { streetNum, houseNum };
+        };
+
+        const sortedOwners = [...owners].sort((a, b) => {
+            const aKeys = getSortKeys(a);
+            const bKeys = getSortKeys(b);
+            if (aKeys.streetNum !== bKeys.streetNum) {
+                return aKeys.streetNum - bKeys.streetNum;
+            }
+            return aKeys.houseNum - bKeys.houseNum;
+        });
+
+        return sortedOwners.map(owner => {
             const ownerDebts = allDebts.filter(d => d.ownerId === owner.id);
             const ownerHistorical = allHistoricalPayments.filter(h => h.ownerId === owner.id);
             
             const pendingDebts = ownerDebts.filter(d => {
                 if (d.status !== 'pending') return false;
                 
-                // For adjustment debts, only consider them if the month has passed or is current
                 if (d.description.toLowerCase().includes('ajuste')) {
                     const debtDate = new Date(d.year, d.month - 1);
                     const currentDate = new Date(currentYear, currentMonth - 1);
                     return debtDate <= currentDate;
                 }
-                // Regular debts are always considered pending.
                 return true;
             });
             
@@ -461,7 +475,7 @@ export default function ReportsPage() {
         combinedHistory.sort((a, b) => {
             const dateA = a.type === 'debt' ? new Date(a.year, a.month-1) : a.paymentDate.toDate();
             const dateB = b.type === 'debt' ? new Date(b.year, b.month-1) : b.paymentDate.toDate();
-            return dateB.getTime() - dateA.getTime();
+            return dateA.getTime() - dateB.getTime();
         });
 
         setIndividualHistory(combinedHistory as TransactionHistoryItem[]);
