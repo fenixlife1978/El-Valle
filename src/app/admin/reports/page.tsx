@@ -41,7 +41,7 @@ type Payment = {
   paymentDate: Timestamp;
   totalAmount: number;
   exchangeRate?: number;
-  beneficiaries: { ownerId: string; street?: string; house?: string; }[];
+  beneficiaries: { ownerId: string; street?: string; house?: string; amount: number;}[];
   status: 'aprobado' | 'pendiente' | 'rechazado';
   reportedBy: string;
 };
@@ -450,7 +450,7 @@ export default function ReportsPage() {
                 if (beneficiary.street) {
                     if (!acc[beneficiary.street]) acc[beneficiary.street] = 0;
                     // Approximate income in USD
-                    const incomeUSD = payment.totalAmount / (payment.exchangeRate || activeRate || 1);
+                    const incomeUSD = beneficiary.amount / (payment.exchangeRate || activeRate || 1);
                     acc[beneficiary.street] += incomeUSD;
                 }
             });
@@ -661,9 +661,9 @@ export default function ReportsPage() {
         doc.setFontSize(9).setFont('helvetica', 'normal');
         doc.text(dateText, pageWidth - margin, margin + 30, { align: 'right'});
 
-        doc.setFont('helvetica', 'bold').setTextColor(255, 0, 0); // Red and Bold
+        doc.setFont('helvetica', 'bold').setTextColor(255, 0, 0);
         doc.text(rateText, pageWidth - margin, margin + 35, { align: 'right'});
-        doc.setTextColor(0, 0, 0); // Reset to black
+        doc.setTextColor(0, 0, 0);
         
         let startY = margin + 45;
 
@@ -674,21 +674,28 @@ export default function ReportsPage() {
         if (approvedPayments.length > 0) {
             doc.setFontSize(11).setFont('helvetica', 'bold').text('Resumen de Pagos', margin, startY);
             startY += 7;
-            const paymentBody = approvedPayments.map(p => [
-                format(p.paymentDate.toDate(), 'dd-MM-yyyy'),
-                `Pago cuota(s)`, // Simplified concept
-                p.reportedBy === selectedIndividual.id ? 'Propietario' : 'Administrador', // Who paid
-                `Bs. ${formatToTwoDecimals(p.totalAmount)}`,
-            ]);
+            const paymentBody = approvedPayments.map(p => {
+                const totalAmountUSD = (p.totalAmount / (p.exchangeRate || activeRate || 1));
+                const beneficiary = p.beneficiaries.find(b => b.ownerId === selectedIndividual.id);
+                const paymentAmount = beneficiary ? beneficiary.amount : p.totalAmount;
+                const concept = p.beneficiaries.length > 1 ? `Pago Múltiple` : `Pago Cuota(s)`;
+
+                return [
+                    format(p.paymentDate.toDate(), 'dd-MM-yyyy'),
+                    concept,
+                    p.reportedBy === selectedIndividual.id ? 'Propietario' : 'Administrador', // Who paid
+                    `Bs. ${formatToTwoDecimals(paymentAmount)}`,
+                ]
+            });
             (doc as any).autoTable({
                 head: [['Fecha', 'Concepto', 'Pagado por', 'Monto (Bs)']], 
                 body: paymentBody,
                 startY: startY, 
                 theme: 'striped', 
-                headStyles: { fillColor: [30, 80, 180] }, // Blue header
+                headStyles: { fillColor: [22, 102, 102] }, // Teal header
                 styles: { fontSize: 8 },
                 foot: [[ { content: 'Total Pagado', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } }, { content: `Bs. ${formatToTwoDecimals(totalPaidBs)}`, styles: { fontStyle: 'bold' } } ]],
-                footStyles: { fillColor: [30, 80, 180], textColor: 255 }
+                footStyles: { fillColor: [22, 102, 102], textColor: 255 }
             });
             startY = (doc as any).lastAutoTable.finalY + 10;
         }
@@ -696,7 +703,6 @@ export default function ReportsPage() {
         // --- Debt Summary ---
         const ownerDebts = allDebts.filter(d => d.ownerId === selectedIndividual.id);
         const totalDebtUsd = ownerDebts.filter(d => d.status === 'pending').reduce((acc, d) => acc + d.amountUSD, 0);
-        const totalDebtBs = ownerDebts.filter(d => d.status === 'pending').reduce((acc, d) => acc + (d.amountUSD * activeRate), 0);
         
         if (ownerDebts.length > 0) {
             doc.setFontSize(11).setFont('helvetica', 'bold').text('Resumen de Deudas', margin, startY);
@@ -714,14 +720,14 @@ export default function ReportsPage() {
                 body: debtBody,
                 startY: startY, 
                 theme: 'striped', 
-                headStyles: { fillColor: [30, 80, 180] }, // Blue header
+                headStyles: { fillColor: [22, 102, 102] }, // Teal header
                 styles: { fontSize: 8 },
                 foot: [[ { content: 'Total Adeudado', colSpan: 1, styles: { halign: 'right', fontStyle: 'bold' } }, 
                          { content: `$${totalDebtUsd.toFixed(2)}`, styles: { fontStyle: 'bold' } },
-                         { content: `Bs. ${formatToTwoDecimals(totalDebtBs)}`, styles: { fontStyle: 'bold' } },
+                         { content: `Bs. ${formatToTwoDecimals(totalDebtUsd * activeRate)}`, styles: { fontStyle: 'bold' } },
                          ''
                       ]],
-                footStyles: { fillColor: [30, 80, 180], textColor: 255 }
+                footStyles: { fillColor: [22, 102, 102], textColor: 255 }
             });
             startY = (doc as any).lastAutoTable.finalY + 10;
         }
@@ -732,12 +738,11 @@ export default function ReportsPage() {
         startY += 10;
 
         // --- Legal Disclaimer ---
-        doc.setFontSize(9).setFont('helvetica', 'bold');
-        doc.setTextColor(255, 0, 0); // Red Color
+        doc.setFontSize(9).setFont('helvetica', 'bold').setTextColor(255, 0, 0);
         const disclaimer = "Los montos en bolívares expresados en las deudas, son producto de la conversión aplicada a la tasa del día de hoy por lo que dichos montos variarán según vaya cambiando la tasa al día de pago.";
         const splitDisclaimer = doc.splitTextToSize(disclaimer, pageWidth - margin * 2);
         doc.text(splitDisclaimer, margin, startY);
-        doc.setTextColor(0,0,0); // Reset color
+        doc.setTextColor(0,0,0);
         doc.setFont('helvetica', 'normal');
 
         doc.save(`${filename}.pdf`);
@@ -1030,8 +1035,8 @@ export default function ReportsPage() {
                                                                 <TableRow key={`payment-${item.id}-${index}`}>
                                                                     <TableCell>{format(item.paymentDate.toDate(), 'dd/MM/yyyy')}</TableCell>
                                                                     <TableCell>Pago Aprobado</TableCell>
-                                                                    <TableCell className="text-right">${formatToTwoDecimals(item.totalAmount / paymentRate)}</TableCell>
-                                                                    <TableCell className="text-right text-green-500">+ Bs. {formatToTwoDecimals(item.totalAmount)}</TableCell>
+                                                                    <TableCell className="text-right">${formatToTwoDecimals(item.beneficiaries[0].amount / paymentRate)}</TableCell>
+                                                                    <TableCell className="text-right text-green-500">+ Bs. {formatToTwoDecimals(item.beneficiaries[0].amount)}</TableCell>
                                                                     <TableCell className="text-right"><Badge variant="outline">Aplicado</Badge></TableCell>
                                                                 </TableRow>
                                                             )
