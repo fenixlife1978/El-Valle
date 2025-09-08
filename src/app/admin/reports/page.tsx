@@ -164,7 +164,7 @@ export default function ReportsPage() {
             const debtsQuery = query(collection(db, 'debts'));
             const historicalPaymentsQuery = query(collection(db, 'historical_payments'));
             
-            const [settingsSnap, ownersSnapshot, paymentsSnapshot, debtsSnapshot, historicalSnapshot] = await Promise.all([
+            const [settingsSnap, ownersSnapshot, paymentsSnapshot, debtsSnapshot, historicalPaymentsSnapshot] = await Promise.all([
                 getDoc(settingsRef),
                 getDocs(ownersQuery),
                 getDocs(paymentsQuery),
@@ -190,7 +190,7 @@ export default function ReportsPage() {
             
             const debtsData = debtsSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Debt));
             setAllDebts(debtsData);
-            setAllHistoricalPayments(historicalSnapshot.docs.map(d => d.data() as HistoricalPayment));
+            setAllHistoricalPayments(historicalPaymentsSnapshot.docs.map(d => d.data() as HistoricalPayment));
 
              // --- Delinquency Data Calculation ---
             const debtsByOwner = new Map<string, { totalUSD: number, count: number }>();
@@ -562,17 +562,24 @@ export default function ReportsPage() {
                     `${monthsLocale[item.month]} ${item.year}`,
                     item.description,
                     item.status === 'paid' ? 'Pagada' : 'Pendiente',
-                    `- Bs. ${formatToTwoDecimals(item.amountUSD * activeRate)}`
+                    `$${formatToTwoDecimals(item.amountUSD)}`,
+                    `Bs. ${formatToTwoDecimals(item.amountUSD * activeRate)}`,
+                    `Bs. ${formatToTwoDecimals(activeRate)}`
                 ];
             } else { // payment
+                const paymentRate = item.exchangeRate || activeRate;
                 return [
                     format(item.paymentDate.toDate(), 'dd/MM/yyyy'),
                     'Pago Aprobado',
                     'Aplicado',
-                    `+ Bs. ${formatToTwoDecimals(item.totalAmount)}`
+                    `$${formatToTwoDecimals(item.totalAmount / paymentRate)}`,
+                    `Bs. ${formatToTwoDecimals(item.totalAmount)}`,
+                    `Bs. ${formatToTwoDecimals(paymentRate)}`
                 ];
             }
         });
+
+        const headers = [['Fecha', 'Concepto', 'Estado', 'Monto (USD)', 'Monto (Bs)', 'Tasa Aplicada (Bs)']];
 
         if (formatType === 'pdf') {
             const doc = new jsPDF();
@@ -595,7 +602,7 @@ export default function ReportsPage() {
 
             startY += 10;
             (doc as any).autoTable({
-                head: [['Fecha', 'Concepto', 'Estado', 'Monto (Bs)']],
+                head: headers,
                 body: historyBody,
                 startY: startY,
                 headStyles: { fillColor: [30, 80, 180] },
@@ -613,11 +620,12 @@ export default function ReportsPage() {
                 [`Saldo a Favor (Bs):`, selectedIndividual.balance],
                 []
             ];
-            const historyHeader = [['Fecha', 'Concepto', 'Estado', 'Monto (Bs)']];
+            
             const worksheet = XLSX.utils.aoa_to_sheet(header);
-            XLSX.utils.sheet_add_aoa(worksheet, historyHeader, { origin: 'A9' });
+            XLSX.utils.sheet_add_aoa(worksheet, headers, { origin: 'A9' });
             XLSX.utils.sheet_add_json(worksheet, historyBody.map(row => ({
-                'Fecha': row[0], 'Concepto': row[1], 'Estado': row[2], 'Monto (Bs)': row[3]
+                'Fecha': row[0], 'Concepto': row[1], 'Estado': row[2], 
+                'Monto (USD)': row[3], 'Monto (Bs)': row[4], 'Tasa Aplicada (Bs)': row[5]
             })), { origin: 'A10', skipHeader: true });
 
             const workbook = XLSX.utils.book_new();
@@ -867,7 +875,9 @@ export default function ReportsPage() {
                                                         <TableRow>
                                                             <TableHead>Fecha</TableHead>
                                                             <TableHead>Concepto</TableHead>
-                                                            <TableHead className="text-right">Monto</TableHead>
+                                                            <TableHead className="text-right">Monto (USD)</TableHead>
+                                                            <TableHead className="text-right">Monto (Bs)</TableHead>
+                                                            <TableHead className="text-right">Tasa (Bs)</TableHead>
                                                             <TableHead className="text-right">Estado</TableHead>
                                                         </TableRow>
                                                     </TableHeader>
@@ -879,18 +889,23 @@ export default function ReportsPage() {
                                                                 <TableRow key={`debt-${item.id}-${index}`}>
                                                                     <TableCell>{date}</TableCell>
                                                                     <TableCell>{item.description}</TableCell>
+                                                                    <TableCell className="text-right">${formatToTwoDecimals(item.amountUSD)}</TableCell>
                                                                     <TableCell className="text-right text-destructive">- Bs. {formatToTwoDecimals(item.amountUSD * activeRate)}</TableCell>
+                                                                    <TableCell className="text-right">Bs. {formatToTwoDecimals(activeRate)}</TableCell>
                                                                     <TableCell className="text-right">
                                                                         {item.status === 'paid' ? <Badge variant="success">Pagada</Badge> : <Badge variant="destructive">Pendiente</Badge>}
                                                                     </TableCell>
                                                                 </TableRow>
                                                             )
                                                         } else {
+                                                            const paymentRate = item.exchangeRate || activeRate;
                                                             return (
                                                                 <TableRow key={`payment-${item.id}-${index}`}>
                                                                     <TableCell>{format(item.paymentDate.toDate(), 'dd/MM/yyyy')}</TableCell>
                                                                     <TableCell>Pago Aprobado</TableCell>
+                                                                    <TableCell className="text-right">${formatToTwoDecimals(item.totalAmount / paymentRate)}</TableCell>
                                                                     <TableCell className="text-right text-green-500">+ Bs. {formatToTwoDecimals(item.totalAmount)}</TableCell>
+                                                                    <TableCell className="text-right">Bs. {formatToTwoDecimals(paymentRate)}</TableCell>
                                                                     <TableCell className="text-right"><Badge variant="outline">Aplicado</Badge></TableCell>
                                                                 </TableRow>
                                                             )
