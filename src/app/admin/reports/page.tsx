@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -404,6 +405,10 @@ export default function ReportsPage() {
 
         const filteredDebts = allDebts.filter(debt => {
             if (debt.status !== 'pending') return false;
+            // Use optional chaining to safely access property
+            const street = debt.property?.street;
+            if (!street) return false;
+
             const debtDate = new Date(debt.year, debt.month - 1);
             if (fromDate && debtDate < fromDate) return false;
             if (toDate && debtDate > toDate) return false;
@@ -411,11 +416,10 @@ export default function ReportsPage() {
         });
 
         const debtsByStreet = filteredDebts.reduce((acc, debt) => {
-            const street = debt.property?.street;
-            if (street) {
-                if (!acc[street]) acc[street] = 0;
-                acc[street] += debt.amountUSD;
-            }
+            // This check is now safe due to the filter above
+            const street = debt.property.street;
+            if (!acc[street]) acc[street] = 0;
+            acc[street] += debt.amountUSD;
             return acc;
         }, {} as { [key: string]: number });
         
@@ -635,40 +639,41 @@ export default function ReportsPage() {
         if (!selectedIndividual || !companyInfo) return;
     
         const filename = `estado_cuenta_${selectedIndividual.name.replace(/\s/g, '_')}`;
-    
         const doc = new jsPDF();
         const pageWidth = doc.internal.pageSize.getWidth();
-        const margin = 10;
+        const margin = 14;
 
-        // Header
+        // --- Header ---
         if (companyInfo.logo) {
             try { doc.addImage(companyInfo.logo, 'PNG', margin, margin, 20, 20); } 
             catch (e) { console.error("Error adding logo to PDF:", e); }
         }
-        doc.setFontSize(11).setFont('helvetica', 'bold').text('ESTADO DE CUENTA', pageWidth / 2, margin + 8, { align: 'center'});
+        doc.setFontSize(16).setFont('helvetica', 'bold').text('ESTADO DE CUENTA', pageWidth - margin, margin + 8, { align: 'right'});
         
         doc.setFontSize(9).setFont('helvetica', 'normal');
         doc.text(`${companyInfo.name} | ${companyInfo.rif}`, margin, margin + 25);
         doc.text(`Propietario: ${selectedIndividual.name}`, margin, margin + 30);
         doc.text(`Propiedad(es): ${(selectedIndividual.properties || []).map(p => `${p.street}-${p.house}`).join(', ')}`, margin, margin + 35);
         
-        doc.text(`Fecha: ${format(new Date(), "dd/MM/yyyy")}`, pageWidth - margin, margin + 30, { align: 'right'});
+        const dateText = `Fecha: ${format(new Date(), "dd/MM/yyyy")}`;
+        const rateText = `Tasa del día: ${formatToTwoDecimals(activeRate)}`;
         
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(255, 0, 0); // Red color
-        doc.text(`Tasa del día: ${formatToTwoDecimals(activeRate)}`, pageWidth - margin, margin + 35, { align: 'right'});
-        doc.setTextColor(0, 0, 0); // Reset color
-        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9).setFont('helvetica', 'normal');
+        doc.text(dateText, pageWidth - margin, margin + 30, { align: 'right'});
+
+        doc.setFont('helvetica', 'bold').setTextColor(255, 0, 0); // Red and Bold
+        doc.text(rateText, pageWidth - margin, margin + 35, { align: 'right'});
+        doc.setTextColor(0, 0, 0); // Reset to black
         
         let startY = margin + 45;
 
-        // Payment Summary
+        // --- Payment Summary ---
         const approvedPayments = allPayments.filter(p => p.beneficiaries.some(b => b.ownerId === selectedIndividual.id) && p.status === 'aprobado');
         let totalPaidBs = approvedPayments.reduce((sum, p) => sum + p.totalAmount, 0);
-
+        
         if (approvedPayments.length > 0) {
             doc.setFontSize(11).setFont('helvetica', 'bold').text('Resumen de Pagos', margin, startY);
-            startY += 5;
+            startY += 7;
             const paymentBody = approvedPayments.map(p => [
                 format(p.paymentDate.toDate(), 'dd-MM-yyyy'),
                 `Pago cuota(s)`, // Simplified concept
@@ -676,42 +681,57 @@ export default function ReportsPage() {
                 `Bs. ${formatToTwoDecimals(p.totalAmount)}`,
             ]);
             (doc as any).autoTable({
-                head: [['Fecha', 'Concepto', 'Pagado por', 'Monto (Bs)']], body: paymentBody,
-                startY: startY, theme: 'striped', headStyles: { fillColor: [45, 85, 150] }, styles: { fontSize: 8 },
-                foot: [[ { content: 'Total Pagado', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } }, { content: `Bs. ${formatToTwoDecimals(totalPaidBs)}`, styles: { fontStyle: 'bold' } } ]]
+                head: [['Fecha', 'Concepto', 'Pagado por', 'Monto (Bs)']], 
+                body: paymentBody,
+                startY: startY, 
+                theme: 'striped', 
+                headStyles: { fillColor: [30, 80, 180] }, // Blue header
+                styles: { fontSize: 8 },
+                foot: [[ { content: 'Total Pagado', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } }, { content: `Bs. ${formatToTwoDecimals(totalPaidBs)}`, styles: { fontStyle: 'bold' } } ]],
+                footStyles: { fillColor: [30, 80, 180], textColor: 255 }
             });
             startY = (doc as any).lastAutoTable.finalY + 10;
         }
 
-        // Debt Summary
+        // --- Debt Summary ---
         const ownerDebts = allDebts.filter(d => d.ownerId === selectedIndividual.id);
         const totalDebtUsd = ownerDebts.filter(d => d.status === 'pending').reduce((acc, d) => acc + d.amountUSD, 0);
-        const totalDebtBs = totalDebtUsd * activeRate;
+        const totalDebtBs = ownerDebts.filter(d => d.status === 'pending').reduce((acc, d) => acc + (d.amountUSD * activeRate), 0);
         
         if (ownerDebts.length > 0) {
             doc.setFontSize(11).setFont('helvetica', 'bold').text('Resumen de Deudas', margin, startY);
-            startY += 5;
-            const debtBody = ownerDebts.sort((a,b) => b.year - a.year || b.month - a.month).map(d => [
-                `${(Object.values(monthsLocale)[d.month -1] || '')} ${d.year}`,
+            startY += 7;
+            const debtBody = ownerDebts
+                .sort((a,b) => b.year - a.year || b.month - a.month) // Sort descending
+                .map(d => [
+                `${Object.values(monthsLocale)[d.month -1] || ''} ${d.year}`,
                 `$${d.amountUSD.toFixed(2)}`,
                 `Bs. ${formatToTwoDecimals(d.amountUSD * activeRate)}`,
                 d.status === 'paid' ? 'Pagada' : 'Pendiente'
             ]);
             (doc as any).autoTable({
-                head: [['Período', 'Monto ($)', 'Monto (Bs.)', 'Estado']], body: debtBody,
-                startY: startY, theme: 'striped', headStyles: { fillColor: [45, 85, 150] }, styles: { fontSize: 8 },
+                head: [['Período', 'Monto ($)', 'Monto (Bs.)', 'Estado']], 
+                body: debtBody,
+                startY: startY, 
+                theme: 'striped', 
+                headStyles: { fillColor: [30, 80, 180] }, // Blue header
+                styles: { fontSize: 8 },
+                foot: [[ { content: 'Total Adeudado', colSpan: 1, styles: { halign: 'right', fontStyle: 'bold' } }, 
+                         { content: `$${totalDebtUsd.toFixed(2)}`, styles: { fontStyle: 'bold' } },
+                         { content: `Bs. ${formatToTwoDecimals(totalDebtBs)}`, styles: { fontStyle: 'bold' } },
+                         ''
+                      ]],
+                footStyles: { fillColor: [30, 80, 180], textColor: 255 }
             });
             startY = (doc as any).lastAutoTable.finalY + 10;
         }
 
-        // Balance Footer
+        // --- Balance Footer ---
         doc.setFontSize(11).setFont('helvetica', 'bold');
-        doc.text(`Total Adeudado: $${totalDebtUsd.toFixed(2)} / Bs. ${formatToTwoDecimals(totalDebtBs)}`, margin, startY);
-        startY += 6;
         doc.text(`Saldo a Favor Actual: Bs. ${formatToTwoDecimals(selectedIndividual.balance)}`, margin, startY);
         startY += 10;
 
-        // Legal Disclaimer
+        // --- Legal Disclaimer ---
         doc.setFontSize(9).setFont('helvetica', 'bold');
         doc.setTextColor(255, 0, 0); // Red Color
         const disclaimer = "Los montos en bolívares expresados en las deudas, son producto de la conversión aplicada a la tasa del día de hoy por lo que dichos montos variarán según vaya cambiando la tasa al día de pago.";
