@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from "@/lib/utils";
-import { format, parseISO } from "date-fns";
+import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { Calendar as CalendarIcon, Download, Search, Loader2, FileText, FileSpreadsheet, ArrowUpDown } from "lucide-react";
 import jsPDF from 'jspdf';
@@ -327,7 +327,7 @@ export default function ReportsPage() {
 
     // --- Handlers ---
 
-    const handleExportIntegral = (format: 'pdf' | 'excel') => {
+    const handleExportIntegral = (formatType: 'pdf' | 'excel') => {
         const data = integralReportData;
         const headers = [["Propietario", "Propiedad", "Fecha Últ. Pago", "Monto Pagado (Bs)", "Tasa Prom. (Bs/$)", "Saldo a Favor (Bs)", "Estado", "Período Solvencia", "Meses Adeudados"]];
         const body = data.map(row => [
@@ -349,7 +349,7 @@ export default function ReportsPage() {
             periodString = `Período de Pagos: Hasta ${format(integralDateRange.to, 'P', { locale: es })}`;
         }
 
-        if (format === 'pdf') {
+        if (formatType === 'pdf') {
             const doc = new jsPDF({ orientation: 'portrait' });
             const pageWidth = doc.internal.pageSize.getWidth();
             let startY = 15;
@@ -399,7 +399,7 @@ export default function ReportsPage() {
         }
     };
     
-    const handleExportDelinquency = (format: 'pdf' | 'excel') => {
+    const handleExportDelinquency = (formatType: 'pdf' | 'excel') => {
         const data = filteredAndSortedDelinquents.filter(o => selectedDelinquentOwners.has(o.id));
         if (data.length === 0) {
             toast({ variant: "destructive", title: "Nada para exportar", description: "Por favor, seleccione al menos un propietario." });
@@ -429,7 +429,7 @@ export default function ReportsPage() {
             return row;
         });
 
-        if (format === 'pdf') {
+        if (formatType === 'pdf') {
             (doc as any).autoTable({
                 head: head, body: body, startY: margin + 55, headStyles: { fillColor: [220, 53, 69] },
                 styles: { cellPadding: 2, fontSize: 8 },
