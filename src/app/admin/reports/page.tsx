@@ -22,7 +22,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from '@/components/ui/label';
 import { format } from 'date-fns';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList } from 'recharts';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 
@@ -118,6 +118,16 @@ const formatToTwoDecimals = (num: number) => {
     }
     const truncated = Math.trunc(num * 100) / 100;
     return truncated.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
+// Custom Label for Bar Charts
+const CustomBarLabel = (props: any) => {
+    const { x, y, width, value } = props;
+    return (
+        <text x={x + width / 2} y={y} fill="#fff" textAnchor="middle" dy={-6} fontSize="12" fontWeight="bold">
+            {`$${Math.round(value)}`}
+        </text>
+    );
 };
 
 
@@ -625,134 +635,84 @@ export default function ReportsPage() {
         if (!selectedIndividual || !companyInfo) return;
     
         const filename = `estado_cuenta_${selectedIndividual.name.replace(/\s/g, '_')}`;
-        const emissionDate = format(new Date(), "dd/MM/yyyy, hh:mm:ss aaaa");
     
-        // Data for payment summary
-        const approvedPayments = allPayments.filter(p => 
-            p.beneficiaries.some(b => b.ownerId === selectedIndividual.id) && p.status === 'aprobado'
-        );
-        let totalPaidBs = 0;
-        const paymentBody = approvedPayments.map(p => {
-            totalPaidBs += p.totalAmount;
-            return [
+        const doc = new jsPDF();
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const margin = 10;
+
+        // Header
+        if (companyInfo.logo) {
+            try { doc.addImage(companyInfo.logo, 'PNG', margin, margin, 20, 20); } 
+            catch (e) { console.error("Error adding logo to PDF:", e); }
+        }
+        doc.setFontSize(11).setFont('helvetica', 'bold').text('ESTADO DE CUENTA', pageWidth / 2, margin + 8, { align: 'center'});
+        
+        doc.setFontSize(9).setFont('helvetica', 'normal');
+        doc.text(`${companyInfo.name} | ${companyInfo.rif}`, margin, margin + 25);
+        doc.text(`Propietario: ${selectedIndividual.name}`, margin, margin + 30);
+        doc.text(`Propiedad(es): ${(selectedIndividual.properties || []).map(p => `${p.street}-${p.house}`).join(', ')}`, margin, margin + 35);
+        
+        doc.text(`Fecha: ${format(new Date(), "dd/MM/yyyy")}`, pageWidth - margin, margin + 30, { align: 'right'});
+        doc.text(`Tasa del día: ${formatToTwoDecimals(activeRate)}`, pageWidth - margin, margin + 35, { align: 'right'});
+        
+        let startY = margin + 45;
+
+        // Payment Summary
+        const approvedPayments = allPayments.filter(p => p.beneficiaries.some(b => b.ownerId === selectedIndividual.id) && p.status === 'aprobado');
+        let totalPaidBs = approvedPayments.reduce((sum, p) => sum + p.totalAmount, 0);
+
+        if (approvedPayments.length > 0) {
+            doc.setFontSize(11).setFont('helvetica', 'bold').text('Resumen de Pagos', margin, startY);
+            startY += 5;
+            const paymentBody = approvedPayments.map(p => [
                 format(p.paymentDate.toDate(), 'dd-MM-yyyy'),
                 `Pago cuota(s)`, // Simplified concept
                 p.reportedBy === selectedIndividual.id ? 'Propietario' : 'Administrador', // Who paid
                 `Bs. ${formatToTwoDecimals(p.totalAmount)}`,
-            ];
-        });
-    
-        // Data for debt summary
+            ]);
+            (doc as any).autoTable({
+                head: [['Fecha', 'Concepto', 'Pagado por', 'Monto (Bs)']], body: paymentBody,
+                startY: startY, theme: 'striped', headStyles: { fillColor: [45, 85, 150] }, styles: { fontSize: 8 },
+                foot: [[ { content: 'Total Pagado', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } }, { content: `Bs. ${formatToTwoDecimals(totalPaidBs)}`, styles: { fontStyle: 'bold' } } ]]
+            });
+            startY = (doc as any).lastAutoTable.finalY + 10;
+        }
+
+        // Debt Summary
         const ownerDebts = allDebts.filter(d => d.ownerId === selectedIndividual.id);
-        const debtBody = ownerDebts.sort((a,b) => b.year - a.year || b.month - a.month).map(d => [
-            `${(Object.values(monthsLocale)[d.month -1] || '')} ${d.year}`,
-            d.description,
-            `$${d.amountUSD.toFixed(2)}`,
-            `Bs. ${formatToTwoDecimals(d.amountUSD * activeRate)}`,
-            d.status === 'paid' ? 'Pagada' : 'Pendiente'
-        ]);
         const totalDebtUsd = ownerDebts.filter(d => d.status === 'pending').reduce((acc, d) => acc + d.amountUSD, 0);
         const totalDebtBs = totalDebtUsd * activeRate;
-    
-        if (formatType === 'pdf') {
-            const doc = new jsPDF();
-            const pageWidth = doc.internal.pageSize.getWidth();
-            const margin = 10;
-    
-            // Header
-            if (companyInfo.logo) {
-                try {
-                    doc.addImage(companyInfo.logo, 'PNG', margin, margin, 20, 20);
-                } catch (e) {
-                    console.error("Error adding logo to PDF:", e);
-                }
-            }
-            doc.setFontSize(11).setFont('helvetica', 'bold').text('ESTADO DE CUENTA', pageWidth / 2, margin + 8, { align: 'center'});
-            
-            doc.setFontSize(9).setFont('helvetica', 'normal');
-            doc.text(`${companyInfo.name} | ${companyInfo.rif}`, margin, margin + 25);
-            doc.text(`Propietario: ${selectedIndividual.name}`, margin, margin + 30);
-            doc.text(`Propiedad(es): ${(selectedIndividual.properties || []).map(p => `${p.street}-${p.house}`).join(', ')}`, margin, margin + 35);
-            
-            doc.text(`Fecha: ${format(new Date(), "dd/MM/yyyy")}`, pageWidth - margin, margin + 30, { align: 'right'});
-            doc.text(`Tasa del día: ${formatToTwoDecimals(activeRate)}`, pageWidth - margin, margin + 35, { align: 'right'});
-            
-            let startY = margin + 45;
-    
-            // Payment Summary
-            doc.setFontSize(11).setFont('helvetica', 'bold').text('Resumen de Pagos', margin, startY);
-            startY += 5;
-            (doc as any).autoTable({
-                head: [['Fecha', 'Concepto', 'Pagado por', 'Monto (Bs)']],
-                body: paymentBody,
-                startY: startY,
-                theme: 'striped',
-                headStyles: { fillColor: [30, 80, 180] },
-                styles: { fontSize: 8 },
-                foot: [[
-                    { content: 'Total Pagado', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } },
-                    { content: `Bs. ${formatToTwoDecimals(totalPaidBs)}`, styles: { fontStyle: 'bold' } }
-                ]]
-            });
-            startY = (doc as any).lastAutoTable.finalY + 10;
-    
-            // Debt Summary
+        
+        if (ownerDebts.length > 0) {
             doc.setFontSize(11).setFont('helvetica', 'bold').text('Resumen de Deudas', margin, startY);
             startY += 5;
-             (doc as any).autoTable({
-                head: [['Período', 'Concepto', 'Monto ($)', 'Monto (Bs.)', 'Estado']],
-                body: debtBody,
-                startY: startY,
-                theme: 'striped',
-                headStyles: { fillColor: [30, 80, 180] },
-                styles: { fontSize: 8 },
-                foot: [[
-                    { content: 'Total Adeudado', colSpan: 2, styles: { halign: 'right', fontStyle: 'bold' } },
-                    { content: `$${totalDebtUsd.toFixed(2)}`, styles: { fontStyle: 'bold' } },
-                    { content: `Bs. ${formatToTwoDecimals(totalDebtBs)}`, styles: { fontStyle: 'bold' } },
-                    ''
-                ]]
+            const debtBody = ownerDebts.sort((a,b) => b.year - a.year || b.month - a.month).map(d => [
+                `${(Object.values(monthsLocale)[d.month -1] || '')} ${d.year}`,
+                `$${d.amountUSD.toFixed(2)}`,
+                `Bs. ${formatToTwoDecimals(d.amountUSD * activeRate)}`,
+                d.status === 'paid' ? 'Pagada' : 'Pendiente'
+            ]);
+            (doc as any).autoTable({
+                head: [['Período', 'Monto ($)', 'Monto (Bs.)', 'Estado']], body: debtBody,
+                startY: startY, theme: 'striped', headStyles: { fillColor: [45, 85, 150] }, styles: { fontSize: 8 },
             });
             startY = (doc as any).lastAutoTable.finalY + 10;
-    
-            // Balance Footer
-            doc.setFontSize(11).setFont('helvetica', 'bold');
-            doc.text(`Saldo a Favor Actual: Bs. ${formatToTwoDecimals(selectedIndividual.balance)}`, margin, startY);
-            startY += 10;
-
-            // Legal Disclaimer
-            doc.setFontSize(8).setFont('helvetica', 'italic');
-            const disclaimer = "Los montos en bolívares expresados en las deudas, son producto de la conversión aplicada a la tasa del día de hoy por lo que dichos montos variarán según vaya cambiando la tasa al día de pago.";
-            const splitDisclaimer = doc.splitTextToSize(disclaimer, pageWidth - margin * 2);
-            doc.text(splitDisclaimer, margin, startY);
-    
-            doc.save(`${filename}.pdf`);
-        } else { // Excel
-             const paymentWorksheetData = approvedPayments.map(p => {
-                const paymentRate = p.exchangeRate || activeRate;
-                return {
-                    'Fecha': format(p.paymentDate.toDate(), 'dd-MM-yyyy'),
-                    'Concepto': `Pago cuota(s)`,
-                    'Monto (USD)': p.totalAmount / paymentRate,
-                    'Monto (Bs)': p.totalAmount
-                };
-            });
-             const debtWorksheetData = ownerDebts.sort((a,b) => b.year - a.year || b.month - a.month).map(d => ({
-                'Período': `${(Object.values(monthsLocale)[d.month -1] || '')} ${d.year}`,
-                'Concepto': d.description,
-                'Monto (USD)': d.amountUSD,
-                'Monto (Bs.)': d.amountUSD * activeRate,
-                'Estado': d.status === 'paid' ? 'Pagada' : 'Pendiente'
-            }));
-
-            const paymentWs = XLSX.utils.json_to_sheet(paymentWorksheetData);
-            const debtWs = XLSX.utils.json_to_sheet(debtWorksheetData);
-            
-            const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, paymentWs, "Resumen de Pagos");
-            XLSX.utils.book_append_sheet(workbook, debtWs, "Resumen de Deudas");
-            XLSX.writeFile(workbook, `${filename}.xlsx`);
         }
+
+        // Balance Footer
+        doc.setFontSize(11).setFont('helvetica', 'bold');
+        doc.text(`Total Adeudado: $${totalDebtUsd.toFixed(2)} / Bs. ${formatToTwoDecimals(totalDebtBs)}`, margin, startY);
+        startY += 6;
+        doc.text(`Saldo a Favor Actual: Bs. ${formatToTwoDecimals(selectedIndividual.balance)}`, margin, startY);
+        startY += 10;
+
+        // Legal Disclaimer
+        doc.setFontSize(8).setFont('helvetica', 'italic');
+        const disclaimer = "Los montos en bolívares expresados en las deudas, son producto de la conversión aplicada a la tasa del día de hoy por lo que dichos montos variarán según vaya cambiando la tasa al día de pago.";
+        const splitDisclaimer = doc.splitTextToSize(disclaimer, pageWidth - margin * 2);
+        doc.text(splitDisclaimer, margin, startY);
+
+        doc.save(`${filename}.pdf`);
     };
     
     const handleExportBalance = (formatType: 'pdf' | 'excel') => {
@@ -794,15 +754,35 @@ export default function ReportsPage() {
         if (!chartElement) return;
 
         const { default: html2canvas } = await import('html2canvas');
-        const canvas = await html2canvas(chartElement);
+        const canvas = await html2canvas(chartElement, { backgroundColor: '#1f2937' }); // Match dark bg
         const imgData = canvas.toDataURL('image/png');
         const filename = `${title.toLowerCase().replace(/\s/g, '_')}_${format(new Date(), 'yyyy-MM-dd')}`;
         const data = chartId === 'debt-chart-container' ? debtsByStreetChartData : incomeByStreetChartData;
 
         if (formatType === 'pdf') {
             const doc = new jsPDF();
-            doc.setFontSize(16).setFont('helvetica', 'bold').text(title, doc.internal.pageSize.getWidth() / 2, 20, { align: 'center' });
-            doc.addImage(imgData, 'PNG', 15, 30, 180, 100);
+            const pageWidth = doc.internal.pageSize.getWidth();
+            const margin = 14;
+
+            // PDF Header
+            if (companyInfo?.logo) {
+                try { doc.addImage(companyInfo.logo, 'PNG', margin, margin, 20, 20); } 
+                catch (e) { console.error("Error adding logo to PDF:", e); }
+            }
+            if (companyInfo) {
+                doc.setFontSize(10).setFont('helvetica', 'bold').text(companyInfo.name, margin + 25, margin + 8);
+                doc.setFontSize(8).setFont('helvetica', 'normal').text(`${companyInfo.rif} | ${companyInfo.phone}`, margin + 25, margin + 13);
+            }
+            doc.setFontSize(8).setFont('helvetica', 'normal').text(`Fecha de Emisión: ${format(new Date(), "dd/MM/yyyy")}`, pageWidth - margin, margin + 8, { align: 'right'});
+            
+            // PDF Title
+            doc.setFontSize(14).setFont('helvetica', 'bold').text(title, pageWidth / 2, margin + 40, { align: 'center' });
+            
+            // Add Chart Image
+            const imgWidth = pageWidth - (margin * 2);
+            const imgHeight = (canvas.height * imgWidth) / canvas.width;
+            doc.addImage(imgData, 'PNG', margin, margin + 50, imgWidth, imgHeight);
+
             doc.save(`${filename}.pdf`);
         } else { // excel
             const worksheet = XLSX.utils.json_to_sheet(data);
@@ -830,7 +810,7 @@ export default function ReportsPage() {
             </div>
             
             <Tabs defaultValue="integral" className="w-full">
-                <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+                <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-5 h-auto flex-wrap">
                     <TabsTrigger value="integral">Integral</TabsTrigger>
                     <TabsTrigger value="individual">Ficha Individual</TabsTrigger>
                     <TabsTrigger value="delinquency">Morosidad</TabsTrigger>
@@ -964,7 +944,6 @@ export default function ReportsPage() {
                                             </div>
                                             <div className="flex gap-2">
                                                 <Button variant="outline" onClick={() => handleExportIndividual('pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
-                                                <Button variant="outline" onClick={() => handleExportIndividual('excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
                                             </div>
                                         </div>
                                     </CardHeader>
@@ -1155,7 +1134,7 @@ export default function ReportsPage() {
                                 </TableBody>
                             </Table>
                         </CardContent>
-                    </Card>
+                     </Card>
                  </TabsContent>
 
                  <TabsContent value="balance">
@@ -1236,56 +1215,60 @@ export default function ReportsPage() {
                             </div>
                         </CardHeader>
                         <CardContent className="space-y-8">
-                             <div id="debt-chart-container" className="p-4 bg-background rounded-lg">
+                             <div id="debt-chart-container" className="p-4 bg-gray-800 text-white rounded-lg">
                                 <div className="flex justify-between items-center mb-4">
                                     <h3 className="font-semibold">Deuda Pendiente por Calle (USD)</h3>
                                     <div className="flex gap-2">
-                                        <Button size="sm" variant="outline" onClick={() => handleExportChart('debt-chart-container', 'Deuda por Calle', 'pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
-                                        <Button size="sm" variant="outline" onClick={() => handleExportChart('debt-chart-container', 'Deuda por Calle', 'excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
+                                        <Button size="sm" variant="outline" onClick={() => handleExportChart('debt-chart-container', 'Gráfico de Deuda por Calle (USD)', 'pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
+                                        <Button size="sm" variant="outline" onClick={() => handleExportChart('debt-chart-container', 'Gráfico de Deuda por Calle (USD)', 'excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
                                     </div>
                                 </div>
                                 {debtsByStreetChartData.length > 0 ? (
-                                <ResponsiveContainer width="100%" height={300}>
-                                    <BarChart data={debtsByStreetChartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="name" />
-                                        <YAxis />
+                                <ResponsiveContainer width="100%" height={350}>
+                                    <BarChart data={debtsByStreetChartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                                        <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
+                                        <XAxis dataKey="name" stroke="#a1a1aa" fontSize={12} />
+                                        <YAxis stroke="#a1a1aa" fontSize={12}/>
                                         <Tooltip 
-                                            cursor={{fill: 'rgba(var(--foreground), 0.1)'}}
+                                            cursor={{fill: 'rgba(255, 255, 255, 0.1)'}}
+                                            contentStyle={{ backgroundColor: '#374151', border: 'none', color: '#fff', borderRadius: '0.5rem' }}
                                             formatter={(value: number) => [`$${value.toFixed(2)}`, 'Deuda Total']}
                                         />
-                                        <Legend />
-                                        <Bar dataKey="TotalDeuda" fill="hsl(var(--destructive))" name="Deuda Total (USD)" />
+                                        <Bar dataKey="TotalDeuda" fill="#dc2626" name="Deuda Total (USD)" radius={[4, 4, 0, 0]}>
+                                            <LabelList dataKey="TotalDeuda" content={<CustomBarLabel />} />
+                                        </Bar>
                                     </BarChart>
                                 </ResponsiveContainer>
                                 ) : (
-                                    <p className="text-center text-muted-foreground py-8">No hay datos de deuda para mostrar en el período seleccionado.</p>
+                                    <p className="text-center text-gray-400 py-8">No hay datos de deuda para mostrar en el período seleccionado.</p>
                                 )}
                              </div>
-                             <div id="income-chart-container" className="p-4 bg-background rounded-lg">
+                             <div id="income-chart-container" className="p-4 bg-gray-800 text-white rounded-lg">
                                 <div className="flex justify-between items-center mb-4">
                                      <h3 className="font-semibold">Ingresos por Calle (USD)</h3>
                                       <div className="flex gap-2">
-                                        <Button size="sm" variant="outline" onClick={() => handleExportChart('income-chart-container', 'Ingresos por Calle', 'pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
-                                        <Button size="sm" variant="outline" onClick={() => handleExportChart('income-chart-container', 'Ingresos por Calle', 'excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
+                                        <Button size="sm" variant="outline" onClick={() => handleExportChart('income-chart-container', 'Gráfico de Ingresos por Calle (USD)', 'pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
+                                        <Button size="sm" variant="outline" onClick={() => handleExportChart('income-chart-container', 'Gráfico de Ingresos por Calle (USD)', 'excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
                                     </div>
                                 </div>
                                 {incomeByStreetChartData.length > 0 ? (
-                                <ResponsiveContainer width="100%" height={300}>
-                                    <BarChart data={incomeByStreetChartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="name" />
-                                        <YAxis />
+                                <ResponsiveContainer width="100%" height={350}>
+                                    <BarChart data={incomeByStreetChartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                                        <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
+                                        <XAxis dataKey="name" stroke="#a1a1aa" fontSize={12} />
+                                        <YAxis stroke="#a1a1aa" fontSize={12} />
                                         <Tooltip 
-                                            cursor={{fill: 'rgba(var(--foreground), 0.1)'}}
+                                            cursor={{fill: 'rgba(255, 255, 255, 0.1)'}}
+                                            contentStyle={{ backgroundColor: '#374151', border: 'none', color: '#fff', borderRadius: '0.5rem' }}
                                             formatter={(value: number) => [`$${value.toFixed(2)}`, 'Ingreso Total']}
                                         />
-                                        <Legend />
-                                        <Bar dataKey="TotalIngresos" fill="hsl(var(--primary))" name="Ingreso Total (USD)" />
+                                        <Bar dataKey="TotalIngresos" fill="#2563eb" name="Ingreso Total (USD)" radius={[4, 4, 0, 0]}>
+                                            <LabelList dataKey="TotalIngresos" content={<CustomBarLabel />} />
+                                        </Bar>
                                     </BarChart>
                                 </ResponsiveContainer>
                                 ) : (
-                                    <p className="text-center text-muted-foreground py-8">No hay datos de ingresos para mostrar en el período seleccionado.</p>
+                                    <p className="text-center text-gray-400 py-8">No hay datos de ingresos para mostrar en el período seleccionado.</p>
                                 )}
                              </div>
                         </CardContent>
