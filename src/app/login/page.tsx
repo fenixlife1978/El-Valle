@@ -9,10 +9,15 @@ import { db } from '@/lib/firebase';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { KeyRound, Loader2, Building, User } from 'lucide-react';
 import Link from 'next/link';
+
+type CompanyInfo = {
+    name: string;
+    logo: string;
+};
 
 function LoginPageContent() {
     const router = useRouter();
@@ -22,8 +27,24 @@ function LoginPageContent() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
+    const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
     
     const role = searchParams.get('role') || 'owner';
+
+    useEffect(() => {
+        const fetchCompanyInfo = async () => {
+            try {
+                const settingsRef = doc(db, 'config', 'mainSettings');
+                const docSnap = await getDoc(settingsRef);
+                if (docSnap.exists()) {
+                    setCompanyInfo(docSnap.data().companyInfo as CompanyInfo);
+                }
+            } catch (error) {
+                console.error("Error fetching company info:", error);
+            }
+        };
+        fetchCompanyInfo();
+    }, []);
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -102,7 +123,11 @@ function LoginPageContent() {
         <div className="min-h-screen flex items-center justify-center bg-background p-4 font-body">
             <Card className="w-full max-w-md">
                 <CardHeader className="text-center">
-                    {role === 'admin' ? <Building className="mx-auto h-12 w-12 text-primary"/> : <User className="mx-auto h-12 w-12 text-primary"/>}
+                    {companyInfo?.logo ? (
+                        <img src={companyInfo.logo} alt="Logo" className="w-20 h-20 rounded-2xl object-cover shadow-lg mx-auto" data-ai-hint="logo"/>
+                    ) : (
+                        role === 'admin' ? <Building className="mx-auto h-12 w-12 text-primary"/> : <User className="mx-auto h-12 w-12 text-primary"/>
+                    )}
                     <CardTitle className="mt-4 text-3xl font-bold font-headline">
                         Iniciar Sesión como {role === 'admin' ? 'Administrador' : 'Propietario'}
                     </CardTitle>
