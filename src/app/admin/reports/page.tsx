@@ -40,7 +40,7 @@ type Payment = {
   paymentDate: Timestamp;
   totalAmount: number;
   exchangeRate?: number;
-  beneficiaries: { ownerId: string }[];
+  beneficiaries: { ownerId: string; street?: string; house?: string; }[];
   status: 'aprobado' | 'pendiente' | 'rechazado';
 };
 
@@ -154,6 +154,9 @@ export default function ReportsPage() {
     const [balanceOwners, setBalanceOwners] = useState<BalanceOwner[]>([]);
     const [balanceSearchTerm, setBalanceSearchTerm] = useState('');
 
+    // State for Charts
+    const [chartsDateRange, setChartsDateRange] = useState<{ from?: Date; to?: Date }>({});
+
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -258,7 +261,8 @@ export default function ReportsPage() {
             const ownerHistorical = allHistoricalPayments.filter(h => h.ownerId === owner.id);
             
             const pendingDebts = ownerDebts.filter(d => {
-                 if (d.status !== 'pending') return false;
+                if (d.status !== 'pending') return false;
+                
                 // For adjustment debts, only consider them if the month has passed or is current
                 if (d.description.toLowerCase().includes('ajuste')) {
                     const debtDate = new Date(d.year, d.month - 1);
@@ -365,20 +369,61 @@ export default function ReportsPage() {
     }, [allDelinquentOwners, delinquencyFilterType, customMonthRange, delinquencySearchTerm, delinquencySortConfig]);
 
      const debtsByStreetChartData = useMemo(() => {
-        const debtsByStreet = allDelinquentOwners.reduce((acc, owner) => {
-            const street = owner.properties.split('-')[0].trim();
+        const fromDate = chartsDateRange.from;
+        const toDate = chartsDateRange.to;
+        if(fromDate) fromDate.setHours(0,0,0,0);
+        if(toDate) toDate.setHours(23,59,59,999);
+
+        const filteredDebts = allDebts.filter(debt => {
+            if (debt.status !== 'pending') return false;
+            const debtDate = new Date(debt.year, debt.month - 1);
+            if (fromDate && debtDate < fromDate) return false;
+            if (toDate && debtDate > toDate) return false;
+            return true;
+        });
+
+        const debtsByStreet = filteredDebts.reduce((acc, debt) => {
+            const street = debt.property.street;
             if (street) {
-                if (!acc[street]) {
-                    acc[street] = 0;
-                }
-                acc[street] += owner.debtAmountUSD;
+                if (!acc[street]) acc[street] = 0;
+                acc[street] += debt.amountUSD;
             }
             return acc;
         }, {} as { [key: string]: number });
         
         return Object.entries(debtsByStreet).map(([name, TotalDeuda]) => ({ name, TotalDeuda: parseFloat(TotalDeuda.toFixed(2)) }))
             .sort((a, b) => b.TotalDeuda - a.TotalDeuda);
-    }, [allDelinquentOwners]);
+    }, [allDebts, chartsDateRange]);
+
+    const incomeByStreetChartData = useMemo(() => {
+        const fromDate = chartsDateRange.from;
+        const toDate = chartsDateRange.to;
+        if(fromDate) fromDate.setHours(0,0,0,0);
+        if(toDate) toDate.setHours(23,59,59,999);
+
+        const filteredPayments = allPayments.filter(payment => {
+            if (payment.status !== 'aprobado') return false;
+            const paymentDate = payment.paymentDate.toDate();
+            if (fromDate && paymentDate < fromDate) return false;
+            if (toDate && paymentDate > toDate) return false;
+            return true;
+        });
+        
+        const incomeByStreet = filteredPayments.reduce((acc, payment) => {
+            payment.beneficiaries.forEach(beneficiary => {
+                if (beneficiary.street) {
+                    if (!acc[beneficiary.street]) acc[beneficiary.street] = 0;
+                    // Approximate income in USD
+                    const incomeUSD = payment.totalAmount / (payment.exchangeRate || activeRate || 1);
+                    acc[beneficiary.street] += incomeUSD;
+                }
+            });
+            return acc;
+        }, {} as { [key: string]: number });
+
+        return Object.entries(incomeByStreet).map(([name, TotalIngresos]) => ({ name, TotalIngresos: parseFloat(TotalIngresos.toFixed(2)) }))
+            .sort((a, b) => b.TotalIngresos - a.TotalIngresos);
+    }, [allPayments, chartsDateRange, activeRate]);
 
 
     useEffect(() => {
@@ -1088,17 +1133,43 @@ export default function ReportsPage() {
                      <Card>
                         <CardHeader>
                             <CardTitle>Gráficos de Gestión</CardTitle>
-                            <CardDescription>Visualizaciones de datos clave del condominio.</CardDescription>
+                            <CardDescription>Visualizaciones de datos clave del condominio, filtradas por período.</CardDescription>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
+                                <div className="space-y-2">
+                                    <Label>Desde</Label>
+                                    <Popover>
+                                        <PopoverTrigger asChild>
+                                            <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !chartsDateRange.from && "text-muted-foreground")}>
+                                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                                {chartsDateRange.from ? format(chartsDateRange.from, "PPP", { locale: es }) : <span>Seleccione fecha de inicio</span>}
+                                            </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={chartsDateRange.from} onSelect={d => setChartsDateRange(prev => ({ ...prev, from: d }))} /></PopoverContent>
+                                    </Popover>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Hasta</Label>
+                                    <Popover>
+                                        <PopoverTrigger asChild>
+                                            <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !chartsDateRange.to && "text-muted-foreground")}>
+                                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                                {chartsDateRange.to ? format(chartsDateRange.to, "PPP", { locale: es }) : <span>Seleccione fecha final</span>}
+                                            </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={chartsDateRange.to} onSelect={d => setChartsDateRange(prev => ({ ...prev, to: d }))} /></PopoverContent>
+                                    </Popover>
+                                </div>
+                            </div>
                         </CardHeader>
                         <CardContent className="space-y-8">
                              <div id="debt-chart-container" className="p-4 bg-background rounded-lg">
-                                <h3 className="font-semibold mb-4">Deuda Total por Calle (USD)</h3>
+                                <h3 className="font-semibold mb-4">Deuda Pendiente por Calle (USD)</h3>
                                 {debtsByStreetChartData.length > 0 ? (
                                 <ResponsiveContainer width="100%" height={300}>
-                                    <BarChart layout="vertical" data={debtsByStreetChartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                                    <BarChart data={debtsByStreetChartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                                         <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis type="number" />
-                                        <YAxis dataKey="name" type="category" width={80} />
+                                        <XAxis dataKey="name" />
+                                        <YAxis />
                                         <Tooltip 
                                             cursor={{fill: 'rgba(var(--foreground), 0.1)'}}
                                             formatter={(value: number) => [`$${value.toFixed(2)}`, 'Deuda Total']}
@@ -1108,7 +1179,27 @@ export default function ReportsPage() {
                                     </BarChart>
                                 </ResponsiveContainer>
                                 ) : (
-                                    <p className="text-center text-muted-foreground py-8">No hay datos de deuda para mostrar.</p>
+                                    <p className="text-center text-muted-foreground py-8">No hay datos de deuda para mostrar en el período seleccionado.</p>
+                                )}
+                             </div>
+                             <div id="income-chart-container" className="p-4 bg-background rounded-lg">
+                                <h3 className="font-semibold mb-4">Ingresos por Calle (USD)</h3>
+                                {incomeByStreetChartData.length > 0 ? (
+                                <ResponsiveContainer width="100%" height={300}>
+                                    <BarChart data={incomeByStreetChartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis dataKey="name" />
+                                        <YAxis />
+                                        <Tooltip 
+                                            cursor={{fill: 'rgba(var(--foreground), 0.1)'}}
+                                            formatter={(value: number) => [`$${value.toFixed(2)}`, 'Ingreso Total']}
+                                        />
+                                        <Legend />
+                                        <Bar dataKey="TotalIngresos" fill="hsl(var(--primary))" name="Ingreso Total (USD)" />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                                ) : (
+                                    <p className="text-center text-muted-foreground py-8">No hay datos de ingresos para mostrar en el período seleccionado.</p>
                                 )}
                              </div>
                              <div className="flex justify-end gap-2">
@@ -1122,4 +1213,3 @@ export default function ReportsPage() {
         </div>
     );
 }
-
