@@ -8,12 +8,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from "@/lib/utils";
-import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { Calendar as CalendarIcon, Download, Search, Loader2, FileText, FileSpreadsheet, ArrowUpDown } from "lucide-react";
+import { Calendar as CalendarIcon, Download, Search, Loader2, FileText, FileSpreadsheet, ArrowUpDown, Building, BadgeInfo, BadgeCheck, BadgeX, History } from "lucide-react";
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import * as XLSX from 'xlsx';
@@ -22,6 +20,11 @@ import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { Calendar } from "@/components/ui/calendar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Label } from '@/components/ui/label';
+import { format } from 'date-fns';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Badge } from '@/components/ui/badge';
 
 
 type Owner = {
@@ -38,6 +41,7 @@ type Payment = {
   totalAmount: number;
   exchangeRate?: number;
   beneficiaries: { ownerId: string }[];
+  status: 'aprobado' | 'pendiente' | 'rechazado';
 };
 
 type HistoricalPayment = {
@@ -54,6 +58,7 @@ type Debt = {
     amountUSD: number;
     description: string;
     status: 'pending' | 'paid';
+    paymentDate?: Timestamp;
 };
 
 type CompanyInfo = {
@@ -85,6 +90,17 @@ type DelinquentOwner = {
     debtAmountUSD: number;
     monthsOwed: number;
 };
+
+type BalanceOwner = {
+    id: string;
+    name: string;
+    properties: string;
+    balance: number;
+    lastMovement: string;
+};
+
+type TransactionHistoryItem = Debt & { type: 'debt' } | Payment & { type: 'payment' };
+
 
 const monthsLocale: { [key: number]: string } = {
     1: 'Ene', 2: 'Feb', 3: 'Mar', 4: 'Abr', 5: 'May', 6: 'Jun',
@@ -126,6 +142,16 @@ export default function ReportsPage() {
     const [delinquencySortConfig, setDelinquencySortConfig] = useState<{ key: SortKey, direction: SortDirection }>({ key: 'name', direction: 'asc' });
     const [selectedDelinquentOwners, setSelectedDelinquentOwners] = useState<Set<string>>(new Set());
     const [includeDelinquencyAmounts, setIncludeDelinquencyAmounts] = useState(true);
+    
+    // State for Individual Report
+    const [individualSearchTerm, setIndividualSearchTerm] = useState('');
+    const [selectedIndividual, setSelectedIndividual] = useState<Owner | null>(null);
+    const [individualHistory, setIndividualHistory] = useState<TransactionHistoryItem[]>([]);
+    const [individualDebtUSD, setIndividualDebtUSD] = useState(0);
+
+    // State for Balance Report
+    const [balanceOwners, setBalanceOwners] = useState<BalanceOwner[]>([]);
+    const [balanceSearchTerm, setBalanceSearchTerm] = useState('');
 
 
     const fetchData = useCallback(async () => {
@@ -133,7 +159,7 @@ export default function ReportsPage() {
         try {
             const settingsRef = doc(db, 'config', 'mainSettings');
             const ownersQuery = query(collection(db, 'owners'), where('name', '!=', 'EDWIN AGUIAR'), orderBy('name'));
-            const paymentsQuery = query(collection(db, 'payments'), where('status', '==', 'aprobado'));
+            const paymentsQuery = query(collection(db, 'payments'));
             const debtsQuery = query(collection(db, 'debts'));
             const historicalPaymentsQuery = query(collection(db, 'historical_payments'));
             
@@ -157,7 +183,10 @@ export default function ReportsPage() {
 
             const ownersData = ownersSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Owner));
             setOwners(ownersData);
-            setAllPayments(paymentsSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Payment)));
+
+            const paymentsData = paymentsSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Payment));
+            setAllPayments(paymentsData);
+            
             const debtsData = debtsSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Debt));
             setAllDebts(debtsData);
             setAllHistoricalPayments(historicalSnapshot.docs.map(d => d.data() as HistoricalPayment));
@@ -187,10 +216,23 @@ export default function ReportsPage() {
                     });
                 }
             });
-
             setAllDelinquentOwners(delinquentData);
             setSelectedDelinquentOwners(new Set(delinquentData.map(o => o.id)));
 
+            // --- Balance Report Data Calculation ---
+            const ownersWithBalance = ownersData.filter(o => o.balance > 0);
+            const balanceReportData = ownersWithBalance.map(owner => {
+                const ownerPayments = paymentsData.filter(p => p.beneficiaries.some(b => b.ownerId === owner.id));
+                const lastPayment = ownerPayments.sort((a,b) => b.paymentDate.toMillis() - a.paymentDate.toMillis())[0];
+                return {
+                    id: owner.id,
+                    name: owner.name,
+                    properties: (owner.properties || []).map(p => `${p.street} - ${p.house}`).join(', '),
+                    balance: owner.balance,
+                    lastMovement: lastPayment ? format(lastPayment.paymentDate.toDate(), 'dd/MM/yyyy') : 'N/A'
+                };
+            });
+            setBalanceOwners(balanceReportData);
 
         } catch (error) {
             console.error("Error fetching report data:", error);
@@ -215,7 +257,7 @@ export default function ReportsPage() {
             const ownerHistorical = allHistoricalPayments.filter(h => h.ownerId === owner.id);
             
             const pendingDebts = ownerDebts.filter(d => {
-                if (d.status !== 'pending') return false;
+                 if (d.status !== 'pending') return false;
                 // For adjustment debts, only consider them if the month has passed or is current
                 if (d.description.toLowerCase().includes('ajuste')) {
                     const debtDate = new Date(d.year, d.month - 1);
@@ -255,7 +297,7 @@ export default function ReportsPage() {
             if(toDate) toDate.setHours(23,59,59,999);
 
             const ownerPayments = allPayments.filter(p => {
-                const isOwnerPayment = p.beneficiaries.some(b => b.ownerId === owner.id);
+                const isOwnerPayment = p.beneficiaries.some(b => b.ownerId === owner.id) && p.status === 'aprobado';
                 if (!isOwnerPayment) return false;
 
                 const paymentDate = p.paymentDate.toDate();
@@ -292,7 +334,7 @@ export default function ReportsPage() {
             return statusMatch && ownerMatch;
         });
     }, [owners, allDebts, allPayments, allHistoricalPayments, integralDateRange, integralStatusFilter, integralOwnerFilter]);
-
+    
     // --- Delinquency Report Logic ---
     const filteredAndSortedDelinquents = useMemo(() => {
         let owners = [...allDelinquentOwners];
@@ -321,11 +363,58 @@ export default function ReportsPage() {
         return owners;
     }, [allDelinquentOwners, delinquencyFilterType, customMonthRange, delinquencySearchTerm, delinquencySortConfig]);
 
+     const debtsByStreetChartData = useMemo(() => {
+        const debtsByStreet = allDelinquentOwners.reduce((acc, owner) => {
+            const street = owner.properties.split('-')[0].trim();
+            if (street) {
+                if (!acc[street]) {
+                    acc[street] = 0;
+                }
+                acc[street] += owner.debtAmountUSD;
+            }
+            return acc;
+        }, {} as { [key: string]: number });
+        
+        return Object.entries(debtsByStreet).map(([name, TotalDeuda]) => ({ name, TotalDeuda }))
+            .sort((a, b) => b.TotalDeuda - a.TotalDeuda);
+    }, [allDelinquentOwners]);
+
+
     useEffect(() => {
         setSelectedDelinquentOwners(new Set(filteredAndSortedDelinquents.map(o => o.id)));
     }, [filteredAndSortedDelinquents]);
 
+    const filteredIndividualOwners = useMemo(() => {
+        if (!individualSearchTerm) return [];
+        return owners.filter(o => o.name.toLowerCase().includes(individualSearchTerm.toLowerCase()));
+    }, [individualSearchTerm, owners]);
+
+    const filteredBalanceOwners = useMemo(() => {
+        if (!balanceSearchTerm) return balanceOwners;
+        return balanceOwners.filter(o => o.name.toLowerCase().includes(balanceSearchTerm.toLowerCase()));
+    }, [balanceSearchTerm, balanceOwners]);
+
     // --- Handlers ---
+
+    const handleSelectIndividual = (owner: Owner) => {
+        setSelectedIndividual(owner);
+        setIndividualSearchTerm('');
+
+        const ownerDebts = allDebts.filter(d => d.ownerId === owner.id).map(d => ({ ...d, type: 'debt' as const }));
+        const ownerPayments = allPayments.filter(p => p.beneficiaries.some(b => b.ownerId === owner.id) && p.status === 'aprobado').map(p => ({ ...p, type: 'payment' as const }));
+        
+        const combinedHistory = [...ownerDebts, ...ownerPayments];
+        combinedHistory.sort((a, b) => {
+            const dateA = a.type === 'debt' ? new Date(a.year, a.month-1) : a.paymentDate.toDate();
+            const dateB = b.type === 'debt' ? new Date(b.year, b.month-1) : b.paymentDate.toDate();
+            return dateB.getTime() - dateA.getTime();
+        });
+
+        setIndividualHistory(combinedHistory as TransactionHistoryItem[]);
+
+        const totalDebt = ownerDebts.filter(d => d.status === 'pending').reduce((acc, debt) => acc + debt.amountUSD, 0);
+        setIndividualDebtUSD(totalDebt);
+    };
 
     const handleExportIntegral = (formatType: 'pdf' | 'excel') => {
         const data = integralReportData;
@@ -469,15 +558,19 @@ export default function ReportsPage() {
     return (
         <div className="space-y-8">
             <div>
-                <h1 className="text-3xl font-bold font-headline">Consultas y Reportes</h1>
+                <h1 className="text-3xl font-bold font-headline">Módulo de Informes</h1>
                 <p className="text-muted-foreground">Genere y exporte reportes detallados sobre la gestión del condominio.</p>
             </div>
             
             <Tabs defaultValue="integral" className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="integral">Reporte Integral</TabsTrigger>
-                    <TabsTrigger value="delinquency">Reporte de Morosidad</TabsTrigger>
+                <TabsList className="grid w-full grid-cols-2 md:grid-cols-5">
+                    <TabsTrigger value="integral">Integral</TabsTrigger>
+                    <TabsTrigger value="individual">Ficha Individual</TabsTrigger>
+                    <TabsTrigger value="delinquency">Morosidad</TabsTrigger>
+                    <TabsTrigger value="balance">Saldos a Favor</TabsTrigger>
+                    <TabsTrigger value="charts">Gráficos</TabsTrigger>
                 </TabsList>
+                
                 <TabsContent value="integral">
                     <Card>
                         <CardHeader>
@@ -569,6 +662,106 @@ export default function ReportsPage() {
                         </CardContent>
                     </Card>
                 </TabsContent>
+
+                 <TabsContent value="individual">
+                     <Card>
+                        <CardHeader>
+                            <CardTitle>Ficha de Estado de Cuenta Individual</CardTitle>
+                            <CardDescription>Busque un propietario para ver su estado de cuenta detallado.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="relative max-w-sm">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <Input placeholder="Buscar por nombre..." className="pl-9" value={individualSearchTerm} onChange={e => setIndividualSearchTerm(e.target.value)} />
+                            </div>
+                            {individualSearchTerm && filteredIndividualOwners.length > 0 && (
+                                <Card className="border rounded-md">
+                                    <ScrollArea className="h-48">
+                                        {filteredIndividualOwners.map(owner => (
+                                            <div key={owner.id} onClick={() => handleSelectIndividual(owner)} className="p-3 hover:bg-muted cursor-pointer border-b last:border-b-0">
+                                                <p className="font-medium">{owner.name}</p>
+                                                <p className="text-sm text-muted-foreground">{(owner.properties || []).map(p => `${p.street} - ${p.house}`).join(', ')}</p>
+                                            </div>
+                                        ))}
+                                    </ScrollArea>
+                                </Card>
+                            )}
+
+                            {selectedIndividual && (
+                                <Card className="mt-4 bg-card-foreground/5 dark:bg-card-foreground/5">
+                                    <CardHeader>
+                                        <CardTitle>{selectedIndividual.name}</CardTitle>
+                                        <CardDescription>{(selectedIndividual.properties || []).map(p => `${p.street} - ${p.house}`).join(', ')}</CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="space-y-6">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <Card>
+                                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                                    <CardTitle className="text-sm font-medium">Deuda Total (USD)</CardTitle>
+                                                    <BadgeX className="h-4 w-4 text-destructive" />
+                                                </CardHeader>
+                                                <CardContent>
+                                                    <div className="text-2xl font-bold text-destructive">${individualDebtUSD.toFixed(2)}</div>
+                                                </CardContent>
+                                            </Card>
+                                             <Card>
+                                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                                    <CardTitle className="text-sm font-medium">Saldo a Favor (Bs)</CardTitle>
+                                                    <BadgeCheck className="h-4 w-4 text-green-500" />
+                                                </CardHeader>
+                                                <CardContent>
+                                                    <div className="text-2xl font-bold text-green-500">Bs. {formatToTwoDecimals(selectedIndividual.balance)}</div>
+                                                </CardContent>
+                                            </Card>
+                                        </div>
+                                        <div>
+                                            <h3 className="text-lg font-semibold mb-2 flex items-center"><History className="mr-2 h-5 w-5"/> Historial de Cuenta</h3>
+                                            <ScrollArea className="h-96 border rounded-md">
+                                                <Table>
+                                                    <TableHeader>
+                                                        <TableRow>
+                                                            <TableHead>Fecha</TableHead>
+                                                            <TableHead>Concepto</TableHead>
+                                                            <TableHead className="text-right">Monto</TableHead>
+                                                            <TableHead className="text-right">Estado</TableHead>
+                                                        </TableRow>
+                                                    </TableHeader>
+                                                    <TableBody>
+                                                    {individualHistory.map((item) => {
+                                                        if (item.type === 'debt') {
+                                                            const date = `${monthsLocale[item.month]} ${item.year}`;
+                                                            return (
+                                                                <TableRow key={`debt-${item.id}`}>
+                                                                    <TableCell>{date}</TableCell>
+                                                                    <TableCell>{item.description}</TableCell>
+                                                                    <TableCell className="text-right text-destructive">- Bs. {formatToTwoDecimals(item.amountUSD * activeRate)}</TableCell>
+                                                                    <TableCell className="text-right">
+                                                                        {item.status === 'paid' ? <Badge variant="success">Pagada</Badge> : <Badge variant="destructive">Pendiente</Badge>}
+                                                                    </TableCell>
+                                                                </TableRow>
+                                                            )
+                                                        } else {
+                                                            return (
+                                                                <TableRow key={`payment-${item.id}`}>
+                                                                    <TableCell>{format(item.paymentDate.toDate(), 'dd/MM/yyyy')}</TableCell>
+                                                                    <TableCell>Pago Aprobado</TableCell>
+                                                                    <TableCell className="text-right text-green-500">+ Bs. {formatToTwoDecimals(item.totalAmount)}</TableCell>
+                                                                    <TableCell className="text-right"><Badge variant="outline">Aplicado</Badge></TableCell>
+                                                                </TableRow>
+                                                            )
+                                                        }
+                                                    })}
+                                                    </TableBody>
+                                                </Table>
+                                            </ScrollArea>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            )}
+                        </CardContent>
+                     </Card>
+                 </TabsContent>
+
                  <TabsContent value="delinquency">
                      <Card>
                         <CardHeader>
@@ -655,7 +848,7 @@ export default function ReportsPage() {
                                 <TableBody>
                                     {filteredAndSortedDelinquents.length > 0 ? (
                                         filteredAndSortedDelinquents.map(owner => (
-                                            <TableRow key={owner.id} data-state={selectedDelinquentOwners.has(owner.id) && 'selected'}>
+                                            <TableRow key={owner.id} data-state={selectedDelinquentOwners.has(owner.id) ? 'selected' : undefined}>
                                                 <TableCell>
                                                     <Checkbox
                                                         checked={selectedDelinquentOwners.has(owner.id)}
@@ -685,7 +878,78 @@ export default function ReportsPage() {
                         </CardContent>
                     </Card>
                  </TabsContent>
+
+                 <TabsContent value="balance">
+                     <Card>
+                        <CardHeader>
+                            <CardTitle>Consulta de Saldos a Favor</CardTitle>
+                            <CardDescription>Lista de todos los propietarios con saldo positivo en sus cuentas.</CardDescription>
+                             <div className="relative mt-2 max-w-sm">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <Input placeholder="Buscar por propietario..." className="pl-9" value={balanceSearchTerm} onChange={e => setBalanceSearchTerm(e.target.value)} />
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Propietario</TableHead>
+                                        <TableHead>Propiedades</TableHead>
+                                        <TableHead>Fecha Últ. Movimiento</TableHead>
+                                        <TableHead className="text-right">Saldo (Bs.)</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {filteredBalanceOwners.length > 0 ? (
+                                        filteredBalanceOwners.map(owner => (
+                                            <TableRow key={owner.id}>
+                                                <TableCell className="font-medium">{owner.name}</TableCell>
+                                                <TableCell>{owner.properties}</TableCell>
+                                                <TableCell>{owner.lastMovement}</TableCell>
+                                                <TableCell className="text-right font-bold text-green-500">Bs. {formatToTwoDecimals(owner.balance)}</TableCell>
+                                            </TableRow>
+                                        ))
+                                    ) : (
+                                        <TableRow><TableCell colSpan={4} className="h-24 text-center">No hay propietarios con saldo a favor.</TableCell></TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </CardContent>
+                     </Card>
+                 </TabsContent>
+
+                 <TabsContent value="charts">
+                     <Card>
+                        <CardHeader>
+                            <CardTitle>Gráficos de Gestión</CardTitle>
+                            <CardDescription>Visualizaciones de datos clave del condominio.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-8">
+                             <div>
+                                <h3 className="font-semibold mb-4">Deuda Total por Calle (USD)</h3>
+                                {debtsByStreetChartData.length > 0 ? (
+                                <ResponsiveContainer width="100%" height={300}>
+                                    <BarChart layout="vertical" data={debtsByStreetChartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis type="number" />
+                                        <YAxis dataKey="name" type="category" width={80} />
+                                        <Tooltip 
+                                            cursor={{fill: 'rgba(255, 255, 255, 0.1)'}}
+                                            formatter={(value: number) => [`$${value.toFixed(2)}`, 'Deuda Total']}
+                                        />
+                                        <Legend />
+                                        <Bar dataKey="TotalDeuda" fill="hsl(var(--destructive))" name="Deuda Total (USD)" />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                                ) : (
+                                    <p className="text-center text-muted-foreground py-8">No hay datos de deuda para mostrar.</p>
+                                )}
+                             </div>
+                        </CardContent>
+                     </Card>
+                 </TabsContent>
             </Tabs>
         </div>
     );
 }
+
