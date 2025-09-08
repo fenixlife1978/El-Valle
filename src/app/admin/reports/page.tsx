@@ -43,6 +43,7 @@ type Payment = {
   exchangeRate?: number;
   beneficiaries: { ownerId: string; street?: string; house?: string; }[];
   status: 'aprobado' | 'pendiente' | 'rechazado';
+  reportedBy: string;
 };
 
 type HistoricalPayment = {
@@ -493,7 +494,7 @@ export default function ReportsPage() {
         }
 
         if (formatType === 'pdf') {
-            const doc = new jsPDF({ orientation: 'portrait' });
+            const doc = new jsPDF({ orientation: 'landscape' });
             const pageWidth = doc.internal.pageSize.getWidth();
             let startY = 15;
             if (companyInfo?.logo) doc.addImage(companyInfo.logo, 'PNG', 15, startY, 20, 20);
@@ -600,81 +601,124 @@ export default function ReportsPage() {
     };
 
     const handleExportIndividual = (formatType: 'pdf' | 'excel') => {
-        if (!selectedIndividual) return;
-
+        if (!selectedIndividual || !companyInfo) return;
+    
         const filename = `estado_cuenta_${selectedIndividual.name.replace(/\s/g, '_')}`;
-        const emissionDate = format(new Date(), "dd/MM/yyyy 'a las' HH:mm:ss");
-
-        const historyBody = individualHistory.map(item => {
-            if (item.type === 'debt') {
-                return [
-                    `${monthsLocale[item.month]} ${item.year}`,
-                    item.description,
-                    item.status === 'paid' ? 'Pagada' : 'Pendiente',
-                    `$${formatToTwoDecimals(item.amountUSD)}`,
-                    `Bs. ${formatToTwoDecimals(item.amountUSD * activeRate)}`
-                ];
-            } else { // payment
-                const paymentRate = item.exchangeRate || activeRate;
-                return [
-                    format(item.paymentDate.toDate(), 'dd/MM/yyyy'),
-                    'Pago Aprobado',
-                    'Aplicado',
-                    `$${formatToTwoDecimals(item.totalAmount / paymentRate)}`,
-                    `Bs. ${formatToTwoDecimals(item.totalAmount)}`
-                ];
-            }
+        const emissionDate = format(new Date(), "dd/MM/yyyy, hh:mm:ss aaaa");
+    
+        // Data for payment summary
+        const approvedPayments = allPayments.filter(p => 
+            p.beneficiaries.some(b => b.ownerId === selectedIndividual.id) && p.status === 'aprobado'
+        );
+        let totalPaidBs = 0;
+        let totalPaidUsd = 0;
+        const paymentBody = approvedPayments.map(p => {
+            totalPaidBs += p.totalAmount;
+            totalPaidUsd += p.exchangeRate ? (p.totalAmount / p.exchangeRate) : 0;
+            return [
+                format(p.paymentDate.toDate(), 'dd-MM-yyyy'),
+                `Pago cuota(s) ${(p.beneficiaries.map(b => `${b.street}-${b.house}`)).join(', ')}`, // Simplified concept
+                p.reportedBy === selectedIndividual.id ? selectedIndividual.name : 'Usuario Administrador',
+                formatToTwoDecimals(p.totalAmount)
+            ];
         });
-
-        const headers = [['Fecha', 'Concepto', 'Estado', 'Monto (USD)', 'Monto (Bs)']];
-
+    
+        // Data for debt summary
+        const ownerDebts = allDebts.filter(d => d.ownerId === selectedIndividual.id);
+        const debtBody = ownerDebts.sort((a,b) => a.year - b.year || a.month - a.month).map(d => [
+            `${(Object.values(monthsLocale)[d.month -1] || '')} ${d.year}`,
+            `$${d.amountUSD.toFixed(2)}`,
+            d.status === 'paid' ? 'Pagada' : 'Pendiente'
+        ]);
+        const totalDebtUsd = ownerDebts.filter(d => d.status === 'pending').reduce((acc, d) => acc + d.amountUSD, 0);
+    
+    
         if (formatType === 'pdf') {
             const doc = new jsPDF();
             const pageWidth = doc.internal.pageSize.getWidth();
-            let startY = 15;
-            if (companyInfo?.logo) doc.addImage(companyInfo.logo, 'PNG', 15, startY, 20, 20);
-            doc.setFontSize(16).setFont('helvetica', 'bold').text('Estado de Cuenta Individual', pageWidth / 2, startY + 15, { align: 'center' });
+            const margin = 10;
+    
+            // Header
+            if (companyInfo.logo) {
+                try {
+                    doc.addImage(companyInfo.logo, 'PNG', margin, margin, 20, 20);
+                } catch (e) {
+                    console.error("Error adding logo to PDF:", e);
+                }
+            }
+            doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, margin + 25, margin + 8);
+            doc.setFontSize(9).setFont('helvetica', 'normal');
+            doc.text(`Propietario: ${selectedIndividual.name}`, margin + 25, margin + 14);
+            doc.text(`Propiedad(es): ${(selectedIndividual.properties || []).map(p => `${p.street}-${p.house}`).join(', ')}`, margin + 25, margin + 19);
+            doc.text(`Reporte generado el: ${emissionDate}`, margin + 25, margin + 24);
             
-            startY += 30;
-            doc.setFontSize(10).setFont('helvetica', 'normal');
-            doc.text(`Propietario: ${selectedIndividual.name}`, 15, startY);
-            doc.text(`Fecha de Emisión: ${emissionDate}`, pageWidth - 15, startY, { align: 'right' });
-            startY += 6;
-            doc.text(`Propiedades: ${(selectedIndividual.properties || []).map(p => `${p.street} - ${p.house}`).join(', ')}`, 15, startY);
-            
-            startY += 10;
-            doc.setFontSize(12).setFont('helvetica', 'bold');
-            doc.text(`Deuda Total: $${individualDebtUSD.toFixed(2)}`, 15, startY);
-            doc.text(`Saldo a Favor: Bs. ${formatToTwoDecimals(selectedIndividual.balance)}`, pageWidth - 15, startY, { align: 'right' });
-
-            startY += 10;
+            let startY = margin + 35;
+    
+            // Payment Summary
+            doc.setFontSize(11).setFont('helvetica', 'bold').text('Resumen de Pagos', margin, startY);
+            startY += 5;
             (doc as any).autoTable({
-                head: headers,
-                body: historyBody,
+                head: [['Fecha', 'Concepto', 'Pagado por', 'Monto (Bs)']],
+                body: paymentBody,
                 startY: startY,
-                headStyles: { fillColor: [30, 80, 180] },
-                styles: { fontSize: 8 }
+                theme: 'striped',
+                headStyles: { fillColor: [22, 163, 74], textColor: 255 },
+                styles: { fontSize: 8 },
+                foot: [[
+                    { content: 'Total Pagado', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } },
+                    { content: `Bs. ${formatToTwoDecimals(totalPaidBs)} ($${totalPaidUsd.toFixed(2)})`, styles: { fontStyle: 'bold' } }
+                ]]
             });
+            startY = (doc as any).lastAutoTable.finalY + 10;
+    
+            // Debt Summary
+            doc.setFontSize(11).setFont('helvetica', 'bold').text('Resumen de Deudas', margin, startY);
+            startY += 5;
+             (doc as any).autoTable({
+                head: [['Período', 'Monto ($)', 'Estado']],
+                body: debtBody,
+                startY: startY,
+                theme: 'striped',
+                headStyles: { fillColor: [22, 163, 74], textColor: 255 },
+                styles: { fontSize: 8 },
+                foot: [[
+                    { content: 'Total Adeudado', colSpan: 1, styles: { halign: 'right', fontStyle: 'bold' } },
+                    { content: `$${totalDebtUsd.toFixed(2)}`, styles: { fontStyle: 'bold' } },
+                    ''
+                ]]
+            });
+            startY = (doc as any).lastAutoTable.finalY + 10;
+    
+            // Balance Footer
+            doc.setFontSize(11).setFont('helvetica', 'bold');
+            doc.text(`Saldo a Favor Actual: Bs. ${formatToTwoDecimals(selectedIndividual.balance)}`, margin, startY);
+    
             doc.save(`${filename}.pdf`);
-        } else { // excel
-            const header = [
-                ["Estado de Cuenta Individual"],
-                [`Propietario: ${selectedIndividual.name}`],
-                [`Propiedades: ${(selectedIndividual.properties || []).map(p => `${p.street} - ${p.house}`).join(', ')}`],
-                [`Fecha de Emisión: ${emissionDate}`],
-                [],
-                [`Deuda Total (USD):`, individualDebtUSD],
-                [`Saldo a Favor (Bs):`, selectedIndividual.balance],
-                []
-            ];
-            
-            const worksheet = XLSX.utils.aoa_to_sheet(header);
-            XLSX.utils.sheet_add_aoa(worksheet, headers, { origin: 'A9' });
-            XLSX.utils.sheet_add_json(worksheet, historyBody.map(row => ({
-                'Fecha': row[0], 'Concepto': row[1], 'Estado': row[2], 
-                'Monto (USD)': row[3], 'Monto (Bs)': row[4]
-            })), { origin: 'A10', skipHeader: true });
+        } else { // Excel
+            // Excel export logic would be more complex to match this specific layout. 
+            // For now, we provide a simpler table export.
+             const history = individualHistory.map(item => {
+                if (item.type === 'debt') {
+                    return {
+                        'Fecha': `${monthsLocale[item.month]} ${item.year}`,
+                        'Concepto': item.description,
+                        'Monto (USD)': item.amountUSD,
+                        'Monto (Bs)': (item.amountUSD * activeRate),
+                        'Estado': item.status === 'paid' ? 'Pagada' : 'Pendiente'
+                    };
+                } else { // payment
+                    const paymentRate = item.exchangeRate || activeRate;
+                    return {
+                        'Fecha': format(item.paymentDate.toDate(), 'dd/MM/yyyy'),
+                        'Concepto': 'Pago Aprobado',
+                        'Monto (USD)': item.totalAmount / paymentRate,
+                        'Monto (Bs)': item.totalAmount,
+                        'Estado': 'Aplicado'
+                    };
+                }
+            });
 
+            const worksheet = XLSX.utils.json_to_sheet(history);
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Estado de Cuenta");
             XLSX.writeFile(workbook, `${filename}.xlsx`);
@@ -1214,3 +1258,4 @@ export default function ReportsPage() {
 }
 
     
+
