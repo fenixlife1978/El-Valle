@@ -644,7 +644,7 @@ export default function ReportsPage() {
     
         // Data for debt summary
         const ownerDebts = allDebts.filter(d => d.ownerId === selectedIndividual.id);
-        const debtBody = ownerDebts.sort((a,b) => a.year - b.year || a.month - a.month).map(d => [
+        const debtBody = ownerDebts.sort((a,b) => b.year - a.year || b.month - a.month).map(d => [
             `${(Object.values(monthsLocale)[d.month -1] || '')} ${d.year}`,
             d.description,
             `$${d.amountUSD.toFixed(2)}`,
@@ -737,7 +737,7 @@ export default function ReportsPage() {
                     'Monto (Bs)': p.totalAmount
                 };
             });
-             const debtWorksheetData = ownerDebts.sort((a,b) => a.year - b.year || a.month - a.month).map(d => ({
+             const debtWorksheetData = ownerDebts.sort((a,b) => b.year - a.year || b.month - a.month).map(d => ({
                 'Período': `${(Object.values(monthsLocale)[d.month -1] || '')} ${d.year}`,
                 'Concepto': d.description,
                 'Monto (USD)': d.amountUSD,
@@ -1295,5 +1295,3 @@ export default function ReportsPage() {
         </div>
     );
 }
-
-    
