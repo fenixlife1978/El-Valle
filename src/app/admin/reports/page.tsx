@@ -44,7 +44,18 @@ type Payment = {
   beneficiaries: { ownerId: string; street?: string; house?: string; amount: number;}[];
   status: 'aprobado' | 'pendiente' | 'rechazado';
   reportedBy: string;
+  reference?: string;
 };
+
+type IncomeReportRow = {
+    ownerName: string;
+    street: string;
+    house: string;
+    date: string;
+    amount: number;
+    reference: string;
+};
+
 
 type HistoricalPayment = {
     ownerId: string;
@@ -149,6 +160,10 @@ export default function ReportsPage() {
     const [integralStatusFilter, setIntegralStatusFilter] = useState('todos');
     const [integralOwnerFilter, setIntegralOwnerFilter] = useState('');
     const [integralDateRange, setIntegralDateRange] = useState<{ from?: Date; to?: Date }>({});
+    
+    // Filters for Income Report
+    const [incomeDateRange, setIncomeDateRange] = useState<{ from?: Date; to?: Date }>({});
+    const [incomeSearchTerm, setIncomeSearchTerm] = useState('');
 
     // State for Delinquency Report
     const [allDelinquentOwners, setAllDelinquentOwners] = useState<DelinquentOwner[]>([]);
@@ -407,7 +422,7 @@ export default function ReportsPage() {
             if (debt.status !== 'pending') return false;
             // Use optional chaining to safely access property
             const street = debt.property?.street;
-            if (!street) return false;
+            if (!street || !street.startsWith('Calle')) return false;
 
             const debtDate = new Date(debt.year, debt.month - 1);
             if (fromDate && debtDate < fromDate) return false;
@@ -447,7 +462,7 @@ export default function ReportsPage() {
         
         const incomeByStreet = filteredPayments.reduce((acc, payment) => {
             payment.beneficiaries.forEach(beneficiary => {
-                if (beneficiary.street) {
+                if (beneficiary.street && beneficiary.street.startsWith('Calle')) {
                     if (!acc[beneficiary.street]) acc[beneficiary.street] = 0;
                     // Approximate income in USD
                     const incomeUSD = beneficiary.amount / (payment.exchangeRate || activeRate || 1);
@@ -481,6 +496,35 @@ export default function ReportsPage() {
     }, [balanceSearchTerm, balanceOwners]);
 
     // --- Handlers ---
+    const incomeReportRows = useMemo<IncomeReportRow[]>(() => {
+        const ownersMap = new Map(owners.map(o => [o.id, o]));
+
+        const filtered = allPayments.filter(payment => {
+            if (payment.status !== 'aprobado') return false;
+            const paymentDate = payment.paymentDate.toDate();
+            if (incomeDateRange.from && paymentDate < incomeDateRange.from) return false;
+            if (incomeDateRange.to && paymentDate > incomeDateRange.to) return false;
+            return true;
+        }).flatMap(payment => 
+            payment.beneficiaries.map(b => ({
+                ownerName: ownersMap.get(b.ownerId)?.name || 'Desconocido',
+                street: b.street || 'N/A',
+                house: b.house || 'N/A',
+                date: format(payment.paymentDate.toDate(), 'dd/MM/yyyy'),
+                amount: b.amount,
+                reference: payment.reference || 'N/A'
+            }))
+        ).filter(row => {
+            if (!incomeSearchTerm) return true;
+            const lowerCaseSearch = incomeSearchTerm.toLowerCase();
+            return row.ownerName.toLowerCase().includes(lowerCaseSearch) ||
+                   row.street.toLowerCase().includes(lowerCaseSearch) ||
+                   row.house.toLowerCase().includes(lowerCaseSearch);
+        });
+
+        return filtered;
+    }, [allPayments, owners, incomeDateRange, incomeSearchTerm]);
+
 
     const handleSelectIndividual = (owner: Owner) => {
         setSelectedIndividual(owner);
@@ -497,7 +541,7 @@ export default function ReportsPage() {
         combinedHistory.sort((a, b) => {
             const dateA = a.type === 'debt' ? new Date(a.year, a.month-1) : a.paymentDate.toDate();
             const dateB = b.type === 'debt' ? new Date(b.year, b.month-1) : b.paymentDate.toDate();
-            return dateA.getTime() - dateB.getTime();
+            return b.paymentDate - a.paymentDate;
         });
 
         setIndividualHistory(combinedHistory as TransactionHistoryItem[]);
@@ -765,6 +809,57 @@ export default function ReportsPage() {
             XLSX.writeFile(workbook, `${filename}.xlsx`);
         }
     };
+    
+    const handleExportIncomeReport = (formatType: 'pdf' | 'excel') => {
+        const data = incomeReportRows;
+        if (data.length === 0) {
+            toast({ variant: "destructive", title: "Nada para exportar", description: "No hay ingresos en el período seleccionado." });
+            return;
+        }
+
+        const filename = `reporte_ingresos_${new Date().toISOString().split('T')[0]}`;
+        const head = [['Propietario', 'Calle', 'Casa', 'Fecha', 'Monto (Bs.)', 'Referencia']];
+        const body = data.map(row => [row.ownerName, row.street, row.house, row.date, formatToTwoDecimals(row.amount), row.reference]);
+        
+        let periodString = "Período: Todos";
+        if (incomeDateRange.from && incomeDateRange.to) periodString = `Período: Desde ${format(incomeDateRange.from, 'P', { locale: es })} hasta ${format(incomeDateRange.to, 'P', { locale: es })}`;
+        else if (incomeDateRange.from) periodString = `Período: Desde ${format(incomeDateRange.from, 'P', { locale: es })}`;
+        else if (incomeDateRange.to) periodString = `Período: Hasta ${format(incomeDateRange.to, 'P', { locale: es })}`;
+
+        if (formatType === 'pdf') {
+            const doc = new jsPDF();
+            const pageWidth = doc.internal.pageSize.getWidth();
+            let startY = 15;
+            if (companyInfo?.logo) doc.addImage(companyInfo.logo, 'PNG', 15, startY, 20, 20);
+            if (companyInfo) doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, 40, startY + 5);
+
+            doc.setFontSize(16).setFont('helvetica', 'bold').text('Reporte de Ingresos', pageWidth / 2, startY + 15, { align: 'center'});
+            startY += 25;
+            doc.setFontSize(9).setFont('helvetica', 'normal');
+            doc.text(periodString, 15, startY);
+            doc.text(`Fecha de Emisión: ${format(new Date(), "dd/MM/yyyy")}`, pageWidth - 15, startY, { align: 'right'});
+            startY += 10;
+            
+            (doc as any).autoTable({
+                head: head, body: body, startY: startY,
+                headStyles: { fillColor: [30, 80, 180] },
+                styles: { fontSize: 8, cellPadding: 2 }
+            });
+            doc.save(`${filename}.pdf`);
+        } else { // Excel
+            const worksheet = XLSX.utils.json_to_sheet(data.map(row => ({
+                'Propietario': row.ownerName,
+                'Calle': row.street,
+                'Casa': row.house,
+                'Fecha': row.date,
+                'Monto (Bs.)': row.amount,
+                'Referencia': row.reference,
+            })));
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Ingresos");
+            XLSX.writeFile(workbook, `${filename}.xlsx`);
+        }
+    };
 
     const handleExportChart = async (chartId: string, title: string, formatType: 'pdf' | 'excel') => {
         const chartElement = document.getElementById(chartId);
@@ -827,11 +922,12 @@ export default function ReportsPage() {
             </div>
             
             <Tabs defaultValue="integral" className="w-full">
-                <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-5 h-auto flex-wrap">
+                 <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-5 h-auto flex-wrap">
                     <TabsTrigger value="integral">Integral</TabsTrigger>
                     <TabsTrigger value="individual">Ficha Individual</TabsTrigger>
                     <TabsTrigger value="delinquency">Morosidad</TabsTrigger>
                     <TabsTrigger value="balance">Saldos a Favor</TabsTrigger>
+                    <TabsTrigger value="income">Informe de Ingresos</TabsTrigger>
                     <TabsTrigger value="charts">Gráficos</TabsTrigger>
                 </TabsList>
                 
@@ -994,7 +1090,6 @@ export default function ReportsPage() {
                                                             <TableHead>Fecha</TableHead>
                                                             <TableHead>Concepto</TableHead>
                                                             <TableHead className="text-right">Monto (USD)</TableHead>
-                                                            <TableHead className="text-right">Monto (Bs)</TableHead>
                                                             <TableHead className="text-right">Estado</TableHead>
                                                         </TableRow>
                                                     </TableHeader>
@@ -1007,7 +1102,6 @@ export default function ReportsPage() {
                                                                     <TableCell>{date}</TableCell>
                                                                     <TableCell>{item.description}</TableCell>
                                                                     <TableCell className="text-right">${formatToTwoDecimals(item.amountUSD)}</TableCell>
-                                                                    <TableCell className="text-right text-destructive">- Bs. {formatToTwoDecimals(item.amountUSD * activeRate)}</TableCell>
                                                                     <TableCell className="text-right">
                                                                         {item.status === 'paid' ? <Badge variant="success">Pagada</Badge> : <Badge variant="destructive">Pendiente</Badge>}
                                                                     </TableCell>
@@ -1020,7 +1114,6 @@ export default function ReportsPage() {
                                                                     <TableCell>{format(item.paymentDate.toDate(), 'dd/MM/yyyy')}</TableCell>
                                                                     <TableCell>Pago Aprobado</TableCell>
                                                                     <TableCell className="text-right">${formatToTwoDecimals(item.beneficiaries[0].amount / paymentRate)}</TableCell>
-                                                                    <TableCell className="text-right text-green-500">+ Bs. {formatToTwoDecimals(item.beneficiaries[0].amount)}</TableCell>
                                                                     <TableCell className="text-right"><Badge variant="outline">Aplicado</Badge></TableCell>
                                                                 </TableRow>
                                                             )
@@ -1198,6 +1291,83 @@ export default function ReportsPage() {
                         </CardContent>
                      </Card>
                  </TabsContent>
+                 
+                <TabsContent value="income">
+                     <Card>
+                        <CardHeader>
+                            <CardTitle>Informe de Ingresos</CardTitle>
+                            <CardDescription>Consulta los pagos aprobados en un período específico.</CardDescription>
+                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 items-end">
+                                <div className="space-y-2">
+                                    <Label>Buscar Propietario/Propiedad</Label>
+                                    <Input placeholder="Nombre, calle o casa..." value={incomeSearchTerm} onChange={e => setIncomeSearchTerm(e.target.value)} />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Pagos Desde</Label>
+                                    <Popover>
+                                        <PopoverTrigger asChild>
+                                            <Button variant="outline" className={cn("w-full justify-start", !incomeDateRange.from && "text-muted-foreground")}>
+                                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                                {incomeDateRange.from ? format(incomeDateRange.from, "P", { locale: es }) : "Fecha"}
+                                            </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent><Calendar mode="single" selected={incomeDateRange.from} onSelect={d => setIncomeDateRange(prev => ({...prev, from: d}))} /></PopoverContent>
+                                    </Popover>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Pagos Hasta</Label>
+                                     <Popover>
+                                        <PopoverTrigger asChild>
+                                            <Button variant="outline" className={cn("w-full justify-start", !incomeDateRange.to && "text-muted-foreground")}>
+                                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                                {incomeDateRange.to ? format(incomeDateRange.to, "P", { locale: es }) : "Fecha"}
+                                            </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent><Calendar mode="single" selected={incomeDateRange.to} onSelect={d => setIncomeDateRange(prev => ({...prev, to: d}))} /></PopoverContent>
+                                    </Popover>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                             <div className="flex justify-end gap-2 mb-4">
+                                <Button variant="outline" onClick={() => handleExportIncomeReport('pdf')} disabled={generatingReport}>
+                                    <FileText className="mr-2 h-4 w-4" /> Exportar a PDF
+                                </Button>
+                                <Button variant="outline" onClick={() => handleExportIncomeReport('excel')} disabled={generatingReport}>
+                                    <FileSpreadsheet className="mr-2 h-4 w-4" /> Exportar a Excel
+                                </Button>
+                            </div>
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Propietario</TableHead>
+                                        <TableHead>Calle</TableHead>
+                                        <TableHead>Casa</TableHead>
+                                        <TableHead>Fecha</TableHead>
+                                        <TableHead className="text-right">Monto (Bs.)</TableHead>
+                                        <TableHead className="text-right">Referencia</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {incomeReportRows.length > 0 ? (
+                                        incomeReportRows.map((row, index) => (
+                                            <TableRow key={index}>
+                                                <TableCell>{row.ownerName}</TableCell>
+                                                <TableCell>{row.street}</TableCell>
+                                                <TableCell>{row.house}</TableCell>
+                                                <TableCell>{row.date}</TableCell>
+                                                <TableCell className="text-right">{formatToTwoDecimals(row.amount)}</TableCell>
+                                                <TableCell className="text-right">{row.reference}</TableCell>
+                                            </TableRow>
+                                        ))
+                                    ) : (
+                                        <TableRow><TableCell colSpan={6} className="h-24 text-center">No se encontraron ingresos para el período y filtro seleccionados.</TableCell></TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
 
                  <TabsContent value="charts">
                      <Card>
@@ -1233,13 +1403,7 @@ export default function ReportsPage() {
                         </CardHeader>
                         <CardContent className="space-y-8">
                              <div id="debt-chart-container" className="p-4 bg-gray-800 text-white rounded-lg">
-                                <div className="flex justify-between items-center mb-4">
-                                    <h3 className="font-semibold">Deuda Pendiente por Calle (USD)</h3>
-                                    <div className="flex gap-2">
-                                        <Button size="sm" variant="outline" onClick={() => handleExportChart('debt-chart-container', 'Gráfico de Deuda por Calle (USD)', 'pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
-                                        <Button size="sm" variant="outline" onClick={() => handleExportChart('debt-chart-container', 'Gráfico de Deuda por Calle (USD)', 'excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
-                                    </div>
-                                </div>
+                                <h3 className="font-semibold text-center mb-4">Deudas Actuales por Calle (USD)</h3>
                                 {debtsByStreetChartData.length > 0 ? (
                                 <ResponsiveContainer width="100%" height={350}>
                                     <BarChart data={debtsByStreetChartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
@@ -1259,15 +1423,13 @@ export default function ReportsPage() {
                                 ) : (
                                     <p className="text-center text-gray-400 py-8">No hay datos de deuda para mostrar en el período seleccionado.</p>
                                 )}
+                                 <div className="flex justify-center gap-2 mt-4">
+                                    <Button size="sm" variant="outline" onClick={() => handleExportChart('debt-chart-container', 'Gráfico de Deuda por Calle (USD)', 'pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
+                                    <Button size="sm" variant="outline" onClick={() => handleExportChart('debt-chart-container', 'Gráfico de Deuda por Calle (USD)', 'excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
+                                </div>
                              </div>
                              <div id="income-chart-container" className="p-4 bg-gray-800 text-white rounded-lg">
-                                <div className="flex justify-between items-center mb-4">
-                                     <h3 className="font-semibold">Ingresos por Calle (USD)</h3>
-                                      <div className="flex gap-2">
-                                        <Button size="sm" variant="outline" onClick={() => handleExportChart('income-chart-container', 'Gráfico de Ingresos por Calle (USD)', 'pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
-                                        <Button size="sm" variant="outline" onClick={() => handleExportChart('income-chart-container', 'Gráfico de Ingresos por Calle (USD)', 'excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
-                                    </div>
-                                </div>
+                                <h3 className="font-semibold text-center mb-4">Ingresos por Calle (USD)</h3>
                                 {incomeByStreetChartData.length > 0 ? (
                                 <ResponsiveContainer width="100%" height={350}>
                                     <BarChart data={incomeByStreetChartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
@@ -1287,6 +1449,10 @@ export default function ReportsPage() {
                                 ) : (
                                     <p className="text-center text-gray-400 py-8">No hay datos de ingresos para mostrar en el período seleccionado.</p>
                                 )}
+                                 <div className="flex justify-center gap-2 mt-4">
+                                    <Button size="sm" variant="outline" onClick={() => handleExportChart('income-chart-container', 'Gráfico de Ingresos por Calle (USD)', 'pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
+                                    <Button size="sm" variant="outline" onClick={() => handleExportChart('income-chart-container', 'Gráfico de Ingresos por Calle (USD)', 'excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
+                                </div>
                              </div>
                         </CardContent>
                      </Card>
@@ -1295,3 +1461,4 @@ export default function ReportsPage() {
         </div>
     );
 }
+
