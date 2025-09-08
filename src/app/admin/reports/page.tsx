@@ -59,6 +59,7 @@ type Debt = {
     description: string;
     status: 'pending' | 'paid';
     paymentDate?: Timestamp;
+    property: { street: string, house: string };
 };
 
 type CompanyInfo = {
@@ -99,7 +100,7 @@ type BalanceOwner = {
     lastMovement: string;
 };
 
-type TransactionHistoryItem = Debt & { type: 'debt' } | Payment & { type: 'payment' };
+type TransactionHistoryItem = (Debt & { type: 'debt' }) | (Payment & { type: 'payment' });
 
 
 const monthsLocale: { [key: number]: string } = {
@@ -375,7 +376,7 @@ export default function ReportsPage() {
             return acc;
         }, {} as { [key: string]: number });
         
-        return Object.entries(debtsByStreet).map(([name, TotalDeuda]) => ({ name, TotalDeuda }))
+        return Object.entries(debtsByStreet).map(([name, TotalDeuda]) => ({ name, TotalDeuda: parseFloat(TotalDeuda.toFixed(2)) }))
             .sort((a, b) => b.TotalDeuda - a.TotalDeuda);
     }, [allDelinquentOwners]);
 
@@ -400,10 +401,14 @@ export default function ReportsPage() {
         setSelectedIndividual(owner);
         setIndividualSearchTerm('');
 
-        const ownerDebts = allDebts.filter(d => d.ownerId === owner.id).map(d => ({ ...d, type: 'debt' as const }));
+        const ownerDebts = allDebts.filter(d => d.ownerId === owner.id);
         const ownerPayments = allPayments.filter(p => p.beneficiaries.some(b => b.ownerId === owner.id) && p.status === 'aprobado').map(p => ({ ...p, type: 'payment' as const }));
         
-        const combinedHistory = [...ownerDebts, ...ownerPayments];
+        const combinedHistory: any[] = [
+            ...ownerDebts.map(d => ({ ...d, type: 'debt' as const })),
+            ...ownerPayments
+        ];
+
         combinedHistory.sort((a, b) => {
             const dateA = a.type === 'debt' ? new Date(a.year, a.month-1) : a.paymentDate.toDate();
             const dateB = b.type === 'debt' ? new Date(b.year, b.month-1) : b.paymentDate.toDate();
@@ -543,6 +548,138 @@ export default function ReportsPage() {
         let direction: SortDirection = 'asc';
         if (delinquencySortConfig.key === key && delinquencySortConfig.direction === 'asc') direction = 'desc';
         setDelinquencySortConfig({ key, direction });
+    };
+
+    const handleExportIndividual = (formatType: 'pdf' | 'excel') => {
+        if (!selectedIndividual) return;
+
+        const filename = `estado_cuenta_${selectedIndividual.name.replace(/\s/g, '_')}`;
+        const emissionDate = format(new Date(), "dd/MM/yyyy 'a las' HH:mm:ss", { locale: es });
+
+        const historyBody = individualHistory.map(item => {
+            if (item.type === 'debt') {
+                return [
+                    `${monthsLocale[item.month]} ${item.year}`,
+                    item.description,
+                    item.status === 'paid' ? 'Pagada' : 'Pendiente',
+                    `- Bs. ${formatToTwoDecimals(item.amountUSD * activeRate)}`
+                ];
+            } else { // payment
+                return [
+                    format(item.paymentDate.toDate(), 'dd/MM/yyyy'),
+                    'Pago Aprobado',
+                    'Aplicado',
+                    `+ Bs. ${formatToTwoDecimals(item.totalAmount)}`
+                ];
+            }
+        });
+
+        if (formatType === 'pdf') {
+            const doc = new jsPDF();
+            const pageWidth = doc.internal.pageSize.getWidth();
+            let startY = 15;
+            if (companyInfo?.logo) doc.addImage(companyInfo.logo, 'PNG', 15, startY, 20, 20);
+            doc.setFontSize(16).setFont('helvetica', 'bold').text('Estado de Cuenta Individual', pageWidth / 2, startY + 15, { align: 'center' });
+            
+            startY += 30;
+            doc.setFontSize(10).setFont('helvetica', 'normal');
+            doc.text(`Propietario: ${selectedIndividual.name}`, 15, startY);
+            doc.text(`Fecha de Emisión: ${emissionDate}`, pageWidth - 15, startY, { align: 'right' });
+            startY += 6;
+            doc.text(`Propiedades: ${(selectedIndividual.properties || []).map(p => `${p.street} - ${p.house}`).join(', ')}`, 15, startY);
+            
+            startY += 10;
+            doc.setFontSize(12).setFont('helvetica', 'bold');
+            doc.text(`Deuda Total: $${individualDebtUSD.toFixed(2)}`, 15, startY);
+            doc.text(`Saldo a Favor: Bs. ${formatToTwoDecimals(selectedIndividual.balance)}`, pageWidth - 15, startY, { align: 'right' });
+
+            startY += 10;
+            (doc as any).autoTable({
+                head: [['Fecha', 'Concepto', 'Estado', 'Monto (Bs)']],
+                body: historyBody,
+                startY: startY,
+                headStyles: { fillColor: [30, 80, 180] },
+                styles: { fontSize: 8 }
+            });
+            doc.save(`${filename}.pdf`);
+        } else { // excel
+            const header = [
+                ["Estado de Cuenta Individual"],
+                [`Propietario: ${selectedIndividual.name}`],
+                [`Propiedades: ${(selectedIndividual.properties || []).map(p => `${p.street} - ${p.house}`).join(', ')}`],
+                [`Fecha de Emisión: ${emissionDate}`],
+                [],
+                [`Deuda Total (USD):`, individualDebtUSD],
+                [`Saldo a Favor (Bs):`, selectedIndividual.balance],
+                []
+            ];
+            const historyHeader = [['Fecha', 'Concepto', 'Estado', 'Monto (Bs)']];
+            const worksheet = XLSX.utils.aoa_to_sheet(header);
+            XLSX.utils.sheet_add_aoa(worksheet, historyHeader, { origin: 'A9' });
+            XLSX.utils.sheet_add_json(worksheet, historyBody.map(row => ({
+                'Fecha': row[0], 'Concepto': row[1], 'Estado': row[2], 'Monto (Bs)': row[3]
+            })), { origin: 'A10', skipHeader: true });
+
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Estado de Cuenta");
+            XLSX.writeFile(workbook, `${filename}.xlsx`);
+        }
+    };
+    
+    const handleExportBalance = (formatType: 'pdf' | 'excel') => {
+        const data = filteredBalanceOwners;
+        if (data.length === 0) {
+            toast({ variant: "destructive", title: "Nada para exportar", description: "No hay propietarios con saldo a favor." });
+            return;
+        }
+
+        const filename = `reporte_saldos_favor_${format(new Date(), 'yyyy-MM-dd')}`;
+        const head = [['Propietario', 'Propiedades', 'Fecha Últ. Movimiento', 'Saldo a Favor (Bs.)']];
+        const body = data.map(o => [o.name, o.properties, o.lastMovement, `Bs. ${formatToTwoDecimals(o.balance)}`]);
+
+        if (formatType === 'pdf') {
+            const doc = new jsPDF();
+            doc.setFontSize(16).setFont('helvetica', 'bold').text("Reporte de Saldos a Favor", doc.internal.pageSize.getWidth() / 2, 20, { align: 'center' });
+            (doc as any).autoTable({
+                head: head,
+                body: body,
+                startY: 30,
+                headStyles: { fillColor: [22, 163, 74] }, // Green color
+            });
+            doc.save(`${filename}.pdf`);
+        } else { // excel
+            const worksheet = XLSX.utils.json_to_sheet(data.map(o => ({
+                'Propietario': o.name,
+                'Propiedades': o.properties,
+                'Fecha Últ. Movimiento': o.lastMovement,
+                'Saldo a Favor (Bs.)': o.balance
+            })));
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Saldos a Favor");
+            XLSX.writeFile(workbook, `${filename}.xlsx`);
+        }
+    };
+
+    const handleExportChart = async (formatType: 'pdf' | 'excel') => {
+        const chartElement = document.getElementById('debt-chart-container');
+        if (!chartElement) return;
+
+        const { default: html2canvas } = await import('html2canvas');
+        const canvas = await html2canvas(chartElement);
+        const imgData = canvas.toDataURL('image/png');
+        const filename = `grafico_deudas_por_calle_${format(new Date(), 'yyyy-MM-dd')}`;
+
+        if (formatType === 'pdf') {
+            const doc = new jsPDF();
+            doc.setFontSize(16).setFont('helvetica', 'bold').text("Deuda Total por Calle (USD)", doc.internal.pageSize.getWidth() / 2, 20, { align: 'center' });
+            doc.addImage(imgData, 'PNG', 15, 30, 180, 100);
+            doc.save(`${filename}.pdf`);
+        } else { // excel
+            const worksheet = XLSX.utils.json_to_sheet(debtsByStreetChartData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Datos del Gráfico");
+            XLSX.writeFile(workbook, `${filename}.xlsx`);
+        }
     };
 
     const renderSortIcon = (key: SortKey) => {
@@ -690,8 +827,16 @@ export default function ReportsPage() {
                             {selectedIndividual && (
                                 <Card className="mt-4 bg-card-foreground/5 dark:bg-card-foreground/5">
                                     <CardHeader>
-                                        <CardTitle>{selectedIndividual.name}</CardTitle>
-                                        <CardDescription>{(selectedIndividual.properties || []).map(p => `${p.street} - ${p.house}`).join(', ')}</CardDescription>
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <CardTitle>{selectedIndividual.name}</CardTitle>
+                                                <CardDescription>{(selectedIndividual.properties || []).map(p => `${p.street} - ${p.house}`).join(', ')}</CardDescription>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <Button variant="outline" onClick={() => handleExportIndividual('pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
+                                                <Button variant="outline" onClick={() => handleExportIndividual('excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
+                                            </div>
+                                        </div>
                                     </CardHeader>
                                     <CardContent className="space-y-6">
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -727,11 +872,11 @@ export default function ReportsPage() {
                                                         </TableRow>
                                                     </TableHeader>
                                                     <TableBody>
-                                                    {individualHistory.map((item) => {
+                                                    {individualHistory.map((item, index) => {
                                                         if (item.type === 'debt') {
                                                             const date = `${monthsLocale[item.month]} ${item.year}`;
                                                             return (
-                                                                <TableRow key={`debt-${item.id}`}>
+                                                                <TableRow key={`debt-${item.id}-${index}`}>
                                                                     <TableCell>{date}</TableCell>
                                                                     <TableCell>{item.description}</TableCell>
                                                                     <TableCell className="text-right text-destructive">- Bs. {formatToTwoDecimals(item.amountUSD * activeRate)}</TableCell>
@@ -742,7 +887,7 @@ export default function ReportsPage() {
                                                             )
                                                         } else {
                                                             return (
-                                                                <TableRow key={`payment-${item.id}`}>
+                                                                <TableRow key={`payment-${item.id}-${index}`}>
                                                                     <TableCell>{format(item.paymentDate.toDate(), 'dd/MM/yyyy')}</TableCell>
                                                                     <TableCell>Pago Aprobado</TableCell>
                                                                     <TableCell className="text-right text-green-500">+ Bs. {formatToTwoDecimals(item.totalAmount)}</TableCell>
@@ -884,9 +1029,15 @@ export default function ReportsPage() {
                         <CardHeader>
                             <CardTitle>Consulta de Saldos a Favor</CardTitle>
                             <CardDescription>Lista de todos los propietarios con saldo positivo en sus cuentas.</CardDescription>
-                             <div className="relative mt-2 max-w-sm">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                <Input placeholder="Buscar por propietario..." className="pl-9" value={balanceSearchTerm} onChange={e => setBalanceSearchTerm(e.target.value)} />
+                             <div className="flex items-center justify-between mt-4">
+                                <div className="relative max-w-sm">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                    <Input placeholder="Buscar por propietario..." className="pl-9" value={balanceSearchTerm} onChange={e => setBalanceSearchTerm(e.target.value)} />
+                                </div>
+                                <div className="flex gap-2">
+                                    <Button variant="outline" onClick={() => handleExportBalance('pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
+                                    <Button variant="outline" onClick={() => handleExportBalance('excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
+                                </div>
                             </div>
                         </CardHeader>
                         <CardContent>
@@ -925,7 +1076,7 @@ export default function ReportsPage() {
                             <CardDescription>Visualizaciones de datos clave del condominio.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-8">
-                             <div>
+                             <div id="debt-chart-container" className="p-4 bg-background rounded-lg">
                                 <h3 className="font-semibold mb-4">Deuda Total por Calle (USD)</h3>
                                 {debtsByStreetChartData.length > 0 ? (
                                 <ResponsiveContainer width="100%" height={300}>
@@ -934,7 +1085,7 @@ export default function ReportsPage() {
                                         <XAxis type="number" />
                                         <YAxis dataKey="name" type="category" width={80} />
                                         <Tooltip 
-                                            cursor={{fill: 'rgba(255, 255, 255, 0.1)'}}
+                                            cursor={{fill: 'rgba(var(--foreground), 0.1)'}}
                                             formatter={(value: number) => [`$${value.toFixed(2)}`, 'Deuda Total']}
                                         />
                                         <Legend />
@@ -945,6 +1096,10 @@ export default function ReportsPage() {
                                     <p className="text-center text-muted-foreground py-8">No hay datos de deuda para mostrar.</p>
                                 )}
                              </div>
+                             <div className="flex justify-end gap-2">
+                                <Button variant="outline" onClick={() => handleExportChart('pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
+                                <Button variant="outline" onClick={() => handleExportChart('excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
+                            </div>
                         </CardContent>
                      </Card>
                  </TabsContent>
