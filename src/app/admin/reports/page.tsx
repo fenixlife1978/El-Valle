@@ -383,7 +383,7 @@ export default function ReportsPage() {
         });
 
         const debtsByStreet = filteredDebts.reduce((acc, debt) => {
-            const street = debt.property.street;
+            const street = debt.property?.street;
             if (street) {
                 if (!acc[street]) acc[street] = 0;
                 acc[street] += debt.amountUSD;
