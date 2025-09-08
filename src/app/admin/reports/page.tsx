@@ -656,14 +656,9 @@ export default function ReportsPage() {
         doc.text(`Propiedad(es): ${(selectedIndividual.properties || []).map(p => `${p.street}-${p.house}`).join(', ')}`, margin, margin + 35);
         
         const dateText = `Fecha: ${format(new Date(), "dd/MM/yyyy")}`;
-        const rateText = `Tasa del día: ${formatToTwoDecimals(activeRate)}`;
         
         doc.setFontSize(9).setFont('helvetica', 'normal');
         doc.text(dateText, pageWidth - margin, margin + 30, { align: 'right'});
-
-        doc.setFont('helvetica', 'bold').setTextColor(255, 0, 0);
-        doc.text(rateText, pageWidth - margin, margin + 35, { align: 'right'});
-        doc.setTextColor(0, 0, 0);
         
         let startY = margin + 45;
 
@@ -675,7 +670,6 @@ export default function ReportsPage() {
             doc.setFontSize(11).setFont('helvetica', 'bold').text('Resumen de Pagos', margin, startY);
             startY += 7;
             const paymentBody = approvedPayments.map(p => {
-                const totalAmountUSD = (p.totalAmount / (p.exchangeRate || activeRate || 1));
                 const beneficiary = p.beneficiaries.find(b => b.ownerId === selectedIndividual.id);
                 const paymentAmount = beneficiary ? beneficiary.amount : p.totalAmount;
                 const concept = p.beneficiaries.length > 1 ? `Pago Múltiple` : `Pago Cuota(s)`;
@@ -712,11 +706,10 @@ export default function ReportsPage() {
                 .map(d => [
                 `${Object.values(monthsLocale)[d.month -1] || ''} ${d.year}`,
                 `$${d.amountUSD.toFixed(2)}`,
-                `Bs. ${formatToTwoDecimals(d.amountUSD * activeRate)}`,
                 d.status === 'paid' ? 'Pagada' : 'Pendiente'
             ]);
             (doc as any).autoTable({
-                head: [['Período', 'Monto ($)', 'Monto (Bs.)', 'Estado']], 
+                head: [['Período', 'Monto ($)', 'Estado']], 
                 body: debtBody,
                 startY: startY, 
                 theme: 'striped', 
@@ -724,7 +717,6 @@ export default function ReportsPage() {
                 styles: { fontSize: 8 },
                 foot: [[ { content: 'Total Adeudado', colSpan: 1, styles: { halign: 'right', fontStyle: 'bold' } }, 
                          { content: `$${totalDebtUsd.toFixed(2)}`, styles: { fontStyle: 'bold' } },
-                         { content: `Bs. ${formatToTwoDecimals(totalDebtUsd * activeRate)}`, styles: { fontStyle: 'bold' } },
                          ''
                       ]],
                 footStyles: { fillColor: [22, 102, 102], textColor: 255 }
@@ -736,14 +728,6 @@ export default function ReportsPage() {
         doc.setFontSize(11).setFont('helvetica', 'bold');
         doc.text(`Saldo a Favor Actual: Bs. ${formatToTwoDecimals(selectedIndividual.balance)}`, margin, startY);
         startY += 10;
-
-        // --- Legal Disclaimer ---
-        doc.setFontSize(9).setFont('helvetica', 'bold').setTextColor(255, 0, 0);
-        const disclaimer = "Los montos en bolívares expresados en las deudas, son producto de la conversión aplicada a la tasa del día de hoy por lo que dichos montos variarán según vaya cambiando la tasa al día de pago.";
-        const splitDisclaimer = doc.splitTextToSize(disclaimer, pageWidth - margin * 2);
-        doc.text(splitDisclaimer, margin, startY);
-        doc.setTextColor(0,0,0);
-        doc.setFont('helvetica', 'normal');
 
         doc.save(`${filename}.pdf`);
     };
