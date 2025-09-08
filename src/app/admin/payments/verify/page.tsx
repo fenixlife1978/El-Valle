@@ -245,7 +245,7 @@ export default function VerifyPaymentsPage() {
                     const dataA = a.data();
                     const dataB = b.data();
                     if (dataA.year !== dataB.year) return dataA.year - dataB.year;
-                    return dataB.month - dataA.month;
+                    return dataA.month - dataB.month;
                 });
                 
                 if (sortedDebts.length > 0) {
@@ -528,7 +528,7 @@ export default function VerifyPaymentsPage() {
 
     // --- Footer Section ---
     const legalNote = 'Todo propietario que requiera de firma y sello húmedo deberá imprimir éste recibo y hacerlo llegar al condominio para su respectiva estampa.';
-    doc.setFontSize(8).setFont('helvetica', 'normal').text(legalNote, margin, startY);
+    doc.setFontSize(9).setFont('helvetica', 'bold').text(legalNote, margin, startY);
     startY += 8;
 
     doc.setFontSize(9).setFont('helvetica', 'normal').text('Este recibo confirma que el pago ha sido validado para la(s) cuota(s) y propiedad(es) aquí detalladas.', margin, startY);
@@ -729,7 +729,7 @@ export default function VerifyPaymentsPage() {
                             </div>
                          )}
                         <div className="mt-6 text-gray-600 text-[10px] space-y-2">
-                             <p className="text-left text-[11px] font-semibold">Todo propietario que requiera de firma y sello húmedo deberá imprimir éste recibo y hacerlo llegar al condominio para su respectiva estampa.</p>
+                             <p className="text-left text-[11px] font-bold">Todo propietario que requiera de firma y sello húmedo deberá imprimir éste recibo y hacerlo llegar al condominio para su respectiva estampa.</p>
                              <p className="text-left">Este recibo confirma que el pago ha sido validado para la(s) cuota(s) y propiedad(es) aquí detalladas.</p>
                              <p className="text-left font-bold mt-2">Firma electrónica: '{companyInfo.name} - Condominio'</p>
                              <hr className="my-4 border-gray-400"/>
