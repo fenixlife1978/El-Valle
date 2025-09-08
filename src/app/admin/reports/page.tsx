@@ -112,7 +112,10 @@ type SortKey = 'name' | 'debtAmountUSD' | 'monthsOwed';
 type SortDirection = 'asc' | 'desc';
 
 const formatToTwoDecimals = (num: number) => {
-    const truncated = Math.trunc(num * 100) / 100;
+    if (typeof num !== 'number' || isNaN(num)) {
+        return '0,00';
+    }
+    const truncated = Math.floor(num * 100) / 100;
     return truncated.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
@@ -478,14 +481,14 @@ export default function ReportsPage() {
         ]);
 
         const filename = `reporte_integral_${new Date().toISOString().split('T')[0]}`;
-        const emissionDate = format(new Date(), "dd/MM/yyyy 'a las' HH:mm:ss", { locale: es });
+        const emissionDate = format(new Date(), "dd/MM/yyyy 'a las' HH:mm:ss");
         let periodString = "Período de Pagos: Todos";
         if (integralDateRange.from && integralDateRange.to) {
-            periodString = `Período de Pagos: Desde ${format(integralDateRange.from, 'P', { locale: es })} hasta ${format(integralDateRange.to, 'P', { locale: es })}`;
+            periodString = `Período de Pagos: Desde ${format(integralDateRange.from, 'P')} hasta ${format(integralDateRange.to, 'P')}`;
         } else if (integralDateRange.from) {
-            periodString = `Período de Pagos: Desde ${format(integralDateRange.from, 'P', { locale: es })}`;
+            periodString = `Período de Pagos: Desde ${format(integralDateRange.from, 'P')}`;
         } else if (integralDateRange.to) {
-            periodString = `Período de Pagos: Hasta ${format(integralDateRange.to, 'P', { locale: es })}`;
+            periodString = `Período de Pagos: Hasta ${format(integralDateRange.to, 'P')}`;
         }
 
         if (formatType === 'pdf') {
@@ -599,7 +602,7 @@ export default function ReportsPage() {
         if (!selectedIndividual) return;
 
         const filename = `estado_cuenta_${selectedIndividual.name.replace(/\s/g, '_')}`;
-        const emissionDate = format(new Date(), "dd/MM/yyyy 'a las' HH:mm:ss", { locale: es });
+        const emissionDate = format(new Date(), "dd/MM/yyyy 'a las' HH:mm:ss");
 
         const historyBody = individualHistory.map(item => {
             if (item.type === 'debt') {
@@ -788,7 +791,7 @@ export default function ReportsPage() {
                                         <PopoverTrigger asChild>
                                             <Button variant="outline" className={cn("w-full justify-start", !integralDateRange.from && "text-muted-foreground")}>
                                                 <CalendarIcon className="mr-2 h-4 w-4" />
-                                                {integralDateRange.from ? format(integralDateRange.from, "P", { locale: es }) : "Fecha"}
+                                                {integralDateRange.from ? format(integralDateRange.from, "P") : "Fecha"}
                                             </Button>
                                         </PopoverTrigger>
                                         <PopoverContent><Calendar mode="single" selected={integralDateRange.from} onSelect={d => setIntegralDateRange(prev => ({...prev, from: d}))} /></PopoverContent>
@@ -800,7 +803,7 @@ export default function ReportsPage() {
                                         <PopoverTrigger asChild>
                                             <Button variant="outline" className={cn("w-full justify-start", !integralDateRange.to && "text-muted-foreground")}>
                                                 <CalendarIcon className="mr-2 h-4 w-4" />
-                                                {integralDateRange.to ? format(integralDateRange.to, "P", { locale: es }) : "Fecha"}
+                                                {integralDateRange.to ? format(integralDateRange.to, "P") : "Fecha"}
                                             </Button>
                                         </PopoverTrigger>
                                         <PopoverContent><Calendar mode="single" selected={integralDateRange.to} onSelect={d => setIntegralDateRange(prev => ({...prev, to: d}))} /></PopoverContent>
@@ -1141,7 +1144,7 @@ export default function ReportsPage() {
                                         <PopoverTrigger asChild>
                                             <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !chartsDateRange.from && "text-muted-foreground")}>
                                                 <CalendarIcon className="mr-2 h-4 w-4" />
-                                                {chartsDateRange.from ? format(chartsDateRange.from, "PPP", { locale: es }) : <span>Seleccione fecha de inicio</span>}
+                                                {chartsDateRange.from ? format(chartsDateRange.from, "PPP") : <span>Seleccione fecha de inicio</span>}
                                             </Button>
                                         </PopoverTrigger>
                                         <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={chartsDateRange.from} onSelect={d => setChartsDateRange(prev => ({ ...prev, from: d }))} /></PopoverContent>
@@ -1153,7 +1156,7 @@ export default function ReportsPage() {
                                         <PopoverTrigger asChild>
                                             <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !chartsDateRange.to && "text-muted-foreground")}>
                                                 <CalendarIcon className="mr-2 h-4 w-4" />
-                                                {chartsDateRange.to ? format(chartsDateRange.to, "PPP", { locale: es }) : <span>Seleccione fecha final</span>}
+                                                {chartsDateRange.to ? format(chartsDateRange.to, "PPP") : <span>Seleccione fecha final</span>}
                                             </Button>
                                         </PopoverTrigger>
                                         <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={chartsDateRange.to} onSelect={d => setChartsDateRange(prev => ({ ...prev, to: d }))} /></PopoverContent>
