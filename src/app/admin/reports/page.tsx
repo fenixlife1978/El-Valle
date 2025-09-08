@@ -484,11 +484,11 @@ export default function ReportsPage() {
         const emissionDate = format(new Date(), "dd/MM/yyyy 'a las' HH:mm:ss");
         let periodString = "Período de Pagos: Todos";
         if (integralDateRange.from && integralDateRange.to) {
-            periodString = `Período de Pagos: Desde ${format(integralDateRange.from, 'P')} hasta ${format(integralDateRange.to, 'P')}`;
+            periodString = `Período de Pagos: Desde ${format(integralDateRange.from, 'P', { locale: es })} hasta ${format(integralDateRange.to, 'P', { locale: es })}`;
         } else if (integralDateRange.from) {
-            periodString = `Período de Pagos: Desde ${format(integralDateRange.from, 'P')}`;
+            periodString = `Período de Pagos: Desde ${format(integralDateRange.from, 'P', { locale: es })}`;
         } else if (integralDateRange.to) {
-            periodString = `Período de Pagos: Hasta ${format(integralDateRange.to, 'P')}`;
+            periodString = `Período de Pagos: Hasta ${format(integralDateRange.to, 'P', { locale: es })}`;
         }
 
         if (formatType === 'pdf') {
@@ -791,7 +791,7 @@ export default function ReportsPage() {
                                         <PopoverTrigger asChild>
                                             <Button variant="outline" className={cn("w-full justify-start", !integralDateRange.from && "text-muted-foreground")}>
                                                 <CalendarIcon className="mr-2 h-4 w-4" />
-                                                {integralDateRange.from ? format(integralDateRange.from, "P") : "Fecha"}
+                                                {integralDateRange.from ? format(integralDateRange.from, "P", { locale: es }) : "Fecha"}
                                             </Button>
                                         </PopoverTrigger>
                                         <PopoverContent><Calendar mode="single" selected={integralDateRange.from} onSelect={d => setIntegralDateRange(prev => ({...prev, from: d}))} /></PopoverContent>
@@ -803,7 +803,7 @@ export default function ReportsPage() {
                                         <PopoverTrigger asChild>
                                             <Button variant="outline" className={cn("w-full justify-start", !integralDateRange.to && "text-muted-foreground")}>
                                                 <CalendarIcon className="mr-2 h-4 w-4" />
-                                                {integralDateRange.to ? format(integralDateRange.to, "P") : "Fecha"}
+                                                {integralDateRange.to ? format(integralDateRange.to, "P", { locale: es }) : "Fecha"}
                                             </Button>
                                         </PopoverTrigger>
                                         <PopoverContent><Calendar mode="single" selected={integralDateRange.to} onSelect={d => setIntegralDateRange(prev => ({...prev, to: d}))} /></PopoverContent>
@@ -1144,7 +1144,7 @@ export default function ReportsPage() {
                                         <PopoverTrigger asChild>
                                             <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !chartsDateRange.from && "text-muted-foreground")}>
                                                 <CalendarIcon className="mr-2 h-4 w-4" />
-                                                {chartsDateRange.from ? format(chartsDateRange.from, "PPP") : <span>Seleccione fecha de inicio</span>}
+                                                {chartsDateRange.from ? format(chartsDateRange.from, "PPP", { locale: es }) : <span>Seleccione fecha de inicio</span>}
                                             </Button>
                                         </PopoverTrigger>
                                         <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={chartsDateRange.from} onSelect={d => setChartsDateRange(prev => ({ ...prev, from: d }))} /></PopoverContent>
@@ -1156,7 +1156,7 @@ export default function ReportsPage() {
                                         <PopoverTrigger asChild>
                                             <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !chartsDateRange.to && "text-muted-foreground")}>
                                                 <CalendarIcon className="mr-2 h-4 w-4" />
-                                                {chartsDateRange.to ? format(chartsDateRange.to, "PPP") : <span>Seleccione fecha final</span>}
+                                                {chartsDateRange.to ? format(chartsDateRange.to, "PPP", { locale: es }) : <span>Seleccione fecha final</span>}
                                             </Button>
                                         </PopoverTrigger>
                                         <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={chartsDateRange.to} onSelect={d => setChartsDateRange(prev => ({ ...prev, to: d }))} /></PopoverContent>
@@ -1216,3 +1216,5 @@ export default function ReportsPage() {
         </div>
     );
 }
+
+    
