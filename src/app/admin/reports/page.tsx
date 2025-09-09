@@ -93,8 +93,9 @@ type IntegralReportRow = {
     avgRate: number;
     balance: number;
     status: 'Solvente' | 'No Solvente';
+    solvencyPeriod: string;
     monthsOwed?: number;
-    futureDebtUSD: number;
+    futureDebtForAdjustments: number;
 };
 
 type DelinquentOwner = {
@@ -311,19 +312,34 @@ export default function ReportsPage() {
         const currentMonth = now.getMonth() + 1;
     
         return sortedOwners.map(owner => {
-            const ownerDebts = allDebts.filter(d => d.ownerId === owner.id && d.status === 'pending');
-            
-            // New solvency logic
-            const dueDebts = ownerDebts.filter(d => 
+            const ownerAllDebts = allDebts.filter(d => d.ownerId === owner.id);
+            const ownerPaidDebts = ownerAllDebts.filter(d => d.status === 'paid').sort((a,b) => b.year - a.year || b.month - a.month);
+            const ownerPendingDebts = ownerAllDebts.filter(d => d.status === 'pending');
+
+            const dueDebts = ownerPendingDebts.filter(d => 
                 d.year < currentYear || (d.year === currentYear && d.month <= currentMonth)
             );
-            const futureDebts = ownerDebts.filter(d => 
+            
+            const futureDebts = ownerPendingDebts.filter(d => 
                 d.year > currentYear || (d.year === currentYear && d.month > currentMonth)
             );
-            
-            const futureDebtUSD = futureDebts.reduce((sum, d) => sum + d.amountUSD, 0);
+
+            const futureDebtForAdjustments = futureDebts.reduce((sum, d) => sum + d.amountUSD, 0);
             const status: 'Solvente' | 'No Solvente' = dueDebts.length > 0 ? 'No Solvente' : 'Solvente';
             
+            let solvencyPeriod = '';
+            if (status === 'Solvente') {
+                if (ownerPaidDebts.length > 0) {
+                    const lastPaid = ownerPaidDebts[0];
+                    solvencyPeriod = `Hasta ${monthsLocale[lastPaid.month]} ${lastPaid.year}`;
+                }
+            } else {
+                const oldestDebt = [...dueDebts].sort((a,b) => a.year - b.year || a.month - b.month)[0];
+                if (oldestDebt) {
+                    solvencyPeriod = `Desde ${monthsLocale[oldestDebt.month]} ${oldestDebt.year}`;
+                }
+            }
+
             const fromDate = integralDateRange.from;
             const toDate = integralDateRange.to;
     
@@ -359,8 +375,9 @@ export default function ReportsPage() {
                 avgRate: avgRate,
                 balance: owner.balance,
                 status,
+                solvencyPeriod,
                 monthsOwed: status === 'No Solvente' ? dueDebts.length : undefined,
-                futureDebtUSD: futureDebtUSD
+                futureDebtForAdjustments: futureDebtForAdjustments
             };
         }).filter(row => {
             const statusMatch = integralStatusFilter === 'todos' || row.status.toLowerCase().replace(' ', '') === integralStatusFilter.toLowerCase().replace(' ', '');
@@ -593,14 +610,16 @@ export default function ReportsPage() {
 
     const handleExportIntegral = (formatType: 'pdf' | 'excel') => {
         const data = integralReportData;
-        const headers = [["Propietario", "Propiedad", "Fecha Últ. Pago", "Monto Pagado (Bs)", "Tasa Prom. (Bs/$)", "Saldo a Favor (Bs)", "Estado", "Meses Adeudados", "Deuda Futura (USD)"]];
+        const headers = [["Propietario", "Propiedad", "Fecha Últ. Pago", "Monto Pagado (Bs)", "Tasa Prom. (Bs/$)", "Saldo a Favor (Bs)", "Estado", "Período Solvencia", "Meses Adeudados", "Deuda Futura por Ajustes"]];
         const body = data.map(row => [
             row.name, row.properties, row.lastPaymentDate,
             row.paidAmount > 0 ? formatToTwoDecimals(row.paidAmount) : '',
             row.avgRate > 0 ? formatToTwoDecimals(row.avgRate) : '',
             row.balance > 0 ? formatToTwoDecimals(row.balance) : '',
-            row.status, row.monthsOwed || '',
-            row.futureDebtUSD > 0 ? `$${row.futureDebtUSD.toFixed(2)}` : ''
+            row.status,
+            row.solvencyPeriod,
+            row.monthsOwed || '',
+            row.futureDebtForAdjustments > 0 ? `$${row.futureDebtForAdjustments.toFixed(2)}` : ''
         ]);
 
         const filename = `reporte_integral_${new Date().toISOString().split('T')[0]}`;
@@ -635,15 +654,16 @@ export default function ReportsPage() {
                 headStyles: { fillColor: [30, 80, 180] }, 
                 styles: { fontSize: 7, cellPadding: 1.5, overflow: 'linebreak' },
                  columnStyles: { 
-                    0: { cellWidth: 30 },
-                    1: { cellWidth: 25 },
-                    2: { cellWidth: 20 },
-                    3: { halign: 'right', cellWidth: 20 },
-                    4: { halign: 'right', cellWidth: 20 }, 
-                    5: { halign: 'right', cellWidth: 20 },
-                    6: { cellWidth: 20 },
-                    7: { halign: 'center', cellWidth: 15 },
-                    8: { halign: 'right', cellWidth: 20 }
+                    0: { cellWidth: 28 }, // Propietario
+                    1: { cellWidth: 20 }, // Propiedad
+                    2: { cellWidth: 18 }, // Fecha Últ. Pago
+                    3: { halign: 'right', cellWidth: 18 }, // Monto Pagado
+                    4: { halign: 'right', cellWidth: 18 }, // Tasa Prom
+                    5: { halign: 'right', cellWidth: 18 }, // Saldo a Favor
+                    6: { cellWidth: 15 }, // Estado
+                    7: { cellWidth: 18 }, // Periodo Solvencia
+                    8: { halign: 'center', cellWidth: 15 }, // Meses
+                    9: { halign: 'right', cellWidth: 20 } // Deuda Futura
                 }
             });
             doc.save(`${filename}.pdf`);
@@ -655,8 +675,8 @@ export default function ReportsPage() {
             XLSX.utils.sheet_add_aoa(worksheet, headers, { origin: "A5" });
             XLSX.utils.sheet_add_json(worksheet, data.map(row => ({
                  "Propietario": row.name, "Propiedad": row.properties, "Fecha Últ. Pago": row.lastPaymentDate, "Monto Pagado (Bs)": row.paidAmount,
-                 "Tasa Prom. (Bs/$)": row.avgRate, "Saldo a Favor (Bs)": row.balance, "Estado": row.status,
-                 "Meses Adeudados": row.monthsOwed || '', "Deuda Futura (USD)": row.futureDebtUSD
+                 "Tasa Prom. (Bs/$)": row.avgRate, "Saldo a Favor (Bs)": row.balance, "Estado": row.status, "Período Solvencia": row.solvencyPeriod,
+                 "Meses Adeudados": row.monthsOwed || '', "Deuda Futura por Ajustes": row.futureDebtForAdjustments
             })), { origin: "A6", skipHeader: true });
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Reporte Integral");
@@ -1015,12 +1035,12 @@ export default function ReportsPage() {
             </div>
             
             <Tabs defaultValue="integral" className="w-full">
-                 <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 h-auto flex-wrap">
+                 <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 h-auto flex-wrap">
                     <TabsTrigger value="integral">Integral</TabsTrigger>
                     <TabsTrigger value="individual">Ficha Individual</TabsTrigger>
                     <TabsTrigger value="delinquency">Morosidad</TabsTrigger>
                     <TabsTrigger value="balance">Saldos a Favor</TabsTrigger>
-                    <TabsTrigger value="income">Informe de Ingresos</TabsTrigger>
+                    <TabsTrigger value="income">Ingresos</TabsTrigger>
                     <TabsTrigger value="advance_payments">Pagos Anticipados</TabsTrigger>
                     <TabsTrigger value="charts">Gráficos</TabsTrigger>
                 </TabsList>
@@ -1091,8 +1111,9 @@ export default function ReportsPage() {
                                         <TableHead className="text-right">Tasa Prom.</TableHead>
                                         <TableHead className="text-right">Saldo a Favor</TableHead>
                                         <TableHead>Estado</TableHead>
+                                        <TableHead>Período Solvencia</TableHead>
                                         <TableHead className="text-center">Meses Deuda</TableHead>
-                                        <TableHead className="text-right">Deuda Futura (USD)</TableHead>
+                                        <TableHead className="text-right">Deuda Futura por Ajustes</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -1107,8 +1128,9 @@ export default function ReportsPage() {
                                             <TableCell>
                                                 <span className={cn('font-semibold', row.status === 'No Solvente' ? 'text-destructive' : 'text-green-600')}>{row.status}</span>
                                             </TableCell>
+                                            <TableCell>{row.solvencyPeriod}</TableCell>
                                             <TableCell className="text-center">{row.monthsOwed || ''}</TableCell>
-                                            <TableCell className="text-right">{row.futureDebtUSD > 0 ? `$${row.futureDebtUSD.toFixed(2)}`: ''}</TableCell>
+                                            <TableCell className="text-right">{row.futureDebtForAdjustments > 0 ? `$${row.futureDebtForAdjustments.toFixed(2)}`: ''}</TableCell>
                                         </TableRow>
                                     ))}
                                 </TableBody>
