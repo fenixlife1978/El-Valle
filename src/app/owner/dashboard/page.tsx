@@ -677,4 +677,3 @@ export default function OwnerDashboardPage() {
     </div>
   );
 }
-

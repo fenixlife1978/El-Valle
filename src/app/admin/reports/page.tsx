@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -93,7 +92,6 @@ type IntegralReportRow = {
     avgRate: number;
     balance: number;
     status: 'Solvente' | 'No Solvente';
-    period: string;
     monthsOwed?: number;
 };
 
@@ -282,10 +280,6 @@ export default function ReportsPage() {
 
 
     const integralReportData = useMemo<IntegralReportRow[]>(() => {
-        const now = new Date();
-        const currentYear = now.getFullYear();
-        const currentMonth = now.getMonth() + 1;
-
         const getSortKeys = (owner: Owner) => {
             const prop = (owner.properties && owner.properties.length > 0) ? owner.properties[0] : { street: 'N/A', house: 'N/A' };
             const streetNum = parseInt(String(prop.street || '').replace('Calle ', '') || '999');
@@ -303,41 +297,9 @@ export default function ReportsPage() {
         });
 
         return sortedOwners.map(owner => {
-            const ownerDebts = allDebts.filter(d => d.ownerId === owner.id);
-            const ownerHistorical = allHistoricalPayments.filter(h => h.ownerId === owner.id);
+            const ownerDebts = allDebts.filter(d => d.ownerId === owner.id && d.status === 'pending');
             
-            const pendingDebts = ownerDebts.filter(d => {
-                if (d.status !== 'pending') return false;
-                
-                if (d.description.toLowerCase().includes('ajuste')) {
-                    const debtDate = new Date(d.year, d.month - 1);
-                    const currentDate = new Date(currentYear, currentMonth - 1);
-                    return debtDate <= currentDate;
-                }
-                return true;
-            });
-            
-            let status: 'Solvente' | 'No Solvente' = pendingDebts.length > 0 ? 'No Solvente' : 'Solvente';
-            let period = '';
-
-            if (status === 'No Solvente') {
-                const sortedPending = [...pendingDebts].sort((a,b) => a.year - b.year || a.month - a.month);
-                const firstDebt = sortedPending[0];
-                const lastDebt = sortedPending[sortedPending.length - 1];
-                period = `${monthsLocale[firstDebt.month]}/${firstDebt.year} - ${monthsLocale[lastDebt.month]}/${lastDebt.year}`;
-            } else {
-                 const allPaidPeriods = new Set<string>();
-                ownerDebts.filter(d => d.status === 'paid').forEach(d => allPaidPeriods.add(`${d.year}-${String(d.month).padStart(2, '0')}`));
-                ownerHistorical.forEach(h => allPaidPeriods.add(`${h.referenceYear}-${String(h.referenceMonth).padStart(2, '0')}`));
-
-                if (allPaidPeriods.size > 0) {
-                    const lastPaidPeriod = Array.from(allPaidPeriods).sort().pop()!;
-                    const [year, month] = lastPaidPeriod.split('-').map(Number);
-                    period = `Hasta ${monthsLocale[month]}/${year}`;
-                } else {
-                    period = "Solvente (Sin Pagos)";
-                }
-            }
+            let status: 'Solvente' | 'No Solvente' = ownerDebts.length > 0 ? 'No Solvente' : 'Solvente';
             
             const fromDate = integralDateRange.from;
             const toDate = integralDateRange.to;
@@ -374,8 +336,7 @@ export default function ReportsPage() {
                 avgRate: avgRate,
                 balance: owner.balance,
                 status,
-                period,
-                monthsOwed: status === 'No Solvente' ? pendingDebts.length : undefined,
+                monthsOwed: status === 'No Solvente' ? ownerDebts.length : undefined,
             };
         }).filter(row => {
             const statusMatch = integralStatusFilter === 'todos' || row.status.toLowerCase().replace(' ', '') === integralStatusFilter.toLowerCase().replace(' ', '');
@@ -423,6 +384,9 @@ export default function ReportsPage() {
             // Use optional chaining to safely access property
             const street = debt.property?.street;
             if (!street || !street.startsWith('Calle')) return false;
+            const streetNumber = parseInt(street.replace('Calle ', ''));
+            if (streetNumber > 8) return false;
+
 
             const debtDate = new Date(debt.year, debt.month - 1);
             if (fromDate && debtDate < fromDate) return false;
@@ -463,6 +427,9 @@ export default function ReportsPage() {
         const incomeByStreet = filteredPayments.reduce((acc, payment) => {
             payment.beneficiaries.forEach(beneficiary => {
                 if (beneficiary.street && beneficiary.street.startsWith('Calle')) {
+                    const streetNumber = parseInt(beneficiary.street.replace('Calle ', ''));
+                    if (streetNumber > 8) return;
+
                     if (!acc[beneficiary.street]) acc[beneficiary.street] = 0;
                     // Approximate income in USD
                     const incomeUSD = beneficiary.amount / (payment.exchangeRate || activeRate || 1);
@@ -691,7 +658,6 @@ export default function ReportsPage() {
             try { doc.addImage(companyInfo.logo, 'PNG', margin, margin, 20, 20); } 
             catch (e) { console.error("Error adding logo to PDF:", e); }
         }
-        doc.setFontSize(16).setFont('helvetica', 'bold').text('ESTADO DE CUENTA', pageWidth / 2, margin + 15, { align: 'center'});
         
         doc.setFontSize(9).setFont('helvetica', 'normal');
         doc.text(`${companyInfo.name} | ${companyInfo.rif}`, margin, margin + 25);
@@ -704,6 +670,11 @@ export default function ReportsPage() {
         doc.text(dateText, pageWidth - margin, margin + 30, { align: 'right'});
         
         let startY = margin + 45;
+
+        // --- Title ---
+        doc.setFontSize(16).setFont('helvetica', 'bold');
+        doc.text('ESTADO DE CUENTA', pageWidth / 2, margin + 15, { align: 'center'});
+
 
         // --- Payment Summary ---
         const approvedPayments = allPayments.filter(p => p.beneficiaries.some(b => b.ownerId === selectedIndividual.id) && p.status === 'aprobado');
@@ -745,21 +716,24 @@ export default function ReportsPage() {
             doc.setFontSize(11).setFont('helvetica', 'bold').text('Resumen de Deudas', margin, startY);
             startY += 7;
             const debtBody = ownerDebts
-                .sort((a,b) => b.year - a.year || b.month - a.month) // Sort descending
+                .sort((a,b) => b.year - a.year || b.month - a.month)
                 .map(d => [
                 `${Object.values(monthsLocale)[d.month -1] || ''} ${d.year}`,
+                d.description,
                 `$${d.amountUSD.toFixed(2)}`,
+                `Bs. ${formatToTwoDecimals(d.amountUSD * activeRate)}`,
                 d.status === 'paid' ? 'Pagada' : 'Pendiente'
             ]);
             (doc as any).autoTable({
-                head: [['Período', 'Monto ($)', 'Estado']], 
+                head: [['Período', 'Concepto', 'Monto ($)', 'Monto (Bs)', 'Estado']], 
                 body: debtBody,
                 startY: startY, 
                 theme: 'striped', 
                 headStyles: { fillColor: [22, 102, 102] }, // Teal header
                 styles: { fontSize: 8 },
-                foot: [[ { content: 'Total Adeudado', colSpan: 1, styles: { halign: 'right', fontStyle: 'bold' } }, 
+                foot: [[ { content: 'Total Adeudado', colSpan: 2, styles: { halign: 'right', fontStyle: 'bold' } }, 
                          { content: `$${totalDebtUsd.toFixed(2)}`, styles: { fontStyle: 'bold' } },
+                         { content: `Bs. ${formatToTwoDecimals(totalDebtUsd * activeRate)}`, styles: { fontStyle: 'bold' } },
                          ''
                       ]],
                 footStyles: { fillColor: [22, 102, 102], textColor: 255 }
@@ -771,6 +745,12 @@ export default function ReportsPage() {
         doc.setFontSize(11).setFont('helvetica', 'bold');
         doc.text(`Saldo a Favor Actual: Bs. ${formatToTwoDecimals(selectedIndividual.balance)}`, margin, startY);
         startY += 10;
+
+        // --- Legal Note ---
+        doc.setFont( 'helvetica', 'normal').setFontSize(8);
+        const legalText = "Los montos en bolívares expresados en las deudas son producto de la conversión aplicada a la tasa del día de hoy, por lo que dichos montos variarán según vaya cambiando la tasa al día de pago.";
+        const splitText = doc.splitTextToSize(legalText, pageWidth - margin * 2);
+        doc.text(splitText, margin, startY);
 
         doc.save(`${filename}.pdf`);
     };
@@ -1458,5 +1438,3 @@ export default function ReportsPage() {
         </div>
     );
 }
-
-
