@@ -71,6 +71,7 @@ type Debt = {
     description: string;
     status: 'pending' | 'paid';
     paymentDate?: Timestamp;
+    paidAmountUSD?: number;
     property: { street: string, house: string };
 };
 
@@ -112,6 +113,14 @@ type BalanceOwner = {
 };
 
 type TransactionHistoryItem = (Debt & { type: 'debt' }) | (Payment & { type: 'payment' });
+
+type AdvancePaymentReportRow = {
+    ownerId: string;
+    ownerName: string;
+    october: { amount: number; status: string; toAdjust: number; } | null;
+    november: { amount: number; status: string; toAdjust: number; } | null;
+    december: { amount: number; status: string; toAdjust: number; } | null;
+};
 
 
 const monthsLocale: { [key: number]: string } = {
@@ -462,6 +471,56 @@ export default function ReportsPage() {
         return balanceOwners.filter(o => o.name.toLowerCase().includes(balanceSearchTerm.toLowerCase()));
     }, [balanceSearchTerm, balanceOwners]);
 
+    // --- Advance Payment Report Logic ---
+    const advancePaymentReportData = useMemo<AdvancePaymentReportRow[]>(() => {
+        const targetYear = 2025;
+        const targetMonths = [10, 11, 12]; // Oct, Nov, Dec
+        const feeThreshold = 15;
+        const adjustmentAmount = 5;
+
+        // Filter debts for the specific period and type
+        const advanceDebts = allDebts.filter(debt => 
+            debt.year === targetYear && 
+            targetMonths.includes(debt.month) && 
+            debt.status === 'paid' && 
+            debt.description.includes('adelantado')
+        );
+
+        if (advanceDebts.length === 0) return [];
+
+        const dataByOwner = new Map<string, AdvancePaymentReportRow>();
+
+        for (const debt of advanceDebts) {
+            if (!dataByOwner.has(debt.ownerId)) {
+                const owner = owners.find(o => o.id === debt.ownerId);
+                dataByOwner.set(debt.ownerId, {
+                    ownerId: debt.ownerId,
+                    ownerName: owner?.name || 'Desconocido',
+                    october: null,
+                    november: null,
+                    december: null,
+                });
+            }
+
+            const ownerData = dataByOwner.get(debt.ownerId)!;
+            const paidAmount = debt.paidAmountUSD || debt.amountUSD;
+            const needsAdjustment = paidAmount < feeThreshold && paidAmount === 10;
+            
+            const monthData = {
+                amount: paidAmount,
+                status: needsAdjustment ? 'Por ajustar' : 'Pagado',
+                toAdjust: needsAdjustment ? adjustmentAmount : 0,
+            };
+
+            if (debt.month === 10) ownerData.october = monthData;
+            else if (debt.month === 11) ownerData.november = monthData;
+            else if (debt.month === 12) ownerData.december = monthData;
+        }
+
+        return Array.from(dataByOwner.values());
+    }, [allDebts, owners]);
+
+
     // --- Handlers ---
     const incomeReportRows = useMemo<IncomeReportRow[]>(() => {
         const ownersMap = new Map(owners.map(o => [o.id, o]));
@@ -721,11 +780,10 @@ export default function ReportsPage() {
                 `${Object.values(monthsLocale)[d.month -1] || ''} ${d.year}`,
                 d.description,
                 `$${d.amountUSD.toFixed(2)}`,
-                `Bs. ${formatToTwoDecimals(d.amountUSD * activeRate)}`,
                 d.status === 'paid' ? 'Pagada' : 'Pendiente'
             ]);
             (doc as any).autoTable({
-                head: [['Período', 'Concepto', 'Monto ($)', 'Monto (Bs)', 'Estado']], 
+                head: [['Período', 'Concepto', 'Monto ($)', 'Estado']], 
                 body: debtBody,
                 startY: startY, 
                 theme: 'striped', 
@@ -733,7 +791,6 @@ export default function ReportsPage() {
                 styles: { fontSize: 8 },
                 foot: [[ { content: 'Total Adeudado', colSpan: 2, styles: { halign: 'right', fontStyle: 'bold' } }, 
                          { content: `$${totalDebtUsd.toFixed(2)}`, styles: { fontStyle: 'bold' } },
-                         { content: `Bs. ${formatToTwoDecimals(totalDebtUsd * activeRate)}`, styles: { fontStyle: 'bold' } },
                          ''
                       ]],
                 footStyles: { fillColor: [22, 102, 102], textColor: 255 }
@@ -745,12 +802,6 @@ export default function ReportsPage() {
         doc.setFontSize(11).setFont('helvetica', 'bold');
         doc.text(`Saldo a Favor Actual: Bs. ${formatToTwoDecimals(selectedIndividual.balance)}`, margin, startY);
         startY += 10;
-
-        // --- Legal Note ---
-        doc.setFont( 'helvetica', 'normal').setFontSize(8);
-        const legalText = "Los montos en bolívares expresados en las deudas son producto de la conversión aplicada a la tasa del día de hoy, por lo que dichos montos variarán según vaya cambiando la tasa al día de pago.";
-        const splitText = doc.splitTextToSize(legalText, pageWidth - margin * 2);
-        doc.text(splitText, margin, startY);
 
         doc.save(`${filename}.pdf`);
     };
@@ -840,6 +891,57 @@ export default function ReportsPage() {
         }
     };
 
+    const handleExportAdvancePaymentReport = (formatType: 'pdf' | 'excel') => {
+        const data = advancePaymentReportData;
+        if (data.length === 0) {
+            toast({ variant: 'destructive', title: 'Nada para exportar', description: 'No hay pagos anticipados para este período.' });
+            return;
+        }
+    
+        const filename = `reporte_pagos_anticipados_Q4_2025_${format(new Date(), 'yyyy-MM-dd')}`;
+        const head = [
+            [{ content: 'Propietario', rowSpan: 2 }, { content: 'Octubre 2025', colSpan: 3 }, { content: 'Noviembre 2025', colSpan: 3 }, { content: 'Diciembre 2025', colSpan: 3 }],
+            ['Monto ($)', 'Estado', 'Por Ajustar ($)', 'Monto ($)', 'Estado', 'Por Ajustar ($)', 'Monto ($)', 'Estado', 'Por Ajustar ($)'],
+        ];
+        const body = data.map(row => [
+            row.ownerName,
+            row.october ? `$${row.october.amount.toFixed(2)}` : '—',
+            row.october ? row.october.status : '—',
+            row.october ? (row.october.toAdjust > 0 ? `$${row.october.toAdjust.toFixed(2)}` : '—') : '—',
+            row.november ? `$${row.november.amount.toFixed(2)}` : '—',
+            row.november ? row.november.status : '—',
+            row.november ? (row.november.toAdjust > 0 ? `$${row.november.toAdjust.toFixed(2)}` : '—') : '—',
+            row.december ? `$${row.december.amount.toFixed(2)}` : '—',
+            row.december ? row.december.status : '—',
+            row.december ? (row.december.toAdjust > 0 ? `$${row.december.toAdjust.toFixed(2)}` : '—') : '—',
+        ]);
+    
+        if (formatType === 'pdf') {
+            const doc = new jsPDF({ orientation: 'landscape' });
+            if (companyInfo?.name) {
+                doc.setFontSize(16).setFont('helvetica', 'bold').text(companyInfo.name, doc.internal.pageSize.getWidth() / 2, 15, { align: 'center' });
+            }
+            doc.setFontSize(12).setFont('helvetica', 'bold').text('Reporte de Pagos Anticipados: Octubre - Diciembre 2025', doc.internal.pageSize.getWidth() / 2, 22, { align: 'center' });
+            doc.setFontSize(8).setFont('helvetica', 'normal').text(`Generado el: ${format(new Date(), "dd/MM/yyyy HH:mm")}`, doc.internal.pageSize.getWidth() / 2, 27, { align: 'center' });
+    
+            (doc as any).autoTable({
+                head: head,
+                body: body,
+                startY: 35,
+                theme: 'grid',
+                headStyles: { fillColor: [30, 80, 180], textColor: 255, fontStyle: 'bold', halign: 'center' },
+                styles: { fontSize: 8, cellPadding: 2, halign: 'center' },
+                columnStyles: {
+                    0: { halign: 'left', fontStyle: 'bold' }
+                }
+            });
+            doc.save(`${filename}.pdf`);
+        } else {
+            // Excel export would be more complex due to merged cells, a simplified version can be provided
+            toast({ title: "Exportación a Excel no implementada", description: "La exportación de reportes con celdas combinadas es compleja."});
+        }
+    };
+
     const handleExportChart = async (chartId: string, title: string, formatType: 'pdf' | 'excel') => {
         const chartElement = document.getElementById(chartId);
         if (!chartElement) return;
@@ -901,12 +1003,13 @@ export default function ReportsPage() {
             </div>
             
             <Tabs defaultValue="integral" className="w-full">
-                 <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-5 h-auto flex-wrap">
+                 <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 h-auto flex-wrap">
                     <TabsTrigger value="integral">Integral</TabsTrigger>
                     <TabsTrigger value="individual">Ficha Individual</TabsTrigger>
                     <TabsTrigger value="delinquency">Morosidad</TabsTrigger>
                     <TabsTrigger value="balance">Saldos a Favor</TabsTrigger>
                     <TabsTrigger value="income">Informe de Ingresos</TabsTrigger>
+                    <TabsTrigger value="advance_payments">Pagos Anticipados</TabsTrigger>
                     <TabsTrigger value="charts">Gráficos</TabsTrigger>
                 </TabsList>
                 
@@ -1346,6 +1449,72 @@ export default function ReportsPage() {
                     </Card>
                 </TabsContent>
 
+                <TabsContent value="advance_payments">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Reporte de Pagos Anticipados (Oct-Dic 2025)</CardTitle>
+                            <CardDescription>Auditoría de pagos por adelantado y ajustes pendientes para el último trimestre de 2025.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="flex justify-end gap-2 mb-4">
+                                <Button variant="outline" onClick={() => handleExportAdvancePaymentReport('pdf')} disabled={generatingReport}>
+                                    <FileText className="mr-2 h-4 w-4" /> Exportar a PDF
+                                </Button>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead rowSpan={2} className="align-bottom">Propietario</TableHead>
+                                            <TableHead colSpan={3} className="text-center">Octubre 2025</TableHead>
+                                            <TableHead colSpan={3} className="text-center">Noviembre 2025</TableHead>
+                                            <TableHead colSpan={3} className="text-center">Diciembre 2025</TableHead>
+                                        </TableRow>
+                                        <TableRow>
+                                            <TableHead className="text-center">Monto ($)</TableHead>
+                                            <TableHead className="text-center">Estado</TableHead>
+                                            <TableHead className="text-center">Por Ajustar ($)</TableHead>
+                                            <TableHead className="text-center">Monto ($)</TableHead>
+                                            <TableHead className="text-center">Estado</TableHead>
+                                            <TableHead className="text-center">Por Ajustar ($)</TableHead>
+                                            <TableHead className="text-center">Monto ($)</TableHead>
+                                            <TableHead className="text-center">Estado</TableHead>
+                                            <TableHead className="text-center">Por Ajustar ($)</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {advancePaymentReportData.length > 0 ? (
+                                            advancePaymentReportData.map(row => (
+                                                <TableRow key={row.ownerId}>
+                                                    <TableCell className="font-medium">{row.ownerName}</TableCell>
+                                                    
+                                                    <TableCell className="text-center">{row.october ? `$${row.october.amount.toFixed(2)}` : '—'}</TableCell>
+                                                    <TableCell className="text-center">{row.october ? row.october.status : '—'}</TableCell>
+                                                    <TableCell className="text-center">{row.october && row.october.toAdjust > 0 ? `$${row.october.toAdjust.toFixed(2)}` : '—'}</TableCell>
+                                                    
+                                                    <TableCell className="text-center">{row.november ? `$${row.november.amount.toFixed(2)}` : '—'}</TableCell>
+                                                    <TableCell className="text-center">{row.november ? row.november.status : '—'}</TableCell>
+                                                    <TableCell className="text-center">{row.november && row.november.toAdjust > 0 ? `$${row.november.toAdjust.toFixed(2)}` : '—'}</TableCell>
+                                                    
+                                                    <TableCell className="text-center">{row.december ? `$${row.december.amount.toFixed(2)}` : '—'}</TableCell>
+                                                    <TableCell className="text-center">{row.december ? row.december.status : '—'}</TableCell>
+                                                    <TableCell className="text-center">{row.december && row.december.toAdjust > 0 ? `$${row.december.toAdjust.toFixed(2)}` : '—'}</TableCell>
+                                                </TableRow>
+                                            ))
+                                        ) : (
+                                            <TableRow>
+                                                <TableCell colSpan={10} className="h-24 text-center">
+                                                    No se encontraron pagos anticipados para el período Oct-Dic 2025.
+                                                </TableCell>
+                                            </TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
                  <TabsContent value="charts">
                      <Card>
                         <CardHeader>
@@ -1379,7 +1548,7 @@ export default function ReportsPage() {
                             </div>
                         </CardHeader>
                         <CardContent className="space-y-8">
-                             <div id="debt-chart-container" className="p-4 bg-gray-800 text-white rounded-lg">
+                             <div className="p-4 bg-gray-800 text-white rounded-lg" id="debt-chart-container">
                                 <h3 className="font-semibold text-center mb-4">Deudas Actuales por Calle (USD)</h3>
                                 {debtsByStreetChartData.length > 0 ? (
                                 <ResponsiveContainer width="100%" height={350}>
@@ -1400,12 +1569,12 @@ export default function ReportsPage() {
                                 ) : (
                                     <p className="text-center text-gray-400 py-8">No hay datos de deuda para mostrar en el período seleccionado.</p>
                                 )}
-                                 <div className="flex justify-center gap-2 mt-4">
-                                    <Button size="sm" variant="outline" onClick={() => handleExportChart('debt-chart-container', 'Gráfico de Deuda por Calle (USD)', 'pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
-                                    <Button size="sm" variant="outline" onClick={() => handleExportChart('debt-chart-container', 'Gráfico de Deuda por Calle (USD)', 'excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
+                                <div className="flex justify-center gap-2 mt-4">
+                                   <Button size="sm" variant="outline" onClick={() => handleExportChart('debt-chart-container', 'Gráfico de Deuda por Calle (USD)', 'pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
+                                   <Button size="sm" variant="outline" onClick={() => handleExportChart('debt-chart-container', 'Gráfico de Deuda por Calle (USD)', 'excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
                                 </div>
                              </div>
-                             <div id="income-chart-container" className="p-4 bg-gray-800 text-white rounded-lg">
+                             <div className="p-4 bg-gray-800 text-white rounded-lg" id="income-chart-container">
                                 <h3 className="font-semibold text-center mb-4">Ingresos por Calle (USD)</h3>
                                 {incomeByStreetChartData.length > 0 ? (
                                 <ResponsiveContainer width="100%" height={350}>
@@ -1427,9 +1596,9 @@ export default function ReportsPage() {
                                     <p className="text-center text-gray-400 py-8">No hay datos de ingresos para mostrar en el período seleccionado.</p>
                                 )}
                                  <div className="flex justify-center gap-2 mt-4">
-                                    <Button size="sm" variant="outline" onClick={() => handleExportChart('income-chart-container', 'Gráfico de Ingresos por Calle (USD)', 'pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
-                                    <Button size="sm" variant="outline" onClick={() => handleExportChart('income-chart-container', 'Gráfico de Ingresos por Calle (USD)', 'excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
-                                </div>
+                                     <Button size="sm" variant="outline" onClick={() => handleExportChart('income-chart-container', 'Gráfico de Ingresos por Calle (USD)', 'pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
+                                     <Button size="sm" variant="outline" onClick={() => handleExportChart('income-chart-container', 'Gráfico de Ingresos por Calle (USD)', 'excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
+                                 </div>
                              </div>
                         </CardContent>
                      </Card>
