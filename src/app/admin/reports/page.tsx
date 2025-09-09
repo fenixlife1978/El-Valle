@@ -94,6 +94,7 @@ type IntegralReportRow = {
     balance: number;
     status: 'Solvente' | 'No Solvente';
     monthsOwed?: number;
+    futureDebtUSD: number;
 };
 
 type DelinquentOwner = {
@@ -295,7 +296,7 @@ export default function ReportsPage() {
             const houseNum = parseInt(String(prop.house || '').replace('Casa ', '') || '999');
             return { streetNum, houseNum };
         };
-
+    
         const sortedOwners = [...owners].sort((a, b) => {
             const aKeys = getSortKeys(a);
             const bKeys = getSortKeys(b);
@@ -304,28 +305,41 @@ export default function ReportsPage() {
             }
             return aKeys.houseNum - bKeys.houseNum;
         });
-
+    
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth() + 1;
+    
         return sortedOwners.map(owner => {
             const ownerDebts = allDebts.filter(d => d.ownerId === owner.id && d.status === 'pending');
             
-            let status: 'Solvente' | 'No Solvente' = ownerDebts.length > 0 ? 'No Solvente' : 'Solvente';
+            // New solvency logic
+            const dueDebts = ownerDebts.filter(d => 
+                d.year < currentYear || (d.year === currentYear && d.month <= currentMonth)
+            );
+            const futureDebts = ownerDebts.filter(d => 
+                d.year > currentYear || (d.year === currentYear && d.month > currentMonth)
+            );
+            
+            const futureDebtUSD = futureDebts.reduce((sum, d) => sum + d.amountUSD, 0);
+            const status: 'Solvente' | 'No Solvente' = dueDebts.length > 0 ? 'No Solvente' : 'Solvente';
             
             const fromDate = integralDateRange.from;
             const toDate = integralDateRange.to;
-
+    
             if(fromDate) fromDate.setHours(0,0,0,0);
             if(toDate) toDate.setHours(23,59,59,999);
-
+    
             const ownerPayments = allPayments.filter(p => {
                 const isOwnerPayment = p.beneficiaries.some(b => b.ownerId === owner.id) && p.status === 'aprobado';
                 if (!isOwnerPayment) return false;
-
+    
                 const paymentDate = p.paymentDate.toDate();
                 if (fromDate && paymentDate < fromDate) return false;
                 if (toDate && paymentDate > toDate) return false;
                 return true;
             });
-
+    
             const totalPaid = ownerPayments.reduce((sum, p) => sum + p.totalAmount, 0);
             const totalRateWeight = ownerPayments.reduce((sum, p) => sum + ((p.exchangeRate || 0) * p.totalAmount), 0);
             const avgRate = totalPaid > 0 ? totalRateWeight / totalPaid : 0;
@@ -335,7 +349,7 @@ export default function ReportsPage() {
                 const lastPayment = ownerPayments.sort((a,b) => b.paymentDate.toMillis() - a.paymentDate.toMillis())[0];
                 lastPaymentDate = format(lastPayment.paymentDate.toDate(), 'dd/MM/yyyy');
             }
-
+    
             return {
                 ownerId: owner.id,
                 name: owner.name,
@@ -345,14 +359,15 @@ export default function ReportsPage() {
                 avgRate: avgRate,
                 balance: owner.balance,
                 status,
-                monthsOwed: status === 'No Solvente' ? ownerDebts.length : undefined,
+                monthsOwed: status === 'No Solvente' ? dueDebts.length : undefined,
+                futureDebtUSD: futureDebtUSD
             };
         }).filter(row => {
             const statusMatch = integralStatusFilter === 'todos' || row.status.toLowerCase().replace(' ', '') === integralStatusFilter.toLowerCase().replace(' ', '');
             const ownerMatch = !integralOwnerFilter || row.name.toLowerCase().includes(integralOwnerFilter.toLowerCase());
             return statusMatch && ownerMatch;
         });
-    }, [owners, allDebts, allPayments, allHistoricalPayments, integralDateRange, integralStatusFilter, integralOwnerFilter]);
+    }, [owners, allDebts, allPayments, integralDateRange, integralStatusFilter, integralOwnerFilter]);
     
     // --- Delinquency Report Logic ---
     const filteredAndSortedDelinquents = useMemo(() => {
@@ -578,13 +593,14 @@ export default function ReportsPage() {
 
     const handleExportIntegral = (formatType: 'pdf' | 'excel') => {
         const data = integralReportData;
-        const headers = [["Propietario", "Propiedad", "Fecha Últ. Pago", "Monto Pagado (Bs)", "Tasa Prom. (Bs/$)", "Saldo a Favor (Bs)", "Estado", "Meses Adeudados"]];
+        const headers = [["Propietario", "Propiedad", "Fecha Últ. Pago", "Monto Pagado (Bs)", "Tasa Prom. (Bs/$)", "Saldo a Favor (Bs)", "Estado", "Meses Adeudados", "Deuda Futura (USD)"]];
         const body = data.map(row => [
             row.name, row.properties, row.lastPaymentDate,
             row.paidAmount > 0 ? formatToTwoDecimals(row.paidAmount) : '',
             row.avgRate > 0 ? formatToTwoDecimals(row.avgRate) : '',
             row.balance > 0 ? formatToTwoDecimals(row.balance) : '',
-            row.status, row.monthsOwed || ''
+            row.status, row.monthsOwed || '',
+            row.futureDebtUSD > 0 ? `$${row.futureDebtUSD.toFixed(2)}` : ''
         ]);
 
         const filename = `reporte_integral_${new Date().toISOString().split('T')[0]}`;
@@ -599,7 +615,7 @@ export default function ReportsPage() {
         }
 
         if (formatType === 'pdf') {
-            const doc = new jsPDF({ orientation: 'portrait' });
+            const doc = new jsPDF({ orientation: 'landscape' });
             const pageWidth = doc.internal.pageSize.getWidth();
             let startY = 15;
             if (companyInfo?.logo) doc.addImage(companyInfo.logo, 'PNG', 15, startY, 20, 20);
@@ -626,7 +642,8 @@ export default function ReportsPage() {
                     4: { halign: 'right', cellWidth: 20 }, 
                     5: { halign: 'right', cellWidth: 20 },
                     6: { cellWidth: 20 },
-                    7: { halign: 'center', cellWidth: 15 } 
+                    7: { halign: 'center', cellWidth: 15 },
+                    8: { halign: 'right', cellWidth: 20 }
                 }
             });
             doc.save(`${filename}.pdf`);
@@ -639,7 +656,7 @@ export default function ReportsPage() {
             XLSX.utils.sheet_add_json(worksheet, data.map(row => ({
                  "Propietario": row.name, "Propiedad": row.properties, "Fecha Últ. Pago": row.lastPaymentDate, "Monto Pagado (Bs)": row.paidAmount,
                  "Tasa Prom. (Bs/$)": row.avgRate, "Saldo a Favor (Bs)": row.balance, "Estado": row.status,
-                 "Meses Adeudados": row.monthsOwed || ''
+                 "Meses Adeudados": row.monthsOwed || '', "Deuda Futura (USD)": row.futureDebtUSD
             })), { origin: "A6", skipHeader: true });
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Reporte Integral");
@@ -718,22 +735,18 @@ export default function ReportsPage() {
             catch (e) { console.error("Error adding logo to PDF:", e); }
         }
         
-        doc.setFontSize(9).setFont('helvetica', 'normal');
-        doc.text(`${companyInfo.name} | ${companyInfo.rif}`, margin, margin + 25);
-        doc.text(`Propietario: ${selectedIndividual.name}`, margin, margin + 30);
-        doc.text(`Propiedad(es): ${(selectedIndividual.properties || []).map(p => `${p.street}-${p.house}`).join(', ')}`, margin, margin + 35);
-        
-        const dateText = `Fecha: ${format(new Date(), "dd/MM/yyyy 'a las' HH:mm:ss")}`;
-        
-        doc.setFontSize(9).setFont('helvetica', 'normal');
-        doc.text(dateText, pageWidth - margin, margin + 30, { align: 'right'});
-        
-        let startY = margin + 45;
-
-        // --- Title ---
         doc.setFontSize(16).setFont('helvetica', 'bold');
         doc.text('ESTADO DE CUENTA', pageWidth / 2, margin + 15, { align: 'center'});
 
+        const dateText = `Fecha: ${format(new Date(), "dd/MM/yyyy 'a las' HH:mm:ss")}`;
+        doc.setFontSize(9).setFont('helvetica', 'normal');
+        doc.text(dateText, pageWidth - margin, margin + 30, { align: 'right'});
+
+        doc.text(`${companyInfo.name} | ${companyInfo.rif}`, margin, margin + 25);
+        doc.text(`Propietario: ${selectedIndividual.name}`, margin, margin + 30);
+        doc.text(`Propiedad(es): ${(selectedIndividual.properties || []).map(p => `${p.street}-${p.house}`).join(', ')}`, margin, margin + 35);
+
+        let startY = margin + 45;
 
         // --- Payment Summary ---
         const approvedPayments = allPayments.filter(p => p.beneficiaries.some(b => b.ownerId === selectedIndividual.id) && p.status === 'aprobado');
@@ -801,7 +814,6 @@ export default function ReportsPage() {
         // --- Balance Footer ---
         doc.setFontSize(11).setFont('helvetica', 'bold');
         doc.text(`Saldo a Favor Actual: Bs. ${formatToTwoDecimals(selectedIndividual.balance)}`, margin, startY);
-        startY += 10;
 
         doc.save(`${filename}.pdf`);
     };
@@ -1080,6 +1092,7 @@ export default function ReportsPage() {
                                         <TableHead className="text-right">Saldo a Favor</TableHead>
                                         <TableHead>Estado</TableHead>
                                         <TableHead className="text-center">Meses Deuda</TableHead>
+                                        <TableHead className="text-right">Deuda Futura (USD)</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -1095,6 +1108,7 @@ export default function ReportsPage() {
                                                 <span className={cn('font-semibold', row.status === 'No Solvente' ? 'text-destructive' : 'text-green-600')}>{row.status}</span>
                                             </TableCell>
                                             <TableCell className="text-center">{row.monthsOwed || ''}</TableCell>
+                                            <TableCell className="text-right">{row.futureDebtUSD > 0 ? `$${row.futureDebtUSD.toFixed(2)}`: ''}</TableCell>
                                         </TableRow>
                                     ))}
                                 </TableBody>
