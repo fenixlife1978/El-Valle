@@ -343,7 +343,9 @@ export default function VerifyPaymentsPage() {
             where("paymentId", "==", payment.id)
         );
         const paidDebtsSnapshot = await getDocs(paidDebtsQuery);
-        const paidDebts = paidDebtsSnapshot.docs.map(doc => ({id: doc.id, ...doc.data()}) as Debt);
+        const paidDebts = paidDebtsSnapshot.docs
+            .map(doc => ({id: doc.id, ...doc.data()}) as Debt)
+            .sort((a,b) => b.year - a.year || b.month - a.month);
         
         setReceiptData({ 
             payment, 
@@ -730,7 +732,7 @@ export default function VerifyPaymentsPage() {
                          )}
                         <div className="mt-6 text-gray-600 text-[10px] space-y-2">
                              <p className="text-left text-[11px] font-bold">Todo propietario que requiera de firma y sello húmedo deberá imprimir éste recibo y hacerlo llegar al condominio para su respectiva estampa.</p>
-                             <p className="text-left">Este recibo confirma que el pago ha sido validado para la(s) cuota(s) y propiedad(es) aquí detalladas.</p>
+                             <p className="text-left">Este recibo confirma que su pago ha sido validado para la(s) cuota(s) y propiedad(es) aquí detalladas.</p>
                              <p className="text-left font-bold mt-2">Firma electrónica: '{companyInfo.name} - Condominio'</p>
                              <hr className="my-4 border-gray-400"/>
                              <p className="italic text-center">Este recibo se generó de manera automática y es válido sin firma manuscrita.</p>
