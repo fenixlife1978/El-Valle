@@ -541,7 +541,7 @@ export default function ReportsPage() {
         combinedHistory.sort((a, b) => {
             const dateA = a.type === 'debt' ? new Date(a.year, a.month-1) : a.paymentDate.toDate();
             const dateB = b.type === 'debt' ? new Date(b.year, b.month-1) : b.paymentDate.toDate();
-            return b.paymentDate - a.paymentDate;
+            return dateB.getTime() - dateA.getTime();
         });
 
         setIndividualHistory(combinedHistory as TransactionHistoryItem[]);
@@ -552,13 +552,13 @@ export default function ReportsPage() {
 
     const handleExportIntegral = (formatType: 'pdf' | 'excel') => {
         const data = integralReportData;
-        const headers = [["Propietario", "Propiedad", "Fecha Últ. Pago", "Monto Pagado (Bs)", "Tasa Prom. (Bs/$)", "Saldo a Favor (Bs)", "Estado", "Período Solvencia", "Meses Adeudados"]];
+        const headers = [["Propietario", "Propiedad", "Fecha Últ. Pago", "Monto Pagado (Bs)", "Tasa Prom. (Bs/$)", "Saldo a Favor (Bs)", "Estado", "Meses Adeudados"]];
         const body = data.map(row => [
             row.name, row.properties, row.lastPaymentDate,
             row.paidAmount > 0 ? formatToTwoDecimals(row.paidAmount) : '',
             row.avgRate > 0 ? formatToTwoDecimals(row.avgRate) : '',
             row.balance > 0 ? formatToTwoDecimals(row.balance) : '',
-            row.status, row.period, row.monthsOwed || ''
+            row.status, row.monthsOwed || ''
         ]);
 
         const filename = `reporte_integral_${new Date().toISOString().split('T')[0]}`;
@@ -600,8 +600,7 @@ export default function ReportsPage() {
                     4: { halign: 'right', cellWidth: 20 }, 
                     5: { halign: 'right', cellWidth: 20 },
                     6: { cellWidth: 20 },
-                    7: { cellWidth: 'auto' },
-                    8: { halign: 'center', cellWidth: 15 } 
+                    7: { halign: 'center', cellWidth: 15 } 
                 }
             });
             doc.save(`${filename}.pdf`);
@@ -614,7 +613,7 @@ export default function ReportsPage() {
             XLSX.utils.sheet_add_json(worksheet, data.map(row => ({
                  "Propietario": row.name, "Propiedad": row.properties, "Fecha Últ. Pago": row.lastPaymentDate, "Monto Pagado (Bs)": row.paidAmount,
                  "Tasa Prom. (Bs/$)": row.avgRate, "Saldo a Favor (Bs)": row.balance, "Estado": row.status,
-                 "Período Solvencia": row.period, "Meses Adeudados": row.monthsOwed || ''
+                 "Meses Adeudados": row.monthsOwed || ''
             })), { origin: "A6", skipHeader: true });
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Reporte Integral");
@@ -997,7 +996,6 @@ export default function ReportsPage() {
                                         <TableHead className="text-right">Tasa Prom.</TableHead>
                                         <TableHead className="text-right">Saldo a Favor</TableHead>
                                         <TableHead>Estado</TableHead>
-                                        <TableHead>Período Solvencia</TableHead>
                                         <TableHead className="text-center">Meses Deuda</TableHead>
                                     </TableRow>
                                 </TableHeader>
@@ -1013,7 +1011,6 @@ export default function ReportsPage() {
                                             <TableCell>
                                                 <span className={cn('font-semibold', row.status === 'No Solvente' ? 'text-destructive' : 'text-green-600')}>{row.status}</span>
                                             </TableCell>
-                                            <TableCell>{row.period}</TableCell>
                                             <TableCell className="text-center">{row.monthsOwed || ''}</TableCell>
                                         </TableRow>
                                     ))}
@@ -1461,4 +1458,5 @@ export default function ReportsPage() {
         </div>
     );
 }
+
 
