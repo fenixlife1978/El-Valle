@@ -232,9 +232,13 @@ export default function VerifyPaymentsPage() {
                 
                 const ownerData = ownerDoc.data();
                 const initialBalance = ownerData.balance || 0;
-                let availableFundsBs = paymentData.totalAmount + initialBalance;
                 
-                // --- 1. Liquidate Pending Debts ---
+                // --- Switch to cents for all calculations ---
+                const initialBalanceInCents = Math.round(initialBalance * 100);
+                const paymentAmountInCents = Math.round(paymentData.totalAmount * 100);
+                let availableFundsInCents = paymentAmountInCents + initialBalanceInCents;
+                
+                // --- 1. Liquidate Pending Debts (in cents) ---
                 const debtsQuery = query(
                     collection(db, 'debts'),
                     where('ownerId', '==', beneficiary.ownerId),
@@ -251,10 +255,10 @@ export default function VerifyPaymentsPage() {
                 if (sortedDebts.length > 0) {
                     for (const debtDoc of sortedDebts) {
                         const debt = { id: debtDoc.id, ...debtDoc.data() } as Debt;
-                        const debtAmountBs = debt.amountUSD * exchangeRate;
+                        const debtAmountInCents = Math.round(debt.amountUSD * exchangeRate * 100);
                         
-                        if (availableFundsBs >= debtAmountBs) {
-                            availableFundsBs -= debtAmountBs;
+                        if (availableFundsInCents >= debtAmountInCents) {
+                            availableFundsInCents -= debtAmountInCents;
                             transaction.update(debtDoc.ref, {
                                 status: 'paid', paidAmountUSD: debt.amountUSD,
                                 paymentDate: paymentData.paymentDate, paymentId: paymentData.id,
@@ -265,15 +269,14 @@ export default function VerifyPaymentsPage() {
                     }
                 }
                 
-                // --- 2 & 3. Create and Liquidate Future Debts ---
-                const condoFeeInBs = condoFee * exchangeRate;
-                if (availableFundsBs >= condoFeeInBs) {
+                // --- 2 & 3. Create and Liquidate Future Debts (in cents) ---
+                const condoFeeInCents = Math.round(condoFee * exchangeRate * 100);
+                if (availableFundsInCents >= condoFeeInCents) {
                     const allExistingDebtsQuery = query(collection(db, 'debts'), where('ownerId', '==', beneficiary.ownerId));
                     const allExistingDebtsSnap = await getDocs(allExistingDebtsQuery);
                     const existingDebtPeriods = new Set(allExistingDebtsSnap.docs.map(d => `${d.data().year}-${d.data().month}`));
 
                     const startDate = startOfMonth(new Date());
-
                     const propertyForFutureDebts = ownerData.properties?.[0];
 
                     if (propertyForFutureDebts) {
@@ -285,8 +288,8 @@ export default function VerifyPaymentsPage() {
                             
                             if (existingDebtPeriods.has(periodKey)) continue;
 
-                            if (availableFundsBs >= condoFeeInBs) {
-                                availableFundsBs -= condoFeeInBs;
+                            if (availableFundsInCents >= condoFeeInCents) {
+                                availableFundsInCents -= condoFeeInCents;
                                 
                                 const debtRef = doc(collection(db, 'debts'));
                                 transaction.set(debtRef, {
@@ -306,7 +309,7 @@ export default function VerifyPaymentsPage() {
                 }
                 
                 // --- 4. Update Balance and generate Observation Note ---
-                const finalBalance = availableFundsBs;
+                const finalBalance = availableFundsInCents / 100; // Convert back to Bs
                 const observationNote = `Pago por Bs. ${formatToTwoDecimals(paymentData.totalAmount)}. Saldo Anterior: Bs. ${formatToTwoDecimals(initialBalance)}, Saldo a Favor Actual después de este recibo: Bs. ${formatToTwoDecimals(finalBalance)}.`;
                 
                 transaction.update(ownerRef, { balance: finalBalance });
@@ -690,6 +693,7 @@ export default function VerifyPaymentsPage() {
                         <hr className="my-2 border-gray-400"/>
                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
                              <p><strong>Beneficiario:</strong></p><p>{receiptData.ownerName}</p>
+                             <p><strong>Unidad:</strong></p><p>{receiptData.ownerUnit}</p>
                              <p><strong>Método de pago:</strong></p><p>{receiptData.payment.type}</p>
                              <p><strong>Banco Emisor:</strong></p><p>{receiptData.payment.bank}</p>
                              <p><strong>N° de Referencia:</strong></p><p>{receiptData.payment.reference}</p>
@@ -716,13 +720,13 @@ export default function VerifyPaymentsPage() {
                                 )) : (
                                     <TableRow>
                                         <TableCell colSpan={2}>Abono a Saldo a Favor</TableCell>
-                                        <TableCell colSpan={2} className="text-right">Bs. {formatToTwoDecimals(receiptData.payment.totalAmount)}</TableCell>
+                                        <TableCell colSpan={2} className="text-right">Bs. {formatToTwoDecimals(receiptData.payment.amount)}</TableCell>
                                     </TableRow>
                                 )}
                             </TableBody>
                         </Table>
                          <div className="text-right font-bold mt-2 pr-4">
-                            Total Pagado: Bs. {formatToTwoDecimals(receiptData.payment.totalAmount)}
+                            Total Pagado: Bs. {formatToTwoDecimals(receiptData.payment.amount)}
                          </div>
                          {receiptData.payment.observations && (
                             <div className="mt-4 p-2 border-t text-xs">
