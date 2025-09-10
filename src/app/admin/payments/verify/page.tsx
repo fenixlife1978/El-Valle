@@ -244,6 +244,7 @@ export default function VerifyPaymentsPage() {
                     where('status', '==', 'pending')
                 );
                 const debtsSnapshot = await getDocs(debtsQuery);
+                // ALWAYS sort debts chronologically to ensure the oldest are paid first.
                 const sortedDebts = debtsSnapshot.docs.sort((a, b) => {
                     const dataA = a.data();
                     const dataB = b.data();
@@ -263,7 +264,7 @@ export default function VerifyPaymentsPage() {
                                 paymentDate: paymentData.paymentDate, paymentId: paymentData.id,
                             });
                         } else {
-                            break; 
+                            break; // Stop if funds are insufficient for the next oldest debt
                         }
                     }
                 }
