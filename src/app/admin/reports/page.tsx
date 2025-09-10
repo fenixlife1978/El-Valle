@@ -305,80 +305,56 @@ export default function ReportsPage() {
             return aKeys.houseNum - bKeys.houseNum;
         });
     
-        const now = new Date();
-        const currentYear = now.getFullYear();
-        const currentMonth = now.getMonth() + 1;
-        const fullFee = 15;
-    
         return sortedOwners.map(owner => {
             const ownerAllDebts = allDebts.filter(d => d.ownerId === owner.id);
             
-            // 1. Calculate total paid amount for each month, considering composite payments.
-            const paidMonths = new Map<string, number>(); // 'YYYY-M' -> paidAmountUSD
+            // --- Solvency Status (based on current date) ---
+            const now = new Date();
+            const currentYear = now.getFullYear();
+            const currentMonth = now.getMonth() + 1;
+            
+            const pendingHistoricalDebts = ownerAllDebts.filter(d => 
+                d.status === 'pending' &&
+                (d.year < currentYear || (d.year === currentYear && d.month <= currentMonth)) &&
+                !d.description.toLowerCase().includes('ajuste') // Ignore pure adjustment debts for solvency status
+            );
+            const status: 'Solvente' | 'No Solvente' = pendingHistoricalDebts.length > 0 ? 'No Solvente' : 'Solvente';
+
+            // --- Solvency Period (based on fully paid months, including future ones) ---
+            const paidAmountsByPeriod = new Map<string, number>(); // Key: 'YYYY-M'
             ownerAllDebts.forEach(d => {
                 if (d.status === 'paid' && d.paidAmountUSD) {
                     const key = `${d.year}-${d.month}`;
-                    const currentPaid = paidMonths.get(key) || 0;
-                    paidMonths.set(key, currentPaid + d.paidAmountUSD);
+                    const currentPaid = paidAmountsByPeriod.get(key) || 0;
+                    paidAmountsByPeriod.set(key, currentPaid + d.paidAmountUSD);
                 }
             });
 
-            // 2. Identify all months up to the current date that are fully paid ($15 or more).
-            const fullyPaidHistoricalPeriods: {year: number, month: number}[] = [];
-            paidMonths.forEach((amount, key) => {
-                const [year, month] = key.split('-').map(Number);
-                if (year < currentYear || (year === currentYear && month <= currentMonth)) {
-                    if (amount >= fullFee) {
-                        fullyPaidHistoricalPeriods.push({year, month});
-                    }
+            const fullyPaidPeriods: {year: number, month: number}[] = [];
+            paidAmountsByPeriod.forEach((amount, key) => {
+                if(amount >= 15){
+                    const [year, month] = key.split('-').map(Number);
+                    fullyPaidPeriods.push({year, month});
                 }
             });
-            fullyPaidHistoricalPeriods.sort((a,b) => b.year - b.year || b.month - a.month);
-            
-            // 3. Identify all *pending* debts up to the current date.
-            const pendingHistoricalDebts = ownerAllDebts.filter(d => 
-                d.status === 'pending' &&
-                (d.year < currentYear || (d.year === currentYear && d.month <= currentMonth))
-            );
-    
-            const status: 'Solvente' | 'No Solvente' = pendingHistoricalDebts.length > 0 ? 'No Solvente' : 'Solvente';
-            
+            fullyPaidPeriods.sort((a,b) => a.year - b.year || a.month - b.month);
+
             let solvencyPeriod = '';
             if (status === 'Solvente') {
-                 if (fullyPaidHistoricalPeriods.length > 0) {
-                    // Check for continuity from the current month backwards
-                    let lastSolventYear = -1, lastSolventMonth = -1;
-                    let isContinuous = true;
-                    for (let y = currentYear; y >= 2023 && isContinuous; y--) { // Assuming 2023 is the earliest possible year
-                        const startMonth = (y === currentYear) ? currentMonth : 12;
-                        for (let m = startMonth; m >= 1 && isContinuous; m--) {
-                            if (fullyPaidHistoricalPeriods.some(p => p.year === y && p.month === m)) {
-                               if(lastSolventYear === -1) { // First found
-                                   lastSolventYear = y;
-                                   lastSolventMonth = m;
-                               }
-                            } else {
-                                isContinuous = false; // Gap found
-                            }
-                        }
-                    }
-                    if(lastSolventYear !== -1){
-                        solvencyPeriod = `Hasta ${monthsLocale[lastSolventMonth]} ${lastSolventYear}`;
-                    } else {
-                        solvencyPeriod = "Sin pagos completos";
-                    }
-
+                if(fullyPaidPeriods.length > 0){
+                    const lastPaid = fullyPaidPeriods[fullyPaidPeriods.length-1];
+                    solvencyPeriod = `Hasta ${monthsLocale[lastPaid.month]} ${lastPaid.year}`;
                 } else {
-                    solvencyPeriod = "Sin pagos completos";
+                     solvencyPeriod = "Solvente";
                 }
-            } else {
+            } else { // No Solvente
                 const oldestDebt = [...pendingHistoricalDebts].sort((a,b) => a.year - b.year || a.month - a.month)[0];
                 if (oldestDebt) {
                     solvencyPeriod = `Desde ${monthsLocale[oldestDebt.month]} ${oldestDebt.year}`;
                 }
             }
 
-            // 4. Calculate financial summaries based on the report's date range filter
+            // --- Financial summaries based on the report's date range filter ---
             const fromDate = integralDateRange.from;
             const toDate = integralDateRange.to;
             if (fromDate) fromDate.setHours(0, 0, 0, 0);
@@ -838,7 +814,7 @@ export default function ReportsPage() {
             doc.setFontSize(11).setFont('helvetica', 'bold').text('Resumen de Deudas', margin, startY);
             startY += 7;
             const debtBody = ownerDebts
-                .sort((a,b) => b.year - a.year || b.month - a.month)
+                .sort((a,b) => b.year - b.year || b.month - b.month)
                 .map(d => [
                 `${Object.values(monthsLocale)[d.month -1] || ''} ${d.year}`,
                 d.description,
