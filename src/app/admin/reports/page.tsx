@@ -95,7 +95,6 @@ type IntegralReportRow = {
     status: 'Solvente' | 'No Solvente';
     solvencyPeriod: string;
     monthsOwed?: number;
-    futureDebtForAdjustments: number;
 };
 
 type DelinquentOwner = {
@@ -350,7 +349,7 @@ export default function ReportsPage() {
                     solvencyPeriod = `Hasta ${monthsLocale[lastPaid.month]} ${lastPaid.year}`;
                 }
             } else {
-                const oldestDebt = [...pendingFeeDebts].sort((a,b) => a.year - b.year || a.month - b.month)[0];
+                const oldestDebt = [...pendingFeeDebts].sort((a,b) => a.year - b.year || a.month - a.month)[0];
                 if (oldestDebt) {
                     solvencyPeriod = `Desde ${monthsLocale[oldestDebt.month]} ${oldestDebt.year}`;
                 }
@@ -380,11 +379,6 @@ export default function ReportsPage() {
                 const lastPayment = [...ownerPayments].sort((a, b) => b.paymentDate.toMillis() - a.paymentDate.toMillis())[0];
                 lastPaymentDate = format(lastPayment.paymentDate.toDate(), 'dd/MM/yyyy');
             }
-
-            // 4. Calculate future debt for adjustments (ignoring fee debts)
-             const futureDebtForAdjustments = ownerAllDebts
-                .filter(d => d.status === 'pending' && d.description.toLowerCase().includes('ajuste'))
-                .reduce((sum, d) => sum + d.amountUSD, 0);
     
             return {
                 ownerId: owner.id,
@@ -397,7 +391,6 @@ export default function ReportsPage() {
                 status,
                 solvencyPeriod,
                 monthsOwed: status === 'No Solvente' ? pendingFeeDebts.length : undefined,
-                futureDebtForAdjustments: futureDebtForAdjustments,
             };
         }).filter(row => {
             const statusMatch = integralStatusFilter === 'todos' || row.status.toLowerCase().replace(' ', '') === integralStatusFilter.toLowerCase().replace(' ', '');
@@ -630,7 +623,7 @@ export default function ReportsPage() {
 
     const handleExportIntegral = (formatType: 'pdf' | 'excel') => {
         const data = integralReportData;
-        const headers = [["Propietario", "Propiedad", "Fecha Últ. Pago", "Monto Pagado (Bs)", "Tasa Prom. (Bs/$)", "Saldo a Favor (Bs)", "Estado", "Período Solvencia", "Meses Adeudados", "Deuda Futura por Ajustes"]];
+        const headers = [["Propietario", "Propiedad", "Fecha Últ. Pago", "Monto Pagado (Bs)", "Tasa Prom. (Bs/$)", "Saldo a Favor (Bs)", "Estado", "Período Solvencia", "Meses Adeudados"]];
         const body = data.map(row => [
             row.name, row.properties, row.lastPaymentDate,
             row.paidAmount > 0 ? formatToTwoDecimals(row.paidAmount) : '',
@@ -639,7 +632,6 @@ export default function ReportsPage() {
             row.status,
             row.solvencyPeriod,
             row.monthsOwed || '',
-            row.futureDebtForAdjustments > 0 ? `$${row.futureDebtForAdjustments.toFixed(2)}` : ''
         ]);
 
         const filename = `reporte_integral_${new Date().toISOString().split('T')[0]}`;
@@ -654,9 +646,7 @@ export default function ReportsPage() {
         }
 
         if (formatType === 'pdf') {
-            const doc = new jsPDF({
-                orientation: 'landscape',
-            });
+            const doc = new jsPDF();
             const pageWidth = doc.internal.pageSize.getWidth();
             let startY = 15;
             if (companyInfo?.logo) doc.addImage(companyInfo.logo, 'PNG', 15, startY, 20, 20);
@@ -676,8 +666,8 @@ export default function ReportsPage() {
                 headStyles: { fillColor: [30, 80, 180] }, 
                 styles: { fontSize: 8, cellPadding: 1.5, overflow: 'linebreak' },
                  columnStyles: { 
-                    0: { cellWidth: 'auto' }, // Propietario
-                    1: { cellWidth: 'auto' }, // Propiedad
+                    0: { cellWidth: 35 }, // Propietario
+                    1: { cellWidth: 35 }, // Propiedad
                     2: { cellWidth: 20 }, // Fecha Últ. Pago
                     3: { halign: 'right' }, // Monto Pagado
                     4: { halign: 'right' }, // Tasa Prom
@@ -685,7 +675,6 @@ export default function ReportsPage() {
                     6: { cellWidth: 'auto' }, // Estado
                     7: { cellWidth: 20 }, // Periodo Solvencia
                     8: { halign: 'center' }, // Meses
-                    9: { halign: 'right' } // Deuda Futura
                 }
             });
             doc.save(`${filename}.pdf`);
@@ -698,7 +687,7 @@ export default function ReportsPage() {
             XLSX.utils.sheet_add_json(worksheet, data.map(row => ({
                  "Propietario": row.name, "Propiedad": row.properties, "Fecha Últ. Pago": row.lastPaymentDate, "Monto Pagado (Bs)": row.paidAmount,
                  "Tasa Prom. (Bs/$)": row.avgRate, "Saldo a Favor (Bs)": row.balance, "Estado": row.status, "Período Solvencia": row.solvencyPeriod,
-                 "Meses Adeudados": row.monthsOwed || '', "Deuda Futura por Ajustes": row.futureDebtForAdjustments
+                 "Meses Adeudados": row.monthsOwed || ''
             })), { origin: "A6", skipHeader: true });
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Reporte Integral");
@@ -1135,7 +1124,6 @@ export default function ReportsPage() {
                                         <TableHead>Estado</TableHead>
                                         <TableHead>Período Solvencia</TableHead>
                                         <TableHead className="text-center">Meses Deuda</TableHead>
-                                        <TableHead className="text-right">Deuda Futura por Ajustes</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -1152,7 +1140,6 @@ export default function ReportsPage() {
                                             </TableCell>
                                             <TableCell>{row.solvencyPeriod}</TableCell>
                                             <TableCell className="text-center">{row.monthsOwed || ''}</TableCell>
-                                            <TableCell className="text-right">{row.futureDebtForAdjustments > 0 ? `$${row.futureDebtForAdjustments.toFixed(2)}`: ''}</TableCell>
                                         </TableRow>
                                     ))}
                                 </TableBody>
