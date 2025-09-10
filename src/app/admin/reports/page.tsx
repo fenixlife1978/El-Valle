@@ -313,6 +313,7 @@ export default function ReportsPage() {
             
             const pendingDebtsUpToCurrentMonth = ownerAllDebts.filter(d => 
                 d.status === 'pending' &&
+                !d.description.toLowerCase().includes('ajuste') && // Ignore adjustments for solvency status
                 (d.year < currentYear || (d.year === currentYear && d.month <= currentMonth))
             );
             const status: 'Solvente' | 'No Solvente' = pendingDebtsUpToCurrentMonth.length === 0 ? 'Solvente' : 'No Solvente';
@@ -320,15 +321,14 @@ export default function ReportsPage() {
             // --- Solvency Period Calculation ---
             const monthlyPayments = new Map<string, number>(); // Key: 'YYYY-MM', Value: total paid USD
             ownerAllDebts.forEach(debt => {
-                 if (debt.status === 'paid' || debt.description.toLowerCase().includes('ajuste por aumento')) {
+                if (debt.status === 'paid') {
                     const key = `${debt.year}-${String(debt.month).padStart(2, '0')}`;
                     const currentTotal = monthlyPayments.get(key) || 0;
-                    let amountToAdd = 0;
-                     if (debt.description.toLowerCase().includes('ajuste por aumento')) {
-                        amountToAdd = 15; // Golden Rule: an adjustment payment implies the full fee is covered.
-                        monthlyPayments.set(key, amountToAdd);
-                    } else if(debt.paidAmountUSD) {
-                         // Only add if it's not the golden rule case to prevent double counting
+                    if (debt.description.toLowerCase().includes('ajuste')) {
+                        // Golden Rule: an adjustment payment implies the full fee is covered.
+                        monthlyPayments.set(key, 15);
+                    } else if (debt.paidAmountUSD) {
+                        // Only add if it's not the golden rule case to prevent double counting
                         if(monthlyPayments.get(key) !== 15){
                              monthlyPayments.set(key, currentTotal + debt.paidAmountUSD);
                         }
@@ -348,17 +348,20 @@ export default function ReportsPage() {
                 let lastConsecutiveDate: Date | null = null;
                 
                 if (sortedPaidPeriods.length > 0) {
-                    const [startYear, startMonth] = sortedPaidPeriods[0].split('-').map(Number);
-                    let currentDate = startOfMonth(new Date(startYear, startMonth - 1));
+                    const oldestPaidDebt = ownerAllDebts.filter(d => d.status === 'paid' && !d.description.toLowerCase().includes('ajuste')).sort((a,b) => a.year - b.year || a.month - b.month)[0];
 
-                    while(true) {
-                        const currentKey = format(currentDate, 'yyyy-MM');
-                        const paidAmount = monthlyPayments.get(currentKey) || 0;
-                        if (paidAmount >= 15) {
-                            lastConsecutiveDate = currentDate;
-                            currentDate = addMonths(currentDate, 1);
-                        } else {
-                            break; 
+                    if (oldestPaidDebt) {
+                         let currentDate = startOfMonth(new Date(oldestPaidDebt.year, oldestPaidDebt.month - 1));
+
+                        while(true) {
+                            const currentKey = format(currentDate, 'yyyy-MM');
+                            const paidAmount = monthlyPayments.get(currentKey) || 0;
+                            if (paidAmount >= 15) {
+                                lastConsecutiveDate = currentDate;
+                                currentDate = addMonths(currentDate, 1);
+                            } else {
+                                break; 
+                            }
                         }
                     }
                 }
