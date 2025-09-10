@@ -21,7 +21,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Calendar } from "@/components/ui/calendar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from '@/components/ui/label';
-import { format, addMonths, startOfMonth, parse } from 'date-fns';
+import { format, addMonths, startOfMonth, parse, getMonth, getYear, isBefore, isEqual } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList } from 'recharts';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
@@ -315,48 +315,62 @@ export default function ReportsPage() {
                 d.status === 'pending' &&
                 (d.year < currentYear || (d.year === currentYear && d.month <= currentMonth))
             );
-            const status: 'Solvente' | 'No Solvente' = pendingDebtsUpToCurrentMonth.length > 0 ? 'No Solvente' : 'Solvente';
+            const status: 'Solvente' | 'No Solvente' = pendingDebtsUpToCurrentMonth.length === 0 ? 'Solvente' : 'No Solvente';
 
             // --- Solvency Period Calculation ---
-            const paidDebtsByPeriod = new Map<string, number>(); // Key: 'YYYY-MM'
-            ownerAllDebts.forEach(d => {
-                if (d.status === 'paid') {
-                    const key = `${d.year}-${d.month}`;
-                    const currentPaid = paidDebtsByPeriod.get(key) || 0;
-                    let paidAmount = d.paidAmountUSD || 0;
-                    if(d.description === 'Ajuste por aumento de cuota') {
-                         paidAmount = 15; // Golden Rule: Adjustment payment counts as full $15
+            const monthlyPayments = new Map<string, number>(); // Key: 'YYYY-MM', Value: total paid USD
+
+            ownerAllDebts.forEach(debt => {
+                if (debt.status === 'paid') {
+                    const key = `${debt.year}-${String(debt.month).padStart(2, '0')}`;
+                    let amountToAdd = 0;
+                    
+                    // Golden Rule: An adjustment payment counts as a full $15 payment for that month
+                    if (debt.description.toLowerCase().includes('ajuste por aumento de cuota')) {
+                        amountToAdd = 15;
+                    } else {
+                        amountToAdd = debt.paidAmountUSD || debt.amountUSD;
                     }
-                    paidDebtsByPeriod.set(key, currentPaid + paidAmount);
+                    
+                    const currentTotal = monthlyPayments.get(key) || 0;
+                    monthlyPayments.set(key, currentTotal + amountToAdd);
                 }
             });
 
-            const allPeriods = Array.from(paidDebtsByPeriod.keys()).sort();
-            let lastSolventPeriod = null;
-            
-            for(const period of allPeriods) {
-                if((paidDebtsByPeriod.get(period) ?? 0) >= 15) {
-                    lastSolventPeriod = period;
-                } else {
-                    // break; // Uncomment if solvency must be consecutive
-                }
-            }
-
-            let solvencyPeriod = '';
+            let lastSolventPeriodKey = '';
             if (status === 'No Solvente') {
                 const oldestDebt = [...pendingDebtsUpToCurrentMonth]
-                    .sort((a,b) => a.year - b.year || a.month - a.month)[0];
+                    .sort((a,b) => a.year - b.year || a.month - b.month)[0];
                 if (oldestDebt) {
-                    solvencyPeriod = `Desde ${monthsLocale[oldestDebt.month]} ${oldestDebt.year}`;
+                    lastSolventPeriodKey = `Desde ${monthsLocale[oldestDebt.month]} ${oldestDebt.year}`;
                 }
             } else {
-                 if (lastSolventPeriod) {
-                    const [year, month] = lastSolventPeriod.split('-').map(Number);
-                    solvencyPeriod = `Hasta ${monthsLocale[month]} ${year}`;
+                const sortedPaidPeriods = Array.from(monthlyPayments.keys()).sort();
+                let lastConsecutiveDate: Date | null = null;
+
+                if (sortedPaidPeriods.length > 0) {
+                    // Find the first month paid
+                    const [startYear, startMonth] = sortedPaidPeriods[0].split('-').map(Number);
+                    let currentDate = startOfMonth(new Date(startYear, startMonth - 1));
+
+                    for (let i = 0; i < sortedPaidPeriods.length * 2; i++) { // Loop a reasonable amount of time
+                        const currentKey = format(currentDate, 'yyyy-MM');
+                        const paidAmount = monthlyPayments.get(currentKey) || 0;
+
+                        if (paidAmount >= 15) {
+                            lastConsecutiveDate = currentDate;
+                            currentDate = addMonths(currentDate, 1);
+                        } else {
+                            break; // End of consecutive payments
+                        }
+                    }
+                }
+                
+                if (lastConsecutiveDate) {
+                     lastSolventPeriodKey = `Hasta ${format(lastConsecutiveDate, 'MMM yyyy', { locale: es })}`;
                 } else {
-                    // Fallback if solvente but no paid records (e.g. new owner)
                     const prevMonth = addMonths(now, -1);
-                    solvencyPeriod = `Hasta ${monthsLocale[prevMonth.getMonth() + 1]} ${prevMonth.getFullYear()}`;
+                    lastSolventPeriodKey = `Hasta ${format(prevMonth, 'MMM yyyy', { locale: es })}`;
                 }
             }
             
@@ -394,7 +408,7 @@ export default function ReportsPage() {
                 avgRate: avgRate,
                 balance: owner.balance,
                 status,
-                solvencyPeriod,
+                solvencyPeriod: lastSolventPeriodKey,
             };
         }).filter(row => {
             const statusMatch = integralStatusFilter === 'todos' || row.status.toLowerCase().replace(' ', '') === integralStatusFilter.toLowerCase().replace(' ', '');
@@ -1651,3 +1665,5 @@ export default function ReportsPage() {
         </div>
     );
 }
+
+    
