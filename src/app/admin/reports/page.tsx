@@ -21,7 +21,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Calendar } from "@/components/ui/calendar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from '@/components/ui/label';
-import { format, addMonths, startOfMonth, parse, getMonth, getYear, isBefore, isEqual } from 'date-fns';
+import { format, addMonths, startOfMonth, parse, getMonth, getYear, isBefore, isEqual, differenceInCalendarMonths } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList } from 'recharts';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
@@ -306,75 +306,69 @@ export default function ReportsPage() {
         return sortedOwners.map(owner => {
             const ownerAllDebts = allDebts.filter(d => d.ownerId === owner.id);
             
-            // --- Solvency Status (based on current date) ---
             const now = new Date();
             const currentYear = now.getFullYear();
             const currentMonth = now.getMonth() + 1;
             
             const pendingDebtsUpToCurrentMonth = ownerAllDebts.filter(d => 
                 d.status === 'pending' &&
-                !d.description.toLowerCase().includes('ajuste') && // Ignore adjustments for solvency status
                 (d.year < currentYear || (d.year === currentYear && d.month <= currentMonth))
             );
             const status: 'Solvente' | 'No Solvente' = pendingDebtsUpToCurrentMonth.length === 0 ? 'Solvente' : 'No Solvente';
 
-            // --- Solvency Period Calculation ---
-            const monthlyPayments = new Map<string, number>(); // Key: 'YYYY-MM', Value: total paid USD
+            const monthlyPayments = new Map<string, number>();
             ownerAllDebts.forEach(debt => {
                 if (debt.status === 'paid') {
-                    const key = `${debt.year}-${String(debt.month).padStart(2, '0')}`;
-                    const currentTotal = monthlyPayments.get(key) || 0;
+                    const key = `${debt.year}-${debt.month}`;
+                    const currentAmount = monthlyPayments.get(key) || 0;
                     if (debt.description.toLowerCase().includes('ajuste')) {
-                        // Golden Rule: an adjustment payment implies the full fee is covered.
                         monthlyPayments.set(key, 15);
-                    } else if (debt.paidAmountUSD) {
-                        // Only add if it's not the golden rule case to prevent double counting
-                        if(monthlyPayments.get(key) !== 15){
-                             monthlyPayments.set(key, currentTotal + debt.paidAmountUSD);
-                        }
+                    } else if (debt.paidAmountUSD && monthlyPayments.get(key) !== 15) {
+                        monthlyPayments.set(key, currentAmount + debt.paidAmountUSD);
                     }
                 }
             });
 
+            const solventMonths = new Set<string>();
+            monthlyPayments.forEach((amount, key) => {
+                if (amount >= 15) {
+                    solventMonths.add(key);
+                }
+            });
+            
             let lastSolventPeriodKey = '';
             if (status === 'No Solvente') {
-                const oldestDebt = [...pendingDebtsUpToCurrentMonth]
+                 const oldestDebt = [...pendingDebtsUpToCurrentMonth]
                     .sort((a,b) => a.year - b.year || a.month - b.month)[0];
                 if (oldestDebt) {
                     lastSolventPeriodKey = `Desde ${monthsLocale[oldestDebt.month]} ${oldestDebt.year}`;
                 }
             } else {
-                const sortedPaidPeriods = Array.from(monthlyPayments.keys()).sort();
-                let lastConsecutiveDate: Date | null = null;
-                
-                if (sortedPaidPeriods.length > 0) {
-                    const oldestPaidDebt = ownerAllDebts.filter(d => d.status === 'paid' && !d.description.toLowerCase().includes('ajuste')).sort((a,b) => a.year - b.year || a.month - b.month)[0];
+                const oldestDebt = [...ownerAllDebts].sort((a,b) => a.year - b.year || a.month - b.month)[0];
+                if (oldestDebt) {
+                    let lastConsecutiveDate: Date | null = null;
+                    const startDate = new Date(oldestDebt.year, oldestDebt.month - 1);
+                    const endDate = new Date(currentYear + 2, 11);
+                    const totalMonths = differenceInCalendarMonths(endDate, startDate);
 
-                    if (oldestPaidDebt) {
-                         let currentDate = startOfMonth(new Date(oldestPaidDebt.year, oldestPaidDebt.month - 1));
-
-                        while(true) {
-                            const currentKey = format(currentDate, 'yyyy-MM');
-                            const paidAmount = monthlyPayments.get(currentKey) || 0;
-                            if (paidAmount >= 15) {
-                                lastConsecutiveDate = currentDate;
-                                currentDate = addMonths(currentDate, 1);
-                            } else {
-                                break; 
-                            }
+                    for(let i = 0; i <= totalMonths; i++) {
+                        const checkDate = addMonths(startDate, i);
+                        const key = `${checkDate.getFullYear()}-${checkDate.getMonth() + 1}`;
+                        if(solventMonths.has(key)) {
+                            lastConsecutiveDate = checkDate;
+                        } else {
+                            break;
                         }
                     }
-                }
-                
-                if (lastConsecutiveDate) {
-                     lastSolventPeriodKey = `Hasta ${format(lastConsecutiveDate, 'MMM yyyy', { locale: es })}`;
-                } else {
-                    const prevMonth = addMonths(now, -1);
-                    lastSolventPeriodKey = `Hasta ${format(prevMonth, 'MMM yyyy', { locale: es })}`;
+                    if (lastConsecutiveDate) {
+                        lastSolventPeriodKey = `Hasta ${format(lastConsecutiveDate, 'MMM yyyy', { locale: es })}`;
+                    } else {
+                        const prevMonth = addMonths(now, -1);
+                        lastSolventPeriodKey = `Hasta ${format(prevMonth, 'MMM yyyy', { locale: es })}`;
+                    }
                 }
             }
             
-            // --- Financial summaries based on the report's date range filter ---
             const fromDate = integralDateRange.from;
             const toDate = integralDateRange.to;
             if (fromDate) fromDate.setHours(0, 0, 0, 0);
@@ -1669,3 +1663,4 @@ export default function ReportsPage() {
     
 
   
+
