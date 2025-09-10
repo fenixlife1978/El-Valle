@@ -634,7 +634,7 @@ export default function ReportsPage() {
         }
 
         if (formatType === 'pdf') {
-            const doc = new jsPDF({ orientation: 'landscape' });
+            const doc = new jsPDF();
             const pageWidth = doc.internal.pageSize.getWidth();
             let startY = 15;
             if (companyInfo?.logo) doc.addImage(companyInfo.logo, 'PNG', 15, startY, 20, 20);
@@ -652,18 +652,18 @@ export default function ReportsPage() {
             (doc as any).autoTable({
                 head: headers, body: body, startY: startY,
                 headStyles: { fillColor: [30, 80, 180] }, 
-                styles: { fontSize: 7, cellPadding: 1.5, overflow: 'linebreak' },
+                styles: { fontSize: 8, cellPadding: 1.5, overflow: 'linebreak' },
                  columnStyles: { 
-                    0: { cellWidth: 28 }, // Propietario
-                    1: { cellWidth: 20 }, // Propiedad
-                    2: { cellWidth: 18 }, // Fecha Últ. Pago
-                    3: { halign: 'right', cellWidth: 18 }, // Monto Pagado
-                    4: { halign: 'right', cellWidth: 18 }, // Tasa Prom
-                    5: { halign: 'right', cellWidth: 18 }, // Saldo a Favor
-                    6: { cellWidth: 15 }, // Estado
-                    7: { cellWidth: 18 }, // Periodo Solvencia
-                    8: { halign: 'center', cellWidth: 15 }, // Meses
-                    9: { halign: 'right', cellWidth: 20 } // Deuda Futura
+                    0: { cellWidth: 'auto' }, // Propietario
+                    1: { cellWidth: 'auto' }, // Propiedad
+                    2: { cellWidth: 20 }, // Fecha Últ. Pago
+                    3: { halign: 'right' }, // Monto Pagado
+                    4: { halign: 'right' }, // Tasa Prom
+                    5: { halign: 'right' }, // Saldo a Favor
+                    6: { cellWidth: 'auto' }, // Estado
+                    7: { cellWidth: 20 }, // Periodo Solvencia
+                    8: { halign: 'center' }, // Meses
+                    9: { halign: 'right' } // Deuda Futura
                 }
             });
             doc.save(`${filename}.pdf`);
