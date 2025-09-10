@@ -319,21 +319,20 @@ export default function ReportsPage() {
 
             // --- Solvency Period Calculation ---
             const monthlyPayments = new Map<string, number>(); // Key: 'YYYY-MM', Value: total paid USD
-
             ownerAllDebts.forEach(debt => {
-                if (debt.status === 'paid') {
+                 if (debt.status === 'paid' || debt.description.toLowerCase().includes('ajuste por aumento')) {
                     const key = `${debt.year}-${String(debt.month).padStart(2, '0')}`;
-                    let amountToAdd = 0;
-                    
-                    // Golden Rule: An adjustment payment counts as a full $15 payment for that month
-                    if (debt.description.toLowerCase().includes('ajuste por aumento de cuota')) {
-                        amountToAdd = 15;
-                    } else {
-                        amountToAdd = debt.paidAmountUSD || debt.amountUSD;
-                    }
-                    
                     const currentTotal = monthlyPayments.get(key) || 0;
-                    monthlyPayments.set(key, currentTotal + amountToAdd);
+                    let amountToAdd = 0;
+                     if (debt.description.toLowerCase().includes('ajuste por aumento')) {
+                        amountToAdd = 15; // Golden Rule: an adjustment payment implies the full fee is covered.
+                        monthlyPayments.set(key, amountToAdd);
+                    } else if(debt.paidAmountUSD) {
+                         // Only add if it's not the golden rule case to prevent double counting
+                        if(monthlyPayments.get(key) !== 15){
+                             monthlyPayments.set(key, currentTotal + debt.paidAmountUSD);
+                        }
+                    }
                 }
             });
 
@@ -347,21 +346,19 @@ export default function ReportsPage() {
             } else {
                 const sortedPaidPeriods = Array.from(monthlyPayments.keys()).sort();
                 let lastConsecutiveDate: Date | null = null;
-
+                
                 if (sortedPaidPeriods.length > 0) {
-                    // Find the first month paid
                     const [startYear, startMonth] = sortedPaidPeriods[0].split('-').map(Number);
                     let currentDate = startOfMonth(new Date(startYear, startMonth - 1));
 
-                    for (let i = 0; i < sortedPaidPeriods.length * 2; i++) { // Loop a reasonable amount of time
+                    while(true) {
                         const currentKey = format(currentDate, 'yyyy-MM');
                         const paidAmount = monthlyPayments.get(currentKey) || 0;
-
                         if (paidAmount >= 15) {
                             lastConsecutiveDate = currentDate;
                             currentDate = addMonths(currentDate, 1);
                         } else {
-                            break; // End of consecutive payments
+                            break; 
                         }
                     }
                 }
@@ -1667,3 +1664,5 @@ export default function ReportsPage() {
 }
 
     
+
+  
