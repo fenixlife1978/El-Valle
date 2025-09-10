@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -304,8 +305,32 @@ export default function ReportsPage() {
         });
 
         return sortedOwners.map(owner => {
+            // --- Phase 1: Determine which months are fully paid ($15) ---
+            const monthlyPayments = new Map<string, number>();
             const ownerAllDebts = allDebts.filter(d => d.ownerId === owner.id);
-            
+
+            ownerAllDebts.forEach(debt => {
+                const key = `${debt.year}-${debt.month}`;
+                const currentAmount = monthlyPayments.get(key) || 0;
+                
+                // Regla de oro: si es un ajuste, cuenta como pago completo.
+                if (debt.status === 'paid' && debt.description.toLowerCase().includes('ajuste')) {
+                    monthlyPayments.set(key, 15);
+                } else if (debt.status === 'paid' && debt.paidAmountUSD && monthlyPayments.get(key) !== 15) {
+                    monthlyPayments.set(key, currentAmount + debt.paidAmountUSD);
+                }
+            });
+
+            const solventMonths = new Set<string>();
+            monthlyPayments.forEach((amount, key) => {
+                // Pagos futuros incompletos se ignoran
+                const [year, month] = key.split('-').map(Number);
+                if (amount >= 15) {
+                    solventMonths.add(key);
+                }
+            });
+
+            // --- Phase 2: Calculate solvency status based on current date ---
             const now = new Date();
             const currentYear = now.getFullYear();
             const currentMonth = now.getMonth() + 1;
@@ -316,26 +341,7 @@ export default function ReportsPage() {
             );
             const status: 'Solvente' | 'No Solvente' = pendingDebtsUpToCurrentMonth.length === 0 ? 'Solvente' : 'No Solvente';
 
-            const monthlyPayments = new Map<string, number>();
-            ownerAllDebts.forEach(debt => {
-                if (debt.status === 'paid') {
-                    const key = `${debt.year}-${debt.month}`;
-                    const currentAmount = monthlyPayments.get(key) || 0;
-                    if (debt.description.toLowerCase().includes('ajuste')) {
-                        monthlyPayments.set(key, 15);
-                    } else if (debt.paidAmountUSD && monthlyPayments.get(key) !== 15) {
-                        monthlyPayments.set(key, currentAmount + debt.paidAmountUSD);
-                    }
-                }
-            });
-
-            const solventMonths = new Set<string>();
-            monthlyPayments.forEach((amount, key) => {
-                if (amount >= 15) {
-                    solventMonths.add(key);
-                }
-            });
-            
+            // --- Phase 3: Determine the solvency period string ---
             let lastSolventPeriodKey = '';
             if (status === 'No Solvente') {
                  const oldestDebt = [...pendingDebtsUpToCurrentMonth]
@@ -343,32 +349,41 @@ export default function ReportsPage() {
                 if (oldestDebt) {
                     lastSolventPeriodKey = `Desde ${monthsLocale[oldestDebt.month]} ${oldestDebt.year}`;
                 }
-            } else {
-                const oldestDebt = [...ownerAllDebts].sort((a,b) => a.year - b.year || a.month - b.month)[0];
+            } else { // Is Solvente
+                const allOwnerDebtsSorted = [...ownerAllDebts].sort((a, b) => a.year - b.year || a.month - b.month);
+                const oldestDebt = allOwnerDebtsSorted[0];
+                
                 if (oldestDebt) {
                     let lastConsecutiveDate: Date | null = null;
                     const startDate = new Date(oldestDebt.year, oldestDebt.month - 1);
-                    const endDate = new Date(currentYear + 2, 11);
+                    const endDate = new Date(currentYear + 2, 11); // Check up to 2 years in the future
                     const totalMonths = differenceInCalendarMonths(endDate, startDate);
 
-                    for(let i = 0; i <= totalMonths; i++) {
+                    for (let i = 0; i <= totalMonths; i++) {
                         const checkDate = addMonths(startDate, i);
                         const key = `${checkDate.getFullYear()}-${checkDate.getMonth() + 1}`;
-                        if(solventMonths.has(key)) {
+                        if (solventMonths.has(key)) {
                             lastConsecutiveDate = checkDate;
                         } else {
-                            break;
+                            break; // Stop at the first non-solvent month
                         }
                     }
+
                     if (lastConsecutiveDate) {
                         lastSolventPeriodKey = `Hasta ${format(lastConsecutiveDate, 'MMM yyyy', { locale: es })}`;
                     } else {
+                        // Fallback if no debts are found but user is solvent (e.g. new user)
                         const prevMonth = addMonths(now, -1);
                         lastSolventPeriodKey = `Hasta ${format(prevMonth, 'MMM yyyy', { locale: es })}`;
                     }
                 }
             }
+            if (!lastSolventPeriodKey && status === 'Solvente') {
+                const prevMonth = addMonths(now, -1);
+                lastSolventPeriodKey = `Hasta ${format(prevMonth, 'MMM yyyy', { locale: es })}`;
+            }
             
+            // --- Phase 4: Filter payments for reporting based on date range ---
             const fromDate = integralDateRange.from;
             const toDate = integralDateRange.to;
             if (fromDate) fromDate.setHours(0, 0, 0, 0);
@@ -1663,4 +1678,5 @@ export default function ReportsPage() {
     
 
   
+
 
