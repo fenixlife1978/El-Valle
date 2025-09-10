@@ -21,7 +21,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Calendar } from "@/components/ui/calendar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from '@/components/ui/label';
-import { format, addMonths, startOfMonth } from 'date-fns';
+import { format, addMonths, startOfMonth, parse } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList } from 'recharts';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
@@ -302,7 +302,7 @@ export default function ReportsPage() {
             if (aKeys.streetNum !== bKeys.streetNum) return aKeys.streetNum - bKeys.streetNum;
             return aKeys.houseNum - bKeys.houseNum;
         });
-    
+
         return sortedOwners.map(owner => {
             const ownerAllDebts = allDebts.filter(d => d.ownerId === owner.id);
             
@@ -313,42 +313,50 @@ export default function ReportsPage() {
             
             const pendingDebtsUpToCurrentMonth = ownerAllDebts.filter(d => 
                 d.status === 'pending' &&
-                (d.year < currentYear || (d.year === currentYear && d.month <= currentMonth)) &&
-                !d.description.toLowerCase().includes('ajuste')
+                (d.year < currentYear || (d.year === currentYear && d.month <= currentMonth))
             );
             const status: 'Solvente' | 'No Solvente' = pendingDebtsUpToCurrentMonth.length > 0 ? 'No Solvente' : 'Solvente';
 
             // --- Solvency Period Calculation ---
-            const paidAmountsByPeriod = new Map<string, number>(); // Key: 'YYYY-MM'
+            const paidDebtsByPeriod = new Map<string, number>(); // Key: 'YYYY-MM'
             ownerAllDebts.forEach(d => {
-                if (d.status === 'paid' && d.paidAmountUSD) {
+                if (d.status === 'paid') {
                     const key = `${d.year}-${d.month}`;
-                    const currentPaid = paidAmountsByPeriod.get(key) || 0;
-                    paidAmountsByPeriod.set(key, currentPaid + d.paidAmountUSD);
+                    const currentPaid = paidDebtsByPeriod.get(key) || 0;
+                    let paidAmount = d.paidAmountUSD || 0;
+                    if(d.description === 'Ajuste por aumento de cuota') {
+                         paidAmount = 15; // Golden Rule: Adjustment payment counts as full $15
+                    }
+                    paidDebtsByPeriod.set(key, currentPaid + paidAmount);
                 }
             });
 
-            const fullyPaidPeriods: {year: number, month: number}[] = [];
-            paidAmountsByPeriod.forEach((amount, key) => {
-                if(amount >= 15){
-                    const [year, month] = key.split('-').map(Number);
-                    fullyPaidPeriods.push({year, month});
+            const allPeriods = Array.from(paidDebtsByPeriod.keys()).sort();
+            let lastSolventPeriod = null;
+            
+            for(const period of allPeriods) {
+                if((paidDebtsByPeriod.get(period) ?? 0) >= 15) {
+                    lastSolventPeriod = period;
+                } else {
+                    // break; // Uncomment if solvency must be consecutive
                 }
-            });
-            fullyPaidPeriods.sort((a,b) => a.year - b.year || a.month - b.month);
+            }
 
             let solvencyPeriod = '';
             if (status === 'No Solvente') {
-                const oldestDebt = [...pendingDebtsUpToCurrentMonth].sort((a,b) => a.year - b.year || a.month - a.month)[0];
+                const oldestDebt = [...pendingDebtsUpToCurrentMonth]
+                    .sort((a,b) => a.year - b.year || a.month - a.month)[0];
                 if (oldestDebt) {
                     solvencyPeriod = `Desde ${monthsLocale[oldestDebt.month]} ${oldestDebt.year}`;
                 }
             } else {
-                if (fullyPaidPeriods.length > 0) {
-                    const lastPaid = fullyPaidPeriods[fullyPaidPeriods.length - 1];
-                    solvencyPeriod = `Hasta ${monthsLocale[lastPaid.month]} ${lastPaid.year}`;
+                 if (lastSolventPeriod) {
+                    const [year, month] = lastSolventPeriod.split('-').map(Number);
+                    solvencyPeriod = `Hasta ${monthsLocale[month]} ${year}`;
                 } else {
-                     solvencyPeriod = "Al día";
+                    // Fallback if solvente but no paid records (e.g. new owner)
+                    const prevMonth = addMonths(now, -1);
+                    solvencyPeriod = `Hasta ${monthsLocale[prevMonth.getMonth() + 1]} ${prevMonth.getFullYear()}`;
                 }
             }
             
