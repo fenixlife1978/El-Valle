@@ -21,7 +21,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Calendar } from "@/components/ui/calendar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from '@/components/ui/label';
-import { format } from 'date-fns';
+import { format, addMonths, startOfMonth } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList } from 'recharts';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
@@ -299,9 +299,7 @@ export default function ReportsPage() {
         const sortedOwners = [...owners].sort((a, b) => {
             const aKeys = getSortKeys(a);
             const bKeys = getSortKeys(b);
-            if (aKeys.streetNum !== bKeys.streetNum) {
-                return aKeys.streetNum - bKeys.streetNum;
-            }
+            if (aKeys.streetNum !== bKeys.streetNum) return aKeys.streetNum - bKeys.streetNum;
             return aKeys.houseNum - bKeys.houseNum;
         });
     
@@ -313,15 +311,15 @@ export default function ReportsPage() {
             const currentYear = now.getFullYear();
             const currentMonth = now.getMonth() + 1;
             
-            const pendingHistoricalDebts = ownerAllDebts.filter(d => 
+            const pendingDebtsUpToCurrentMonth = ownerAllDebts.filter(d => 
                 d.status === 'pending' &&
                 (d.year < currentYear || (d.year === currentYear && d.month <= currentMonth)) &&
-                !d.description.toLowerCase().includes('ajuste') // Ignore pure adjustment debts for solvency status
+                !d.description.toLowerCase().includes('ajuste')
             );
-            const status: 'Solvente' | 'No Solvente' = pendingHistoricalDebts.length > 0 ? 'No Solvente' : 'Solvente';
+            const status: 'Solvente' | 'No Solvente' = pendingDebtsUpToCurrentMonth.length > 0 ? 'No Solvente' : 'Solvente';
 
-            // --- Solvency Period (based on fully paid months, including future ones) ---
-            const paidAmountsByPeriod = new Map<string, number>(); // Key: 'YYYY-M'
+            // --- Solvency Period Calculation ---
+            const paidAmountsByPeriod = new Map<string, number>(); // Key: 'YYYY-MM'
             ownerAllDebts.forEach(d => {
                 if (d.status === 'paid' && d.paidAmountUSD) {
                     const key = `${d.year}-${d.month}`;
@@ -340,20 +338,20 @@ export default function ReportsPage() {
             fullyPaidPeriods.sort((a,b) => a.year - b.year || a.month - b.month);
 
             let solvencyPeriod = '';
-            if (status === 'Solvente') {
-                if(fullyPaidPeriods.length > 0){
-                    const lastPaid = fullyPaidPeriods[fullyPaidPeriods.length-1];
-                    solvencyPeriod = `Hasta ${monthsLocale[lastPaid.month]} ${lastPaid.year}`;
-                } else {
-                     solvencyPeriod = "Solvente";
-                }
-            } else { // No Solvente
-                const oldestDebt = [...pendingHistoricalDebts].sort((a,b) => a.year - b.year || a.month - a.month)[0];
+            if (status === 'No Solvente') {
+                const oldestDebt = [...pendingDebtsUpToCurrentMonth].sort((a,b) => a.year - b.year || a.month - a.month)[0];
                 if (oldestDebt) {
                     solvencyPeriod = `Desde ${monthsLocale[oldestDebt.month]} ${oldestDebt.year}`;
                 }
+            } else {
+                if (fullyPaidPeriods.length > 0) {
+                    const lastPaid = fullyPaidPeriods[fullyPaidPeriods.length - 1];
+                    solvencyPeriod = `Hasta ${monthsLocale[lastPaid.month]} ${lastPaid.year}`;
+                } else {
+                     solvencyPeriod = "Al día";
+                }
             }
-
+            
             // --- Financial summaries based on the report's date range filter ---
             const fromDate = integralDateRange.from;
             const toDate = integralDateRange.to;
