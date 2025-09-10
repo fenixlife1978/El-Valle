@@ -310,46 +310,61 @@ export default function ReportsPage() {
         const now = new Date();
         const currentYear = now.getFullYear();
         const currentMonth = now.getMonth() + 1;
+        const fullFee = 15;
     
         return sortedOwners.map(owner => {
             const ownerAllDebts = allDebts.filter(d => d.ownerId === owner.id);
-            const ownerPaidDebts = ownerAllDebts.filter(d => d.status === 'paid').sort((a,b) => b.year - a.year || b.month - a.month);
-            const ownerPendingDebts = ownerAllDebts.filter(d => d.status === 'pending');
-
-            const dueDebts = ownerPendingDebts.filter(d => 
-                d.year < currentYear || (d.year === currentYear && d.month <= currentMonth)
-            );
             
-            const futureDebts = ownerPendingDebts.filter(d => 
-                d.year > currentYear || (d.year === currentYear && d.month > currentMonth)
+            // 1. Identify all fully paid months at the correct rate.
+            const paidMonths = new Map<string, number>(); // 'YYYY-M' -> paidAmountUSD
+            ownerAllDebts.forEach(d => {
+                if (d.status === 'paid' && d.paidAmountUSD) {
+                    const key = `${d.year}-${d.month}`;
+                    const currentPaid = paidMonths.get(key) || 0;
+                    paidMonths.set(key, currentPaid + d.paidAmountUSD);
+                }
+            });
+    
+            const fullyPaidPeriods: {year: number, month: number}[] = [];
+            paidMonths.forEach((amount, key) => {
+                if (amount >= fullFee) {
+                    const [year, month] = key.split('-').map(Number);
+                    fullyPaidPeriods.push({year, month});
+                }
+            });
+            fullyPaidPeriods.sort((a,b) => b.year - a.year || b.month - a.month);
+    
+            // 2. Identify all true pending debts (non-adjustments, past or current)
+            const pendingFeeDebts = ownerAllDebts.filter(d => 
+                d.status === 'pending' &&
+                !d.description.toLowerCase().includes('ajuste') &&
+                (d.year < currentYear || (d.year === currentYear && d.month <= currentMonth))
             );
-
-            const futureDebtForAdjustments = futureDebts.reduce((sum, d) => sum + d.amountUSD, 0);
-            const status: 'Solvente' | 'No Solvente' = dueDebts.length > 0 ? 'No Solvente' : 'Solvente';
+    
+            const status: 'Solvente' | 'No Solvente' = pendingFeeDebts.length > 0 ? 'No Solvente' : 'Solvente';
             
             let solvencyPeriod = '';
             if (status === 'Solvente') {
-                if (ownerPaidDebts.length > 0) {
-                    const lastPaid = ownerPaidDebts[0];
+                if (fullyPaidPeriods.length > 0) {
+                    const lastPaid = fullyPaidPeriods[0]; // Most recent
                     solvencyPeriod = `Hasta ${monthsLocale[lastPaid.month]} ${lastPaid.year}`;
                 }
             } else {
-                const oldestDebt = [...dueDebts].sort((a,b) => a.year - b.year || a.month - b.month)[0];
+                const oldestDebt = [...pendingFeeDebts].sort((a,b) => a.year - b.year || a.month - b.month)[0];
                 if (oldestDebt) {
                     solvencyPeriod = `Desde ${monthsLocale[oldestDebt.month]} ${oldestDebt.year}`;
                 }
             }
 
+            // 3. Calculate financial summaries based on date range
             const fromDate = integralDateRange.from;
             const toDate = integralDateRange.to;
-    
-            if(fromDate) fromDate.setHours(0,0,0,0);
-            if(toDate) toDate.setHours(23,59,59,999);
+            if (fromDate) fromDate.setHours(0, 0, 0, 0);
+            if (toDate) toDate.setHours(23, 59, 59, 999);
     
             const ownerPayments = allPayments.filter(p => {
                 const isOwnerPayment = p.beneficiaries.some(b => b.ownerId === owner.id) && p.status === 'aprobado';
                 if (!isOwnerPayment) return false;
-    
                 const paymentDate = p.paymentDate.toDate();
                 if (fromDate && paymentDate < fromDate) return false;
                 if (toDate && paymentDate > toDate) return false;
@@ -361,10 +376,15 @@ export default function ReportsPage() {
             const avgRate = totalPaid > 0 ? totalRateWeight / totalPaid : 0;
             
             let lastPaymentDate = '';
-            if(ownerPayments.length > 0) {
-                const lastPayment = ownerPayments.sort((a,b) => b.paymentDate.toMillis() - a.paymentDate.toMillis())[0];
+            if (ownerPayments.length > 0) {
+                const lastPayment = [...ownerPayments].sort((a, b) => b.paymentDate.toMillis() - a.paymentDate.toMillis())[0];
                 lastPaymentDate = format(lastPayment.paymentDate.toDate(), 'dd/MM/yyyy');
             }
+
+            // 4. Calculate future debt for adjustments (ignoring fee debts)
+             const futureDebtForAdjustments = ownerAllDebts
+                .filter(d => d.status === 'pending' && d.description.toLowerCase().includes('ajuste'))
+                .reduce((sum, d) => sum + d.amountUSD, 0);
     
             return {
                 ownerId: owner.id,
@@ -376,8 +396,8 @@ export default function ReportsPage() {
                 balance: owner.balance,
                 status,
                 solvencyPeriod,
-                monthsOwed: status === 'No Solvente' ? dueDebts.length : undefined,
-                futureDebtForAdjustments: futureDebtForAdjustments
+                monthsOwed: status === 'No Solvente' ? pendingFeeDebts.length : undefined,
+                futureDebtForAdjustments: futureDebtForAdjustments,
             };
         }).filter(row => {
             const statusMatch = integralStatusFilter === 'todos' || row.status.toLowerCase().replace(' ', '') === integralStatusFilter.toLowerCase().replace(' ', '');
@@ -634,7 +654,9 @@ export default function ReportsPage() {
         }
 
         if (formatType === 'pdf') {
-            const doc = new jsPDF();
+            const doc = new jsPDF({
+                orientation: 'landscape',
+            });
             const pageWidth = doc.internal.pageSize.getWidth();
             let startY = 15;
             if (companyInfo?.logo) doc.addImage(companyInfo.logo, 'PNG', 15, startY, 20, 20);
