@@ -22,7 +22,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Calendar } from "@/components/ui/calendar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from '@/components/ui/label';
-import { format, addMonths, startOfMonth, parse, getMonth, getYear, isBefore, isEqual, differenceInCalendarMonths } from 'date-fns';
+import { format, addMonths, startOfMonth, parse, getMonth, getYear, isBefore, isEqual, differenceInCalendarMonths, differenceInMonths } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList } from 'recharts';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
@@ -95,6 +95,7 @@ type IntegralReportRow = {
     balance: number;
     status: 'Solvente' | 'No Solvente';
     solvencyPeriod: string;
+    monthsOwed: number;
 };
 
 type DelinquentOwner = {
@@ -306,6 +307,7 @@ export default function ReportsPage() {
 
         return sortedOwners.map(owner => {
             const ownerAllDebts = allDebts.filter(d => d.ownerId === owner.id);
+            const feeThreshold = 15;
 
             // Phase 1: Create a map of monthly payments, aggregating amounts.
             const monthlyPayments = new Map<string, number>();
@@ -314,10 +316,9 @@ export default function ReportsPage() {
                     const key = `${debt.year}-${debt.month}`;
                     const currentAmount = monthlyPayments.get(key) || 0;
                     
-                    // Golden Rule: if it's an adjustment, it counts as a full 15.
                     if (debt.description.toLowerCase().includes('ajuste')) {
-                        monthlyPayments.set(key, 15);
-                    } else if (monthlyPayments.get(key) !== 15) { // Only add if not already marked as fully paid
+                        monthlyPayments.set(key, feeThreshold);
+                    } else if (monthlyPayments.get(key) !== feeThreshold) {
                         monthlyPayments.set(key, currentAmount + debt.paidAmountUSD);
                     }
                 }
@@ -326,7 +327,7 @@ export default function ReportsPage() {
             // Phase 2: Create a set of "solvent" months (paid >= $15)
             const solventMonths = new Set<string>();
             monthlyPayments.forEach((amount, key) => {
-                if (amount >= 15) {
+                if (amount >= feeThreshold) {
                     solventMonths.add(key);
                 }
             });
@@ -344,40 +345,45 @@ export default function ReportsPage() {
 
             // Phase 4: Determine the solvency period string
             let lastSolventPeriodKey = '';
+            let lastConsecutiveDate: Date | null = null;
+
+            const allOwnerDebtsSorted = [...ownerAllDebts].sort((a, b) => a.year - b.year || a.month - b.month);
+            const oldestDebt = allOwnerDebtsSorted[0];
+
+            if (oldestDebt) {
+                const startDate = new Date(oldestDebt.year, oldestDebt.month - 1);
+                const endDate = new Date(currentYear + 2, 11); // Check up to 2 years in the future
+                
+                for (let i = 0; i <= differenceInCalendarMonths(endDate, startDate); i++) {
+                    const checkDate = addMonths(startDate, i);
+                    const key = `${checkDate.getFullYear()}-${checkDate.getMonth() + 1}`;
+                    if (solventMonths.has(key)) {
+                        lastConsecutiveDate = checkDate;
+                    } else {
+                        break; 
+                    }
+                }
+            }
+
             if (status === 'No Solvente') {
                  const oldestDebt = [...pendingDebtsUpToCurrentMonth]
                     .sort((a,b) => a.year - b.year || a.month - b.month)[0];
                 if (oldestDebt) {
                     lastSolventPeriodKey = `Desde ${monthsLocale[oldestDebt.month]} ${oldestDebt.year}`;
                 }
-            } else { // Is Solvente
-                const allOwnerDebtsSorted = [...ownerAllDebts].sort((a, b) => a.year - b.year || a.month - b.month);
-                const oldestDebt = allOwnerDebtsSorted[0];
-                
-                if (oldestDebt) {
-                    let lastConsecutiveDate: Date | null = null;
-                    const startDate = new Date(oldestDebt.year, oldestDebt.month - 1);
-                    const endDate = new Date(currentYear + 2, 11); // Check up to 2 years in the future
-                    const totalMonths = differenceInCalendarMonths(endDate, startDate);
-
-                    for (let i = 0; i <= totalMonths; i++) {
-                        const checkDate = addMonths(startDate, i);
-                        const key = `${checkDate.getFullYear()}-${checkDate.getMonth() + 1}`;
-                        if (solventMonths.has(key)) {
-                            lastConsecutiveDate = checkDate;
-                        } else {
-                            break; // Stop at the first non-solvent month
-                        }
-                    }
-
-                    if (lastConsecutiveDate) {
-                        lastSolventPeriodKey = `Hasta ${format(lastConsecutiveDate, 'MMM yyyy', { locale: es })}`;
-                    }
+            } else {
+                if (lastConsecutiveDate) {
+                    lastSolventPeriodKey = `Hasta ${format(lastConsecutiveDate, 'MMM yyyy', { locale: es })}`;
+                } else {
+                     const prevMonth = addMonths(now, -1);
+                     lastSolventPeriodKey = `Hasta ${format(prevMonth, 'MMM yyyy', { locale: es })}`;
                 }
             }
-             if (!lastSolventPeriodKey && status === 'Solvente') {
-                const prevMonth = addMonths(now, -1);
-                lastSolventPeriodKey = `Hasta ${format(prevMonth, 'MMM yyyy', { locale: es })}`;
+            
+            let monthsOwed = 0;
+            if (status === 'No Solvente') {
+                const lastSolventDate = lastConsecutiveDate ? lastConsecutiveDate : addMonths(startOfMonth(new Date()), -1);
+                monthsOwed = differenceInMonths(startOfMonth(new Date()), lastSolventDate);
             }
 
             // Phase 5: Filter payments for reporting based on date range
@@ -401,7 +407,7 @@ export default function ReportsPage() {
             
             let lastPaymentDate = '';
             if (ownerPayments.length > 0) {
-                const lastPayment = [...ownerPayments].sort((a, b) => b.paymentDate.toMillis() - a.paymentDate.toMillis())[0];
+                const lastPayment = [...ownerPayments].sort((a, b) => b.paymentDate.toMillis() - b.paymentDate.toMillis())[0];
                 lastPaymentDate = format(lastPayment.paymentDate.toDate(), 'dd/MM/yyyy');
             }
     
@@ -415,6 +421,7 @@ export default function ReportsPage() {
                 balance: owner.balance,
                 status,
                 solvencyPeriod: lastSolventPeriodKey,
+                monthsOwed,
             };
         }).filter(row => {
             const statusMatch = integralStatusFilter === 'todos' || row.status.toLowerCase().replace(' ', '') === integralStatusFilter.toLowerCase().replace(' ', '');
@@ -647,7 +654,7 @@ export default function ReportsPage() {
 
     const handleExportIntegral = (formatType: 'pdf' | 'excel') => {
         const data = integralReportData;
-        const headers = [["Propietario", "Propiedad", "Fecha Últ. Pago", "Monto Pagado (Bs)", "Tasa Prom. (Bs/$)", "Saldo a Favor (Bs)", "Estado", "Período Solvencia"]];
+        const headers = [["Propietario", "Propiedad", "Fecha Últ. Pago", "Monto Pagado (Bs)", "Tasa Prom. (Bs/$)", "Saldo a Favor (Bs)", "Estado", "Periodo", "Meses Adeudados"]];
         const body = data.map(row => [
             row.name, row.properties, row.lastPaymentDate,
             row.paidAmount > 0 ? formatToTwoDecimals(row.paidAmount) : '',
@@ -655,6 +662,7 @@ export default function ReportsPage() {
             row.balance > 0 ? formatToTwoDecimals(row.balance) : '',
             row.status,
             row.solvencyPeriod,
+            row.monthsOwed > 0 ? row.monthsOwed : ''
         ]);
 
         const filename = `reporte_integral_${new Date().toISOString().split('T')[0]}`;
@@ -689,14 +697,15 @@ export default function ReportsPage() {
                 headStyles: { fillColor: [30, 80, 180] }, 
                 styles: { fontSize: 8, cellPadding: 1.5, overflow: 'linebreak' },
                  columnStyles: { 
-                    0: { cellWidth: 30 }, // Propietario
-                    1: { cellWidth: 30 }, // Propiedad
-                    2: { cellWidth: 20 }, // Fecha Últ. Pago
+                    0: { cellWidth: 25 }, // Propietario
+                    1: { cellWidth: 25 }, // Propiedad
+                    2: { cellWidth: 18 }, // Fecha Últ. Pago
                     3: { halign: 'right' }, // Monto Pagado
                     4: { halign: 'right' }, // Tasa Prom
                     5: { halign: 'right' }, // Saldo a Favor
-                    6: { cellWidth: 20 }, // Estado
-                    7: { cellWidth: 'auto' }, // Periodo Solvencia
+                    6: { cellWidth: 18 }, // Estado
+                    7: { cellWidth: 20 }, // Periodo
+                    8: { halign: 'center' }, // Meses Adeudados
                 }
             });
             doc.save(`${filename}.pdf`);
@@ -708,7 +717,7 @@ export default function ReportsPage() {
             XLSX.utils.sheet_add_aoa(worksheet, headers, { origin: "A5" });
             XLSX.utils.sheet_add_json(worksheet, data.map(row => ({
                  "Propietario": row.name, "Propiedad": row.properties, "Fecha Últ. Pago": row.lastPaymentDate, "Monto Pagado (Bs)": row.paidAmount,
-                 "Tasa Prom. (Bs/$)": row.avgRate, "Saldo a Favor (Bs)": row.balance, "Estado": row.status, "Período Solvencia": row.solvencyPeriod,
+                 "Tasa Prom. (Bs/$)": row.avgRate, "Saldo a Favor (Bs)": row.balance, "Estado": row.status, "Periodo": row.solvencyPeriod, "Meses Adeudados": row.monthsOwed
             })), { origin: "A6", skipHeader: true });
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Reporte Integral");
@@ -1139,11 +1148,12 @@ export default function ReportsPage() {
                                         <TableHead>Propietario</TableHead>
                                         <TableHead>Propiedad</TableHead>
                                         <TableHead>Fecha Últ. Pago</TableHead>
-                                        <TableHead>Estado</TableHead>
-                                        <TableHead>Período Solvencia</TableHead>
                                         <TableHead className="text-right">Monto Pagado</TableHead>
                                         <TableHead className="text-right">Tasa Prom.</TableHead>
                                         <TableHead className="text-right">Saldo a Favor</TableHead>
+                                        <TableHead>Estado</TableHead>
+                                        <TableHead>Periodo</TableHead>
+                                        <TableHead className="text-center">Meses Adeudados</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -1152,13 +1162,14 @@ export default function ReportsPage() {
                                             <TableCell className="font-medium">{row.name}</TableCell>
                                             <TableCell>{row.properties}</TableCell>
                                             <TableCell>{row.lastPaymentDate}</TableCell>
+                                            <TableCell className="text-right">{row.paidAmount > 0 ? `Bs. ${formatToTwoDecimals(row.paidAmount)}`: ''}</TableCell>
+                                            <TableCell className="text-right">{row.avgRate > 0 ? `Bs. ${formatToTwoDecimals(row.avgRate)}`: ''}</TableCell>
+                                            <TableCell className="text-right">{row.balance > 0 ? `Bs. ${formatToTwoDecimals(row.balance)}`: ''}</TableCell>
                                             <TableCell>
                                                 <span className={cn('font-semibold', row.status === 'No Solvente' ? 'text-destructive' : 'text-green-600')}>{row.status}</span>
                                             </TableCell>
                                             <TableCell>{row.solvencyPeriod}</TableCell>
-                                            <TableCell className="text-right">{row.paidAmount > 0 ? `Bs. ${formatToTwoDecimals(row.paidAmount)}`: ''}</TableCell>
-                                            <TableCell className="text-right">{row.avgRate > 0 ? `Bs. ${formatToTwoDecimals(row.avgRate)}`: ''}</TableCell>
-                                            <TableCell className="text-right">{row.balance > 0 ? `Bs. ${formatToTwoDecimals(row.balance)}`: ''}</TableCell>
+                                            <TableCell className="text-center">{row.monthsOwed > 0 ? row.monthsOwed : ''}</TableCell>
                                         </TableRow>
                                     ))}
                                 </TableBody>
@@ -1675,6 +1686,7 @@ export default function ReportsPage() {
     
 
   
+
 
 
 
