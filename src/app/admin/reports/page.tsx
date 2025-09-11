@@ -313,39 +313,26 @@ export default function ReportsPage() {
             
             // Phase 1: Determine all "solvent months"
             const solventMonths = new Set<string>();
-            const monthlyPaidAmounts = new Map<string, number>();
 
-            // Group paid amounts from 'debts' collection
             ownerAllDebts.forEach(debt => {
-                if (debt.status === 'paid' && debt.paidAmountUSD) {
-                    const key = `${debt.year}-${debt.month}`;
-                    const currentAmount = monthlyPaidAmounts.get(key) || 0;
-                    
-                    if(debt.description.toLowerCase().includes('ajuste por aumento')) {
-                        // Golden Rule: an adjustment payment equals a full $15 payment for that month
-                        monthlyPaidAmounts.set(key, 15);
-                    } else {
-                        monthlyPaidAmounts.set(key, currentAmount + debt.paidAmountUSD);
+                const isJuly2025OrBefore = debt.year < 2025 || (debt.year === 2025 && debt.month <= 7);
+                const isPaid = debt.status === 'paid';
+                const paidAmount = debt.paidAmountUSD || 0;
+
+                if (isPaid) {
+                    if (isJuly2025OrBefore && paidAmount >= 10) {
+                        solventMonths.add(`${debt.year}-${debt.month}`);
+                    } else if (!isJuly2025OrBefore && paidAmount >= 15) {
+                        solventMonths.add(`${debt.year}-${debt.month}`);
+                    } else if (debt.description.toLowerCase().includes('ajuste por aumento')) {
+                        solventMonths.add(`${debt.year}-${debt.month}`);
                     }
                 }
             });
-            // Also consider historical payments as full payments
             ownerHistoricalPayments.forEach(hp => {
-                 const key = `${hp.referenceYear}-${hp.referenceMonth}`;
-                 monthlyPaidAmounts.set(key, 15); // Assume historical payments are full
+                 solventMonths.add(`${hp.referenceYear}-${hp.referenceMonth}`);
             });
 
-            // Determine solvency for each month based on the rules
-            monthlyPaidAmounts.forEach((amount, key) => {
-                const [year, month] = key.split('-').map(Number);
-                const isJuly2025OrBefore = year < 2025 || (year === 2025 && month <= 7);
-                
-                if (isJuly2025OrBefore && amount >= 10) {
-                    solventMonths.add(key);
-                } else if (!isJuly2025OrBefore && amount >= 15) {
-                    solventMonths.add(key);
-                }
-            });
 
             // Phase 2: Find the last consecutive solvent month
             let lastSolventDate: Date | null = null;
@@ -355,19 +342,14 @@ export default function ReportsPage() {
                     return new Date(year, month - 1);
                 }).sort((a, b) => a.getTime() - b.getTime());
 
-                if (sortedSolventPeriods.length > 0) {
-                    lastSolventDate = sortedSolventPeriods[0]; // Start with the first ever paid month
-                    for (let i = 0; i < sortedSolventPeriods.length - 1; i++) {
-                        const current = sortedSolventPeriods[i];
-                        const next = sortedSolventPeriods[i+1];
-                        // If the next month is exactly one month after the current one, continue the chain
-                        if (differenceInCalendarMonths(next, current) === 1) {
-                            lastSolventDate = next;
-                        } else {
-                            // If there is a gap, the consecutive chain is broken
-                            break; 
-                        }
+                lastSolventDate = sortedSolventPeriods[0];
+                for (let i = 0; i < sortedSolventPeriods.length - 1; i++) {
+                    const current = sortedSolventPeriods[i];
+                    const next = sortedSolventPeriods[i + 1];
+                    if (differenceInCalendarMonths(next, current) > 1) {
+                        break; 
                     }
+                    lastSolventDate = next;
                 }
             }
             
@@ -402,7 +384,7 @@ export default function ReportsPage() {
 
             // Phase 5: Calculate pending adjustment debt
             const adjustmentDebtUSD = ownerAllDebts
-                .filter(d => d.status === 'pending' && d.description.toLowerCase().includes('ajuste por aumento'))
+                .filter(d => d.status === 'pending' && d.description.toLowerCase().includes('ajuste por aumento de cuota'))
                 .reduce((sum, d) => sum + d.amountUSD, 0);
             
             // Phase 6: Filter payments for reporting based on date range
@@ -869,7 +851,7 @@ export default function ReportsPage() {
             doc.setFontSize(11).setFont('helvetica', 'bold').text('Resumen de Deudas', margin, startY);
             startY += 7;
             const debtBody = ownerDebts
-                .sort((a,b) => b.year - b.year || b.month - b.month)
+                .sort((a,b) => b.year - a.year || b.month - b.month)
                 .map(d => [
                 `${Object.values(monthsLocale)[d.month -1] || ''} ${d.year}`,
                 d.description,
@@ -905,18 +887,32 @@ export default function ReportsPage() {
             toast({ variant: "destructive", title: "Nada para exportar", description: "No hay propietarios con saldo a favor." });
             return;
         }
-
+    
         const filename = `reporte_saldos_favor_${format(new Date(), 'yyyy-MM-dd')}`;
         const head = [['Propietario', 'Propiedades', 'Fecha Últ. Movimiento', 'Saldo a Favor (Bs.)']];
         const body = data.map(o => [o.name, o.properties, o.lastMovement, `Bs. ${formatToTwoDecimals(o.balance)}`]);
-
+    
         if (formatType === 'pdf') {
             const doc = new jsPDF();
-            doc.setFontSize(16).setFont('helvetica', 'bold').text("Reporte de Saldos a Favor", doc.internal.pageSize.getWidth() / 2, 20, { align: 'center' });
+            const pageWidth = doc.internal.pageSize.getWidth();
+            const margin = 14;
+    
+            if (companyInfo?.logo) {
+                try { doc.addImage(companyInfo.logo, 'PNG', margin, margin, 20, 20); } 
+                catch (e) { console.error("Error adding logo to PDF:", e); }
+            }
+            if (companyInfo) {
+                doc.setFontSize(10).setFont('helvetica', 'bold').text(companyInfo.name, margin + 25, margin + 8);
+                doc.setFontSize(8).setFont('helvetica', 'normal').text(companyInfo.rif || '', margin + 25, margin + 13);
+            }
+            doc.setFontSize(8).setFont('helvetica', 'normal').text(`Emitido: ${format(new Date(), "dd/MM/yyyy HH:mm:ss")}`, pageWidth - margin, margin + 8, { align: 'right'});
+    
+            doc.setFontSize(16).setFont('helvetica', 'bold').text("Reporte de Saldos a Favor", pageWidth / 2, margin + 30, { align: 'center' });
+            
             (doc as any).autoTable({
                 head: head,
                 body: body,
-                startY: 30,
+                startY: margin + 40,
                 headStyles: { fillColor: [22, 163, 74] }, // Green color
             });
             doc.save(`${filename}.pdf`);
@@ -1000,13 +996,13 @@ export default function ReportsPage() {
             row.ownerName,
             row.october ? `$${row.october.amount.toFixed(2)}` : '—',
             row.october ? row.october.status : '—',
-            row.october ? (row.october.toAdjust > 0 ? `$${row.october.toAdjust.toFixed(2)}` : '—') : '—',
+            row.october && row.october.toAdjust > 0 ? `$${row.october.toAdjust.toFixed(2)}` : '—',
             row.november ? `$${row.november.amount.toFixed(2)}` : '—',
             row.november ? row.november.status : '—',
-            row.november ? (row.november.toAdjust > 0 ? `$${row.november.toAdjust.toFixed(2)}` : '—') : '—',
+            row.november && row.november.toAdjust > 0 ? `$${row.november.toAdjust.toFixed(2)}` : '—',
             row.december ? `$${row.december.amount.toFixed(2)}` : '—',
             row.december ? row.december.status : '—',
-            row.december ? (row.december.toAdjust > 0 ? `$${row.december.toAdjust.toFixed(2)}` : '—') : '—',
+            row.december && row.december.toAdjust > 0 ? `$${row.december.toAdjust.toFixed(2)}` : '—',
         ]);
     
         if (formatType === 'pdf') {
@@ -1704,3 +1700,5 @@ export default function ReportsPage() {
         </div>
     );
 }
+
+    
