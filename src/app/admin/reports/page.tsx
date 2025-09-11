@@ -356,16 +356,15 @@ export default function ReportsPage() {
                 }).sort((a, b) => a.getTime() - b.getTime());
 
                 if (sortedSolventPeriods.length > 0) {
-                    let firstMonth = sortedSolventPeriods[0];
-                    lastSolventDate = firstMonth;
-                    for (let i = 0; i < sortedSolventPeriods.length -1; i++) {
+                    lastSolventDate = sortedSolventPeriods[0]; // Start with the first ever paid month
+                    for (let i = 0; i < sortedSolventPeriods.length - 1; i++) {
                         const current = sortedSolventPeriods[i];
                         const next = sortedSolventPeriods[i+1];
+                        // If the next month is exactly one month after the current one, continue the chain
                         if (differenceInCalendarMonths(next, current) === 1) {
                             lastSolventDate = next;
                         } else {
-                            // This logic can be more complex if we need to find the longest chain.
-                            // For now, assume we start from the oldest paid month.
+                            // If there is a gap, the consecutive chain is broken
                             break; 
                         }
                     }
@@ -403,7 +402,7 @@ export default function ReportsPage() {
 
             // Phase 5: Calculate pending adjustment debt
             const adjustmentDebtUSD = ownerAllDebts
-                .filter(d => d.status === 'pending' && d.description === 'Ajuste por aumento de cuota')
+                .filter(d => d.status === 'pending' && d.description.toLowerCase().includes('ajuste por aumento'))
                 .reduce((sum, d) => sum + d.amountUSD, 0);
             
             // Phase 6: Filter payments for reporting based on date range
