@@ -305,32 +305,33 @@ export default function ReportsPage() {
         });
 
         return sortedOwners.map(owner => {
-            // --- Phase 1: Determine which months are fully paid ($15) ---
-            const monthlyPayments = new Map<string, number>();
             const ownerAllDebts = allDebts.filter(d => d.ownerId === owner.id);
 
+            // Phase 1: Create a map of monthly payments, aggregating amounts.
+            const monthlyPayments = new Map<string, number>();
             ownerAllDebts.forEach(debt => {
-                const key = `${debt.year}-${debt.month}`;
-                const currentAmount = monthlyPayments.get(key) || 0;
-                
-                // Regla de oro: si es un ajuste, cuenta como pago completo.
-                if (debt.status === 'paid' && debt.description.toLowerCase().includes('ajuste')) {
-                    monthlyPayments.set(key, 15);
-                } else if (debt.status === 'paid' && debt.paidAmountUSD && monthlyPayments.get(key) !== 15) {
-                    monthlyPayments.set(key, currentAmount + debt.paidAmountUSD);
+                if (debt.status === 'paid' && debt.paidAmountUSD) {
+                    const key = `${debt.year}-${debt.month}`;
+                    const currentAmount = monthlyPayments.get(key) || 0;
+                    
+                    // Golden Rule: if it's an adjustment, it counts as a full 15.
+                    if (debt.description.toLowerCase().includes('ajuste')) {
+                        monthlyPayments.set(key, 15);
+                    } else if (monthlyPayments.get(key) !== 15) { // Only add if not already marked as fully paid
+                        monthlyPayments.set(key, currentAmount + debt.paidAmountUSD);
+                    }
                 }
             });
 
+            // Phase 2: Create a set of "solvent" months (paid >= $15)
             const solventMonths = new Set<string>();
             monthlyPayments.forEach((amount, key) => {
-                // Pagos futuros incompletos se ignoran
-                const [year, month] = key.split('-').map(Number);
                 if (amount >= 15) {
                     solventMonths.add(key);
                 }
             });
 
-            // --- Phase 2: Calculate solvency status based on current date ---
+            // Phase 3: Determine solvency status based on current date
             const now = new Date();
             const currentYear = now.getFullYear();
             const currentMonth = now.getMonth() + 1;
@@ -341,7 +342,7 @@ export default function ReportsPage() {
             );
             const status: 'Solvente' | 'No Solvente' = pendingDebtsUpToCurrentMonth.length === 0 ? 'Solvente' : 'No Solvente';
 
-            // --- Phase 3: Determine the solvency period string ---
+            // Phase 4: Determine the solvency period string
             let lastSolventPeriodKey = '';
             if (status === 'No Solvente') {
                  const oldestDebt = [...pendingDebtsUpToCurrentMonth]
@@ -371,19 +372,15 @@ export default function ReportsPage() {
 
                     if (lastConsecutiveDate) {
                         lastSolventPeriodKey = `Hasta ${format(lastConsecutiveDate, 'MMM yyyy', { locale: es })}`;
-                    } else {
-                        // Fallback if no debts are found but user is solvent (e.g. new user)
-                        const prevMonth = addMonths(now, -1);
-                        lastSolventPeriodKey = `Hasta ${format(prevMonth, 'MMM yyyy', { locale: es })}`;
                     }
                 }
             }
-            if (!lastSolventPeriodKey && status === 'Solvente') {
+             if (!lastSolventPeriodKey && status === 'Solvente') {
                 const prevMonth = addMonths(now, -1);
                 lastSolventPeriodKey = `Hasta ${format(prevMonth, 'MMM yyyy', { locale: es })}`;
             }
-            
-            // --- Phase 4: Filter payments for reporting based on date range ---
+
+            // Phase 5: Filter payments for reporting based on date range
             const fromDate = integralDateRange.from;
             const toDate = integralDateRange.to;
             if (fromDate) fromDate.setHours(0, 0, 0, 0);
@@ -1678,5 +1675,6 @@ export default function ReportsPage() {
     
 
   
+
 
 
