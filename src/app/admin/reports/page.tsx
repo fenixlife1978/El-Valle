@@ -304,65 +304,71 @@ export default function ReportsPage() {
             return aKeys.houseNum - bKeys.houseNum;
         });
 
+        const startOfCurrentMonth = startOfMonth(new Date());
+
         return sortedOwners.map(owner => {
             const ownerAllDebts = allDebts.filter(d => d.ownerId === owner.id);
-            const feeThreshold = 15.00;
-            const now = new Date();
-            const startOfCurrentMonth = startOfMonth(now);
-
-            // Phase 1: Create a map of monthly payments, aggregating amounts.
-            const monthlyPayments = new Map<string, number>();
-            const adjustmentPayments = new Set<string>();
+            
+            // Phase 1: Determine all "solvent months" based on new rules
+            const monthlyPaidAmounts = new Map<string, number>();
+            const adjustmentPaidMonths = new Set<string>();
 
             ownerAllDebts.forEach(debt => {
                 if (debt.status === 'paid' && debt.paidAmountUSD) {
                     const key = `${debt.year}-${debt.month}`;
-                    if (debt.description.toLowerCase().includes('ajuste')) {
-                        adjustmentPayments.add(key);
+                    const currentAmount = monthlyPaidAmounts.get(key) || 0;
+                    monthlyPaidAmounts.set(key, currentAmount + debt.paidAmountUSD);
+                    
+                    if(debt.description.toLowerCase().includes('ajuste')) {
+                        adjustmentPaidMonths.add(key);
                     }
-                    const currentAmount = monthlyPayments.get(key) || 0;
-                    monthlyPayments.set(key, currentAmount + debt.paidAmountUSD);
                 }
             });
-
-            // Phase 2: Create a set of "solvent" months based on strict rules.
+            
             const solventMonths = new Set<string>();
-            monthlyPayments.forEach((amount, key) => {
-                // A month is solvent if it has an adjustment payment OR if the total paid amount is >= $15
-                if (adjustmentPayments.has(key) || amount >= feeThreshold) {
+            monthlyPaidAmounts.forEach((amount, key) => {
+                const [, monthStr] = key.split('-');
+                const month = parseInt(monthStr);
+
+                const isAdjustmentPaid = adjustmentPaidMonths.has(key);
+                const isJulyOrBefore = month <= 7;
+                
+                if (isAdjustmentPaid) {
+                    solventMonths.add(key);
+                } else if (isJulyOrBefore && amount >= 10) {
+                    solventMonths.add(key);
+                } else if (!isJulyOrBefore && amount >= 15) {
                     solventMonths.add(key);
                 }
             });
-            
-            // Phase 3: Find the last consecutive solvent month
+
+            // Phase 2: Find the last consecutive solvent month
             let lastSolventDate: Date | null = null;
-            if (ownerAllDebts.length > 0) {
-                 const allOwnerDebtsSorted = [...ownerAllDebts].sort((a, b) => a.year - b.year || a.month - b.month);
-                 const oldestDebt = allOwnerDebtsSorted[0];
-                 if(oldestDebt) {
-                    const startDate = new Date(oldestDebt.year, oldestDebt.month - 1);
-                    const endDate = addMonths(startOfCurrentMonth, 24); // Look 2 years into the future
-                    
-                    let isConsecutive = true;
-                    for (let i = 0; i <= differenceInCalendarMonths(endDate, startDate); i++) {
-                        const checkDate = addMonths(startDate, i);
-                        const key = `${checkDate.getFullYear()}-${checkDate.getMonth() + 1}`;
-                        if (solventMonths.has(key)) {
-                            if (isConsecutive) {
-                                lastSolventDate = checkDate;
-                            }
-                        } else {
-                            isConsecutive = false; // Break the chain
-                        }
+            if (solventMonths.size > 0) {
+                const sortedSolventPeriods = Array.from(solventMonths).sort();
+                const firstPeriod = sortedSolventPeriods[0];
+                const [firstYear, firstMonth] = firstPeriod.split('-').map(Number);
+                let startDate = new Date(firstYear, firstMonth - 1);
+                
+                lastSolventDate = startDate;
+
+                for (let i = 1; i < 240; i++) { // Look ahead 20 years
+                    const nextDate = addMonths(startDate, i);
+                    const nextKey = `${nextDate.getFullYear()}-${nextDate.getMonth() + 1}`;
+                    if (solventMonths.has(nextKey)) {
+                        lastSolventDate = nextDate;
+                    } else {
+                        break; // End of consecutive sequence
                     }
-                 }
+                }
             }
             
-            // Phase 4: Determine solvency status and period string
+            // Phase 3: Determine solvency status and period string
             const pendingDebtsUpToCurrentMonth = ownerAllDebts.filter(d => {
                 const debtDate = new Date(d.year, d.month - 1);
-                return d.status === 'pending' && isEqual(debtDate, startOfCurrentMonth) || isBefore(debtDate, startOfCurrentMonth);
+                return d.status === 'pending' && (isEqual(debtDate, startOfCurrentMonth) || isBefore(debtDate, startOfCurrentMonth));
             });
+            
             const status: 'Solvente' | 'No Solvente' = pendingDebtsUpToCurrentMonth.length === 0 ? 'Solvente' : 'No Solvente';
             
             let solvencyPeriod = '';
@@ -371,29 +377,31 @@ export default function ReportsPage() {
                 if (oldestDebt) {
                     solvencyPeriod = `Desde ${monthsLocale[oldestDebt.month]} ${oldestDebt.year}`;
                 } else {
-                    solvencyPeriod = 'N/A';
+                     solvencyPeriod = 'N/A'; // Should not happen if No Solvente
                 }
             } else {
                  if (lastSolventDate) {
                     solvencyPeriod = `Hasta ${format(lastSolventDate, 'MMM yyyy', { locale: es })}`;
                  } else {
-                    solvencyPeriod = 'Al día';
+                     const now = new Date();
+                     solvencyPeriod = `Hasta ${format(now, 'MMM yyyy', { locale: es })}`;
                  }
             }
 
+            // Phase 4: Calculate months owed
             let monthsOwed = 0;
-            if (status === 'No Solvente' && lastSolventDate) {
-                // Calculate months owed from the month AFTER the last solvent one, up to the current month.
-                const firstOwedMonth = addMonths(lastSolventDate, 1);
-                if (isBefore(firstOwedMonth, startOfCurrentMonth) || isEqual(firstOwedMonth, startOfCurrentMonth)) {
-                    monthsOwed = differenceInMonths(startOfCurrentMonth, firstOwedMonth) + 1;
+            if (status === 'No Solvente') {
+                if (lastSolventDate) {
+                    const firstOwedMonth = addMonths(lastSolventDate, 1);
+                     if (isBefore(firstOwedMonth, startOfCurrentMonth) || isEqual(firstOwedMonth, startOfCurrentMonth)) {
+                        monthsOwed = differenceInMonths(startOfCurrentMonth, firstOwedMonth) + 1;
+                    }
+                } else {
+                    // Count all pending debts up to current month if no solvent history
+                    monthsOwed = pendingDebtsUpToCurrentMonth.length;
                 }
-            } else if (status === 'No Solvente' && !lastSolventDate) {
-                // If there are no solvent months, count all pending debts up to current month.
-                monthsOwed = pendingDebtsUpToCurrentMonth.length;
             }
-
-
+            
             // Phase 5: Filter payments for reporting based on date range
             const fromDate = integralDateRange.from;
             const toDate = integralDateRange.to;
@@ -1690,12 +1698,3 @@ export default function ReportsPage() {
         </div>
     );
 }
-
-    
-
-  
-
-
-
-
-
