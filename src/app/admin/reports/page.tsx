@@ -309,35 +309,30 @@ export default function ReportsPage() {
         return sortedOwners.map(owner => {
             const ownerAllDebts = allDebts.filter(d => d.ownerId === owner.id);
             
-            // Phase 1: Determine all "solvent months" based on new rules
+            // Phase 1: Determine all "solvent months"
+            const solventMonths = new Set<string>();
             const monthlyPaidAmounts = new Map<string, number>();
-            const adjustmentPaidMonths = new Set<string>();
 
+            // Group paid amounts by month
             ownerAllDebts.forEach(debt => {
                 if (debt.status === 'paid' && debt.paidAmountUSD) {
                     const key = `${debt.year}-${debt.month}`;
                     const currentAmount = monthlyPaidAmounts.get(key) || 0;
                     monthlyPaidAmounts.set(key, currentAmount + debt.paidAmountUSD);
-                    
-                    if(debt.description.toLowerCase().includes('ajuste')) {
-                        adjustmentPaidMonths.add(key);
+                    if(debt.description.toLowerCase().includes('ajuste por aumento')) {
+                         monthlyPaidAmounts.set(key, 15); // Golden rule
                     }
                 }
             });
-            
-            const solventMonths = new Set<string>();
-            monthlyPaidAmounts.forEach((amount, key) => {
-                const [, monthStr] = key.split('-');
-                const month = parseInt(monthStr);
 
-                const isAdjustmentPaid = adjustmentPaidMonths.has(key);
-                const isJulyOrBefore = month <= 7;
+            // Determine solvency for each month
+            monthlyPaidAmounts.forEach((amount, key) => {
+                const [year, month] = key.split('-').map(Number);
+                const isJuly2025OrBefore = year < 2025 || (year === 2025 && month <= 7);
                 
-                if (isAdjustmentPaid) {
+                if (isJuly2025OrBefore && amount >= 10) {
                     solventMonths.add(key);
-                } else if (isJulyOrBefore && amount >= 10) {
-                    solventMonths.add(key);
-                } else if (!isJulyOrBefore && amount >= 15) {
+                } else if (!isJuly2025OrBefore && amount >= 15) {
                     solventMonths.add(key);
                 }
             });
@@ -345,20 +340,21 @@ export default function ReportsPage() {
             // Phase 2: Find the last consecutive solvent month
             let lastSolventDate: Date | null = null;
             if (solventMonths.size > 0) {
-                const sortedSolventPeriods = Array.from(solventMonths).sort();
-                const firstPeriod = sortedSolventPeriods[0];
-                const [firstYear, firstMonth] = firstPeriod.split('-').map(Number);
-                let startDate = new Date(firstYear, firstMonth - 1);
-                
-                lastSolventDate = startDate;
+                const sortedSolventPeriods = Array.from(solventMonths).map(p => {
+                    const [year, month] = p.split('-').map(Number);
+                    return new Date(year, month - 1);
+                }).sort((a, b) => a.getTime() - b.getTime());
 
-                for (let i = 1; i < 240; i++) { // Look ahead 20 years
-                    const nextDate = addMonths(startDate, i);
-                    const nextKey = `${nextDate.getFullYear()}-${nextDate.getMonth() + 1}`;
-                    if (solventMonths.has(nextKey)) {
-                        lastSolventDate = nextDate;
-                    } else {
-                        break; // End of consecutive sequence
+                if(sortedSolventPeriods.length > 0) {
+                    lastSolventDate = sortedSolventPeriods[0];
+                    for (let i = 0; i < sortedSolventPeriods.length - 1; i++) {
+                        const current = sortedSolventPeriods[i];
+                        const next = sortedSolventPeriods[i+1];
+                        if (differenceInCalendarMonths(next, current) === 1) {
+                            lastSolventDate = next;
+                        } else {
+                            break; // End of consecutive sequence
+                        }
                     }
                 }
             }
@@ -377,29 +373,20 @@ export default function ReportsPage() {
                 if (oldestDebt) {
                     solvencyPeriod = `Desde ${monthsLocale[oldestDebt.month]} ${oldestDebt.year}`;
                 } else {
-                     solvencyPeriod = 'N/A'; // Should not happen if No Solvente
+                     solvencyPeriod = 'N/A';
                 }
             } else {
                  if (lastSolventDate) {
                     solvencyPeriod = `Hasta ${format(lastSolventDate, 'MMM yyyy', { locale: es })}`;
                  } else {
-                     const now = new Date();
-                     solvencyPeriod = `Hasta ${format(now, 'MMM yyyy', { locale: es })}`;
+                     solvencyPeriod = 'N/A';
                  }
             }
-
+            
             // Phase 4: Calculate months owed
             let monthsOwed = 0;
             if (status === 'No Solvente') {
-                if (lastSolventDate) {
-                    const firstOwedMonth = addMonths(lastSolventDate, 1);
-                     if (isBefore(firstOwedMonth, startOfCurrentMonth) || isEqual(firstOwedMonth, startOfCurrentMonth)) {
-                        monthsOwed = differenceInMonths(startOfCurrentMonth, firstOwedMonth) + 1;
-                    }
-                } else {
-                    // Count all pending debts up to current month if no solvent history
-                    monthsOwed = pendingDebtsUpToCurrentMonth.length;
-                }
+                 monthsOwed = pendingDebtsUpToCurrentMonth.filter(d => d.description.toLowerCase().includes('condominio')).length;
             }
             
             // Phase 5: Filter payments for reporting based on date range
@@ -1698,3 +1685,5 @@ export default function ReportsPage() {
         </div>
     );
 }
+
+    
