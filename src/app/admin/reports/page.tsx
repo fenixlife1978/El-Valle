@@ -95,6 +95,7 @@ type IntegralReportRow = {
     status: 'Solvente' | 'No Solvente';
     solvencyPeriod: string;
     monthsOwed: number;
+    adjustmentDebtUSD: number; // New field for pending adjustment debt
 };
 
 type DelinquentOwner = {
@@ -308,24 +309,33 @@ export default function ReportsPage() {
 
         return sortedOwners.map(owner => {
             const ownerAllDebts = allDebts.filter(d => d.ownerId === owner.id);
+            const ownerHistoricalPayments = allHistoricalPayments.filter(hp => hp.ownerId === owner.id);
             
             // Phase 1: Determine all "solvent months"
             const solventMonths = new Set<string>();
             const monthlyPaidAmounts = new Map<string, number>();
 
-            // Group paid amounts by month
+            // Group paid amounts from 'debts' collection
             ownerAllDebts.forEach(debt => {
                 if (debt.status === 'paid' && debt.paidAmountUSD) {
                     const key = `${debt.year}-${debt.month}`;
                     const currentAmount = monthlyPaidAmounts.get(key) || 0;
-                    monthlyPaidAmounts.set(key, currentAmount + debt.paidAmountUSD);
+                    
                     if(debt.description.toLowerCase().includes('ajuste por aumento')) {
-                         monthlyPaidAmounts.set(key, 15); // Golden rule
+                        // Golden Rule: an adjustment payment equals a full $15 payment for that month
+                        monthlyPaidAmounts.set(key, 15);
+                    } else {
+                        monthlyPaidAmounts.set(key, currentAmount + debt.paidAmountUSD);
                     }
                 }
             });
+            // Also consider historical payments as full payments
+            ownerHistoricalPayments.forEach(hp => {
+                 const key = `${hp.referenceYear}-${hp.referenceMonth}`;
+                 monthlyPaidAmounts.set(key, 15); // Assume historical payments are full
+            });
 
-            // Determine solvency for each month
+            // Determine solvency for each month based on the rules
             monthlyPaidAmounts.forEach((amount, key) => {
                 const [year, month] = key.split('-').map(Number);
                 const isJuly2025OrBefore = year < 2025 || (year === 2025 && month <= 7);
@@ -345,15 +355,18 @@ export default function ReportsPage() {
                     return new Date(year, month - 1);
                 }).sort((a, b) => a.getTime() - b.getTime());
 
-                if(sortedSolventPeriods.length > 0) {
-                    lastSolventDate = sortedSolventPeriods[0];
-                    for (let i = 0; i < sortedSolventPeriods.length - 1; i++) {
+                if (sortedSolventPeriods.length > 0) {
+                    let firstMonth = sortedSolventPeriods[0];
+                    lastSolventDate = firstMonth;
+                    for (let i = 0; i < sortedSolventPeriods.length -1; i++) {
                         const current = sortedSolventPeriods[i];
                         const next = sortedSolventPeriods[i+1];
                         if (differenceInCalendarMonths(next, current) === 1) {
                             lastSolventDate = next;
                         } else {
-                            break; // End of consecutive sequence
+                            // This logic can be more complex if we need to find the longest chain.
+                            // For now, assume we start from the oldest paid month.
+                            break; 
                         }
                     }
                 }
@@ -367,29 +380,33 @@ export default function ReportsPage() {
             
             const status: 'Solvente' | 'No Solvente' = pendingDebtsUpToCurrentMonth.length === 0 ? 'Solvente' : 'No Solvente';
             
-            let solvencyPeriod = '';
+            let solvencyPeriod = 'N/A';
             if (status === 'No Solvente') {
                 const oldestDebt = [...pendingDebtsUpToCurrentMonth].sort((a,b) => a.year - b.year || a.month - b.month)[0];
                 if (oldestDebt) {
                     solvencyPeriod = `Desde ${monthsLocale[oldestDebt.month]} ${oldestDebt.year}`;
-                } else {
-                     solvencyPeriod = 'N/A';
                 }
             } else {
                  if (lastSolventDate) {
                     solvencyPeriod = `Hasta ${format(lastSolventDate, 'MMM yyyy', { locale: es })}`;
-                 } else {
-                     solvencyPeriod = 'N/A';
                  }
             }
             
             // Phase 4: Calculate months owed
             let monthsOwed = 0;
-            if (status === 'No Solvente') {
-                 monthsOwed = pendingDebtsUpToCurrentMonth.filter(d => d.description.toLowerCase().includes('condominio')).length;
+            if (status === 'No Solvente' && lastSolventDate) {
+                 monthsOwed = differenceInMonths(startOfCurrentMonth, lastSolventDate);
+            } else if (status === 'No Solvente' && !lastSolventDate) {
+                // If never paid, count all pending months up to current
+                monthsOwed = pendingDebtsUpToCurrentMonth.length;
             }
+
+            // Phase 5: Calculate pending adjustment debt
+            const adjustmentDebtUSD = ownerAllDebts
+                .filter(d => d.status === 'pending' && d.description === 'Ajuste por aumento de cuota')
+                .reduce((sum, d) => sum + d.amountUSD, 0);
             
-            // Phase 5: Filter payments for reporting based on date range
+            // Phase 6: Filter payments for reporting based on date range
             const fromDate = integralDateRange.from;
             const toDate = integralDateRange.to;
             if (fromDate) fromDate.setHours(0, 0, 0, 0);
@@ -424,14 +441,15 @@ export default function ReportsPage() {
                 balance: owner.balance,
                 status,
                 solvencyPeriod,
-                monthsOwed,
+                monthsOwed: monthsOwed > 0 ? monthsOwed : 0,
+                adjustmentDebtUSD: adjustmentDebtUSD,
             };
         }).filter(row => {
             const statusMatch = integralStatusFilter === 'todos' || row.status.toLowerCase().replace(' ', '') === integralStatusFilter.toLowerCase().replace(' ', '');
             const ownerMatch = !integralOwnerFilter || row.name.toLowerCase().includes(integralOwnerFilter.toLowerCase());
             return statusMatch && ownerMatch;
         });
-    }, [owners, allDebts, allPayments, integralDateRange, integralStatusFilter, integralOwnerFilter]);
+    }, [owners, allDebts, allHistoricalPayments, allPayments, integralDateRange, integralStatusFilter, integralOwnerFilter]);
     
     // --- Delinquency Report Logic ---
     const filteredAndSortedDelinquents = useMemo(() => {
@@ -657,7 +675,7 @@ export default function ReportsPage() {
 
     const handleExportIntegral = (formatType: 'pdf' | 'excel') => {
         const data = integralReportData;
-        const headers = [["Propietario", "Propiedad", "Fecha Últ. Pago", "Monto Pagado (Bs)", "Tasa Prom. (Bs/$)", "Saldo a Favor (Bs)", "Estado", "Periodo", "Meses Adeudados"]];
+        const headers = [["Propietario", "Propiedad", "Fecha Últ. Pago", "Monto Pagado (Bs)", "Tasa Prom. (Bs/$)", "Saldo a Favor (Bs)", "Estado", "Periodo", "Meses Adeudados", "Deuda por Ajuste ($)"]];
         const body = data.map(row => [
             row.name, row.properties, row.lastPaymentDate,
             row.paidAmount > 0 ? formatToTwoDecimals(row.paidAmount) : '',
@@ -665,7 +683,8 @@ export default function ReportsPage() {
             row.balance > 0 ? formatToTwoDecimals(row.balance) : '',
             row.status,
             row.solvencyPeriod,
-            row.monthsOwed > 0 ? row.monthsOwed : ''
+            row.monthsOwed > 0 ? row.monthsOwed : '',
+            row.adjustmentDebtUSD > 0 ? `$${row.adjustmentDebtUSD.toFixed(2)}` : ''
         ]);
 
         const filename = `reporte_integral_${new Date().toISOString().split('T')[0]}`;
@@ -680,7 +699,7 @@ export default function ReportsPage() {
         }
 
         if (formatType === 'pdf') {
-            const doc = new jsPDF({ orientation: 'portrait' });
+            const doc = new jsPDF({ orientation: 'landscape' });
             const pageWidth = doc.internal.pageSize.getWidth();
             let startY = 15;
             if (companyInfo?.logo) doc.addImage(companyInfo.logo, 'PNG', 15, startY, 20, 20);
@@ -698,30 +717,29 @@ export default function ReportsPage() {
             (doc as any).autoTable({
                 head: headers, body: body, startY: startY,
                 headStyles: { fillColor: [30, 80, 180] }, 
-                styles: { fontSize: 8, cellPadding: 1.5, overflow: 'linebreak' },
+                styles: { fontSize: 7, cellPadding: 1.5, overflow: 'linebreak' },
                  columnStyles: { 
-                    0: { cellWidth: 25 }, // Propietario
-                    1: { cellWidth: 25 }, // Propiedad
-                    2: { cellWidth: 18 }, // Fecha Últ. Pago
-                    3: { halign: 'right' }, // Monto Pagado
-                    4: { halign: 'right' }, // Tasa Prom
-                    5: { halign: 'right' }, // Saldo a Favor
-                    6: { cellWidth: 18 }, // Estado
-                    7: { cellWidth: 20 }, // Periodo
-                    8: { halign: 'center' }, // Meses Adeudados
+                    3: { halign: 'right' },
+                    4: { halign: 'right' },
+                    5: { halign: 'right' },
+                    8: { halign: 'center' },
+                    9: { halign: 'right' },
                 }
             });
             doc.save(`${filename}.pdf`);
         } else {
-             const headerData = [
-                ["Reporte Integral de Propietarios"], [periodString], [`Fecha de Emisión: ${emissionDate}`], []
-            ];
-            const worksheet = XLSX.utils.aoa_to_sheet(headerData);
-            XLSX.utils.sheet_add_aoa(worksheet, headers, { origin: "A5" });
-            XLSX.utils.sheet_add_json(worksheet, data.map(row => ({
-                 "Propietario": row.name, "Propiedad": row.properties, "Fecha Últ. Pago": row.lastPaymentDate, "Monto Pagado (Bs)": row.paidAmount,
-                 "Tasa Prom. (Bs/$)": row.avgRate, "Saldo a Favor (Bs)": row.balance, "Estado": row.status, "Periodo": row.solvencyPeriod, "Meses Adeudados": row.monthsOwed
-            })), { origin: "A6", skipHeader: true });
+             const worksheet = XLSX.utils.json_to_sheet(data.map(row => ({
+                 "Propietario": row.name, 
+                 "Propiedad": row.properties, 
+                 "Fecha Últ. Pago": row.lastPaymentDate, 
+                 "Monto Pagado (Bs)": row.paidAmount,
+                 "Tasa Prom. (Bs/$)": row.avgRate, 
+                 "Saldo a Favor (Bs)": row.balance, 
+                 "Estado": row.status, 
+                 "Periodo": row.solvencyPeriod, 
+                 "Meses Adeudados": row.monthsOwed,
+                 "Deuda por Ajuste ($)": row.adjustmentDebtUSD
+            })));
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Reporte Integral");
             XLSX.writeFile(workbook, `${filename}.xlsx`);
@@ -1157,6 +1175,7 @@ export default function ReportsPage() {
                                         <TableHead>Estado</TableHead>
                                         <TableHead>Periodo</TableHead>
                                         <TableHead className="text-center">Meses Adeudados</TableHead>
+                                        <TableHead className="text-right">Deuda por Ajuste ($)</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -1173,6 +1192,7 @@ export default function ReportsPage() {
                                             </TableCell>
                                             <TableCell>{row.solvencyPeriod}</TableCell>
                                             <TableCell className="text-center">{row.monthsOwed > 0 ? row.monthsOwed : ''}</TableCell>
+                                            <TableCell className="text-right">{row.adjustmentDebtUSD > 0 ? `$${row.adjustmentDebtUSD.toFixed(2)}`: ''}</TableCell>
                                         </TableRow>
                                     ))}
                                 </TableBody>
@@ -1685,5 +1705,3 @@ export default function ReportsPage() {
         </div>
     );
 }
-
-    
