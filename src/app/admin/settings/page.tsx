@@ -19,6 +19,7 @@ import { db } from '@/lib/firebase';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { Progress } from '@/components/ui/progress';
 
 
 type AdminProfile = {
@@ -106,6 +107,7 @@ export default function SettingsPage() {
     
     const [isFeeChanged, setIsFeeChanged] = useState(false);
     const [isAdjustmentRunning, setIsAdjustmentRunning] = useState(false);
+    const [progress, setProgress] = useState(0);
 
     useEffect(() => {
         const settingsRef = doc(db, 'config', 'mainSettings');
@@ -259,16 +261,23 @@ export default function SettingsPage() {
 
     const handleSaveChanges = async () => {
         setSaving(true);
+        setProgress(0);
         const newCondoFee = Number(condoFee);
 
         try {
             const settingsRef = doc(db, 'config', 'mainSettings');
+            
+            // Simulate progress
+            await new Promise(resolve => setTimeout(() => { setProgress(30); resolve(null); }, 300));
+            
             await updateDoc(settingsRef, {
                 adminProfile,
                 companyInfo,
                 condoFee: newCondoFee,
                 lastCondoFee: lastCondoFee // Store the fee that was active before this save
             });
+            
+            await new Promise(resolve => setTimeout(() => { setProgress(100); resolve(null); }, 500));
             
             toast({
                 title: 'Cambios Guardados',
@@ -291,7 +300,7 @@ export default function SettingsPage() {
              console.error("Error saving settings:", error);
              toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron guardar los cambios.' });
         } finally {
-            setSaving(false);
+            await new Promise(resolve => setTimeout(() => { setSaving(false); setProgress(0); }, 700));
         }
     };
     
@@ -589,11 +598,12 @@ export default function SettingsPage() {
                 </div>
             </div>
             
-            <div className="flex justify-end">
+            <div className="flex flex-col items-end gap-2">
                 <Button onClick={handleSaveChanges} disabled={saving}>
                     {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4"/>}
                     Guardar Cambios
                 </Button>
+                {saving && <Progress value={progress} className="w-full max-w-xs" />}
             </div>
 
             {/* Edit Rate Dialog */}
