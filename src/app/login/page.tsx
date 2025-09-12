@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { KeyRound, Loader2, Building, User } from 'lucide-react';
+import { Loader2, Building, User } from 'lucide-react';
 import Link from 'next/link';
 
 type CompanyInfo = {
@@ -59,7 +59,6 @@ function LoginPageContent() {
                 const userDocRef = doc(db, 'owners', user.uid);
                 let userDocSnap = await getDoc(userDocRef);
 
-                // Admin auto-creation logic
                 if (!userDocSnap.exists() && email === 'vallecondo@gmail.com') {
                     toast({
                         title: 'Perfil no encontrado',
@@ -73,27 +72,24 @@ function LoginPageContent() {
                         balance: 0,
                     };
                     await setDoc(userDocRef, adminData);
-                    userDocSnap = await getDoc(userDocRef); // Re-fetch the document
+                    userDocSnap = await getDoc(userDocRef);
                 }
 
 
                 if (userDocSnap.exists()) {
                     const userData = userDocSnap.data();
                     
-                    // If user is admin, redirect to admin dashboard regardless of the role in URL
                     if (userData.role === 'administrador') {
                         router.push('/admin/dashboard');
-                        return; // <-- This was the missing piece
+                        return;
                     }
 
-                    // Check if the role matches for non-admins
                     if (userData.role !== role) {
                         toast({ variant: 'destructive', title: 'Error de Rol', description: `No tienes permisos para acceder como ${role}.` });
                         setLoading(false);
                         return;
                     }
 
-                    // Special check for owner's first login
                     if (userData.role === 'propietario' && password === '123456') {
                         router.push('/change-password');
                     } else {
@@ -121,21 +117,19 @@ function LoginPageContent() {
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-background p-4 font-body">
-            <Card className="w-full max-w-md">
-                <CardHeader className="text-center">
-                    {companyInfo?.logo ? (
-                        <img src={companyInfo.logo} alt="Logo" className="w-20 h-20 rounded-2xl object-cover shadow-lg mx-auto" data-ai-hint="logo"/>
-                    ) : (
-                        role === 'admin' ? <Building className="mx-auto h-12 w-12 text-primary"/> : <User className="mx-auto h-12 w-12 text-primary"/>
-                    )}
+             <Card className="w-full max-w-md shadow-2xl">
+                <CardHeader className="text-center bg-primary text-primary-foreground p-8 rounded-t-lg">
+                    <div className="mx-auto bg-white/20 rounded-full p-4 w-24 h-24 flex items-center justify-center">
+                         {role === 'admin' ? <Building className="mx-auto h-12 w-12"/> : <User className="mx-auto h-12 w-12"/>}
+                    </div>
                     <CardTitle className="mt-4 text-3xl font-bold font-headline">
-                        Iniciar Sesión como {role === 'admin' ? 'Administrador' : 'Propietario'}
+                        {role === 'admin' ? 'Administrador' : 'Propietario'}
                     </CardTitle>
-                    <CardDescription>
+                    <CardDescription className="text-primary-foreground/80">
                         Ingresa tus credenciales para acceder a tu panel.
                     </CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-8">
                     <form onSubmit={handleLogin} className="space-y-6">
                         <div className="space-y-2">
                             <Label htmlFor="email">Correo Electrónico</Label>
@@ -147,6 +141,7 @@ function LoginPageContent() {
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
                                 disabled={loading}
+                                className="h-12"
                             />
                         </div>
                         <div className="space-y-2">
@@ -159,15 +154,16 @@ function LoginPageContent() {
                                 onChange={(e) => setPassword(e.target.value)}
                                 required
                                 disabled={loading}
+                                className="h-12"
                             />
                         </div>
-                        <Button type="submit" className="w-full" disabled={loading}>
+                        <Button type="submit" className="w-full h-12 rounded-full text-base font-bold" disabled={loading}>
                             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                             {loading ? 'Ingresando...' : 'Ingresar'}
                         </Button>
                     </form>
                 </CardContent>
-                <CardFooter className="flex justify-center">
+                <CardFooter className="flex justify-center p-4">
                     <Button variant="link" asChild>
                         <Link href="/">Volver a la selección de rol</Link>
                     </Button>
