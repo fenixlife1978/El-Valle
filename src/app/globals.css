@@ -4,26 +4,26 @@
 
 @layer base {
   :root {
-    --background: 220 13% 95%; /* Light Blue-Gray */
+    --background: 0 0% 100%; /* White */
     --foreground: 222 47% 11%; /* Dark Blue */
 
-    --card: 0 0% 100%; /* White */
+    --card: 0 0% 100%;
     --card-foreground: 222 47% 11%;
 
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
 
     --primary: 217 91% 60%; /* Vibrant Blue */
-    --primary-foreground: 0 0% 98%;
+    --primary-foreground: 0 0% 98%; /* White */
 
-    --secondary: 220 9% 46%; /* Muted Gray-Blue for secondary buttons/text */
-    --secondary-foreground: 0 0% 98%;
+    --secondary: 220 14% 91%; /* Light Gray-Blue */
+    --secondary-foreground: 222 47% 11%; /* Dark Blue */
 
-    --muted: 220 14% 91%;
-    --muted-foreground: 220 9% 46%;
-
-    --accent: 220 14% 91%; /* Lighter shade of background for hover */
-    --accent-foreground: 222 47% 11%;
+    --muted: 220 14% 96%; /* Lighter Gray-Blue */
+    --muted-foreground: 220 9% 46%; /* Muted Gray */
+    
+    --accent: 48 96% 50%; /* Yellow */
+    --accent-foreground: 222 47% 11%; /* Dark Blue */
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 98%;
@@ -32,7 +32,7 @@
     --success-foreground: 0 0% 98%;
     
     --warning: 48 96% 50%;
-    --warning-foreground: 0 0% 0%;
+    --warning-foreground: 222 47% 11%;
 
     --border: 220 13% 91%;
     --input: 220 13% 89%;
@@ -41,8 +41,8 @@
     --radius: 0.5rem;
 
     --chart-1: 217 91% 60%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
+    --chart-2: 48 96% 50%;
+    --chart-3: 160 60% 45%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
     
@@ -75,8 +75,8 @@
     --muted: 224 71% 14%;
     --muted-foreground: 220 14% 65%;
 
-    --accent: 224 71% 14%;
-    --accent-foreground: 0 0% 98%;
+    --accent: 48 96% 50%;
+    --accent-foreground: 222 47% 11%;
     
     --destructive: 0 63% 31%;
     --destructive-foreground: 0 0% 98%;
@@ -85,15 +85,15 @@
     --success-foreground: 0 0% 98%;
 
     --warning: 48 96% 50%;
-    --warning-foreground: 0 0% 0%;
+    --warning-foreground: 222 47% 11%;
 
     --border: 224 71% 14%;
     --input: 224 71% 14%;
     --ring: 217 91% 60%;
 
     --chart-1: 217 91% 60%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
+    --chart-2: 48 96% 50%;
+    --chart-3: 160 60% 45%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
 
