@@ -1647,13 +1647,8 @@ export default function ReportsPage() {
                                 <ResponsiveContainer width="100%" height={350}>
                                     <BarChart data={debtsByStreetChartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
                                         <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
-                                        <XAxis dataKey="name" stroke="#a1a1aa" fontSize={12} />
-                                        <YAxis stroke="#a1a1aa" fontSize={12}/>
-                                        <Tooltip 
-                                            cursor={{fill: 'rgba(255, 255, 255, 0.1)'}}
-                                            contentStyle={{ backgroundColor: '#374151', border: 'none', color: '#fff', borderRadius: '0.5rem' }}
-                                            formatter={(value: number) => [`$${value.toFixed(2)}`, 'Deuda Total']}
-                                        />
+                                        <XAxis dataKey="name" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
+                                        <YAxis stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
                                         <Bar dataKey="TotalDeuda" fill="#dc2626" name="Deuda Total (USD)" radius={[4, 4, 0, 0]}>
                                             <LabelList dataKey="TotalDeuda" content={<CustomBarLabel />} />
                                         </Bar>
@@ -1673,13 +1668,8 @@ export default function ReportsPage() {
                                 <ResponsiveContainer width="100%" height={350}>
                                     <BarChart data={incomeByStreetChartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
                                         <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
-                                        <XAxis dataKey="name" stroke="#a1a1aa" fontSize={12} />
-                                        <YAxis stroke="#a1a1aa" fontSize={12} />
-                                        <Tooltip 
-                                            cursor={{fill: 'rgba(255, 255, 255, 0.1)'}}
-                                            contentStyle={{ backgroundColor: '#374151', border: 'none', color: '#fff', borderRadius: '0.5rem' }}
-                                            formatter={(value: number) => [`$${value.toFixed(2)}`, 'Ingreso Total']}
-                                        />
+                                        <XAxis dataKey="name" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
+                                        <YAxis stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
                                         <Bar dataKey="TotalIngresos" fill="#2563eb" name="Ingreso Total (USD)" radius={[4, 4, 0, 0]}>
                                             <LabelList dataKey="TotalIngresos" content={<CustomBarLabel />} />
                                         </Bar>
@@ -1700,5 +1690,3 @@ export default function ReportsPage() {
         </div>
     );
 }
-
-    
