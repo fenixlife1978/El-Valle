@@ -270,12 +270,22 @@ export default function SettingsPage() {
             // Simulate progress
             await new Promise(resolve => setTimeout(() => { setProgress(30); resolve(null); }, 300));
             
-            await updateDoc(settingsRef, {
-                adminProfile,
-                companyInfo,
+            // Flatten the objects for Firestore
+            const dataToSave = {
+                'adminProfile.name': adminProfile.name,
+                'adminProfile.email': adminProfile.email,
+                'adminProfile.avatar': adminProfile.avatar,
+                'companyInfo.name': companyInfo.name,
+                'companyInfo.address': companyInfo.address,
+                'companyInfo.rif': companyInfo.rif,
+                'companyInfo.phone': companyInfo.phone,
+                'companyInfo.email': companyInfo.email,
+                'companyInfo.logo': companyInfo.logo,
                 condoFee: newCondoFee,
-                lastCondoFee: lastCondoFee // Store the fee that was active before this save
-            });
+                lastCondoFee: lastCondoFee,
+            };
+
+            await updateDoc(settingsRef, dataToSave);
             
             await new Promise(resolve => setTimeout(() => { setProgress(100); resolve(null); }, 500));
             
