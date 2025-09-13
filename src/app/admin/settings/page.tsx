@@ -267,20 +267,22 @@ export default function SettingsPage() {
         try {
             const settingsRef = doc(db, 'config', 'mainSettings');
             
-            // Simulate progress
             await new Promise(resolve => setTimeout(() => { setProgress(30); resolve(null); }, 300));
             
-            // Flatten the objects for Firestore
             const dataToSave = {
-                'adminProfile.name': adminProfile.name,
-                'adminProfile.email': adminProfile.email,
-                'adminProfile.avatar': adminProfile.avatar,
-                'companyInfo.name': companyInfo.name,
-                'companyInfo.address': companyInfo.address,
-                'companyInfo.rif': companyInfo.rif,
-                'companyInfo.phone': companyInfo.phone,
-                'companyInfo.email': companyInfo.email,
-                'companyInfo.logo': companyInfo.logo,
+                adminProfile: {
+                    name: adminProfile.name,
+                    email: adminProfile.email,
+                    avatar: adminProfile.avatar,
+                },
+                companyInfo: {
+                    name: companyInfo.name,
+                    address: companyInfo.address,
+                    rif: companyInfo.rif,
+                    phone: companyInfo.phone,
+                    email: companyInfo.email,
+                    logo: companyInfo.logo,
+                },
                 condoFee: newCondoFee,
                 lastCondoFee: lastCondoFee,
             };
@@ -295,7 +297,6 @@ export default function SettingsPage() {
                 className: 'bg-green-100 border-green-400 text-green-800'
             });
 
-            // If fee changed, now we enable the adjustment button
             if (isFeeChanged) {
                  toast({
                     title: 'Cuota Actualizada',
@@ -303,8 +304,7 @@ export default function SettingsPage() {
                     className: 'bg-blue-100 border-blue-400 text-blue-800'
                 });
             }
-             setLastCondoFee(newCondoFee); // Update the last known fee in state
-             // We keep isFeeChanged true until the adjustment is run, or it's changed back.
+             setLastCondoFee(newCondoFee);
              
         } catch(error) {
              console.error("Error saving settings:", error);
