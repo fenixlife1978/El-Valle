@@ -353,8 +353,10 @@ export default function OwnerDashboardPage() {
     doc.text(`Tasa de Cambio Aplicada: Bs. ${formatToTwoDecimals(payment.exchangeRate)} por USD`, margin, startY);
     startY += 10;
     
+    let totalPaidInConcepts = 0;
     const tableBody = paidDebts.map(debt => {
         const debtAmountBs = (debt.paidAmountUSD || debt.amountUSD) * payment.exchangeRate;
+        totalPaidInConcepts += debtAmountBs;
         const propertyLabel = debt.property ? `${debt.property.street} - ${debt.property.house}` : 'N/A';
         const periodLabel = `${monthsLocale[debt.month]} ${debt.year}`;
         const concept = `${debt.description} (${propertyLabel})`;
@@ -379,6 +381,7 @@ export default function OwnerDashboardPage() {
         });
         startY = (doc as any).lastAutoTable.finalY + 8;
     } else {
+        totalPaidInConcepts = payment.amount;
         (doc as any).autoTable({
             startY: startY,
             head: [['Concepto', 'Monto Pagado (Bs)']],
@@ -393,7 +396,7 @@ export default function OwnerDashboardPage() {
     
     // Totals Section
     const totalLabel = "TOTAL PAGADO:";
-    const totalValue = `Bs. ${formatToTwoDecimals(payment.amount)}`;
+    const totalValue = `Bs. ${formatToTwoDecimals(totalPaidInConcepts)}`;
     doc.setFontSize(11).setFont('helvetica', 'bold');
     const totalValueWidth = doc.getStringUnitWidth(totalValue) * 11 / doc.internal.scaleFactor;
     doc.text(totalValue, pageWidth - margin, startY, { align: 'right' });
@@ -558,7 +561,7 @@ export default function OwnerDashboardPage() {
                         <TableCell>{new Date(payment.date).toLocaleDateString('es-VE')}</TableCell>
                         <TableCell>
                             {payment.type === 'adelanto' 
-                                ? `$ ${formatToTwoDecimals(payment.amount)}`
+                                ? `$${formatToTwoDecimals(payment.amount)}`
                                 : `Bs. ${formatToTwoDecimals(payment.amount)}`
                             }
                         </TableCell>
@@ -650,15 +653,14 @@ export default function OwnerDashboardPage() {
                                         </TableRow>
                                     ))
                                 ) : (
-                                     <TableRow>
-                                        <TableCell colSpan={2}>Abono a Saldo a Favor</TableCell>
-                                        <TableCell colSpan={2} className="text-right">Bs. {formatToTwoDecimals(receiptData.payment.amount)}</TableCell>
+                                    <TableRow>
+                                        <TableCell colSpan={4} className="h-24 text-center">Abono a Saldo a Favor</TableCell>
                                     </TableRow>
                                 )}
                             </TableBody>
                         </Table>
                          <div className="text-right font-bold mt-2 pr-4">
-                            Total Pagado: Bs. {formatToTwoDecimals(receiptData.payment.amount)}
+                            Total Pagado: Bs. {formatToTwoDecimals(receiptData.paidDebts.reduce((acc, debt) => acc + ((debt.paidAmountUSD || debt.amountUSD) * receiptData.payment.exchangeRate), 0) > 0 ? receiptData.paidDebts.reduce((acc, debt) => acc + ((debt.paidAmountUSD || debt.amountUSD) * receiptData.payment.exchangeRate), 0) : receiptData.payment.amount)}
                          </div>
                         {/* Footer */}
                         <div className="mt-6 text-gray-600 text-[10px] space-y-2">

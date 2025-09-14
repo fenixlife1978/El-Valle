@@ -472,8 +472,10 @@ export default function VerifyPaymentsPage() {
 
     startY += 10;
     
+    let totalPaidInConcepts = 0;
     const tableBody = paidDebts.map(debt => {
         const debtAmountBs = (debt.paidAmountUSD || debt.amountUSD) * payment.exchangeRate;
+        totalPaidInConcepts += debtAmountBs;
         const propertyLabel = debt.property ? `${debt.property.street} - ${debt.property.house}` : 'N/A';
         const periodLabel = `${monthsLocale[debt.month]} ${debt.year}`;
         const concept = `${debt.description} (${propertyLabel})`;
@@ -498,7 +500,7 @@ export default function VerifyPaymentsPage() {
         });
         startY = (doc as any).lastAutoTable.finalY + 8;
     } else {
-         // If no debts were paid, show a generic concept
+        totalPaidInConcepts = payment.totalAmount;
         (doc as any).autoTable({
             startY: startY,
             head: [['Concepto', 'Monto Pagado (Bs)']],
@@ -513,7 +515,7 @@ export default function VerifyPaymentsPage() {
     
     // Totals Section
     const totalLabel = "TOTAL PAGADO:";
-    const totalValue = `Bs. ${formatToTwoDecimals(payment.totalAmount)}`;
+    const totalValue = `Bs. ${formatToTwoDecimals(totalPaidInConcepts)}`;
     doc.setFontSize(11).setFont('helvetica', 'bold');
     const totalValueWidth = doc.getStringUnitWidth(totalValue) * 11 / doc.internal.scaleFactor;
     doc.text(totalValue, pageWidth - margin, startY, { align: 'right' });
@@ -612,7 +614,7 @@ export default function VerifyPaymentsPage() {
                                 <TableCell>{payment.unit}</TableCell>
                                 <TableCell>
                                     {payment.type === 'adelanto' 
-                                        ? `$ ${formatToTwoDecimals(payment.amount)}`
+                                        ? `$${formatToTwoDecimals(payment.amount)}`
                                         : `Bs. ${formatToTwoDecimals(payment.amount)}`
                                     }
                                 </TableCell>
@@ -722,10 +724,7 @@ export default function VerifyPaymentsPage() {
                                         </TableRow>
                                     ))
                                 ) : (
-                                    <TableRow>
-                                        <TableCell colSpan={2}>Abono a Saldo a Favor</TableCell>
-                                        <TableCell colSpan={2} className="text-right">Bs. {formatToTwoDecimals(receiptData.payment.amount)}</TableCell>
-                                    </TableRow>
+                                    <TableRow><TableCell colSpan={4} className="h-24 text-center">Abono a Saldo a Favor</TableCell></TableRow>
                                 )}
                             </TableBody>
                         </Table>
