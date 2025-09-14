@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -7,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { Database, Upload, Trash2, Loader2, FileUp, AlertTriangle, Terminal, RefreshCw, History, Download } from 'lucide-react';
-import { collection, getDocs, writeBatch, doc, addDoc, query, orderBy, onSnapshot, deleteDoc } from 'firebase/firestore';
+import { collection, getDocs, writeBatch, doc, addDoc, query, orderBy, onSnapshot, deleteDoc, Timestamp } from 'firebase/firestore';
 import { db, storage } from '@/lib/firebase';
 import { ref, uploadString, getDownloadURL, listAll, deleteObject } from 'firebase/storage';
 import { format } from 'date-fns';
@@ -21,6 +22,24 @@ type BackupRecord = {
     createdAt: Date;
     url: string;
 };
+
+// Helper function to convert Firestore Timestamps to strings
+const convertTimestamps = (data: any): any => {
+    if (data instanceof Timestamp) {
+        return data.toDate().toISOString();
+    }
+    if (Array.isArray(data)) {
+        return data.map(item => convertTimestamps(item));
+    }
+    if (typeof data === 'object' && data !== null) {
+        return Object.keys(data).reduce((acc, key) => {
+            acc[key] = convertTimestamps(data[key]);
+            return acc;
+        }, {} as { [key: string]: any });
+    }
+    return data;
+};
+
 
 export default function BackupPage() {
     const { toast } = useToast();
@@ -57,29 +76,28 @@ export default function BackupPage() {
     const handleCreateBackup = async () => {
         setLoadingAction('create');
         addLog('Iniciando proceso de creación de backup...');
-        const backupData: { [key: string]: any[] } = {};
+        let backupData: { [key: string]: any[] } = {};
 
         try {
             for (const collectionName of COLLECTIONS_TO_BACKUP) {
                 addLog(`Exportando colección: ${collectionName}...`);
                 const collectionRef = collection(db, collectionName);
                 const snapshot = await getDocs(collectionRef);
-                backupData[collectionName] = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                const collectionData = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                backupData[collectionName] = convertTimestamps(collectionData); // Convert timestamps before stringifying
                 addLog(`-> ${snapshot.size} documentos exportados de ${collectionName}.`);
             }
 
             const jsonString = JSON.stringify(backupData, null, 2);
             
-            // Upload to Firebase Storage
             const timestamp = new Date().toISOString();
             const fileName = `backup-condoconnect-${timestamp}.json`;
             const storageRef = ref(storage, `backups/${fileName}`);
             addLog(`Subiendo backup a la nube: ${fileName}...`);
-            const snapshot = await uploadString(storageRef, jsonString, 'raw', { contentType: 'application/json' });
-            const downloadURL = await getDownloadURL(snapshot.ref);
+            const uploadSnapshot = await uploadString(storageRef, jsonString, 'raw', { contentType: 'application/json' });
+            const downloadURL = await getDownloadURL(uploadSnapshot.ref);
             addLog('¡Backup subido exitosamente!');
 
-            // Save record to Firestore
             await addDoc(collection(db, 'backups'), {
                 fileName,
                 createdAt: new Date(),
@@ -87,7 +105,6 @@ export default function BackupPage() {
             });
             addLog('Registro de backup guardado en la base de datos.');
 
-            // Also provide local download
             const blob = new Blob([jsonString], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -115,7 +132,7 @@ export default function BackupPage() {
             const file = e.target.files[0];
             if (file.type === 'application/json') {
                 setFileToRestore(file);
-                setBackupToRestore(null); // Clear history selection
+                setBackupToRestore(null);
                 setIsRestoreConfirmOpen(true);
             } else {
                 toast({ variant: 'destructive', title: 'Archivo Inválido', description: 'Por favor, seleccione un archivo JSON.' });
@@ -126,7 +143,7 @@ export default function BackupPage() {
 
     const handleRestoreFromHistory = (backup: BackupRecord) => {
         setBackupToRestore(backup);
-        setFileToRestore(null); // Clear file selection
+        setFileToRestore(null);
         setIsRestoreConfirmOpen(true);
     };
 
@@ -140,12 +157,10 @@ export default function BackupPage() {
         addLog(`Iniciando restauración desde: ${sourceName}...`);
 
         try {
-            // Step 1: Clear current data
             addLog('Limpiando datos actuales antes de restaurar...');
-            await clearAllData(false); // internal call, don't show toast
+            await clearAllData(false);
             addLog('Datos actuales eliminados.');
 
-            // Step 2: Get JSON data
             let jsonString: string;
             if (fileToRestore) {
                 jsonString = await fileToRestore.text();
@@ -157,23 +172,32 @@ export default function BackupPage() {
                 addLog('Descarga completada.');
             }
             
-            // Step 3: Restore data
             const backupData = JSON.parse(jsonString);
-            const batch = writeBatch(db);
-
+            
             for (const collectionName of COLLECTIONS_TO_BACKUP) {
                 if (backupData[collectionName]) {
                     addLog(`Restaurando colección: ${collectionName}...`);
                     const collectionData = backupData[collectionName];
+                    const batch = writeBatch(db); // Create a new batch for each collection to avoid size limits
                     for (const docData of collectionData) {
                         const { id, ...data } = docData;
+                        // Firestore timestamps from ISO string needs conversion on restore
+                        const restoredData = Object.entries(data).reduce((acc, [key, value]) => {
+                             if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/.test(value)) {
+                                acc[key] = Timestamp.fromDate(new Date(value));
+                            } else {
+                                acc[key] = value;
+                            }
+                            return acc;
+                        }, {} as {[key: string]: any});
+                        
                         const docRef = doc(db, collectionName, id);
-                        batch.set(docRef, data);
+                        batch.set(docRef, restoredData);
                     }
-                     addLog(`-> ${collectionData.length} documentos preparados para ${collectionName}.`);
+                    await batch.commit();
+                     addLog(`-> ${collectionData.length} documentos restaurados en ${collectionName}.`);
                 }
             }
-            await batch.commit();
             addLog('¡Restauración completada exitosamente!');
             toast({ title: 'Restauración Completa', description: 'Los datos han sido restaurados desde el backup.', className: 'bg-green-100 border-green-400 text-green-800' });
             
@@ -212,7 +236,7 @@ export default function BackupPage() {
                 addLog(`ERROR al limpiar datos: ${errorMessage}`);
                 toast({ variant: 'destructive', title: 'Error', description: 'No se pudo completar la limpieza de datos.' });
              }
-             throw error; // Re-throw for internal handling
+             throw error;
         }
     };
 
