@@ -16,13 +16,6 @@ import { es } from 'date-fns/locale';
 
 const COLLECTIONS_TO_BACKUP = ['owners', 'payments', 'debts', 'historical_payments', 'config'];
 
-type BackupRecord = {
-    id: string;
-    fileName: string;
-    createdAt: Date;
-    url: string;
-};
-
 // Helper function to convert Firestore Timestamps to strings
 const convertTimestamps = (data: any): any => {
     if (data === null || data === undefined) {
@@ -52,27 +45,7 @@ export default function BackupPage() {
     const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
     const [isRestoreConfirmOpen, setIsRestoreConfirmOpen] = useState(false);
     const [fileToRestore, setFileToRestore] = useState<File | null>(null);
-    const [backupToRestore, setBackupToRestore] = useState<BackupRecord | null>(null);
-    const [backupHistory, setBackupHistory] = useState<BackupRecord[]>([]);
-
-    useEffect(() => {
-        const q = query(collection(db, "backups"), orderBy("createdAt", "desc"));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const history: BackupRecord[] = [];
-            snapshot.forEach((doc) => {
-                const data = doc.data();
-                history.push({
-                    id: doc.id,
-                    fileName: data.fileName,
-                    createdAt: data.createdAt.toDate(),
-                    url: data.url,
-                });
-            });
-            setBackupHistory(history);
-        });
-        return () => unsubscribe();
-    }, []);
-
+    
     const addLog = (message: string) => {
         setLogs(prev => [`${format(new Date(), 'HH:mm:ss')}: ${message}`, ...prev]);
     };
@@ -100,20 +73,7 @@ export default function BackupPage() {
             
             const timestamp = new Date().toISOString();
             const fileName = `backup-condoconnect-${timestamp}.json`;
-            const storageRef = ref(storage, `backups/${fileName}`);
-            addLog(`Subiendo backup a la nube: ${fileName}...`);
-            await new Promise(resolve => setTimeout(resolve, 0));
-            const uploadSnapshot = await uploadString(storageRef, jsonString, 'raw', { contentType: 'application/json' });
-            const downloadURL = await getDownloadURL(uploadSnapshot.ref);
-            addLog('¡Backup subido exitosamente!');
-
-            await addDoc(collection(db, 'backups'), {
-                fileName,
-                createdAt: new Date(),
-                url: downloadURL,
-            });
-            addLog('Registro de backup guardado en la base de datos.');
-
+            
             const blob = new Blob([jsonString], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -124,8 +84,8 @@ export default function BackupPage() {
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
 
-            addLog('¡Backup creado y guardado exitosamente!');
-            toast({ title: 'Backup Creado', description: 'El archivo se ha guardado en la nube y descargado localmente.', className: 'bg-green-100 border-green-400 text-green-800' });
+            addLog('¡Backup creado y descargado localmente!');
+            toast({ title: 'Backup Creado', description: 'El archivo se ha descargado localmente.', className: 'bg-green-100 border-green-400 text-green-800' });
         } catch (error) {
             console.error('Error creando backup:', error);
             const errorMessage = error instanceof Error ? error.message : 'Error desconocido.';
@@ -141,7 +101,6 @@ export default function BackupPage() {
             const file = e.target.files[0];
             if (file.type === 'application/json') {
                 setFileToRestore(file);
-                setBackupToRestore(null);
                 setIsRestoreConfirmOpen(true);
             } else {
                 toast({ variant: 'destructive', title: 'Archivo Inválido', description: 'Por favor, seleccione un archivo JSON.' });
@@ -150,19 +109,13 @@ export default function BackupPage() {
         e.target.value = '';
     };
 
-    const handleRestoreFromHistory = (backup: BackupRecord) => {
-        setBackupToRestore(backup);
-        setFileToRestore(null);
-        setIsRestoreConfirmOpen(true);
-    };
-
     const confirmRestore = async () => {
-        if (!fileToRestore && !backupToRestore) return;
+        if (!fileToRestore) return;
         
         setIsRestoreConfirmOpen(false);
         setLoadingAction('restore');
         
-        const sourceName = fileToRestore ? fileToRestore.name : backupToRestore!.fileName;
+        const sourceName = fileToRestore.name;
         addLog(`Iniciando restauración desde: ${sourceName}...`);
 
         try {
@@ -170,16 +123,7 @@ export default function BackupPage() {
             await clearAllData(false);
             addLog('Datos actuales eliminados.');
 
-            let jsonString: string;
-            if (fileToRestore) {
-                jsonString = await fileToRestore.text();
-            } else {
-                addLog('Descargando backup desde la nube...');
-                const response = await fetch(backupToRestore!.url);
-                if(!response.ok) throw new Error(`No se pudo descargar el archivo de backup (HTTP ${response.status})`);
-                jsonString = await response.text();
-                addLog('Descarga completada.');
-            }
+            let jsonString = await fileToRestore.text();
             
             const backupData = JSON.parse(jsonString);
             
@@ -218,7 +162,6 @@ export default function BackupPage() {
         } finally {
              setLoadingAction(null);
              setFileToRestore(null);
-             setBackupToRestore(null);
         }
     };
     
@@ -306,58 +249,23 @@ export default function BackupPage() {
                         </Button>
                     </CardContent>
                 </Card>
-                <Card>
+                 <Card>
                     <CardHeader>
-                        <CardTitle className="flex items-center text-lg"><History className="mr-2 h-5 w-5"/>Historial de Backups</CardTitle>
-                        <CardDescription>Restaura o descarga una copia de seguridad guardada previamente.</CardDescription>
+                        <CardTitle className="flex items-center text-lg"><Terminal className="mr-2 h-5 w-5"/>Consola de Mensajes</CardTitle>
                     </CardHeader>
                     <CardContent>
-                       <div className="border rounded-md h-96 overflow-y-auto">
-                            {backupHistory.length === 0 ? (
-                                <div className="flex items-center justify-center h-full text-muted-foreground">
-                                    <p>No hay backups guardados.</p>
-                                </div>
-                            ) : (
-                                backupHistory.map(backup => (
-                                    <div key={backup.id} className="flex items-center justify-between p-3 border-b last:border-b-0">
-                                        <div>
-                                            <p className="font-semibold text-sm">{backup.fileName}</p>
-                                            <p className="text-xs text-muted-foreground">{format(backup.createdAt, "dd MMM yyyy, HH:mm", { locale: es })}</p>
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <Button size="sm" variant="outline" onClick={() => handleRestoreFromHistory(backup)} disabled={!!loadingAction}>
-                                                <RefreshCw className="mr-2 h-4 w-4"/>Restaurar
-                                            </Button>
-                                            <Button size="sm" variant="ghost" asChild>
-                                                <a href={backup.url} target="_blank" rel="noopener noreferrer" download={backup.fileName}>
-                                                    <Download className="h-4 w-4"/>
-                                                </a>
-                                            </Button>
-                                        </div>
-                                    </div>
-                                ))
-                            )}
-                       </div>
+                        <div className="bg-gray-900 text-white font-mono text-xs rounded-md p-4 h-96 overflow-y-auto flex flex-col-reverse">
+                            <div>
+                                {logs.map((log, index) => (
+                                    <p key={index} className={log.includes('ERROR') ? 'text-red-400' : 'text-green-400'}>
+                                        {log}
+                                    </p>
+                                ))}
+                            </div>
+                        </div>
                     </CardContent>
                 </Card>
             </div>
-
-            <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center text-lg"><Terminal className="mr-2 h-5 w-5"/>Consola de Mensajes</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="bg-gray-900 text-white font-mono text-xs rounded-md p-4 h-48 overflow-y-auto flex flex-col-reverse">
-                        <div>
-                            {logs.map((log, index) => (
-                                <p key={index} className={log.includes('ERROR') ? 'text-red-400' : 'text-green-400'}>
-                                    {log}
-                                </p>
-                            ))}
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
 
             <Dialog open={isClearConfirmOpen} onOpenChange={setIsClearConfirmOpen}>
                 <DialogContent>
@@ -379,11 +287,11 @@ export default function BackupPage() {
                     <DialogHeader>
                         <DialogTitle className="flex items-center"><AlertTriangle className="mr-2 h-6 w-6 text-destructive"/>¿Está seguro que desea restaurar?</DialogTitle>
                          <DialogDescription>
-                            Esta acción borrará todos los datos actuales y los reemplazará con los del archivo <span className="font-bold">{fileToRestore?.name || backupToRestore?.fileName}</span>. Esta acción es irreversible.
+                            Esta acción borrará todos los datos actuales y los reemplazará con los del archivo <span className="font-bold">{fileToRestore?.name}</span>. Esta acción es irreversible.
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => {setIsRestoreConfirmOpen(false); setFileToRestore(null); setBackupToRestore(null);}}>Cancelar</Button>
+                        <Button variant="outline" onClick={() => {setIsRestoreConfirmOpen(false); setFileToRestore(null);}}>Cancelar</Button>
                         <Button variant="destructive" onClick={confirmRestore}>Sí, restaurar desde backup</Button>
                     </DialogFooter>
                 </DialogContent>
