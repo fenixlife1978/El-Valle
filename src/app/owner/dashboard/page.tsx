@@ -17,7 +17,7 @@ import { doc, onSnapshot, collection, query, where, orderBy, limit, getDoc, getD
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
@@ -439,7 +439,7 @@ export default function OwnerDashboardPage() {
     <div className="space-y-8">
         <div>
             <h1 className="text-3xl font-bold font-headline">Panel de Propietario</h1>
-            <p className="text-muted-foreground">Bienvenido, ${userData?.name || 'Propietario'}. Aquí está el resumen de tu cuenta.</p>
+            <p className="text-muted-foreground">Bienvenido, {userData?.name || 'Propietario'}. Aquí está el resumen de tu cuenta.</p>
         </div>
       
       <Card className="w-full rounded-2xl shadow-lg border-2 border-border/20">
@@ -449,13 +449,13 @@ export default function OwnerDashboardPage() {
                     <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                              <p className="text-xs text-destructive">Deuda Total Pendiente</p>
-                             <p className="text-2xl font-bold text-destructive">$${dashboardStats.totalDebtUSD.toFixed(2)}</p>
-                             <p className="text-sm text-muted-foreground">~ Bs. ${formatToTwoDecimals(dashboardStats.totalDebtUSD * dashboardStats.exchangeRate)}</p>
+                             <p className="text-2xl font-bold text-destructive">${dashboardStats.totalDebtUSD.toFixed(2)}</p>
+                             <p className="text-sm text-muted-foreground">~ Bs. {formatToTwoDecimals(dashboardStats.totalDebtUSD * dashboardStats.exchangeRate)}</p>
                         </div>
                         <div>
                             <p className="text-xs text-success">Saldo a Favor</p>
-                            <p className="text-2xl font-bold text-success">Bs. ${formatToTwoDecimals(dashboardStats.balanceInFavor)}</p>
-                            <p className="text-sm text-muted-foreground">~ $${dashboardStats.exchangeRate > 0 ? formatToTwoDecimals(dashboardStats.balanceInFavor / dashboardStats.exchangeRate) : '0,00'}</p>
+                            <p className="text-2xl font-bold text-success">Bs. {formatToTwoDecimals(dashboardStats.balanceInFavor)}</p>
+                            <p className="text-sm text-muted-foreground">~ ${dashboardStats.exchangeRate > 0 ? formatToTwoDecimals(dashboardStats.balanceInFavor / dashboardStats.exchangeRate) : '0,00'}</p>
                         </div>
                     </div>
                 </div>
@@ -464,12 +464,12 @@ export default function OwnerDashboardPage() {
                         {solvencyStatus === 'moroso' ? <AlertCircle className="mr-2 h-4 w-4"/> : <ShieldCheck className="mr-2 h-4 w-4"/>}
                         {solvencyStatus}
                     </Badge>
-                     {solvencyPeriod && <p className="text-sm font-semibold text-muted-foreground">${solvencyPeriod}</p>}
+                     {solvencyPeriod && <p className="text-sm font-semibold text-muted-foreground">{solvencyPeriod}</p>}
                  </div>
             </CardHeader>
             <CardContent className="px-6 pb-6">
                  <div className="text-xs text-muted-foreground">
-                    Tasa de cambio del día: Bs. ${formatToTwoDecimals(dashboardStats.exchangeRate)} por USD
+                    Tasa de cambio del día: Bs. {formatToTwoDecimals(dashboardStats.exchangeRate)} por USD
                  </div>
             </CardContent>
         </Card>
@@ -502,9 +502,9 @@ export default function OwnerDashboardPage() {
                                 aria-label={`Seleccionar deuda de ${monthsLocale[debt.month]} ${debt.year}`}
                             />
                         </TableCell>
-                        <TableCell className="font-medium">${monthsLocale[debt.month]} ${debt.year}</TableCell>
-                        <TableCell>${debt.description}</TableCell>
-                        <TableCell className="text-right">Bs. ${formatToTwoDecimals(debt.amountUSD * dashboardStats.exchangeRate)}</TableCell>
+                        <TableCell className="font-medium">{monthsLocale[debt.month]} {debt.year}</TableCell>
+                        <TableCell>{debt.description}</TableCell>
+                        <TableCell className="text-right">Bs. {formatToTwoDecimals(debt.amountUSD * dashboardStats.exchangeRate)}</TableCell>
                     </TableRow>
                     )))}
                 </TableBody>
@@ -515,16 +515,16 @@ export default function OwnerDashboardPage() {
                              <h3 className="text-lg font-semibold flex items-center"><Calculator className="mr-2 h-5 w-5"/> Calculadora de Pago</h3>
                              <div className="flex justify-between items-center">
                                  <span className="text-muted-foreground">Total Seleccionado:</span>
-                                 <span className="font-medium">Bs. ${formatToTwoDecimals(paymentCalculator.totalSelectedBs)}</span>
+                                 <span className="font-medium">Bs. {formatToTwoDecimals(paymentCalculator.totalSelectedBs)}</span>
                              </div>
                              <div className="flex justify-between items-center text-sm">
                                  <span className="text-muted-foreground flex items-center"><Minus className="mr-2 h-4 w-4"/> Saldo a Favor:</span>
-                                 <span className="font-medium">Bs. ${formatToTwoDecimals(paymentCalculator.balanceInFavor)}</span>
+                                 <span className="font-medium">Bs. {formatToTwoDecimals(paymentCalculator.balanceInFavor)}</span>
                              </div>
                              <hr className="my-1"/>
                              <div className="flex justify-between items-center text-lg">
                                  <span className="font-bold flex items-center"><Equal className="mr-2 h-4 w-4"/> TOTAL A PAGAR:</span>
-                                 <span className="font-bold text-primary">Bs. ${formatToTwoDecimals(paymentCalculator.totalToPay)}</span>
+                                 <span className="font-bold text-primary">Bs. {formatToTwoDecimals(paymentCalculator.totalToPay)}</span>
                              </div>
                         </div>
                     </CardFooter>
@@ -555,18 +555,18 @@ export default function OwnerDashboardPage() {
                     ) : (
                     payments.map((payment) => (
                     <TableRow key={payment.id}>
-                        <TableCell>${new Date(payment.date).toLocaleDateString('es-VE')}</TableCell>
+                        <TableCell>{new Date(payment.date).toLocaleDateString('es-VE')}</TableCell>
                         <TableCell>
-                            ${payment.type === 'adelanto' 
+                            {payment.type === 'adelanto' 
                                 ? `$ ${formatToTwoDecimals(payment.amount)}`
                                 : `Bs. ${formatToTwoDecimals(payment.amount)}`
                             }
                         </TableCell>
-                        <TableCell>${payment.bank}</TableCell>
-                        <TableCell>${payment.ref}</TableCell>
+                        <TableCell>{payment.bank}</TableCell>
+                        <TableCell>{payment.ref}</TableCell>
                         <TableCell>
                           <Badge variant={payment.status === 'aprobado' ? 'success' : payment.status === 'rechazado' ? 'destructive' : 'warning'}>
-                            ${payment.status.charAt(0).toUpperCase() + payment.status.slice(1)}
+                            {payment.status.charAt(0).toUpperCase() + payment.status.slice(1)}
                           </Badge>
                         </TableCell>
                          <TableCell className="text-right">
@@ -606,28 +606,28 @@ export default function OwnerDashboardPage() {
                             <div className="flex items-center gap-4">
                                 {companyInfo.logo && <img src={companyInfo.logo} alt="Logo" className="w-20 h-20 object-contain"/>}
                                 <div>
-                                    <p className="font-bold">${companyInfo.name}</p>
-                                    <p>${companyInfo.rif}</p>
-                                    <p>${companyInfo.address}</p>
-                                    <p>Teléfono: ${companyInfo.phone}</p>
+                                    <p className="font-bold">{companyInfo.name}</p>
+                                    <p>{companyInfo.rif}</p>
+                                    <p>{companyInfo.address}</p>
+                                    <p>Teléfono: {companyInfo.phone}</p>
                                 </div>
                             </div>
                             <div className="text-right">
                                 <p className="font-bold text-lg">RECIBO DE PAGO</p>
-                                <p><strong>Fecha Emisión:</strong> ${format(new Date(), 'dd/MM/yyyy')}</p>
-                                <p><strong>N° Recibo:</strong> ${receiptData.payment.id.substring(0, 10)}</p>
+                                <p><strong>Fecha Emisión:</strong> {format(new Date(), 'dd/MM/yyyy')}</p>
+                                <p><strong>N° Recibo:</strong> {receiptData.payment.id.substring(0, 10)}</p>
                             </div>
                         </div>
                         <hr className="my-2 border-gray-400"/>
                         {/* Details */}
                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                             <p><strong>Beneficiario:</strong></p><p>${receiptData.ownerName}</p>
-                             <p><strong>Unidad:</strong></p><p>${receiptData.ownerUnit}</p>
-                             <p><strong>Método de pago:</strong></p><p>${receiptData.payment.type}</p>
-                             <p><strong>Banco Emisor:</strong></p><p>${receiptData.payment.bank}</p>
-                             <p><strong>N° de Referencia:</strong></p><p>${receiptData.payment.reference}</p>
-                             <p><strong>Fecha del pago:</strong></p><p>${format(receiptData.payment.paymentDate.toDate(), 'dd/MM/yyyy')}</p>
-                             <p><strong>Tasa de Cambio Aplicada:</strong></p><p>Bs. ${formatToTwoDecimals(receiptData.payment.exchangeRate)} por USD</p>
+                             <p><strong>Beneficiario:</strong></p><p>{receiptData.ownerName}</p>
+                             <p><strong>Unidad:</strong></p><p>{receiptData.ownerUnit}</p>
+                             <p><strong>Método de pago:</strong></p><p>{receiptData.payment.type}</p>
+                             <p><strong>Banco Emisor:</strong></p><p>{receiptData.payment.bank}</p>
+                             <p><strong>N° de Referencia:</strong></p><p>{receiptData.payment.reference}</p>
+                             <p><strong>Fecha del pago:</strong></p><p>{format(receiptData.payment.paymentDate.toDate(), 'dd/MM/yyyy')}</p>
+                             <p><strong>Tasa de Cambio Aplicada:</strong></p><p>Bs. {formatToTwoDecimals(receiptData.payment.exchangeRate)} por USD</p>
                         </div>
                         {/* Concept Table */}
                         <Table className="text-xs">
@@ -640,29 +640,31 @@ export default function OwnerDashboardPage() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {receiptData.paidDebts.length > 0 ? receiptData.paidDebts.map((debt, index) => (
-                                    <TableRow key={index} className="even:bg-gray-100">
-                                        <TableCell>${monthsLocale[debt.month]} ${debt.year}</TableCell>
-                                        <TableCell>${debt.description} (${debt.property.street} - ${debt.property.house})</TableCell>
-                                        <TableCell className="text-right">$${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}</TableCell>
-                                        <TableCell className="text-right">Bs. ${formatToTwoDecimals((debt.paidAmountUSD || debt.amountUSD) * receiptData.payment.exchangeRate)}</TableCell>
-                                    </TableRow>
-                                )) : (
+                                {receiptData.paidDebts.length > 0 ? (
+                                    receiptData.paidDebts.map((debt, index) => (
+                                        <TableRow key={index} className="even:bg-gray-100">
+                                            <TableCell>{monthsLocale[debt.month]} {debt.year}</TableCell>
+                                            <TableCell>{debt.description} ({debt.property.street} - {debt.property.house})</TableCell>
+                                            <TableCell className="text-right">${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}</TableCell>
+                                            <TableCell className="text-right">Bs. {formatToTwoDecimals((debt.paidAmountUSD || debt.amountUSD) * receiptData.payment.exchangeRate)}</TableCell>
+                                        </TableRow>
+                                    ))
+                                ) : (
                                      <TableRow>
                                         <TableCell colSpan={2}>Abono a Saldo a Favor</TableCell>
-                                        <TableCell colSpan={2} className="text-right">Bs. ${formatToTwoDecimals(receiptData.payment.amount)}</TableCell>
+                                        <TableCell colSpan={2} className="text-right">Bs. {formatToTwoDecimals(receiptData.payment.amount)}</TableCell>
                                     </TableRow>
                                 )}
                             </TableBody>
                         </Table>
                          <div className="text-right font-bold mt-2 pr-4">
-                            Total Pagado: Bs. ${formatToTwoDecimals(receiptData.payment.amount)}
+                            Total Pagado: Bs. {formatToTwoDecimals(receiptData.payment.amount)}
                          </div>
                         {/* Footer */}
                         <div className="mt-6 text-gray-600 text-[10px] space-y-2">
                              <p className="text-left text-[11px] font-semibold">Todo propietario que requiera de firma y sello húmedo deberá imprimir éste recibo y hacerlo llegar al condominio para su respectiva estampa.</p>
                              <p className="text-left">Este recibo confirma que su pago ha sido validado conforme a los términos establecidos por la comunidad.</p>
-                             <p className="text-left font-bold mt-2">Firma electrónica: '${companyInfo.name} - Condominio'</p>
+                             <p className="text-left font-bold mt-2">Firma electrónica: '{companyInfo.name} - Condominio'</p>
                              <hr className="my-4 border-gray-400"/>
                              <p className="italic text-center">Este recibo se generó de manera automática y es válido sin firma manuscrita.</p>
                         </div>
@@ -679,5 +681,7 @@ export default function OwnerDashboardPage() {
     </div>
   );
 }
+
+    
 
     

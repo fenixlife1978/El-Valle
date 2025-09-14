@@ -683,24 +683,24 @@ export default function VerifyPaymentsPage() {
                                     <p className="font-bold">{companyInfo.name}</p>
                                     <p>{companyInfo.rif}</p>
                                     <p>{companyInfo.address}</p>
-                                    <p>Teléfono: ${companyInfo.phone}</p>
+                                    <p>Teléfono: {companyInfo.phone}</p>
                                 </div>
                             </div>
                             <div className="text-right">
                                 <p className="font-bold text-lg">RECIBO DE PAGO</p>
-                                <p><strong>Fecha Emisión:</strong> ${format(new Date(), 'dd/MM/yyyy')}</p>
-                                <p><strong>N° Recibo:</strong> ${receiptData.payment.id.substring(0, 10)}</p>
+                                <p><strong>Fecha Emisión:</strong> {format(new Date(), 'dd/MM/yyyy')}</p>
+                                <p><strong>N° Recibo:</strong> {receiptData.payment.id.substring(0, 10)}</p>
                             </div>
                         </div>
                         <hr className="my-2 border-gray-400"/>
                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                             <p><strong>Beneficiario:</strong></p><p>${receiptData.ownerName}</p>
-                             <p><strong>Unidad:</strong></p><p>${receiptData.ownerUnit}</p>
-                             <p><strong>Método de pago:</strong></p><p>${receiptData.payment.type}</p>
-                             <p><strong>Banco Emisor:</strong></p><p>${receiptData.payment.bank}</p>
-                             <p><strong>N° de Referencia:</strong></p><p>${receiptData.payment.reference}</p>
-                             <p><strong>Fecha del pago:</strong></p><p>${format(receiptData.payment.paymentDate.toDate(), 'dd/MM/yyyy')}</p>
-                             <p><strong>Tasa de Cambio Aplicada:</strong></p><p>Bs. ${formatToTwoDecimals(receiptData.payment.exchangeRate)} por USD</p>
+                             <p><strong>Beneficiario:</strong></p><p>{receiptData.ownerName}</p>
+                             <p><strong>Unidad:</strong></p><p>{receiptData.ownerUnit}</p>
+                             <p><strong>Método de pago:</strong></p><p>{receiptData.payment.type}</p>
+                             <p><strong>Banco Emisor:</strong></p><p>{receiptData.payment.bank}</p>
+                             <p><strong>N° de Referencia:</strong></p><p>{receiptData.payment.reference}</p>
+                             <p><strong>Fecha del pago:</strong></p><p>{format(receiptData.payment.paymentDate.toDate(), 'dd/MM/yyyy')}</p>
+                             <p><strong>Tasa de Cambio Aplicada:</strong></p><p>Bs. {formatToTwoDecimals(receiptData.payment.exchangeRate)} por USD</p>
                         </div>
                         <Table className="text-xs">
                             <TableHeader>
@@ -712,34 +712,36 @@ export default function VerifyPaymentsPage() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {receiptData.paidDebts.length > 0 ? receiptData.paidDebts.map((debt, index) => (
-                                    <TableRow key={index} className="even:bg-gray-100">
-                                        <TableCell>${monthsLocale[debt.month]} ${debt.year}</TableCell>
-                                        <TableCell>${debt.description} (${debt.property ? `${debt.property.street} - ${debt.property.house}`: 'N/A'})</TableCell>
-                                        <TableCell className="text-right">$${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}</TableCell>
-                                        <TableCell className="text-right">Bs. ${formatToTwoDecimals((debt.paidAmountUSD || debt.amountUSD) * receiptData.payment.exchangeRate)}</TableCell>
-                                    </TableRow>
-                                )) : (
+                                {receiptData.paidDebts.length > 0 ? (
+                                    receiptData.paidDebts.map((debt, index) => (
+                                        <TableRow key={index} className="even:bg-gray-100">
+                                            <TableCell>{monthsLocale[debt.month]} {debt.year}</TableCell>
+                                            <TableCell>{debt.description} ({debt.property ? `${debt.property.street} - ${debt.property.house}` : 'N/A'})</TableCell>
+                                            <TableCell className="text-right">${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}</TableCell>
+                                            <TableCell className="text-right">Bs. {formatToTwoDecimals((debt.paidAmountUSD || debt.amountUSD) * receiptData.payment.exchangeRate)}</TableCell>
+                                        </TableRow>
+                                    ))
+                                ) : (
                                     <TableRow>
                                         <TableCell colSpan={2}>Abono a Saldo a Favor</TableCell>
-                                        <TableCell colSpan={2} className="text-right">Bs. ${formatToTwoDecimals(receiptData.payment.amount)}</TableCell>
+                                        <TableCell colSpan={2} className="text-right">Bs. {formatToTwoDecimals(receiptData.payment.amount)}</TableCell>
                                     </TableRow>
                                 )}
                             </TableBody>
                         </Table>
                          <div className="text-right font-bold mt-2 pr-4">
-                            Total Pagado: Bs. ${formatToTwoDecimals(receiptData.payment.amount)}
+                            Total Pagado: Bs. {formatToTwoDecimals(receiptData.payment.amount)}
                          </div>
-                         ${receiptData.payment.observations && (
+                         {receiptData.payment.observations && (
                             <div className="mt-4 p-2 border-t text-xs">
                                 <p className="font-bold">Observaciones:</p>
-                                <p className="italic whitespace-pre-wrap">${receiptData.payment.observations}</p>
+                                <p className="italic whitespace-pre-wrap">{receiptData.payment.observations}</p>
                             </div>
                          )}
                         <div className="mt-6 text-gray-600 text-[10px] space-y-2">
                              <p className="text-left text-[11px] font-bold">Todo propietario que requiera de firma y sello húmedo deberá imprimir éste recibo y hacerlo llegar al condominio para su respectiva estampa.</p>
                              <p className="text-left">Este recibo confirma que su pago ha sido validado para la(s) cuota(s) y propiedad(es) aquí detalladas.</p>
-                             <p className="text-left font-bold mt-2">Firma electrónica: '${companyInfo.name} - Condominio'</p>
+                             <p className="text-left font-bold mt-2">Firma electrónica: '{companyInfo.name} - Condominio'</p>
                              <hr className="my-4 border-gray-400"/>
                              <p className="italic text-center">Este recibo se generó de manera automática y es válido sin firma manuscrita.</p>
                         </div>
@@ -772,6 +774,7 @@ export default function VerifyPaymentsPage() {
     </div>
   );
 }
-
     
+    
+
     
