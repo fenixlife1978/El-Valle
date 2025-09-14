@@ -132,7 +132,7 @@ const CustomHeader = ({ userRole }: { userRole: string }) => {
 
             <div className="flex w-full items-center justify-between gap-4 sm:w-auto sm:ml-auto">
                 {activeRate && (
-                    <Card className="flex items-center gap-3 p-2 rounded-lg bg-card/50">
+                    <Card className="flex items-center gap-3 p-2 rounded-lg bg-card/50 flex-shrink-0">
                        <BCVLogo />
                        <div>
                             <p className="text-sm font-bold leading-none">Bs. {activeRate.rate.toLocaleString('es-VE', { minimumFractionDigits: 2 })}</p>

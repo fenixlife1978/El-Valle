@@ -30,7 +30,16 @@ const adminNavItems: NavItem[] = [
     { href: "/admin/debts", icon: CircleDollarSign, label: "Gestión de Deudas" },
     { href: "/admin/reports", icon: FileSearch, label: "Informes" },
     { href: "/admin/people", icon: Users, label: "Personas" },
-    { href: "/admin/settings", icon: Settings, label: "Configuración" },
+    { 
+      href: "/admin/settings", 
+      icon: Settings, 
+      label: "Configuración",
+      items: [
+        { href: "/admin/settings", label: "Ajustes Generales" },
+        { href: "/admin/settings/backup", label: "Crear Backup" },
+        { href: "/admin/settings/restore", label: "Restaurar Backup" },
+      ]
+    },
 ];
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
