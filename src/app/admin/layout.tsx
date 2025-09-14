@@ -36,8 +36,7 @@ const adminNavItems: NavItem[] = [
       label: "Configuración",
       items: [
         { href: "/admin/settings", label: "Ajustes Generales" },
-        { href: "/admin/settings/backup", label: "Crear Backup" },
-        { href: "/admin/settings/restore", label: "Restaurar Backup" },
+        { href: "/admin/settings/backup", label: "Backup y Restauración" },
       ]
     },
 ];
