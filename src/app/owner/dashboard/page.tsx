@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -487,7 +488,7 @@ export default function OwnerDashboardPage() {
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    ${loading ? (
+                    {loading ? (
                         <TableRow><TableCell colSpan={4} className="h-24 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto"/></TableCell></TableRow>
                     ) : debts.length === 0 ? (
                         <TableRow><TableCell colSpan={4} className="h-24 text-center text-muted-foreground">¡Felicidades! No tienes deudas pendientes.</TableCell></TableRow>
@@ -508,7 +509,7 @@ export default function OwnerDashboardPage() {
                     )))}
                 </TableBody>
                 </Table>
-                 ${paymentCalculator.hasSelection && (
+                 {paymentCalculator.hasSelection && (
                     <CardFooter className="p-4 bg-muted/50 border-t">
                         <div className="w-full max-w-md ml-auto space-y-2">
                              <h3 className="text-lg font-semibold flex items-center"><Calculator className="mr-2 h-5 w-5"/> Calculadora de Pago</h3>
@@ -547,7 +548,7 @@ export default function OwnerDashboardPage() {
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    ${loading ? (
+                    {loading ? (
                         <TableRow><TableCell colSpan={6} className="h-24 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto"/></TableCell></TableRow>
                     ) : payments.length === 0 ? (
                         <TableRow><TableCell colSpan={6} className="h-24 text-center text-muted-foreground">No tienes pagos aprobados recientemente.</TableCell></TableRow>
@@ -569,7 +570,7 @@ export default function OwnerDashboardPage() {
                           </Badge>
                         </TableCell>
                          <TableCell className="text-right">
-                            ${payment.status === 'aprobado' ? (
+                            {payment.status === 'aprobado' ? (
                                 <Button variant="ghost" size="icon" onClick={() => showReceiptPreview(payment)}>
                                     <FileText className="h-4 w-4"/>
                                     <span className="sr-only">Ver Recibo</span>
@@ -598,7 +599,7 @@ export default function OwnerDashboardPage() {
                         Revise el recibo antes de descargarlo. El diseño se ajustará en el PDF final.
                     </DialogDescription>
                 </DialogHeader>
-                ${receiptData && companyInfo && (
+                {receiptData && companyInfo && (
                      <div className="flex-grow overflow-y-auto pr-4 -mr-4 border rounded-md p-4 bg-white text-black font-sans text-xs space-y-4">
                         {/* Header */}
                         <div className="flex justify-between items-start">
@@ -639,7 +640,7 @@ export default function OwnerDashboardPage() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                ${receiptData.paidDebts.length > 0 ? receiptData.paidDebts.map((debt, index) => (
+                                {receiptData.paidDebts.length > 0 ? receiptData.paidDebts.map((debt, index) => (
                                     <TableRow key={index} className="even:bg-gray-100">
                                         <TableCell>${monthsLocale[debt.month]} ${debt.year}</TableCell>
                                         <TableCell>${debt.description} (${debt.property.street} - ${debt.property.house})</TableCell>

@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -711,7 +712,7 @@ export default function VerifyPaymentsPage() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                ${receiptData.paidDebts.length > 0 ? receiptData.paidDebts.map((debt, index) => (
+                                {receiptData.paidDebts.length > 0 ? receiptData.paidDebts.map((debt, index) => (
                                     <TableRow key={index} className="even:bg-gray-100">
                                         <TableCell>${monthsLocale[debt.month]} ${debt.year}</TableCell>
                                         <TableCell>${debt.description} (${debt.property ? `${debt.property.street} - ${debt.property.house}`: 'N/A'})</TableCell>
