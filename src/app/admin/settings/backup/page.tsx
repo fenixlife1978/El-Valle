@@ -1,17 +1,26 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { Database, Upload, Trash2, Loader2, FileUp, AlertTriangle, Terminal, RefreshCw } from 'lucide-react';
-import { collection, getDocs, writeBatch, doc, getDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { Database, Upload, Trash2, Loader2, FileUp, AlertTriangle, Terminal, RefreshCw, History, Download } from 'lucide-react';
+import { collection, getDocs, writeBatch, doc, addDoc, query, orderBy, onSnapshot, deleteDoc } from 'firebase/firestore';
+import { db, storage } from '@/lib/firebase';
+import { ref, uploadString, getDownloadURL, listAll, deleteObject } from 'firebase/storage';
 import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
 
 const COLLECTIONS_TO_BACKUP = ['owners', 'payments', 'debts', 'historical_payments', 'config'];
+
+type BackupRecord = {
+    id: string;
+    fileName: string;
+    createdAt: Date;
+    url: string;
+};
 
 export default function BackupPage() {
     const { toast } = useToast();
@@ -20,9 +29,29 @@ export default function BackupPage() {
     const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
     const [isRestoreConfirmOpen, setIsRestoreConfirmOpen] = useState(false);
     const [fileToRestore, setFileToRestore] = useState<File | null>(null);
+    const [backupToRestore, setBackupToRestore] = useState<BackupRecord | null>(null);
+    const [backupHistory, setBackupHistory] = useState<BackupRecord[]>([]);
+
+    useEffect(() => {
+        const q = query(collection(db, "backups"), orderBy("createdAt", "desc"));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const history: BackupRecord[] = [];
+            snapshot.forEach((doc) => {
+                const data = doc.data();
+                history.push({
+                    id: doc.id,
+                    fileName: data.fileName,
+                    createdAt: data.createdAt.toDate(),
+                    url: data.url,
+                });
+            });
+            setBackupHistory(history);
+        });
+        return () => unsubscribe();
+    }, []);
 
     const addLog = (message: string) => {
-        setLogs(prev => [...prev, `${format(new Date(), 'HH:mm:ss')}: ${message}`]);
+        setLogs(prev => [`${format(new Date(), 'HH:mm:ss')}: ${message}`, ...prev]);
     };
 
     const handleCreateBackup = async () => {
@@ -40,17 +69,37 @@ export default function BackupPage() {
             }
 
             const jsonString = JSON.stringify(backupData, null, 2);
+            
+            // Upload to Firebase Storage
+            const timestamp = new Date().toISOString();
+            const fileName = `backup-condoconnect-${timestamp}.json`;
+            const storageRef = ref(storage, `backups/${fileName}`);
+            addLog(`Subiendo backup a la nube: ${fileName}...`);
+            const snapshot = await uploadString(storageRef, jsonString, 'raw', { contentType: 'application/json' });
+            const downloadURL = await getDownloadURL(snapshot.ref);
+            addLog('¡Backup subido exitosamente!');
+
+            // Save record to Firestore
+            await addDoc(collection(db, 'backups'), {
+                fileName,
+                createdAt: new Date(),
+                url: downloadURL,
+            });
+            addLog('Registro de backup guardado en la base de datos.');
+
+            // Also provide local download
             const blob = new Blob([jsonString], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `backup-condoconnect-${format(new Date(), 'yyyy-MM-dd')}.json`;
+            a.download = fileName;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
-            addLog('¡Backup creado y descargado exitosamente!');
-            toast({ title: 'Backup Creado', description: 'El archivo del backup se ha descargado.', className: 'bg-green-100 border-green-400 text-green-800' });
+
+            addLog('¡Backup creado y guardado exitosamente!');
+            toast({ title: 'Backup Creado', description: 'El archivo se ha guardado en la nube y descargado localmente.', className: 'bg-green-100 border-green-400 text-green-800' });
         } catch (error) {
             console.error('Error creando backup:', error);
             const errorMessage = error instanceof Error ? error.message : 'Error desconocido.';
@@ -66,20 +115,29 @@ export default function BackupPage() {
             const file = e.target.files[0];
             if (file.type === 'application/json') {
                 setFileToRestore(file);
+                setBackupToRestore(null); // Clear history selection
                 setIsRestoreConfirmOpen(true);
             } else {
                 toast({ variant: 'destructive', title: 'Archivo Inválido', description: 'Por favor, seleccione un archivo JSON.' });
             }
         }
-         // Reset file input to allow re-selection of the same file
         e.target.value = '';
     };
 
-    const handleRestoreBackup = async () => {
-        if (!fileToRestore) return;
+    const handleRestoreFromHistory = (backup: BackupRecord) => {
+        setBackupToRestore(backup);
+        setFileToRestore(null); // Clear file selection
+        setIsRestoreConfirmOpen(true);
+    };
+
+    const confirmRestore = async () => {
+        if (!fileToRestore && !backupToRestore) return;
+        
         setIsRestoreConfirmOpen(false);
         setLoadingAction('restore');
-        addLog(`Iniciando restauración desde el archivo: ${fileToRestore.name}...`);
+        
+        const sourceName = fileToRestore ? fileToRestore.name : backupToRestore!.fileName;
+        addLog(`Iniciando restauración desde: ${sourceName}...`);
 
         try {
             // Step 1: Clear current data
@@ -87,47 +145,47 @@ export default function BackupPage() {
             await clearAllData(false); // internal call, don't show toast
             addLog('Datos actuales eliminados.');
 
-            // Step 2: Read file and restore data
-            const reader = new FileReader();
-            reader.onload = async (event) => {
-                try {
-                    const backupData = JSON.parse(event.target?.result as string);
-                    const batch = writeBatch(db);
+            // Step 2: Get JSON data
+            let jsonString: string;
+            if (fileToRestore) {
+                jsonString = await fileToRestore.text();
+            } else {
+                addLog('Descargando backup desde la nube...');
+                const response = await fetch(backupToRestore!.url);
+                if(!response.ok) throw new Error(`No se pudo descargar el archivo de backup (HTTP ${response.status})`);
+                jsonString = await response.text();
+                addLog('Descarga completada.');
+            }
+            
+            // Step 3: Restore data
+            const backupData = JSON.parse(jsonString);
+            const batch = writeBatch(db);
 
-                    for (const collectionName of COLLECTIONS_TO_BACKUP) {
-                        if (backupData[collectionName]) {
-                            addLog(`Restaurando colección: ${collectionName}...`);
-                            const collectionData = backupData[collectionName];
-                            for (const docData of collectionData) {
-                                const { id, ...data } = docData;
-                                const docRef = doc(db, collectionName, id);
-                                batch.set(docRef, data);
-                            }
-                             addLog(`-> ${collectionData.length} documentos preparados para ${collectionName}.`);
-                        }
+            for (const collectionName of COLLECTIONS_TO_BACKUP) {
+                if (backupData[collectionName]) {
+                    addLog(`Restaurando colección: ${collectionName}...`);
+                    const collectionData = backupData[collectionName];
+                    for (const docData of collectionData) {
+                        const { id, ...data } = docData;
+                        const docRef = doc(db, collectionName, id);
+                        batch.set(docRef, data);
                     }
-                    await batch.commit();
-                    addLog('¡Restauración completada exitosamente!');
-                    toast({ title: 'Restauración Completa', description: 'Los datos han sido restaurados desde el backup.', className: 'bg-green-100 border-green-400 text-green-800' });
-                } catch (parseError) {
-                    console.error('Error parseando o restaurando backup:', parseError);
-                    const errorMessage = parseError instanceof Error ? parseError.message : 'Error desconocido.';
-                    addLog(`ERROR al restaurar: ${errorMessage}`);
-                    toast({ variant: 'destructive', title: 'Error de Restauración', description: 'El archivo de backup podría estar corrupto o tener un formato incorrecto.' });
-                } finally {
-                    setLoadingAction(null);
-                    setFileToRestore(null);
+                     addLog(`-> ${collectionData.length} documentos preparados para ${collectionName}.`);
                 }
-            };
-            reader.readAsText(fileToRestore);
-
+            }
+            await batch.commit();
+            addLog('¡Restauración completada exitosamente!');
+            toast({ title: 'Restauración Completa', description: 'Los datos han sido restaurados desde el backup.', className: 'bg-green-100 border-green-400 text-green-800' });
+            
         } catch (error) {
             console.error('Error durante la restauración:', error);
             const errorMessage = error instanceof Error ? error.message : 'Error desconocido.';
             addLog(`ERROR al restaurar: ${errorMessage}`);
-            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo completar la restauración.' });
-            setLoadingAction(null);
-            setFileToRestore(null);
+            toast({ variant: 'destructive', title: 'Error de Restauración', description: 'El archivo de backup podría estar corrupto o tener un formato incorrecto.' });
+        } finally {
+             setLoadingAction(null);
+             setFileToRestore(null);
+             setBackupToRestore(null);
         }
     };
     
@@ -137,6 +195,7 @@ export default function BackupPage() {
                 if(showToasts) addLog(`Limpiando colección: ${collectionName}...`);
                 const collectionRef = collection(db, collectionName);
                 const snapshot = await getDocs(collectionRef);
+                if (snapshot.empty) continue;
                 const batch = writeBatch(db);
                 snapshot.docs.forEach(d => batch.delete(d.ref));
                 await batch.commit();
@@ -168,68 +227,105 @@ export default function BackupPage() {
 
 
     return (
-        <div className="space-y-8 max-w-2xl mx-auto">
-             <Card className="overflow-hidden shadow-lg">
-                <CardHeader className="bg-muted/50">
-                    <div className="flex items-center gap-4">
-                        <div className="p-3 bg-primary/10 rounded-lg">
-                           <RefreshCw className="h-8 w-8 text-primary" />
+        <div className="space-y-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <Card className="overflow-hidden shadow-lg">
+                    <CardHeader className="bg-muted/50">
+                        <div className="flex items-center gap-4">
+                            <div className="p-3 bg-primary/10 rounded-lg">
+                            <RefreshCw className="h-8 w-8 text-primary" />
+                            </div>
+                            <div>
+                                <CardTitle className="text-2xl font-bold text-primary">Backup y Restauración</CardTitle>
+                                <CardDescription>Gestiona copias de seguridad de los datos de tu aplicación.</CardDescription>
+                            </div>
                         </div>
-                        <div>
-                            <CardTitle className="text-2xl font-bold text-primary">Backup y Restauración</CardTitle>
-                            <CardDescription>Gestiona copias de seguridad de los datos de tu aplicación.</CardDescription>
-                        </div>
-                    </div>
-                </CardHeader>
-                <CardContent className="p-6 space-y-4">
-                    <Button 
-                        onClick={handleCreateBackup} 
-                        disabled={!!loadingAction} 
-                        className="w-full h-14 text-lg bg-green-600 hover:bg-green-700 text-white font-bold"
-                    >
-                        {loadingAction === 'create' ? <Loader2 className="mr-2 h-5 w-5 animate-spin"/> : <Database className="mr-3 h-5 w-5"/>}
-                        Crear Backup
-                    </Button>
+                    </CardHeader>
+                    <CardContent className="p-6 space-y-4">
+                        <Button 
+                            onClick={handleCreateBackup} 
+                            disabled={!!loadingAction} 
+                            className="w-full h-14 text-lg bg-green-600 hover:bg-green-700 text-white font-bold"
+                        >
+                            {loadingAction === 'create' ? <Loader2 className="mr-2 h-5 w-5 animate-spin"/> : <Database className="mr-3 h-5 w-5"/>}
+                            Crear Backup
+                        </Button>
 
-                    <Button 
-                        onClick={() => document.getElementById('restore-input')?.click()} 
-                        disabled={!!loadingAction} 
-                        variant="secondary" 
-                        className="w-full h-14 text-lg font-bold"
-                    >
-                        {loadingAction === 'restore' ? <Loader2 className="mr-2 h-5 w-5 animate-spin"/> : <FileUp className="mr-3 h-5 w-5"/>}
-                        Restaurar Backup
-                    </Button>
-                    <Input id="restore-input" type="file" accept=".json" onChange={handleFileSelect} className="hidden" />
+                        <Button 
+                            onClick={() => document.getElementById('restore-input')?.click()} 
+                            disabled={!!loadingAction} 
+                            variant="secondary" 
+                            className="w-full h-14 text-lg font-bold"
+                        >
+                            {loadingAction === 'restore' ? <Loader2 className="mr-2 h-5 w-5 animate-spin"/> : <FileUp className="mr-3 h-5 w-5"/>}
+                            Restaurar desde Archivo
+                        </Button>
+                        <Input id="restore-input" type="file" accept=".json" onChange={handleFileSelect} className="hidden" />
 
-                    <Button 
-                        onClick={() => setIsClearConfirmOpen(true)} 
-                        disabled={!!loadingAction} 
-                        variant="destructive" 
-                        className="w-full h-14 text-lg font-bold"
-                    >
-                         {loadingAction === 'clear' ? <Loader2 className="mr-2 h-5 w-5 animate-spin"/> : <Trash2 className="mr-3 h-5 w-5"/>}
-                        Limpiar Datos
-                    </Button>
-                </CardContent>
-            </Card>
+                        <Button 
+                            onClick={() => setIsClearConfirmOpen(true)} 
+                            disabled={!!loadingAction} 
+                            variant="destructive" 
+                            className="w-full h-14 text-lg font-bold"
+                        >
+                            {loadingAction === 'clear' ? <Loader2 className="mr-2 h-5 w-5 animate-spin"/> : <Trash2 className="mr-3 h-5 w-5"/>}
+                            Limpiar Datos
+                        </Button>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center text-lg"><History className="mr-2 h-5 w-5"/>Historial de Backups</CardTitle>
+                        <CardDescription>Restaura o descarga una copia de seguridad guardada previamente.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                       <div className="border rounded-md h-96 overflow-y-auto">
+                            {backupHistory.length === 0 ? (
+                                <div className="flex items-center justify-center h-full text-muted-foreground">
+                                    <p>No hay backups guardados.</p>
+                                </div>
+                            ) : (
+                                backupHistory.map(backup => (
+                                    <div key={backup.id} className="flex items-center justify-between p-3 border-b last:border-b-0">
+                                        <div>
+                                            <p className="font-semibold text-sm">{backup.fileName}</p>
+                                            <p className="text-xs text-muted-foreground">{format(backup.createdAt, "dd MMM yyyy, HH:mm", { locale: es })}</p>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <Button size="sm" variant="outline" onClick={() => handleRestoreFromHistory(backup)} disabled={!!loadingAction}>
+                                                <RefreshCw className="mr-2 h-4 w-4"/>Restaurar
+                                            </Button>
+                                            <Button size="sm" variant="ghost" asChild>
+                                                <a href={backup.url} target="_blank" rel="noopener noreferrer" download={backup.fileName}>
+                                                    <Download className="h-4 w-4"/>
+                                                </a>
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                       </div>
+                    </CardContent>
+                </Card>
+            </div>
 
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center text-lg"><Terminal className="mr-2 h-5 w-5"/>Consola de Mensajes</CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <div className="bg-gray-900 text-white font-mono text-xs rounded-md p-4 h-48 overflow-y-auto">
-                        {logs.map((log, index) => (
-                            <p key={index} className={log.startsWith('ERROR') ? 'text-red-400' : 'text-green-400'}>
-                                {log}
-                            </p>
-                        ))}
+                    <div className="bg-gray-900 text-white font-mono text-xs rounded-md p-4 h-48 overflow-y-auto flex flex-col-reverse">
+                        <div>
+                            {logs.map((log, index) => (
+                                <p key={index} className={log.includes('ERROR') ? 'text-red-400' : 'text-green-400'}>
+                                    {log}
+                                </p>
+                            ))}
+                        </div>
                     </div>
                 </CardContent>
             </Card>
 
-             {/* Dialog for Clear Confirmation */}
             <Dialog open={isClearConfirmOpen} onOpenChange={setIsClearConfirmOpen}>
                 <DialogContent>
                     <DialogHeader>
@@ -245,18 +341,17 @@ export default function BackupPage() {
                 </DialogContent>
             </Dialog>
             
-            {/* Dialog for Restore Confirmation */}
             <Dialog open={isRestoreConfirmOpen} onOpenChange={setIsRestoreConfirmOpen}>
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle className="flex items-center"><AlertTriangle className="mr-2 h-6 w-6 text-destructive"/>¿Está seguro que desea restaurar?</DialogTitle>
                          <DialogDescription>
-                            Esta acción borrará todos los datos actuales y los reemplazará con los del archivo <span className="font-bold">{fileToRestore?.name}</span>. Esta acción es irreversible.
+                            Esta acción borrará todos los datos actuales y los reemplazará con los del archivo <span className="font-bold">{fileToRestore?.name || backupToRestore?.fileName}</span>. Esta acción es irreversible.
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => {setIsRestoreConfirmOpen(false); setFileToRestore(null);}}>Cancelar</Button>
-                        <Button variant="destructive" onClick={handleRestoreBackup}>Sí, restaurar desde backup</Button>
+                        <Button variant="outline" onClick={() => {setIsRestoreConfirmOpen(false); setFileToRestore(null); setBackupToRestore(null);}}>Cancelar</Button>
+                        <Button variant="destructive" onClick={confirmRestore}>Sí, restaurar desde backup</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
