@@ -219,7 +219,20 @@ export default function VerifyPaymentsPage() {
                 }
     
                 const paymentData = { id: paymentDoc.id, ...paymentDoc.data() } as FullPayment;
-                const exchangeRate = paymentData.exchangeRate;
+
+                // --- Get correct exchange rate for the payment date ---
+                const settingsRef = doc(db, 'config', 'mainSettings');
+                const settingsSnap = await getDoc(settingsRef);
+                if (!settingsSnap.exists()) throw new Error('No se encontró el documento de configuración.');
+                
+                const allRates = (settingsSnap.data().exchangeRates || []) as {date: string, rate: number}[];
+                const paymentDateString = format(paymentData.paymentDate.toDate(), 'yyyy-MM-dd');
+                const applicableRates = allRates
+                    .filter(r => r.date <= paymentDateString)
+                    .sort((a, b) => b.date.localeCompare(a.date));
+
+                const exchangeRate = applicableRates.length > 0 ? applicableRates[0].rate : 0;
+                
                 if (!exchangeRate || exchangeRate <= 0) throw new Error('La tasa de cambio para este pago es inválida o no está definida.');
                 if (condoFee <= 0) throw new Error('La cuota de condominio no está configurada.');
                 
@@ -311,10 +324,10 @@ export default function VerifyPaymentsPage() {
                 
                 // --- 4. Update Balance and generate Observation Note ---
                 const finalBalance = availableFundsInCents / 100; // Convert back to Bs
-                const observationNote = `Pago por Bs. ${formatToTwoDecimals(paymentData.totalAmount)}. Saldo Anterior: Bs. ${formatToTwoDecimals(initialBalance)}, Saldo a Favor Actual después de este recibo: Bs. ${formatToTwoDecimals(finalBalance)}.`;
+                const observationNote = `Pago por Bs. ${formatToTwoDecimals(paymentData.totalAmount)}. Tasa aplicada: Bs. ${formatToTwoDecimals(exchangeRate)}. Saldo Anterior: Bs. ${formatToTwoDecimals(initialBalance)}. Saldo a Favor Actual: Bs. ${formatToTwoDecimals(finalBalance)}.`;
                 
                 transaction.update(ownerRef, { balance: finalBalance });
-                transaction.update(paymentRef, { status: 'aprobado', observations: observationNote });
+                transaction.update(paymentRef, { status: 'aprobado', observations: observationNote, exchangeRate: exchangeRate });
             });
     
             toast({
@@ -442,7 +455,8 @@ export default function VerifyPaymentsPage() {
     const margin = 14;
 
     if (companyInfo.logo) {
-        doc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25);
+        try { doc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25); }
+        catch(e) { console.error("Error adding logo to PDF", e); }
     }
     doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, margin + 30, margin + 8);
     doc.setFontSize(9).setFont('helvetica', 'normal');
@@ -724,12 +738,14 @@ export default function VerifyPaymentsPage() {
                                         </TableRow>
                                     ))
                                 ) : (
-                                    <TableRow><TableCell colSpan={4} className="h-24 text-center">Abono a Saldo a Favor</TableCell></TableRow>
+                                    <TableRow>
+                                        <TableCell colSpan={4} className="h-24 text-center">Abono a Saldo a Favor</TableCell>
+                                    </TableRow>
                                 )}
                             </TableBody>
                         </Table>
                          <div className="text-right font-bold mt-2 pr-4">
-                            Total Pagado: Bs. {formatToTwoDecimals(receiptData.payment.amount)}
+                            Total Pagado: Bs. {formatToTwoDecimals(receiptData.paidDebts.reduce((acc, debt) => acc + ((debt.paidAmountUSD || debt.amountUSD) * receiptData.payment.exchangeRate), 0) > 0 ? receiptData.paidDebts.reduce((acc, debt) => acc + ((debt.paidAmountUSD || debt.amountUSD) * receiptData.payment.exchangeRate), 0) : receiptData.payment.amount)}
                          </div>
                          {receiptData.payment.observations && (
                             <div className="mt-4 p-2 border-t text-xs">
