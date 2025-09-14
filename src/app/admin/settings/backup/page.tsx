@@ -25,17 +25,21 @@ type BackupRecord = {
 
 // Helper function to convert Firestore Timestamps to strings
 const convertTimestamps = (data: any): any => {
+    if (data === null || data === undefined) {
+        return data;
+    }
     if (data instanceof Timestamp) {
         return data.toDate().toISOString();
     }
     if (Array.isArray(data)) {
         return data.map(item => convertTimestamps(item));
     }
-    if (typeof data === 'object' && data !== null) {
-        return Object.keys(data).reduce((acc, key) => {
-            acc[key] = convertTimestamps(data[key]);
-            return acc;
-        }, {} as { [key: string]: any });
+    if (typeof data === 'object' && data.constructor === Object) {
+        const res: { [key: string]: any } = {};
+        for (const key in data) {
+            res[key] = convertTimestamps(data[key]);
+        }
+        return res;
     }
     return data;
 };
@@ -76,24 +80,29 @@ export default function BackupPage() {
     const handleCreateBackup = async () => {
         setLoadingAction('create');
         addLog('Iniciando proceso de creación de backup...');
-        let backupData: { [key: string]: any[] } = {};
+        const backupData: { [key: string]: any[] } = {};
 
         try {
             for (const collectionName of COLLECTIONS_TO_BACKUP) {
                 addLog(`Exportando colección: ${collectionName}...`);
+                await new Promise(resolve => setTimeout(resolve, 0)); // Allow UI to update
                 const collectionRef = collection(db, collectionName);
                 const snapshot = await getDocs(collectionRef);
                 const collectionData = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-                backupData[collectionName] = convertTimestamps(collectionData); // Convert timestamps before stringifying
+                
+                backupData[collectionName] = convertTimestamps(collectionData);
                 addLog(`-> ${snapshot.size} documentos exportados de ${collectionName}.`);
             }
 
+            addLog('Serializando datos a formato JSON...');
+            await new Promise(resolve => setTimeout(resolve, 0));
             const jsonString = JSON.stringify(backupData, null, 2);
             
             const timestamp = new Date().toISOString();
             const fileName = `backup-condoconnect-${timestamp}.json`;
             const storageRef = ref(storage, `backups/${fileName}`);
             addLog(`Subiendo backup a la nube: ${fileName}...`);
+            await new Promise(resolve => setTimeout(resolve, 0));
             const uploadSnapshot = await uploadString(storageRef, jsonString, 'raw', { contentType: 'application/json' });
             const downloadURL = await getDownloadURL(uploadSnapshot.ref);
             addLog('¡Backup subido exitosamente!');
