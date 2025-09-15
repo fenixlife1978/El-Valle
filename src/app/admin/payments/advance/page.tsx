@@ -17,7 +17,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 type Owner = {
     id: string;
     name: string;
-    house: string;
+    properties: { street: string; house: string }[];
 };
 
 const months = Array.from({ length: 12 }, (_, i) => {
@@ -56,7 +56,7 @@ export default function AdvancePaymentPage() {
                 return {
                     id: doc.id,
                     name: data.name,
-                    house: (data.properties && data.properties.length > 0) ? `${data.properties[0].street} - ${data.properties[0].house}` : 'N/A'
+                    properties: data.properties || []
                 };
             });
             setOwners(ownersData.sort((a, b) => a.name.localeCompare(b.name)));
@@ -71,7 +71,7 @@ export default function AdvancePaymentPage() {
         if (!searchTerm || searchTerm.length < 3) return [];
         return owners.filter(owner =>
             owner.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            String(owner.house).toLowerCase().includes(searchTerm.toLowerCase())
+            owner.properties.some(p => `${p.street} - ${p.house}`.toLowerCase().includes(searchTerm.toLowerCase()))
         );
     }, [searchTerm, owners]);
 
@@ -146,6 +146,7 @@ export default function AdvancePaymentPage() {
                 const debtRef = doc(collection(db, "debts"));
                 batch.set(debtRef, {
                     ownerId: selectedOwner.id,
+                    property: selectedOwner.properties[0], // Assuming first property for simplicity
                     year,
                     month,
                     amountUSD: monthlyAmountNum,
@@ -160,7 +161,10 @@ export default function AdvancePaymentPage() {
             const paymentRef = doc(collection(db, "payments"));
             batch.set(paymentRef, {
                 reportedBy: selectedOwner.id, // Admin is reporting on behalf of owner
-                beneficiaries: [{ ownerId: selectedOwner.id, house: selectedOwner.house, amount: totalAmount }],
+                beneficiaries: [{ 
+                    ownerId: selectedOwner.id, 
+                    amount: totalAmount 
+                }],
                 totalAmount: totalAmount,
                 exchangeRate: 1, // Rate is not relevant as we are paying in USD equivalent
                 paymentDate: paymentDate,
@@ -232,7 +236,7 @@ export default function AdvancePaymentPage() {
                                                 {filteredOwners.map(owner => (
                                                     <div key={owner.id} onClick={() => handleOwnerSelect(owner)} className="p-3 hover:bg-muted cursor-pointer border-b last:border-b-0">
                                                         <p className="font-medium">{owner.name}</p>
-                                                        <p className="text-sm text-muted-foreground">{owner.house}</p>
+                                                        <p className="text-sm text-muted-foreground">{owner.properties.map(p => `${p.street} - ${p.house}`).join(', ')}</p>
                                                     </div>
                                                 ))}
                                             </ScrollArea>
@@ -243,7 +247,7 @@ export default function AdvancePaymentPage() {
                                 <Card className="bg-muted/50 p-4 flex items-center justify-between">
                                     <div>
                                         <p className="font-semibold text-primary">{selectedOwner.name}</p>
-                                        <p className="text-sm text-muted-foreground">{selectedOwner.house}</p>
+                                        <p className="text-sm text-muted-foreground">{selectedOwner.properties.map(p => `${p.street} - ${p.house}`).join(', ')}</p>
                                     </div>
                                     <Button variant="ghost" size="icon" onClick={resetOwnerSelection}>
                                         <XCircle className="h-5 w-5 text-destructive"/>

@@ -168,13 +168,8 @@ export default function OwnerDashboardPage() {
                     if (paymentsUnsubscribe) paymentsUnsubscribe();
                     
                     const paymentsQuery = query(
-                        collection(db, "payments"), 
-                        where("beneficiaries", "array-contains-any", ownerData.properties.map(p => ({
-                            ownerId: ownerData.id,
-                            ownerName: ownerData.name,
-                            street: p.street,
-                            house: p.house
-                        }))),
+                        collection(db, "payments"),
+                        where("beneficiaries", "array-contains", { ownerId: ownerData.id }),
                         where('status', '==', 'aprobado'),
                         orderBy('paymentDate', 'desc'),
                         limit(3)
@@ -320,7 +315,8 @@ export default function OwnerDashboardPage() {
 
     // --- Header ---
     if (companyInfo.logo) {
-        doc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25);
+        try { doc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25); }
+        catch (e) { console.error("Error adding image to PDF: ", e)}
     }
     doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, margin + 30, margin + 8);
     doc.setFontSize(9).setFont('helvetica', 'normal');

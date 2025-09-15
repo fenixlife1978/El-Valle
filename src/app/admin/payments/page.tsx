@@ -50,6 +50,8 @@ type BeneficiaryType = 'propio' | 'terceros';
 type PaymentMethod = 'movil' | 'transferencia' | 'pago-historico' | '';
 type BeneficiarySplit = { property: { street: string, house: string }; amount: number | string; };
 
+const ADMIN_USER_ID = 'G2jhcEnp05TcvjYj8SwhzVCHbW83';
+
 export default function UnifiedPaymentsPage() {
     const { toast } = useToast();
     const [owners, setOwners] = useState<Owner[]>([]);
@@ -300,17 +302,13 @@ export default function UnifiedPaymentsPage() {
                 bank: bank === 'otro' ? otherBank : bank,
                 reference: reference,
                 totalAmount: Number(totalAmount),
-                beneficiaryType: beneficiaryType,
                 beneficiaries: beneficiarySplits.map(s => ({
                     ownerId: selectedOwner!.id,
-                    ownerName: selectedOwner!.name,
-                    street: s.property.street,
-                    house: s.property.house,
                     amount: Number(s.amount)
                 })),
                 status: 'pendiente' as 'pendiente',
                 reportedAt: serverTimestamp(),
-                reportedBy: beneficiaryType === 'propio' ? selectedOwner!.id : 'admin_user',
+                reportedBy: beneficiaryType === 'propio' ? selectedOwner!.id : ADMIN_USER_ID,
             };
             
             await addDoc(collection(db, "payments"), paymentData);
