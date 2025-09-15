@@ -271,7 +271,15 @@ export default function ReportsPage() {
             };
 
             const ownersWithBalance = ownersData.filter(o => o.balance > 0);
-            const balanceReportData = ownersWithBalance.map(owner => {
+            
+            const balanceReportData = ownersWithBalance.sort((a, b) => {
+                const aKeys = getSortKeys(a);
+                const bKeys = getSortKeys(b);
+                if (aKeys.streetNum !== bKeys.streetNum) {
+                    return aKeys.streetNum - bKeys.streetNum;
+                }
+                return aKeys.houseNum - bKeys.houseNum;
+            }).map(owner => {
                 const ownerPayments = paymentsData.filter(p => p.beneficiaries.some(b => b.ownerId === owner.id));
                 const lastPayment = ownerPayments.sort((a,b) => b.paymentDate.toMillis() - a.paymentDate.toMillis())[0];
                 return {
@@ -281,16 +289,8 @@ export default function ReportsPage() {
                     balance: owner.balance,
                     lastMovement: lastPayment ? format(lastPayment.paymentDate.toDate(), 'dd/MM/yyyy') : 'N/A'
                 };
-            }).sort((a, b) => {
-                const aOwner = owners.find(o => o.id === a.id)!;
-                const bOwner = owners.find(o => o.id === b.id)!;
-                const aKeys = getSortKeys(aOwner);
-                const bKeys = getSortKeys(bOwner);
-                if (aKeys.streetNum !== bKeys.streetNum) {
-                    return aKeys.streetNum - bKeys.streetNum;
-                }
-                return aKeys.houseNum - bKeys.houseNum;
             });
+
             setBalanceOwners(balanceReportData);
 
         } catch (error) {
@@ -424,7 +424,7 @@ export default function ReportsPage() {
             
             let lastPaymentDate = '';
             if (ownerPayments.length > 0) {
-                const lastPayment = [...ownerPayments].sort((a, b) => b.paymentDate.toMillis() - b.paymentDate.toMillis())[0];
+                const lastPayment = [...ownerPayments].sort((a, b) => b.paymentDate.toMillis() - a.paymentDate.toMillis())[0];
                 lastPaymentDate = format(lastPayment.paymentDate.toDate(), 'dd/MM/yyyy');
             }
     
