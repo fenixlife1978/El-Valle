@@ -263,6 +263,13 @@ export default function ReportsPage() {
             setSelectedDelinquentOwners(new Set(delinquentData.map(o => o.id)));
 
             // --- Balance Report Data Calculation ---
+            const getSortKeys = (owner: Owner) => {
+                const prop = (owner.properties && owner.properties.length > 0) ? owner.properties[0] : { street: 'N/A', house: 'N/A' };
+                const streetNum = parseInt(String(prop.street || '').replace('Calle ', '') || '999');
+                const houseNum = parseInt(String(prop.house || '').replace('Casa ', '') || '999');
+                return { streetNum, houseNum };
+            };
+
             const ownersWithBalance = ownersData.filter(o => o.balance > 0);
             const balanceReportData = ownersWithBalance.map(owner => {
                 const ownerPayments = paymentsData.filter(p => p.beneficiaries.some(b => b.ownerId === owner.id));
@@ -274,6 +281,15 @@ export default function ReportsPage() {
                     balance: owner.balance,
                     lastMovement: lastPayment ? format(lastPayment.paymentDate.toDate(), 'dd/MM/yyyy') : 'N/A'
                 };
+            }).sort((a, b) => {
+                const aOwner = owners.find(o => o.id === a.id)!;
+                const bOwner = owners.find(o => o.id === b.id)!;
+                const aKeys = getSortKeys(aOwner);
+                const bKeys = getSortKeys(bOwner);
+                if (aKeys.streetNum !== bKeys.streetNum) {
+                    return aKeys.streetNum - bKeys.streetNum;
+                }
+                return aKeys.houseNum - bKeys.houseNum;
             });
             setBalanceOwners(balanceReportData);
 
