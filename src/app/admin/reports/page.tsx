@@ -111,7 +111,6 @@ type BalanceOwner = {
     name: string;
     properties: string;
     balance: number;
-    lastMovement: string;
 };
 
 type TransactionHistoryItem = (Debt & { type: 'debt' }) | (Payment & { type: 'payment' });
@@ -280,14 +279,11 @@ export default function ReportsPage() {
                 }
                 return aKeys.houseNum - bKeys.houseNum;
             }).map(owner => {
-                const ownerPayments = paymentsData.filter(p => p.beneficiaries.some(b => b.ownerId === owner.id));
-                const lastPayment = ownerPayments.sort((a,b) => b.paymentDate.toMillis() - a.paymentDate.toMillis())[0];
                 return {
                     id: owner.id,
                     name: owner.name,
                     properties: (owner.properties || []).map(p => `${p.street} - ${p.house}`).join(', '),
                     balance: owner.balance,
-                    lastMovement: lastPayment ? format(lastPayment.paymentDate.toDate(), 'dd/MM/yyyy') : 'N/A'
                 };
             });
 
@@ -905,8 +901,8 @@ export default function ReportsPage() {
         }
     
         const filename = `reporte_saldos_favor_${format(new Date(), 'yyyy-MM-dd')}`;
-        const head = [['Propietario', 'Propiedades', 'Fecha Últ. Movimiento', 'Saldo a Favor (Bs.)']];
-        const body = data.map(o => [o.name, o.properties, o.lastMovement, `Bs. ${formatToTwoDecimals(o.balance)}`]);
+        const head = [['Propietario', 'Propiedades', 'Saldo a Favor (Bs.)']];
+        const body = data.map(o => [o.name, o.properties, `Bs. ${formatToTwoDecimals(o.balance)}`]);
     
         if (formatType === 'pdf') {
             const doc = new jsPDF();
@@ -936,7 +932,6 @@ export default function ReportsPage() {
             const worksheet = XLSX.utils.json_to_sheet(data.map(o => ({
                 'Propietario': o.name,
                 'Propiedades': o.properties,
-                'Fecha Últ. Movimiento': o.lastMovement,
                 'Saldo a Favor (Bs.)': o.balance
             })));
             const workbook = XLSX.utils.book_new();
@@ -1458,7 +1453,6 @@ export default function ReportsPage() {
                                     <TableRow>
                                         <TableHead>Propietario</TableHead>
                                         <TableHead>Propiedades</TableHead>
-                                        <TableHead>Fecha Últ. Movimiento</TableHead>
                                         <TableHead className="text-right">Saldo (Bs.)</TableHead>
                                     </TableRow>
                                 </TableHeader>
@@ -1468,12 +1462,11 @@ export default function ReportsPage() {
                                             <TableRow key={owner.id}>
                                                 <TableCell className="font-medium">{owner.name}</TableCell>
                                                 <TableCell>{owner.properties}</TableCell>
-                                                <TableCell>{owner.lastMovement}</TableCell>
                                                 <TableCell className="text-right font-bold text-green-500">Bs. {formatToTwoDecimals(owner.balance)}</TableCell>
                                             </TableRow>
                                         ))
                                     ) : (
-                                        <TableRow><TableCell colSpan={4} className="h-24 text-center">No hay propietarios con saldo a favor.</TableCell></TableRow>
+                                        <TableRow><TableCell colSpan={3} className="h-24 text-center">No hay propietarios con saldo a favor.</TableCell></TableRow>
                                     )}
                                 </TableBody>
                             </Table>
