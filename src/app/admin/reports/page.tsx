@@ -375,7 +375,7 @@ export default function ReportsPage() {
             
             let solvencyPeriod = 'N/A';
             if (status === 'No Solvente') {
-                const oldestDebt = [...pendingDebtsUpToCurrentMonth].sort((a,b) => a.year - b.year || a.month - b.month)[0];
+                const oldestDebt = [...pendingDebtsUpToCurrentMonth].sort((a,b) => a.year - b.year || a.month - a.month)[0];
                 if (oldestDebt) {
                     solvencyPeriod = `Desde ${monthsLocale[oldestDebt.month]} ${oldestDebt.year}`;
                 }
