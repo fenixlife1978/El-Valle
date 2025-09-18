@@ -148,8 +148,8 @@ export default function VerifyPaymentsPage() {
             let unit = 'N/A';
             if (data.beneficiaries?.length > 1) {
                 unit = "Múltiples Propiedades";
-            } else if (firstBeneficiary) {
-                unit = firstBeneficiary && firstBeneficiary.street && firstBeneficiary.house ? `${firstBeneficiary.street} - ${firstBeneficiary.house}` : 'N/A';
+            } else if (firstBeneficiary && firstBeneficiary.street && firstBeneficiary.house) {
+                unit = `${firstBeneficiary.street} - ${firstBeneficiary.house}`;
             }
 
             paymentsData.push({
