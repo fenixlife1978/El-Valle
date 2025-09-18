@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -11,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from "@/lib/utils";
 import { es } from "date-fns/locale";
-import { Calendar as CalendarIcon, Download, Search, Loader2, FileText, FileSpreadsheet, ArrowUpDown, Building, BadgeInfo, BadgeCheck, BadgeX, History } from "lucide-react";
+import { Calendar as CalendarIcon, Download, Search, Loader2, FileText, FileSpreadsheet, ArrowUpDown, Building, BadgeInfo, BadgeCheck, BadgeX, History, ChevronDown, ChevronRight } from "lucide-react";
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import * as XLSX from 'xlsx';
@@ -25,6 +26,7 @@ import { format, addMonths, startOfMonth, parse, getMonth, getYear, isBefore, is
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList } from 'recharts';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
 
 type Owner = {
@@ -113,7 +115,9 @@ type BalanceOwner = {
     balance: number;
 };
 
-type TransactionHistoryItem = (Debt & { type: 'debt' }) | (Payment & { type: 'payment' });
+type PaymentWithDebts = Payment & {
+    liquidatedDebts: Debt[];
+};
 
 type AdvancePaymentReportRow = {
     ownerId: string;
@@ -185,7 +189,7 @@ export default function ReportsPage() {
     // State for Individual Report
     const [individualSearchTerm, setIndividualSearchTerm] = useState('');
     const [selectedIndividual, setSelectedIndividual] = useState<Owner | null>(null);
-    const [individualHistory, setIndividualHistory] = useState<TransactionHistoryItem[]>([]);
+    const [individualPayments, setIndividualPayments] = useState<PaymentWithDebts[]>([]);
     const [individualDebtUSD, setIndividualDebtUSD] = useState(0);
 
     // State for Balance Report
@@ -642,29 +646,48 @@ export default function ReportsPage() {
     }, [allPayments, owners, incomeDateRange, incomeSearchTerm]);
 
 
-    const handleSelectIndividual = (owner: Owner) => {
+    const handleSelectIndividual = async (owner: Owner) => {
         setSelectedIndividual(owner);
         setIndividualSearchTerm('');
 
-        const ownerDebts = allDebts.filter(d => d.ownerId === owner.id);
-        const ownerPayments = allPayments.filter(p => p.beneficiaries.some(b => b.ownerId === owner.id) && p.status === 'aprobado').map(p => ({ ...p, type: 'payment' as const }));
+        // 1. Fetch all approved payments for the owner, sorted by date
+        const ownerPaymentsQuery = query(
+            collection(db, "payments"),
+            where("beneficiaries", "array-contains", { ownerId: owner.id, house: owner.properties[0].house, street: owner.properties[0].street, amount: 0 }),
+            where("status", "==", "aprobado"),
+            orderBy("paymentDate", "desc")
+        );
+        // Note: The above query is incorrect for array-contains. A better approach is to filter client-side if a direct query isn't possible,
+        // or restructure data. For now, let's fetch all and filter.
         
-        const combinedHistory: any[] = [
-            ...ownerDebts.map(d => ({ ...d, type: 'debt' as const })),
-            ...ownerPayments
-        ];
+        const allApprovedPayments = allPayments.filter(p => p.beneficiaries.some(b => b.ownerId === owner.id) && p.status === 'aprobado')
+            .sort((a,b) => b.paymentDate.toMillis() - a.paymentDate.toMillis());
 
-        combinedHistory.sort((a, b) => {
-            const dateA = a.type === 'debt' ? new Date(a.year, a.month-1) : a.paymentDate.toDate();
-            const dateB = b.type === 'debt' ? new Date(b.year, b.month-1) : b.paymentDate.toDate();
-            return dateB.getTime() - dateA.getTime();
-        });
 
-        setIndividualHistory(combinedHistory as TransactionHistoryItem[]);
+        // 2. For each payment, find the debts it liquidated
+        const paymentsWithDebts: PaymentWithDebts[] = [];
+        for (const payment of allApprovedPayments) {
+            const liquidatedDebtsQuery = query(
+                collection(db, "debts"),
+                where("paymentId", "==", payment.id)
+            );
+            const debtsSnapshot = await getDocs(liquidatedDebtsQuery);
+            const liquidatedDebts = debtsSnapshot.docs.map(d => d.data() as Debt);
+            
+            paymentsWithDebts.push({
+                ...payment,
+                liquidatedDebts: liquidatedDebts.sort((a,b) => a.year - b.year || a.month - a.month),
+            });
+        }
+        
+        setIndividualPayments(paymentsWithDebts);
 
-        const totalDebt = ownerDebts.filter(d => d.status === 'pending').reduce((acc, debt) => acc + debt.amountUSD, 0);
+        const totalDebt = allDebts
+            .filter(d => d.ownerId === owner.id && d.status === 'pending')
+            .reduce((acc, debt) => acc + debt.amountUSD, 0);
         setIndividualDebtUSD(totalDebt);
     };
+
 
     const handleExportIntegral = (formatType: 'pdf' | 'excel') => {
         const data = integralReportData;
@@ -799,7 +822,7 @@ export default function ReportsPage() {
     const handleExportIndividual = (formatType: 'pdf' | 'excel') => {
         if (!selectedIndividual || !companyInfo) return;
     
-        const filename = `estado_cuenta_${selectedIndividual.name.replace(/\s/g, '_')}`;
+        const filename = `reporte_pagos_${selectedIndividual.name.replace(/\s/g, '_')}`;
         const doc = new jsPDF();
         const pageWidth = doc.internal.pageSize.getWidth();
         const margin = 14;
@@ -811,7 +834,7 @@ export default function ReportsPage() {
         }
         
         doc.setFontSize(16).setFont('helvetica', 'bold');
-        doc.text('ESTADO DE CUENTA', pageWidth / 2, margin + 15, { align: 'center'});
+        doc.text('Reporte de Pagos del Propietario', pageWidth / 2, margin + 15, { align: 'center'});
 
         const dateText = `Fecha: ${format(new Date(), "dd/MM/yyyy 'a las' HH:mm:ss")}`;
         doc.setFontSize(9).setFont('helvetica', 'normal');
@@ -823,72 +846,56 @@ export default function ReportsPage() {
 
         let startY = margin + 45;
 
-        // --- Payment Summary ---
-        const approvedPayments = allPayments.filter(p => p.beneficiaries.some(b => b.ownerId === selectedIndividual.id) && p.status === 'aprobado');
-        let totalPaidBs = approvedPayments.reduce((sum, p) => sum + p.totalAmount, 0);
-        
-        if (approvedPayments.length > 0) {
-            doc.setFontSize(11).setFont('helvetica', 'bold').text('Resumen de Pagos', margin, startY);
-            startY += 7;
-            const paymentBody = approvedPayments.map(p => {
-                const beneficiary = p.beneficiaries.find(b => b.ownerId === selectedIndividual.id);
-                const paymentAmount = beneficiary ? beneficiary.amount : p.totalAmount;
-                const concept = p.beneficiaries.length > 1 ? `Pago Múltiple` : `Pago Cuota(s)`;
+        // --- Payments Summary ---
+        if (individualPayments.length > 0) {
+            individualPayments.forEach((payment) => {
+                const paymentDate = format(payment.paymentDate.toDate(), 'dd-MM-yyyy');
+                const paymentAmount = `Bs. ${formatToTwoDecimals(payment.totalAmount)}`;
+                const paymentRef = payment.reference || 'N/A';
+                const rate = `Bs. ${formatToTwoDecimals(payment.exchangeRate || 0)}`;
 
-                return [
-                    format(p.paymentDate.toDate(), 'dd-MM-yyyy'),
-                    concept,
-                    p.reportedBy === selectedIndividual.id ? 'Propietario' : 'Administrador', // Who paid
-                    `Bs. ${formatToTwoDecimals(paymentAmount)}`,
-                ]
-            });
-            (doc as any).autoTable({
-                head: [['Fecha', 'Concepto', 'Pagado por', 'Monto (Bs)']], 
-                body: paymentBody,
-                startY: startY, 
-                theme: 'striped', 
-                headStyles: { fillColor: [22, 102, 102] }, // Teal header
-                styles: { fontSize: 8 },
-                foot: [[ { content: 'Total Pagado', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } }, { content: `Bs. ${formatToTwoDecimals(totalPaidBs)}`, styles: { fontStyle: 'bold' } } ]],
-                footStyles: { fillColor: [22, 102, 102], textColor: 255 }
-            });
-            startY = (doc as any).lastAutoTable.finalY + 10;
-        }
+                doc.setFontSize(10).setFont('helvetica', 'bold');
+                doc.setFillColor(230, 230, 230); // Light grey background for payment header
+                doc.rect(margin, startY-4, pageWidth - (margin*2), 18, 'F');
+                doc.text(`Fecha de Pago: ${paymentDate}`, margin + 2, startY);
+                doc.text(`Monto: ${paymentAmount}`, margin + 60, startY);
+                doc.text(`Ref: ${paymentRef}`, margin + 110, startY);
+                doc.text(`Tasa: ${rate}`, margin + 160, startY);
+                startY += 8;
 
-        // --- Debt Summary ---
-        const ownerDebts = allDebts.filter(d => d.ownerId === selectedIndividual.id);
-        const totalDebtUsd = ownerDebts.filter(d => d.status === 'pending').reduce((acc, d) => acc + d.amountUSD, 0);
-        
-        if (ownerDebts.length > 0) {
-            doc.setFontSize(11).setFont('helvetica', 'bold').text('Resumen de Deudas', margin, startY);
-            startY += 7;
-            const debtBody = ownerDebts
-                .sort((a,b) => b.year - a.year || b.month - b.month)
-                .map(d => [
-                `${Object.values(monthsLocale)[d.month -1] || ''} ${d.year}`,
-                d.description,
-                `$${d.amountUSD.toFixed(2)}`,
-                d.status === 'paid' ? 'Pagada' : 'Pendiente'
-            ]);
-            (doc as any).autoTable({
-                head: [['Período', 'Concepto', 'Monto ($)', 'Estado']], 
-                body: debtBody,
-                startY: startY, 
-                theme: 'striped', 
-                headStyles: { fillColor: [22, 102, 102] }, // Teal header
-                styles: { fontSize: 8 },
-                foot: [[ { content: 'Total Adeudado', colSpan: 2, styles: { halign: 'right', fontStyle: 'bold' } }, 
-                         { content: `$${totalDebtUsd.toFixed(2)}`, styles: { fontStyle: 'bold' } },
-                         ''
-                      ]],
-                footStyles: { fillColor: [22, 102, 102], textColor: 255 }
+                if (payment.liquidatedDebts.length > 0) {
+                     (doc as any).autoTable({
+                        head: [['Período', 'Concepto', 'Monto Pagado ($)']], 
+                        body: payment.liquidatedDebts.map(d => [
+                           `${Object.values(monthsLocale)[d.month -1] || ''} ${d.year}`,
+                            d.description,
+                           `$${(d.paidAmountUSD || d.amountUSD).toFixed(2)}`
+                        ]),
+                        startY: startY, 
+                        theme: 'grid', 
+                        headStyles: { fillColor: [120, 120, 120] },
+                        styles: { fontSize: 8 },
+                        margin: { left: margin + 2, right: margin + 2 }
+                    });
+                    startY = (doc as any).lastAutoTable.finalY + 5;
+                } else {
+                    doc.setFontSize(9).setFont('helvetica', 'italic').text('Este pago fue acreditado a saldo a favor.', margin + 2, startY);
+                    startY += 8;
+                }
+                 startY += 5; // Extra space between payments
             });
-            startY = (doc as any).lastAutoTable.finalY + 10;
+        } else {
+             doc.setFontSize(10).setFont('helvetica', 'normal').text('No se encontraron pagos aprobados para este propietario.', margin, startY);
+             startY += 10;
         }
 
         // --- Balance Footer ---
+        doc.setLineWidth(0.5);
+        doc.line(margin, startY, pageWidth - margin, startY);
+        startY += 8;
         doc.setFontSize(11).setFont('helvetica', 'bold');
         doc.text(`Saldo a Favor Actual: Bs. ${formatToTwoDecimals(selectedIndividual.balance)}`, margin, startY);
+        doc.text(`Deuda Pendiente Total: $${individualDebtUSD.toFixed(2)}`, pageWidth - margin, startY, { align: 'right'});
 
         doc.save(`${filename}.pdf`);
     };
@@ -1210,8 +1217,8 @@ export default function ReportsPage() {
                  <TabsContent value="individual">
                      <Card>
                         <CardHeader>
-                            <CardTitle>Ficha de Estado de Cuenta Individual</CardTitle>
-                            <CardDescription>Busque un propietario para ver su estado de cuenta detallado.</CardDescription>
+                            <CardTitle>Ficha Individual de Pagos</CardTitle>
+                            <CardDescription>Busque un propietario para ver su historial detallado de pagos.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div className="relative max-w-sm">
@@ -1266,45 +1273,53 @@ export default function ReportsPage() {
                                             </Card>
                                         </div>
                                         <div>
-                                            <h3 className="text-lg font-semibold mb-2 flex items-center"><History className="mr-2 h-5 w-5"/> Historial de Cuenta</h3>
+                                            <h3 className="text-lg font-semibold mb-2 flex items-center"><History className="mr-2 h-5 w-5"/> Historial de Pagos</h3>
                                             <ScrollArea className="h-96 border rounded-md">
-                                                <Table>
-                                                    <TableHeader>
-                                                        <TableRow>
-                                                            <TableHead>Fecha</TableHead>
-                                                            <TableHead>Concepto</TableHead>
-                                                            <TableHead className="text-right">Monto (USD)</TableHead>
-                                                            <TableHead className="text-right">Estado</TableHead>
-                                                        </TableRow>
-                                                    </TableHeader>
-                                                    <TableBody>
-                                                    {individualHistory.map((item, index) => {
-                                                        if (item.type === 'debt') {
-                                                            const date = `${monthsLocale[item.month]} ${item.year}`;
-                                                            return (
-                                                                <TableRow key={`debt-${item.id}-${index}`}>
-                                                                    <TableCell>{date}</TableCell>
-                                                                    <TableCell>{item.description}</TableCell>
-                                                                    <TableCell className="text-right">${formatToTwoDecimals(item.amountUSD)}</TableCell>
-                                                                    <TableCell className="text-right">
-                                                                        {item.status === 'paid' ? <Badge variant="success">Pagada</Badge> : <Badge variant="destructive">Pendiente</Badge>}
-                                                                    </TableCell>
-                                                                </TableRow>
-                                                            )
-                                                        } else {
-                                                            const paymentRate = item.exchangeRate || activeRate;
-                                                            return (
-                                                                <TableRow key={`payment-${item.id}-${index}`}>
-                                                                    <TableCell>{format(item.paymentDate.toDate(), 'dd/MM/yyyy')}</TableCell>
-                                                                    <TableCell>Pago Aprobado</TableCell>
-                                                                    <TableCell className="text-right">${formatToTwoDecimals(item.beneficiaries[0].amount / paymentRate)}</TableCell>
-                                                                    <TableCell className="text-right"><Badge variant="outline">Aplicado</Badge></TableCell>
-                                                                </TableRow>
-                                                            )
-                                                        }
-                                                    })}
-                                                    </TableBody>
-                                                </Table>
+                                                 {individualPayments.length > 0 ? (
+                                                    <div className="p-2 space-y-2">
+                                                        {individualPayments.map((payment) => (
+                                                            <Collapsible key={payment.id} className="border rounded-md">
+                                                                <CollapsibleTrigger className="w-full p-2 hover:bg-muted/50 rounded-t-md">
+                                                                    <div className="flex items-center justify-between">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <ChevronRight className="h-4 w-4 transition-transform duration-200 group-data-[state=open]:rotate-90" />
+                                                                            <span className="font-semibold">{format(payment.paymentDate.toDate(), 'dd/MM/yyyy')}</span>
+                                                                            <Badge variant="outline">Ref: {payment.reference}</Badge>
+                                                                        </div>
+                                                                        <span className="font-bold text-primary">Bs. {formatToTwoDecimals(payment.totalAmount)}</span>
+                                                                    </div>
+                                                                </CollapsibleTrigger>
+                                                                <CollapsibleContent>
+                                                                    <div className="p-2 border-t">
+                                                                        {payment.liquidatedDebts.length > 0 ? (
+                                                                            <Table>
+                                                                                <TableHeader>
+                                                                                    <TableRow>
+                                                                                        <TableHead>Mes Liquidado</TableHead>
+                                                                                        <TableHead>Monto ($)</TableHead>
+                                                                                    </TableRow>
+                                                                                </TableHeader>
+                                                                                <TableBody>
+                                                                                    {payment.liquidatedDebts.map(debt => (
+                                                                                        <TableRow key={debt.id}>
+                                                                                            <TableCell>{monthsLocale[debt.month]} {debt.year}</TableCell>
+                                                                                            <TableCell>${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}</TableCell>
+                                                                                        </TableRow>
+                                                                                    ))}
+                                                                                </TableBody>
+                                                                            </Table>
+                                                                        ) : (
+                                                                            <p className="text-sm text-muted-foreground px-4 py-2">Este pago fue acreditado a saldo a favor.</p>
+                                                                        )}
+                                                                         <p className="text-xs text-muted-foreground text-right p-2">Tasa aplicada: Bs. {formatToTwoDecimals(payment.exchangeRate || activeRate)}</p>
+                                                                    </div>
+                                                                </CollapsibleContent>
+                                                            </Collapsible>
+                                                        ))}
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex items-center justify-center h-full text-muted-foreground">No se encontraron pagos aprobados.</div>
+                                                )}
                                             </ScrollArea>
                                         </div>
                                     </CardContent>
