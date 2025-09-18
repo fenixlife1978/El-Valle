@@ -127,11 +127,11 @@ type AdvancePaymentReportRow = {
     december: { amount: number; status: string; toAdjust: number; } | null;
 };
 
-type AccountStatementTransaction = {
-    date: Date;
-    concept: string;
-    charge: number;
-    credit: number;
+type AccountStatementData = {
+    payments: Payment[];
+    debts: Debt[];
+    totalPaidBs: number;
+    totalDebtUSD: number;
     balance: number;
 };
 
@@ -203,8 +203,8 @@ export default function ReportsPage() {
     // State for Account Statement report
     const [statementSearchTerm, setStatementSearchTerm] = useState('');
     const [selectedStatementOwner, setSelectedStatementOwner] = useState<Owner | null>(null);
-    const [accountStatement, setAccountStatement] = useState<AccountStatementTransaction[]>([]);
-    const [statementSummary, setStatementSummary] = useState({ initialBalance: 0, totalCharges: 0, totalCredits: 0, finalBalance: 0 });
+    const [accountStatementData, setAccountStatementData] = useState<AccountStatementData | null>(null);
+    
 
     // State for Balance Report
     const [balanceOwners, setBalanceOwners] = useState<BalanceOwner[]>([]);
@@ -710,47 +710,24 @@ export default function ReportsPage() {
     const handleSelectStatementOwner = (owner: Owner) => {
         setSelectedStatementOwner(owner);
         setStatementSearchTerm('');
+        setAccountStatementData(null); // Clear previous data
 
-        const ownerDebts = allDebts.filter(d => d.ownerId === owner.id);
-        const ownerPayments = allPayments.filter(p => p.beneficiaries.some(b => b.ownerId === owner.id) && p.status === 'aprobado');
+        const ownerDebts = allDebts.filter(d => d.ownerId === owner.id)
+            .sort((a, b) => a.year - b.year || a.month - b.month);
 
-        const debtTransactions = ownerDebts.map(d => ({
-            date: new Date(d.year, d.month - 1),
-            concept: `${d.description} - ${d.property.street} ${d.property.house}`,
-            charge: d.amountUSD * (d.paymentDate ? allPayments.find(p => p.id === d.paymentId)?.exchangeRate || activeRate : activeRate),
-            credit: 0,
-            type: 'debt'
-        }));
+        const ownerPayments = allPayments.filter(p => 
+                p.beneficiaries.some(b => b.ownerId === owner.id) && p.status === 'aprobado'
+            ).sort((a, b) => a.paymentDate.toMillis() - b.paymentDate.toMillis());
 
-        const paymentTransactions = ownerPayments.map(p => ({
-            date: p.paymentDate.toDate(),
-            concept: `Pago Ref: ${p.reference}`,
-            charge: 0,
-            credit: p.totalAmount,
-            type: 'payment'
-        }));
+        const totalDebtUSD = ownerDebts.filter(d => d.status === 'pending').reduce((sum, d) => sum + d.amountUSD, 0);
+        const totalPaidBs = ownerPayments.reduce((sum, p) => sum + p.totalAmount, 0);
 
-        const allTransactions = [...debtTransactions, ...paymentTransactions].sort((a, b) => a.date.getTime() - b.date.getTime());
-        
-        let currentBalance = 0; // Assuming starting from 0 for simplicity, could fetch initial balance
-        let totalCharges = 0;
-        let totalCredits = 0;
-        const statement = allTransactions.map(t => {
-            currentBalance = currentBalance - t.charge + t.credit;
-            totalCharges += t.charge;
-            totalCredits += t.credit;
-            return {
-                ...t,
-                balance: currentBalance
-            };
-        });
-
-        setAccountStatement(statement);
-        setStatementSummary({
-            initialBalance: 0, // Simplified
-            totalCharges,
-            totalCredits,
-            finalBalance: currentBalance
+        setAccountStatementData({
+            debts: ownerDebts,
+            payments: ownerPayments,
+            totalDebtUSD: totalDebtUSD,
+            totalPaidBs: totalPaidBs,
+            balance: owner.balance,
         });
     };
 
@@ -967,7 +944,7 @@ export default function ReportsPage() {
     };
 
     const handleExportAccountStatement = (formatType: 'pdf' | 'excel') => {
-        if (!selectedStatementOwner || !companyInfo) return;
+        if (!selectedStatementOwner || !companyInfo || !accountStatementData) return;
 
         const filename = `estado_de_cuenta_${selectedStatementOwner.name.replace(/\s/g, '_')}`;
         const doc = new jsPDF();
@@ -976,48 +953,63 @@ export default function ReportsPage() {
 
         // --- Header ---
         if (companyInfo.logo) doc.addImage(companyInfo.logo, 'PNG', margin, margin, 20, 20);
-        doc.setFontSize(16).setFont('helvetica', 'bold').text('Estado de Cuenta', pageWidth / 2, margin + 15, { align: 'center' });
         
-        const dateText = `Fecha: ${format(new Date(), "dd/MM/yyyy 'a las' HH:mm:ss")}`;
-        doc.setFontSize(9).setFont('helvetica', 'normal').text(dateText, pageWidth - margin, margin + 30, { align: 'right' });
-        doc.text(`${companyInfo.name} | ${companyInfo.rif}`, margin, margin + 25);
-        doc.text(`Propietario: ${selectedStatementOwner.name}`, margin, margin + 30);
-        
-        let startY = margin + 45;
+        doc.setFontSize(10).setFont('helvetica', 'bold').text(companyInfo.name, margin + 25, margin + 8);
+        doc.setFontSize(8).setFont('helvetica', 'normal').text(companyInfo.rif, margin + 25, margin + 13);
+        doc.setFontSize(8).setFont('helvetica', 'normal').text(`Propietario: ${selectedStatementOwner.name}`, margin + 25, margin + 18);
+        doc.setFontSize(8).setFont('helvetica', 'normal').text(`Propiedad(es): ${(selectedStatementOwner.properties || []).map(p => `${p.street}-${p.house}`).join(', ')}`, margin + 25, margin + 23);
 
-        // --- Body ---
+        doc.setFontSize(16).setFont('helvetica', 'bold').text('ESTADO DE CUENTA', pageWidth - margin, margin + 15, { align: 'right' });
+        const dateText = `Fecha: ${format(new Date(), "dd/MM/yyyy 'a las' HH:mm:ss")}`;
+        doc.setFontSize(8).setFont('helvetica', 'normal').text(dateText, pageWidth - margin, margin + 22, { align: 'right' });
+        
+        let startY = margin + 40;
+
+        // --- Payments Summary ---
+        doc.setFontSize(11).setFont('helvetica', 'bold').text('Resumen de Pagos', margin, startY);
+        startY += 6;
         (doc as any).autoTable({
-            head: [['Fecha', 'Concepto', 'Cargo (Bs.)', 'Abono (Bs.)', 'Saldo (Bs.)']],
-            body: accountStatement.map(t => [
-                format(t.date, 'dd/MM/yyyy'),
-                t.concept,
-                t.charge > 0 ? formatToTwoDecimals(t.charge) : '',
-                t.credit > 0 ? formatToTwoDecimals(t.credit) : '',
-                formatToTwoDecimals(t.balance)
+            head: [['Fecha', 'Concepto', 'Pagado por', 'Monto (Bs)']],
+            body: accountStatementData.payments.map(p => [
+                format(p.paymentDate.toDate(), 'dd-MM-yyyy'),
+                `Pago Cuota(s)`, // Simplified concept for now
+                'Administrador', // Simplified
+                formatToTwoDecimals(p.totalAmount)
             ]),
             startY: startY,
-            theme: 'grid',
-            headStyles: { fillColor: [30, 80, 180] },
-            styles: { fontSize: 8 },
-            columnStyles: {
-                2: { halign: 'right' },
-                3: { halign: 'right' },
-                4: { halign: 'right', fontStyle: 'bold' },
-            }
+            theme: 'striped',
+            headStyles: { fillColor: [0, 77, 64] }, // Dark teal
+            footStyles: { fillColor: [0, 77, 64], textColor: 255, fontStyle: 'bold' },
+            styles: { fontSize: 9 },
+            foot: [['Total Pagado', '', '', `Bs. ${formatToTwoDecimals(accountStatementData.totalPaidBs)}`]]
         });
-        
         startY = (doc as any).lastAutoTable.finalY + 10;
 
-        // --- Footer Summary ---
-        doc.setFontSize(10).setFont('helvetica', 'bold');
-        doc.text('RESUMEN', margin, startY);
+        // --- Debts Summary ---
+        doc.setFontSize(11).setFont('helvetica', 'bold').text('Resumen de Deudas', margin, startY);
         startY += 6;
-        doc.setFontSize(9).setFont('helvetica', 'normal');
-        doc.text(`Total Cargos: Bs. ${formatToTwoDecimals(statementSummary.totalCharges)}`, margin, startY);
-        doc.text(`Saldo Final: Bs. ${formatToTwoDecimals(statementSummary.finalBalance)}`, pageWidth - margin, startY, {align: 'right'});
-        startY += 6;
-        doc.text(`Total Abonos: Bs. ${formatToTwoDecimals(statementSummary.totalCredits)}`, margin, startY);
+        (doc as any).autoTable({
+            head: [['Periodo', 'Concepto', 'Monto ($)', 'Estado']],
+            body: accountStatementData.debts.map(d => [
+                `${monthsLocale[d.month]} ${d.year}`,
+                d.description,
+                `$${d.amountUSD.toFixed(2)}`,
+                d.status === 'paid' ? 'Pagada' : 'Pendiente'
+            ]),
+            startY: startY,
+            theme: 'striped',
+            headStyles: { fillColor: [0, 77, 64] },
+            footStyles: { fillColor: [0, 77, 64], textColor: 255, fontStyle: 'bold' },
+            styles: { fontSize: 9, cellPadding: 2 },
+            columnStyles: { 3: { halign: 'right' } },
+            foot: [['Total Adeudado', '', `$${accountStatementData.totalDebtUSD.toFixed(2)}`, '']]
+        });
+        startY = (doc as any).lastAutoTable.finalY + 15;
         
+        // --- Footer Balance ---
+        doc.setFontSize(12).setFont('helvetica', 'bold');
+        doc.text(`Saldo a Favor Actual: Bs. ${formatToTwoDecimals(accountStatementData.balance)}`, margin, startY);
+
         doc.save(`${filename}.pdf`);
     };
     
@@ -1455,7 +1447,7 @@ export default function ReportsPage() {
                      <Card>
                         <CardHeader>
                             <CardTitle>Estado de Cuenta</CardTitle>
-                            <CardDescription>Busque un propietario para ver su estado de cuenta cronológico.</CardDescription>
+                            <CardDescription>Busque un propietario para ver su estado de cuenta.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div className="relative max-w-sm">
@@ -1475,46 +1467,88 @@ export default function ReportsPage() {
                                 </Card>
                             )}
 
-                            {selectedStatementOwner && (
+                            {selectedStatementOwner && accountStatementData && (
                                 <Card className="mt-4 bg-card-foreground/5 dark:bg-card-foreground/5">
                                     <CardHeader>
-                                        <div className="flex justify-between items-start">
-                                            <div>
-                                                <CardTitle>{selectedStatementOwner.name}</CardTitle>
-                                                <CardDescription>{(selectedStatementOwner.properties || []).map(p => `${p.street} - ${p.house}`).join(', ')}</CardDescription>
+                                        <div className="flex justify-between items-center">
+                                            <div className="flex items-center gap-4">
+                                                {companyInfo?.logo && <img src={companyInfo.logo} alt="Logo" className="w-16 h-16 rounded-md"/>}
+                                                <div>
+                                                    <p className="font-bold">{companyInfo?.name} | {companyInfo?.rif}</p>
+                                                    <p className="text-sm">Propietario: {selectedStatementOwner.name}</p>
+                                                    <p className="text-sm">Propiedad(es): {(selectedStatementOwner.properties || []).map(p => `${p.street}-${p.house}`).join(', ')}</p>
+                                                </div>
                                             </div>
-                                            <Button variant="outline" onClick={() => handleExportAccountStatement('pdf')}><FileText className="mr-2 h-4 w-4" /> Exportar PDF</Button>
+                                            <div className="text-right">
+                                                <h2 className="text-2xl font-bold">ESTADO DE CUENTA</h2>
+                                                <p className="text-xs">Fecha: {format(new Date(), "dd/MM/yyyy 'a las' HH:mm:ss")}</p>
+                                                <Button size="sm" variant="outline" className="mt-2" onClick={() => handleExportAccountStatement('pdf')}><FileText className="mr-2 h-4 w-4" /> Exportar PDF</Button>
+                                            </div>
                                         </div>
                                     </CardHeader>
-                                    <CardContent className="space-y-4">
-                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                            <Card>
-                                                <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Cargos</CardTitle></CardHeader>
-                                                <CardContent><div className="text-xl font-bold">Bs. {formatToTwoDecimals(statementSummary.totalCharges)}</div></CardContent>
-                                            </Card>
-                                            <Card>
-                                                <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Abonos</CardTitle></CardHeader>
-                                                <CardContent><div className="text-xl font-bold">Bs. {formatToTwoDecimals(statementSummary.totalCredits)}</div></CardContent>
-                                            </Card>
-                                            <Card>
-                                                <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Saldo Final</CardTitle></CardHeader>
-                                                <CardContent><div className="text-xl font-bold">Bs. {formatToTwoDecimals(statementSummary.finalBalance)}</div></CardContent>
-                                            </Card>
-                                        </div>
-                                        <Table>
-                                            <TableHeader><TableRow><TableHead>Fecha</TableHead><TableHead>Concepto</TableHead><TableHead className="text-right">Cargo (Bs.)</TableHead><TableHead className="text-right">Abono (Bs.)</TableHead><TableHead className="text-right">Saldo (Bs.)</TableHead></TableRow></TableHeader>
-                                            <TableBody>
-                                                {accountStatement.map((t, i) => (
-                                                    <TableRow key={i}>
-                                                        <TableCell>{format(t.date, 'dd/MM/yyyy')}</TableCell>
-                                                        <TableCell>{t.concept}</TableCell>
-                                                        <TableCell className="text-right text-destructive">{t.charge > 0 ? formatToTwoDecimals(t.charge) : ''}</TableCell>
-                                                        <TableCell className="text-right text-green-500">{t.credit > 0 ? formatToTwoDecimals(t.credit) : ''}</TableCell>
-                                                        <TableCell className="text-right font-semibold">{formatToTwoDecimals(t.balance)}</TableCell>
+                                    <CardContent className="space-y-6">
+                                        <div>
+                                            <h3 className="font-bold mb-2">Resumen de Pagos</h3>
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow className="bg-[#004D40] hover:bg-[#00382e] text-white">
+                                                        <TableHead className="text-white">Fecha</TableHead>
+                                                        <TableHead className="text-white">Concepto</TableHead>
+                                                        <TableHead className="text-white">Pagado por</TableHead>
+                                                        <TableHead className="text-white text-right">Monto (Bs)</TableHead>
                                                     </TableRow>
-                                                ))}
-                                            </TableBody>
-                                        </Table>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {accountStatementData.payments.map(p => (
+                                                        <TableRow key={p.id}>
+                                                            <TableCell>{format(p.paymentDate.toDate(), 'dd-MM-yyyy')}</TableCell>
+                                                            <TableCell>Pago Cuota(s)</TableCell>
+                                                            <TableCell>Administrador</TableCell>
+                                                            <TableCell className="text-right">{formatToTwoDecimals(p.totalAmount)}</TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                                <TableFooter>
+                                                     <TableRow className="bg-[#004D40] hover:bg-[#00382e] text-white font-bold">
+                                                        <TableCell colSpan={3}>Total Pagado</TableCell>
+                                                        <TableCell className="text-right">Bs. {formatToTwoDecimals(accountStatementData.totalPaidBs)}</TableCell>
+                                                    </TableRow>
+                                                </TableFooter>
+                                            </Table>
+                                        </div>
+                                        <div>
+                                            <h3 className="font-bold mb-2">Resumen de Deudas</h3>
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow className="bg-[#004D40] hover:bg-[#00382e] text-white">
+                                                        <TableHead className="text-white">Periodo</TableHead>
+                                                        <TableHead className="text-white">Concepto</TableHead>
+                                                        <TableHead className="text-white text-right">Monto ($)</TableHead>
+                                                        <TableHead className="text-white text-right">Estado</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                     {accountStatementData.debts.map(d => (
+                                                        <TableRow key={d.id}>
+                                                            <TableCell>{monthsLocale[d.month]} {d.year}</TableCell>
+                                                            <TableCell>{d.description}</TableCell>
+                                                            <TableCell className="text-right">${d.amountUSD.toFixed(2)}</TableCell>
+                                                            <TableCell className="text-right">{d.status === 'paid' ? 'Pagada' : 'Pendiente'}</TableCell>
+                                                        </TableRow>
+                                                     ))}
+                                                </TableBody>
+                                                <TableFooter>
+                                                    <TableRow className="bg-[#004D40] hover:bg-[#00382e] text-white font-bold">
+                                                        <TableCell colSpan={2}>Total Adeudado</TableCell>
+                                                        <TableCell className="text-right">${accountStatementData.totalDebtUSD.toFixed(2)}</TableCell>
+                                                        <TableCell></TableCell>
+                                                    </TableRow>
+                                                </TableFooter>
+                                            </Table>
+                                        </div>
+                                        <div className="text-right font-bold text-lg pt-4">
+                                            Saldo a Favor Actual: Bs. {formatToTwoDecimals(accountStatementData.balance)}
+                                        </div>
                                     </CardContent>
                                 </Card>
                             )}
