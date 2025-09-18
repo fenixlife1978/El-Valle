@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from "@/lib/utils";
 import { es } from "date-fns/locale";
-import { Calendar as CalendarIcon, Download, Search, Loader2, FileText, FileSpreadsheet, ArrowUpDown, Building, BadgeInfo, BadgeCheck, BadgeX, History, ChevronDown, ChevronRight } from "lucide-react";
+import { Calendar as CalendarIcon, Download, Search, Loader2, FileText, FileSpreadsheet, ArrowUpDown, Building, BadgeInfo, BadgeCheck, BadgeX, History, ChevronDown, ChevronRight, TrendingUp, TrendingDown, DollarSign, Receipt } from "lucide-react";
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import * as XLSX from 'xlsx';
@@ -127,6 +127,14 @@ type AdvancePaymentReportRow = {
     december: { amount: number; status: string; toAdjust: number; } | null;
 };
 
+type AccountStatementTransaction = {
+    date: Date;
+    concept: string;
+    charge: number;
+    credit: number;
+    balance: number;
+};
+
 
 const monthsLocale: { [key: number]: string } = {
     1: 'Ene', 2: 'Feb', 3: 'Mar', 4: 'Abr', 5: 'May', 6: 'Jun',
@@ -191,6 +199,12 @@ export default function ReportsPage() {
     const [selectedIndividual, setSelectedIndividual] = useState<Owner | null>(null);
     const [individualPayments, setIndividualPayments] = useState<PaymentWithDebts[]>([]);
     const [individualDebtUSD, setIndividualDebtUSD] = useState(0);
+
+    // State for Account Statement report
+    const [statementSearchTerm, setStatementSearchTerm] = useState('');
+    const [selectedStatementOwner, setSelectedStatementOwner] = useState<Owner | null>(null);
+    const [accountStatement, setAccountStatement] = useState<AccountStatementTransaction[]>([]);
+    const [statementSummary, setStatementSummary] = useState({ initialBalance: 0, totalCharges: 0, totalCredits: 0, finalBalance: 0 });
 
     // State for Balance Report
     const [balanceOwners, setBalanceOwners] = useState<BalanceOwner[]>([]);
@@ -560,6 +574,11 @@ export default function ReportsPage() {
         return owners.filter(o => o.name.toLowerCase().includes(individualSearchTerm.toLowerCase()));
     }, [individualSearchTerm, owners]);
 
+    const filteredStatementOwners = useMemo(() => {
+        if (!statementSearchTerm) return [];
+        return owners.filter(o => o.name.toLowerCase().includes(statementSearchTerm.toLowerCase()));
+    }, [statementSearchTerm, owners]);
+
     const filteredBalanceOwners = useMemo(() => {
         if (!balanceSearchTerm) return balanceOwners;
         return balanceOwners.filter(o => o.name.toLowerCase().includes(balanceSearchTerm.toLowerCase()));
@@ -686,6 +705,53 @@ export default function ReportsPage() {
             .filter(d => d.ownerId === owner.id && d.status === 'pending')
             .reduce((acc, debt) => acc + debt.amountUSD, 0);
         setIndividualDebtUSD(totalDebt);
+    };
+
+    const handleSelectStatementOwner = (owner: Owner) => {
+        setSelectedStatementOwner(owner);
+        setStatementSearchTerm('');
+
+        const ownerDebts = allDebts.filter(d => d.ownerId === owner.id);
+        const ownerPayments = allPayments.filter(p => p.beneficiaries.some(b => b.ownerId === owner.id) && p.status === 'aprobado');
+
+        const debtTransactions = ownerDebts.map(d => ({
+            date: new Date(d.year, d.month - 1),
+            concept: `${d.description} - ${d.property.street} ${d.property.house}`,
+            charge: d.amountUSD * (d.paymentDate ? allPayments.find(p => p.id === d.paymentId)?.exchangeRate || activeRate : activeRate),
+            credit: 0,
+            type: 'debt'
+        }));
+
+        const paymentTransactions = ownerPayments.map(p => ({
+            date: p.paymentDate.toDate(),
+            concept: `Pago Ref: ${p.reference}`,
+            charge: 0,
+            credit: p.totalAmount,
+            type: 'payment'
+        }));
+
+        const allTransactions = [...debtTransactions, ...paymentTransactions].sort((a, b) => a.date.getTime() - b.date.getTime());
+        
+        let currentBalance = 0; // Assuming starting from 0 for simplicity, could fetch initial balance
+        let totalCharges = 0;
+        let totalCredits = 0;
+        const statement = allTransactions.map(t => {
+            currentBalance = currentBalance - t.charge + t.credit;
+            totalCharges += t.charge;
+            totalCredits += t.credit;
+            return {
+                ...t,
+                balance: currentBalance
+            };
+        });
+
+        setAccountStatement(statement);
+        setStatementSummary({
+            initialBalance: 0, // Simplified
+            totalCharges,
+            totalCredits,
+            finalBalance: currentBalance
+        });
     };
 
 
@@ -899,6 +965,61 @@ export default function ReportsPage() {
 
         doc.save(`${filename}.pdf`);
     };
+
+    const handleExportAccountStatement = (formatType: 'pdf' | 'excel') => {
+        if (!selectedStatementOwner || !companyInfo) return;
+
+        const filename = `estado_de_cuenta_${selectedStatementOwner.name.replace(/\s/g, '_')}`;
+        const doc = new jsPDF();
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const margin = 14;
+
+        // --- Header ---
+        if (companyInfo.logo) doc.addImage(companyInfo.logo, 'PNG', margin, margin, 20, 20);
+        doc.setFontSize(16).setFont('helvetica', 'bold').text('Estado de Cuenta', pageWidth / 2, margin + 15, { align: 'center' });
+        
+        const dateText = `Fecha: ${format(new Date(), "dd/MM/yyyy 'a las' HH:mm:ss")}`;
+        doc.setFontSize(9).setFont('helvetica', 'normal').text(dateText, pageWidth - margin, margin + 30, { align: 'right' });
+        doc.text(`${companyInfo.name} | ${companyInfo.rif}`, margin, margin + 25);
+        doc.text(`Propietario: ${selectedStatementOwner.name}`, margin, margin + 30);
+        
+        let startY = margin + 45;
+
+        // --- Body ---
+        (doc as any).autoTable({
+            head: [['Fecha', 'Concepto', 'Cargo (Bs.)', 'Abono (Bs.)', 'Saldo (Bs.)']],
+            body: accountStatement.map(t => [
+                format(t.date, 'dd/MM/yyyy'),
+                t.concept,
+                t.charge > 0 ? formatToTwoDecimals(t.charge) : '',
+                t.credit > 0 ? formatToTwoDecimals(t.credit) : '',
+                formatToTwoDecimals(t.balance)
+            ]),
+            startY: startY,
+            theme: 'grid',
+            headStyles: { fillColor: [30, 80, 180] },
+            styles: { fontSize: 8 },
+            columnStyles: {
+                2: { halign: 'right' },
+                3: { halign: 'right' },
+                4: { halign: 'right', fontStyle: 'bold' },
+            }
+        });
+        
+        startY = (doc as any).lastAutoTable.finalY + 10;
+
+        // --- Footer Summary ---
+        doc.setFontSize(10).setFont('helvetica', 'bold');
+        doc.text('RESUMEN', margin, startY);
+        startY += 6;
+        doc.setFontSize(9).setFont('helvetica', 'normal');
+        doc.text(`Total Cargos: Bs. ${formatToTwoDecimals(statementSummary.totalCharges)}`, margin, startY);
+        doc.text(`Saldo Final: Bs. ${formatToTwoDecimals(statementSummary.finalBalance)}`, pageWidth - margin, startY, {align: 'right'});
+        startY += 6;
+        doc.text(`Total Abonos: Bs. ${formatToTwoDecimals(statementSummary.totalCredits)}`, margin, startY);
+        
+        doc.save(`${filename}.pdf`);
+    };
     
     const handleExportBalance = (formatType: 'pdf' | 'excel') => {
         const data = filteredBalanceOwners;
@@ -1110,9 +1231,10 @@ export default function ReportsPage() {
             </div>
             
             <Tabs defaultValue="integral" className="w-full">
-                 <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 h-auto flex-wrap">
+                 <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-6 h-auto flex-wrap">
                     <TabsTrigger value="integral">Integral</TabsTrigger>
                     <TabsTrigger value="individual">Ficha Individual</TabsTrigger>
+                    <TabsTrigger value="estado-de-cuenta">Estado de Cuenta</TabsTrigger>
                     <TabsTrigger value="delinquency">Morosidad</TabsTrigger>
                     <TabsTrigger value="balance">Saldos a Favor</TabsTrigger>
                     <TabsTrigger value="income">Ingresos</TabsTrigger>
@@ -1328,6 +1450,77 @@ export default function ReportsPage() {
                         </CardContent>
                      </Card>
                  </TabsContent>
+
+                <TabsContent value="estado-de-cuenta">
+                     <Card>
+                        <CardHeader>
+                            <CardTitle>Estado de Cuenta</CardTitle>
+                            <CardDescription>Busque un propietario para ver su estado de cuenta cronológico.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="relative max-w-sm">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <Input placeholder="Buscar por nombre..." className="pl-9" value={statementSearchTerm} onChange={e => setStatementSearchTerm(e.target.value)} />
+                            </div>
+                            {statementSearchTerm && filteredStatementOwners.length > 0 && (
+                                <Card className="border rounded-md">
+                                    <ScrollArea className="h-48">
+                                        {filteredStatementOwners.map(owner => (
+                                            <div key={owner.id} onClick={() => handleSelectStatementOwner(owner)} className="p-3 hover:bg-muted cursor-pointer border-b last:border-b-0">
+                                                <p className="font-medium">{owner.name}</p>
+                                                <p className="text-sm text-muted-foreground">{(owner.properties || []).map(p => `${p.street} - ${p.house}`).join(', ')}</p>
+                                            </div>
+                                        ))}
+                                    </ScrollArea>
+                                </Card>
+                            )}
+
+                            {selectedStatementOwner && (
+                                <Card className="mt-4 bg-card-foreground/5 dark:bg-card-foreground/5">
+                                    <CardHeader>
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <CardTitle>{selectedStatementOwner.name}</CardTitle>
+                                                <CardDescription>{(selectedStatementOwner.properties || []).map(p => `${p.street} - ${p.house}`).join(', ')}</CardDescription>
+                                            </div>
+                                            <Button variant="outline" onClick={() => handleExportAccountStatement('pdf')}><FileText className="mr-2 h-4 w-4" /> Exportar PDF</Button>
+                                        </div>
+                                    </CardHeader>
+                                    <CardContent className="space-y-4">
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                            <Card>
+                                                <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Cargos</CardTitle></CardHeader>
+                                                <CardContent><div className="text-xl font-bold">Bs. {formatToTwoDecimals(statementSummary.totalCharges)}</div></CardContent>
+                                            </Card>
+                                            <Card>
+                                                <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Abonos</CardTitle></CardHeader>
+                                                <CardContent><div className="text-xl font-bold">Bs. {formatToTwoDecimals(statementSummary.totalCredits)}</div></CardContent>
+                                            </Card>
+                                            <Card>
+                                                <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Saldo Final</CardTitle></CardHeader>
+                                                <CardContent><div className="text-xl font-bold">Bs. {formatToTwoDecimals(statementSummary.finalBalance)}</div></CardContent>
+                                            </Card>
+                                        </div>
+                                        <Table>
+                                            <TableHeader><TableRow><TableHead>Fecha</TableHead><TableHead>Concepto</TableHead><TableHead className="text-right">Cargo (Bs.)</TableHead><TableHead className="text-right">Abono (Bs.)</TableHead><TableHead className="text-right">Saldo (Bs.)</TableHead></TableRow></TableHeader>
+                                            <TableBody>
+                                                {accountStatement.map((t, i) => (
+                                                    <TableRow key={i}>
+                                                        <TableCell>{format(t.date, 'dd/MM/yyyy')}</TableCell>
+                                                        <TableCell>{t.concept}</TableCell>
+                                                        <TableCell className="text-right text-destructive">{t.charge > 0 ? formatToTwoDecimals(t.charge) : ''}</TableCell>
+                                                        <TableCell className="text-right text-green-500">{t.credit > 0 ? formatToTwoDecimals(t.credit) : ''}</TableCell>
+                                                        <TableCell className="text-right font-semibold">{formatToTwoDecimals(t.balance)}</TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    </CardContent>
+                                </Card>
+                            )}
+                        </CardContent>
+                     </Card>
+                </TabsContent>
 
                  <TabsContent value="delinquency">
                      <Card>
