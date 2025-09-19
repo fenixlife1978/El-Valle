@@ -92,8 +92,8 @@ export default function AdminDashboardPage() {
 
             const recentPaymentsQuery = query(collection(db, "payments"), orderBy('reportedAt', 'desc'), limit(5));
             const recentPaymentsUnsubscribe = onSnapshot(recentPaymentsQuery, async (snapshot) => {
-                const paymentsPromises = snapshot.docs.map(async doc => {
-                    const data = doc.data();
+                const paymentsPromises = snapshot.docs.map(async (paymentDoc) => {
+                    const data = paymentDoc.data();
                     const firstBeneficiary = data.beneficiaries?.[0];
                     
                     let userName = 'Beneficiario no identificado';
@@ -111,9 +111,10 @@ export default function AdminDashboardPage() {
                             unit = `${firstBeneficiary.street} - ${firstBeneficiary.house}`;
                         } else if (firstBeneficiary.ownerId) {
                             // Fallback: fetch owner data to get property
-                            const ownerDoc = await getDoc(doc(db, "owners", firstBeneficiary.ownerId));
-                            if (ownerDoc.exists()) {
-                                const owner = ownerDoc.data() as Omit<Owner, 'id'>;
+                            const ownerDocRef = doc(db, "owners", firstBeneficiary.ownerId);
+                            const ownerDocSnap = await getDoc(ownerDocRef);
+                            if (ownerDocSnap.exists()) {
+                                const owner = ownerDocSnap.data() as Omit<Owner, 'id'>;
                                 if (owner && owner.properties && owner.properties.length > 0) {
                                     unit = `${owner.properties[0].street} - ${owner.properties[0].house}`;
                                 }
@@ -125,7 +126,7 @@ export default function AdminDashboardPage() {
                     }
 
                     return { 
-                        id: doc.id,
+                        id: paymentDoc.id,
                         user: userName,
                         unit: unit,
                         amount: data.totalAmount,
