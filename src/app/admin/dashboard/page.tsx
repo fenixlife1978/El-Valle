@@ -111,11 +111,12 @@ export default function AdminDashboardPage() {
                             unit = `${firstBeneficiary.street} - ${firstBeneficiary.house}`;
                         } else if (firstBeneficiary.ownerId) {
                             // Fallback: fetch owner data to get property
-                            const owner = newOwnersMap.get(firstBeneficiary.ownerId);
-                            if (owner && owner.properties && owner.properties.length > 0) {
-                                unit = `${owner.properties[0].street} - ${owner.properties[0].house}`;
-                            } else {
-                                unit = "Propiedad no especificada"; // Final fallback
+                            const ownerDoc = await getDoc(doc(db, "owners", firstBeneficiary.ownerId));
+                            if (ownerDoc.exists()) {
+                                const owner = ownerDoc.data() as Omit<Owner, 'id'>;
+                                if (owner && owner.properties && owner.properties.length > 0) {
+                                    unit = `${owner.properties[0].street} - ${owner.properties[0].house}`;
+                                }
                             }
                         }
                     }
