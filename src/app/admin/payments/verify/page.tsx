@@ -21,6 +21,12 @@ import { es } from 'date-fns/locale';
 type PaymentStatus = 'pendiente' | 'aprobado' | 'rechazado';
 type PaymentMethod = 'transferencia' | 'movil' | 'adelanto' | 'conciliacion';
 
+type Owner = {
+    id: string;
+    name: string;
+    properties?: { street: string, house: string }[];
+};
+
 type Beneficiary = { ownerId: string; ownerName: string; amount: number; street?: string; house?: string; };
 
 type FullPayment = {
@@ -108,15 +114,14 @@ export default function VerifyPaymentsPage() {
   const [paymentToDelete, setPaymentToDelete] = useState<FullPayment | null>(null);
   const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
   const { toast } = useToast();
-  const [ownersMap, setOwnersMap] = useState<Map<string, string>>(new Map());
+  const [ownersMap, setOwnersMap] = useState<Map<string, Owner>>(new Map());
 
   useEffect(() => {
-    // Pre-fetch all owners to create a map of ID -> Name
     const ownersQuery = query(collection(db, "owners"));
     const ownersUnsubscribe = onSnapshot(ownersQuery, (snapshot) => {
-        const newOwnersMap = new Map<string, string>();
+        const newOwnersMap = new Map<string, Owner>();
         snapshot.forEach(doc => {
-            newOwnersMap.set(doc.id, doc.data().name);
+            newOwnersMap.set(doc.id, { id: doc.id, ...doc.data() } as Owner);
         });
         setOwnersMap(newOwnersMap);
     });
@@ -125,7 +130,7 @@ export default function VerifyPaymentsPage() {
   }, []);
 
   useEffect(() => {
-    if (ownersMap.size === 0) return; // Don't fetch payments until owners are loaded
+    if (ownersMap.size === 0) return;
 
     setLoading(true);
 
@@ -135,21 +140,24 @@ export default function VerifyPaymentsPage() {
         const paymentsData: FullPayment[] = [];
         snapshot.forEach(doc => {
             const data = doc.data();
-
             const firstBeneficiary = data.beneficiaries?.[0];
             
-            let userName = 'Beneficiario no identificado'; // Fallback text
-            if (firstBeneficiary?.ownerName) {
-                userName = firstBeneficiary.ownerName;
-            } else if (firstBeneficiary?.ownerId && ownersMap.has(firstBeneficiary.ownerId)) {
-                userName = ownersMap.get(firstBeneficiary.ownerId)!;
-            }
+            let userName = 'Beneficiario no identificado';
+            let unit = 'Propiedad no especificada';
 
-            let unit = 'N/A';
-            if (data.beneficiaries?.length > 1) {
-                unit = "Múltiples Propiedades";
-            } else if (firstBeneficiary && firstBeneficiary.street && firstBeneficiary.house) {
-                unit = `${firstBeneficiary.street} - ${firstBeneficiary.house}`;
+            if (firstBeneficiary?.ownerId) {
+                const owner = ownersMap.get(firstBeneficiary.ownerId);
+                if (owner) {
+                    userName = owner.name;
+                    if (data.beneficiaries?.length > 1) {
+                        unit = "Múltiples Propiedades";
+                    } else if (firstBeneficiary.street && firstBeneficiary.house) {
+                        unit = `${firstBeneficiary.street} - ${firstBeneficiary.house}`;
+                    } else if (owner.properties && owner.properties.length > 0) {
+                        // Fallback to the first property of the owner
+                        unit = `${owner.properties[0].street} - ${owner.properties[0].house}`;
+                    }
+                }
             }
 
             paymentsData.push({
