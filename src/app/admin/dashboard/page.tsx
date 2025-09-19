@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Landmark, AlertCircle, Building, Eye, Printer, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { collection, onSnapshot, query, where, limit, orderBy, getDocs } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, limit, orderBy, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
 type Payment = {
@@ -24,6 +24,7 @@ type Payment = {
 type Owner = {
     id: string;
     name: string;
+    properties?: { street: string, house: string }[];
 };
 
 const formatToTwoDecimals = (num: number) => {
@@ -41,20 +42,20 @@ export default function AdminDashboardPage() {
     totalUnits: 0,
   });
   const [recentPayments, setRecentPayments] = useState<Payment[]>([]);
-  const [ownersMap, setOwnersMap] = useState<Map<string, string>>(new Map());
+  const [ownersMap, setOwnersMap] = useState<Map<string, Owner>>(new Map());
 
   useEffect(() => {
     setLoading(true);
 
     const ownersQuery = query(collection(db, "owners"));
     const ownersUnsubscribe = onSnapshot(ownersQuery, (snapshot) => {
-        const newOwnersMap = new Map<string, string>();
+        const newOwnersMap = new Map<string, Owner>();
         let totalUnits = 0;
         snapshot.forEach(doc => {
-            newOwnersMap.set(doc.id, doc.data().name);
-            const owner = doc.data();
-            if (owner.properties && owner.properties.length > 0) {
-                totalUnits += owner.properties.length;
+            const ownerData = doc.data() as Omit<Owner, 'id'>;
+            newOwnersMap.set(doc.id, { id: doc.id, ...ownerData });
+            if (ownerData.properties && ownerData.properties.length > 0) {
+                totalUnits += ownerData.properties.length;
             }
         });
         setOwnersMap(newOwnersMap);
@@ -73,7 +74,6 @@ export default function AdminDashboardPage() {
                     const payment = doc.data();
                     const paymentDate = new Date(payment.paymentDate.seconds * 1000);
                     
-                    // Exclude 'adelanto', 'conciliacion', and 'pago-historico' from monthly income
                     const isIncomePayment = !['adelanto', 'conciliacion', 'pago-historico'].includes(payment.paymentMethod);
 
                     if (payment.status === 'aprobado' && isIncomePayment && paymentDate.getMonth() === now.getMonth() && paymentDate.getFullYear() === now.getFullYear()) {
@@ -91,9 +91,8 @@ export default function AdminDashboardPage() {
             });
 
             const recentPaymentsQuery = query(collection(db, "payments"), orderBy('reportedAt', 'desc'), limit(5));
-            const recentPaymentsUnsubscribe = onSnapshot(recentPaymentsQuery, (snapshot) => {
-                const paymentsData: Payment[] = [];
-                snapshot.forEach(doc => {
+            const recentPaymentsUnsubscribe = onSnapshot(recentPaymentsQuery, async (snapshot) => {
+                const paymentsPromises = snapshot.docs.map(async doc => {
                     const data = doc.data();
                     const firstBeneficiary = data.beneficiaries?.[0];
                     
@@ -101,17 +100,30 @@ export default function AdminDashboardPage() {
                     if (firstBeneficiary?.ownerName) {
                         userName = firstBeneficiary.ownerName;
                     } else if (firstBeneficiary?.ownerId && newOwnersMap.has(firstBeneficiary.ownerId)) {
-                        userName = newOwnersMap.get(firstBeneficiary.ownerId)!;
+                        userName = newOwnersMap.get(firstBeneficiary.ownerId)!.name;
                     }
 
-                    let unit = 'N/A';
+                    let unit = '';
                     if (data.beneficiaries?.length > 1) {
                         unit = "Múltiples Propiedades";
                     } else if (firstBeneficiary) {
-                        unit = `${firstBeneficiary.street || 'N/A'} - ${firstBeneficiary.house || 'N/A'}`;
+                        if (firstBeneficiary.street && firstBeneficiary.house) {
+                            unit = `${firstBeneficiary.street} - ${firstBeneficiary.house}`;
+                        } else if (firstBeneficiary.ownerId) {
+                            // Fallback: fetch owner data to get property
+                            const owner = newOwnersMap.get(firstBeneficiary.ownerId);
+                            if (owner && owner.properties && owner.properties.length > 0) {
+                                unit = `${owner.properties[0].street} - ${owner.properties[0].house}`;
+                            } else {
+                                unit = "Propiedad no especificada"; // Final fallback
+                            }
+                        }
+                    }
+                    if (!unit) { // If unit is still empty
+                        unit = "Propiedad no especificada";
                     }
 
-                    paymentsData.push({ 
+                    return { 
                         id: doc.id,
                         user: userName,
                         unit: unit,
@@ -120,8 +132,10 @@ export default function AdminDashboardPage() {
                         bank: data.bank,
                         type: data.paymentMethod,
                         status: data.status,
-                    });
+                    };
                 });
+                
+                const paymentsData = await Promise.all(paymentsPromises);
                 setRecentPayments(paymentsData);
                 setLoading(false);
             });
