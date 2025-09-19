@@ -7,7 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from "@/lib/utils";
@@ -669,33 +669,17 @@ export default function ReportsPage() {
         setSelectedIndividual(owner);
         setIndividualSearchTerm('');
 
-        // 1. Fetch all approved payments for the owner, sorted by date
-        const ownerPaymentsQuery = query(
-            collection(db, "payments"),
-            where("beneficiaries", "array-contains", { ownerId: owner.id, house: owner.properties[0].house, street: owner.properties[0].street, amount: 0 }),
-            where("status", "==", "aprobado"),
-            orderBy("paymentDate", "desc")
-        );
-        // Note: The above query is incorrect for array-contains. A better approach is to filter client-side if a direct query isn't possible,
-        // or restructure data. For now, let's fetch all and filter.
-        
         const allApprovedPayments = allPayments.filter(p => p.beneficiaries.some(b => b.ownerId === owner.id) && p.status === 'aprobado')
             .sort((a,b) => b.paymentDate.toMillis() - a.paymentDate.toMillis());
 
-
-        // 2. For each payment, find the debts it liquidated
         const paymentsWithDebts: PaymentWithDebts[] = [];
         for (const payment of allApprovedPayments) {
-            const liquidatedDebtsQuery = query(
-                collection(db, "debts"),
-                where("paymentId", "==", payment.id)
-            );
-            const debtsSnapshot = await getDocs(liquidatedDebtsQuery);
-            const liquidatedDebts = debtsSnapshot.docs.map(d => d.data() as Debt);
+            const liquidatedDebts = allDebts.filter(d => d.paymentId === payment.id)
+                .sort((a,b) => a.year - b.year || a.month - b.month);
             
             paymentsWithDebts.push({
                 ...payment,
-                liquidatedDebts: liquidatedDebts.sort((a,b) => a.year - b.year || a.month - a.month),
+                liquidatedDebts,
             });
         }
         
@@ -1332,7 +1316,7 @@ export default function ReportsPage() {
                      <Card>
                         <CardHeader>
                             <CardTitle>Ficha Individual de Pagos</CardTitle>
-                            <CardDescription>Busque un propietario para ver su historial detallado de pagos.</CardDescription>
+                            <CardDescription>Busque un propietario para ver su historial detallado de pagos y los meses que liquida cada uno.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div className="relative max-w-sm">
@@ -1361,7 +1345,7 @@ export default function ReportsPage() {
                                                 <CardDescription>{(selectedIndividual.properties || []).map(p => `${p.street} - ${p.house}`).join(', ')}</CardDescription>
                                             </div>
                                             <div className="flex gap-2">
-                                                <Button variant="outline" onClick={() => handleExportIndividual('pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
+                                                <Button variant="outline" onClick={() => handleExportIndividual('pdf')}><FileText className="mr-2 h-4 w-4" /> Exportar PDF</Button>
                                             </div>
                                         </div>
                                     </CardHeader>
@@ -1387,37 +1371,44 @@ export default function ReportsPage() {
                                             </Card>
                                         </div>
                                         <div>
-                                            <h3 className="text-lg font-semibold mb-2 flex items-center"><History className="mr-2 h-5 w-5"/> Historial de Pagos</h3>
-                                            <ScrollArea className="h-96 border rounded-md">
+                                            <h3 className="text-lg font-semibold mb-2 flex items-center"><History className="mr-2 h-5 w-5"/> Historial de Pagos Aprobados</h3>
+                                            <ScrollArea className="h-[28rem] border rounded-md">
                                                  {individualPayments.length > 0 ? (
                                                     <div className="p-2 space-y-2">
                                                         {individualPayments.map((payment) => (
                                                             <Collapsible key={payment.id} className="border rounded-md">
-                                                                <CollapsibleTrigger className="w-full p-2 hover:bg-muted/50 rounded-t-md">
+                                                                <CollapsibleTrigger className="w-full p-3 hover:bg-muted/50 rounded-t-md">
                                                                     <div className="flex items-center justify-between">
                                                                         <div className="flex items-center gap-2">
                                                                             <ChevronRight className="h-4 w-4 transition-transform duration-200 group-data-[state=open]:rotate-90" />
-                                                                            <span className="font-semibold">{format(payment.paymentDate.toDate(), 'dd/MM/yyyy')}</span>
-                                                                            <Badge variant="outline">Ref: {payment.reference}</Badge>
+                                                                            <div className="text-left">
+                                                                                <p className="font-semibold text-primary">{format(payment.paymentDate.toDate(), 'dd/MM/yyyy')}</p>
+                                                                                <p className="text-xs text-muted-foreground">Ref: {payment.reference}</p>
+                                                                            </div>
                                                                         </div>
-                                                                        <span className="font-bold text-primary">Bs. {formatToTwoDecimals(payment.totalAmount)}</span>
+                                                                        <div className="text-right">
+                                                                             <p className="font-bold text-lg">Bs. {formatToTwoDecimals(payment.totalAmount)}</p>
+                                                                             <p className="text-xs text-muted-foreground">Tasa: Bs. {formatToTwoDecimals(payment.exchangeRate || activeRate)}</p>
+                                                                        </div>
                                                                     </div>
                                                                 </CollapsibleTrigger>
                                                                 <CollapsibleContent>
-                                                                    <div className="p-2 border-t">
+                                                                    <div className="p-2 border-t bg-background">
                                                                         {payment.liquidatedDebts.length > 0 ? (
                                                                             <Table>
                                                                                 <TableHeader>
                                                                                     <TableRow>
                                                                                         <TableHead>Mes Liquidado</TableHead>
-                                                                                        <TableHead>Monto ($)</TableHead>
+                                                                                        <TableHead>Concepto</TableHead>
+                                                                                        <TableHead className="text-right">Monto Pagado ($)</TableHead>
                                                                                     </TableRow>
                                                                                 </TableHeader>
                                                                                 <TableBody>
                                                                                     {payment.liquidatedDebts.map(debt => (
                                                                                         <TableRow key={debt.id}>
                                                                                             <TableCell>{monthsLocale[debt.month]} {debt.year}</TableCell>
-                                                                                            <TableCell>${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}</TableCell>
+                                                                                            <TableCell>{debt.description}</TableCell>
+                                                                                            <TableCell className="text-right">${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}</TableCell>
                                                                                         </TableRow>
                                                                                     ))}
                                                                                 </TableBody>
@@ -1425,7 +1416,6 @@ export default function ReportsPage() {
                                                                         ) : (
                                                                             <p className="text-sm text-muted-foreground px-4 py-2">Este pago fue acreditado a saldo a favor.</p>
                                                                         )}
-                                                                         <p className="text-xs text-muted-foreground text-right p-2">Tasa aplicada: Bs. {formatToTwoDecimals(payment.exchangeRate || activeRate)}</p>
                                                                     </div>
                                                                 </CollapsibleContent>
                                                             </Collapsible>
