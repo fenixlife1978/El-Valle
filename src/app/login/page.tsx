@@ -3,8 +3,8 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { getAuth, signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,16 +18,6 @@ type CompanyInfo = {
     name: string;
     logo: string;
 };
-
-const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="24px" height="24px" {...props}>
-        <path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z" />
-        <path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z" />
-        <path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.223,0-9.657-3.356-11.303-8H4.694v8.192C8.214,40.63,15.553,44,24,44z" />
-        <path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571l6.19,5.238C42.022,36.219,44,30.561,44,24C44,22.659,43.862,21.35,43.611,20.083z" />
-    </svg>
-);
-
 
 function LoginContent() {
     const router = useRouter();
@@ -73,16 +63,19 @@ function LoginContent() {
             
             const userData = userDocSnap.data();
 
-            if (role === 'owner' && password === '123456') {
+            // Force password change for owners on first login with generic password
+            if (userData.role === 'propietario' && password === '123456') {
                  router.push('/change-password');
                  return;
             }
-
+            
+            // Redirect based on role
             if (userData.role === 'administrador') {
                 router.push('/admin/dashboard');
             } else {
                 router.push('/owner/dashboard');
             }
+
         } catch (error: any) {
             let description = "Ocurrió un error al iniciar sesión.";
             if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
@@ -100,47 +93,6 @@ function LoginContent() {
         }
     };
 
-    const handleGoogleSignIn = async () => {
-        setLoading(true);
-        const provider = new GoogleAuthProvider();
-        try {
-            const result = await signInWithPopup(auth, provider);
-            const user = result.user;
-
-            const userDocRef = doc(db, 'owners', user.uid);
-            const userDocSnap = await getDoc(userDocRef);
-
-            if (userDocSnap.exists()) {
-                const userData = userDocSnap.data();
-                if (userData.role === 'administrador') {
-                    router.push('/admin/dashboard');
-                } else {
-                    router.push('/owner/dashboard');
-                }
-            } else {
-                // If user does not exist, create a new 'owner' profile
-                const newUserProfile = {
-                    name: user.displayName || 'Propietario',
-                    email: user.email,
-                    role: 'propietario',
-                    properties: [],
-                    balance: 0,
-                    avatar: user.photoURL || '',
-                };
-                await setDoc(userDocRef, newUserProfile);
-                router.push('/owner/dashboard');
-            }
-        } catch (error) {
-            console.error(error);
-            toast({
-                variant: 'destructive',
-                title: 'Error de Inicio de Sesión',
-                description: 'No se pudo iniciar sesión con Google. Por favor, intenta de nuevo.',
-            });
-        } finally {
-            setLoading(false);
-        }
-    };
 
     return (
         <Card className="w-full max-w-md">
@@ -188,20 +140,6 @@ function LoginContent() {
                         </Button>
                     </div>
                 </form>
-                 <div className="relative my-6">
-                    <div className="absolute inset-0 flex items-center">
-                        <span className="w-full border-t" />
-                    </div>
-                    <div className="relative flex justify-center text-xs uppercase">
-                        <span className="bg-background px-2 text-muted-foreground">
-                            O ingresa con
-                        </span>
-                    </div>
-                </div>
-                 <Button variant="outline" className="w-full h-12 text-lg" onClick={handleGoogleSignIn} disabled={loading}>
-                    <GoogleIcon className="mr-2" />
-                    Ingresar con Google
-                </Button>
             </CardContent>
             <CardFooter className="flex flex-col items-center p-4 gap-2">
                 <Button variant="link" asChild>
@@ -225,4 +163,3 @@ export default function LoginPage() {
         </div>
     );
 }
-

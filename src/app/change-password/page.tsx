@@ -51,7 +51,7 @@ export default function ChangePasswordPage() {
             return;
         }
         if (newPassword === '123456') {
-            toast({ variant: 'destructive', title: 'Error', description: 'No puedes usar la misma contraseña genérica.' });
+            toast({ variant: 'destructive', title: 'Contraseña no válida', description: 'No puedes usar la misma contraseña genérica.' });
             setLoading(false);
             return;
         }
