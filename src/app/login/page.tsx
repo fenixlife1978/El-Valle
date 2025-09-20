@@ -100,11 +100,15 @@ function LoginPageContent() {
                 }
             }
         } catch (error: any) {
-            console.error("Firebase Auth Error:", error);
             let description = 'Ocurrió un error inesperado. Por favor, intenta de nuevo.';
-            if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+            const isCredentialError = ['auth/user-not-found', 'auth/wrong-password', 'auth/invalid-credential'].includes(error.code);
+
+            if (isCredentialError) {
                 description = 'El correo electrónico o la contraseña que ingresaste son incorrectos. Por favor, inténtalo de nuevo.';
+            } else {
+                console.error("Firebase Auth Error:", error);
             }
+            
             toast({
                 variant: 'destructive',
                 title: 'Error de Inicio de Sesión',
