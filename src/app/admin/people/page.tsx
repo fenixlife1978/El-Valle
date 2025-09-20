@@ -9,15 +9,15 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PlusCircle, MoreHorizontal, Edit, Trash2, FileUp, FileDown, Loader2, MinusCircle, KeyRound, Search } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, Edit, Trash2, FileUp, FileDown, Loader2, MinusCircle, KeyRound, Search, RefreshCw } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc, setDoc } from 'firebase/firestore';
+import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc, setDoc, getDocs } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
-import { createUserWithEmailAndPassword, deleteUser } from 'firebase/auth';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
 
 
 type Role = 'propietario' | 'administrador';
@@ -211,7 +211,7 @@ export default function PeopleManagementPage() {
                     properties: ownerData.properties,
                     role: ownerData.role,
                     balance: isNaN(balanceValue) ? 0 : balanceValue,
-                    mustChangePass: ownerData.role === 'propietario' // Only force change for owners
+                    mustChangePass: ownerData.role === 'propietario'
                 };
                 
                 try {
@@ -405,6 +405,30 @@ export default function PeopleManagementPage() {
 
     const handleImportClick = () => {
         importFileRef.current?.click();
+    };
+
+    const handleSyncProfiles = async () => {
+        setLoading(true);
+        try {
+            const ownersSnapshot = await getDocs(collection(db, "owners"));
+            const firestoreIds = new Set(ownersSnapshot.docs.map(doc => doc.id));
+            
+            // This is a placeholder for getting auth users, as client SDK cannot list all users.
+            // In a real scenario, this would be an admin backend call.
+            // For now, we assume any document in 'owners' is an "auth" user for this function's purpose.
+            
+            toast({
+                title: "Función no implementable",
+                description: "La sincronización de perfiles desde el cliente no es segura. La creación de perfiles debe hacerse individualmente para garantizar la consistencia.",
+                variant: "destructive"
+            });
+
+        } catch (error) {
+            console.error("Error syncing profiles:", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo completar la sincronización.' });
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
