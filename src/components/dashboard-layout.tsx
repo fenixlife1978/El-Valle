@@ -6,7 +6,9 @@ import { usePathname, useRouter } from 'next/navigation';
 import { Building2, LogOut, type LucideIcon, ChevronDown, TrendingUp } from 'lucide-react';
 import * as React from 'react';
 import { doc, onSnapshot, Timestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db, auth } from '@/lib/firebase';
+import { signOut } from 'firebase/auth';
+import { useAuthState } from 'react-firebase-hooks/auth';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -78,16 +80,11 @@ const BCVLogo = () => (
 
 const CustomHeader = ({ userRole }: { userRole: string }) => {
     const router = useRouter();
-    const [session, setSession] = React.useState<any>(null);
+    const [user] = useAuthState(auth);
     const [activeRate, setActiveRate] = React.useState<ExchangeRate | null>(null);
     const [userProfile, setUserProfile] = React.useState<UserProfile | null>(null);
 
     React.useEffect(() => {
-        const userSession = localStorage.getItem('user-session');
-        if (userSession) {
-            setSession(JSON.parse(userSession));
-        }
-
         const settingsRef = doc(db, 'config', 'mainSettings');
         const settingsUnsubscribe = onSnapshot(settingsRef, (docSnap) => {
             if (docSnap.exists()) {
@@ -102,9 +99,8 @@ const CustomHeader = ({ userRole }: { userRole: string }) => {
         });
 
         let profileUnsubscribe: () => void;
-        if (userSession) {
-            const uid = JSON.parse(userSession).uid;
-            const profileRef = doc(db, 'owners', uid);
+        if (user) {
+            const profileRef = doc(db, 'owners', user.uid);
             profileUnsubscribe = onSnapshot(profileRef, (docSnap) => {
                 if(docSnap.exists()) {
                     setUserProfile(docSnap.data() as UserProfile);
@@ -117,9 +113,10 @@ const CustomHeader = ({ userRole }: { userRole: string }) => {
             if(profileUnsubscribe) profileUnsubscribe();
         };
 
-    }, []);
+    }, [user]);
 
     const handleLogout = async () => {
+        await signOut(auth);
         localStorage.removeItem('user-session');
         router.push('/');
     };
@@ -188,12 +185,11 @@ export function DashboardLayout({
   const pathname = usePathname();
   const router = useRouter();
   const [companyInfo, setCompanyInfo] = React.useState<CompanyInfo | null>(null);
+  const [user, loading] = useAuthState(auth);
 
   React.useEffect(() => {
-    // Check for session on mount
-    const userSession = localStorage.getItem('user-session');
-    if (!userSession) {
-      router.push('/');
+    if(!loading && !user) {
+        router.push('/');
     }
 
     const settingsRef = doc(db, 'config', 'mainSettings');
@@ -203,7 +199,7 @@ export function DashboardLayout({
         }
     });
     return () => unsubscribe();
-  }, [router]);
+  }, [user, loading, router]);
 
 
   const isSubItemActive = (parentHref: string, items?: Omit<NavItem, 'icon' | 'items'>[]) => {

@@ -16,7 +16,9 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc, setDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db, auth } from '@/lib/firebase';
+import { createUserWithEmailAndPassword, deleteUser } from 'firebase/auth';
+
 
 type Role = 'propietario' | 'administrador';
 
@@ -32,6 +34,7 @@ type Owner = {
     email?: string;
     balance: number;
     role: Role;
+    mustChangePass?: boolean;
 };
 
 type CompanyInfo = {
@@ -49,6 +52,7 @@ const emptyOwner: Omit<Owner, 'id' | 'balance'> & { balance: number | string } =
     email: '', 
     balance: 0, 
     role: 'propietario',
+    mustChangePass: true
 };
 
 const streets = Array.from({ length: 8 }, (_, i) => `Calle ${i + 1}`);
@@ -148,6 +152,7 @@ export default function PeopleManagementPage() {
     const handleEditOwner = (owner: Owner) => {
         const editableOwner = {
             ...owner,
+            mustChangePass: owner.mustChangePass ?? false,
             properties: owner.properties && owner.properties.length > 0 
                 ? owner.properties 
                 : [{ street: '', house: '' }]
@@ -164,8 +169,9 @@ export default function PeopleManagementPage() {
     const confirmDelete = async () => {
         if (ownerToDelete) {
              try {
+                // We don't delete the Firebase Auth user to avoid orphans and allow re-linking
                 await deleteDoc(doc(db, "owners", ownerToDelete.id));
-                toast({ title: 'Propietario Eliminado', description: `${ownerToDelete.name} ha sido eliminado de Firestore.` });
+                toast({ title: 'Propietario Eliminado', description: `${ownerToDelete.name} ha sido eliminado de la base de datos.` });
             } catch (error) {
                 console.error("Error deleting document: ", error);
                 toast({ variant: 'destructive', title: 'Error', description: 'No se pudo eliminar el propietario.' });
@@ -177,30 +183,48 @@ export default function PeopleManagementPage() {
     }
 
     const handleSaveOwner = async () => {
-        if (!currentOwner.name || currentOwner.properties.some(p => !p.street || !p.house)) {
-            toast({ variant: 'destructive', title: 'Error de Validación', description: 'Nombre, calle y casa son obligatorios para todas las propiedades.' });
+        if (!currentOwner.name || !currentOwner.email || currentOwner.properties.some(p => !p.street || !p.house)) {
+            toast({ variant: 'destructive', title: 'Error de Validación', description: 'Nombre, Email, calle y casa son obligatorios.' });
             return;
         }
 
         const { id, ...ownerData } = currentOwner;
         const balanceValue = parseFloat(String(ownerData.balance).replace(',', '.') || '0');
         const dataToSave: any = {
-            ...ownerData,
-            balance: isNaN(balanceValue) ? 0 : balanceValue
+            name: ownerData.name,
+            email: ownerData.email,
+            properties: ownerData.properties,
+            role: ownerData.role,
+            balance: isNaN(balanceValue) ? 0 : balanceValue,
+            mustChangePass: ownerData.mustChangePass
         };
 
         try {
-            if (id) {
+            if (id) { // Editing existing owner
                 const ownerRef = doc(db, "owners", id);
                 await updateDoc(ownerRef, dataToSave);
                 toast({ title: 'Propietario Actualizado', description: 'Los datos han sido guardados exitosamente.' });
-            } else {
-                await addDoc(collection(db, "owners"), dataToSave);
-                toast({ title: 'Propietario Agregado', description: 'La nueva persona ha sido guardada.' });
+            } else { // Creating new owner
+                if (!auth.currentUser) throw new Error("Admin not authenticated");
+                
+                const password = ownerData.role === 'administrador' ? 'M110710.m' : '123456';
+                
+                try {
+                    const userCredential = await createUserWithEmailAndPassword(auth, ownerData.email!, password);
+                    const newUserId = userCredential.user.uid;
+                    await setDoc(doc(db, "owners", newUserId), dataToSave);
+                    toast({ title: 'Propietario Agregado', description: 'La nueva persona ha sido guardada.' });
+                } catch (error: any) {
+                    if (error.code === 'auth/email-already-in-use') {
+                        toast({ variant: 'destructive', title: 'Email ya existe', description: 'El correo electrónico ya está registrado en el sistema de autenticación.'});
+                    } else {
+                        throw error; // Re-throw other auth errors
+                    }
+                }
             }
         } catch (error: any) {
             console.error("Error saving owner: ", error);
-            toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron guardar los cambios en la base de datos.' });
+            toast({ variant: 'destructive', title: 'Error', description: error.message || 'No se pudieron guardar los cambios.' });
         } finally {
             setIsDialogOpen(false);
             setCurrentOwner(emptyOwner);
@@ -512,8 +536,9 @@ export default function PeopleManagementPage() {
                                 <Input id="name" value={currentOwner.name} onChange={handleInputChange} />
                             </div>
                              <div className="space-y-2">
-                                <Label htmlFor="email">Email (Opcional)</Label>
-                                <Input id="email" type="email" value={currentOwner.email || ''} onChange={handleInputChange} />
+                                <Label htmlFor="email">Email</Label>
+                                <Input id="email" type="email" value={currentOwner.email || ''} onChange={handleInputChange} disabled={!!currentOwner.id}/>
+                                {currentOwner.id && <p className="text-xs text-muted-foreground">El email no se puede cambiar para un usuario existente.</p>}
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="role">Rol</Label>

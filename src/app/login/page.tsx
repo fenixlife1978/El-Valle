@@ -3,8 +3,9 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { doc, getDoc, getDocs, collection, query, where } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { db, auth } from '@/lib/firebase';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -49,56 +50,50 @@ function LoginContent() {
         e.preventDefault();
         setLoading(true);
 
-        // Admin login
-        if (email.toLowerCase() === 'vallecondo@gmail.com') {
-            if (password === 'M110710.m') {
-                const adminQuery = query(collection(db, "owners"), where("email", "==", email.toLowerCase()));
-                const querySnapshot = await getDocs(adminQuery);
-                if (querySnapshot.empty) {
-                    toast({ variant: "destructive", title: "Error", description: "Perfil de administrador no encontrado en la base de datos." });
+        try {
+            const userCredential = await signInWithEmailAndPassword(auth, email, password);
+            const user = userCredential.user;
+
+            if (user) {
+                const userDocRef = doc(db, "owners", user.uid);
+                const userDoc = await getDoc(userDocRef);
+
+                if (!userDoc.exists()) {
+                    toast({ variant: "destructive", title: "Error", description: "Perfil de usuario no encontrado en la base de datos." });
                     setLoading(false);
                     return;
                 }
-                const adminDoc = querySnapshot.docs[0];
-                localStorage.setItem('user-session', JSON.stringify({ uid: adminDoc.id, role: 'administrador', email: adminDoc.data().email }));
-                router.push('/admin/dashboard');
-            } else {
-                toast({ variant: "destructive", title: "Error de Autenticación", description: "Contraseña incorrecta para el administrador." });
-                setLoading(false);
+                
+                const userData = userDoc.data();
+                const sessionData = { 
+                    uid: user.uid, 
+                    role: userData.role, 
+                    email: user.email, 
+                    mustChangePass: userData.mustChangePass || false
+                };
+                
+                localStorage.setItem('user-session', JSON.stringify(sessionData));
+
+                if (userData.mustChangePass) {
+                    router.push('/change-password');
+                } else {
+                    if (userData.role === 'administrador') {
+                        router.push('/admin/dashboard');
+                    } else {
+                        router.push('/owner/dashboard');
+                    }
+                }
             }
-            return;
-        }
-
-        // Owner login
-        try {
-            const ownerQuery = query(collection(db, "owners"), where("email", "==", email.toLowerCase()));
-            const querySnapshot = await getDocs(ownerQuery);
-
-            if (querySnapshot.empty) {
-                 toast({ variant: "destructive", title: "Error de Autenticación", description: "Propietario no encontrado." });
-                 setLoading(false);
-                 return;
-            }
-
-            const userDoc = querySnapshot.docs[0];
-            const userData = userDoc.data();
-
-            if (password === '123456') {
-                 localStorage.setItem('user-session', JSON.stringify({ uid: userDoc.id, role: 'propietario', email: userData.email, mustChangePass: true }));
-                 router.push('/change-password');
-            } else {
-                // This is a simplified check. Without server-side auth, we can't securely verify passwords.
-                // For this simulation, we'll assume any other password is "correct" if the user exists.
-                // In a real app, this is highly insecure.
-                localStorage.setItem('user-session', JSON.stringify({ uid: userDoc.id, role: 'propietario', email: userData.email }));
-                router.push('/owner/dashboard');
-            }
-
         } catch (error: any) {
+            console.error("Login error:", error);
+            let description = "Ocurrió un error inesperado.";
+            if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+                description = "Correo electrónico o contraseña incorrectos.";
+            }
             toast({
                 variant: "destructive",
-                title: "Error Inesperado",
-                description: "Ocurrió un error al intentar iniciar sesión.",
+                title: "Error de Autenticación",
+                description: description,
             });
         } finally {
             setLoading(false);
@@ -153,7 +148,9 @@ function LoginContent() {
                 </form>
             </CardContent>
             <CardFooter className="flex flex-col items-center p-4 gap-2">
-                 <p className="text-sm text-muted-foreground">¿Problemas para ingresar?</p>
+                 <Button variant="link" asChild>
+                    <Link href="/forgot-password">¿Olvidaste tu contraseña?</Link>
+                </Button>
                  <Button variant="link" asChild>
                     <Link href="/">Volver a la selección de rol</Link>
                 </Button>

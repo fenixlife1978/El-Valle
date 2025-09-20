@@ -3,8 +3,9 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { db } from '@/lib/firebase';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase';
+import { updatePassword, signOut } from 'firebase/auth';
+import { doc, updateDoc } from 'firebase/firestore';
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,39 +13,33 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, KeyRound } from 'lucide-react';
+import { useAuthState } from 'react-firebase-hooks/auth';
 
 export default function ChangePasswordPage() {
     const router = useRouter();
-    const [session, setSession] = useState<any>(null);
     const { toast } = useToast();
+    const [user, authLoading] = useAuthState(auth);
 
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [loading, setLoading] = useState(false);
+    const [sessionRole, setSessionRole] = useState('');
 
-    useEffect(() => {
-        const userSession = localStorage.getItem('user-session');
-        if (!userSession) {
+     useEffect(() => {
+        if (!authLoading && !user) {
             router.push('/login');
-        } else {
-            const parsedSession = JSON.parse(userSession);
-            // Redirect if not required to change password
-            if (!parsedSession.mustChangePass) {
-                if (parsedSession.role === 'administrador') {
-                    router.push('/admin/dashboard');
-                } else {
-                    router.push('/owner/dashboard');
-                }
-            }
-            setSession(parsedSession);
         }
-    }, [router]);
+        const userSession = localStorage.getItem('user-session');
+        if(userSession){
+            setSessionRole(JSON.parse(userSession).role);
+        }
+    }, [user, authLoading, router]);
 
     const handleChangePassword = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
 
-        if (!session) {
+        if (!user) {
             toast({ variant: 'destructive', title: 'Error', description: 'No estás autenticado.' });
             setLoading(false);
             return;
@@ -59,47 +54,54 @@ export default function ChangePasswordPage() {
             setLoading(false);
             return;
         }
-        if (newPassword === '123456') {
+         if (newPassword === '123456') {
             toast({ variant: 'destructive', title: 'Contraseña no válida', description: 'No puedes usar la misma contraseña genérica.' });
             setLoading(false);
             return;
         }
 
         try {
-            // This is a simulated password change since there is no backend.
-            // In a real app, this would be an API call to a secure backend.
+            await updatePassword(user, newPassword);
             
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            
+            const userDocRef = doc(db, 'owners', user.uid);
+            await updateDoc(userDocRef, {
+                mustChangePass: false
+            });
+
+            // Clear old session and logout
+            localStorage.removeItem('user-session');
+            await signOut(auth);
+
             toast({
                 title: 'Contraseña Cambiada Exitosamente',
-                description: 'Serás redirigido a tu panel de control.',
+                description: 'Por favor, inicia sesión con tu nueva contraseña.',
                 className: 'bg-green-100 border-green-400 text-green-800'
             });
 
-            // Update local session and redirect
-            const updatedSession = { ...session, mustChangePass: false };
-            localStorage.setItem('user-session', JSON.stringify(updatedSession));
-            
-            if (session.role === 'administrador') {
-                router.push('/admin/dashboard');
-            } else {
-                router.push('/owner/dashboard');
-            }
+            router.push(`/login?role=${sessionRole}`);
 
         } catch (error: any) {
             console.error("Error changing password:", error);
+            let description = 'Ocurrió un error inesperado.';
+            if (error.code === 'auth/requires-recent-login') {
+                description = 'Por seguridad, debes volver a iniciar sesión para cambiar la contraseña.';
+            }
             toast({ 
                 variant: 'destructive', 
                 title: 'Error al cambiar la contraseña', 
-                description: 'Por favor, intenta de nuevo. Si el problema persiste, contacta al administrador.' 
+                description: description
             });
+            if (error.code === 'auth/requires-recent-login') {
+                localStorage.removeItem('user-session');
+                await signOut(auth);
+                router.push('/login');
+            }
         } finally {
             setLoading(false);
         }
     };
 
-    if (!session) {
+    if (authLoading || !user) {
         return (
             <div className="min-h-screen flex items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin" />
