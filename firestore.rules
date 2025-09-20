@@ -1,65 +1,47 @@
+
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // Helper functions
-    function isAdmin() {
-      // Check for custom claim 'role' on the auth token.
-      // This must be set via a backend function when the user is created or updated.
-      return request.auth.token.role == 'administrador';
-    }
-
-    function isOwner(userId) {
-      return request.auth.uid == userId;
-    }
-
+    
+    // Helper Functions
     function isAuthenticated() {
       return request.auth.uid != null;
     }
 
-    // `owners` collection: User profiles
+    function isAdmin() {
+      return isAuthenticated() && get(/databases/$(database)/documents/owners/$(request.auth.uid)).data.role == 'administrador';
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Collection Rules
     match /owners/{userId} {
       allow read: if isAdmin() || isOwner(userId);
-      // Admins can manage any user. Users can only update their own profile (e.g., name, avatar), but not their balance or role.
-      allow create, delete: if isAdmin();
-      allow update: if (isAdmin()) || (isOwner(userId) && !('balance' in request.resource.data) && !('role' in request.resource.data));
+      allow create: if isAdmin();
+      allow update: if isAdmin() || isOwner(userId);
+      allow delete: if isAdmin();
     }
 
-    // `payments` collection
     match /payments/{paymentId} {
-      // Admins can read all. Owners can read payments where they are a beneficiary.
-      allow read: if isAdmin() || request.auth.uid in resource.data.beneficiaryIds;
-      // Any authenticated user can create a payment (report it), but not modify it later.
+      allow read: if isAdmin() || (isAuthenticated() && request.auth.uid in resource.data.beneficiaryIds);
       allow create: if isAuthenticated();
-      // Only admins can update (approve/reject) or delete payments.
       allow update, delete: if isAdmin();
     }
-    
-    // `debts` collection
-    match /debts/{debtId} {
-       // Admins can read all. Owners can read debts that belong to them.
-      allow read: if isAdmin() || isOwner(resource.data.ownerId);
-      // Only admins can manage debts.
-      allow create, update, delete: if isAdmin();
-    }
 
-    // `historical_payments` collection
-    match /historical_payments/{histId} {
-        // Admin-only access
+    match /debts/{debtId} {
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.ownerId == request.auth.uid);
+      allow write: if isAdmin();
+    }
+    
+    match /historical_payments/{paymentId} {
         allow read, write: if isAdmin();
     }
 
-    // `config` collection: Global app settings
-    match /config/{configId} {
-      // Admins can change settings. Authenticated users can read them (e.g., for company info).
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
-    }
-
-    // Default deny all other access
-    match /{document=**} {
-      allow read, write: if false;
+    match /config/{docId} {
+      allow read, write: if isAdmin();
     }
   }
 }

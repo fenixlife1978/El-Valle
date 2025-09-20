@@ -60,98 +60,96 @@ export default function AdminDashboardPage() {
         });
         setOwnersMap(newOwnersMap);
         setStats(prev => ({ ...prev, totalUnits }));
+    });
 
-        // The dependency on ownersMap.size ensures this runs only when owners are loaded
-        if (newOwnersMap.size > 0) {
-            
-            const paymentsQuery = query(collection(db, "payments"));
-            const paymentsUnsubscribe = onSnapshot(paymentsQuery, (snapshot) => {
-                let monthTotalBs = 0;
-                let monthTotalUsd = 0;
-                let pendingCount = 0;
-                const now = new Date();
-                snapshot.forEach(doc => {
-                    const payment = doc.data();
-                    const paymentDate = new Date(payment.paymentDate.seconds * 1000);
-                    
-                    const isIncomePayment = !['adelanto', 'conciliacion', 'pago-historico'].includes(payment.paymentMethod);
+    // We need to wait for owners to be loaded to properly display payment info
+    if (ownersMap.size > 0 || !loading) {
+        
+        const paymentsQuery = query(collection(db, "payments"));
+        const paymentsUnsubscribe = onSnapshot(paymentsQuery, (snapshot) => {
+            let monthTotalBs = 0;
+            let monthTotalUsd = 0;
+            let pendingCount = 0;
+            const now = new Date();
+            snapshot.forEach(doc => {
+                const payment = doc.data();
+                const paymentDate = new Date(payment.paymentDate.seconds * 1000);
+                
+                const isIncomePayment = !['adelanto', 'conciliacion', 'pago-historico'].includes(payment.paymentMethod);
 
-                    if (payment.status === 'aprobado' && isIncomePayment && paymentDate.getMonth() === now.getMonth() && paymentDate.getFullYear() === now.getFullYear()) {
-                        const amountBs = Number(payment.totalAmount);
-                        monthTotalBs += amountBs;
-                        if (payment.exchangeRate && payment.exchangeRate > 0) {
-                            monthTotalUsd += amountBs / payment.exchangeRate;
-                        }
+                if (payment.status === 'aprobado' && isIncomePayment && paymentDate.getMonth() === now.getMonth() && paymentDate.getFullYear() === now.getFullYear()) {
+                    const amountBs = Number(payment.totalAmount);
+                    monthTotalBs += amountBs;
+                    if (payment.exchangeRate && payment.exchangeRate > 0) {
+                        monthTotalUsd += amountBs / payment.exchangeRate;
                     }
-                    if (payment.status === 'pendiente') {
-                        pendingCount++;
-                    }
-                });
-                setStats(prev => ({ ...prev, paymentsThisMonthBs: monthTotalBs, paymentsThisMonthUsd: monthTotalUsd, pendingPayments: pendingCount }));
+                }
+                if (payment.status === 'pendiente') {
+                    pendingCount++;
+                }
             });
+            setStats(prev => ({ ...prev, paymentsThisMonthBs: monthTotalBs, paymentsThisMonthUsd: monthTotalUsd, pendingPayments: pendingCount }));
+        });
 
-            const recentPaymentsQuery = query(collection(db, "payments"), orderBy('reportedAt', 'desc'), limit(5));
-            const recentPaymentsUnsubscribe = onSnapshot(recentPaymentsQuery, async (snapshot) => {
-                const paymentsPromises = snapshot.docs.map(async (paymentDoc) => {
-                    const data = paymentDoc.data();
-                    const firstBeneficiary = data.beneficiaries?.[0];
-                    
-                    let userName = 'Beneficiario no identificado';
-                    if (firstBeneficiary?.ownerName) {
-                        userName = firstBeneficiary.ownerName;
-                    } else if (firstBeneficiary?.ownerId && newOwnersMap.has(firstBeneficiary.ownerId)) {
-                        userName = newOwnersMap.get(firstBeneficiary.ownerId)!.name;
-                    }
+        const recentPaymentsQuery = query(collection(db, "payments"), orderBy('reportedAt', 'desc'), limit(5));
+        const recentPaymentsUnsubscribe = onSnapshot(recentPaymentsQuery, async (snapshot) => {
+            const paymentsPromises = snapshot.docs.map(async (paymentDoc) => {
+                const data = paymentDoc.data();
+                const firstBeneficiary = data.beneficiaries?.[0];
+                
+                let userName = 'Beneficiario no identificado';
+                if (firstBeneficiary?.ownerName) {
+                    userName = firstBeneficiary.ownerName;
+                } else if (firstBeneficiary?.ownerId && ownersMap.has(firstBeneficiary.ownerId)) {
+                    userName = ownersMap.get(firstBeneficiary.ownerId)!.name;
+                }
 
-                    let unit = '';
-                    if (data.beneficiaries?.length > 1) {
-                        unit = "Múltiples Propiedades";
-                    } else if (firstBeneficiary) {
-                        if (firstBeneficiary.street && firstBeneficiary.house) {
-                            unit = `${firstBeneficiary.street} - ${firstBeneficiary.house}`;
-                        } else if (firstBeneficiary.ownerId) {
-                            // Fallback: fetch owner data to get property
-                            const ownerDocRef = doc(db, "owners", firstBeneficiary.ownerId);
-                            const ownerDocSnap = await getDoc(ownerDocRef);
-                            if (ownerDocSnap.exists()) {
-                                const owner = ownerDocSnap.data() as Omit<Owner, 'id'>;
-                                if (owner && owner.properties && owner.properties.length > 0) {
-                                    unit = `${owner.properties[0].street} - ${owner.properties[0].house}`;
-                                }
+                let unit = '';
+                if (data.beneficiaries?.length > 1) {
+                    unit = "Múltiples Propiedades";
+                } else if (firstBeneficiary) {
+                    if (firstBeneficiary.street && firstBeneficiary.house) {
+                        unit = `${firstBeneficiary.street} - ${firstBeneficiary.house}`;
+                    } else if (firstBeneficiary.ownerId) {
+                        const ownerDocRef = doc(db, "owners", firstBeneficiary.ownerId);
+                        const ownerDocSnap = await getDoc(ownerDocRef);
+                        if (ownerDocSnap.exists()) {
+                            const owner = ownerDocSnap.data() as Omit<Owner, 'id'>;
+                            if (owner.properties && owner.properties.length > 0) {
+                                unit = `${owner.properties[0].street} - ${owner.properties[0].house}`;
                             }
                         }
                     }
-                    if (!unit) { // If unit is still empty
-                        unit = "Propiedad no especificada";
-                    }
+                }
+                if (!unit) {
+                    unit = "Propiedad no especificada";
+                }
 
-                    return { 
-                        id: paymentDoc.id,
-                        user: userName,
-                        unit: unit,
-                        amount: data.totalAmount,
-                        date: new Date(data.paymentDate.seconds * 1000).toISOString(),
-                        bank: data.bank,
-                        type: data.paymentMethod,
-                        status: data.status,
-                    };
-                });
-                
-                const paymentsData = await Promise.all(paymentsPromises);
-                setRecentPayments(paymentsData);
-                setLoading(false);
+                return { 
+                    id: paymentDoc.id,
+                    user: userName,
+                    unit: unit,
+                    amount: data.totalAmount,
+                    date: new Date(data.paymentDate.seconds * 1000).toISOString(),
+                    bank: data.bank,
+                    type: data.paymentMethod,
+                    status: data.status,
+                };
             });
+            
+            const paymentsData = await Promise.all(paymentsPromises);
+            setRecentPayments(paymentsData);
+            setLoading(false);
+        });
 
-            // Return cleanup functions for payment listeners
-            return () => {
-                paymentsUnsubscribe();
-                recentPaymentsUnsubscribe();
-            };
-        }
-    });
+        return () => {
+            ownersUnsubscribe();
+            paymentsUnsubscribe();
+            recentPaymentsUnsubscribe();
+        };
+    }
 
-    return () => ownersUnsubscribe();
-  }, []);
+  }, [ownersMap.size, loading]);
 
   return (
     <div className="space-y-8">
