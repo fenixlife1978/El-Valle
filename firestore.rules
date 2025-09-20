@@ -1,46 +1,46 @@
-
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Helper Functions
+    // Helper functions
     function isAuthenticated() {
-      return request.auth.uid != null;
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return request.auth.uid == userId;
     }
 
     function isAdmin() {
+      // Check for admin role in a custom claim or in the user's document
       return isAuthenticated() && get(/databases/$(database)/documents/owners/$(request.auth.uid)).data.role == 'administrador';
     }
 
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
-    }
-
-    // Collection Rules
-    match /owners/{userId} {
-      allow read: if isAdmin() || isOwner(userId);
-      allow create: if isAdmin();
-      allow update: if isAdmin() || isOwner(userId);
-      allow delete: if isAdmin();
+    // Admins have full access.
+    // Owners can only read their own data and create payments/debts.
+    match /owners/{ownerId} {
+      allow read: if isAdmin() || isOwner(ownerId);
+      allow write: if isAdmin();
+      allow update: if isOwner(ownerId); // Owners can update their own profile
     }
 
     match /payments/{paymentId} {
-      allow read: if isAdmin() || (isAuthenticated() && request.auth.uid in resource.data.beneficiaryIds);
+      allow read: if isAdmin() || request.auth.uid in resource.data.beneficiaryIds;
       allow create: if isAuthenticated();
       allow update, delete: if isAdmin();
     }
-
-    match /debts/{debtId} {
-      allow read: if isAdmin() || (isAuthenticated() && resource.data.ownerId == request.auth.uid);
-      allow write: if isAdmin();
-    }
     
-    match /historical_payments/{paymentId} {
-        allow read, write: if isAdmin();
+    match /debts/{debtId} {
+       allow read: if isAdmin() || isOwner(resource.data.ownerId);
+       allow write: if isAdmin();
     }
 
-    match /config/{docId} {
+    match /historical_payments/{paymentId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /config/{configId} {
       allow read, write: if isAdmin();
     }
   }
