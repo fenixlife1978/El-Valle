@@ -190,24 +190,29 @@ export default function PeopleManagementPage() {
 
         const { id, ...ownerData } = currentOwner;
         const balanceValue = parseFloat(String(ownerData.balance).replace(',', '.') || '0');
-        const dataToSave: any = {
-            name: ownerData.name,
-            email: ownerData.email,
-            properties: ownerData.properties,
-            role: ownerData.role,
-            balance: isNaN(balanceValue) ? 0 : balanceValue,
-            mustChangePass: ownerData.mustChangePass
-        };
-
+        
         try {
             if (id) { // Editing existing owner
+                 const dataToSave: any = {
+                    name: ownerData.name,
+                    email: ownerData.email,
+                    properties: ownerData.properties,
+                    role: ownerData.role,
+                    balance: isNaN(balanceValue) ? 0 : balanceValue,
+                };
                 const ownerRef = doc(db, "owners", id);
                 await updateDoc(ownerRef, dataToSave);
                 toast({ title: 'Propietario Actualizado', description: 'Los datos han sido guardados exitosamente.' });
             } else { // Creating new owner
-                if (!auth.currentUser) throw new Error("Admin not authenticated");
-                
                 const password = ownerData.role === 'administrador' ? 'M110710.m' : '123456';
+                 const dataToSave: any = {
+                    name: ownerData.name,
+                    email: ownerData.email,
+                    properties: ownerData.properties,
+                    role: ownerData.role,
+                    balance: isNaN(balanceValue) ? 0 : balanceValue,
+                    mustChangePass: ownerData.role === 'propietario' // Only force change for owners
+                };
                 
                 try {
                     const userCredential = await createUserWithEmailAndPassword(auth, ownerData.email!, password);
