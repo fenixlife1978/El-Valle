@@ -79,22 +79,26 @@ function LoginPageContent() {
                 if (userDocSnap.exists()) {
                     const userData = userDocSnap.data();
                     
-                    if (userData.role === 'administrador') {
-                        router.push('/admin/dashboard');
-                        return;
-                    }
-
+                    // This is the role check. Admins can't log in via owner page and vice-versa.
                     if (userData.role !== role) {
-                        toast({ variant: 'destructive', title: 'Error de Rol', description: `No tienes permisos para acceder como ${role}.` });
+                        toast({ variant: 'destructive', title: 'Acceso Denegado', description: `No tienes permisos para acceder como ${role === 'admin' ? 'Administrador' : 'Propietario'}.` });
                         setLoading(false);
                         return;
                     }
-
+                    
+                    // Force password change for owners on first login
                     if (userData.role === 'propietario' && password === '123456') {
                         router.push('/change-password');
+                        return; // Stop execution here to redirect
+                    }
+
+                    // Normal redirect based on role
+                    if (userData.role === 'administrador') {
+                        router.push('/admin/dashboard');
                     } else {
                         router.push('/owner/dashboard');
                     }
+
                 } else {
                     toast({ variant: 'destructive', title: 'Error', description: 'No se encontró tu perfil en la base de datos.' });
                 }
@@ -149,7 +153,14 @@ function LoginPageContent() {
                             />
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="password">Contraseña</Label>
+                             <div className="flex items-center justify-between">
+                                <Label htmlFor="password">Contraseña</Label>
+                                <Link href="/forgot-password" passHref>
+                                    <Button variant="link" className="p-0 h-auto text-xs">
+                                        ¿Olvidaste tu contraseña?
+                                    </Button>
+                                </Link>
+                            </div>
                             <Input
                                 id="password"
                                 type="password"
