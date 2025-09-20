@@ -163,8 +163,11 @@ export default function AdvancePaymentPage() {
                 reportedBy: selectedOwner.id, // Admin is reporting on behalf of owner
                 beneficiaries: [{ 
                     ownerId: selectedOwner.id, 
+                    ownerName: selectedOwner.name,
+                    ...selectedOwner.properties[0],
                     amount: totalAmount 
                 }],
+                beneficiaryIds: [selectedOwner.id],
                 totalAmount: totalAmount,
                 exchangeRate: 1, // Rate is not relevant as we are paying in USD equivalent
                 paymentDate: paymentDate,

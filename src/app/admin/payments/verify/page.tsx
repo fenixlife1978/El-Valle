@@ -32,6 +32,7 @@ type Beneficiary = { ownerId: string; ownerName: string; amount: number; street?
 type FullPayment = {
   id: string;
   beneficiaries: Beneficiary[];
+  beneficiaryIds: string[];
   totalAmount: number;
   exchangeRate: number;
   paymentDate: Timestamp;
@@ -171,6 +172,7 @@ export default function VerifyPaymentsPage() {
                 reference: data.reference,
                 status: data.status,
                 beneficiaries: data.beneficiaries,
+                beneficiaryIds: data.beneficiaryIds || [],
                 totalAmount: data.totalAmount,
                 exchangeRate: data.exchangeRate,
                 paymentDate: data.paymentDate,
@@ -370,7 +372,7 @@ export default function VerifyPaymentsPage() {
         const paidDebtsSnapshot = await getDocs(paidDebtsQuery);
         const paidDebts = paidDebtsSnapshot.docs
             .map(doc => ({id: doc.id, ...doc.data()}) as Debt)
-            .sort((a,b) => b.year - a.year || b.month - a.month);
+            .sort((a,b) => b.year - a.year || b.month - b.month);
         
         setReceiptData({ 
             payment, 

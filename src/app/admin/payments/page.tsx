@@ -304,8 +304,11 @@ export default function UnifiedPaymentsPage() {
                 totalAmount: Number(totalAmount),
                 beneficiaries: beneficiarySplits.map(s => ({
                     ownerId: selectedOwner!.id,
+                    ownerName: selectedOwner!.name,
+                    ...s.property,
                     amount: Number(s.amount)
                 })),
+                beneficiaryIds: Array.from(new Set(beneficiarySplits.map(() => selectedOwner!.id))),
                 status: 'pendiente' as 'pendiente',
                 reportedAt: serverTimestamp(),
                 reportedBy: beneficiaryType === 'propio' ? selectedOwner!.id : ADMIN_USER_ID,

@@ -151,7 +151,7 @@ export default function PaymentCalculatorPage() {
     };
     
     const handleAdvanceMonthSelection = (monthValue: string) => {
-        setSelectedAdvanceMonths(prev => prev.includes(monthValue) ? prev.filter(m => m !== monthValue) : [...prev, monthValue]);
+        setSelectedAdvanceMonths(prev => prev.includes(monthValue) ? prev.filter(m => m !== monthValue) : [...prev, m]);
     };
 
     const futureMonths = useMemo(() => {
@@ -236,7 +236,8 @@ export default function PaymentCalculatorPage() {
             const paymentRef = doc(collection(db, 'payments'));
             const paymentData = {
                 reportedBy: selectedOwner.id, // Admin reporting for owner
-                beneficiaries: [{ ownerId: selectedOwner.id, house: selectedOwner.house, street: selectedOwner.street, amount: paymentCalculator.totalDebtBs }],
+                beneficiaries: [{ ownerId: selectedOwner.id, ownerName: selectedOwner.name, house: selectedOwner.house, street: selectedOwner.street, amount: paymentCalculator.totalDebtBs }],
+                beneficiaryIds: [selectedOwner.id],
                 totalAmount: paymentCalculator.totalDebtBs,
                 exchangeRate: activeRate,
                 paymentDate: paymentDate,

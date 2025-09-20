@@ -176,7 +176,7 @@ export default function OwnerDashboardPage() {
                         const pendingDebts = allDebtsData.filter(d => d.status === 'pending');
                         const totalDebtUSD = pendingDebts.reduce((sum, d) => sum + d.amountUSD, 0);
 
-                        setDebts(pendingDebts.sort((a, b) => b.year - a.year || b.month - a.month));
+                        setDebts(pendingDebts.sort((a, b) => b.year - a.year || b.month - b.month));
                         setDashboardStats(prev => ({...prev, totalDebtUSD }));
 
                         if (totalDebtUSD > 0) {
@@ -202,7 +202,7 @@ export default function OwnerDashboardPage() {
                     });
                     
                     if (paymentsUnsubscribe) paymentsUnsubscribe();
-                    const paymentsQuery = query(collection(db, "payments"), where("beneficiaries", "array-contains", { ownerId: userId }), orderBy('paymentDate', 'desc'), limit(3));
+                    const paymentsQuery = query(collection(db, "payments"), where("beneficiaryIds", "array-contains", userId), orderBy('paymentDate', 'desc'), limit(3));
                     paymentsUnsubscribe = onSnapshot(paymentsQuery, (snapshot) => {
                         const paymentsData: Payment[] = [];
                         snapshot.forEach((doc) => {
