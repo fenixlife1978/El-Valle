@@ -188,48 +188,58 @@ export default function PeopleManagementPage() {
             toast({ variant: 'destructive', title: 'Error de Validación', description: 'Nombre, calle y casa son obligatorios para todas las propiedades.' });
             return;
         }
-    
+
+        const { id, ...ownerData } = currentOwner;
+        const balanceValue = parseFloat(String(ownerData.balance).replace(',', '.') || '0');
+        const dataToSave: any = {
+            ...ownerData,
+            balance: isNaN(balanceValue) ? 0 : balanceValue
+        };
+
         try {
-            const { id, ...ownerData } = currentOwner;
-            
-            const balanceValue = parseFloat(String(ownerData.balance).replace(',', '.') || '0');
-            const dataToSave: any = {
-                ...ownerData,
-                balance: isNaN(balanceValue) ? 0 : balanceValue
-            };
-    
-            if (id) { // Editing existing user
+            if (id) {
+                // Editing an existing user. We assume their auth account already exists and is linked.
                 const ownerRef = doc(db, "owners", id);
                 await updateDoc(ownerRef, dataToSave);
-                toast({ title: 'Propietario Actualizado', description: 'Los datos han sido guardados en la base de datos.' });
-            } else { // Adding new user
-                if (dataToSave.email && dataToSave.email.trim() !== '') { // Email is optional, only create auth user if provided
-                    const initialPassword = dataToSave.role === 'administrador' ? 'M110710.m' : '123456';
+                toast({ title: 'Propietario Actualizado', description: 'Los datos han sido guardados exitosamente.' });
+            } else {
+                // Adding a new user.
+                if (dataToSave.email && dataToSave.email.trim() !== '') {
+                    // If email is provided, create auth user first.
                     try {
+                        const initialPassword = dataToSave.role === 'administrador' ? 'M110710.m' : '123456';
+                        // Create user in Firebase Auth
                         const userCredential = await createUserWithEmailAndPassword(auth, dataToSave.email, initialPassword);
                         const newUserId = userCredential.user.uid;
+                        
+                        // Use the new UID as the document ID in Firestore
                         const userRef = doc(db, "owners", newUserId);
                         await setDoc(userRef, dataToSave);
-                        toast({ title: 'Propietario Agregado', description: 'La nueva persona ha sido guardada con cuenta de autenticación.' });
+
+                        toast({ title: 'Propietario Agregado', description: `La cuenta para ${dataToSave.name} fue creada exitosamente.` });
+
                     } catch (error: any) {
                         if (error.code === 'auth/email-already-in-use') {
-                            toast({ variant: 'destructive', title: 'Error de Autenticación', description: 'El correo electrónico ya está registrado. No se pudo crear la cuenta de autenticación, pero el propietario se guardará sin acceso.' });
-                            // Save without auth if email exists
-                            await addDoc(collection(db, "owners"), dataToSave);
+                            toast({ 
+                                variant: 'destructive', 
+                                title: 'Email ya Registrado', 
+                                description: 'Este correo ya tiene una cuenta. No se creó un nuevo usuario de autenticación. Verifique los datos.' 
+                            });
                         } else {
-                            throw error; // Rethrow other auth errors
+                             throw error; // Rethrow other auth errors to be caught by the outer catch block
                         }
                     }
-                } else { // No email provided, just save to Firestore
+                } else {
+                    // No email provided, just save to Firestore with a random ID.
                     await addDoc(collection(db, "owners"), dataToSave);
-                    toast({ title: 'Propietario Agregado', description: 'La nueva persona ha sido guardada sin cuenta de autenticación.' });
+                    toast({ title: 'Propietario Agregado', description: 'La nueva persona ha sido guardada sin una cuenta de acceso.' });
                 }
             }
         } catch (error: any) {
             console.error("Error saving owner: ", error);
             let description = 'No se pudieron guardar los cambios en la base de datos.';
             if (error.code === 'auth/weak-password') {
-                description = 'La contraseña es demasiado débil.';
+                description = 'La contraseña es demasiado débil (mínimo 6 caracteres).';
             }
             toast({ variant: 'destructive', title: 'Error', description });
         } finally {
