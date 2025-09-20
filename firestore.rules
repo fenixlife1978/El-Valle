@@ -65,7 +65,7 @@ service cloud.firestore {
       // Lectura: Cualquier usuario autenticado puede leer las configuraciones (ej: info de la empresa).
       allow read: if isAuthenticated();
       // Escritura: Solo los administradores pueden cambiar la configuración.
-      allow write: if isAdmin();
+      tallow write: if isAdmin();
     }
   }
 }

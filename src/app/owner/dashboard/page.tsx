@@ -122,19 +122,19 @@ export default function OwnerDashboardPage() {
             router.push('/login?role=owner');
             return;
         }
-
+    
         const userId = user.uid;
+        let settingsUnsubscribe: () => void;
         let userUnsubscribe: () => void;
         let paymentsUnsubscribe: () => void;
-        
+        let debtsUnsubscribe: () => void;
+    
         const settingsRef = doc(db, 'config', 'mainSettings');
-        const settingsUnsubscribe = onSnapshot(settingsRef, (settingsSnap) => {
+        settingsUnsubscribe = onSnapshot(settingsRef, (settingsSnap) => {
             let activeRate = 0;
-            let fetchedCompanyInfo: CompanyInfo | null = null;
-
             if (settingsSnap.exists()) {
                 const settings = settingsSnap.data();
-                fetchedCompanyInfo = settings.companyInfo || null;
+                setCompanyInfo(settings.companyInfo || null);
                 const rates = settings.exchangeRates || [];
                 const activeRateObj = rates.find((r: any) => r.active);
                 if (activeRateObj) {
@@ -146,13 +146,10 @@ export default function OwnerDashboardPage() {
             } else {
                 console.error("Settings document not found!");
             }
-            setCompanyInfo(fetchedCompanyInfo);
-            
+    
             if (userUnsubscribe) userUnsubscribe();
-
             const userDocRef = doc(db, "owners", userId);
-            userUnsubscribe = onSnapshot(userDocRef, async (userSnap) => {
-                setLoading(true);
+            userUnsubscribe = onSnapshot(userDocRef, (userSnap) => {
                 if (userSnap.exists()) {
                     const data = userSnap.data();
                     const ownerData = { 
@@ -163,96 +160,71 @@ export default function OwnerDashboardPage() {
                         balance: data.balance || 0,
                     } as UserData;
                     setUserData(ownerData);
+    
+                    setDashboardStats(prev => ({
+                        ...prev,
+                        balanceInFavor: ownerData.balance || 0,
+                        exchangeRate: activeRate
+                    }));
 
-                    // Re-subscribe to payments whenever user data changes
+                    if (debtsUnsubscribe) debtsUnsubscribe();
+                    const debtsQuery = query(collection(db, "debts"), where("ownerId", "==", userId));
+                    debtsUnsubscribe = onSnapshot(debtsQuery, async (debtsSnapshot) => {
+                        const allDebtsData: Debt[] = [];
+                        debtsSnapshot.forEach(d => allDebtsData.push({ id: d.id, ...d.data() } as Debt));
+
+                        const pendingDebts = allDebtsData.filter(d => d.status === 'pending');
+                        const totalDebtUSD = pendingDebts.reduce((sum, d) => sum + d.amountUSD, 0);
+
+                        setDebts(pendingDebts.sort((a, b) => b.year - a.year || b.month - a.month));
+                        setDashboardStats(prev => ({...prev, totalDebtUSD }));
+
+                        if (totalDebtUSD > 0) {
+                            setSolvencyStatus('moroso');
+                            const oldestDebt = [...pendingDebts].sort((a, b) => a.year - b.year || a.month - b.month)[0];
+                            if (oldestDebt) {
+                                setSolvencyPeriod(`Desde ${monthsLocale[oldestDebt.month] || ''} ${oldestDebt.year}`);
+                            }
+                        } else {
+                            setSolvencyStatus('solvente');
+                            const lastPaidDebt = allDebtsData
+                                .filter(d => d.status === 'paid')
+                                .sort((a,b) => b.year - b.year || b.month - b.month)[0];
+                            
+                            if (lastPaidDebt) {
+                                setSolvencyPeriod(`Hasta ${monthsLocale[lastPaidDebt.month] || ''} ${lastPaidDebt.year}`);
+                            } else {
+                                const now = new Date();
+                                setSolvencyPeriod(`Hasta ${monthsLocale[now.getMonth() + 1] || ''} ${now.getFullYear()}`);
+                            }
+                        }
+                        
+                    });
+                    
                     if (paymentsUnsubscribe) paymentsUnsubscribe();
-                    
-                    const paymentsQuery = query(
-                        collection(db, "payments"),
-                        where("beneficiaries", "array-contains", { ownerId: ownerData.id }),
-                        where('status', '==', 'aprobado'),
-                        orderBy('paymentDate', 'desc'),
-                        limit(3)
-                    );
-                    
+                    const paymentsQuery = query(collection(db, "payments"), where("beneficiaries", "array-contains", { ownerId: userId }), orderBy('paymentDate', 'desc'), limit(3));
                     paymentsUnsubscribe = onSnapshot(paymentsQuery, (snapshot) => {
-                         const paymentsData: Payment[] = [];
+                        const paymentsData: Payment[] = [];
                         snapshot.forEach((doc) => {
-                            const data = doc.data();
-                            paymentsData.push({
-                                id: doc.id,
-                                date: new Date(data.paymentDate.seconds * 1000).toISOString(),
-                                amount: data.totalAmount,
-                                bank: data.bank,
-                                type: data.paymentMethod,
-                                ref: data.reference,
-                                status: data.status,
-                                reportedAt: data.reportedAt,
-                                exchangeRate: data.exchangeRate,
-                                paymentDate: data.paymentDate,
-                                reference: data.reference,
-                                beneficiaries: data.beneficiaries,
-                            });
+                            paymentsData.push({ id: doc.id, ...doc.data() } as Payment);
                         });
                         setPayments(paymentsData);
                     });
-
-
-                    const pendingDebtsQuery = query(collection(db, "debts"), where("ownerId", "==", userId), where("status", "==", "pending"));
-                    const pendingDebtsSnapshot = await getDocs(pendingDebtsQuery);
-                    
-                    const pendingDebtsData: Debt[] = [];
-                    let totalDebtUSD = 0;
-                    pendingDebtsSnapshot.forEach((doc) => {
-                        const debt = { id: doc.id, ...doc.data() } as Debt
-                        pendingDebtsData.push(debt);
-                        totalDebtUSD += debt.amountUSD;
-                    });
-                    
-                    const sortedPendingDebts = pendingDebtsData.sort((a,b) => b.year - a.year || b.month - a.month);
-                    setDebts(sortedPendingDebts);
-                    
-                    if (totalDebtUSD > 0) {
-                        setSolvencyStatus('moroso');
-                        const oldestDebt = sortedPendingDebts[sortedPendingDebts.length - 1];
-                        if (oldestDebt) {
-                            const monthLabel = monthsLocale[oldestDebt.month] || '';
-                            setSolvencyPeriod(`Desde ${monthLabel} ${oldestDebt.year}`);
-                        }
-                    } else {
-                        setSolvencyStatus('solvente');
-                        const allDebtsQuery = query(collection(db, "debts"), where("ownerId", "==", userId), where("status", "==", "paid"), orderBy("year", "desc"), orderBy("month", "desc"), limit(1));
-                        const lastPaidDebtSnapshot = await getDocs(allDebtsQuery);
-
-                        if (!lastPaidDebtSnapshot.empty) {
-                            const lastPaidDebt = lastPaidDebtSnapshot.docs[0].data();
-                            const monthLabel = monthsLocale[lastPaidDebt.month] || '';
-                            setSolvencyPeriod(`Hasta ${monthLabel} ${lastPaidDebt.year}`);
-                        } else {
-                            const now = new Date();
-                            const monthLabel = monthsLocale[now.getMonth() + 1] || '';
-                            setSolvencyPeriod(`Hasta ${monthLabel} ${now.getFullYear()}`);
-                        }
-                    }
-                    
-                    setDashboardStats({
-                        balanceInFavor: ownerData.balance || 0,
-                        totalDebtUSD: totalDebtUSD,
-                        exchangeRate: activeRate,
-                    });
+    
                 } else {
                     console.log("No such user document!");
                 }
                 setLoading(false);
             });
         });
-        
+    
         return () => {
-            settingsUnsubscribe();
+            if (settingsUnsubscribe) settingsUnsubscribe();
             if (userUnsubscribe) userUnsubscribe();
             if (paymentsUnsubscribe) paymentsUnsubscribe();
+            if (debtsUnsubscribe) debtsUnsubscribe();
         };
-
+    
     }, [user, authLoading, router]);
     
     const handleDebtSelection = (debtId: string) => {
@@ -292,7 +264,7 @@ export default function OwnerDashboardPage() {
         const paidDebtsSnapshot = await getDocs(paidDebtsQuery);
         const paidDebts = paidDebtsSnapshot.docs
             .map(doc => ({id: doc.id, ...doc.data()}) as Debt)
-            .sort((a,b) => b.year - a.year || b.month - a.month);
+            .sort((a,b) => b.year - a.year || b.month - b.month);
         
         setReceiptData({ 
             payment, 
@@ -554,7 +526,7 @@ export default function OwnerDashboardPage() {
                     ) : (
                     payments.map((payment) => (
                     <TableRow key={payment.id}>
-                        <TableCell>{new Date(payment.date).toLocaleDateString('es-VE')}</TableCell>
+                        <TableCell>{format(payment.paymentDate.toDate(), 'dd/MM/yyyy')}</TableCell>
                         <TableCell>
                             {payment.type === 'adelanto' 
                                 ? `$${formatToTwoDecimals(payment.amount)}`
