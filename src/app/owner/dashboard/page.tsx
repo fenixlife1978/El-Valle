@@ -10,8 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Landmark, AlertCircle, Building, Eye, Printer, Megaphone, Loader2, Wallet, FileText, CalendarClock, Scale, Calculator, Minus, Equal, ShieldCheck, TrendingUp, TrendingDown, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getCommunityUpdates } from '@/ai/flows/community-updates';
-import { auth, db } from '@/lib/firebase';
-import { useAuthState } from 'react-firebase-hooks/auth';
+import { db } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
 import { doc, onSnapshot, collection, query, where, orderBy, limit, getDoc, getDocs, Timestamp } from 'firebase/firestore';
 import { format } from 'date-fns';
@@ -96,8 +95,8 @@ const formatToTwoDecimals = (num: number) => {
 };
 
 export default function OwnerDashboardPage() {
-    const [user, authLoading] = useAuthState(auth);
     const router = useRouter();
+    const [session, setSession] = useState<any>(null);
 
     const [loading, setLoading] = useState(true);
     const [userData, setUserData] = useState<UserData | null>(null);
@@ -117,13 +116,15 @@ export default function OwnerDashboardPage() {
     const [isReceiptPreviewOpen, setIsReceiptPreviewOpen] = useState(false);
     
     useEffect(() => {
-        if (authLoading) return;
-        if (!user) {
+        const userSession = localStorage.getItem('user-session');
+        if (!userSession) {
             router.push('/login?role=owner');
             return;
         }
-    
-        const userId = user.uid;
+        const parsedSession = JSON.parse(userSession);
+        setSession(parsedSession);
+        
+        const userId = parsedSession.uid;
         let settingsUnsubscribe: () => void;
         let userUnsubscribe: () => void;
         let paymentsUnsubscribe: () => void;
@@ -225,7 +226,7 @@ export default function OwnerDashboardPage() {
             if (debtsUnsubscribe) debtsUnsubscribe();
         };
     
-    }, [user, authLoading, router]);
+    }, [router]);
     
     const handleDebtSelection = (debtId: string) => {
         setSelectedDebts(prev => 
@@ -264,7 +265,7 @@ export default function OwnerDashboardPage() {
         const paidDebtsSnapshot = await getDocs(paidDebtsQuery);
         const paidDebts = paidDebtsSnapshot.docs
             .map(doc => ({id: doc.id, ...doc.data()}) as Debt)
-            .sort((a,b) => b.year - a.year || b.month - b.month);
+            .sort((a,b) => b.year - b.year || b.month - b.month);
         
         setReceiptData({ 
             payment, 
@@ -390,7 +391,7 @@ export default function OwnerDashboardPage() {
     setIsReceiptPreviewOpen(false);
   };
 
-  if (loading || authLoading) {
+  if (loading) {
     return (
         <div className="flex justify-center items-center h-full">
             <Loader2 className="h-10 w-10 animate-spin text-primary" />
@@ -473,7 +474,7 @@ export default function OwnerDashboardPage() {
                                 aria-label={`Seleccionar deuda de ${monthsLocale[debt.month]} ${debt.year}`}
                             />
                         </TableCell>
-                        <TableCell className="font-medium">{monthsLocale[debt.month]} {debt.year}</TableCell>
+                        <TableCell className="font-medium">{monthsLocale[debt.month]} ${debt.year}</TableCell>
                         <TableCell>{debt.description}</TableCell>
                         <TableCell className="text-right">Bs. {formatToTwoDecimals(debt.amountUSD * dashboardStats.exchangeRate)}</TableCell>
                     </TableRow>
@@ -651,7 +652,3 @@ export default function OwnerDashboardPage() {
     </div>
   );
 }
-
-    
-
-    

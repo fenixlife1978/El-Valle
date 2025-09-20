@@ -6,9 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { Building2, LogOut, type LucideIcon, ChevronDown, TrendingUp } from 'lucide-react';
 import * as React from 'react';
 import { doc, onSnapshot, Timestamp } from 'firebase/firestore';
-import { db, auth } from '@/lib/firebase';
-import { signOut } from 'firebase/auth';
-import { useAuthState } from 'react-firebase-hooks/auth';
+import { db } from '@/lib/firebase';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -80,11 +78,16 @@ const BCVLogo = () => (
 
 const CustomHeader = ({ userRole }: { userRole: string }) => {
     const router = useRouter();
-    const [user, loading] = useAuthState(auth);
+    const [session, setSession] = React.useState<any>(null);
     const [activeRate, setActiveRate] = React.useState<ExchangeRate | null>(null);
     const [userProfile, setUserProfile] = React.useState<UserProfile | null>(null);
 
     React.useEffect(() => {
+        const userSession = localStorage.getItem('user-session');
+        if (userSession) {
+            setSession(JSON.parse(userSession));
+        }
+
         const settingsRef = doc(db, 'config', 'mainSettings');
         const settingsUnsubscribe = onSnapshot(settingsRef, (docSnap) => {
             if (docSnap.exists()) {
@@ -99,8 +102,9 @@ const CustomHeader = ({ userRole }: { userRole: string }) => {
         });
 
         let profileUnsubscribe: () => void;
-        if (user) {
-            const profileRef = doc(db, 'owners', user.uid);
+        if (userSession) {
+            const uid = JSON.parse(userSession).uid;
+            const profileRef = doc(db, 'owners', uid);
             profileUnsubscribe = onSnapshot(profileRef, (docSnap) => {
                 if(docSnap.exists()) {
                     setUserProfile(docSnap.data() as UserProfile);
@@ -113,10 +117,10 @@ const CustomHeader = ({ userRole }: { userRole: string }) => {
             if(profileUnsubscribe) profileUnsubscribe();
         };
 
-    }, [user]);
+    }, []);
 
     const handleLogout = async () => {
-        await signOut(auth);
+        localStorage.removeItem('user-session');
         router.push('/');
     };
 
@@ -172,7 +176,7 @@ const CustomHeader = ({ userRole }: { userRole: string }) => {
 
 export function DashboardLayout({
   children,
-  userName, // This prop is no longer used, but kept for signature consistency
+  userName,
   userRole,
   navItems,
 }: {
@@ -182,10 +186,16 @@ export function DashboardLayout({
   navItems: NavItem[];
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [companyInfo, setCompanyInfo] = React.useState<CompanyInfo | null>(null);
-  const [user] = useAuthState(auth);
 
   React.useEffect(() => {
+    // Check for session on mount
+    const userSession = localStorage.getItem('user-session');
+    if (!userSession) {
+      router.push('/');
+    }
+
     const settingsRef = doc(db, 'config', 'mainSettings');
     const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
         if (docSnap.exists()) {
@@ -193,7 +203,7 @@ export function DashboardLayout({
         }
     });
     return () => unsubscribe();
-  }, []);
+  }, [router]);
 
 
   const isSubItemActive = (parentHref: string, items?: Omit<NavItem, 'icon' | 'items'>[]) => {

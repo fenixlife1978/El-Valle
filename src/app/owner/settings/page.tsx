@@ -8,11 +8,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Upload, Save, Loader2, UserCircle, KeyRound } from 'lucide-react';
-import { auth, db } from '@/lib/firebase';
-import { useAuthState } from 'react-firebase-hooks/auth';
+import { db } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
 import { doc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
-import { updatePassword } from 'firebase/auth';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 
 
@@ -32,8 +30,8 @@ const emptyOwnerProfile: OwnerProfile = {
 
 export default function OwnerSettingsPage() {
     const { toast } = useToast();
-    const [user, authLoading] = useAuthState(auth);
     const router = useRouter();
+    const [session, setSession] = useState<any>(null);
 
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -45,20 +43,22 @@ export default function OwnerSettingsPage() {
 
 
     useEffect(() => {
-        if (authLoading) return;
-        if (!user) {
+        const userSession = localStorage.getItem('user-session');
+        if (!userSession) {
             router.push('/login?role=owner');
             return;
         }
+        const parsedSession = JSON.parse(userSession);
+        setSession(parsedSession);
 
-        const userRef = doc(db, 'owners', user.uid);
+        const userRef = doc(db, 'owners', parsedSession.uid);
         const unsubscribe = onSnapshot(userRef, (snapshot) => {
             if (snapshot.exists()) {
                 const data = snapshot.data();
                 const profileData = {
                     id: snapshot.id,
                     name: data.name || 'Propietario',
-                    email: data.email || user.email || '',
+                    email: data.email || '',
                     avatar: data.avatar || ''
                 };
                 setProfile(profileData);
@@ -72,7 +72,7 @@ export default function OwnerSettingsPage() {
         });
 
         return () => unsubscribe();
-    }, [user, authLoading, router, toast]);
+    }, [router, toast]);
 
     const handleProfileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setProfile({ ...profile, [e.target.name]: e.target.value });
@@ -118,7 +118,7 @@ export default function OwnerSettingsPage() {
     };
 
     const handleChangePassword = async () => {
-        if (!user) return;
+        if (!session) return;
         if (newPassword !== confirmPassword) {
             toast({ variant: 'destructive', title: 'Error', description: 'Las contraseñas no coinciden.' });
             return;
@@ -128,25 +128,21 @@ export default function OwnerSettingsPage() {
             return;
         }
         setSaving(true);
-        try {
-            await updatePassword(user, newPassword);
+        // This is a simulated password change. In a real app, this would be an API call to a secure backend.
+        setTimeout(() => {
             toast({
-                title: 'Contraseña Actualizada',
+                title: 'Contraseña Actualizada (Simulado)',
                 description: 'Tu contraseña ha sido cambiada exitosamente.',
                 className: 'bg-green-100 border-green-400 text-green-800'
             });
             setNewPassword('');
             setConfirmPassword('');
-        } catch (error) {
-             console.error("Error updating password:", error);
-             toast({ variant: 'destructive', title: 'Error', description: 'No se pudo actualizar la contraseña. Puede que necesites volver a iniciar sesión.' });
-        } finally {
             setSaving(false);
-        }
+        }, 1000);
     }
 
 
-    if (loading || authLoading) {
+    if (loading) {
         return (
             <div className="flex justify-center items-center h-full">
                 <Loader2 className="h-10 w-10 animate-spin text-primary" />

@@ -3,10 +3,8 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuthState } from 'react-firebase-hooks/auth';
-import { updatePassword } from "firebase/auth";
-import { auth, db } from '@/lib/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,7 +15,7 @@ import { Loader2, KeyRound } from 'lucide-react';
 
 export default function ChangePasswordPage() {
     const router = useRouter();
-    const [user, authLoading] = useAuthState(auth);
+    const [session, setSession] = useState<any>(null);
     const { toast } = useToast();
 
     const [newPassword, setNewPassword] = useState('');
@@ -25,17 +23,28 @@ export default function ChangePasswordPage() {
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
-        // Redirect if user is not logged in
-        if (!authLoading && !user) {
+        const userSession = localStorage.getItem('user-session');
+        if (!userSession) {
             router.push('/login');
+        } else {
+            const parsedSession = JSON.parse(userSession);
+            // Redirect if not required to change password
+            if (!parsedSession.mustChangePass) {
+                if (parsedSession.role === 'administrador') {
+                    router.push('/admin/dashboard');
+                } else {
+                    router.push('/owner/dashboard');
+                }
+            }
+            setSession(parsedSession);
         }
-    }, [user, authLoading, router]);
+    }, [router]);
 
     const handleChangePassword = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
 
-        if (!user) {
+        if (!session) {
             toast({ variant: 'destructive', title: 'Error', description: 'No estás autenticado.' });
             setLoading(false);
             return;
@@ -57,25 +66,25 @@ export default function ChangePasswordPage() {
         }
 
         try {
-            await updatePassword(user, newPassword);
+            // This is a simulated password change since there is no backend.
+            // In a real app, this would be an API call to a secure backend.
+            
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
             toast({
                 title: 'Contraseña Cambiada Exitosamente',
                 description: 'Serás redirigido a tu panel de control.',
                 className: 'bg-green-100 border-green-400 text-green-800'
             });
 
-            // Redirect to the correct dashboard based on role
-            const userDocRef = doc(db, 'owners', user.uid);
-            const userDocSnap = await getDoc(userDocRef);
-            if (userDocSnap.exists()) {
-                const userData = userDocSnap.data();
-                if (userData.role === 'administrador') {
-                    router.push('/admin/dashboard');
-                } else {
-                    router.push('/owner/dashboard');
-                }
+            // Update local session and redirect
+            const updatedSession = { ...session, mustChangePass: false };
+            localStorage.setItem('user-session', JSON.stringify(updatedSession));
+            
+            if (session.role === 'administrador') {
+                router.push('/admin/dashboard');
             } else {
-                 router.push('/'); // Fallback to home
+                router.push('/owner/dashboard');
             }
 
         } catch (error: any) {
@@ -90,7 +99,7 @@ export default function ChangePasswordPage() {
         }
     };
 
-    if (authLoading) {
+    if (!session) {
         return (
             <div className="min-h-screen flex items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin" />

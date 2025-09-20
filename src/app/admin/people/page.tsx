@@ -16,9 +16,7 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc, setDoc } from 'firebase/firestore';
-import { db, auth } from '@/lib/firebase';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
-
+import { db } from '@/lib/firebase';
 
 type Role = 'propietario' | 'administrador';
 
@@ -64,7 +62,7 @@ const getHousesForStreet = (street: string) => {
     return Array.from({ length: houseCount }, (_, i) => `Casa ${i + 1}`);
 };
 
-const ADMIN_USER_ID = 'G2jhcEnp05TcvjYj8SwhzVCHbW83'; // EDWIN AGUIAR's ID
+const ADMIN_USER_ID = 'G2jhcEnp05TcvjYj8SwhzVCHbW83'; 
 
 const formatToTwoDecimals = (num: number) => {
     if (typeof num !== 'number' || isNaN(num)) return '0,00';
@@ -90,11 +88,9 @@ export default function PeopleManagementPage() {
             const ownersData: Owner[] = [];
             snapshot.forEach((doc) => {
                 const data = doc.data();
-                // Ensure balance is always a number for display/calculation, default to 0 if null/undefined
                 ownersData.push({ id: doc.id, ...data, balance: data.balance ?? 0 } as Owner);
             });
             
-            // Custom sort logic
             const getSortKeys = (owner: Owner) => {
                 const prop = (owner.properties && owner.properties.length > 0) ? owner.properties[0] : { street: 'N/A', house: 'N/A' };
                 const streetNum = parseInt(String(prop.street || '').replace('Calle ', '') || '999');
@@ -115,7 +111,7 @@ export default function PeopleManagementPage() {
             setLoading(false);
         }, (error) => {
             console.error("Error fetching owners: ", error);
-            toast({ variant: 'destructive', title: 'Error de Conexión', description: 'No se pudieron cargar los propietarios. Revisa la configuración de Firebase.' });
+            toast({ variant: 'destructive', title: 'Error de Conexión', description: 'No se pudieron cargar los propietarios.' });
             setLoading(false);
         });
 
@@ -150,7 +146,6 @@ export default function PeopleManagementPage() {
     };
 
     const handleEditOwner = (owner: Owner) => {
-        // Ensure owner has a properties array
         const editableOwner = {
             ...owner,
             properties: owner.properties && owner.properties.length > 0 
@@ -169,10 +164,8 @@ export default function PeopleManagementPage() {
     const confirmDelete = async () => {
         if (ownerToDelete) {
              try {
-                // Note: Deleting from Firestore does not delete from Firebase Auth.
-                // This would require a backend function for security reasons.
                 await deleteDoc(doc(db, "owners", ownerToDelete.id));
-                toast({ title: 'Propietario Eliminado', description: `${ownerToDelete.name} ha sido eliminado de Firestore. La cuenta de autenticación debe eliminarse manualmente.` });
+                toast({ title: 'Propietario Eliminado', description: `${ownerToDelete.name} ha sido eliminado de Firestore.` });
             } catch (error) {
                 console.error("Error deleting document: ", error);
                 toast({ variant: 'destructive', title: 'Error', description: 'No se pudo eliminar el propietario.' });
@@ -198,50 +191,16 @@ export default function PeopleManagementPage() {
 
         try {
             if (id) {
-                // Editing an existing user. We assume their auth account already exists and is linked.
                 const ownerRef = doc(db, "owners", id);
                 await updateDoc(ownerRef, dataToSave);
                 toast({ title: 'Propietario Actualizado', description: 'Los datos han sido guardados exitosamente.' });
             } else {
-                // Adding a new user.
-                if (dataToSave.email && dataToSave.email.trim() !== '') {
-                    // If email is provided, create auth user first.
-                    try {
-                        const initialPassword = dataToSave.role === 'administrador' ? 'M110710.m' : '123456';
-                        // Create user in Firebase Auth
-                        const userCredential = await createUserWithEmailAndPassword(auth, dataToSave.email, initialPassword);
-                        const newUserId = userCredential.user.uid;
-                        
-                        // Use the new UID as the document ID in Firestore
-                        const userRef = doc(db, "owners", newUserId);
-                        await setDoc(userRef, dataToSave);
-
-                        toast({ title: 'Propietario Agregado', description: `La cuenta para ${dataToSave.name} fue creada exitosamente.` });
-
-                    } catch (error: any) {
-                        if (error.code === 'auth/email-already-in-use') {
-                            toast({ 
-                                variant: 'destructive', 
-                                title: 'Email ya Registrado', 
-                                description: 'Este correo ya tiene una cuenta. No se creó un nuevo usuario de autenticación. Verifique los datos.' 
-                            });
-                        } else {
-                             throw error; // Rethrow other auth errors to be caught by the outer catch block
-                        }
-                    }
-                } else {
-                    // No email provided, just save to Firestore with a random ID.
-                    await addDoc(collection(db, "owners"), dataToSave);
-                    toast({ title: 'Propietario Agregado', description: 'La nueva persona ha sido guardada sin una cuenta de acceso.' });
-                }
+                await addDoc(collection(db, "owners"), dataToSave);
+                toast({ title: 'Propietario Agregado', description: 'La nueva persona ha sido guardada.' });
             }
         } catch (error: any) {
             console.error("Error saving owner: ", error);
-            let description = 'No se pudieron guardar los cambios en la base de datos.';
-            if (error.code === 'auth/weak-password') {
-                description = 'La contraseña es demasiado débil (mínimo 6 caracteres).';
-            }
-            toast({ variant: 'destructive', title: 'Error', description });
+            toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron guardar los cambios en la base de datos.' });
         } finally {
             setIsDialogOpen(false);
             setCurrentOwner(emptyOwner);
@@ -273,8 +232,6 @@ export default function PeopleManagementPage() {
     const addProperty = () => {
         setCurrentOwner({ ...currentOwner, properties: [...currentOwner.properties, { street: '', house: '' }] });
     };
-
-
 
     const removeProperty = (index: number) => {
         const newProperties = currentOwner.properties.filter((_, i) => i !== index);
@@ -388,24 +345,10 @@ export default function PeopleManagementPage() {
                     if (ownerData.name === 'EDWIN AGUIAR') continue; // Skip admin
                     if (ownerData.properties && ownerData.properties.length > 0) {
                          try {
-                             if (ownerData.email) {
-                                const initialPassword = ownerData.role === 'administrador' ? 'M110710.m' : '123456';
-                                const userCredential = await createUserWithEmailAndPassword(auth, ownerData.email, initialPassword);
-                                const newUserId = userCredential.user.uid;
-                                const userRef = doc(db, "owners", newUserId);
-                                await setDoc(userRef, ownerData);
-                             } else {
-                                await addDoc(collection(db, "owners"), ownerData);
-                             }
+                            await addDoc(collection(db, "owners"), ownerData);
                             successCount++;
                          } catch (error: any) {
-                             if (error.code === 'auth/email-already-in-use') {
-                                 console.warn(`Could not create auth for ${ownerData.email}, user already exists. Saving data to Firestore.`);
-                                 await addDoc(collection(db, "owners"), ownerData);
-                                 successCount++;
-                             } else {
-                                console.warn(`Could not import user ${ownerData.email || ownerData.name}: ${error.message}`);
-                             }
+                            console.warn(`Could not import user ${ownerData.email || ownerData.name}: ${error.message}`);
                          }
                     }
                 }
@@ -570,9 +513,7 @@ export default function PeopleManagementPage() {
                             </div>
                              <div className="space-y-2">
                                 <Label htmlFor="email">Email (Opcional)</Label>
-                                <Input id="email" type="email" value={currentOwner.email || ''} onChange={handleInputChange} disabled={!!currentOwner.id} />
-                                {currentOwner.id && <p className="text-xs text-muted-foreground">El email no se puede cambiar para un usuario existente.</p>}
-                                {!currentOwner.id && <p className="text-xs text-muted-foreground">Si se provee, se creará una cuenta de acceso.</p>}
+                                <Input id="email" type="email" value={currentOwner.email || ''} onChange={handleInputChange} />
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="role">Rol</Label>
@@ -641,7 +582,7 @@ export default function PeopleManagementPage() {
                     <DialogHeader>
                         <DialogTitle>¿Estás seguro?</DialogTitle>
                         <DialogDescription>
-                            Esta acción no se puede deshacer. Esto eliminará permanentemente a <span className="font-semibold">{ownerToDelete?.name}</span> de la base de datos de la app. La cuenta de autenticación deberá ser eliminada manually desde la consola de Firebase.
+                            Esta acción no se puede deshacer. Esto eliminará permanentemente a <span className="font-semibold">{ownerToDelete?.name}</span> de la base de datos de la app.
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>

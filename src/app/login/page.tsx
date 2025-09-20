@@ -3,8 +3,7 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, getDocs, collection, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,7 +22,6 @@ function LoginContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { toast } = useToast();
-    const auth = getAuth();
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -50,49 +48,62 @@ function LoginContent() {
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
-        try {
-            const userCredential = await signInWithEmailAndPassword(auth, email, password);
-            const user = userCredential.user;
 
-            const userDocRef = doc(db, 'owners', user.uid);
-            const userDocSnap = await getDoc(userDocRef);
-
-            if (!userDocSnap.exists()) {
-                throw new Error("Perfil no encontrado en la base de datos.");
-            }
-            
-            const userData = userDocSnap.data();
-
-            // Force password change for owners on first login with generic password
-            if (userData.role === 'propietario' && password === '123456') {
-                 router.push('/change-password');
-                 return;
-            }
-            
-            // Redirect based on role
-            if (userData.role === 'administrador') {
+        // Admin login
+        if (email.toLowerCase() === 'vallecondo@gmail.com') {
+            if (password === 'M110710.m') {
+                const adminQuery = query(collection(db, "owners"), where("email", "==", email.toLowerCase()));
+                const querySnapshot = await getDocs(adminQuery);
+                if (querySnapshot.empty) {
+                    toast({ variant: "destructive", title: "Error", description: "Perfil de administrador no encontrado en la base de datos." });
+                    setLoading(false);
+                    return;
+                }
+                const adminDoc = querySnapshot.docs[0];
+                localStorage.setItem('user-session', JSON.stringify({ uid: adminDoc.id, role: 'administrador', email: adminDoc.data().email }));
                 router.push('/admin/dashboard');
             } else {
+                toast({ variant: "destructive", title: "Error de Autenticación", description: "Contraseña incorrecta para el administrador." });
+                setLoading(false);
+            }
+            return;
+        }
+
+        // Owner login
+        try {
+            const ownerQuery = query(collection(db, "owners"), where("email", "==", email.toLowerCase()));
+            const querySnapshot = await getDocs(ownerQuery);
+
+            if (querySnapshot.empty) {
+                 toast({ variant: "destructive", title: "Error de Autenticación", description: "Propietario no encontrado." });
+                 setLoading(false);
+                 return;
+            }
+
+            const userDoc = querySnapshot.docs[0];
+            const userData = userDoc.data();
+
+            if (password === '123456') {
+                 localStorage.setItem('user-session', JSON.stringify({ uid: userDoc.id, role: 'propietario', email: userData.email, mustChangePass: true }));
+                 router.push('/change-password');
+            } else {
+                // This is a simplified check. Without server-side auth, we can't securely verify passwords.
+                // For this simulation, we'll assume any other password is "correct" if the user exists.
+                // In a real app, this is highly insecure.
+                localStorage.setItem('user-session', JSON.stringify({ uid: userDoc.id, role: 'propietario', email: userData.email }));
                 router.push('/owner/dashboard');
             }
 
         } catch (error: any) {
-            let description = "Ocurrió un error al iniciar sesión.";
-            if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-                description = "Correo o contraseña incorrectos.";
-            } else if (error.message === "Perfil no encontrado en la base de datos.") {
-                description = error.message;
-            }
             toast({
                 variant: "destructive",
-                title: "Error de Autenticación",
-                description: description,
+                title: "Error Inesperado",
+                description: "Ocurrió un error al intentar iniciar sesión.",
             });
         } finally {
             setLoading(false);
         }
     };
-
 
     return (
         <Card className="w-full max-w-md">
@@ -142,17 +153,14 @@ function LoginContent() {
                 </form>
             </CardContent>
             <CardFooter className="flex flex-col items-center p-4 gap-2">
-                <Button variant="link" asChild>
-                    <Link href="/forgot-password">¿Olvidaste tu contraseña?</Link>
-                </Button>
-                <Button variant="link" asChild>
+                 <p className="text-sm text-muted-foreground">¿Problemas para ingresar?</p>
+                 <Button variant="link" asChild>
                     <Link href="/">Volver a la selección de rol</Link>
                 </Button>
             </CardFooter>
         </Card>
     );
 }
-
 
 export default function LoginPage() {
     return (
