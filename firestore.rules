@@ -3,10 +3,69 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow read/write access to all collections for any authenticated user.
-    // This is suitable for development but should be refined for production.
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+
+    // --- FUNCIONES DE AYUDA ---
+    // Verifica si el usuario tiene el rol de 'administrador'.
+    // NOTA: Esto asume que el rol se guarda en la colección 'owners'.
+    // Si se establece en los Custom Claims de Auth, la lógica sería: request.auth.token.role == 'administrador'
+    function isAdmin() {
+      return get(/databases/$(database)/documents/owners/$(request.auth.uid)).data.role == 'administrador';
+    }
+
+    // Verifica si el ID del usuario autenticado coincide con el 'userId' de un documento.
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    // Verifica si el usuario está autenticado.
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // --- REGLAS PARA COLECCIONES ---
+
+    // Colección de Propietarios (owners)
+    match /owners/{ownerId} {
+      // Lectura: Administradores pueden leer todo, usuarios solo su propio perfil.
+      allow read: if isAdmin() || isOwner(ownerId);
+      // Creación: Solo administradores pueden crear nuevos perfiles.
+      allow create: if isAdmin();
+      // Actualización: Administradores pueden actualizar cualquier perfil, usuarios solo el suyo.
+      allow update: if isAdmin() || isOwner(ownerId);
+      // Eliminación: Solo administradores pueden eliminar perfiles.
+      allow delete: if isAdmin();
+    }
+
+    // Colección de Pagos (payments)
+    match /payments/{paymentId} {
+      // Lectura: Administradores pueden leer todo, usuarios solo sus propios pagos.
+      allow read: if isAdmin() || isOwner(resource.data.reportedBy);
+      // Creación: Cualquier usuario autenticado puede reportar un pago.
+      allow create: if isAuthenticated();
+      // Actualización y Eliminación: Solo los administradores pueden modificar o eliminar pagos.
+      allow update, delete: if isAdmin();
+    }
+    
+    // Colección de Deudas (debts)
+    match /debts/{debtId} {
+        // Lectura: Administradores leen todo, usuarios solo sus deudas.
+        allow read: if isAdmin() || isOwner(resource.data.ownerId);
+        // Escritura (crear, actualizar, eliminar): Solo administradores.
+        allow write: if isAdmin();
+    }
+    
+    // Colección de Pagos Históricos (historical_payments)
+    match /historical_payments/{histPaymentId} {
+        // Solo los administradores pueden gestionar los pagos históricos.
+        allow read, write: if isAdmin();
+    }
+
+    // Colección de Configuraciones (config)
+    match /config/{configId} {
+      // Lectura: Cualquier usuario autenticado puede leer las configuraciones (ej: info de la empresa).
+      allow read: if isAuthenticated();
+      // Escritura: Solo los administradores pueden cambiar la configuración.
+      allow write: if isAdmin();
     }
   }
 }
