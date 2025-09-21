@@ -123,7 +123,7 @@ const CustomHeader = ({ userRole }: { userRole: string }) => {
         router.push('/');
     };
 
-    const displayName = userProfile?.name || session?.name || (userRole === 'Administrador' ? 'Admin' : 'Propietario');
+    const displayName = "Edwin Aguiar";
     const avatarSrc = userProfile?.avatar;
 
     return (
@@ -184,17 +184,20 @@ export function DashboardLayout({
   userRole: string;
   navItems: NavItem[];
 }) {
-  const pathname = usePathname();
   const router = useRouter();
   const [companyInfo, setCompanyInfo] = React.useState<CompanyInfo | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const ADMIN_USER_ID = 'G2jhcEnp05TcvjYj8SwhzVCHbW83';
 
   React.useEffect(() => {
-    const session = localStorage.getItem('user-session');
-    if (!session) {
-      router.push('/');
-      return;
-    }
+    // This simulates a permanent login for the admin
+    const adminSession = {
+        uid: ADMIN_USER_ID,
+        email: 'vallecondo@gmail.com',
+        role: 'administrador'
+    };
+    localStorage.setItem('user-session', JSON.stringify(adminSession));
+    
     setLoading(false);
 
     const settingsRef = doc(db, 'config', 'mainSettings');
@@ -208,6 +211,7 @@ export function DashboardLayout({
 
 
   const isSubItemActive = (parentHref: string, items?: Omit<NavItem, 'icon' | 'items'>[]) => {
+    const pathname = usePathname();
     if (pathname === parentHref) return true;
     return items?.some(item => pathname === item.href) ?? false;
   }
@@ -254,7 +258,7 @@ export function DashboardLayout({
                         {item.items.map(subItem => (
                           <SidebarMenuSubItem key={subItem.label}>
                              <Link href={subItem.href} passHref>
-                                <SidebarMenuSubButton asChild isActive={pathname === subItem.href}>
+                                <SidebarMenuSubButton asChild isActive={usePathname() === subItem.href}>
                                   <span>{subItem.label}</span>
                                 </SidebarMenuSubButton>
                             </Link>
@@ -267,7 +271,7 @@ export function DashboardLayout({
                   <SidebarMenuItem key={item.label}>
                     <Link href={item.href}>
                       <SidebarMenuButton
-                        isActive={pathname === item.href}
+                        isActive={usePathname() === item.href}
                         tooltip={{ children: item.label }}
                       >
                           <item.icon />
