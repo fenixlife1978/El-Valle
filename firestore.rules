@@ -1,60 +1,58 @@
-rrules_version = '2';
-⁶Aules_version = '2';
+rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper function to check if the user is an admin
-    function isAdmin() {
-      return get(/databases/$(database)/documents/owners/$(request.auth.uid)).data.role == 'administrador';
+    // Helper function to check if a user is an admin.
+    // It reads the user's profile from the 'owners' collection.
+    function isAdmin(userId) {
+      return get(/databases/$(database)/documents/owners/$(userId)).data.role == 'administrador';
     }
 
-    // Owners collection
-    match /owners/{userId} {
-      // Admins can do anything.
-      // Authenticated users can read and update their own profile.
-      allow read, update: if isAdmin() || request.auth.uid == userId;
-      // Only admins can create or delete owners.
-      allow create, delete: if isAdmin();
-    }
-
-    // Payments collection
-    match /payments/{paymentId} {
-      // Admins can do anything.
-      // Authenticated users can create payments for themselves.
-      // Authenticated users can read payments where they are a beneficiary.
-      allow create: if request.auth.uid == request.resource.data.reportedBy;
-      allow read, write: if isAdmin();
-      allow read: if request.auth.uid in get(/databases/$(database)/documents/payments/$(paymentId)).data.beneficiaryIds;
-    }
-
-    // Debts collection
-    match /debts/{debtId} {
-      // Admins can do anything.
-      // Authenticated users can read debts that belong to them.
-      allow read, write: if isAdmin();
-      allow read: if request.auth.uid == get(/databases/$(database)/documents/debts/$(debtId)).data.ownerId;
-    }
-    
-    // Historical Payments collection
-    match /historical_payments/{paymentId} {
-        // Admins can do anything.
-        // Owners can read their own historical payments.
-        allow read, write: if isAdmin();
-        allow read: if request.auth.uid == get(/databases/$(database)/documents/historical_payments/$(paymentId)).data.ownerId;
-    }
-
-    // Config collection
-    match /config/{configId} {
-      // Admins can read and write.
-      // All authenticated users can read settings (e.g., for exchange rates).
-      allow read: if request.auth != null;
-      allow write: if isAdmin();
-    }
-
-    // Default deny all other access
+    // Default rule: Deny all reads and writes unless explicitly allowed.
     match /{document=**} {
       allow read, write: if false;
+    }
+    
+    // Admins have full access to all collections.
+    match /{path=**} {
+        allow read, write: if isAdmin(request.auth.uid);
+    }
+
+    // Rules for the 'owners' collection
+    match /owners/{userId} {
+      // Owners can read their own profile.
+      allow get: if request.auth.uid == userId;
+      // Owners can update their own profile.
+      allow update: if request.auth.uid == userId;
+      // Nobody can create or delete owner profiles directly except admins (covered by global admin rule).
+      allow create, delete: if false;
+    }
+
+    // Rules for the 'payments' collection
+    match /payments/{paymentId} {
+      // Owners can read payments where they are listed as a beneficiary.
+      allow read: if request.auth.uid in resource.data.beneficiaryIds;
+      // Authenticated users can create new payment reports.
+      allow create: if request.auth != null;
+    }
+
+    // Rules for the 'debts' collection
+    match /debts/{debtId} {
+        // Owners can read debts that belong to them.
+        allow read: if resource.data.ownerId == request.auth.uid;
+    }
+
+    // Rules for the 'historical_payments' collection
+    match /historical_payments/{paymentId} {
+        // Owners can read historical payments that belong to them.
+        allow read: if resource.data.ownerId == request.auth.uid;
+    }
+
+    // Rules for the 'config' collection
+    match /config/{configId} {
+      // All authenticated users can read the system configuration (e.g., for exchange rates).
+      allow get: if request.auth != null;
     }
   }
 }
