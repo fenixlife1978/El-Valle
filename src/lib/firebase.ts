@@ -3,11 +3,10 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
-import { getAuth } from 'firebase/auth';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBxKTp_QYuxHWB18jirph5vhY6tWCWR_HI",
-  authDomain: "condominio-prueba.firebaseapp.com",
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_AUTH_DOMAIN",
   projectId: "condominio-prueba",
   storageBucket: "condominio-prueba.appspot.com",
   messagingSenderId: "787293423330",
@@ -19,7 +18,7 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const db = getFirestore(app);
-const auth = getAuth(app);
 const storage = getStorage(app);
 
-export { app, db, auth, storage };
+// NOTE: Auth is no longer exported as it's not used in the app.
+export { app, db, storage };

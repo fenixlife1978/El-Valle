@@ -38,8 +38,6 @@ export default function OwnerSettingsPage() {
     
     const [profile, setProfile] = useState<OwnerProfile>(emptyOwnerProfile);
     const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
-    const [newPassword, setNewPassword] = useState('');
-    const [confirmPassword, setConfirmPassword] = useState('');
 
 
     useEffect(() => {
@@ -117,30 +115,6 @@ export default function OwnerSettingsPage() {
         }
     };
 
-    const handleChangePassword = async () => {
-        if (!session) return;
-        if (newPassword !== confirmPassword) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Las contraseñas no coinciden.' });
-            return;
-        }
-        if (newPassword.length < 6) {
-            toast({ variant: 'destructive', title: 'Error', description: 'La nueva contraseña debe tener al menos 6 caracteres.' });
-            return;
-        }
-        setSaving(true);
-        // This is a simulated password change. In a real app, this would be an API call to a secure backend.
-        setTimeout(() => {
-            toast({
-                title: 'Contraseña Actualizada (Simulado)',
-                description: 'Tu contraseña ha sido cambiada exitosamente.',
-                className: 'bg-green-100 border-green-400 text-green-800'
-            });
-            setNewPassword('');
-            setConfirmPassword('');
-            setSaving(false);
-        }, 1000);
-    }
-
 
     if (loading) {
         return (
@@ -202,44 +176,6 @@ export default function OwnerSettingsPage() {
                     </Button>
                 </CardFooter>
             </Card>
-
-            <Card>
-                <CardHeader>
-                    <CardTitle>Seguridad</CardTitle>
-                    <CardDescription>Cambia tu contraseña de acceso.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                        <Label htmlFor="new-password">Nueva Contraseña</Label>
-                        <Input 
-                            id="new-password" 
-                            type="password" 
-                            value={newPassword}
-                            onChange={(e) => setNewPassword(e.target.value)}
-                            placeholder="••••••••"
-                            disabled={saving}
-                        />
-                    </div>
-                     <div className="space-y-2">
-                        <Label htmlFor="confirm-password">Confirmar Contraseña</Label>
-                        <Input 
-                            id="confirm-password" 
-                            type="password"
-                            value={confirmPassword}
-                            onChange={(e) => setConfirmPassword(e.target.value)}
-                             placeholder="••••••••"
-                             disabled={saving}
-                        />
-                    </div>
-                </CardContent>
-                <CardFooter>
-                    <Button onClick={handleChangePassword} disabled={saving || !newPassword}>
-                        <KeyRound className="mr-2 h-4 w-4"/>
-                        Cambiar Contraseña
-                    </Button>
-                </CardFooter>
-            </Card>
-
         </div>
     );
 }
