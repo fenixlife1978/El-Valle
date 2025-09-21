@@ -1,12 +1,59 @@
-
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow any authenticated user to read and write to any collection.
-    // This is a secure base rule for this app, as all users must be logged in.
+
+    // Helper function to check if the user is an admin
+    function isAdmin() {
+      return get(/databases/$(database)/documents/owners/$(request.auth.uid)).data.role == 'administrador';
+    }
+
+    // Owners collection
+    match /owners/{userId} {
+      // Admins can do anything.
+      // Authenticated users can read and update their own profile.
+      allow read, update: if isAdmin() || request.auth.uid == userId;
+      // Only admins can create or delete owners.
+      allow create, delete: if isAdmin();
+    }
+
+    // Payments collection
+    match /payments/{paymentId} {
+      // Admins can do anything.
+      // Authenticated users can create payments for themselves.
+      // Authenticated users can read payments where they are a beneficiary.
+      allow create: if request.auth.uid == request.resource.data.reportedBy;
+      allow read, write: if isAdmin();
+      allow read: if request.auth.uid in get(/databases/$(database)/documents/payments/$(paymentId)).data.beneficiaryIds;
+    }
+
+    // Debts collection
+    match /debts/{debtId} {
+      // Admins can do anything.
+      // Authenticated users can read debts that belong to them.
+      allow read, write: if isAdmin();
+      allow read: if request.auth.uid == get(/databases/$(database)/documents/debts/$(debtId)).data.ownerId;
+    }
+    
+    // Historical Payments collection
+    match /historical_payments/{paymentId} {
+        // Admins can do anything.
+        // Owners can read their own historical payments.
+        allow read, write: if isAdmin();
+        allow read: if request.auth.uid == get(/databases/$(database)/documents/historical_payments/$(paymentId)).data.ownerId;
+    }
+
+    // Config collection
+    match /config/{configId} {
+      // Admins can read and write.
+      // All authenticated users can read settings (e.g., for exchange rates).
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+
+    // Default deny all other access
     match /{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if false;
     }
   }
 }
