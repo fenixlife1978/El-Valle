@@ -23,10 +23,10 @@ const FIRESTORE_RULES = `rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow read/write access to all documents for any authenticated user.
-    // This is a simplified rule to prevent permission errors during development.
+    // Allow read/write access to all documents.
+    // WARNING: This is insecure and should only be used for local development.
     match /{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if true;
     }
   }
 }`;
@@ -599,7 +599,7 @@ export const ai = genkit({
         <div className="space-y-8">
              <Card>
                 <CardHeader>
-                    <CardTitle>Reglas Actuales de Firestore</CardTitle>
+                    <CardTitle>Reglas de Seguridad de Firestore</CardTitle>
                     <CardDescription>Copia y pega estas reglas en la sección "Rules" de tu base de datos en la consola de Firebase para aplicar los permisos correctos.</CardDescription>
                 </CardHeader>
                 <CardContent>
