@@ -79,15 +79,10 @@ const BCVLogo = () => (
 
 const CustomHeader = ({ userRole }: { userRole: string }) => {
     const router = useRouter();
-    const [session, setSession] = React.useState<any>(null);
     const [activeRate, setActiveRate] = React.useState<ExchangeRate | null>(null);
     const [userProfile, setUserProfile] = React.useState<UserProfile | null>(null);
 
     React.useEffect(() => {
-        const userSessionString = localStorage.getItem('user-session');
-        const userSession = userSessionString ? JSON.parse(userSessionString) : null;
-        setSession(userSession);
-
         const settingsRef = doc(db, 'config', 'mainSettings');
         const settingsUnsubscribe = onSnapshot(settingsRef, (docSnap) => {
             if (docSnap.exists()) {
@@ -101,29 +96,21 @@ const CustomHeader = ({ userRole }: { userRole: string }) => {
             }
         });
 
-        let profileUnsubscribe: () => void | undefined;
-        if (userSession?.uid) {
-            const profileRef = doc(db, 'owners', userSession.uid);
-            profileUnsubscribe = onSnapshot(profileRef, (docSnap) => {
-                if(docSnap.exists()) {
-                    setUserProfile(docSnap.data() as UserProfile);
-                }
-            });
-        }
+        // Since we are not logging in, we don't fetch a dynamic user profile.
+        // We can set a static one if needed, or leave it as null.
+        setUserProfile({ name: 'Edwin Aguiar', avatar: '' }); // Static profile
         
         return () => {
             settingsUnsubscribe();
-            if(profileUnsubscribe) profileUnsubscribe();
         };
-
     }, []);
 
     const handleLogout = () => {
-        localStorage.removeItem('user-session');
+        // No user session to clear, just redirect
         router.push('/login');
     };
 
-    const displayName = session?.name || "Usuario";
+    const displayName = "Edwin Aguiar";
     const avatarSrc = userProfile?.avatar;
 
     return (
@@ -186,16 +173,9 @@ export function DashboardLayout({
 }) {
   const router = useRouter();
   const [companyInfo, setCompanyInfo] = React.useState<CompanyInfo | null>(null);
-  const [loading, setLoading] = React.useState(true);
+  const [loading, setLoading] = React.useState(false); // No longer checking session, so start with false.
 
   React.useEffect(() => {
-    const userSession = localStorage.getItem('user-session');
-    if (!userSession) {
-      router.push('/login');
-    } else {
-       setLoading(false);
-    }
-    
     const settingsRef = doc(db, 'config', 'mainSettings');
     const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
         if (docSnap.exists()) {
@@ -203,7 +183,7 @@ export function DashboardLayout({
         }
     });
     return () => unsubscribe();
-  }, [router]);
+  }, []);
 
 
   const isSubItemActive = (parentHref: string, items?: Omit<NavItem, 'icon' | 'items'>[]) => {
