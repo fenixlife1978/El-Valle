@@ -11,6 +11,7 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     cpus: 1,
+    allowedDevOrigins: ["https://6000-firebase-studio-1755127519376.cluster-joak5ukfbnbyqspg4tewa33d24.cloudworkstations.dev"],
   },
   webpack(config) {
     config.module.rules.push({
