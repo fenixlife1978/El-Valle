@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { Database, Upload, Trash2, Loader2, FileUp, AlertTriangle, Terminal, RefreshCw, History, Download, Copy, Code } from 'lucide-react';
-import { collection, getDocs, writeBatch, doc, addDoc, query, orderBy, onSnapshot, deleteDoc, Timestamp } from 'firebase/firestore';
+import { collection, getDocs, writeBatch, doc, addDoc, query, orderBy, onSnapshot, deleteDoc, Timestamp, setDoc } from 'firebase/firestore';
 import { db, storage, app } from '@/lib/firebase';
 import { ref, uploadString, getDownloadURL, listAll, deleteObject } from 'firebase/storage';
 import { format } from 'date-fns';
@@ -106,8 +106,7 @@ export default function BackupPage() {
                 properties: [{ street: 'Calle 1', house: 'Casa 1' }] // Default property
             };
 
-            const ownerRef = doc(db, "owners", user.uid);
-            await writeBatch(db).set(ownerRef, adminProfile).commit();
+            await setDoc(doc(db, "owners", user.uid), adminProfile);
 
             toast({ title: 'Administrador Creado', description: `La cuenta para ${email} ha sido creada.` });
 
@@ -744,5 +743,3 @@ export const ai = genkit({
 
         </div>
     );
-
-    
