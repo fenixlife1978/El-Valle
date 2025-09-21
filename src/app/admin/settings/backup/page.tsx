@@ -309,7 +309,7 @@ To get started, take a look at src/app/page.tsx.
 # https://firebase.google.com/docs/app-hosting/configure
 
 runConfig:
-  # Increase this value if you'd like to automatically spin up
+  # Increase this value if you\'d like to automatically spin up
   # more instances in response to increased traffic.
   maxInstances: 1
 
@@ -533,7 +533,7 @@ const paymentMethods = ['movil', 'transferencia'];
 // We define a strict output schema. The AI will do its best to conform to this.
 const InferPaymentDetailsOutputSchema = z.object({
   totalAmount: z.number().describe('The numeric total amount of the payment.'),
-  paymentDate: z.string().describe(\`The date of the payment in 'yyyy-MM-dd' format. Today's date is \${format(new Date(), 'yyyy-MM-dd')}.\`),
+  paymentDate: z.string().describe(\`The date of the payment in 'yyyy-MM-dd' format. Today\'s date is \${format(new Date(), 'yyyy-MM-dd')}.\`),
   paymentMethod: z.enum(paymentMethods).describe('The payment method used.'),
   bank: z.enum(venezuelanBanks).describe('The source bank of the payment.'),
   reference: z.string().describe('The payment reference number, containing only digits.'),
@@ -555,7 +555,7 @@ const prompt = ai.definePrompt({
   name: 'inferPaymentDetailsPrompt',
   input: {schema: InferPaymentDetailsInputSchema},
   output: {schema: InferPaymentDetailsOutputSchema},
-  prompt: \`You are an expert financial assistant for a condominium management app in Venezuela. Your task is to analyze a user's text description of a payment and accurately extract the key details into a structured format.
+  prompt: \`You are an expert financial assistant for a condominium management app in Venezuela. Your task is to analyze a user\'s text description of a payment and accurately extract the key details into a structured format.
 
 The user will provide text that might be informal or contain abbreviations. You must interpret it correctly.
 
@@ -568,7 +568,7 @@ Key Information to Extract:
 
 Analyze the following text and return the structured data.
 
-User's Text: {{{text}}}
+User\'s Text: {{{text}}}
 \`,
 });
 
