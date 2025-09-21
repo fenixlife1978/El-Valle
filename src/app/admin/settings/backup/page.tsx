@@ -9,11 +9,13 @@ import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { Database, Upload, Trash2, Loader2, FileUp, AlertTriangle, Terminal, RefreshCw, History, Download, Copy, Code } from 'lucide-react';
 import { collection, getDocs, writeBatch, doc, addDoc, query, orderBy, onSnapshot, deleteDoc, Timestamp } from 'firebase/firestore';
-import { db, storage } from '@/lib/firebase';
+import { db, storage, app } from '@/lib/firebase';
 import { ref, uploadString, getDownloadURL, listAll, deleteObject } from 'firebase/storage';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Textarea } from '@/components/ui/textarea';
+import { createUserWithEmailAndPassword, getAuth } from 'firebase/auth';
+
 
 const COLLECTIONS_TO_BACKUP = ['owners', 'payments', 'debts', 'historical_payments', 'config'];
 
@@ -132,6 +134,39 @@ export default function BackupPage() {
     const addLog = (message: string) => {
         setLogs(prev => [`${format(new Date(), 'HH:mm:ss')}: ${message}`, ...prev]);
     };
+
+    const handleCreateAdmin = async () => {
+        const email = "Vallecondo@gmail.com";
+        const password = "M110710.m";
+        const auth = getAuth(app);
+        
+        try {
+            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+            const user = userCredential.user;
+            
+            const adminProfile = {
+                name: "EDWIN AGUIAR",
+                email: email,
+                role: "administrador",
+                balance: 0,
+                passwordChanged: true,
+                properties: [{ street: 'Calle 1', house: 'Casa 1' }] // Default property
+            };
+
+            const ownerRef = doc(db, "owners", user.uid);
+            await writeBatch(db).set(ownerRef, adminProfile).commit();
+
+            toast({ title: 'Administrador Creado', description: `La cuenta para ${email} ha sido creada.` });
+
+        } catch (error: any) {
+            if (error.code === 'auth/email-already-in-use') {
+                toast({ variant: 'default', title: 'Cuenta Existente', description: 'La cuenta de administrador ya existe.' });
+            } else {
+                toast({ variant: 'destructive', title: 'Error', description: error.message });
+            }
+        }
+    };
+
 
     const handleCreateBackup = async () => {
         setLoadingAction('create');
@@ -649,6 +684,17 @@ export const ai = genkit({
                     </Button>
                 </CardFooter>
             </Card>
+            
+            <Card>
+                <CardHeader>
+                    <CardTitle>Crear Cuenta de Administrador</CardTitle>
+                    <CardDescription>Crea la cuenta de administrador principal si no existe.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <Button onClick={handleCreateAdmin}>Crear Administrador</Button>
+                </CardContent>
+            </Card>
+
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <Card className="overflow-hidden shadow-lg">
@@ -745,4 +791,5 @@ export const ai = genkit({
 
         </div>
     );
-}
+
+    
