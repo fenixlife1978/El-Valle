@@ -84,10 +84,9 @@ const CustomHeader = ({ userRole }: { userRole: string }) => {
     const [userProfile, setUserProfile] = React.useState<UserProfile | null>(null);
 
     React.useEffect(() => {
-        const userSession = localStorage.getItem('user-session');
-        if (userSession) {
-            setSession(JSON.parse(userSession));
-        }
+        const userSessionString = localStorage.getItem('user-session');
+        const userSession = userSessionString ? JSON.parse(userSessionString) : null;
+        setSession(userSession);
 
         const settingsRef = doc(db, 'config', 'mainSettings');
         const settingsUnsubscribe = onSnapshot(settingsRef, (docSnap) => {
@@ -102,9 +101,9 @@ const CustomHeader = ({ userRole }: { userRole: string }) => {
             }
         });
 
-        let profileUnsubscribe: () => void;
-        if (session) {
-            const profileRef = doc(db, 'owners', session.uid);
+        let profileUnsubscribe: () => void | undefined;
+        if (userSession?.uid) {
+            const profileRef = doc(db, 'owners', userSession.uid);
             profileUnsubscribe = onSnapshot(profileRef, (docSnap) => {
                 if(docSnap.exists()) {
                     setUserProfile(docSnap.data() as UserProfile);
@@ -117,7 +116,7 @@ const CustomHeader = ({ userRole }: { userRole: string }) => {
             if(profileUnsubscribe) profileUnsubscribe();
         };
 
-    }, [session]);
+    }, []);
 
     const handleLogout = () => {
         localStorage.removeItem('user-session');
