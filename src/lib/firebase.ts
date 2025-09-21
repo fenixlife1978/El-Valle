@@ -4,8 +4,8 @@ import { getStorage } from 'firebase/storage';
 import { getAuth } from 'firebase/auth';
 
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
+  apiKey: "AIzaSyC2a...Y89fNXq0",
+  authDomain: "condominio-prueba.firebaseapp.com",
   projectId: "condominio-prueba",
   storageBucket: "condominio-prueba.appspot.com",
   messagingSenderId: "787293423330",
