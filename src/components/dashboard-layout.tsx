@@ -120,10 +120,10 @@ const CustomHeader = ({ userRole }: { userRole: string }) => {
 
     const handleLogout = () => {
         localStorage.removeItem('user-session');
-        router.push('/');
+        router.push('/login');
     };
 
-    const displayName = "Edwin Aguiar";
+    const displayName = session?.name || "Usuario";
     const avatarSrc = userProfile?.avatar;
 
     return (
@@ -187,19 +187,15 @@ export function DashboardLayout({
   const router = useRouter();
   const [companyInfo, setCompanyInfo] = React.useState<CompanyInfo | null>(null);
   const [loading, setLoading] = React.useState(true);
-  const ADMIN_USER_ID = 'G2jhcEnp05TcvjYj8SwhzVCHbW83';
 
   React.useEffect(() => {
-    // This simulates a permanent login for the admin
-    const adminSession = {
-        uid: ADMIN_USER_ID,
-        email: 'vallecondo@gmail.com',
-        role: 'administrador'
-    };
-    localStorage.setItem('user-session', JSON.stringify(adminSession));
+    const userSession = localStorage.getItem('user-session');
+    if (!userSession) {
+      router.push('/login');
+    } else {
+       setLoading(false);
+    }
     
-    setLoading(false);
-
     const settingsRef = doc(db, 'config', 'mainSettings');
     const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
         if (docSnap.exists()) {
