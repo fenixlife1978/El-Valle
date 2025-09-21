@@ -66,19 +66,12 @@ function LoginContent() {
                     const querySnapshot = await getDocs(q);
 
                     if (!querySnapshot.empty) {
-                        // Found a profile with this email, but wrong ID. This is a legacy account.
-                        // We can't "move" the doc, so we'll re-create it with the correct UID and delete the old one.
-                        // For simplicity here, we'll just create a new one if it's missing. A more robust solution would handle data migration.
                         const oldDoc = querySnapshot.docs[0];
                         userData = oldDoc.data();
                         
-                        // Create the new document with the correct UID
                         await setDoc(userDocRef, userData);
                         
-                        // Optionally, delete the old document to prevent duplicates
-                        // await deleteDoc(oldDoc.ref);
-
-                        userDoc = await getDoc(userDocRef); // Re-fetch the new document
+                        userDoc = await getDoc(userDocRef); 
                         toast({ title: "¡Perfil Sincronizado!", description: "Su cuenta ha sido actualizada. Bienvenido.", className: 'bg-green-100 border-green-400 text-green-800' });
                     } else {
                         // No profile found at all, create a new one.
@@ -87,11 +80,11 @@ function LoginContent() {
                             email: user.email,
                             role: 'propietario',
                             balance: 0,
-                            mustChangePass: true, // New users from login must change pass
+                            mustChangePass: true, 
                             properties: [{ street: 'N/A', house: 'N/A' }],
                         };
                         await setDoc(userDocRef, userData);
-                        userDoc = await getDoc(userDocRef); // re-fetch
+                        userDoc = await getDoc(userDocRef); 
                         toast({ title: "¡Bienvenido!", description: "Hemos creado un perfil para usted.", className: 'bg-green-100 border-green-400 text-green-800' });
                     }
                 }
@@ -111,7 +104,7 @@ function LoginContent() {
                 };
                 localStorage.setItem('user-session', JSON.stringify(sessionData));
 
-                if (userData.mustChangePass || password === "123456") {
+                if (userData.mustChangePass) {
                     router.push('/change-password');
                 } else {
                     if (userData.role === 'administrador') {
