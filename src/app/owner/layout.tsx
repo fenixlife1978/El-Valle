@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -20,7 +21,7 @@ const ownerNavItems: NavItem[] = [
 
 export default function OwnerLayout({ children }: { children: ReactNode }) {
     return (
-        <DashboardLayout userName="Propietario" userRole="Propietario" navItems={ownerNavItems}>
+        <DashboardLayout userName="Edwin Aguiar" userRole="Propietario" navItems={ownerNavItems}>
             {children}
         </DashboardLayout>
     );
