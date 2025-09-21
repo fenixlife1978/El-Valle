@@ -1,10 +1,10 @@
-
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, query, where, getDocs, collection } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db, app } from '@/lib/firebase';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from '@/components/ui/input';
@@ -22,8 +22,10 @@ function LoginContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { toast } = useToast();
+    const auth = getAuth(app);
 
     const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
 
@@ -48,50 +50,70 @@ function LoginContent() {
         e.preventDefault();
         setLoading(true);
 
-        if (!email) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Por favor, ingrese su correo electrónico.' });
+        if (!email || !password) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Por favor, ingrese su correo y contraseña.' });
             setLoading(false);
             return;
         }
 
         try {
-            const q = query(collection(db, "owners"), where("email", "==", email));
-            const querySnapshot = await getDocs(q);
+            const userCredential = await signInWithEmailAndPassword(auth, email, password);
+            const user = userCredential.user;
 
-            if (querySnapshot.empty) {
-                toast({
-                    variant: "destructive",
-                    title: "Usuario No Encontrado",
-                    description: "El correo electrónico no está registrado en el sistema.",
-                });
-                setLoading(false);
-                return;
+            if (user) {
+                const userDocRef = doc(db, 'owners', user.uid);
+                const userDocSnap = await getDoc(userDocRef);
+
+                if (!userDocSnap.exists()) {
+                     // Check if a profile exists with this email but different ID (sync issue)
+                    const q = query(collection(db, "owners"), where("email", "==", user.email));
+                    const querySnapshot = await getDocs(q);
+                    if (!querySnapshot.empty) {
+                        const oldDoc = querySnapshot.docs[0];
+                        // This case is complex, ideally handled by a backend function
+                        // to avoid security issues. For now, we'll deny login.
+                        await signOut(auth);
+                        toast({ variant: 'destructive', title: 'Error de Sincronización', description: 'Contacte al administrador para sincronizar su cuenta.' });
+                        setLoading(false);
+                        return;
+                    }
+                    toast({ variant: 'destructive', title: 'Perfil No Encontrado', description: 'No se encontró un perfil en la base de datos para este usuario.' });
+                    await signOut(auth);
+                    setLoading(false);
+                    return;
+                }
+
+                const userData = userDocSnap.data();
+                const sessionData = {
+                    uid: user.uid,
+                    role: userData.role,
+                    name: userData.name,
+                    passwordChanged: userData.passwordChanged,
+                };
+                localStorage.setItem('user-session', JSON.stringify(sessionData));
+
+                toast({ title: '¡Bienvenido!', description: `Has iniciado sesión como ${userData.role}.`, className: 'bg-green-100 border-green-400 text-green-800' });
+
+                if (userData.role === 'administrador') {
+                    router.push('/admin/dashboard');
+                } else {
+                    if (userData.passwordChanged === false) {
+                        router.push('/owner/change-password');
+                    } else {
+                        router.push('/owner/dashboard');
+                    }
+                }
             }
-            
-            const userDoc = querySnapshot.docs[0];
-            const userData = userDoc.data();
-
-            const sessionData = {
-                uid: userDoc.id,
-                role: userData.role,
-                name: userData.name
-            };
-            localStorage.setItem('user-session', JSON.stringify(sessionData));
-
-            toast({ title: '¡Bienvenido!', description: `Has iniciado sesión como ${userData.role}.`, className: 'bg-green-100 border-green-400 text-green-800' });
-
-            if (userData.role === 'administrador') {
-                router.push('/admin/dashboard');
-            } else {
-                router.push('/owner/dashboard');
-            }
-
         } catch (error: any) {
             console.error("Login error:", error);
+            let description = "Ocurrió un error al intentar iniciar sesión.";
+            if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found') {
+                description = "Correo electrónico o contraseña incorrectos.";
+            }
             toast({
                 variant: "destructive",
-                title: "Error Inesperado",
-                description: "Ocurrió un error al intentar iniciar sesión.",
+                title: "Error de Autenticación",
+                description,
             });
         } finally {
             setLoading(false);
@@ -121,6 +143,17 @@ function LoginContent() {
                             placeholder="tu@email.com"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
+                            required
+                            disabled={loading}
+                        />
+                    </div>
+                     <div className="space-y-2">
+                        <Label htmlFor="password">Contraseña</Label>
+                        <Input
+                            id="password"
+                            type="password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
                             required
                             disabled={loading}
                         />

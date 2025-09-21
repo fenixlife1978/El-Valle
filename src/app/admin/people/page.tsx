@@ -14,7 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc, setDoc, getDocs } from 'firebase/firestore';
+import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc, setDoc, getDocs, writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
 
@@ -32,6 +32,7 @@ type Owner = {
     email?: string;
     balance: number;
     role: Role;
+    passwordChanged?: boolean;
 };
 
 type CompanyInfo = {
@@ -49,6 +50,7 @@ const emptyOwner: Omit<Owner, 'id' | 'balance'> & { id?: string; balance: number
     email: '', 
     balance: 0, 
     role: 'propietario',
+    passwordChanged: false,
 };
 
 const streets = Array.from({ length: 8 }, (_, i) => `Calle ${i + 1}`);
@@ -164,6 +166,7 @@ export default function PeopleManagementPage() {
     const confirmDelete = async () => {
         if (ownerToDelete) {
              try {
+                // Here you would also call a cloud function to delete the auth user
                 await deleteDoc(doc(db, "owners", ownerToDelete.id));
                 toast({ title: 'Propietario Eliminado', description: `${ownerToDelete.name} ha sido eliminado de la base de datos.` });
             } catch (error) {
@@ -190,6 +193,7 @@ export default function PeopleManagementPage() {
             properties: ownerData.properties,
             role: ownerData.role,
             balance: isNaN(balanceValue) ? 0 : balanceValue,
+            passwordChanged: ownerData.passwordChanged || false,
         };
         
         try {
@@ -198,8 +202,11 @@ export default function PeopleManagementPage() {
                 await updateDoc(ownerRef, dataToSave);
                 toast({ title: 'Propietario Actualizado', description: 'Los datos han sido guardados exitosamente.' });
             } else { // Creating new owner
-                await addDoc(collection(db, "owners"), dataToSave);
-                toast({ title: 'Propietario Agregado', description: 'La nueva persona ha sido guardada.' });
+                // This would be a cloud function call in a real app to protect credentials
+                // For simplicity, we simulate the result. A real implementation is needed.
+                const newOwnerRef = doc(collection(db, "owners"));
+                await setDoc(newOwnerRef, dataToSave);
+                toast({ title: 'Propietario Agregado', description: `Se ha creado el perfil para ${dataToSave.name}. Se necesita acción manual en Firebase para crear su cuenta de autenticación con la contraseña '123456'.` });
             }
         } catch (error: any) {
             console.error("Error saving owner: ", error);
@@ -342,23 +349,23 @@ export default function PeopleManagementPage() {
                 });
 
                 const newOwners = Object.values(ownersMap);
-                
+                const batch = writeBatch(db);
                 let successCount = 0;
+                
                 for (const ownerData of newOwners) {
-                    if (ownerData.name === 'EDWIN AGUIAR') continue; // Skip admin
+                    if (ownerData.name === 'EDWIN AGUIAR' || !ownerData.email) continue;
                     if (ownerData.properties && ownerData.properties.length > 0) {
-                         try {
-                            await addDoc(collection(db, "owners"), ownerData);
-                            successCount++;
-                         } catch (error: any) {
-                            console.warn(`Could not import user ${ownerData.email || ownerData.name}: ${error.message}`);
-                         }
+                        const ownerDocRef = doc(collection(db, "owners"));
+                         batch.set(ownerDocRef, { ...ownerData, passwordChanged: false });
+                         successCount++;
                     }
                 }
 
+                await batch.commit();
+
                 toast({
                     title: 'Importación Completada',
-                    description: `${successCount} de ${newOwners.length} registros han sido agregados. Revisa la consola para ver errores.`,
+                    description: `${successCount} de ${newOwners.length} registros han sido agregados. La creación de cuentas de autenticación debe realizarse manualmente en Firebase.`,
                     className: 'bg-green-100 border-green-400 text-green-800'
                 });
 
