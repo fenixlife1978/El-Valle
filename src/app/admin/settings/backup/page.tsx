@@ -7,14 +7,75 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter }
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { Database, Upload, Trash2, Loader2, FileUp, AlertTriangle, Terminal, RefreshCw, History, Download } from 'lucide-react';
+import { Database, Upload, Trash2, Loader2, FileUp, AlertTriangle, Terminal, RefreshCw, History, Download, Copy } from 'lucide-react';
 import { collection, getDocs, writeBatch, doc, addDoc, query, orderBy, onSnapshot, deleteDoc, Timestamp } from 'firebase/firestore';
 import { db, storage } from '@/lib/firebase';
 import { ref, uploadString, getDownloadURL, listAll, deleteObject } from 'firebase/storage';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { Textarea } from '@/components/ui/textarea';
 
 const COLLECTIONS_TO_BACKUP = ['owners', 'payments', 'debts', 'historical_payments', 'config'];
+
+const FIRESTORE_RULES = `rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper function to check if the user is an admin
+    function isAdmin(userId) {
+      return exists(/databases/$(database)/documents/owners/$(userId)) &&
+             get(/databases/$(database)/documents/owners/$(userId)).data.role == 'administrador';
+    }
+
+    // Admins have full access to everything
+    match /{document=**} {
+      allow read, write: if request.auth != null && isAdmin(request.auth.uid);
+    }
+    
+    // Rules for the 'owners' collection
+    match /owners/{ownerId} {
+      allow read, update: if request.auth != null && request.auth.uid == ownerId;
+      // No one can create or delete their own owner document through the app
+      allow create, delete: if false;
+    }
+
+    // Rules for 'payments'
+    match /payments/{paymentId} {
+      allow read: if request.auth != null && (
+        // Allow if user is in the beneficiaryIds array
+        resource.data.beneficiaryIds[0] == request.auth.uid ||
+        // Fallback for older documents
+        (resource.data.beneficiaries[0].ownerId == request.auth.uid)
+      );
+      allow create: if request.auth != null && request.resource.data.reportedBy == request.auth.uid;
+      allow update, delete: if false; // Only admins can modify/delete payments
+    }
+    
+    // Rules for 'debts'
+    match /debts/{debtId} {
+      allow read: if request.auth != null && resource.data.ownerId == request.auth.uid;
+      // Debts are created by the system (admin), not by users
+      allow create, update, delete: if false; 
+    }
+
+    // Rules for 'historical_payments'
+    match /historical_payments/{paymentId} {
+       allow read: if request.auth != null && resource.data.ownerId == request.auth.uid;
+       // Historical payments are created by the system (admin), not by users
+       allow create, update, delete: if false;
+    }
+    
+    // Rules for 'config'
+    match /config/{configId} {
+      // Any authenticated user can read the config (e.g., for exchange rates)
+      allow read: if request.auth != null;
+      // Only admins can write to config
+      allow write: if false;
+    }
+  }
+}`;
+
 
 // Helper function to convert Firestore Timestamps to strings
 const convertTimestamps = (data: any): any => {
@@ -201,9 +262,36 @@ export default function BackupPage() {
         setLoadingAction(null);
     };
 
+    const handleCopyRules = () => {
+        navigator.clipboard.writeText(FIRESTORE_RULES);
+        toast({
+            title: 'Reglas Copiadas',
+            description: 'Las reglas de Firestore han sido copiadas a tu portapapeles.',
+        });
+    };
+
 
     return (
         <div className="space-y-8">
+             <Card>
+                <CardHeader>
+                    <CardTitle>Reglas Actuales de Firestore</CardTitle>
+                    <CardDescription>Copia y pega estas reglas en la sección "Rules" de tu base de datos en la consola de Firebase para aplicar los permisos correctos.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <Textarea
+                        readOnly
+                        value={FIRESTORE_RULES}
+                        className="h-64 font-mono text-xs bg-muted/50"
+                    />
+                </CardContent>
+                <CardFooter>
+                    <Button onClick={handleCopyRules}>
+                        <Copy className="mr-2 h-4 w-4" />
+                        Copiar Reglas
+                    </Button>
+                </CardFooter>
+            </Card>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <Card className="overflow-hidden shadow-lg">
                     <CardHeader className="bg-muted/50">
