@@ -3,12 +3,12 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, query, where, getDocs, collection } from 'firebase/firestore';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { db, auth } from '@/lib/firebase';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Building, User } from 'lucide-react';
@@ -55,18 +55,63 @@ function LoginContent() {
             const user = userCredential.user;
 
             if (user) {
-                const userDocRef = doc(db, "owners", user.uid);
-                const userDoc = await getDoc(userDocRef);
+                let userDocRef = doc(db, "owners", user.uid);
+                let userDoc = await getDoc(userDocRef);
+                let userData;
 
                 if (!userDoc.exists()) {
-                    toast({ variant: "destructive", title: "Error", description: "Perfil de usuario no encontrado en la base de datos." });
-                    setLoading(false);
-                    return;
+                    // Self-healing logic: If doc with UID doesn't exist, try to find by email
+                    toast({ title: "Sincronizando perfil...", description: "Un momento, estamos actualizando su cuenta." });
+                    const q = query(collection(db, "owners"), where("email", "==", user.email));
+                    const querySnapshot = await getDocs(q);
+
+                    if (!querySnapshot.empty) {
+                        // Found a profile with this email, but wrong ID. This is a legacy account.
+                        // We can't "move" the doc, so we'll re-create it with the correct UID and delete the old one.
+                        // For simplicity here, we'll just create a new one if it's missing. A more robust solution would handle data migration.
+                        const oldDoc = querySnapshot.docs[0];
+                        userData = oldDoc.data();
+                        
+                        // Create the new document with the correct UID
+                        await setDoc(userDocRef, userData);
+                        
+                        // Optionally, delete the old document to prevent duplicates
+                        // await deleteDoc(oldDoc.ref);
+
+                        userDoc = await getDoc(userDocRef); // Re-fetch the new document
+                        toast({ title: "¡Perfil Sincronizado!", description: "Su cuenta ha sido actualizada. Bienvenido.", className: 'bg-green-100 border-green-400 text-green-800' });
+                    } else {
+                        // No profile found at all, create a new one.
+                        userData = {
+                            name: user.email?.split('@')[0] || 'Nuevo Propietario',
+                            email: user.email,
+                            role: 'propietario',
+                            balance: 0,
+                            mustChangePass: true, // New users from login must change pass
+                            properties: [{ street: 'N/A', house: 'N/A' }],
+                        };
+                        await setDoc(userDocRef, userData);
+                        userDoc = await getDoc(userDocRef); // re-fetch
+                        toast({ title: "¡Bienvenido!", description: "Hemos creado un perfil para usted.", className: 'bg-green-100 border-green-400 text-green-800' });
+                    }
                 }
                 
-                const userData = userDoc.data();
+                userData = userDoc.data();
+
+                if (!userData) {
+                     toast({ variant: "destructive", title: "Error Crítico", description: "No se pudo cargar el perfil de usuario después de la sincronización." });
+                     setLoading(false);
+                     return;
+                }
                 
-                if (userData.mustChangePass) {
+                 const sessionData = {
+                    uid: user.uid,
+                    role: userData.role,
+                    name: userData.name
+                };
+                localStorage.setItem('user-session', JSON.stringify(sessionData));
+
+                if (userData.mustChangePass || password === "123456") {
                     router.push('/change-password');
                 } else {
                     if (userData.role === 'administrador') {
