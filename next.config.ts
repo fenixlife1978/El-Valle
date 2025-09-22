@@ -9,6 +9,10 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  experimental: {
+    // allowedDevOrigins is no longer an experimental feature.
+  },
+  allowedDevOrigins: ["https://6000-firebase-studio-1755127519376.cluster-joak5ukfbnbyqspg4tewa33d24.cloudworkstations.dev"],
   webpack(config) {
     config.module.rules.push({
       test: /\.svg$/,
