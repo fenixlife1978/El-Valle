@@ -204,7 +204,7 @@ export default function BackupPage() {
                         const { id, ...data } = docData;
                         // Firestore timestamps from ISO string needs conversion on restore
                         const restoredData = Object.entries(data).reduce((acc, [key, value]) => {
-                             if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/.test(value)) {
+                             if (typeof value === 'string' && /^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.\\d{3}Z$/.test(value)) {
                                 acc[key] = Timestamp.fromDate(new Date(value));
                             } else {
                                 acc[key] = value;
@@ -7741,5 +7741,4 @@ export default function ReportsPage() {
 
         </div>
     );
-
-    
+}

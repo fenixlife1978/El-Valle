@@ -63,12 +63,6 @@ type ExchangeRate = {
     active: boolean;
 };
 
-type UserProfile = {
-    name: string;
-    avatar: string;
-};
-
-
 const BCVLogo = () => (
     <svg width="24" height="24" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" className="shrink-0">
         <path d="M49.619 19.468C32.769 19.468 19.23 33.007 19.23 49.857C19.23 66.707 32.769 80.246 49.619 80.246C66.469 80.246 80 66.707 80 49.857C80 33.007 66.469 19.468 49.619 19.468Z" fill="#D52B1E"></path>
@@ -77,10 +71,9 @@ const BCVLogo = () => (
 );
 
 
-const CustomHeader = ({ userRole }: { userRole: string }) => {
+const CustomHeader = ({ userRole, userName }: { userRole: string, userName: string }) => {
     const router = useRouter();
     const [activeRate, setActiveRate] = React.useState<ExchangeRate | null>(null);
-    const [userProfile, setUserProfile] = React.useState<UserProfile | null>(null);
 
     React.useEffect(() => {
         const settingsRef = doc(db, 'config', 'mainSettings');
@@ -96,22 +89,17 @@ const CustomHeader = ({ userRole }: { userRole: string }) => {
             }
         });
 
-        // Since we are not logging in, we don't fetch a dynamic user profile.
-        // We can set a static one if needed, or leave it as null.
-        setUserProfile({ name: 'Edwin Aguiar', avatar: '' }); // Static profile
-        
         return () => {
             settingsUnsubscribe();
         };
     }, []);
 
     const handleLogout = () => {
-        // No user session to clear, just redirect
+        localStorage.removeItem('user-session');
         router.push('/login');
     };
 
-    const displayName = "Edwin Aguiar";
-    const avatarSrc = userProfile?.avatar;
+    const displayName = userName;
 
     return (
         <header className="sticky top-0 z-10 flex h-auto flex-col items-center gap-2 border-b bg-background/80 p-2 backdrop-blur-sm sm:flex-row sm:h-16 sm:px-4">
@@ -136,7 +124,7 @@ const CustomHeader = ({ userRole }: { userRole: string }) => {
                     <DropdownMenuTrigger asChild>
                     <Button variant="ghost" className="relative h-10 w-10 rounded-full">
                         <Avatar className="h-10 w-10">
-                        <AvatarImage src={avatarSrc} alt={displayName} data-ai-hint="profile picture"/>
+                        <AvatarImage src="" alt={displayName} data-ai-hint="profile picture"/>
                         <AvatarFallback>{displayName.charAt(0)}</AvatarFallback>
                         </Avatar>
                     </Button>
@@ -173,7 +161,6 @@ export function DashboardLayout({
 }) {
   const router = useRouter();
   const [companyInfo, setCompanyInfo] = React.useState<CompanyInfo | null>(null);
-  const [loading, setLoading] = React.useState(false); // No longer checking session, so start with false.
 
   React.useEffect(() => {
     const settingsRef = doc(db, 'config', 'mainSettings');
@@ -185,21 +172,12 @@ export function DashboardLayout({
     return () => unsubscribe();
   }, []);
 
-
   const isSubItemActive = (parentHref: string, items?: Omit<NavItem, 'icon' | 'items'>[]) => {
     const pathname = usePathname();
     if (pathname === parentHref) return true;
     return items?.some(item => pathname === item.href) ?? false;
   }
   
-  if(loading) {
-    return (
-        <div className="flex h-screen w-screen items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin"/>
-        </div>
-    );
-  }
-
   return (
     <SidebarProvider>
       <Sidebar>
@@ -264,7 +242,7 @@ export function DashboardLayout({
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>
-        <CustomHeader userRole={userRole} />
+        <CustomHeader userRole={userRole} userName={userName} />
         <main className="flex-1 p-4 md:p-8 bg-background">{children}</main>
         <footer className="bg-secondary text-secondary-foreground p-4 text-center text-sm">
            © {new Date().getFullYear()} {companyInfo?.name || 'CondoConnect'}. Todos los derechos reservados.
