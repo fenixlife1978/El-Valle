@@ -13,6 +13,7 @@ import { CheckCircle2, XCircle, MoreHorizontal, Printer, Filter, Loader2, Trash2
 import { useToast } from '@/hooks/use-toast';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+import QRCode from 'qrcode';
 import { collection, onSnapshot, query, doc, updateDoc, getDoc, writeBatch, where, orderBy, Timestamp, getDocs, deleteField, deleteDoc, runTransaction, addDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { format, addMonths, startOfMonth } from 'date-fns';
@@ -25,6 +26,7 @@ type Owner = {
     id: string;
     name: string;
     properties?: { street: string, house: string }[];
+    receiptCounter?: number;
 };
 
 type Beneficiary = { ownerId: string; ownerName: string; amount: number; street?: string; house?: string; };
@@ -44,6 +46,7 @@ type FullPayment = {
   bank: string;
   type: PaymentMethod;
   reference: string;
+  receiptNumber?: string;
   reportedBy: string;
   reportedAt?: Timestamp;
   observations?: string;
@@ -76,7 +79,7 @@ type CompanyInfo = {
 type ReceiptData = {
     payment: FullPayment;
     ownerName: string; 
-    ownerUnit: string; // This can represent the primary unit or a summary
+    ownerUnit: string; 
     paidDebts: Debt[];
 } | null;
 
@@ -170,6 +173,7 @@ export default function VerifyPaymentsPage() {
                 bank: data.bank,
                 type: data.paymentMethod,
                 reference: data.reference,
+                receiptNumber: data.receiptNumber,
                 status: data.status,
                 beneficiaries: data.beneficiaries,
                 beneficiaryIds: data.beneficiaryIds || [],
@@ -255,6 +259,9 @@ export default function VerifyPaymentsPage() {
                 
                 const ownerData = ownerDoc.data();
                 const initialBalance = ownerData.balance || 0;
+                const receiptCounter = ownerData.receiptCounter || 0;
+                const newReceiptCounter = receiptCounter + 1;
+                const receiptNumber = `REC-${beneficiary.ownerId.substring(0, 5).toUpperCase()}-${String(newReceiptCounter).padStart(4, '0')}`;
                 
                 // --- Switch to cents for all calculations ---
                 const initialBalanceInCents = Math.round(initialBalance * 100);
@@ -336,8 +343,8 @@ export default function VerifyPaymentsPage() {
                 const finalBalance = availableFundsInCents / 100; // Convert back to Bs
                 const observationNote = `Pago por Bs. ${formatToTwoDecimals(paymentData.totalAmount)}. Tasa aplicada: Bs. ${formatToTwoDecimals(exchangeRate)}. Saldo Anterior: Bs. ${formatToTwoDecimals(initialBalance)}. Saldo a Favor Actual: Bs. ${formatToTwoDecimals(finalBalance)}.`;
                 
-                transaction.update(ownerRef, { balance: finalBalance });
-                transaction.update(paymentRef, { status: 'aprobado', observations: observationNote, exchangeRate: exchangeRate });
+                transaction.update(ownerRef, { balance: finalBalance, receiptCounter: newReceiptCounter });
+                transaction.update(paymentRef, { status: 'aprobado', observations: observationNote, exchangeRate: exchangeRate, receiptNumber: receiptNumber });
             });
     
             toast({
@@ -457,13 +464,36 @@ export default function VerifyPaymentsPage() {
   };
 
 
-  const handleDownloadPdf = () => {
+  const handleDownloadPdf = async () => {
     if (!receiptData || !companyInfo) return;
     const { payment, ownerName, paidDebts } = receiptData;
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 14;
 
+    // --- QR Code Generation ---
+    const receiptUrl = `${window.location.origin}/receipt/${payment.id}`;
+    const qrData = JSON.stringify({
+        receiptNumber: payment.receiptNumber,
+        date: format(new Date(), 'yyyy-MM-dd'),
+        amount: payment.totalAmount,
+        ownerId: payment.beneficiaries[0]?.ownerId,
+        url: receiptUrl,
+    });
+
+    let qrCodeImage = '';
+    try {
+        qrCodeImage = await QRCode.toDataURL(qrData, {
+            errorCorrectionLevel: 'M',
+            margin: 2,
+            scale: 4,
+            color: { dark: '#000000', light: '#FFFFFF' }
+        });
+    } catch (err) {
+        console.error('Failed to generate QR code:', err);
+    }
+
+    // --- PDF Header ---
     if (companyInfo.logo) {
         try { doc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25); }
         catch(e) { console.error("Error adding logo to PDF", e); }
@@ -479,7 +509,7 @@ export default function VerifyPaymentsPage() {
     doc.setLineWidth(0.5).line(margin, margin + 32, pageWidth - margin, margin + 32);
 
     doc.setFontSize(16).setFont('helvetica', 'bold').text("RECIBO DE PAGO", pageWidth / 2, margin + 45, { align: 'center' });
-    doc.setFontSize(10).setFont('helvetica', 'normal').text(`N° de recibo: ${payment.id.substring(0, 10)}`, pageWidth - margin, margin + 50, { align: 'right' });
+    doc.setFontSize(10).setFont('helvetica', 'normal').text(`N° de recibo: ${payment.receiptNumber || payment.id.substring(0, 10)}`, pageWidth - margin, margin + 50, { align: 'right' });
 
     let startY = margin + 60;
     doc.setFontSize(10).text(`Nombre del Beneficiario: ${ownerName}`, margin, startY);
@@ -548,31 +578,47 @@ export default function VerifyPaymentsPage() {
 
     startY += 10;
     
-    // Observations Section
+    // --- QR and Footer Section ---
+    const qrSize = 35;
+    const qrX = pageWidth - margin - qrSize;
+    const footerStartY = doc.internal.pageSize.getHeight() - 45;
+    let qrY = footerStartY;
+
+    if (startY + qrSize > footerStartY) { // Check if QR would overlap content
+        qrY = startY + 5;
+    }
+    
+    // Observations Section (if it fits)
     if (payment.observations) {
-        doc.setFontSize(9).setFont('helvetica', 'italic');
-        const splitObservations = doc.splitTextToSize(payment.observations, pageWidth - margin * 2);
-        doc.text("Observaciones:", margin, startY);
-        startY += 5;
-        doc.text(splitObservations, margin, startY);
-        startY += (splitObservations.length * 4) + 4;
+        doc.setFontSize(8).setFont('helvetica', 'italic');
+        const splitObservations = doc.splitTextToSize(payment.observations, pageWidth - margin * 2 - qrSize - 5);
+        const observationHeight = splitObservations.length * 3.5;
+        if (startY + observationHeight < qrY) { // Draw observations if they fit before QR
+            doc.text("Observaciones:", margin, startY);
+            startY += 4;
+            doc.text(splitObservations, margin, startY);
+        }
+    }
+    
+    if (qrCodeImage) {
+        doc.addImage(qrCodeImage, 'PNG', qrX, qrY, qrSize, qrSize);
     }
 
-    // --- Footer Section ---
     const legalNote = 'Todo propietario que requiera de firma y sello húmedo deberá imprimir éste recibo y hacerlo llegar al condominio para su respectiva estampa.';
-    const splitLegalNote = doc.splitTextToSize(legalNote, pageWidth - (margin * 2));
-    doc.setFontSize(9).setFont('helvetica', 'bold').text(splitLegalNote, margin, startY);
-    startY += (splitLegalNote.length * 4) + 4;
+    const splitLegalNote = doc.splitTextToSize(legalNote, pageWidth - (margin * 2) - qrSize - 10);
+    doc.setFontSize(8).setFont('helvetica', 'bold').text(splitLegalNote, margin, footerStartY);
+    let noteY = footerStartY + (splitLegalNote.length * 3) + 2;
 
-    doc.setFontSize(9).setFont('helvetica', 'normal').text('Este recibo confirma que el pago ha sido validado para la(s) cuota(s) y propiedad(es) aquí detalladas.', margin, startY);
-    startY += 8;
-    doc.setFont('helvetica', 'bold').text(`Firma electrónica: '${companyInfo.name} - Condominio'`, margin, startY);
-    startY += 10;
-    doc.setLineWidth(0.2).line(margin, startY, pageWidth - margin, startY);
-    startY += 5;
-    doc.setFontSize(8).setFont('helvetica', 'italic').text('Este recibo se generó de manera automática y es válido sin firma manuscrita.', pageWidth / 2, startY, { align: 'center'});
+    doc.setFontSize(8).setFont('helvetica', 'normal').text('Este recibo confirma que el pago ha sido validado para la(s) cuota(s) y propiedad(es) aquí detalladas.', margin, noteY);
+    noteY += 4;
+    doc.setFont('helvetica', 'bold').text(`Firma electrónica: '${companyInfo.name} - Condominio'`, margin, noteY);
+    noteY += 6;
+    doc.setLineWidth(0.2).line(margin, noteY, pageWidth - margin, noteY);
+    noteY += 4;
+    doc.setFontSize(7).setFont('helvetica', 'italic').text('Este recibo se generó de manera automática y es válido sin firma manuscrita.', pageWidth / 2, noteY, { align: 'center'});
 
-    doc.save(`Recibo_de_Pago_${payment.id.substring(0,7)}.pdf`);
+
+    doc.save(`Recibo_de_Pago_${payment.receiptNumber || payment.id.substring(0,7)}.pdf`);
     setIsReceiptPdfPreviewOpen(false);
   };
 
@@ -715,7 +761,7 @@ export default function VerifyPaymentsPage() {
                             <div className="text-right">
                                 <p className="font-bold text-lg">RECIBO DE PAGO</p>
                                 <p><strong>Fecha Emisión:</strong> {format(new Date(), 'dd/MM/yyyy')}</p>
-                                <p><strong>N° Recibo:</strong> {receiptData.payment.id.substring(0, 10)}</p>
+                                <p><strong>N° Recibo:</strong> {receiptData.payment.receiptNumber || receiptData.payment.id.substring(0, 10)}</p>
                             </div>
                         </div>
                         <hr className="my-2 border-gray-400"/>
