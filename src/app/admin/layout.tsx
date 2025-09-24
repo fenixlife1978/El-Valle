@@ -12,9 +12,6 @@ import {
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Loader2 } from 'lucide-react';
 
 const adminNavItems: NavItem[] = [
     { href: "/admin/dashboard", icon: Home, label: "Dashboard" },
@@ -38,10 +35,6 @@ const adminNavItems: NavItem[] = [
       href: "/admin/settings", 
       icon: Settings, 
       label: "Configuración",
-      items: [
-        { href: "/admin/settings", label: "Ajustes Generales" },
-        { href: "/admin/settings/backup", label: "Backup y Restauración" },
-      ]
     },
 ];
 
@@ -52,4 +45,3 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         </DashboardLayout>
     );
 }
-
