@@ -509,7 +509,20 @@ export default function VerifyPaymentsPage() {
     doc.setLineWidth(0.5).line(margin, margin + 32, pageWidth - margin, margin + 32);
 
     doc.setFontSize(16).setFont('helvetica', 'bold').text("RECIBO DE PAGO", pageWidth / 2, margin + 45, { align: 'center' });
-    doc.setFontSize(10).setFont('helvetica', 'normal').text(`N° de recibo: ${payment.receiptNumber || payment.id.substring(0, 10)}`, pageWidth - margin, margin + 50, { align: 'right' });
+    
+    // --- Right-side Info (Receipt No. + QR) ---
+    const receiptNumberText = `N° de recibo: ${payment.receiptNumber || payment.id.substring(0, 10)}`;
+    const textWidth = doc.getStringUnitWidth(receiptNumberText) * 10 / doc.internal.scaleFactor;
+    const receiptX = pageWidth - margin - textWidth;
+    doc.setFontSize(10).setFont('helvetica', 'normal').text(receiptNumberText, pageWidth - margin, margin + 50, { align: 'right' });
+
+    if (qrCodeImage) {
+        const qrSize = 35;
+        const qrX = pageWidth - margin - qrSize;
+        const qrY = margin + 55;
+        doc.addImage(qrCodeImage, 'PNG', qrX, qrY, qrSize, qrSize);
+    }
+
 
     let startY = margin + 60;
     doc.setFontSize(10).text(`Nombre del Beneficiario: ${ownerName}`, margin, startY);
@@ -576,38 +589,30 @@ export default function VerifyPaymentsPage() {
     doc.text(totalLabel, pageWidth - margin - totalValueWidth - 2, startY, { align: 'right' });
 
 
-    startY += 10;
-    
-    // --- QR and Footer Section ---
-    const qrSize = 35;
-    const qrX = pageWidth - margin - qrSize;
-    const footerStartY = doc.internal.pageSize.getHeight() - 45;
-    let qrY = footerStartY;
+    // --- Footer Section ---
+    const footerStartY = (doc as any).lastAutoTable.finalY > doc.internal.pageSize.getHeight() - 60 
+        ? doc.internal.pageSize.getHeight() - 45 
+        : doc.internal.pageSize.getHeight() - 45;
 
-    if (startY + qrSize > footerStartY) { // Check if QR would overlap content
-        qrY = startY + 5;
-    }
+    startY = footerStartY;
     
-    // Observations Section (if it fits)
+    // Observations Section
     if (payment.observations) {
         doc.setFontSize(8).setFont('helvetica', 'italic');
-        const splitObservations = doc.splitTextToSize(payment.observations, pageWidth - margin * 2 - qrSize - 5);
+        const splitObservations = doc.splitTextToSize(payment.observations, pageWidth - margin * 2);
         const observationHeight = splitObservations.length * 3.5;
-        if (startY + observationHeight < qrY) { // Draw observations if they fit before QR
+        if (startY + observationHeight < footerStartY) { 
             doc.text("Observaciones:", margin, startY);
             startY += 4;
             doc.text(splitObservations, margin, startY);
+            startY += observationHeight;
         }
-    }
-    
-    if (qrCodeImage) {
-        doc.addImage(qrCodeImage, 'PNG', qrX, qrY, qrSize, qrSize);
     }
 
     const legalNote = 'Todo propietario que requiera de firma y sello húmedo deberá imprimir éste recibo y hacerlo llegar al condominio para su respectiva estampa.';
-    const splitLegalNote = doc.splitTextToSize(legalNote, pageWidth - (margin * 2) - qrSize - 10);
-    doc.setFontSize(8).setFont('helvetica', 'bold').text(splitLegalNote, margin, footerStartY);
-    let noteY = footerStartY + (splitLegalNote.length * 3) + 2;
+    const splitLegalNote = doc.splitTextToSize(legalNote, pageWidth - (margin * 2));
+    doc.setFontSize(8).setFont('helvetica', 'bold').text(splitLegalNote, margin, startY);
+    let noteY = startY + (splitLegalNote.length * 3) + 2;
 
     doc.setFontSize(8).setFont('helvetica', 'normal').text('Este recibo confirma que el pago ha sido validado para la(s) cuota(s) y propiedad(es) aquí detalladas.', margin, noteY);
     noteY += 4;
@@ -849,3 +854,4 @@ export default function VerifyPaymentsPage() {
     
 
     
+
