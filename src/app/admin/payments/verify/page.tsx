@@ -81,6 +81,7 @@ type ReceiptData = {
     ownerName: string; 
     ownerUnit: string; 
     paidDebts: Debt[];
+    qrCodeUrl?: string;
 } | null;
 
 const statusVariantMap: { [key in PaymentStatus]: 'warning' | 'success' | 'destructive' } = {
@@ -381,11 +382,29 @@ export default function VerifyPaymentsPage() {
             .map(doc => ({id: doc.id, ...doc.data()}) as Debt)
             .sort((a,b) => b.year - a.year || b.month - b.month);
         
+        // --- QR Code Generation ---
+        const receiptUrl = `${window.location.origin}/receipt/${payment.id}`;
+        const qrDataContent = JSON.stringify({
+            receiptNumber: payment.receiptNumber,
+            date: format(new Date(), 'yyyy-MM-dd'),
+            amount: payment.totalAmount,
+            ownerId: payment.beneficiaries[0]?.ownerId,
+            url: receiptUrl,
+        });
+
+        const qrCodeUrl = await QRCode.toDataURL(qrDataContent, {
+            errorCorrectionLevel: 'M',
+            margin: 2,
+            scale: 4,
+            color: { dark: '#000000', light: '#FFFFFF' }
+        });
+
         setReceiptData({ 
             payment, 
             ownerName: ownerName,
             ownerUnit: ownerUnitSummary, 
-            paidDebts 
+            paidDebts,
+            qrCodeUrl,
         });
         setIsReceiptPdfPreviewOpen(true);
     } catch (error) {
@@ -466,32 +485,11 @@ export default function VerifyPaymentsPage() {
 
   const handleDownloadPdf = async () => {
     if (!receiptData || !companyInfo) return;
-    const { payment, ownerName, paidDebts } = receiptData;
+    const { payment, ownerName, paidDebts, qrCodeUrl } = receiptData;
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 14;
 
-    // --- QR Code Generation ---
-    const receiptUrl = `${window.location.origin}/receipt/${payment.id}`;
-    const qrData = JSON.stringify({
-        receiptNumber: payment.receiptNumber,
-        date: format(new Date(), 'yyyy-MM-dd'),
-        amount: payment.totalAmount,
-        ownerId: payment.beneficiaries[0]?.ownerId,
-        url: receiptUrl,
-    });
-
-    let qrCodeImage = '';
-    try {
-        qrCodeImage = await QRCode.toDataURL(qrData, {
-            errorCorrectionLevel: 'M',
-            margin: 2,
-            scale: 4,
-            color: { dark: '#000000', light: '#FFFFFF' }
-        });
-    } catch (err) {
-        console.error('Failed to generate QR code:', err);
-    }
 
     // --- PDF Header ---
     if (companyInfo.logo) {
@@ -511,16 +509,12 @@ export default function VerifyPaymentsPage() {
     doc.setFontSize(16).setFont('helvetica', 'bold').text("RECIBO DE PAGO", pageWidth / 2, margin + 45, { align: 'center' });
     
     // --- Right-side Info (Receipt No. + QR) ---
-    const receiptNumberText = `N° de recibo: ${payment.receiptNumber || payment.id.substring(0, 10)}`;
-    const textWidth = doc.getStringUnitWidth(receiptNumberText) * 10 / doc.internal.scaleFactor;
-    const receiptX = pageWidth - margin - textWidth;
-    doc.setFontSize(10).setFont('helvetica', 'normal').text(receiptNumberText, pageWidth - margin, margin + 50, { align: 'right' });
-
-    if (qrCodeImage) {
-        const qrSize = 35;
-        const qrX = pageWidth - margin - qrSize;
-        const qrY = margin + 55;
-        doc.addImage(qrCodeImage, 'PNG', qrX, qrY, qrSize, qrSize);
+    doc.setFontSize(10).setFont('helvetica', 'normal');
+    doc.text(`N° de recibo: ${payment.receiptNumber || payment.id.substring(0, 10)}`, pageWidth - margin, margin + 45, { align: 'right' });
+    
+    if (qrCodeUrl) {
+        const qrSize = 30;
+        doc.addImage(qrCodeUrl, 'PNG', pageWidth - margin - qrSize, margin + 48, qrSize, qrSize);
     }
 
 
@@ -763,10 +757,11 @@ export default function VerifyPaymentsPage() {
                                     <p>Teléfono: {companyInfo.phone}</p>
                                 </div>
                             </div>
-                            <div className="text-right">
+                            <div className="text-right flex flex-col items-end">
                                 <p className="font-bold text-lg">RECIBO DE PAGO</p>
                                 <p><strong>Fecha Emisión:</strong> {format(new Date(), 'dd/MM/yyyy')}</p>
                                 <p><strong>N° Recibo:</strong> {receiptData.payment.receiptNumber || receiptData.payment.id.substring(0, 10)}</p>
+                                {receiptData.qrCodeUrl && <img src={receiptData.qrCodeUrl} alt="QR Code" className="w-20 h-20 mt-2"/>}
                             </div>
                         </div>
                         <hr className="my-2 border-gray-400"/>
@@ -854,4 +849,5 @@ export default function VerifyPaymentsPage() {
     
 
     
+
 
