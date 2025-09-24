@@ -52,3 +52,4 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         </DashboardLayout>
     );
 }
+

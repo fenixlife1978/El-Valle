@@ -27,6 +27,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { getCommunityUpdates } from '@/ai/flows/community-updates';
 
 
 type Owner = {
@@ -199,6 +200,7 @@ export default function ReportsPage() {
     const [selectedIndividual, setSelectedIndividual] = useState<Owner | null>(null);
     const [individualPayments, setIndividualPayments] = useState<PaymentWithDebts[]>([]);
     const [individualDebtUSD, setIndividualDebtUSD] = useState(0);
+    const [communityUpdates, setCommunityUpdates] = useState<string[]>([]);
 
     // State for Account Statement report
     const [statementSearchTerm, setStatementSearchTerm] = useState('');
@@ -1194,6 +1196,35 @@ export default function ReportsPage() {
         return delinquencySortConfig.direction === 'asc' ? '▲' : '▼';
     };
 
+    const generateCommunityUpdates = async () => {
+        setGeneratingReport(true);
+        if (!selectedIndividual) return;
+
+        try {
+            const owner = selectedIndividual;
+            const ownerAllDebts = allDebts.filter(d => d.ownerId === owner.id);
+            const paymentHistory = ownerAllDebts.map(d => `${monthsLocale[d.month]} ${d.year}: ${d.status}`).join(', ');
+
+            const communityUpdatesText = await getDocs(collection(db, 'announcements'))
+            .then(snapshot => snapshot.docs.map(doc => doc.data().text).join('\\n'));
+
+            const aiInput = {
+                userProfile: `Name: ${owner.name}, Properties: ${owner.properties.map(p => `${p.street}-${p.house}`).join(', ')}`,
+                paymentHistory: paymentHistory,
+                allUpdates: communityUpdatesText,
+            };
+
+            const updates = await getCommunityUpdates(aiInput);
+            setCommunityUpdates(updates.updates);
+
+        } catch (error) {
+             console.error('Error generating community updates:', error);
+             toast({ variant: 'destructive', title: 'Error de IA', description: 'No se pudieron generar las actualizaciones de la comunidad.' });
+        } finally {
+            setGeneratingReport(false);
+        }
+    };
+
 
     if (loading) {
         return <div className="flex justify-center items-center h-full"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>;
@@ -1345,11 +1376,27 @@ export default function ReportsPage() {
                                                 <CardDescription>{(selectedIndividual.properties || []).map(p => `${p.street} - ${p.house}`).join(', ')}</CardDescription>
                                             </div>
                                             <div className="flex gap-2">
+                                                <Button variant="outline" onClick={() => generateCommunityUpdates()} disabled={generatingReport}>
+                                                    {generatingReport ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Wand2 className="mr-2 h-4 w-4"/>}
+                                                    Resumen con IA
+                                                </Button>
                                                 <Button variant="outline" onClick={() => handleExportIndividual('pdf')}><FileText className="mr-2 h-4 w-4" /> Exportar PDF</Button>
                                             </div>
                                         </div>
                                     </CardHeader>
                                     <CardContent className="space-y-6">
+                                        {communityUpdates.length > 0 && (
+                                            <Card>
+                                                <CardHeader>
+                                                    <CardTitle className="text-lg">Actualizaciones Relevantes para ti</CardTitle>
+                                                </CardHeader>
+                                                <CardContent>
+                                                    <ul className="list-disc pl-5 space-y-2">
+                                                        {communityUpdates.map((update, index) => <li key={index}>{update}</li>)}
+                                                    </ul>
+                                                </CardContent>
+                                            </Card>
+                                        )}
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <Card>
                                                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -1471,7 +1518,7 @@ export default function ReportsPage() {
                                             </div>
                                             <div className="text-right">
                                                 <h2 className="text-2xl font-bold">ESTADO DE CUENTA</h2>
-                                                <p className="text-xs">Fecha: {format(new Date(), "dd/MM/yyyy 'a las' HH:mm:ss")}</p>
+                                                <p className="text-xs">Fecha: ${format(new Date(), "dd/MM/yyyy 'a las' HH:mm:ss")}</p>
                                                 <Button size="sm" variant="outline" className="mt-2" onClick={() => handleExportAccountStatement('pdf')}><FileText className="mr-2 h-4 w-4" /> Exportar PDF</Button>
                                             </div>
                                         </div>
@@ -1522,7 +1569,7 @@ export default function ReportsPage() {
                                                         <TableRow key={d.id}>
                                                             <TableCell>{monthsLocale[d.month]} {d.year}</TableCell>
                                                             <TableCell>{d.description}</TableCell>
-                                                            <TableCell className="text-right">${d.amountUSD.toFixed(2)}</TableCell>
+                                                            <TableCell className="text-right">$${d.amountUSD.toFixed(2)}</TableCell>
                                                             <TableCell className="text-right">{d.status === 'paid' ? 'Pagada' : 'Pendiente'}</TableCell>
                                                         </TableRow>
                                                      ))}
@@ -1530,7 +1577,7 @@ export default function ReportsPage() {
                                                 <TableFooter>
                                                     <TableRow className="bg-[#004D40] hover:bg-[#00382e] text-white font-bold">
                                                         <TableCell colSpan={2}>Total Adeudado</TableCell>
-                                                        <TableCell className="text-right">${accountStatementData.totalDebtUSD.toFixed(2)}</TableCell>
+                                                        <TableCell className="text-right">$${accountStatementData.totalDebtUSD.toFixed(2)}</TableCell>
                                                         <TableCell></TableCell>
                                                     </TableRow>
                                                 </TableFooter>

@@ -29,3 +29,4 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
         </DashboardLayout>
     );
 }
+
