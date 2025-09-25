@@ -584,23 +584,15 @@ export default function VerifyPaymentsPage() {
 
 
     // --- Footer Section ---
-    const footerStartY = (doc as any).lastAutoTable.finalY > doc.internal.pageSize.getHeight() - 60 
-        ? doc.internal.pageSize.getHeight() - 45 
-        : doc.internal.pageSize.getHeight() - 45;
-
-    startY = footerStartY;
+    const footerStartY = doc.internal.pageSize.getHeight() - 55;
+    startY = startY > footerStartY ? footerStartY : startY + 10;
     
     // Observations Section
     if (payment.observations) {
         doc.setFontSize(8).setFont('helvetica', 'italic');
-        const splitObservations = doc.splitTextToSize(payment.observations, pageWidth - margin * 2);
-        const observationHeight = splitObservations.length * 3.5;
-        if (startY + observationHeight < footerStartY) { 
-            doc.text("Observaciones:", margin, startY);
-            startY += 4;
-            doc.text(splitObservations, margin, startY);
-            startY += observationHeight;
-        }
+        const splitObservations = doc.splitTextToSize(`Observaciones: ${payment.observations}`, pageWidth - margin * 2);
+        doc.text(splitObservations, margin, startY);
+        startY += (splitObservations.length * 3.5) + 4;
     }
 
     const legalNote = 'Todo propietario que requiera de firma y sello húmedo deberá imprimir éste recibo y hacerlo llegar al condominio para su respectiva estampa.';
@@ -849,5 +841,6 @@ export default function VerifyPaymentsPage() {
     
 
     
+
 
 
