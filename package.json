@@ -1,10 +1,9 @@
-
 {
   "name": "nextn",
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "set GENKIT_TELEMETRY_DISABLED=true && genkit start -- tsx --watch src/ai/flows/*.ts & next dev",
+    "dev": "set GENKIT_TELEMETRY_DISABLED=true && npx kill-port 9002 && genkit start -- tsx --watch src/ai/flows/*.ts & next dev --port 9002",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
@@ -48,8 +47,9 @@
     "html2canvas": "^1.4.1",
     "jspdf": "^2.5.1",
     "jspdf-autotable": "^3.8.2",
+    "kill-port": "^2.0.1",
     "lucide-react": "^0.475.0",
-    "next": "15.3.3",
+    "next": "^15.5.4",
     "patch-package": "^8.0.0",
     "qrcode": "^1.5.3",
     "react": "^18.3.1",
