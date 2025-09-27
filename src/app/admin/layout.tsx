@@ -9,6 +9,7 @@ import {
     FileSearch,
     CircleDollarSign,
     ListChecks,
+    RefreshCw,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
@@ -35,6 +36,10 @@ const adminNavItems: NavItem[] = [
       href: "/admin/settings", 
       icon: Settings, 
       label: "Configuración",
+      items: [
+        { href: "/admin/settings", label: "General" },
+        { href: "/admin/settings/sync", label: "Sincronizar Perfiles" },
+      ]
     },
 ];
 

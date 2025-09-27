@@ -403,7 +403,7 @@ export default function SettingsPage() {
     return (
         <div className="space-y-8">
             <div>
-                <h1 className="text-3xl font-bold font-headline">Configuración del Sistema</h1>
+                <h1 className="text-3xl font-bold font-headline">Configuración General</h1>
                 <p className="text-muted-foreground">Gestiona la información de la comunidad y las reglas de negocio.</p>
             </div>
 
@@ -525,21 +525,6 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="lg:col-span-1 space-y-8">
-                     <Card>
-                        <CardHeader>
-                            <CardTitle>Conversión Automática Bs/$</CardTitle>
-                            <CardDescription>Integración con la tasa oficial BCV.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                             <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-3 text-sm text-blue-800">
-                                <Wand2 className="h-5 w-5 mt-0.5 shrink-0"/>
-                                <div>
-                                    <p>Para automatizar la tasa de cambio, se debe conectar este sistema a la API del Banco Central de Venezuela (BCV).</p>
-                                    <p className="mt-2">Esto requiere una función en el servidor que se ejecute diariamente para obtener y guardar la nueva tasa.</p>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
                     <Card>
                         <CardHeader>
                             <CardTitle>Gestión Manual de Tasa</CardTitle>
