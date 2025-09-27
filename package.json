@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "GENKIT_TELEMETRY_DISABLED=true genkit start -- tsx --watch src/ai/flows/*.ts & next dev",
+    "dev": "set GENKIT_TELEMETRY_DISABLED=true && genkit start -- tsx --watch src/ai/flows/*.ts & next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
