@@ -177,7 +177,7 @@ export default function OwnerDashboardPage() {
                         const pendingDebts = allDebtsData.filter(d => d.status === 'pending');
                         const totalDebtUSD = pendingDebts.reduce((sum, d) => sum + d.amountUSD, 0);
 
-                        setDebts(pendingDebts.sort((a, b) => b.year - a.year || b.month - b.month));
+                        setDebts(pendingDebts.sort((a, b) => b.year - b.year || b.month - b.month));
                         setDashboardStats(prev => ({...prev, totalDebtUSD }));
 
                         if (totalDebtUSD > 0) {
@@ -265,7 +265,7 @@ export default function OwnerDashboardPage() {
         const paidDebtsSnapshot = await getDocs(paidDebtsQuery);
         const paidDebts = paidDebtsSnapshot.docs
             .map(doc => ({id: doc.id, ...doc.data()}) as Debt)
-            .sort((a,b) => b.year - b.year || b.month - b.month);
+            .sort((a,b) => b.year - a.year || b.month - b.month);
         
         setReceiptData({ 
             payment, 
