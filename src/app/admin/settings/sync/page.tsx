@@ -9,6 +9,7 @@ import { Loader2, UserPlus, RefreshCw, AlertTriangle, UserCheck } from 'lucide-r
 import { collection, doc, getDoc, setDoc, Timestamp, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { getAuth, onAuthStateChanged, type User } from 'firebase/auth';
+import { cn } from "@/lib/utils";
 
 type AuthUser = {
     uid: string;
@@ -209,5 +210,3 @@ export default function SyncProfilesPage() {
         </div>
     );
 }
-
-    
