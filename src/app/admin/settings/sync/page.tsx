@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -7,8 +6,8 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter }
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, UserPlus, RefreshCw, AlertTriangle, UserCheck } from 'lucide-react';
 import { collection, doc, getDoc, setDoc, Timestamp, getDocs } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { getAuth, onAuthStateChanged, type User } from 'firebase/auth';
+import { db, auth } from '@/lib/firebase'; // Import auth from central config
+import { type User } from 'firebase/auth';
 import { cn } from "@/lib/utils";
 
 type AuthUser = {
@@ -37,7 +36,6 @@ export default function SyncProfilesPage() {
             // This example simulates it by checking the currently logged-in user.
             // For a full implementation, this should be a Cloud Function.
             
-            const auth = getAuth();
             const currentUser = auth.currentUser;
             
             // In a real scenario, you'd fetch this list from your backend/cloud function
