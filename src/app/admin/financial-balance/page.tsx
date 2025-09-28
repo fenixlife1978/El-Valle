@@ -184,7 +184,7 @@ export default function FinancialBalancePage() {
         }
     };
     
-    const handleExport = async (format: 'pdf' | 'excel', statement: FinancialStatement) => {
+    const handleExport = async (formatType: 'pdf' | 'excel', statement: FinancialStatement) => {
         const qrCodeUrl = await QRCode.toDataURL(`${window.location.origin}/balance/${statement.id}`, { errorCorrectionLevel: 'M', margin: 2, scale: 4 });
         
         const totalIngresos = statement.ingresos.reduce((sum, item) => sum + (item.monto as number), 0);
@@ -194,7 +194,7 @@ export default function FinancialBalancePage() {
         const yearLabel = statement.id.split('-')[0];
         const period = `${monthLabel} ${yearLabel}`;
 
-        if (format === 'pdf') {
+        if (formatType === 'pdf') {
             const doc = new jsPDF();
             const pageWidth = doc.internal.pageSize.getWidth();
             const margin = 14;
@@ -444,6 +444,8 @@ export default function FinancialBalancePage() {
         </div>
     );
 }
+
+    
 
     
 
