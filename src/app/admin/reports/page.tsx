@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -677,7 +676,7 @@ export default function ReportsPage() {
         const paymentsWithDebts: PaymentWithDebts[] = [];
         for (const payment of allApprovedPayments) {
             const liquidatedDebts = allDebts.filter(d => d.paymentId === payment.id)
-                .sort((a,b) => a.year - b.year || a.month - b.month);
+                .sort((a,b) => a.year - b.year || a.month - a.month);
             
             paymentsWithDebts.push({
                 ...payment,
@@ -1276,7 +1275,7 @@ export default function ReportsPage() {
                                         <PopoverTrigger asChild>
                                             <Button variant="outline" className={cn("w-full justify-start", !integralDateRange.from && "text-muted-foreground")}>
                                                 <CalendarIcon className="mr-2 h-4 w-4" />
-                                                {integralDateRange.from ? format(integralDateRange.from, "P", { locale: es }) : "Fecha"}
+                                                {integralDateRange.from ? format(integralDateRange.from, 'P', { locale: es }) : "Fecha"}
                                             </Button>
                                         </PopoverTrigger>
                                         <PopoverContent><Calendar mode="single" selected={integralDateRange.from} onSelect={d => setIntegralDateRange(prev => ({...prev, from: d}))} /></PopoverContent>
@@ -1288,7 +1287,7 @@ export default function ReportsPage() {
                                         <PopoverTrigger asChild>
                                             <Button variant="outline" className={cn("w-full justify-start", !integralDateRange.to && "text-muted-foreground")}>
                                                 <CalendarIcon className="mr-2 h-4 w-4" />
-                                                {integralDateRange.to ? format(integralDateRange.to, "P", { locale: es }) : "Fecha"}
+                                                {integralDateRange.to ? format(integralDateRange.to, 'P', { locale: es }) : "Fecha"}
                                             </Button>
                                         </PopoverTrigger>
                                         <PopoverContent><Calendar mode="single" selected={integralDateRange.to} onSelect={d => setIntegralDateRange(prev => ({...prev, to: d}))} /></PopoverContent>
@@ -1769,7 +1768,7 @@ export default function ReportsPage() {
                                         <PopoverTrigger asChild>
                                             <Button variant="outline" className={cn("w-full justify-start", !incomeDateRange.from && "text-muted-foreground")}>
                                                 <CalendarIcon className="mr-2 h-4 w-4" />
-                                                {incomeDateRange.from ? format(incomeDateRange.from, "P", { locale: es }) : "Fecha"}
+                                                {incomeDateRange.from ? format(incomeDateRange.from, 'P', { locale: es }) : "Fecha"}
                                             </Button>
                                         </PopoverTrigger>
                                         <PopoverContent><Calendar mode="single" selected={incomeDateRange.from} onSelect={d => setIncomeDateRange(prev => ({...prev, from: d}))} /></PopoverContent>
@@ -1781,7 +1780,7 @@ export default function ReportsPage() {
                                         <PopoverTrigger asChild>
                                             <Button variant="outline" className={cn("w-full justify-start", !incomeDateRange.to && "text-muted-foreground")}>
                                                 <CalendarIcon className="mr-2 h-4 w-4" />
-                                                {incomeDateRange.to ? format(incomeDateRange.to, "P", { locale: es }) : "Fecha"}
+                                                {incomeDateRange.to ? format(incomeDateRange.to, 'P', { locale: es }) : "Fecha"}
                                             </Button>
                                         </PopoverTrigger>
                                         <PopoverContent><Calendar mode="single" selected={incomeDateRange.to} onSelect={d => setIncomeDateRange(prev => ({...prev, to: d}))} /></PopoverContent>
@@ -1978,3 +1977,5 @@ export default function ReportsPage() {
         </div>
     );
 }
+
+    
