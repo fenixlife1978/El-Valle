@@ -270,6 +270,7 @@ export default function VerifyPaymentsPage() {
                     
                     let availableFundsInCents = Math.round(paymentAmountForOwner * 100) + Math.round(initialBalance * 100);
                     
+                    // Unified debts from all properties of the owner
                     const debtsQuery = query(
                         collection(db, 'debts'),
                         where('ownerId', '==', ownerId),
@@ -277,6 +278,7 @@ export default function VerifyPaymentsPage() {
                     );
                     const debtsSnapshot = await getDocs(debtsQuery);
                     
+                    // Sort all pending debts chronologically, oldest first
                     const sortedDebts = debtsSnapshot.docs.sort((a, b) => {
                         const dataA = a.data();
                         const dataB = b.data();
@@ -845,5 +847,7 @@ export default function VerifyPaymentsPage() {
 
 
 
+
+    
 
     
