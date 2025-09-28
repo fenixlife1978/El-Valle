@@ -25,7 +25,6 @@ const adminNavItems: NavItem[] = [
         { href: "/admin/payments", label: "Reportar Pago" },
         { href: "/admin/payments/advance", label: "Registrar Adelanto" },
         { href: "/admin/payments/verify", label: "Verificar Pagos" },
-        { href: "/admin/payments/reconciliation", label: "Conciliación Bancaria" },
         { href: "/admin/payments/calculator", label: "Calculadora de Pagos" },
         { href: "/admin/payments/history", label: "Pagos Históricos" },
       ]
