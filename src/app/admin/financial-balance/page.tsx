@@ -33,6 +33,7 @@ type FinancialState = {
     cuentasPorCobrar: number | string;
     cuentasPorPagar: number | string;
     efectivoDisponible: number | string;
+    saldoFinalBanco: number | string;
 };
 
 type FinancialStatement = {
@@ -77,7 +78,7 @@ export default function FinancialBalancePage() {
     const [selectedYear, setSelectedYear] = useState<string>(String(new Date().getFullYear()));
     const [ingresos, setIngresos] = useState<FinancialItem[]>([initialItem]);
     const [egresos, setEgresos] = useState<FinancialItem[]>([initialItem]);
-    const [estadoFinanciero, setEstadoFinanciero] = useState<FinancialState>({ saldoNeto: 0, cuentasPorCobrar: '', cuentasPorPagar: '', efectivoDisponible: '' });
+    const [estadoFinanciero, setEstadoFinanciero] = useState<FinancialState>({ saldoNeto: 0, cuentasPorCobrar: '', cuentasPorPagar: '', efectivoDisponible: '', saldoFinalBanco: '' });
     const [notas, setNotas] = useState('');
     
     const [statements, setStatements] = useState<FinancialStatement[]>([]);
@@ -119,7 +120,7 @@ export default function FinancialBalancePage() {
         setSelectedYear(String(new Date().getFullYear()));
         setIngresos([{ id: Date.now().toString(), concepto: '', monto: '' }]);
         setEgresos([{ id: Date.now().toString(), concepto: '', monto: '' }]);
-        setEstadoFinanciero({ saldoNeto: 0, cuentasPorCobrar: '', cuentasPorPagar: '', efectivoDisponible: '' });
+        setEstadoFinanciero({ saldoNeto: 0, cuentasPorCobrar: '', cuentasPorPagar: '', efectivoDisponible: '', saldoFinalBanco: '' });
         setNotas('');
     };
 
@@ -167,6 +168,7 @@ export default function FinancialBalancePage() {
                 cuentasPorCobrar: Number(estadoFinanciero.cuentasPorCobrar),
                 cuentasPorPagar: Number(estadoFinanciero.cuentasPorPagar),
                 efectivoDisponible: Number(estadoFinanciero.efectivoDisponible),
+                saldoFinalBanco: Number(estadoFinanciero.saldoFinalBanco),
             },
             notas: notas,
             firmadoPor: 'Administrador', // Hardcoded for now
@@ -244,6 +246,7 @@ export default function FinancialBalancePage() {
                 ['Cuentas por Cobrar', formatToTwoDecimals(ef.cuentasPorCobrar as number)],
                 ['Cuentas por Pagar', formatToTwoDecimals(ef.cuentasPorPagar as number)],
                 ['Efectivo Disponible (Caja Chica)', formatToTwoDecimals(ef.efectivoDisponible as number)],
+                ['Saldo Final del Mes en Banco', formatToTwoDecimals(ef.saldoFinalBanco as number)],
             ];
             (doc as any).autoTable({
                 head: [['ESTADO FINANCIERO', '']],
@@ -281,6 +284,7 @@ export default function FinancialBalancePage() {
                 ['Cuentas por Cobrar', statement.estadoFinanciero.cuentasPorCobrar],
                 ['Cuentas por Pagar', statement.estadoFinanciero.cuentasPorPagar],
                 ['Efectivo Disponible (Caja Chica)', statement.estadoFinanciero.efectivoDisponible],
+                ['Saldo Final del Mes en Banco', statement.estadoFinanciero.saldoFinalBanco],
                 [],
                 ['Notas', statement.notas]
             ];
@@ -425,7 +429,7 @@ export default function FinancialBalancePage() {
                             <p className={`text-2xl font-bold ${totals.saldoNeto >= 0 ? 'text-primary' : 'text-destructive'}`}>Bs. {formatToTwoDecimals(totals.saldoNeto)}</p>
                         </div>
                     </div>
-                    <div className="grid md:grid-cols-3 gap-4 pt-4">
+                    <div className="grid md:grid-cols-2 gap-4 pt-4">
                         <div className="space-y-2">
                             <Label htmlFor="cobrar">Cuentas por Cobrar (Bs.)</Label>
                             <Input id="cobrar" type="number" value={estadoFinanciero.cuentasPorCobrar} onChange={e => setEstadoFinanciero(p => ({...p, cuentasPorCobrar: e.target.value}))} placeholder="0.00" />
@@ -437,6 +441,10 @@ export default function FinancialBalancePage() {
                         <div className="space-y-2">
                             <Label htmlFor="efectivo">Efectivo Disponible (Caja Chica) (Bs.)</Label>
                             <Input id="efectivo" type="number" value={estadoFinanciero.efectivoDisponible} onChange={e => setEstadoFinanciero(p => ({...p, efectivoDisponible: e.target.value}))} placeholder="0.00" />
+                        </div>
+                         <div className="space-y-2">
+                            <Label htmlFor="saldoFinalBanco">Saldo Final del Mes en Banco (Bs.)</Label>
+                            <Input id="saldoFinalBanco" type="number" value={estadoFinanciero.saldoFinalBanco} onChange={e => setEstadoFinanciero(p => ({...p, saldoFinalBanco: e.target.value}))} placeholder="0.00" />
                         </div>
                     </div>
                      <div className="space-y-2">
