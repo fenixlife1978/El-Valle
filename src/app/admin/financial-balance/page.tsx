@@ -13,7 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { PlusCircle, MinusCircle, Loader2, FileText, FileSpreadsheet, Eye, Save, Trash2, ArrowLeft, MoreHorizontal } from 'lucide-react';
 import { collection, doc, getDoc, setDoc, onSnapshot, orderBy, query, deleteDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { format }s from 'date-fns';
+import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -186,8 +186,8 @@ export default function FinancialBalancePage() {
     const handleExport = async (format: 'pdf' | 'excel', statement: FinancialStatement) => {
         const qrCodeUrl = await QRCode.toDataURL(`${window.location.origin}/balance/${statement.id}`, { errorCorrectionLevel: 'M', margin: 2, scale: 4 });
         
-        const totalIngresos = statement.ingresos.reduce((sum, item) => sum + item.monto, 0);
-        const totalEgresos = statement.egresos.reduce((sum, item) => sum + item.monto, 0);
+        const totalIngresos = statement.ingresos.reduce((sum, item) => sum + (item.monto as number), 0);
+        const totalEgresos = statement.egresos.reduce((sum, item) => sum + (item.monto as number), 0);
 
         const monthLabel = months.find(m => m.value === statement.id.split('-')[1])?.label;
         const yearLabel = statement.id.split('-')[0];
@@ -444,3 +444,6 @@ export default function FinancialBalancePage() {
     );
 }
 
+    
+
+    
