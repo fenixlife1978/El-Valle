@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "set GENKIT_TELEMETRY_DISABLED=true && npx kill-port 9002 && genkit start -- tsx --watch src/ai/flows/*.ts & next dev --port 9002",
+    "dev": "set GENKIT_TELEMETRY_DISABLED=true && npx kill-port 9002 && genkit start -- tsx --watch src/ai/flows/*.ts & next dev --port 9002 --hostname 0.0.0.0",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
