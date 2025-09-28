@@ -202,8 +202,16 @@ export default function FinancialBalancePage() {
             // Header
             if (companyInfo?.logo) doc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25);
             doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo?.name || '', margin + 30, margin + 8);
-            doc.setFontSize(9).setFont('helvetica', 'normal').text(companyInfo?.rif || '', margin + 30, margin + 14);
+            doc.setFontSize(9).setFont('helvetica', 'normal');
+            doc.text(companyInfo?.rif || '', margin + 30, margin + 14);
+            doc.text(companyInfo?.address || '', margin + 30, margin + 19);
+            doc.text(`Teléfono: ${companyInfo?.phone || ''}`, margin + 30, margin + 24);
+
             doc.text(`Emitido: ${format(new Date(), 'dd/MM/yyyy')}`, pageWidth - margin, margin + 8, { align: 'right' });
+            if (qrCodeUrl) {
+                const qrSize = 25;
+                doc.addImage(qrCodeUrl, 'PNG', pageWidth - margin - qrSize, margin + 12, qrSize, qrSize);
+            }
             
             // Title
             doc.setFontSize(16).setFont('helvetica', 'bold').text('Balance Financiero', pageWidth / 2, margin + 45, { align: 'center'});
@@ -235,7 +243,7 @@ export default function FinancialBalancePage() {
                 ['SALDO NETO (Ingresos - Egresos)', formatToTwoDecimals(ef.saldoNeto)],
                 ['Cuentas por Cobrar', formatToTwoDecimals(ef.cuentasPorCobrar as number)],
                 ['Cuentas por Pagar', formatToTwoDecimals(ef.cuentasPorPagar as number)],
-                ['Efectivo Disponible', formatToTwoDecimals(ef.efectivoDisponible as number)],
+                ['Efectivo Disponible (Caja Chica)', formatToTwoDecimals(ef.efectivoDisponible as number)],
             ];
             (doc as any).autoTable({
                 head: [['ESTADO FINANCIERO', '']],
@@ -247,10 +255,9 @@ export default function FinancialBalancePage() {
             
             // Footer
             doc.setFontSize(10).text('Notas:', margin, startY);
-            doc.setFontSize(10).setFont('helvetica', 'normal').text(statement.notas, margin, startY + 5, { maxWidth: 120 });
-            doc.addImage(qrCodeUrl, 'PNG', pageWidth - margin - 35, startY, 35, 35);
+            doc.setFontSize(10).setFont('helvetica', 'normal').text(statement.notas, margin, startY + 5, { maxWidth: 180 });
             
-            startY += 40;
+            startY += 25;
             doc.text('_________________________', margin, startY);
             doc.text(`Firmado por: ${statement.firmadoPor}`, margin, startY + 5);
 
@@ -273,7 +280,7 @@ export default function FinancialBalancePage() {
                 ['SALDO NETO', statement.estadoFinanciero.saldoNeto],
                 ['Cuentas por Cobrar', statement.estadoFinanciero.cuentasPorCobrar],
                 ['Cuentas por Pagar', statement.estadoFinanciero.cuentasPorPagar],
-                ['Efectivo Disponible', statement.estadoFinanciero.efectivoDisponible],
+                ['Efectivo Disponible (Caja Chica)', statement.estadoFinanciero.efectivoDisponible],
                 [],
                 ['Notas', statement.notas]
             ];
@@ -428,7 +435,7 @@ export default function FinancialBalancePage() {
                             <Input id="pagar" type="number" value={estadoFinanciero.cuentasPorPagar} onChange={e => setEstadoFinanciero(p => ({...p, cuentasPorPagar: e.target.value}))} placeholder="0.00" />
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="efectivo">Efectivo Disponible (Bs.)</Label>
+                            <Label htmlFor="efectivo">Efectivo Disponible (Caja Chica) (Bs.)</Label>
                             <Input id="efectivo" type="number" value={estadoFinanciero.efectivoDisponible} onChange={e => setEstadoFinanciero(p => ({...p, efectivoDisponible: e.target.value}))} placeholder="0.00" />
                         </div>
                     </div>
@@ -444,11 +451,3 @@ export default function FinancialBalancePage() {
         </div>
     );
 }
-
-    
-
-    
-
-    
-
-    
