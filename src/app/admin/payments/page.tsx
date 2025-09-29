@@ -50,7 +50,7 @@ type BeneficiaryType = 'propio' | 'terceros';
 type PaymentMethod = 'movil' | 'transferencia' | 'pago-historico' | '';
 type BeneficiarySplit = { property: { street: string, house: string }; amount: number | string; };
 
-const ADMIN_USER_ID = 'G2jhcEnp05TcvjYj8SwhzVCHbW83';
+const ADMIN_USER_ID = 'valle-admin-main-account';
 
 export default function UnifiedPaymentsPage() {
     const { toast } = useToast();
@@ -85,7 +85,7 @@ export default function UnifiedPaymentsPage() {
             querySnapshot.forEach((doc) => {
                 ownersData.push({ id: doc.id, ...doc.data() } as Owner);
             });
-            setOwners(ownersData.sort((a, b) => a.name.localeCompare(b.name)));
+            setOwners(ownersData.sort((a, b) => (a.name || '').localeCompare(b.name || '')));
         }, (error) => {
             console.error("Error fetching owners: ", error);
             toast({ variant: 'destructive', title: 'Error de Conexión', description: 'No se pudieron cargar los propietarios.' });
@@ -139,7 +139,7 @@ export default function UnifiedPaymentsPage() {
         if (!searchTerm || searchTerm.length < 3) return [];
         const lowerCaseSearch = searchTerm.toLowerCase();
         return owners.filter(owner => {
-            const ownerName = owner.name.toLowerCase();
+            const ownerName = (owner.name || '').toLowerCase();
             const propertiesMatch = owner.properties?.some(p => 
                 (p.house && String(p.house).toLowerCase().includes(lowerCaseSearch)) ||
                 (p.street && String(p.street).toLowerCase().includes(lowerCaseSearch))
