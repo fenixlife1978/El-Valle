@@ -48,22 +48,26 @@ const adminNavItems: NavItem[] = [
 ];
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
+    const router = useRouter();
     const [loading, setLoading] = useState(true);
     const [userName, setUserName] = useState('Administrador');
 
     useEffect(() => {
-        // SIMULATE ADMIN SESSION FOR TEMPORARY ACCESS
-        const adminSession = {
-            uid: 'valle-admin-main-account',
-            email: 'vallecondo@gmail.com',
-            role: 'administrador',
-            name: 'Valle Admin',
-            passwordChanged: true,
-        };
-        localStorage.setItem('user-session', JSON.stringify(adminSession));
-        setUserName(adminSession.name);
+        const userSession = localStorage.getItem('user-session');
+        if (!userSession) {
+            router.push('/login?role=administrador');
+            return;
+        }
+
+        const parsedSession = JSON.parse(userSession);
+        if (parsedSession.role !== 'administrador') {
+            router.push('/login?role=administrador');
+            return;
+        }
+        
+        setUserName(parsedSession.name || 'Administrador');
         setLoading(false);
-    }, []);
+    }, [router]);
 
     if (loading) {
         return (
