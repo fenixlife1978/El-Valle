@@ -29,8 +29,8 @@ export default function SyncProfilesPage() {
     const [allUsers, setAllUsers] = useState<AuthUser[]>([]);
 
     const ensureAdminProfile = useCallback(async () => {
-        const adminId = 'valle-admin-main-account';
-        const adminEmail = 'Vallecondo@gmail.com';
+        const adminId = 'valle-admin-main-account'; // A hardcoded, unique ID for the main admin
+        const adminEmail = 'vallecondo@gmail.com';
         const adminName = 'Valle Admin';
         const adminRef = doc(db, "owners", adminId);
         const adminSnap = await getDoc(adminRef);
