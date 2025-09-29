@@ -136,12 +136,12 @@ export default function PeopleManagementPage() {
         if (!searchTerm) return owners;
         const lowerCaseSearch = searchTerm.toLowerCase();
         return owners.filter(owner => {
-            const ownerName = owner.name.toLowerCase();
+            const ownerNameMatch = owner.name && owner.name.toLowerCase().includes(lowerCaseSearch);
             const propertiesMatch = owner.properties?.some(p => 
                 (p.house && String(p.house).toLowerCase().includes(lowerCaseSearch)) ||
                 (p.street && String(p.street).toLowerCase().includes(lowerCaseSearch))
             );
-            return ownerName.includes(lowerCaseSearch) || propertiesMatch;
+            return ownerNameMatch || propertiesMatch;
         });
     }, [searchTerm, owners]);
 
