@@ -22,11 +22,36 @@ const ownerNavItems: NavItem[] = [
 ];
 
 export default function OwnerLayout({ children }: { children: ReactNode }) {
+    const router = useRouter();
+    const [session, setSession] = useState<any>(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const userSession = localStorage.getItem('user-session');
+        if (!userSession) {
+            router.push('/login?role=owner');
+            return;
+        }
+        const parsedSession = JSON.parse(userSession);
+        if (parsedSession.role !== 'propietario') {
+             router.push('/login?role=owner');
+             return;
+        }
+        setSession(parsedSession);
+        setLoading(false);
+    }, [router]);
+    
+    if (loading) {
+        return (
+             <div className="flex h-screen w-full items-center justify-center bg-background">
+                <Loader2 className="h-10 w-10 animate-spin text-primary" />
+            </div>
+        )
+    }
 
     return (
-        <DashboardLayout userName="Edwin Aguiar" userRole="Propietario" navItems={ownerNavItems}>
+        <DashboardLayout userName={session?.name || 'Propietario'} userRole="Propietario" navItems={ownerNavItems}>
             {children}
         </DashboardLayout>
     );
 }
-
