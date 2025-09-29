@@ -16,9 +16,6 @@ import { ReactNode, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
 import { Loader2 } from 'lucide-react';
-import { getAuth, onAuthStateChanged } from 'firebase/auth';
-import { app, db } from '@/lib/firebase';
-import { doc, getDoc } from 'firebase/firestore';
 
 
 const adminNavItems: NavItem[] = [
@@ -68,7 +65,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             return;
         }
         
-        setUserName(parsedSession.name || 'Administrador');
+        setUserName(parsedSession.name || 'Valle Admin');
         setLoading(false);
 
     }, [router]);
