@@ -54,10 +54,12 @@ const emptyOwner: Omit<Owner, 'id' | 'balance'> & { id?: string; balance: number
     passwordChanged: false,
 };
 
-const streets = Array.from({ length: 8 }, (_, i) => `Calle ${i + 1}`);
+const streets = ["N/A", ...Array.from({ length: 8 }, (_, i) => `Calle ${i + 1}`)];
 
 const getHousesForStreet = (street: string) => {
     if (!street) return [];
+    if (street === "N/A") return ["N/A"];
+    
     const streetString = String(street);
     const streetNumber = parseInt(streetString.replace('Calle ', '') || '0');
     if (isNaN(streetNumber)) return [];
