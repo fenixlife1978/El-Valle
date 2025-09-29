@@ -276,7 +276,6 @@ export default function VerifyPaymentsPage() {
                     
                     let availableFundsInCents = Math.round(paymentAmountForOwner * 100) + Math.round(initialBalance * 100);
                     
-                    // Unified debts from all properties of the owner
                     const debtsQuery = query(
                         collection(db, 'debts'),
                         where('ownerId', '==', ownerId),
@@ -284,22 +283,21 @@ export default function VerifyPaymentsPage() {
                     );
                     const debtsSnapshot = await getDocs(debtsQuery);
                     
-                    // Sort all pending debts chronologically, oldest first
-                    const sortedDebts = debtsSnapshot.docs.sort((a, b) => {
-                        const dataA = a.data();
-                        const dataB = b.data();
-                        if (dataA.year !== dataB.year) return dataA.year - dataB.year;
-                        return dataA.month - dataB.month;
-                    });
+                    const sortedDebts = debtsSnapshot.docs
+                        .map(doc => ({ id: doc.id, ...doc.data() } as Debt))
+                        .sort((a, b) => {
+                            if (a.year !== b.year) return a.year - b.year;
+                            return a.month - b.month;
+                        });
                     
                     if (sortedDebts.length > 0) {
-                        for (const debtDoc of sortedDebts) {
-                            const debt = { id: debtDoc.id, ...debtDoc.data() } as Debt;
+                        for (const debt of sortedDebts) {
+                            const debtRef = doc(db, 'debts', debt.id);
                             const debtAmountInCents = Math.round(debt.amountUSD * paymentData.exchangeRate * 100);
                             
                             if (availableFundsInCents >= debtAmountInCents) {
                                 availableFundsInCents -= debtAmountInCents;
-                                transaction.update(debtDoc.ref, {
+                                transaction.update(debtRef, {
                                     status: 'paid', paidAmountUSD: debt.amountUSD,
                                     paymentDate: paymentData.paymentDate, paymentId: paymentData.id,
                                 });
@@ -388,7 +386,10 @@ export default function VerifyPaymentsPage() {
         const paidDebtsSnapshot = await getDocs(paidDebtsQuery);
         const paidDebts = paidDebtsSnapshot.docs
             .map(doc => ({id: doc.id, ...doc.data()}) as Debt)
-            .sort((a,b) => b.year - a.year || b.month - b.month);
+            .sort((a,b) => {
+                if (a.year !== b.year) return a.year - b.year;
+                return a.month - b.month;
+            });
         
         // --- QR Code Generation ---
         const receiptUrl = `${window.location.origin}/receipt/${payment.id}`;
