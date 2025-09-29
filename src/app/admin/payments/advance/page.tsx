@@ -7,18 +7,26 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { CheckCircle, Loader2, CalendarPlus, Info, Check, Search, XCircle } from 'lucide-react';
+import { CheckCircle, Loader2, CalendarPlus, Info, Check, Search, XCircle, Trash2, PlusCircle } from 'lucide-react';
 import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc, writeBatch, Timestamp, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { addMonths, format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Checkbox } from '@/components/ui/checkbox';
+import { cn } from '@/lib/utils';
 
 type Owner = {
     id: string;
     name: string;
     properties: { street: string; house: string }[];
 };
+
+type PropertySplit = {
+    property: { street: string; house: string };
+    amount: string; // Amount in USD per month for this property
+};
+
 
 const months = Array.from({ length: 12 }, (_, i) => {
     const date = addMonths(new Date(), i);
@@ -37,16 +45,16 @@ export default function AdvancePaymentPage() {
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedOwner, setSelectedOwner] = useState<Owner | null>(null);
     const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
-    const [monthlyAmount, setMonthlyAmount] = useState('');
+    const [propertySplits, setPropertySplits] = useState<PropertySplit[]>([]);
     const [observations, setObservations] = useState('');
 
     const totalAmount = useMemo(() => {
-        const amount = parseFloat(monthlyAmount);
-        if (isNaN(amount) || amount <= 0 || selectedMonths.length === 0) {
+        if (selectedMonths.length === 0 || propertySplits.length === 0) {
             return 0;
         }
-        return amount * selectedMonths.length;
-    }, [monthlyAmount, selectedMonths]);
+        const totalPerMonth = propertySplits.reduce((sum, split) => sum + (parseFloat(split.amount) || 0), 0);
+        return totalPerMonth * selectedMonths.length;
+    }, [propertySplits, selectedMonths]);
 
     useEffect(() => {
         const ownersQuery = query(collection(db, "owners"));
@@ -78,11 +86,34 @@ export default function AdvancePaymentPage() {
     const handleOwnerSelect = (owner: Owner) => {
         setSelectedOwner(owner);
         setSearchTerm('');
+        if (owner.properties && owner.properties.length > 0) {
+            // Start with the first property selected
+            setPropertySplits([{ property: owner.properties[0], amount: '' }]);
+        }
     };
     
     const resetOwnerSelection = () => {
         setSelectedOwner(null);
+        setPropertySplits([]);
         setSearchTerm('');
+        setSelectedMonths([]);
+    };
+    
+    const handlePropertySplitToggle = (property: { street: string; house: string }) => {
+        const exists = propertySplits.some(p => p.property.street === property.street && p.property.house === property.house);
+        if (exists) {
+            if (propertySplits.length > 1) { // Prevent removing the last one
+                setPropertySplits(prev => prev.filter(p => !(p.property.street === property.street && p.property.house === property.house)));
+            }
+        } else {
+            setPropertySplits(prev => [...prev, { property, amount: '' }]);
+        }
+    };
+
+    const handleSplitAmountChange = (index: number, value: string) => {
+        const newSplits = [...propertySplits];
+        newSplits[index].amount = value;
+        setPropertySplits(newSplits);
     };
 
     const handleMonthToggle = (monthValue: string) => {
@@ -95,12 +126,12 @@ export default function AdvancePaymentPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        const monthlyAmountNum = parseFloat(monthlyAmount);
-        if (!selectedOwner || selectedMonths.length === 0 || isNaN(monthlyAmountNum) || monthlyAmountNum <= 0) {
+        
+        if (!selectedOwner || selectedMonths.length === 0 || propertySplits.length === 0 || propertySplits.some(p => !p.amount || parseFloat(p.amount) <= 0)) {
             toast({
                 variant: 'destructive',
                 title: 'Datos Incompletos',
-                description: 'Debe seleccionar un propietario, al menos un mes y un monto de cuota válido.',
+                description: 'Debe seleccionar propietario, meses, al menos una propiedad y un monto de cuota válido para cada una.',
             });
             return;
         }
@@ -108,74 +139,75 @@ export default function AdvancePaymentPage() {
         setLoading(true);
 
         try {
-            // Check for existing debts for the selected months to prevent duplicates
-            const existingDebtsQuery = query(
-                collection(db, "debts"),
-                where("ownerId", "==", selectedOwner.id),
-                where("status", "==", "paid"),
-                where("description", "==", "Cuota de Condominio (Pagada por adelantado)")
-            );
-            const existingDebtsSnapshot = await getDocs(existingDebtsQuery);
-            const existingPaidMonths = existingDebtsSnapshot.docs.map(d => {
-                const data = d.data();
-                return `${data.year}-${String(data.month).padStart(2, '0')}`;
-            });
-
-            const duplicates = selectedMonths.filter(m => existingPaidMonths.includes(m));
-            if (duplicates.length > 0) {
-                 const monthLabels = duplicates.map(dup => {
-                    const [year, month] = dup.split('-').map(Number);
-                    const date = new Date(year, month - 1);
-                    return format(date, 'MMMM yyyy', { locale: es });
-                }).join(', ');
-                toast({
-                    variant: 'destructive',
-                    title: 'Meses Duplicados',
-                    description: `Los meses ${monthLabels} ya han sido pagados por adelantado.`,
-                });
-                setLoading(false);
-                return;
-            }
-
             const batch = writeBatch(db);
             const paymentDate = Timestamp.now();
             
-            // 1. Create future 'paid' debt documents for each month
-            selectedMonths.forEach(monthStr => {
+            // Check for duplicates
+             for (const split of propertySplits) {
+                const existingDebtsQuery = query(
+                    collection(db, "debts"),
+                    where("ownerId", "==", selectedOwner.id),
+                    where("property.street", "==", split.property.street),
+                    where("property.house", "==", split.property.house),
+                    where("status", "==", "paid"),
+                    where("description", "==", "Cuota de Condominio (Pagada por adelantado)")
+                );
+                const existingDebtsSnapshot = await getDocs(existingDebtsQuery);
+                const existingPaidMonths = new Set(existingDebtsSnapshot.docs.map(d => `${d.data().year}-${String(d.data().month).padStart(2, '0')}`));
+
+                const duplicates = selectedMonths.filter(m => existingPaidMonths.has(m));
+                if (duplicates.length > 0) {
+                    const monthLabels = duplicates.map(dup => format(new Date(dup.replace('-', '/')), 'MMMM yyyy', { locale: es })).join(', ');
+                    toast({
+                        variant: 'destructive',
+                        title: 'Meses Duplicados',
+                        description: `La propiedad ${split.property.street}-${split.property.house} ya tiene pagos adelantados para: ${monthLabels}.`,
+                    });
+                    setLoading(false);
+                    return;
+                }
+            }
+
+
+            // Create future 'paid' debt documents for each month and each property
+            for (const monthStr of selectedMonths) {
                 const [year, month] = monthStr.split('-').map(Number);
-                const debtRef = doc(collection(db, "debts"));
-                batch.set(debtRef, {
-                    ownerId: selectedOwner.id,
-                    property: selectedOwner.properties[0], // Assuming first property for simplicity
-                    year,
-                    month,
-                    amountUSD: monthlyAmountNum,
-                    description: "Cuota de Condominio (Pagada por adelantado)",
-                    status: 'paid',
-                    paymentDate: paymentDate,
-                    paidAmountUSD: monthlyAmountNum,
-                });
-            });
+                for (const split of propertySplits) {
+                    const monthlyAmountNum = parseFloat(split.amount);
+                    const debtRef = doc(collection(db, "debts"));
+                    batch.set(debtRef, {
+                        ownerId: selectedOwner.id,
+                        property: split.property,
+                        year,
+                        month,
+                        amountUSD: monthlyAmountNum,
+                        description: "Cuota de Condominio (Pagada por adelantado)",
+                        status: 'paid',
+                        paymentDate: paymentDate,
+                        paidAmountUSD: monthlyAmountNum,
+                    });
+                }
+            }
             
-            // 2. Create the main payment document with the total amount
+            // Create the main payment document with the total amount and beneficiaries
             const paymentRef = doc(collection(db, "payments"));
             batch.set(paymentRef, {
-                reportedBy: selectedOwner.id, // Admin is reporting on behalf of owner
-                beneficiaries: [{ 
-                    ownerId: selectedOwner.id, 
+                reportedBy: selectedOwner.id, 
+                beneficiaries: propertySplits.map(split => ({
+                    ownerId: selectedOwner.id,
                     ownerName: selectedOwner.name,
-                    ...selectedOwner.properties[0],
-                    amount: totalAmount 
-                }],
+                    ...split.property,
+                    amount: parseFloat(split.amount) * selectedMonths.length
+                })),
                 beneficiaryIds: [selectedOwner.id],
                 totalAmount: totalAmount,
-                exchangeRate: 1, // Rate is not relevant as we are paying in USD equivalent
+                exchangeRate: 1, // Rate is not relevant for USD advance payments
                 paymentDate: paymentDate,
                 reportedAt: serverTimestamp(),
                 paymentMethod: 'adelanto',
                 bank: 'N/A',
                 reference: `Adelanto ${selectedMonths.join(', ')}`,
-                status: 'aprobado', // Advance payments are approved by definition
+                status: 'aprobado',
                 observations: observations,
             });
 
@@ -188,11 +220,7 @@ export default function AdvancePaymentPage() {
             });
 
             // Reset form
-            setSelectedOwner(null);
-            setSelectedMonths([]);
-            setMonthlyAmount('');
-            setObservations('');
-            setSearchTerm('');
+            resetOwnerSelection();
 
         } catch (error) {
             console.error("Error registering advance payment: ", error);
@@ -211,7 +239,7 @@ export default function AdvancePaymentPage() {
         <div className="space-y-8">
             <div>
                 <h1 className="text-3xl font-bold font-headline">Registrar Pago por Adelantado</h1>
-                <p className="text-muted-foreground">Seleccione un propietario y los meses futuros que desea cancelar.</p>
+                <p className="text-muted-foreground">Seleccione un propietario y los meses futuros que desea cancelar para una o más propiedades.</p>
             </div>
             <form onSubmit={handleSubmit}>
                 <Card>
@@ -280,44 +308,61 @@ export default function AdvancePaymentPage() {
                                     </div>
                                 </Card>
                             </div>
-
-                            <div className="grid md:grid-cols-2 gap-6">
-                                <div className="space-y-2">
-                                    <Label htmlFor="monthlyAmount">3. Monto de Cuota Pagada por Mes (USD)</Label>
+                            
+                            <div className="space-y-4">
+                                <Label className="font-semibold">3. Monto por Propiedad (USD Mensual)</Label>
+                                <Card className="bg-muted/50 p-4 space-y-4">
+                                     {selectedOwner.properties.map(prop => {
+                                        const isSelected = propertySplits.some(p => p.property.street === prop.street && p.property.house === prop.house);
+                                        const splitIndex = propertySplits.findIndex(p => p.property.street === prop.street && p.property.house === prop.house);
+                                        
+                                        return (
+                                            <div key={`${prop.street}-${prop.house}`} className="flex items-center gap-4">
+                                                <Checkbox
+                                                    id={`prop-${prop.house}`}
+                                                    checked={isSelected}
+                                                    onCheckedChange={() => handlePropertySplitToggle(prop)}
+                                                />
+                                                <Label htmlFor={`prop-${prop.house}`} className="flex-1">{prop.street} - {prop.house}</Label>
+                                                <Input
+                                                    type="number"
+                                                    placeholder="Monto USD"
+                                                    className={cn("w-32", !isSelected && "bg-muted/50")}
+                                                    disabled={!isSelected}
+                                                    value={isSelected ? propertySplits[splitIndex].amount : ''}
+                                                    onChange={(e) => handleSplitAmountChange(splitIndex, e.target.value)}
+                                                />
+                                            </div>
+                                        )
+                                     })}
+                                </Card>
+                            </div>
+                           
+                            <div className="grid md:grid-cols-2 gap-6 items-end">
+                                 <div className="space-y-2">
+                                    <Label htmlFor="observations">Observaciones (Opcional)</Label>
                                     <Input
-                                        id="monthlyAmount"
-                                        type="number"
-                                        value={monthlyAmount}
-                                        onChange={(e) => setMonthlyAmount(e.target.value)}
-                                        placeholder="25.00"
-                                        required
+                                        id="observations"
+                                        value={observations}
+                                        onChange={(e) => setObservations(e.target.value)}
+                                        placeholder="Ej: Pago realizado por Zelle"
                                     />
                                 </div>
-                                 <div className="space-y-2">
+                                <div className="space-y-2">
                                     <Label htmlFor="totalAmount">Monto Total a Pagar (USD)</Label>
                                     <Input
                                         id="totalAmount"
                                         type="number"
                                         value={totalAmount.toFixed(2)}
-                                        className="font-bold text-lg bg-muted"
+                                        className="font-bold text-lg bg-background"
                                         readOnly
                                     />
                                     {selectedMonths.length > 0 &&
                                         <p className="text-sm text-muted-foreground">
-                                            {selectedMonths.length} {selectedMonths.length > 1 ? 'meses' : 'mes'} seleccionados
+                                            {selectedMonths.length} {selectedMonths.length > 1 ? 'meses' : 'mes'} x {propertySplits.length} {propertySplits.length > 1 ? 'propiedades' : 'propiedad'}
                                         </p>
                                     }
                                 </div>
-                            </div>
-                            
-                            <div className="space-y-2">
-                                <Label htmlFor="observations">Observaciones (Opcional)</Label>
-                                <Input
-                                    id="observations"
-                                    value={observations}
-                                    onChange={(e) => setObservations(e.target.value)}
-                                    placeholder="Ej: Pago realizado por Zelle"
-                                />
                             </div>
                         </>
                        )}

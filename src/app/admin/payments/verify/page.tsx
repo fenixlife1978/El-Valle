@@ -235,20 +235,26 @@ export default function VerifyPaymentsPage() {
     
                 const paymentData = { id: paymentDoc.id, ...paymentDoc.data() } as FullPayment;
 
-                const settingsRef = doc(db, 'config', 'mainSettings');
-                const settingsSnap = await getDoc(settingsRef);
-                if (!settingsSnap.exists()) throw new Error('No se encontró el documento de configuración.');
-                
-                const allRates = (settingsSnap.data().exchangeRates || []) as {date: string, rate: number}[];
-                const paymentDateString = format(paymentData.paymentDate.toDate(), 'yyyy-MM-dd');
-                const applicableRates = allRates
-                    .filter(r => r.date <= paymentDateString)
-                    .sort((a, b) => b.date.localeCompare(a.date));
+                // For 'adelanto' payments, the rate is irrelevant.
+                if (paymentData.type !== 'adelanto') {
+                    const settingsRef = doc(db, 'config', 'mainSettings');
+                    const settingsSnap = await getDoc(settingsRef);
+                    if (!settingsSnap.exists()) throw new Error('No se encontró el documento de configuración.');
+                    
+                    const allRates = (settingsSnap.data().exchangeRates || []) as {date: string, rate: number}[];
+                    const paymentDateString = format(paymentData.paymentDate.toDate(), 'yyyy-MM-dd');
+                    const applicableRates = allRates
+                        .filter(r => r.date <= paymentDateString)
+                        .sort((a, b) => b.date.localeCompare(a.date));
 
-                const exchangeRate = applicableRates.length > 0 ? applicableRates[0].rate : 0;
-                
-                if (!exchangeRate || exchangeRate <= 0) throw new Error('La tasa de cambio para este pago es inválida o no está definida.');
-                if (condoFee <= 0) throw new Error('La cuota de condominio no está configurada.');
+                    const exchangeRate = applicableRates.length > 0 ? applicableRates[0].rate : 0;
+                    
+                    if (!exchangeRate || exchangeRate <= 0) throw new Error('La tasa de cambio para este pago es inválida o no está definida.');
+                    paymentData.exchangeRate = exchangeRate; // Update paymentData with the correct rate
+                }
+
+
+                if (condoFee <= 0 && paymentData.type !== 'adelanto') throw new Error('La cuota de condominio no está configurada.');
                 
                 const allBeneficiaryIds = Array.from(new Set(paymentData.beneficiaries.map(b => b.ownerId)));
                 if (allBeneficiaryIds.length === 0) throw new Error("El pago no tiene beneficiarios definidos.");
@@ -289,7 +295,7 @@ export default function VerifyPaymentsPage() {
                     if (sortedDebts.length > 0) {
                         for (const debtDoc of sortedDebts) {
                             const debt = { id: debtDoc.id, ...debtDoc.data() } as Debt;
-                            const debtAmountInCents = Math.round(debt.amountUSD * exchangeRate * 100);
+                            const debtAmountInCents = Math.round(debt.amountUSD * paymentData.exchangeRate * 100);
                             
                             if (availableFundsInCents >= debtAmountInCents) {
                                 availableFundsInCents -= debtAmountInCents;
@@ -303,7 +309,7 @@ export default function VerifyPaymentsPage() {
                         }
                     }
                     
-                    const condoFeeInCents = Math.round(condoFee * exchangeRate * 100);
+                    const condoFeeInCents = Math.round(condoFee * paymentData.exchangeRate * 100);
                     if (availableFundsInCents >= condoFeeInCents) {
                         const allExistingDebtsQuery = query(collection(db, 'debts'), where('ownerId', '==', ownerId));
                         const allExistingDebtsSnap = await getDocs(allExistingDebtsQuery);
@@ -343,10 +349,10 @@ export default function VerifyPaymentsPage() {
                     }
                     
                     const finalBalance = availableFundsInCents / 100;
-                    const observationNote = `Pago por Bs. ${formatToTwoDecimals(paymentAmountForOwner)}. Tasa aplicada: Bs. ${formatToTwoDecimals(exchangeRate)}. Saldo Anterior: Bs. ${formatToTwoDecimals(initialBalance)}. Saldo a Favor Actual: Bs. ${formatToTwoDecimals(finalBalance)}.`;
+                    const observationNote = `Pago por Bs. ${formatToTwoDecimals(paymentAmountForOwner)}. Tasa aplicada: Bs. ${formatToTwoDecimals(paymentData.exchangeRate)}. Saldo Anterior: Bs. ${formatToTwoDecimals(initialBalance)}. Saldo a Favor Actual: Bs. ${formatToTwoDecimals(finalBalance)}.`;
                     
                     transaction.update(ownerRef, { balance: finalBalance, receiptCounter: newReceiptCounter });
-                    transaction.update(paymentRef, { status: 'aprobado', observations: observationNote, exchangeRate: exchangeRate, receiptNumber: receiptNumber });
+                    transaction.update(paymentRef, { status: 'aprobado', observations: observationNote, exchangeRate: paymentData.exchangeRate, receiptNumber: receiptNumber });
                 }
             });
     
@@ -562,7 +568,25 @@ export default function VerifyPaymentsPage() {
             didDrawPage: (data: any) => { startY = data.cursor.y; }
         });
         startY = (doc as any).lastAutoTable.finalY + 8;
-    } else {
+    } else if (payment.type === 'adelanto') {
+        // Special case for advance payments that don't liquidate existing debts
+        totalPaidInConcepts = payment.totalAmount; // totalAmount is in USD for advances
+        (doc as any).autoTable({
+            startY: startY,
+            head: [['Concepto', 'Propiedades Beneficiadas', 'Monto Pagado ($)']],
+            body: payment.beneficiaries.map(b => [
+                'Pago por Adelantado',
+                `${b.street} - ${b.house}`,
+                `$${formatToTwoDecimals(b.amount)}`,
+            ]),
+            theme: 'striped',
+            headStyles: { fillColor: [44, 62, 80], textColor: 255 },
+            styles: { fontSize: 9, cellPadding: 2.5 },
+            didDrawPage: (data: any) => { startY = data.cursor.y; }
+        });
+         startY = (doc as any).lastAutoTable.finalY + 8;
+    }
+     else {
         totalPaidInConcepts = payment.totalAmount;
         (doc as any).autoTable({
             startY: startY,
@@ -578,7 +602,7 @@ export default function VerifyPaymentsPage() {
     
     // Totals Section
     const totalLabel = "TOTAL PAGADO:";
-    const totalValue = `Bs. ${formatToTwoDecimals(totalPaidInConcepts)}`;
+    const totalValue = payment.type === 'adelanto' ? `$${formatToTwoDecimals(totalPaidInConcepts)}` : `Bs. ${formatToTwoDecimals(totalPaidInConcepts)}`;
     doc.setFontSize(11).setFont('helvetica', 'bold');
     const totalValueWidth = doc.getStringUnitWidth(totalValue) * 11 / doc.internal.scaleFactor;
     doc.text(totalValue, pageWidth - margin, startY, { align: 'right' });
@@ -847,6 +871,8 @@ export default function VerifyPaymentsPage() {
 
 
 
+
+    
 
     
 
