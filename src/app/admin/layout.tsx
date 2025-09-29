@@ -48,7 +48,6 @@ const adminNavItems: NavItem[] = [
 ];
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
-    const router = useRouter();
     const [loading, setLoading] = useState(true);
     const [userName, setUserName] = useState('Administrador');
 
