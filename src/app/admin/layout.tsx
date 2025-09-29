@@ -12,10 +12,14 @@ import {
     RefreshCw,
     TrendingUp,
 } from 'lucide-react';
-import { type ReactNode, useEffect, useState } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
 import { Loader2 } from 'lucide-react';
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
+import { app, db } from '@/lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
+
 
 const adminNavItems: NavItem[] = [
     { href: "/admin/dashboard", icon: Home, label: "Dashboard" },
@@ -49,19 +53,25 @@ const adminNavItems: NavItem[] = [
 export default function AdminLayout({ children }: { children: ReactNode }) {
     const router = useRouter();
     const [loading, setLoading] = useState(true);
-    
+    const [userName, setUserName] = useState('Administrador');
+
     useEffect(() => {
-        // SIMULATE ADMIN SESSION FOR TEMPORARY ACCESS
-        const adminSession = {
-            uid: 'valle-admin-main-account',
-            email: 'vallecondo@gmail.com',
-            role: 'administrador',
-            name: 'Valle Admin',
-            passwordChanged: true,
-        };
-        localStorage.setItem('user-session', JSON.stringify(adminSession));
+        const userSession = localStorage.getItem('user-session');
+        if (!userSession) {
+            router.push('/login?role=administrador');
+            return;
+        }
+        
+        const parsedSession = JSON.parse(userSession);
+        if (parsedSession.role !== 'administrador') {
+            router.push('/login?role=administrador');
+            return;
+        }
+        
+        setUserName(parsedSession.name || 'Administrador');
         setLoading(false);
-    }, []);
+
+    }, [router]);
 
     if (loading) {
         return (
@@ -72,7 +82,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     }
 
     return (
-        <DashboardLayout userName="Valle Admin" userRole="Administrador" navItems={adminNavItems}>
+        <DashboardLayout userName={userName} userRole="Administrador" navItems={adminNavItems}>
             {children}
         </DashboardLayout>
     );
