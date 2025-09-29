@@ -83,7 +83,9 @@ function LoginContent() {
         } catch (error: any) {
             console.error('Login error:', error);
             let description = 'Ocurrió un error inesperado. Por favor, intente de nuevo.';
-            if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+            if (error.code === 'auth/operation-not-allowed') {
+                description = 'El inicio de sesión con Correo/Contraseña no está habilitado. Por favor, actívelo en la consola de Firebase > Authentication > Sign-in method.';
+            } else if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
                 description = 'El correo o la contraseña son incorrectos.';
             }
             toast({ variant: 'destructive', title: 'Error de Autenticación', description: description });
