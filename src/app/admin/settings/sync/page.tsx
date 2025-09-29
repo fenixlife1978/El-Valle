@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -20,6 +21,40 @@ type MissingProfile = AuthUser & {
     existsInDb: boolean;
 };
 
+// This function is defined outside the component to be potentially reusable if needed.
+export const ensureAdminProfile = async (showToast?: (options: any) => void) => {
+    const adminId = 'valle-admin-main-account'; // A hardcoded, unique ID for the main admin
+    const adminEmail = 'vallecondo@gmail.com';
+    const adminName = 'Valle Admin';
+    const adminRef = doc(db, "owners", adminId);
+    
+    try {
+        const adminSnap = await getDoc(adminRef);
+
+        if (!adminSnap.exists()) {
+            await setDoc(adminRef, {
+                name: adminName,
+                email: adminEmail,
+                role: 'administrador',
+                balance: 0,
+                properties: [{ street: 'N/A', house: 'N/A' }],
+                passwordChanged: true, 
+                creadoPor: "sistema-inicializacion",
+                fechaCreacion: Timestamp.now()
+            });
+            if (showToast) {
+                showToast({ title: "Perfil de Administrador Creado", description: "El perfil principal de administrador fue creado exitosamente." });
+            }
+        }
+    } catch (error) {
+        console.error("Error creating or verifying admin profile:", error);
+        if (showToast) {
+            showToast({ variant: 'destructive', title: 'Error Crítico', description: 'No se pudo crear o verificar el perfil del administrador.' });
+        }
+    }
+};
+
+
 export default function SyncProfilesPage() {
     const { toast } = useToast();
     const [loading, setLoading] = useState(true);
@@ -27,48 +62,14 @@ export default function SyncProfilesPage() {
     const [missingProfiles, setMissingProfiles] = useState<MissingProfile[]>([]);
     const [allUsers, setAllUsers] = useState<AuthUser[]>([]);
 
-    const ensureAdminProfile = useCallback(async () => {
-        const adminId = 'valle-admin-main-account'; // A hardcoded, unique ID for the main admin
-        const adminEmail = 'vallecondo@gmail.com';
-        const adminName = 'Valle Admin';
-        const adminRef = doc(db, "owners", adminId);
-        const adminSnap = await getDoc(adminRef);
-
-        if (!adminSnap.exists()) {
-            try {
-                await setDoc(adminRef, {
-                    name: adminName,
-                    email: adminEmail,
-                    role: 'administrador',
-                    balance: 0,
-                    properties: [{ street: 'N/A', house: 'N/A' }],
-                    passwordChanged: true, 
-                    creadoPor: "sistema-inicializacion",
-                    fechaCreacion: Timestamp.now()
-                });
-                toast({ title: "Perfil de Administrador Creado", description: "El perfil principal de administrador fue creado exitosamente." });
-            } catch (error) {
-                console.error("Error creating admin profile:", error);
-                toast({ variant: 'destructive', title: 'Error Crítico', description: 'No se pudo crear el perfil del administrador.' });
-            }
-        }
-    }, [toast]);
-
-
     const checkForMissingProfiles = useCallback(async () => {
         setLoading(true);
 
         try {
-            // This is a placeholder for fetching all Firebase Auth users.
-            // In a real client-side app, you can't list all users.
-            // This example simulates it by checking the currently logged-in user.
-            // For a full implementation, this should be a Cloud Function.
-            
-            await ensureAdminProfile();
+            await ensureAdminProfile(toast);
             
             const currentUser = auth.currentUser;
             
-            // In a real scenario, you'd fetch this list from your backend/cloud function
             const simulatedUserList: AuthUser[] = currentUser ? [{
                 uid: currentUser.uid,
                 email: currentUser.email,
@@ -102,10 +103,9 @@ export default function SyncProfilesPage() {
         } finally {
             setLoading(false);
         }
-    }, [toast, ensureAdminProfile]);
+    }, [toast]);
 
     useEffect(() => {
-        // This is a simplified check. A real implementation would require a backend call.
         checkForMissingProfiles();
     }, [checkForMissingProfiles]);
 
