@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useRef, useEffect } from 'react';
@@ -184,7 +185,7 @@ export default function PeopleManagementPage() {
             toast({ variant: 'destructive', title: 'Error de Validación', description: 'Nombre, Email, calle y casa son obligatorios.' });
             return;
         }
-
+    
         const { id, ...ownerData } = currentOwner;
         const balanceValue = parseFloat(String(ownerData.balance).replace(',', '.') || '0');
         const dataToSave: any = {
@@ -195,18 +196,26 @@ export default function PeopleManagementPage() {
             balance: isNaN(balanceValue) ? 0 : balanceValue,
             passwordChanged: ownerData.passwordChanged || false,
         };
-        
+    
         try {
             if (id) { // Editing existing owner
                 const ownerRef = doc(db, "owners", id);
                 await updateDoc(ownerRef, dataToSave);
                 toast({ title: 'Propietario Actualizado', description: 'Los datos han sido guardados exitosamente.' });
             } else { // Creating new owner
-                // This would be a cloud function call in a real app to protect credentials
-                // For simplicity, we simulate the result. A real implementation is needed.
-                const newOwnerRef = doc(collection(db, "owners"));
+                // This is a simplified creation process that does NOT create an Auth user.
+                // A real implementation would require a Cloud Function to create the auth user securely.
+                
+                // For now, we use the email as the document ID for predictability IF it's the main admin.
+                const newId = dataToSave.email === 'vallecondo@gmail.com' ? ADMIN_USER_ID : null;
+                const newOwnerRef = newId ? doc(db, "owners", newId) : doc(collection(db, "owners"));
+                
                 await setDoc(newOwnerRef, dataToSave);
-                toast({ title: 'Propietario Agregado', description: `Se ha creado el perfil para ${dataToSave.name}. Se necesita acción manual en Firebase para crear su cuenta de autenticación con la contraseña '123456'.` });
+                
+                toast({ 
+                    title: 'Propietario Agregado', 
+                    description: `Se ha creado el perfil para ${dataToSave.name}. Ahora debe crear manualmente la cuenta de autenticación en Firebase con la contraseña '123456'.` 
+                });
             }
         } catch (error: any) {
             console.error("Error saving owner: ", error);
@@ -331,13 +340,13 @@ export default function PeopleManagementPage() {
                 
                 const ownersMap: { [key: string]: Partial<Owner> } = {};
                 (json as any[]).forEach(item => {
-                    if (!item.name) return; // Name is the minimum requirement
-                    const key = (item.email || item.name).toLowerCase(); // Use name as key if email is missing
+                    if (!item.name || !item.email) return; 
+                    const key = item.email.toLowerCase();
                     if (!ownersMap[key]) {
                         const balanceNum = parseFloat(item.balance);
                         ownersMap[key] = {
                             name: item.name,
-                            email: item.email || undefined,
+                            email: item.email,
                             balance: isNaN(balanceNum) ? 0 : parseFloat(balanceNum.toFixed(2)),
                             role: (item.role === 'administrador' || item.role === 'propietario') ? item.role : 'propietario',
                             properties: []
@@ -353,9 +362,9 @@ export default function PeopleManagementPage() {
                 let successCount = 0;
                 
                 for (const ownerData of newOwners) {
-                    if (ownerData.name === 'EDWIN AGUIAR' || !ownerData.email) continue;
+                    if (ownerData.email === 'vallecondo@gmail.com') continue;
                     if (ownerData.properties && ownerData.properties.length > 0) {
-                        const ownerDocRef = doc(collection(db, "owners"));
+                        const ownerDocRef = doc(collection(db, "owners")); // Always generate new ID for imports
                          batch.set(ownerDocRef, { ...ownerData, passwordChanged: false });
                          successCount++;
                     }
@@ -365,7 +374,7 @@ export default function PeopleManagementPage() {
 
                 toast({
                     title: 'Importación Completada',
-                    description: `${successCount} de ${newOwners.length} registros han sido agregados. La creación de cuentas de autenticación debe realizarse manualmente en Firebase.`,
+                    description: `${successCount} de ${newOwners.length} registros han sido agregados. La creación de cuentas de autenticación debe realizarse manualmente.`,
                     className: 'bg-green-100 border-green-400 text-green-800'
                 });
 
