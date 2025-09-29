@@ -53,22 +53,18 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     const [userName, setUserName] = useState('Administrador');
 
     useEffect(() => {
-        const userSession = localStorage.getItem('user-session');
-        if (!userSession) {
-            router.push('/login?role=administrador');
-            return;
-        }
-        
-        const parsedSession = JSON.parse(userSession);
-        if (parsedSession.role !== 'administrador') {
-            router.push('/login?role=administrador');
-            return;
-        }
-        
-        setUserName(parsedSession.name || 'Valle Admin');
+        // SIMULATE ADMIN SESSION FOR TEMPORARY ACCESS
+        const adminSession = {
+            uid: 'valle-admin-main-account',
+            email: 'vallecondo@gmail.com',
+            role: 'administrador',
+            name: 'Valle Admin',
+            passwordChanged: true,
+        };
+        localStorage.setItem('user-session', JSON.stringify(adminSession));
+        setUserName(adminSession.name);
         setLoading(false);
-
-    }, [router]);
+    }, []);
 
     if (loading) {
         return (
