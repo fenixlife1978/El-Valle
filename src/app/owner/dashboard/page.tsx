@@ -265,7 +265,10 @@ export default function OwnerDashboardPage() {
         const paidDebtsSnapshot = await getDocs(paidDebtsQuery);
         const paidDebts = paidDebtsSnapshot.docs
             .map(doc => ({id: doc.id, ...doc.data()}) as Debt)
-            .sort((a,b) => b.year - a.year || b.month - b.month);
+            .sort((a,b) => {
+                if (a.year !== b.year) return a.year - b.year;
+                return a.month - b.month;
+            });
         
         setReceiptData({ 
             payment, 
@@ -655,3 +658,4 @@ export default function OwnerDashboardPage() {
 
 
     
+
