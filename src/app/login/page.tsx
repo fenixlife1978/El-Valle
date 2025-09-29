@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, Suspense, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Building2, Loader2, KeyRound, Mail, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { db, app } from '@/lib/firebase';
 import Link from 'next/link';
+import { ensureAdminProfile } from '@/app/admin/settings/sync/page';
 
 function LoginContent() {
     const router = useRouter();
@@ -24,21 +25,22 @@ function LoginContent() {
     const auth = getAuth(app);
     
     const [isMounted, setIsMounted] = useState(false);
-    useEffect(() => {
-        setIsMounted(true);
-        return () => setIsMounted(false);
-    }, []);
 
     useEffect(() => {
+        setIsMounted(true);
         const roleParam = searchParams.get('role');
         if (roleParam === 'propietario' || roleParam === 'administrador') {
             setRole(roleParam);
-        } else {
-            if (isMounted) {
-                router.push('/');
+            if (roleParam === 'administrador') {
+                // Pre-run the check to ensure the admin profile exists in Firestore
+                ensureAdminProfile();
             }
+        } else {
+             router.push('/');
         }
-    }, [searchParams, router, isMounted]);
+        return () => setIsMounted(false);
+    }, [searchParams, router]);
+
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
