@@ -12,7 +12,7 @@ import {
     RefreshCw,
     TrendingUp,
 } from 'lucide-react';
-import type { ReactNode, useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
 import { Loader2 } from 'lucide-react';
