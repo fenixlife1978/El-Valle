@@ -22,6 +22,13 @@ function LoginContent() {
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const auth = getAuth(app);
+    
+    // Ensure we don't update state after component unmounts
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => {
+        setMounted(true);
+        return () => setMounted(false);
+    }, []);
 
     useEffect(() => {
         const roleParam = searchParams.get('role');
@@ -54,7 +61,7 @@ function LoginContent() {
                     // Role check
                     if (userData.role !== role) {
                         toast({ variant: 'destructive', title: 'Acceso Denegado', description: `Esta cuenta no tiene permisos de ${role}.` });
-                        setLoading(false);
+                        if (mounted) setLoading(false);
                         return;
                     }
 
@@ -78,6 +85,7 @@ function LoginContent() {
                     }
                 } else {
                      toast({ variant: 'destructive', title: 'Error', description: 'No se encontró un perfil asociado a esta cuenta.' });
+                     if (mounted) setLoading(false);
                 }
             }
         } catch (error: any) {
@@ -95,13 +103,6 @@ function LoginContent() {
             }
         }
     };
-    
-    // Ensure we don't update state after component unmounts
-    const [mounted, setMounted] = useState(false);
-    useEffect(() => {
-        setMounted(true);
-        return () => setMounted(false);
-    }, []);
 
     if (!role) {
         return (
