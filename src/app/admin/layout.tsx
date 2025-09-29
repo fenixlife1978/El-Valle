@@ -12,8 +12,10 @@ import {
     RefreshCw,
     TrendingUp,
 } from 'lucide-react';
-import type { ReactNode } from 'react';
+import type { ReactNode, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
+import { Loader2 } from 'lucide-react';
 
 const adminNavItems: NavItem[] = [
     { href: "/admin/dashboard", icon: Home, label: "Dashboard" },
@@ -45,6 +47,30 @@ const adminNavItems: NavItem[] = [
 ];
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
+    const router = useRouter();
+    const [loading, setLoading] = useState(true);
+    
+    useEffect(() => {
+        // SIMULATE ADMIN SESSION FOR TEMPORARY ACCESS
+        const adminSession = {
+            uid: 'valle-admin-main-account',
+            email: 'vallecondo@gmail.com',
+            role: 'administrador',
+            name: 'Valle Admin',
+            passwordChanged: true,
+        };
+        localStorage.setItem('user-session', JSON.stringify(adminSession));
+        setLoading(false);
+    }, []);
+
+    if (loading) {
+        return (
+             <div className="flex h-screen w-full items-center justify-center bg-background">
+                <Loader2 className="h-10 w-10 animate-spin text-primary" />
+            </div>
+        )
+    }
+
     return (
         <DashboardLayout userName="Valle Admin" userRole="Administrador" navItems={adminNavItems}>
             {children}
