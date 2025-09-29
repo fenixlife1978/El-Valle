@@ -101,7 +101,7 @@ const formatToTwoDecimals = (num: number) => {
 };
 
 
-const ADMIN_USER_ID = 'G2jhcEnp05TcvjYj8SwhzVCHbW83'; // EDWIN AGUIAR's ID
+const ADMIN_USER_ID = 'valle-admin-main-account';
 
 export default function DebtManagementPage() {
     const [view, setView] = useState<View>('list');
