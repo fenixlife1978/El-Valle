@@ -23,11 +23,10 @@ function LoginContent() {
     const [loading, setLoading] = useState(false);
     const auth = getAuth(app);
     
-    // Ensure we don't update state after component unmounts
-    const [mounted, setMounted] = useState(false);
+    const [isMounted, setIsMounted] = useState(false);
     useEffect(() => {
-        setMounted(true);
-        return () => setMounted(false);
+        setIsMounted(true);
+        return () => setIsMounted(false);
     }, []);
 
     useEffect(() => {
@@ -35,9 +34,11 @@ function LoginContent() {
         if (roleParam === 'propietario' || roleParam === 'administrador') {
             setRole(roleParam);
         } else {
-            router.push('/'); // Redirect if role is invalid
+            if (isMounted) {
+                router.push('/');
+            }
         }
-    }, [searchParams, router]);
+    }, [searchParams, router, isMounted]);
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -58,10 +59,9 @@ function LoginContent() {
                 if (userDocSnap.exists()) {
                     const userData = userDocSnap.data();
 
-                    // Role check
                     if (userData.role !== role) {
                         toast({ variant: 'destructive', title: 'Acceso Denegado', description: `Esta cuenta no tiene permisos de ${role}.` });
-                        if (mounted) setLoading(false);
+                        if (isMounted) setLoading(false);
                         return;
                     }
 
@@ -85,7 +85,7 @@ function LoginContent() {
                     }
                 } else {
                      toast({ variant: 'destructive', title: 'Error', description: 'No se encontró un perfil asociado a esta cuenta.' });
-                     if (mounted) setLoading(false);
+                     if (isMounted) setLoading(false);
                 }
             }
         } catch (error: any) {
@@ -98,7 +98,7 @@ function LoginContent() {
             }
             toast({ variant: 'destructive', title: 'Error de Autenticación', description: description });
         } finally {
-            if (mounted) {
+            if (isMounted) {
                 setLoading(false);
             }
         }
