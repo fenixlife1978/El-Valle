@@ -46,7 +46,7 @@ const adminNavItems: NavItem[] = [
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
     return (
-        <DashboardLayout userName="Edwin Aguiar" userRole="Administrador" navItems={adminNavItems}>
+        <DashboardLayout userName="Valle Admin" userRole="Administrador" navItems={adminNavItems}>
             {children}
         </DashboardLayout>
     );

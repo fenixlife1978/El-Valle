@@ -27,6 +27,34 @@ export default function SyncProfilesPage() {
     const [missingProfiles, setMissingProfiles] = useState<MissingProfile[]>([]);
     const [allUsers, setAllUsers] = useState<AuthUser[]>([]);
 
+    const ensureAdminProfile = useCallback(async () => {
+        const adminId = 'valle-admin-main-account';
+        const adminEmail = 'Vallecondo@gmail.com';
+        const adminName = 'Valle Admin';
+        const adminRef = doc(db, "owners", adminId);
+        const adminSnap = await getDoc(adminRef);
+
+        if (!adminSnap.exists()) {
+            try {
+                await setDoc(adminRef, {
+                    name: adminName,
+                    email: adminEmail,
+                    role: 'administrador',
+                    balance: 0,
+                    properties: [],
+                    passwordChanged: true, 
+                    creadoPor: "sistema-inicializacion",
+                    fechaCreacion: Timestamp.now()
+                });
+                toast({ title: "Perfil de Administrador Creado", description: "El perfil principal de administrador fue creado exitosamente." });
+            } catch (error) {
+                console.error("Error creating admin profile:", error);
+                toast({ variant: 'destructive', title: 'Error Crítico', description: 'No se pudo crear el perfil del administrador.' });
+            }
+        }
+    }, [toast]);
+
+
     const checkForMissingProfiles = useCallback(async () => {
         setLoading(true);
 
@@ -35,6 +63,8 @@ export default function SyncProfilesPage() {
             // In a real client-side app, you can't list all users.
             // This example simulates it by checking the currently logged-in user.
             // For a full implementation, this should be a Cloud Function.
+            
+            await ensureAdminProfile();
             
             const currentUser = auth.currentUser;
             
@@ -72,7 +102,7 @@ export default function SyncProfilesPage() {
         } finally {
             setLoading(false);
         }
-    }, [toast]);
+    }, [toast, ensureAdminProfile]);
 
     useEffect(() => {
         // This is a simplified check. A real implementation would require a backend call.

@@ -64,7 +64,7 @@ const getHousesForStreet = (street: string) => {
     return Array.from({ length: houseCount }, (_, i) => `Casa ${i + 1}`);
 };
 
-const ADMIN_USER_ID = 'G2jhcEnp05TcvjYj8SwhzVCHbW83'; 
+const ADMIN_USER_ID = 'valle-admin-main-account'; 
 
 const formatToTwoDecimals = (num: number) => {
     if (typeof num !== 'number' || isNaN(num)) return '0,00';
