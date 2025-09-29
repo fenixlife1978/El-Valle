@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo, useRef, useEffect } from 'react';
@@ -209,7 +208,7 @@ export default function PeopleManagementPage() {
                 // A real implementation would require a Cloud Function to create the auth user securely.
                 
                 // For now, we use the email as the document ID for predictability IF it's the main admin.
-                const newId = dataToSave.email === 'vallecondo@gmail.com' ? ADMIN_USER_ID : null;
+                const newId = dataToSave.email.toLowerCase() === 'vallecondo@gmail.com' ? ADMIN_USER_ID : null;
                 const newOwnerRef = newId ? doc(db, "owners", newId) : doc(collection(db, "owners"));
                 
                 await setDoc(newOwnerRef, dataToSave);

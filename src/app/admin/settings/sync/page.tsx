@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -42,7 +41,7 @@ export default function SyncProfilesPage() {
                     email: adminEmail,
                     role: 'administrador',
                     balance: 0,
-                    properties: [],
+                    properties: [{ street: 'N/A', house: 'N/A' }],
                     passwordChanged: true, 
                     creadoPor: "sistema-inicializacion",
                     fechaCreacion: Timestamp.now()
