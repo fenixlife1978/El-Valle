@@ -6,7 +6,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/componentsui/table";
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from "@/lib/utils";
@@ -155,9 +155,10 @@ const formatToTwoDecimals = (num: number) => {
 // Custom Label for Bar Charts
 const CustomBarLabel = (props: any) => {
     const { x, y, width, value } = props;
+    const formattedValue = `$${Math.round(value)}`;
     return (
-        <text x={x + width / 2} y={y} fill="#fff" textAnchor="middle" dy={-6} fontSize="12" fontWeight="bold">
-            {`$${Math.round(value)}`}
+        <text x={x + width / 2} y={y} fill="#fff" textAnchor="middle" dy={-6} fontSize="12" fontWeight="bold" transform={`rotate(-90, ${x + width / 2}, ${y})`}>
+            {formattedValue}
         </text>
     );
 };
@@ -1943,11 +1944,12 @@ export default function ReportsPage() {
                              <div className="p-4 bg-gray-800 text-white rounded-lg" id="debt-chart-container">
                                 <h3 className="font-semibold text-center mb-4">Deudas Actuales por Calle (USD)</h3>
                                 {debtsByStreetChartData.length > 0 ? (
-                                <ResponsiveContainer width="100%" height={350}>
-                                    <BarChart data={debtsByStreetChartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                                <ResponsiveContainer width="100%" height={450}>
+                                    <BarChart data={debtsByStreetChartData} margin={{ top: 40, right: 30, left: 20, bottom: 60 }}>
                                         <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
-                                        <XAxis dataKey="name" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
+                                        <XAxis dataKey="name" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} angle={-90} textAnchor="end" height={50} interval={0} />
                                         <YAxis stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
+                                        <Tooltip cursor={{fill: 'rgba(255, 255, 255, 0.1)'}} contentStyle={{backgroundColor: '#334155', border: 'none', borderRadius: '0.5rem'}} />
                                         <Bar dataKey="TotalDeuda" fill="#dc2626" name="Deuda Total (USD)" radius={[4, 4, 0, 0]}>
                                             <LabelList dataKey="TotalDeuda" content={<CustomBarLabel />} />
                                         </Bar>
@@ -1964,11 +1966,12 @@ export default function ReportsPage() {
                              <div className="p-4 bg-gray-800 text-white rounded-lg" id="income-chart-container">
                                 <h3 className="font-semibold text-center mb-4">Ingresos por Calle (USD)</h3>
                                 {incomeByStreetChartData.length > 0 ? (
-                                <ResponsiveContainer width="100%" height={350}>
-                                    <BarChart data={incomeByStreetChartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                                <ResponsiveContainer width="100%" height={450}>
+                                    <BarChart data={incomeByStreetChartData} margin={{ top: 40, right: 30, left: 20, bottom: 60 }}>
                                         <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
-                                        <XAxis dataKey="name" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
+                                        <XAxis dataKey="name" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} angle={-90} textAnchor="end" height={50} interval={0} />
                                         <YAxis stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
+                                        <Tooltip cursor={{fill: 'rgba(255, 255, 255, 0.1)'}} contentStyle={{backgroundColor: '#334155', border: 'none', borderRadius: '0.5rem'}} />
                                         <Bar dataKey="TotalIngresos" fill="#2563eb" name="Ingreso Total (USD)" radius={[4, 4, 0, 0]}>
                                             <LabelList dataKey="TotalIngresos" content={<CustomBarLabel />} />
                                         </Bar>
