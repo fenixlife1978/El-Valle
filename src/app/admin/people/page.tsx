@@ -75,6 +75,13 @@ const formatToTwoDecimals = (num: number) => {
     return truncated.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
+const getSortKeys = (owner: Owner) => {
+    const prop = (owner.properties && owner.properties.length > 0) ? owner.properties[0] : { street: 'N/A', house: 'N/A' };
+    const streetNum = parseInt(String(prop.street || '').replace('Calle ', '') || '999');
+    const houseNum = parseInt(String(prop.house || '').replace('Casa ', '') || '999');
+    return { streetNum, houseNum };
+};
+
 export default function PeopleManagementPage() {
     const [owners, setOwners] = useState<Owner[]>([]);
     const [loading, setLoading] = useState(true);
@@ -97,13 +104,6 @@ export default function PeopleManagementPage() {
                     ownersData.push({ id: doc.id, ...data, balance: data.balance ?? 0 } as Owner);
                 }
             });
-            
-            const getSortKeys = (owner: Owner) => {
-                const prop = (owner.properties && owner.properties.length > 0) ? owner.properties[0] : { street: 'N/A', house: 'N/A' };
-                const streetNum = parseInt(String(prop.street || '').replace('Calle ', '') || '999');
-                const houseNum = parseInt(String(prop.house || '').replace('Casa ', '') || '999');
-                return { streetNum, houseNum };
-            };
 
             ownersData.sort((a, b) => {
                 const aKeys = getSortKeys(a);
@@ -171,7 +171,6 @@ export default function PeopleManagementPage() {
     const confirmDelete = async () => {
         if (ownerToDelete) {
              try {
-                // Here you would also call a cloud function to delete the auth user
                 await deleteDoc(doc(db, "owners", ownerToDelete.id));
                 toast({ title: 'Propietario Eliminado', description: `${ownerToDelete.name} ha sido eliminado de la base de datos.` });
             } catch (error) {
@@ -207,15 +206,8 @@ export default function PeopleManagementPage() {
                 await updateDoc(ownerRef, dataToSave);
                 toast({ title: 'Propietario Actualizado', description: 'Los datos han sido guardados exitosamente.' });
             } else { // Creating new owner
-                // This is a simplified creation process that does NOT create an Auth user.
-                // A real implementation would require a Cloud Function to create the auth user securely.
-                
-                // For now, we use the email as the document ID for predictability IF it's the main admin.
-                const newId = dataToSave.email.toLowerCase() === 'vallecondo@gmail.com' ? ADMIN_USER_ID : null;
-                const newOwnerRef = newId ? doc(db, "owners", newId) : doc(collection(db, "owners"));
-                
+                const newOwnerRef = doc(collection(db, "owners"));
                 await setDoc(newOwnerRef, dataToSave);
-                
                 toast({ 
                     title: 'Propietario Agregado', 
                     description: `Se ha creado el perfil para ${dataToSave.name}. Ahora debe crear manualmente la cuenta de autenticación en Firebase con la contraseña '123456'.` 
@@ -503,7 +495,7 @@ export default function PeopleManagementPage() {
                                                             <Edit className="mr-2 h-4 w-4" />
                                                             Editar
                                                         </DropdownMenuItem>
-                                                        {owner.id !== ADMIN_USER_ID && ( // Prevent admin deletion
+                                                        {owner.id !== ADMIN_USER_ID && (
                                                             <DropdownMenuItem onClick={() => handleDeleteOwner(owner)} className="text-destructive focus:text-destructive focus:bg-destructive/10">
                                                                 <Trash2 className="mr-2 h-4 w-4" />
                                                                 Eliminar
@@ -619,7 +611,3 @@ export default function PeopleManagementPage() {
         </div>
     );
 }
-
-    
-
-    
