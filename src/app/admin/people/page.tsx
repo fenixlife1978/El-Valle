@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useRef, useEffect } from 'react';
@@ -92,7 +93,10 @@ export default function PeopleManagementPage() {
             const ownersData: Owner[] = [];
             snapshot.forEach((doc) => {
                 const data = doc.data();
-                ownersData.push({ id: doc.id, ...data, balance: data.balance ?? 0 } as Owner);
+                // Exclude admin users from the list
+                if (doc.id !== ADMIN_USER_ID) {
+                    ownersData.push({ id: doc.id, ...data, balance: data.balance ?? 0 } as Owner);
+                }
             });
             
             const getSortKeys = (owner: Owner) => {
@@ -616,3 +620,5 @@ export default function PeopleManagementPage() {
         </div>
     );
 }
+
+    
