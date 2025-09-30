@@ -12,10 +12,8 @@ import {
     RefreshCw,
     TrendingUp,
 } from 'lucide-react';
-import { ReactNode, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { ReactNode, useState } from 'react';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
-import { Loader2 } from 'lucide-react';
 
 
 const adminNavItems: NavItem[] = [
@@ -48,34 +46,7 @@ const adminNavItems: NavItem[] = [
 ];
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
-    const router = useRouter();
-    const [loading, setLoading] = useState(true);
-    const [userName, setUserName] = useState('Administrador');
-
-    useEffect(() => {
-        const userSession = localStorage.getItem('user-session');
-        if (!userSession) {
-            router.push('/login?role=administrador');
-            return;
-        }
-
-        const parsedSession = JSON.parse(userSession);
-        if (parsedSession.role !== 'administrador') {
-            router.push('/login?role=administrador');
-            return;
-        }
-        
-        setUserName(parsedSession.name || 'Administrador');
-        setLoading(false);
-    }, [router]);
-
-    if (loading) {
-        return (
-             <div className="flex h-screen w-full items-center justify-center bg-background">
-                <Loader2 className="h-10 w-10 animate-spin text-primary" />
-            </div>
-        )
-    }
+    const [userName] = useState('Administrador');
 
     return (
         <DashboardLayout userName={userName} userRole="Administrador" navItems={adminNavItems}>
