@@ -93,7 +93,6 @@ export default function PeopleManagementPage() {
             const ownersData: Owner[] = [];
             snapshot.forEach((doc) => {
                 const data = doc.data();
-                // Exclude admin users from the list
                 if (doc.id !== ADMIN_USER_ID) {
                     ownersData.push({ id: doc.id, ...data, balance: data.balance ?? 0 } as Owner);
                 }
@@ -620,5 +619,7 @@ export default function PeopleManagementPage() {
         </div>
     );
 }
+
+    
 
     
