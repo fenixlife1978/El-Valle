@@ -7,7 +7,7 @@ import { getAuth } from 'firebase/auth';
 const firebaseConfig = {
   "projectId": "condoconnect-yyjbd",
   "appId": "1:630518792088:web:05ce5e5b80cf64a12935ed",
-  "apiKey": "AIzaSyD7DQi7JNv8M7V7LzZfZ6sN3z2pXjs-TJI",
+  "apiKey": "AIzaSyBxKTp_QYuxHWB18jirph5vhY6tWCWR_HI",
   "authDomain": "condoconnect-yyjbd.firebaseapp.com",
   "storageBucket": "condoconnect-yyjbd.appspot.com",
   "messagingSenderId": "630518792088"
