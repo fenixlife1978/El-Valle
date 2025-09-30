@@ -4,7 +4,14 @@ import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { getAuth } from 'firebase/auth';
 
-const firebaseConfig = {"apiKey":"AIzaSyD7DQi7JNv8M7V7LzZfZ6sN3z2pXjs-TJI","authDomain":"next-condo-8c139.firebaseapp.com","projectId":"next-condo-8c139","storageBucket":"next-condo-8c139.appspot.com","messagingSenderId":"123456789012","appId":"1:123456789012:web:1234567890abcdef","measurementId":"G-1234567890"};
+const firebaseConfig = {
+  "projectId": "condoconnect-yyjbd",
+  "appId": "1:630518792088:web:05ce5e5b80cf64a12935ed",
+  "apiKey": "AIzaSyD7DQi7JNv8M7V7LzZfZ6sN3z2pXjs-TJI",
+  "authDomain": "condoconnect-yyjbd.firebaseapp.com",
+  "storageBucket": "condoconnect-yyjbd.appspot.com",
+  "messagingSenderId": "630518792088"
+};
 
 
 // Initialize Firebase
@@ -14,4 +21,3 @@ const storage = getStorage(app);
 const auth = getAuth(app);
 
 export { app, db, storage, auth };
-
