@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "set GENKIT_TELEMETRY_DISABLED=true && npx kill-port 9002 && genkit start -- tsx --watch src/ai/flows/*.ts & next dev --port 9002 --hostname 0.0.0.0",
+    "dev": "npm-run-all --parallel dev:next dev:genkit",
+    "dev:next": "next dev --port 9002 --hostname 0.0.0.0",
+    "dev:genkit": "set GENKIT_TELEMETRY_DISABLED=true && npx kill-port 9002 && genkit start -- tsx --watch src/ai/flows/*.ts",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
@@ -69,6 +71,7 @@
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "genkit-cli": "^1.14.1",
+    "npm-run-all": "^4.1.5",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
     "typescript": "^5"
