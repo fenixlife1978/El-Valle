@@ -6,7 +6,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/componentsui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from "@/lib/utils";
@@ -689,7 +689,7 @@ export default function ReportsPage() {
         const paymentsWithDebts: PaymentWithDebts[] = [];
         for (const payment of allApprovedPayments) {
             const liquidatedDebts = allDebts.filter(d => d.paymentId === payment.id)
-                .sort((a,b) => a.year - b.year || a.month - a.month);
+                .sort((a,b) => a.year - b.year || a.month - b.month);
             
             paymentsWithDebts.push({
                 ...payment,
