@@ -619,7 +619,7 @@ export default function OwnerDashboardPage() {
                                     receiptData.paidDebts.map((debt, index) => (
                                         <TableRow key={index} className="even:bg-gray-100">
                                             <TableCell>{monthsLocale[debt.month]} {debt.year}</TableCell>
-                                            <TableCell>{debt.description} ({debt.property.street} - {debt.property.house})</TableCell>
+                                            <TableCell>{debt.description} ({debt.property ? `${debt.property.street} - ${debt.property.house}` : 'N/A'})</TableCell>
                                             <TableCell className="text-right">${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}</TableCell>
                                             <TableCell className="text-right">Bs. {formatToTwoDecimals((debt.paidAmountUSD || debt.amountUSD) * receiptData.payment.exchangeRate)}</TableCell>
                                         </TableRow>
@@ -658,5 +658,6 @@ export default function OwnerDashboardPage() {
 
 
     
+
 
 
