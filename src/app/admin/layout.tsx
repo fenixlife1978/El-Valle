@@ -12,8 +12,10 @@ import {
     RefreshCw,
     TrendingUp,
 } from 'lucide-react';
-import { ReactNode, useState } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
+import { useRouter } from 'next/navigation';
+import { useToast } from '@/hooks/use-toast';
 
 
 const adminNavItems: NavItem[] = [
@@ -46,10 +48,45 @@ const adminNavItems: NavItem[] = [
 ];
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
-    const [userName] = useState('Administrador');
+    const router = useRouter();
+    const { toast } = useToast();
+    const [session, setSession] = useState<any>(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const userSession = localStorage.getItem('user-session');
+        if (!userSession) {
+            router.push('/login?role=admin');
+            return;
+        }
+        
+        const parsedSession = JSON.parse(userSession);
+        if (parsedSession.role !== 'administrador') {
+            toast({
+                variant: 'destructive',
+                title: 'Acceso Denegado',
+                description: 'No tienes permisos para acceder a esta área.'
+            });
+            localStorage.removeItem('user-session');
+            router.push('/login');
+            return;
+        }
+        
+        setSession(parsedSession);
+        setLoading(false);
+
+    }, [router, toast]);
+    
+    if (loading) {
+        return (
+             <div className="flex justify-center items-center h-screen">
+                <Loader2 className="h-10 w-10 animate-spin text-primary" />
+            </div>
+        )
+    }
 
     return (
-        <DashboardLayout userName={userName} userRole="Administrador" navItems={adminNavItems}>
+        <DashboardLayout userName={session?.displayName || 'Administrador'} userRole="Administrador" navItems={adminNavItems}>
             {children}
         </DashboardLayout>
     );
