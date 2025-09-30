@@ -1,8 +1,10 @@
-
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
     match /{document=**} {
+      // Permite el acceso de lectura y escritura a todos los usuarios,
+      // autenticados o no. Esto es necesario porque se eliminó el login.
       allow read, write: if true;
     }
   }
