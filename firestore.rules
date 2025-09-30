@@ -2,8 +2,9 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Regla General: Permite el acceso de lectura y escritura a cualquier usuario autenticado.
-    // Esto elimina todos los errores de "permiso denegado" para que la aplicación sea completamente funcional.
+    // Allow read/write access to all documents for any authenticated user.
+    // This is a permissive rule for initial development.
+    // For production, you should implement more granular security rules.
     match /{document=**} {
       allow read, write: if request.auth != null;
     }
