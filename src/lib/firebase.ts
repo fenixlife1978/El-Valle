@@ -5,11 +5,11 @@ import { getStorage } from 'firebase/storage';
 import { getAuth } from 'firebase/auth';
 
 const firebaseConfig = {
-  "projectId": "condoconnect-yyjbd",
+  "projectId": "condominio-prueba",
   "appId": "1:630518792088:web:05ce5e5b80cf64a12935ed",
   "apiKey": "AIzaSyBxKTp_QYuxHWB18jirph5vhY6tWCWR_HI",
-  "authDomain": "condoconnect-yyjbd.firebaseapp.com",
-  "storageBucket": "condoconnect-yyjbd.appspot.com",
+  "authDomain": "condominio-prueba.firebaseapp.com",
+  "storageBucket": "condominio-prueba.appspot.com",
   "messagingSenderId": "630518792088"
 };
 
