@@ -162,6 +162,25 @@ const CustomBarLabel = (props: any) => {
     );
 };
 
+const ADMIN_USER_ID = 'valle-admin-main-account';
+
+const getSortKeys = (owner: Owner | DelinquentOwner | BalanceOwner) => {
+    const properties = 'properties' in owner ? owner.properties : '';
+    let street = 'N/A', house = 'N/A';
+    
+    if (typeof properties === 'string' && properties !== '') {
+        const firstProp = properties.split(',')[0];
+        [street, house] = firstProp.split('-').map(s => s.trim());
+    } else if (Array.isArray(properties) && properties.length > 0) {
+        street = properties[0].street;
+        house = properties[0].house;
+    }
+
+    const streetNum = parseInt(String(street || '').replace('Calle ', '') || '999');
+    const houseNum = parseInt(String(house || '').replace('Casa ', '') || '999');
+    return { streetNum, houseNum };
+};
+
 
 export default function ReportsPage() {
     const { toast } = useToast();
@@ -219,7 +238,7 @@ export default function ReportsPage() {
         setLoading(true);
         try {
             const settingsRef = doc(db, 'config', 'mainSettings');
-            const ownersQuery = query(collection(db, 'owners'), where('name', '!=', 'EDWIN AGUIAR'));
+            const ownersQuery = query(collection(db, 'owners'));
             const paymentsQuery = query(collection(db, 'payments'));
             const debtsQuery = query(collection(db, 'debts'));
             const historicalPaymentsQuery = query(collection(db, 'historical_payments'));
@@ -242,7 +261,7 @@ export default function ReportsPage() {
                  setActiveRate(rate);
             }
 
-            const ownersData = ownersSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Owner));
+            const ownersData = ownersSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Owner)).filter(o => o.id !== ADMIN_USER_ID);
             setOwners(ownersData);
 
             const paymentsData = paymentsSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Payment));
@@ -281,29 +300,20 @@ export default function ReportsPage() {
             setSelectedDelinquentOwners(new Set(delinquentData.map(o => o.id)));
 
             // --- Balance Report Data Calculation ---
-            const getSortKeys = (owner: Owner) => {
-                const prop = (owner.properties && owner.properties.length > 0) ? owner.properties[0] : { street: 'N/A', house: 'N/A' };
-                const streetNum = parseInt(String(prop.street || '').replace('Calle ', '') || '999');
-                const houseNum = parseInt(String(prop.house || '').replace('Casa ', '') || '999');
-                return { streetNum, houseNum };
-            };
-
             const ownersWithBalance = ownersData.filter(o => o.balance > 0);
             
-            const balanceReportData = ownersWithBalance.sort((a, b) => {
-                const aKeys = getSortKeys(a);
-                const bKeys = getSortKeys(b);
-                if (aKeys.streetNum !== bKeys.streetNum) {
-                    return aKeys.streetNum - bKeys.streetNum;
-                }
-                return aKeys.houseNum - bKeys.houseNum;
-            }).map(owner => {
+            const balanceReportData = ownersWithBalance.map(owner => {
                 return {
                     id: owner.id,
                     name: owner.name,
                     properties: (owner.properties || []).map(p => `${p.street} - ${p.house}`).join(', '),
                     balance: owner.balance,
                 };
+            }).sort((a,b) => {
+                const aKeys = getSortKeys(a);
+                const bKeys = getSortKeys(b);
+                if (aKeys.streetNum !== bKeys.streetNum) return aKeys.streetNum - bKeys.streetNum;
+                return aKeys.houseNum - bKeys.houseNum;
             });
 
             setBalanceOwners(balanceReportData);
@@ -322,13 +332,6 @@ export default function ReportsPage() {
 
 
     const integralReportData = useMemo<IntegralReportRow[]>(() => {
-        const getSortKeys = (owner: Owner) => {
-            const prop = (owner.properties && owner.properties.length > 0) ? owner.properties[0] : { street: 'N/A', house: 'N/A' };
-            const streetNum = parseInt(String(prop.street || '').replace('Calle ', '') || '999');
-            const houseNum = parseInt(String(prop.house || '').replace('Casa ', '') || '999');
-            return { streetNum, houseNum };
-        };
-    
         const sortedOwners = [...owners].sort((a, b) => {
             const aKeys = getSortKeys(a);
             const bKeys = getSortKeys(b);
@@ -483,9 +486,18 @@ export default function ReportsPage() {
         }
 
         owners.sort((a, b) => {
-            if (a[delinquencySortConfig.key] < b[delinquencySortConfig.key]) return delinquencySortConfig.direction === 'asc' ? -1 : 1;
-            if (a[delinquencySortConfig.key] > b[delinquencySortConfig.key]) return delinquencySortConfig.direction === 'asc' ? 1 : -1;
-            return 0;
+            if (delinquencySortConfig.key !== 'name') {
+                 if (a[delinquencySortConfig.key] < b[delinquencySortConfig.key]) return delinquencySortConfig.direction === 'asc' ? -1 : 1;
+                if (a[delinquencySortConfig.key] > b[delinquencySortConfig.key]) return delinquencySortConfig.direction === 'asc' ? 1 : -1;
+            }
+           
+            const aKeys = getSortKeys(a);
+            const bKeys = getSortKeys(b);
+
+            if (aKeys.streetNum !== bKeys.streetNum) return aKeys.streetNum - bKeys.streetNum;
+            if (aKeys.houseNum !== bKeys.houseNum) return aKeys.houseNum - bKeys.houseNum;
+
+            return a.name.localeCompare(b.name);
         });
 
         return owners;
@@ -1977,5 +1989,7 @@ export default function ReportsPage() {
         </div>
     );
 }
+
+    
 
     

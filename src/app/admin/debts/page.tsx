@@ -103,6 +103,13 @@ const formatToTwoDecimals = (num: number) => {
 
 const ADMIN_USER_ID = 'valle-admin-main-account';
 
+const getSortKeys = (owner: Owner) => {
+    const prop = (owner.properties && owner.properties.length > 0) ? owner.properties[0] : { street: 'N/A', house: 'N/A' };
+    const streetNum = parseInt(String(prop.street || '').replace('Calle ', '') || '999');
+    const houseNum = parseInt(String(prop.house || '').replace('Casa ', '') || '999');
+    return { streetNum, houseNum };
+};
+
 export default function DebtManagementPage() {
     const [view, setView] = useState<View>('list');
     const [owners, setOwners] = useState<Owner[]>([]);
@@ -189,7 +196,7 @@ export default function DebtManagementPage() {
 
         const ownersQuery = query(collection(db, "owners"));
         const ownersUnsubscribe = onSnapshot(ownersQuery, async (snapshot) => {
-            const ownersData: Owner[] = snapshot.docs.map(doc => {
+            let ownersData: Owner[] = snapshot.docs.map(doc => {
                 const data = doc.data();
                 return { 
                     id: doc.id, 
@@ -199,6 +206,16 @@ export default function DebtManagementPage() {
                     properties: data.properties,
                 };
             }).filter(owner => owner.id !== ADMIN_USER_ID); // Exclude admin
+
+            ownersData.sort((a, b) => {
+                const aKeys = getSortKeys(a);
+                const bKeys = getSortKeys(b);
+                if (aKeys.streetNum !== bKeys.streetNum) {
+                    return aKeys.streetNum - bKeys.streetNum;
+                }
+                return aKeys.houseNum - bKeys.houseNum;
+            });
+
             setOwners(ownersData);
             setLoading(false);
         }, (error) => {
@@ -1270,3 +1287,5 @@ export default function DebtManagementPage() {
     // Fallback while loading or if view is invalid
     return null;
 }
+
+    
