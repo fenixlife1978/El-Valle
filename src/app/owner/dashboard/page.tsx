@@ -13,7 +13,7 @@ import { getCommunityUpdates } from '@/ai/flows/community-updates';
 import { db } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
 import { doc, onSnapshot, collection, query, where, orderBy, limit, getDoc, getDocs, Timestamp } from 'firebase/firestore';
-import { format, isBefore, startOfMonth } from 'date-fns';
+import { format, isBefore, startOfMonth, addMonths, isEqual } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -102,6 +102,7 @@ export default function OwnerDashboardPage() {
     const [userData, setUserData] = useState<UserData | null>(null);
     const [payments, setPayments] = useState<Payment[]>([]);
     const [debts, setDebts] = useState<Debt[]>([]);
+    const [allOwnerDebts, setAllOwnerDebts] = useState<Debt[]>([]);
     const [dashboardStats, setDashboardStats] = useState({
         balanceInFavor: 0,
         totalDebtUSD: 0,
@@ -173,33 +174,75 @@ export default function OwnerDashboardPage() {
                     debtsUnsubscribe = onSnapshot(debtsQuery, async (debtsSnapshot) => {
                         const allDebtsData: Debt[] = [];
                         debtsSnapshot.forEach(d => allDebtsData.push({ id: d.id, ...d.data() } as Debt));
+                        setAllOwnerDebts(allDebtsData);
 
                         const pendingDebts = allDebtsData.filter(d => d.status === 'pending');
                         const totalDebtUSD = pendingDebts.reduce((sum, d) => sum + d.amountUSD, 0);
 
                         setDebts(pendingDebts.sort((a, b) => b.year - b.year || b.month - b.month));
                         setDashboardStats(prev => ({...prev, totalDebtUSD }));
+                        
+                        // New Solvency Logic
+                        let firstUnpaidMonth: Date | null = null;
+                        let lastPaidMonth: Date | null = null;
 
-                        if (totalDebtUSD > 0) {
-                            setSolvencyStatus('moroso');
-                            const oldestDebt = [...pendingDebts].sort((a, b) => a.year - b.year || a.month - b.month)[0];
-                            if (oldestDebt) {
-                                setSolvencyPeriod(`Desde ${monthsLocale[oldestDebt.month] || ''} ${oldestDebt.year}`);
-                            }
-                        } else {
-                            setSolvencyStatus('solvente');
-                            const lastPaidDebt = allDebtsData
-                                .filter(d => d.status === 'paid')
-                                .sort((a,b) => b.year - b.year || b.month - b.month)[0];
-                            
-                            if (lastPaidDebt) {
-                                setSolvencyPeriod(`Hasta ${monthsLocale[lastPaidDebt.month] || ''} ${lastPaidDebt.year}`);
-                            } else {
-                                const now = new Date();
-                                setSolvencyPeriod(`Hasta ${monthsLocale[now.getMonth() + 1] || ''} ${now.getFullYear()}`);
+                        const allRecords = allDebtsData.map(d => new Date(d.year, d.month - 1))
+                            .sort((a, b) => a.getTime() - b.getTime());
+
+                        if (allRecords.length > 0) {
+                            const oldestRecordDate = allRecords[0];
+                            const today = new Date();
+
+                            for (let d = oldestRecordDate; isBefore(d, today) || isEqual(d, startOfMonth(today)); d = addMonths(d, 1)) {
+                                const year = d.getFullYear();
+                                const month = d.getMonth() + 1;
+
+                                const isMonthFullyPaid = !allDebtsData.some(debt =>
+                                    debt.year === year && debt.month === month && debt.status === 'pending'
+                                );
+
+                                if (isMonthFullyPaid) {
+                                    lastPaidMonth = d;
+                                } else {
+                                    if (!firstUnpaidMonth) {
+                                        firstUnpaidMonth = d;
+                                    }
+                                }
                             }
                         }
-                        
+
+                        if (!firstUnpaidMonth) { // Potentially solvent, check for future payments
+                            const futurePaidDebts = allDebtsData
+                                .filter(d => d.status === 'paid' && isBefore(new Date(), new Date(d.year, d.month - 1)))
+                                .sort((a, b) => new Date(a.year, a.month - 1).getTime() - new Date(b.year, b.month - 1).getTime());
+                            
+                            let consecutiveLastPaid = lastPaidMonth ? new Date(lastPaidMonth) : null;
+                            if(consecutiveLastPaid) {
+                                for(const debt of futurePaidDebts) {
+                                    const nextMonth = addMonths(consecutiveLastPaid, 1);
+                                    const isFutureMonthFullyPaid = !allDebtsData.some(d => d.year === debt.year && d.month === debt.month && d.status === 'pending');
+
+                                    if(debt.year === nextMonth.getFullYear() && debt.month === nextMonth.getMonth() + 1 && isFutureMonthFullyPaid) {
+                                        consecutiveLastPaid = new Date(debt.year, debt.month -1);
+                                    } else {
+                                        break;
+                                    }
+                                }
+                            }
+                            lastPaidMonth = consecutiveLastPaid;
+                        }
+
+                        if (firstUnpaidMonth) {
+                            setSolvencyStatus('moroso');
+                            setSolvencyPeriod(`Desde ${format(firstUnpaidMonth, 'MMMM yyyy', { locale: es })}`);
+                        } else {
+                            setSolvencyStatus('solvente');
+                            if (lastPaidMonth) {
+                                setSolvencyPeriod(`Hasta ${format(lastPaidMonth, 'MMMM yyyy', { locale: es })}`);
+                            } else {
+                                setSolvencyPeriod('Al día');
+                            }
+                        }
                     });
                     
                     if (paymentsUnsubscribe) paymentsUnsubscribe();
