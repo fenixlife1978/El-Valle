@@ -353,9 +353,9 @@ export default function ReportsPage() {
                 oldestRecordDate = new Date(sortedDebts[0].year, sortedDebts[0].month - 1);
             }
             
-            // Phase 2: Find the first unpaid month by iterating from the oldest record to now.
+            // Phase 2: Find the first unpaid month and the last paid month.
             let firstUnpaidMonth: Date | null = null;
-            let lastPaidMonth: Date | null = null;
+            let lastConsecutivePaidMonth: Date | null = null;
             
             if (oldestRecordDate) {
                 // Iterate from the oldest known month up to the current month
@@ -363,34 +363,35 @@ export default function ReportsPage() {
                     const year = d.getFullYear();
                     const month = d.getMonth() + 1;
                     
-                    // A month is NOT fully paid if ANY debt for that month/year is pending.
                     const isMonthFullyPaid = !ownerAllDebts.some(debt =>
                         debt.year === year && debt.month === month && debt.status === 'pending'
                     );
 
                     if (isMonthFullyPaid) {
-                        // This month is fine, update the last known paid month
-                        lastPaidMonth = d;
+                        lastConsecutivePaidMonth = d;
                     } else {
-                        // Found the first gap. This is the start of non-solvency.
                         firstUnpaidMonth = d;
-                        break; // Stop checking further
+                        break; // Found a gap, stop checking
                     }
                 }
             }
 
-            // Phase 3: Determine solvency status and period based on the findings.
+            // Phase 3: Determine solvency status and period.
             const status: 'Solvente' | 'No Solvente' = !firstUnpaidMonth ? 'Solvente' : 'No Solvente';
             let solvencyPeriod = 'N/A';
+
             if (status === 'No Solvente' && firstUnpaidMonth) {
                 solvencyPeriod = `Desde ${format(firstUnpaidMonth, 'MMM yyyy', { locale: es })}`;
             } else if (status === 'Solvente') {
-                 if (lastPaidMonth) {
-                    solvencyPeriod = `Hasta ${format(lastPaidMonth, 'MMM yyyy', { locale: es })}`;
-                 } else {
-                    // No records at all means they are technically solvent up to the previous month.
-                    solvencyPeriod = `Hasta ${format(addMonths(currentMonthStart, -1), 'MMM yyyy', { locale: es })}`;
-                 }
+                 // Find the absolute last paid month, even if it's an advance payment
+                const allPaidDebts = ownerAllDebts.filter(d => d.status === 'paid');
+                if (allPaidDebts.length > 0) {
+                    const lastPaidDebt = allPaidDebts.sort((a,b) => b.year - a.year || b.month - a.month)[0];
+                    const lastPaidDate = new Date(lastPaidDebt.year, lastPaidDebt.month - 1);
+                    solvencyPeriod = `Hasta ${format(lastPaidDate, 'MMM yyyy', { locale: es })}`;
+                } else {
+                    solvencyPeriod = 'Sin historial de pago';
+                }
             }
 
 
@@ -1974,5 +1975,6 @@ export default function ReportsPage() {
         </div>
     );
 }
+
 
 
