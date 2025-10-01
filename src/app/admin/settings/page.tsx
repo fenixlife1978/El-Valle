@@ -116,8 +116,8 @@ export default function SettingsPage() {
                 const settings = docSnap.data() as Settings;
                 setAdminProfile(settings.adminProfile || emptyAdminProfile);
                 setAdminAvatarPreview(settings.adminProfile?.avatar);
-                setCompanyInfo(settings.companyInfo);
-                setLogoPreview(settings.companyInfo.logo);
+                setCompanyInfo(settings.companyInfo || emptyCompanyInfo);
+                setLogoPreview(settings.companyInfo?.logo || emptyCompanyInfo.logo);
                 setCondoFee(settings.condoFee);
                 setLastCondoFee(settings.condoFee); // Set the last known fee from DB
                 setExchangeRates(settings.exchangeRates || []);
@@ -263,40 +263,43 @@ export default function SettingsPage() {
         setSaving(true);
         setProgress(0);
         const newCondoFee = Number(condoFee);
-
+    
         try {
             const settingsRef = doc(db, 'config', 'mainSettings');
-            
+    
             await new Promise(resolve => setTimeout(() => { setProgress(30); resolve(null); }, 300));
-            
+    
+            // Ensure all properties are defined before saving
+            const safeCompanyInfo = {
+                name: companyInfo?.name || '',
+                address: companyInfo?.address || '',
+                rif: companyInfo?.rif || '',
+                phone: companyInfo?.phone || '',
+                email: companyInfo?.email || '',
+                logo: companyInfo?.logo || '',
+            };
+    
             const dataToSave = {
                 adminProfile: {
-                    name: adminProfile.name,
-                    email: adminProfile.email,
-                    avatar: adminProfile.avatar,
+                    name: adminProfile.name || '',
+                    email: adminProfile.email || '',
+                    avatar: adminProfile.avatar || '',
                 },
-                companyInfo: {
-                    name: companyInfo.name,
-                    address: companyInfo.address,
-                    rif: companyInfo.rif,
-                    phone: companyInfo.phone,
-                    email: companyInfo.email,
-                    logo: companyInfo.logo,
-                },
+                companyInfo: safeCompanyInfo,
                 condoFee: newCondoFee,
                 lastCondoFee: lastCondoFee,
             };
-
+    
             await updateDoc(settingsRef, dataToSave);
-            
+    
             await new Promise(resolve => setTimeout(() => { setProgress(100); resolve(null); }, 500));
-            
+    
             toast({
                 title: 'Cambios Guardados',
                 description: 'La configuración ha sido actualizada exitosamente.',
                 className: 'bg-green-100 border-green-400 text-green-800'
             });
-
+    
             if (isFeeChanged) {
                  toast({
                     title: 'Cuota Actualizada',
