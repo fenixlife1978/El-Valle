@@ -34,7 +34,7 @@ type CompanyInfo = {
     rif: string;
     phone: string;
     email: string;
-    logo: string; // Will store as data URL for simplicity
+    logo: string;
 };
 
 type ExchangeRate = {
@@ -269,7 +269,7 @@ export default function SettingsPage() {
     
             await new Promise(resolve => setTimeout(() => { setProgress(30); resolve(null); }, 300));
     
-            // Ensure all properties are defined before saving
+            // Sanitize the data to prevent Firestore errors with `undefined`.
             const safeCompanyInfo: CompanyInfo = {
                 name: companyInfo?.name || '',
                 address: companyInfo?.address || '',
@@ -311,7 +311,7 @@ export default function SettingsPage() {
              
         } catch(error) {
              console.error("Error saving settings:", error);
-             toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron guardar los cambios.' });
+             toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron guardar los cambios. ' + (error as Error).message });
         } finally {
             await new Promise(resolve => setTimeout(() => { setSaving(false); setProgress(0); }, 700));
         }
@@ -641,3 +641,5 @@ export default function SettingsPage() {
         </div>
     );
 }
+
+    
