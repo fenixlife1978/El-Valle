@@ -347,41 +347,51 @@ export default function ReportsPage() {
             const ownerAllDebts = allDebts.filter(d => d.ownerId === owner.id);
             const ownerHistoricalPayments = allHistoricalPayments.filter(hp => hp.ownerId === owner.id);
 
-            // Phase 1: Create a set of all paid months
-            const paidMonths = new Set<string>();
-            ownerAllDebts.forEach(debt => {
-                if (debt.status === 'paid') {
-                    paidMonths.add(`${debt.year}-${debt.month}`);
-                }
-            });
-            ownerHistoricalPayments.forEach(hp => {
-                paidMonths.add(`${hp.referenceYear}-${hp.referenceMonth}`);
-            });
-            
-            // Phase 2: Find the oldest debt to determine the start of the solvency check
+            // Phase 1: Determine the owner's oldest recorded month.
             let oldestDebtDate: Date | null = null;
             if (ownerAllDebts.length > 0) {
                 const sortedDebts = [...ownerAllDebts].sort((a,b) => a.year - b.year || a.month - b.month);
                 oldestDebtDate = new Date(sortedDebts[0].year, sortedDebts[0].month -1);
             }
-
-            // Phase 3: Find the first unpaid month
+             if (ownerHistoricalPayments.length > 0) {
+                const sortedHistorical = [...ownerHistoricalPayments].sort((a,b) => a.referenceYear - b.referenceYear || a.referenceMonth - b.referenceMonth);
+                const oldestHistoricalDate = new Date(sortedHistorical[0].referenceYear, sortedHistorical[0].referenceMonth -1);
+                if (!oldestDebtDate || isBefore(oldestHistoricalDate, oldestDebtDate)) {
+                    oldestDebtDate = oldestHistoricalDate;
+                }
+            }
+            
+            // Phase 2: Iterate from the oldest month to the current month to find the first unpaid month.
             let firstUnpaidMonth: Date | null = null;
             let monthsOwed = 0;
             if (oldestDebtDate) {
-                 for (let d = oldestDebtDate; isBefore(d, currentMonthStart) || isEqual(d, currentMonthStart); d = addMonths(d, 1)) {
-                    const periodKey = `${d.getFullYear()}-${d.getMonth() + 1}`;
-                    if (!paidMonths.has(periodKey)) {
+                for (let d = oldestDebtDate; isBefore(d, currentMonthStart) || isEqual(d, currentMonthStart); d = addMonths(d, 1)) {
+                    const year = d.getFullYear();
+                    const month = d.getMonth() + 1;
+                    
+                    // A month is considered unpaid if ANY debt for that month is 'pending'.
+                    const hasPendingDebtForMonth = ownerAllDebts.some(debt => 
+                        debt.year === year && debt.month === month && debt.status === 'pending'
+                    );
+
+                    if (hasPendingDebtForMonth) {
                         if (!firstUnpaidMonth) {
                             firstUnpaidMonth = d;
                         }
-                        monthsOwed++;
+                        // Only count "cuota de condominio" for months owed count.
+                        const hasPendingBaseFee = ownerAllDebts.some(debt => 
+                            debt.year === year && 
+                            debt.month === month && 
+                            debt.status === 'pending' &&
+                            debt.description.toLowerCase().includes('condominio')
+                        );
+                        if(hasPendingBaseFee) monthsOwed++;
                     }
                 }
             }
             
-            // Phase 4: Determine solvency status and period
-            const status: 'Solvente' | 'No Solvente' = monthsOwed === 0 ? 'Solvente' : 'No Solvente';
+            // Phase 3: Determine solvency status and period.
+            const status: 'Solvente' | 'No Solvente' = !firstUnpaidMonth ? 'Solvente' : 'No Solvente';
             let solvencyPeriod = 'N/A';
             if (status === 'No Solvente' && firstUnpaidMonth) {
                 solvencyPeriod = `Desde ${format(firstUnpaidMonth, 'MMM yyyy', { locale: es })}`;
@@ -389,12 +399,12 @@ export default function ReportsPage() {
                 solvencyPeriod = `Hasta ${format(currentMonthStart, 'MMM yyyy', { locale: es })}`;
             }
             
-            // Phase 5: Calculate pending adjustment debt
+            // Phase 4: Calculate pending adjustment debt.
             const adjustmentDebtUSD = ownerAllDebts
                 .filter(d => d.status === 'pending' && d.description.toLowerCase().includes('ajuste por aumento'))
                 .reduce((sum, d) => sum + d.amountUSD, 0);
 
-            // Phase 6: Filter payments for reporting based on date range
+            // Phase 5: Filter payments for reporting based on date range.
             const fromDate = integralDateRange.from;
             const toDate = integralDateRange.to;
             if (fromDate) fromDate.setHours(0, 0, 0, 0);
@@ -429,7 +439,7 @@ export default function ReportsPage() {
                 balance: owner.balance,
                 status,
                 solvencyPeriod,
-                monthsOwed: monthsOwed,
+                monthsOwed,
                 adjustmentDebtUSD: adjustmentDebtUSD,
             };
         }).filter(row => {
@@ -705,7 +715,7 @@ export default function ReportsPage() {
 
     const handleExportIntegral = (formatType: 'pdf' | 'excel') => {
         const data = integralReportData;
-        const headers = [["Propietario", "Propiedad", "Fecha Últ. Pago", "Monto Pagado (Bs)", "Tasa BCV (Bs/$)", "Saldo a Favor (Bs)", "Estado", "Periodo", "Meses Adeudados", "Deuda por Ajuste ($)"]];
+        const headers = [["Propietario", "Propiedad", "Fecha Últ. Pago", "Monto Pagado (Bs)", "Tasa BCV", "Saldo a Favor (Bs)", "Estado", "Periodo", "Meses Adeudados", "Deuda por Ajuste ($)"]];
         const body = data.map(row => [
             row.name, row.properties, row.lastPaymentDate,
             row.paidAmount > 0 ? formatToTwoDecimals(row.paidAmount) : '',
@@ -763,7 +773,7 @@ export default function ReportsPage() {
                  "Propiedad": row.properties, 
                  "Fecha Últ. Pago": row.lastPaymentDate, 
                  "Monto Pagado (Bs)": row.paidAmount,
-                 "Tasa BCV (Bs/$)": row.avgRate, 
+                 "Tasa BCV": row.avgRate, 
                  "Saldo a Favor (Bs)": row.balance, 
                  "Estado": row.status, 
                  "Periodo": row.solvencyPeriod, 
