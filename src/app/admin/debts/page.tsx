@@ -462,6 +462,16 @@ export default function DebtManagementPage() {
 
         try {
             const today = new Date();
+            if (today.getDate() < 6) {
+                toast({
+                    variant: 'destructive',
+                    title: 'Acción no permitida',
+                    description: 'La deuda del mes en curso solo puede generarse a partir del día 6.'
+                });
+                setIsGeneratingMonthlyDebt(false);
+                return;
+            }
+
             const year = today.getFullYear();
             const month = today.getMonth() + 1;
 
@@ -913,6 +923,7 @@ export default function DebtManagementPage() {
     
     // Main List View
     if (view === 'list') {
+        const canGenerateDebt = new Date().getDate() >= 6;
         return (
             <div className="space-y-8">
                  <div>
@@ -928,7 +939,12 @@ export default function DebtManagementPage() {
                                     <RefreshCw className="mr-2 h-4 w-4" />
                                     Sincronizar Saldos
                                 </Button>
-                                <Button onClick={handleGenerateMonthlyDebt} variant="outline" disabled={isGeneratingMonthlyDebt}>
+                                <Button 
+                                    onClick={handleGenerateMonthlyDebt} 
+                                    variant="outline" 
+                                    disabled={isGeneratingMonthlyDebt || !canGenerateDebt}
+                                    title={!canGenerateDebt ? 'Disponible a partir del día 6 del mes' : 'Generar deuda para el mes en curso'}
+                                >
                                     {isGeneratingMonthlyDebt ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CalendarPlus className="mr-2 h-4 w-4" />}
                                     Generar Deuda del Mes
                                 </Button>
