@@ -77,7 +77,7 @@ const emptyCompanyInfo: CompanyInfo = {
     rif: '',
     phone: '',
     email: '',
-    logo: '/logo-placeholder.png' // A default placeholder
+    logo: '' 
 };
 
 export default function SettingsPage() {
@@ -117,7 +117,7 @@ export default function SettingsPage() {
                 setAdminProfile(settings.adminProfile || emptyAdminProfile);
                 setAdminAvatarPreview(settings.adminProfile?.avatar);
                 setCompanyInfo(settings.companyInfo || emptyCompanyInfo);
-                setLogoPreview(settings.companyInfo?.logo || emptyCompanyInfo.logo);
+                setLogoPreview(settings.companyInfo?.logo);
                 setCondoFee(settings.condoFee);
                 setLastCondoFee(settings.condoFee); // Set the last known fee from DB
                 setExchangeRates(settings.exchangeRates || []);
@@ -270,7 +270,7 @@ export default function SettingsPage() {
             await new Promise(resolve => setTimeout(() => { setProgress(30); resolve(null); }, 300));
     
             // Ensure all properties are defined before saving
-            const safeCompanyInfo = {
+            const safeCompanyInfo: CompanyInfo = {
                 name: companyInfo?.name || '',
                 address: companyInfo?.address || '',
                 rif: companyInfo?.rif || '',
