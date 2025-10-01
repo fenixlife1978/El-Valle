@@ -347,30 +347,31 @@ export default function ReportsPage() {
             const ownerAllDebts = allDebts.filter(d => d.ownerId === owner.id);
             const ownerHistoricalPayments = allHistoricalPayments.filter(hp => hp.ownerId === owner.id);
 
-            // Phase 1: Determine the owner's oldest recorded month.
-            let oldestDebtDate: Date | null = null;
+            // Phase 1: Determine the owner's oldest recorded month to start checking from.
+            let oldestRecordDate: Date | null = null;
             if (ownerAllDebts.length > 0) {
-                const sortedDebts = [...ownerAllDebts].sort((a,b) => a.year - b.year || a.month - b.month);
-                oldestDebtDate = new Date(sortedDebts[0].year, sortedDebts[0].month -1);
+                const sortedDebts = [...ownerAllDebts].sort((a, b) => a.year - b.year || a.month - b.month);
+                oldestRecordDate = new Date(sortedDebts[0].year, sortedDebts[0].month - 1);
             }
-             if (ownerHistoricalPayments.length > 0) {
-                const sortedHistorical = [...ownerHistoricalPayments].sort((a,b) => a.referenceYear - b.referenceYear || a.referenceMonth - b.referenceMonth);
-                const oldestHistoricalDate = new Date(sortedHistorical[0].referenceYear, sortedHistorical[0].referenceMonth -1);
-                if (!oldestDebtDate || isBefore(oldestHistoricalDate, oldestDebtDate)) {
-                    oldestDebtDate = oldestHistoricalDate;
+            if (ownerHistoricalPayments.length > 0) {
+                const sortedHistorical = [...ownerHistoricalPayments].sort((a, b) => a.referenceYear - b.referenceYear || a.referenceMonth - b.referenceMonth);
+                const oldestHistoricalDate = new Date(sortedHistorical[0].referenceYear, sortedHistorical[0].referenceMonth - 1);
+                if (!oldestRecordDate || isBefore(oldestHistoricalDate, oldestRecordDate)) {
+                    oldestRecordDate = oldestHistoricalDate;
                 }
             }
-            
-            // Phase 2: Iterate from the oldest month to the current month to find the first unpaid month.
+
+            // Phase 2: Find the first month that is not fully paid.
             let firstUnpaidMonth: Date | null = null;
-            let monthsOwed = 0;
-            if (oldestDebtDate) {
-                for (let d = oldestDebtDate; isBefore(d, currentMonthStart) || isEqual(d, currentMonthStart); d = addMonths(d, 1)) {
+            let lastPaidMonth: Date | null = null;
+
+            if (oldestRecordDate) {
+                for (let d = oldestRecordDate; isBefore(d, currentMonthStart) || isEqual(d, currentMonthStart); d = addMonths(d, 1)) {
                     const year = d.getFullYear();
                     const month = d.getMonth() + 1;
                     
-                    // A month is considered unpaid if ANY debt for that month is 'pending'.
-                    const hasPendingDebtForMonth = ownerAllDebts.some(debt => 
+                    // A month is fully paid if NO debt for that month/year is pending.
+                    const hasPendingDebtForMonth = ownerAllDebts.some(debt =>
                         debt.year === year && debt.month === month && debt.status === 'pending'
                     );
 
@@ -378,30 +379,36 @@ export default function ReportsPage() {
                         if (!firstUnpaidMonth) {
                             firstUnpaidMonth = d;
                         }
-                        // Only count "cuota de condominio" for months owed count.
-                        const hasPendingBaseFee = ownerAllDebts.some(debt => 
-                            debt.year === year && 
-                            debt.month === month && 
-                            debt.status === 'pending' &&
-                            debt.description.toLowerCase().includes('condominio')
-                        );
-                        if(hasPendingBaseFee) monthsOwed++;
+                    } else {
+                        // This month is fully paid, update the last paid month.
+                         if (!firstUnpaidMonth) { // Only update if still solvent
+                            lastPaidMonth = d;
+                        }
                     }
                 }
             }
-            
+
             // Phase 3: Determine solvency status and period.
             const status: 'Solvente' | 'No Solvente' = !firstUnpaidMonth ? 'Solvente' : 'No Solvente';
             let solvencyPeriod = 'N/A';
             if (status === 'No Solvente' && firstUnpaidMonth) {
                 solvencyPeriod = `Desde ${format(firstUnpaidMonth, 'MMM yyyy', { locale: es })}`;
             } else if (status === 'Solvente') {
-                solvencyPeriod = `Hasta ${format(currentMonthStart, 'MMM yyyy', { locale: es })}`;
+                 if (lastPaidMonth) {
+                    solvencyPeriod = `Hasta ${format(lastPaidMonth, 'MMM yyyy', { locale: es })}`;
+                 } else {
+                    // If no records at all, they are solvent up to the previous month
+                    solvencyPeriod = `Hasta ${format(addMonths(currentMonthStart, -1), 'MMM yyyy', { locale: es })}`;
+                 }
             }
-            
-            // Phase 4: Calculate pending adjustment debt.
+
+            // Phase 4: Calculate total months owed and adjustment debt.
+            const monthsOwed = ownerAllDebts.filter(d => 
+                d.status === 'pending' && d.description.toLowerCase().includes('condominio')
+            ).length;
+
             const adjustmentDebtUSD = ownerAllDebts
-                .filter(d => d.status === 'pending' && d.description.toLowerCase().includes('ajuste por aumento'))
+                .filter(d => d.status === 'pending' && d.description.toLowerCase().includes('ajuste'))
                 .reduce((sum, d) => sum + d.amountUSD, 0);
 
             // Phase 5: Filter payments for reporting based on date range.
@@ -409,7 +416,7 @@ export default function ReportsPage() {
             const toDate = integralDateRange.to;
             if (fromDate) fromDate.setHours(0, 0, 0, 0);
             if (toDate) toDate.setHours(23, 59, 59, 999);
-    
+
             const ownerPayments = allPayments.filter(p => {
                 const isOwnerPayment = p.beneficiaries.some(b => b.ownerId === owner.id) && p.status === 'aprobado';
                 if (!isOwnerPayment) return false;
@@ -418,17 +425,17 @@ export default function ReportsPage() {
                 if (toDate && paymentDate > toDate) return false;
                 return true;
             });
-    
+
             const totalPaid = ownerPayments.reduce((sum, p) => sum + p.totalAmount, 0);
             const totalRateWeight = ownerPayments.reduce((sum, p) => sum + ((p.exchangeRate || 0) * p.totalAmount), 0);
             const avgRate = totalPaid > 0 ? totalRateWeight / totalPaid : 0;
-            
+
             let lastPaymentDate = '';
             if (ownerPayments.length > 0) {
                 const lastPayment = [...ownerPayments].sort((a, b) => b.paymentDate.toMillis() - a.paymentDate.toMillis())[0];
                 lastPaymentDate = format(lastPayment.paymentDate.toDate(), 'dd/MM/yyyy');
             }
-    
+
             return {
                 ownerId: owner.id,
                 name: owner.name,
@@ -440,15 +447,15 @@ export default function ReportsPage() {
                 status,
                 solvencyPeriod,
                 monthsOwed,
-                adjustmentDebtUSD: adjustmentDebtUSD,
+                adjustmentDebtUSD,
             };
         }).filter(row => {
-            if (row.name.toLowerCase() === 'edwin aguiar') return false;
             const statusMatch = integralStatusFilter === 'todos' || row.status.toLowerCase().replace(' ', '') === integralStatusFilter.toLowerCase().replace(' ', '');
             const ownerMatch = !integralOwnerFilter || row.name.toLowerCase().includes(integralOwnerFilter.toLowerCase());
             return statusMatch && ownerMatch;
         });
     }, [owners, allDebts, allHistoricalPayments, allPayments, integralDateRange, integralStatusFilter, integralOwnerFilter]);
+
     
     // --- Delinquency Report Logic ---
     const filteredAndSortedDelinquents = useMemo(() => {
@@ -1975,3 +1982,4 @@ export default function ReportsPage() {
         </div>
     );
 }
+
