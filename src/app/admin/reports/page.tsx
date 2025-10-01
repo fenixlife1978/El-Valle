@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -461,6 +462,7 @@ export default function ReportsPage() {
                 adjustmentDebtUSD: adjustmentDebtUSD,
             };
         }).filter(row => {
+            if (row.name.toLowerCase() === 'edwin aguiar') return false;
             const statusMatch = integralStatusFilter === 'todos' || row.status.toLowerCase().replace(' ', '') === integralStatusFilter.toLowerCase().replace(' ', '');
             const ownerMatch = !integralOwnerFilter || row.name.toLowerCase().includes(integralOwnerFilter.toLowerCase());
             return statusMatch && ownerMatch;
@@ -732,7 +734,7 @@ export default function ReportsPage() {
 
     const handleExportIntegral = (formatType: 'pdf' | 'excel') => {
         const data = integralReportData;
-        const headers = [["Propietario", "Propiedad", "Fecha Últ. Pago", "Monto Pagado (Bs)", "Tasa Prom. (Bs/$)", "Saldo a Favor (Bs)", "Estado", "Periodo", "Meses Adeudados", "Deuda por Ajuste ($)"]];
+        const headers = [["Propietario", "Propiedad", "Fecha Últ. Pago", "Monto Pagado (Bs)", "Tasa BCV (Bs/$)", "Saldo a Favor (Bs)", "Estado", "Periodo", "Meses Adeudados", "Deuda por Ajuste ($)"]];
         const body = data.map(row => [
             row.name, row.properties, row.lastPaymentDate,
             row.paidAmount > 0 ? formatToTwoDecimals(row.paidAmount) : '',
@@ -790,7 +792,7 @@ export default function ReportsPage() {
                  "Propiedad": row.properties, 
                  "Fecha Últ. Pago": row.lastPaymentDate, 
                  "Monto Pagado (Bs)": row.paidAmount,
-                 "Tasa Prom. (Bs/$)": row.avgRate, 
+                 "Tasa BCV (Bs/$)": row.avgRate, 
                  "Saldo a Favor (Bs)": row.balance, 
                  "Estado": row.status, 
                  "Periodo": row.solvencyPeriod, 
@@ -1324,7 +1326,7 @@ export default function ReportsPage() {
                                         <TableHead>Propiedad</TableHead>
                                         <TableHead>Fecha Últ. Pago</TableHead>
                                         <TableHead className="text-right">Monto Pagado</TableHead>
-                                        <TableHead className="text-right">Tasa Prom.</TableHead>
+                                        <TableHead className="text-right">Tasa BCV</TableHead>
                                         <TableHead className="text-right">Saldo a Favor</TableHead>
                                         <TableHead>Estado</TableHead>
                                         <TableHead>Periodo</TableHead>
