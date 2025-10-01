@@ -13,7 +13,7 @@ import { getCommunityUpdates } from '@/ai/flows/community-updates';
 import { db } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
 import { doc, onSnapshot, collection, query, where, orderBy, limit, getDoc, getDocs, Timestamp } from 'firebase/firestore';
-import { format } from 'date-fns';
+import { format, isBefore, startOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -52,7 +52,7 @@ type Debt = {
     month: number;
     amountUSD: number;
     description: string;
-    status: 'pending' | 'paid';
+    status: 'pending' | 'paid' | 'vencida';
     paidAmountUSD?: number;
     paymentDate?: Timestamp;
     paymentId?: string;
@@ -459,29 +459,37 @@ export default function OwnerDashboardPage() {
                     <TableHead className="w-[50px] text-center">Pagar</TableHead>
                     <TableHead>Período</TableHead>
                     <TableHead>Concepto</TableHead>
+                    <TableHead>Estado</TableHead>
                     <TableHead className="text-right">Monto (Bs.)</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
                     {loading ? (
-                        <TableRow><TableCell colSpan={4} className="h-24 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto"/></TableCell></TableRow>
+                        <TableRow><TableCell colSpan={5} className="h-24 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto"/></TableCell></TableRow>
                     ) : debts.length === 0 ? (
-                        <TableRow><TableCell colSpan={4} className="h-24 text-center text-muted-foreground">¡Felicidades! No tienes deudas pendientes.</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={5} className="h-24 text-center text-muted-foreground">¡Felicidades! No tienes deudas pendientes.</TableCell></TableRow>
                     ) : (
-                    debts.map((debt) => (
-                    <TableRow key={debt.id} data-state={selectedDebts.includes(debt.id) ? 'selected' : ''}>
-                        <TableCell className="text-center">
-                            <Checkbox 
-                                onCheckedChange={() => handleDebtSelection(debt.id)}
-                                checked={selectedDebts.includes(debt.id)}
-                                aria-label={`Seleccionar deuda de ${monthsLocale[debt.month]} ${debt.year}`}
-                            />
-                        </TableCell>
-                        <TableCell className="font-medium">{monthsLocale[debt.month]} ${debt.year}</TableCell>
-                        <TableCell>{debt.description}</TableCell>
-                        <TableCell className="text-right">Bs. {formatToTwoDecimals(debt.amountUSD * dashboardStats.exchangeRate)}</TableCell>
-                    </TableRow>
-                    )))}
+                    debts.map((debt) => {
+                        const debtMonthDate = startOfMonth(new Date(debt.year, debt.month - 1));
+                        const isOverdue = isBefore(debtMonthDate, startOfMonth(new Date()));
+                        return (
+                        <TableRow key={debt.id} data-state={selectedDebts.includes(debt.id) ? 'selected' : ''}>
+                            <TableCell className="text-center">
+                                <Checkbox 
+                                    onCheckedChange={() => handleDebtSelection(debt.id)}
+                                    checked={selectedDebts.includes(debt.id)}
+                                    aria-label={`Seleccionar deuda de ${monthsLocale[debt.month]} ${debt.year}`}
+                                />
+                            </TableCell>
+                            <TableCell className="font-medium">{monthsLocale[debt.month]} ${debt.year}</TableCell>
+                            <TableCell>{debt.description}</TableCell>
+                            <TableCell>
+                                {isOverdue ? <Badge variant={'destructive'}>Vencida</Badge> : <Badge variant={'warning'}>Pendiente</Badge>}
+                            </TableCell>
+                            <TableCell className="text-right">Bs. {formatToTwoDecimals(debt.amountUSD * dashboardStats.exchangeRate)}</TableCell>
+                        </TableRow>
+                        )
+                    }))}
                 </TableBody>
                 </Table>
                  {paymentCalculator.hasSelection && (
@@ -662,3 +670,6 @@ export default function OwnerDashboardPage() {
 
 
 
+
+
+    

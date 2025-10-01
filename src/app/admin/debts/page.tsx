@@ -15,7 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import { collection, query, onSnapshot, where, doc, getDoc, writeBatch, updateDoc, deleteDoc, runTransaction, Timestamp, getDocs, addDoc, orderBy, setDoc, limit, deleteField } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Badge } from '@/components/ui/badge';
-import { differenceInCalendarMonths, format, addMonths, startOfMonth } from 'date-fns';
+import { differenceInCalendarMonths, format, addMonths, startOfMonth, isBefore } from 'date-fns';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -42,7 +42,7 @@ type Debt = {
     month: number;
     amountUSD: number;
     description: string;
-    status: 'pending' | 'paid';
+    status: 'pending' | 'paid' | 'vencida';
     paidAmountUSD?: number;
     paymentDate?: Timestamp;
     paymentId?: string;
@@ -462,15 +462,8 @@ export default function DebtManagementPage() {
 
         try {
             const today = new Date();
-            if (today.getDate() < 6) {
-                toast({
-                    variant: 'destructive',
-                    title: 'Acción no permitida',
-                    description: 'La deuda del mes en curso solo puede generarse a partir del día 6.'
-                });
-                setIsGeneratingMonthlyDebt(false);
-                return;
-            }
+            // REMOVED: Day 6 check is no longer needed.
+            // if (today.getDate() < 6) { ... }
 
             const year = today.getFullYear();
             const month = today.getMonth() + 1;
@@ -504,7 +497,7 @@ export default function DebtManagementPage() {
                                     month: month,
                                     amountUSD: condoFee,
                                     description: 'Cuota de Condominio',
-                                    status: 'pending'
+                                    status: 'pending' // Always 'pending' on creation. UI will determine 'vencida'.
                                 });
                                 newDebtsCount++;
                             }
@@ -923,7 +916,7 @@ export default function DebtManagementPage() {
     
     // Main List View
     if (view === 'list') {
-        const canGenerateDebt = new Date().getDate() >= 6;
+        const canGenerateDebt = new Date().getDate() >= 1; // Can generate from day 1
         return (
             <div className="space-y-8">
                  <div>
@@ -943,7 +936,7 @@ export default function DebtManagementPage() {
                                     onClick={handleGenerateMonthlyDebt} 
                                     variant="outline" 
                                     disabled={isGeneratingMonthlyDebt || !canGenerateDebt}
-                                    title={!canGenerateDebt ? 'Disponible a partir del día 6 del mes' : 'Generar deuda para el mes en curso'}
+                                    title={!canGenerateDebt ? 'Disponible a partir del día 1 del mes' : 'Generar deuda para el mes en curso'}
                                 >
                                     {isGeneratingMonthlyDebt ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CalendarPlus className="mr-2 h-4 w-4" />}
                                     Generar Deuda del Mes
@@ -1066,6 +1059,9 @@ export default function DebtManagementPage() {
                              const propKey = `${property.street}-${property.house}`;
                              const { pending: pendingDebts, paid: paidDebts } = debtsByProperty.get(propKey) || { pending: [], paid: [] };
                              const calc = paymentCalculator(property);
+                             const firstPendingDebt = pendingDebts[0];
+                             const debtDate = firstPendingDebt ? startOfMonth(new Date(firstPendingDebt.year, firstPendingDebt.month - 1)) : null;
+                             const isOverdue = debtDate && isBefore(debtDate, startOfMonth(new Date()));
 
                             return (
                             <Card key={propKey}>
@@ -1107,23 +1103,29 @@ export default function DebtManagementPage() {
                                                             </TableCell>
                                                         </TableRow>
                                                      )}
-                                                     {pendingDebts.map((debt) => (
-                                                        <TableRow key={debt.id}>
-                                                            <TableCell className="font-medium">{months.find(m => m.value === debt.month)?.label} {debt.year}</TableCell>
-                                                            <TableCell>{debt.description}</TableCell>
-                                                            <TableCell>Bs. {formatToTwoDecimals(debt.amountUSD * activeRate)}</TableCell>
-                                                            <TableCell><Badge variant={'warning'}>Pendiente</Badge></TableCell>
-                                                            <TableCell className="text-right">
-                                                                <DropdownMenu>
-                                                                    <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                                                                    <DropdownMenuContent align="end">
-                                                                        <DropdownMenuItem onClick={() => handleEditDebt(debt)}><Edit className="mr-2 h-4 w-4" />Editar</DropdownMenuItem>
-                                                                        <DropdownMenuItem onClick={() => handleDeleteDebt(debt)} className="text-destructive"><Trash2 className="mr-2 h-4 w-4" />Eliminar</DropdownMenuItem>
-                                                                    </DropdownMenuContent>
-                                                                </DropdownMenu>
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    ))}
+                                                     {pendingDebts.map((debt) => {
+                                                        const debtMonthDate = startOfMonth(new Date(debt.year, debt.month - 1));
+                                                        const isDebtOverdue = isBefore(debtMonthDate, startOfMonth(new Date()));
+                                                        return (
+                                                            <TableRow key={debt.id}>
+                                                                <TableCell className="font-medium">{months.find(m => m.value === debt.month)?.label} {debt.year}</TableCell>
+                                                                <TableCell>{debt.description}</TableCell>
+                                                                <TableCell>Bs. {formatToTwoDecimals(debt.amountUSD * activeRate)}</TableCell>
+                                                                <TableCell>
+                                                                    {isDebtOverdue ? <Badge variant={'destructive'}>Vencida</Badge> : <Badge variant={'warning'}>Pendiente</Badge>}
+                                                                </TableCell>
+                                                                <TableCell className="text-right">
+                                                                    <DropdownMenu>
+                                                                        <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                                                                        <DropdownMenuContent align="end">
+                                                                            <DropdownMenuItem onClick={() => handleEditDebt(debt)}><Edit className="mr-2 h-4 w-4" />Editar</DropdownMenuItem>
+                                                                            <DropdownMenuItem onClick={() => handleDeleteDebt(debt)} className="text-destructive"><Trash2 className="mr-2 h-4 w-4" />Eliminar</DropdownMenuItem>
+                                                                        </DropdownMenuContent>
+                                                                    </DropdownMenu>
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        )
+                                                     })}
                                                     {paidDebts.map((debt) => (
                                                         <TableRow key={debt.id} className="text-muted-foreground">
                                                             <TableCell className="font-medium">{months.find(m => m.value === debt.month)?.label} {debt.year}</TableCell>
@@ -1303,5 +1305,7 @@ export default function DebtManagementPage() {
     // Fallback while loading or if view is invalid
     return null;
 }
+
+    
 
     
