@@ -340,89 +340,60 @@ export default function ReportsPage() {
             if (aKeys.streetNum !== bKeys.streetNum) return aKeys.streetNum - bKeys.streetNum;
             return aKeys.houseNum - bKeys.houseNum;
         });
-
-        const startOfCurrentMonth = startOfMonth(new Date());
+        
+        const currentMonthStart = startOfMonth(new Date());
 
         return sortedOwners.map(owner => {
             const ownerAllDebts = allDebts.filter(d => d.ownerId === owner.id);
             const ownerHistoricalPayments = allHistoricalPayments.filter(hp => hp.ownerId === owner.id);
-            
-            // Phase 1: Determine all "solvent months"
-            const solventMonths = new Set<string>();
 
+            // Phase 1: Create a set of all paid months
+            const paidMonths = new Set<string>();
             ownerAllDebts.forEach(debt => {
-                const isJuly2025OrBefore = debt.year < 2025 || (debt.year === 2025 && debt.month <= 7);
-                const isPaid = debt.status === 'paid';
-                const paidAmount = debt.paidAmountUSD || 0;
-
-                if (isPaid) {
-                    if (isJuly2025OrBefore && paidAmount >= 10) {
-                        solventMonths.add(`${debt.year}-${debt.month}`);
-                    } else if (!isJuly2025OrBefore && paidAmount >= 15) {
-                        solventMonths.add(`${debt.year}-${debt.month}`);
-                    } else if (debt.description.toLowerCase().includes('ajuste por aumento')) {
-                        solventMonths.add(`${debt.year}-${debt.month}`);
-                    }
+                if (debt.status === 'paid') {
+                    paidMonths.add(`${debt.year}-${debt.month}`);
                 }
             });
             ownerHistoricalPayments.forEach(hp => {
-                 solventMonths.add(`${hp.referenceYear}-${hp.referenceMonth}`);
-            });
-
-
-            // Phase 2: Find the last consecutive solvent month
-            let lastSolventDate: Date | null = null;
-            if (solventMonths.size > 0) {
-                const sortedSolventPeriods = Array.from(solventMonths).map(p => {
-                    const [year, month] = p.split('-').map(Number);
-                    return new Date(year, month - 1);
-                }).sort((a, b) => a.getTime() - b.getTime());
-
-                lastSolventDate = sortedSolventPeriods[0];
-                for (let i = 0; i < sortedSolventPeriods.length - 1; i++) {
-                    const current = sortedSolventPeriods[i];
-                    const next = sortedSolventPeriods[i + 1];
-                    if (differenceInCalendarMonths(next, current) > 1) {
-                        break; 
-                    }
-                    lastSolventDate = next;
-                }
-            }
-            
-            // Phase 3: Determine solvency status and period string
-            const pendingDebtsUpToCurrentMonth = ownerAllDebts.filter(d => {
-                const debtDate = new Date(d.year, d.month - 1);
-                return d.status === 'pending' && (isEqual(debtDate, startOfCurrentMonth) || isBefore(debtDate, startOfCurrentMonth));
+                paidMonths.add(`${hp.referenceYear}-${hp.referenceMonth}`);
             });
             
-            const status: 'Solvente' | 'No Solvente' = pendingDebtsUpToCurrentMonth.length === 0 ? 'Solvente' : 'No Solvente';
-            
-            let solvencyPeriod = 'N/A';
-            if (status === 'No Solvente') {
-                const oldestDebt = [...pendingDebtsUpToCurrentMonth].sort((a,b) => a.year - b.year || a.month - a.month)[0];
-                if (oldestDebt) {
-                    solvencyPeriod = `Desde ${monthsLocale[oldestDebt.month]} ${oldestDebt.year}`;
-                }
-            } else {
-                 if (lastSolventDate) {
-                    solvencyPeriod = `Hasta ${format(lastSolventDate, 'MMM yyyy', { locale: es })}`;
-                 }
+            // Phase 2: Find the oldest debt to determine the start of the solvency check
+            let oldestDebtDate: Date | null = null;
+            if (ownerAllDebts.length > 0) {
+                const sortedDebts = [...ownerAllDebts].sort((a,b) => a.year - b.year || a.month - b.month);
+                oldestDebtDate = new Date(sortedDebts[0].year, sortedDebts[0].month -1);
             }
-            
-            // Phase 4: Calculate months owed
+
+            // Phase 3: Find the first unpaid month
+            let firstUnpaidMonth: Date | null = null;
             let monthsOwed = 0;
-            if (status === 'No Solvente' && lastSolventDate) {
-                 monthsOwed = differenceInMonths(startOfCurrentMonth, lastSolventDate);
-            } else if (status === 'No Solvente' && !lastSolventDate) {
-                // If never paid, count all pending months up to current
-                monthsOwed = pendingDebtsUpToCurrentMonth.length;
+            if (oldestDebtDate) {
+                 for (let d = oldestDebtDate; isBefore(d, currentMonthStart) || isEqual(d, currentMonthStart); d = addMonths(d, 1)) {
+                    const periodKey = `${d.getFullYear()}-${d.getMonth() + 1}`;
+                    if (!paidMonths.has(periodKey)) {
+                        if (!firstUnpaidMonth) {
+                            firstUnpaidMonth = d;
+                        }
+                        monthsOwed++;
+                    }
+                }
             }
-
+            
+            // Phase 4: Determine solvency status and period
+            const status: 'Solvente' | 'No Solvente' = monthsOwed === 0 ? 'Solvente' : 'No Solvente';
+            let solvencyPeriod = 'N/A';
+            if (status === 'No Solvente' && firstUnpaidMonth) {
+                solvencyPeriod = `Desde ${format(firstUnpaidMonth, 'MMM yyyy', { locale: es })}`;
+            } else if (status === 'Solvente') {
+                solvencyPeriod = `Hasta ${format(currentMonthStart, 'MMM yyyy', { locale: es })}`;
+            }
+            
             // Phase 5: Calculate pending adjustment debt
             const adjustmentDebtUSD = ownerAllDebts
-                .filter(d => d.status === 'pending' && d.description.toLowerCase().includes('ajuste por aumento de cuota'))
+                .filter(d => d.status === 'pending' && d.description.toLowerCase().includes('ajuste por aumento'))
                 .reduce((sum, d) => sum + d.amountUSD, 0);
-            
+
             // Phase 6: Filter payments for reporting based on date range
             const fromDate = integralDateRange.from;
             const toDate = integralDateRange.to;
@@ -458,7 +429,7 @@ export default function ReportsPage() {
                 balance: owner.balance,
                 status,
                 solvencyPeriod,
-                monthsOwed: monthsOwed > 0 ? monthsOwed : 0,
+                monthsOwed: monthsOwed,
                 adjustmentDebtUSD: adjustmentDebtUSD,
             };
         }).filter(row => {
