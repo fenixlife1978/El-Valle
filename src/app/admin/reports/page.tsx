@@ -345,33 +345,38 @@ export default function ReportsPage() {
 
         return sortedOwners.map(owner => {
             const ownerAllDebts = allDebts.filter(d => d.ownerId === owner.id);
+            const ownerHistoricalPayments = allHistoricalPayments.filter(p => p.ownerId === owner.id);
 
-            // Phase 1: Find the first month for this owner that has any record (debt)
+            // Phase 1: Find the first month for this owner that has any record (debt or historical)
             let oldestRecordDate: Date | null = null;
             if (ownerAllDebts.length > 0) {
                 const sortedDebts = [...ownerAllDebts].sort((a, b) => a.year - b.year || a.month - b.month);
                 oldestRecordDate = new Date(sortedDebts[0].year, sortedDebts[0].month - 1);
             }
+             if (ownerHistoricalPayments.length > 0) {
+                const sortedHistorical = [...ownerHistoricalPayments].sort((a, b) => a.referenceYear - b.referenceYear || a.referenceMonth - b.referenceMonth);
+                const historicalDate = new Date(sortedHistorical[0].referenceYear, sortedHistorical[0].referenceMonth - 1);
+                if (!oldestRecordDate || isBefore(historicalDate, oldestRecordDate)) {
+                    oldestRecordDate = historicalDate;
+                }
+            }
             
-            // Phase 2: Find the first unpaid month and the last paid month.
+            // Phase 2: Find the first unpaid month.
             let firstUnpaidMonth: Date | null = null;
-            let lastConsecutivePaidMonth: Date | null = null;
-            
             if (oldestRecordDate) {
                 // Iterate from the oldest known month up to the current month
                 for (let d = oldestRecordDate; isBefore(d, currentMonthStart) || isEqual(d, currentMonthStart); d = addMonths(d, 1)) {
                     const year = d.getFullYear();
                     const month = d.getMonth() + 1;
                     
+                    // A month is fully paid if there are NO pending debts for it (base fee or adjustment).
                     const isMonthFullyPaid = !ownerAllDebts.some(debt =>
                         debt.year === year && debt.month === month && debt.status === 'pending'
                     );
 
-                    if (isMonthFullyPaid) {
-                        lastConsecutivePaidMonth = d;
-                    } else {
+                    if (!isMonthFullyPaid) {
                         firstUnpaidMonth = d;
-                        break; // Found a gap, stop checking
+                        break; // Found the first gap, stop checking
                     }
                 }
             }
@@ -383,15 +388,7 @@ export default function ReportsPage() {
             if (status === 'No Solvente' && firstUnpaidMonth) {
                 solvencyPeriod = `Desde ${format(firstUnpaidMonth, 'MMM yyyy', { locale: es })}`;
             } else if (status === 'Solvente') {
-                 // Find the absolute last paid month, even if it's an advance payment
-                const allPaidDebts = ownerAllDebts.filter(d => d.status === 'paid');
-                if (allPaidDebts.length > 0) {
-                    const lastPaidDebt = allPaidDebts.sort((a,b) => b.year - a.year || b.month - a.month)[0];
-                    const lastPaidDate = new Date(lastPaidDebt.year, lastPaidDebt.month - 1);
-                    solvencyPeriod = `Hasta ${format(lastPaidDate, 'MMM yyyy', { locale: es })}`;
-                } else {
-                    solvencyPeriod = 'Sin historial de pago';
-                }
+                solvencyPeriod = `Hasta ${format(currentMonthStart, 'MMM yyyy', { locale: es })}`;
             }
 
 
@@ -447,7 +444,7 @@ export default function ReportsPage() {
             const ownerMatch = !integralOwnerFilter || row.name.toLowerCase().includes(integralOwnerFilter.toLowerCase());
             return statusMatch && ownerMatch;
         });
-    }, [owners, allDebts, allPayments, integralDateRange, integralStatusFilter, integralOwnerFilter]);
+    }, [owners, allDebts, allPayments, allHistoricalPayments, integralDateRange, integralStatusFilter, integralOwnerFilter]);
 
     
     // --- Delinquency Report Logic ---
@@ -1975,6 +1972,7 @@ export default function ReportsPage() {
         </div>
     );
 }
+
 
 
 
