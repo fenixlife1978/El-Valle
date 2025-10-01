@@ -345,50 +345,41 @@ export default function ReportsPage() {
 
         return sortedOwners.map(owner => {
             const ownerAllDebts = allDebts.filter(d => d.ownerId === owner.id);
-            const ownerHistoricalPayments = allHistoricalPayments.filter(hp => hp.ownerId === owner.id);
 
-            // Phase 1: Determine the owner's oldest recorded month to start checking from.
+            // Phase 1: Find the first month for this owner that has any record (debt)
             let oldestRecordDate: Date | null = null;
             if (ownerAllDebts.length > 0) {
                 const sortedDebts = [...ownerAllDebts].sort((a, b) => a.year - b.year || a.month - b.month);
                 oldestRecordDate = new Date(sortedDebts[0].year, sortedDebts[0].month - 1);
             }
-            if (ownerHistoricalPayments.length > 0) {
-                const sortedHistorical = [...ownerHistoricalPayments].sort((a, b) => a.referenceYear - b.referenceYear || a.referenceMonth - b.referenceMonth);
-                const oldestHistoricalDate = new Date(sortedHistorical[0].referenceYear, sortedHistorical[0].referenceMonth - 1);
-                if (!oldestRecordDate || isBefore(oldestHistoricalDate, oldestRecordDate)) {
-                    oldestRecordDate = oldestHistoricalDate;
-                }
-            }
-
-            // Phase 2: Find the first month that is not fully paid.
+            
+            // Phase 2: Find the first unpaid month by iterating from the oldest record to now.
             let firstUnpaidMonth: Date | null = null;
             let lastPaidMonth: Date | null = null;
-
+            
             if (oldestRecordDate) {
+                // Iterate from the oldest known month up to the current month
                 for (let d = oldestRecordDate; isBefore(d, currentMonthStart) || isEqual(d, currentMonthStart); d = addMonths(d, 1)) {
                     const year = d.getFullYear();
                     const month = d.getMonth() + 1;
                     
-                    // A month is fully paid if NO debt for that month/year is pending.
-                    const hasPendingDebtForMonth = ownerAllDebts.some(debt =>
+                    // A month is NOT fully paid if ANY debt for that month/year is pending.
+                    const isMonthFullyPaid = !ownerAllDebts.some(debt =>
                         debt.year === year && debt.month === month && debt.status === 'pending'
                     );
 
-                    if (hasPendingDebtForMonth) {
-                        if (!firstUnpaidMonth) {
-                            firstUnpaidMonth = d;
-                        }
+                    if (isMonthFullyPaid) {
+                        // This month is fine, update the last known paid month
+                        lastPaidMonth = d;
                     } else {
-                        // This month is fully paid, update the last paid month.
-                         if (!firstUnpaidMonth) { // Only update if still solvent
-                            lastPaidMonth = d;
-                        }
+                        // Found the first gap. This is the start of non-solvency.
+                        firstUnpaidMonth = d;
+                        break; // Stop checking further
                     }
                 }
             }
 
-            // Phase 3: Determine solvency status and period.
+            // Phase 3: Determine solvency status and period based on the findings.
             const status: 'Solvente' | 'No Solvente' = !firstUnpaidMonth ? 'Solvente' : 'No Solvente';
             let solvencyPeriod = 'N/A';
             if (status === 'No Solvente' && firstUnpaidMonth) {
@@ -397,10 +388,11 @@ export default function ReportsPage() {
                  if (lastPaidMonth) {
                     solvencyPeriod = `Hasta ${format(lastPaidMonth, 'MMM yyyy', { locale: es })}`;
                  } else {
-                    // If no records at all, they are solvent up to the previous month
+                    // No records at all means they are technically solvent up to the previous month.
                     solvencyPeriod = `Hasta ${format(addMonths(currentMonthStart, -1), 'MMM yyyy', { locale: es })}`;
                  }
             }
+
 
             // Phase 4: Calculate total months owed and adjustment debt.
             const monthsOwed = ownerAllDebts.filter(d => 
@@ -454,7 +446,7 @@ export default function ReportsPage() {
             const ownerMatch = !integralOwnerFilter || row.name.toLowerCase().includes(integralOwnerFilter.toLowerCase());
             return statusMatch && ownerMatch;
         });
-    }, [owners, allDebts, allHistoricalPayments, allPayments, integralDateRange, integralStatusFilter, integralOwnerFilter]);
+    }, [owners, allDebts, allPayments, integralDateRange, integralStatusFilter, integralOwnerFilter]);
 
     
     // --- Delinquency Report Logic ---
@@ -1982,4 +1974,5 @@ export default function ReportsPage() {
         </div>
     );
 }
+
 
