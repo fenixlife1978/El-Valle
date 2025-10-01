@@ -346,49 +346,80 @@ export default function ReportsPage() {
         return sortedOwners.map(owner => {
             const ownerAllDebts = allDebts.filter(d => d.ownerId === owner.id);
             const ownerHistoricalPayments = allHistoricalPayments.filter(p => p.ownerId === owner.id);
-
-            // Phase 1: Find the first month for this owner that has any record (debt or historical)
-            let oldestRecordDate: Date | null = null;
-            if (ownerAllDebts.length > 0) {
-                const sortedDebts = [...ownerAllDebts].sort((a, b) => a.year - b.year || a.month - b.month);
-                oldestRecordDate = new Date(sortedDebts[0].year, sortedDebts[0].month - 1);
-            }
-             if (ownerHistoricalPayments.length > 0) {
-                const sortedHistorical = [...ownerHistoricalPayments].sort((a, b) => a.referenceYear - b.referenceYear || a.referenceMonth - b.referenceMonth);
-                const historicalDate = new Date(sortedHistorical[0].referenceYear, sortedHistorical[0].referenceMonth - 1);
-                if (!oldestRecordDate || isBefore(historicalDate, oldestRecordDate)) {
-                    oldestRecordDate = historicalDate;
-                }
-            }
             
-            // Phase 2: Find the first unpaid month.
+            // --- New Solvency Logic ---
             let firstUnpaidMonth: Date | null = null;
+            let lastPaidMonth: Date | null = null;
+            let oldestRecordDate: Date | null = null;
+
+            // Step 1: Find the oldest record to start checking from
+            const allRecords = [
+                ...ownerAllDebts.map(d => new Date(d.year, d.month - 1)),
+                ...ownerHistoricalPayments.map(p => new Date(p.referenceYear, p.referenceMonth - 1))
+            ].sort((a, b) => a.getTime() - b.getTime());
+
+            if (allRecords.length > 0) {
+                oldestRecordDate = allRecords[0];
+            }
+
+            // Step 2: Iterate month by month to find the first unpaid month and last paid month
             if (oldestRecordDate) {
-                // Iterate from the oldest known month up to the current month
-                for (let d = oldestRecordDate; isBefore(d, currentMonthStart) || isEqual(d, currentMonthStart); d = addMonths(d, 1)) {
+                const today = new Date();
+                for (let d = oldestRecordDate; isBefore(d, today) || isEqual(d, startOfMonth(today)); d = addMonths(d, 1)) {
                     const year = d.getFullYear();
                     const month = d.getMonth() + 1;
-                    
+
                     // A month is fully paid if there are NO pending debts for it (base fee or adjustment).
                     const isMonthFullyPaid = !ownerAllDebts.some(debt =>
                         debt.year === year && debt.month === month && debt.status === 'pending'
                     );
 
-                    if (!isMonthFullyPaid) {
-                        firstUnpaidMonth = d;
-                        break; // Found the first gap, stop checking
+                    if (isMonthFullyPaid) {
+                        lastPaidMonth = d;
+                    } else {
+                        // This is the first gap.
+                        if (!firstUnpaidMonth) {
+                            firstUnpaidMonth = d;
+                        }
                     }
                 }
             }
+             // Step 2.5: Consider future paid months only if completely solvent up to now
+            if (!firstUnpaidMonth) {
+                const futurePaidDebts = ownerAllDebts
+                    .filter(d => d.status === 'paid' && isBefore(new Date(), new Date(d.year, d.month - 1)))
+                    .sort((a, b) => new Date(a.year, a.month - 1).getTime() - new Date(b.year, b.month - 1).getTime());
 
-            // Phase 3: Determine solvency status and period.
+                let consecutiveLastPaid = lastPaidMonth ? new Date(lastPaidMonth) : null;
+                if (consecutiveLastPaid) {
+                     for (const debt of futurePaidDebts) {
+                        const nextMonth = addMonths(consecutiveLastPaid, 1);
+                        if (debt.year === nextMonth.getFullYear() && debt.month === nextMonth.getMonth() + 1) {
+                           // Check if this future month is fully paid
+                            const isFutureMonthFullyPaid = !ownerAllDebts.some(d =>
+                                d.year === debt.year && d.month === debt.month && d.status === 'pending'
+                            );
+                            if(isFutureMonthFullyPaid) {
+                                consecutiveLastPaid = new Date(debt.year, debt.month - 1);
+                            } else {
+                                break; // Not consecutively paid, stop.
+                            }
+                        } else {
+                            break; // Gap found, stop.
+                        }
+                    }
+                }
+               lastPaidMonth = consecutiveLastPaid;
+            }
+
+
+            // Step 3: Determine solvency status and period based on findings.
             const status: 'Solvente' | 'No Solvente' = !firstUnpaidMonth ? 'Solvente' : 'No Solvente';
             let solvencyPeriod = 'N/A';
-
             if (status === 'No Solvente' && firstUnpaidMonth) {
                 solvencyPeriod = `Desde ${format(firstUnpaidMonth, 'MMM yyyy', { locale: es })}`;
-            } else if (status === 'Solvente') {
-                solvencyPeriod = `Hasta ${format(currentMonthStart, 'MMM yyyy', { locale: es })}`;
+            } else if (status === 'Solvente' && lastPaidMonth) {
+                solvencyPeriod = `Hasta ${format(lastPaidMonth, 'MMM yyyy', { locale: es })}`;
             }
 
 
@@ -1972,6 +2003,7 @@ export default function ReportsPage() {
         </div>
     );
 }
+
 
 
 
