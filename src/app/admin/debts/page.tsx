@@ -297,15 +297,16 @@ export default function DebtManagementPage() {
                     
                     // --- ALL READS FIRST ---
                     const ownerDoc = await transaction.get(ownerRef);
-                    const pendingDebtsSnapshot = await getDocs(pendingDebtsQuery); // Not a transaction read, but happens before logic
-                    const allExistingDebtsSnap = await getDocs(allExistingDebtsQuery); // Same as above
+                    // These reads happen outside the transaction but are completed before any writes.
+                    const pendingDebtsSnapshot = await getDocs(pendingDebtsQuery); 
+                    const allExistingDebtsSnap = await getDocs(allExistingDebtsQuery);
 
                     if (!ownerDoc.exists()) throw new Error(`Propietario ${owner.id} no encontrado.`);
 
                     let availableBalance = Number(ownerDoc.data().balance || 0);
                     if (availableBalance <= 0) return; // No balance to process
 
-                    // --- LOGIC AND CALCULATION ---
+                    // --- LOGIC AND CALCULATION (Happens after all reads) ---
                     let balanceChanged = false;
 
                     const sortedDebts = pendingDebtsSnapshot.docs
@@ -622,22 +623,37 @@ export default function DebtManagementPage() {
         try {
             const ownerRef = doc(db, "owners", selectedOwner.id);
             const debtRef = doc(db, "debts", debtToDelete.id);
-            
+    
             await runTransaction(db, async (transaction) => {
+                // --- 1. All reads first ---
                 const ownerDoc = await transaction.get(ownerRef);
-                
-                if (!ownerDoc.exists()) throw "El documento del propietario no existe.";
+                if (!ownerDoc.exists()) {
+                    throw "El documento del propietario no existe.";
+                }
     
+                const currentBalanceBs = ownerDoc.data().balance || 0;
+                let newBalanceBs = currentBalanceBs;
+                let shouldUpdateBalance = false;
+    
+                // --- 2. Logic ---
                 if (debtToDelete.status === 'paid' && debtToDelete.paidAmountUSD && activeRate > 0) {
-                     const currentBalanceBs = ownerDoc.data().balance || 0;
-                     const debtAmountBs = debtToDelete.paidAmountUSD * activeRate;
-                     const newBalanceBs = currentBalanceBs + debtAmountBs;
-                     transaction.update(ownerRef, { balance: newBalanceBs });
+                    const debtAmountBs = debtToDelete.paidAmountUSD * activeRate;
+                    newBalanceBs = currentBalanceBs + debtAmountBs;
+                    shouldUpdateBalance = true;
+                }
     
-                     if (debtToDelete.paymentId) {
-                         const paymentRef = doc(db, "payments", debtToDelete.paymentId);
-                         transaction.delete(paymentRef);
-                     }
+                // --- 3. All writes last ---
+                if (shouldUpdateBalance) {
+                    transaction.update(ownerRef, { balance: newBalanceBs });
+                }
+    
+                if (debtToDelete.paymentId && debtToDelete.status === 'paid') {
+                    const paymentRef = doc(db, "payments", debtToDelete.paymentId);
+                    // Check if payment exists before attempting to delete
+                    const paymentDoc = await getDoc(paymentRef); // This is a read outside the transaction, but acceptable for this logic
+                    if (paymentDoc.exists()) {
+                       transaction.delete(paymentRef);
+                    }
                 }
                 
                 transaction.delete(debtRef);
@@ -1240,4 +1256,5 @@ export default function DebtManagementPage() {
     
 
     
+
 
