@@ -29,38 +29,32 @@ export default function SyncProfilesPage() {
     const [missingProfiles, setMissingProfiles] = useState<MissingProfile[]>([]);
     const [user, setUser] = useState<User | null>(null);
 
-    const checkForMissingProfiles = useCallback(async () => {
-        if (!user) {
-            setLoading(false);
-            return;
-        }
-
+    const checkForMissingProfiles = useCallback(async (currentUser: User) => {
         setLoading(true);
-
         try {
             await ensureAdminProfile();
             
-            const currentUser: AuthUser = {
-                uid: user.uid,
-                email: user.email,
-                displayName: user.displayName
+            const userData: AuthUser = {
+                uid: currentUser.uid,
+                email: currentUser.email,
+                displayName: currentUser.displayName
             };
             
             const ownerRef = doc(db, "owners", currentUser.uid);
             const ownerSnap = await getDoc(ownerRef);
             
             setMissingProfiles([{
-                ...currentUser,
+                ...userData,
                 existsInDb: ownerSnap.exists()
             }]);
 
-        } catch (error) => {
+        } catch (error) {
             console.error("Error checking for profiles:", error);
             toast({ variant: 'destructive', title: 'Error', description: 'No se pudo verificar los perfiles de usuario.' });
         } finally {
             setLoading(false);
         }
-    }, [toast, user]);
+    }, [toast]);
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -70,10 +64,10 @@ export default function SyncProfilesPage() {
     }, []);
 
     useEffect(() => {
-        if (user !== null) {
-            checkForMissingProfiles();
+        if (user) {
+            checkForMissingProfiles(user);
         } else {
-            // If user becomes null (e.g. logs out), stop loading
+            // If user is not logged in, stop loading.
             setLoading(false);
         }
     }, [user, checkForMissingProfiles]);
@@ -129,8 +123,10 @@ export default function SyncProfilesPage() {
             description: `Se crearon ${createdCount} nuevos perfiles. Hubo ${errorCount} errores.`,
             className: errorCount > 0 ? 'bg-orange-100 border-orange-400 text-orange-800' : 'bg-green-100 border-green-400 text-green-800'
         });
-
-        await checkForMissingProfiles(); // Refresh the list
+        
+        if (user) {
+            await checkForMissingProfiles(user); // Refresh the list
+        }
         setSyncing(false);
     };
 
@@ -147,10 +143,12 @@ export default function SyncProfilesPage() {
                 <CardHeader>
                     <div className="flex justify-between items-center">
                         <CardTitle>Verificación de Perfiles</CardTitle>
-                        <Button variant="outline" onClick={checkForMissingProfiles} disabled={loading}>
-                            <RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} />
-                            Volver a Verificar
-                        </Button>
+                         {user && (
+                             <Button variant="outline" onClick={() => checkForMissingProfiles(user)} disabled={loading}>
+                                <RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} />
+                                Volver a Verificar
+                            </Button>
+                         )}
                     </div>
                      <CardDescription>
                         Esta herramienta verifica los usuarios del sistema de autenticación y los compara con la base de datos de perfiles ('owners').
