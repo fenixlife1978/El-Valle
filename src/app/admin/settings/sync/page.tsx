@@ -6,9 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, UserPlus, RefreshCw, AlertTriangle, UserCheck } from 'lucide-react';
-import { doc, getDoc, setDoc, Timestamp, getDocs, collection } from 'firebase/firestore';
-import { db, auth } from '@/lib/firebase'; // Import auth from central config
-import { type User } from 'firebase/auth';
+import { doc, getDoc, setDoc, Timestamp } from 'firebase/firestore';
+import { db, auth } from '@/lib/firebase';
+import { onAuthStateChanged, type User } from 'firebase/auth';
 import { cn } from "@/lib/utils";
 import { ensureAdminProfile } from '@/lib/ensureAdminProfile';
 
@@ -27,53 +27,56 @@ export default function SyncProfilesPage() {
     const [loading, setLoading] = useState(true);
     const [syncing, setSyncing] = useState(false);
     const [missingProfiles, setMissingProfiles] = useState<MissingProfile[]>([]);
-    const [allUsers, setAllUsers] = useState<AuthUser[]>([]);
+    const [user, setUser] = useState<User | null>(null);
 
     const checkForMissingProfiles = useCallback(async () => {
+        if (!user) {
+            setLoading(false);
+            return;
+        }
+
         setLoading(true);
 
         try {
             await ensureAdminProfile();
             
-            const currentUser = auth.currentUser;
-            if (!currentUser) {
-                toast({ variant: 'destructive', title: "No autenticado", description: "No se encontró un usuario activo. Por favor, inicie sesión." });
-                setLoading(false);
-                return;
-            }
+            const currentUser: AuthUser = {
+                uid: user.uid,
+                email: user.email,
+                displayName: user.displayName
+            };
             
-            // This is a simulation. In a real server environment, you'd fetch this list securely.
-            const simulatedUserList: AuthUser[] = [{
-                uid: currentUser.uid,
-                email: currentUser.email,
-                displayName: currentUser.displayName
-            }];
+            const ownerRef = doc(db, "owners", currentUser.uid);
+            const ownerSnap = await getDoc(ownerRef);
             
-            setAllUsers(simulatedUserList);
+            setMissingProfiles([{
+                ...currentUser,
+                existsInDb: ownerSnap.exists()
+            }]);
 
-            const profilesData: MissingProfile[] = [];
-            for (const user of simulatedUserList) {
-                const ownerRef = doc(db, "owners", user.uid);
-                const ownerSnap = await getDoc(ownerRef);
-                profilesData.push({
-                    ...user,
-                    existsInDb: ownerSnap.exists()
-                });
-            }
-
-            setMissingProfiles(profilesData);
-
-        } catch (error) {
+        } catch (error) => {
             console.error("Error checking for profiles:", error);
             toast({ variant: 'destructive', title: 'Error', description: 'No se pudo verificar los perfiles de usuario.' });
         } finally {
             setLoading(false);
         }
-    }, [toast]);
+    }, [toast, user]);
 
     useEffect(() => {
-        checkForMissingProfiles();
-    }, [checkForMissingProfiles]);
+        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+            setUser(currentUser);
+        });
+        return () => unsubscribe();
+    }, []);
+
+    useEffect(() => {
+        if (user !== null) {
+            checkForMissingProfiles();
+        } else {
+            // If user becomes null (e.g. logs out), stop loading
+            setLoading(false);
+        }
+    }, [user, checkForMissingProfiles]);
 
     const crearPerfilSiNoExiste = async (uid: string, datosUsuario: { email: string | null; name: string | null }, rol = "propietario") => {
         const perfilRef = doc(db, "owners", uid);
@@ -112,8 +115,8 @@ export default function SyncProfilesPage() {
         let createdCount = 0;
         let errorCount = 0;
 
-        for (const user of usersToCreate) {
-            const result = await crearPerfilSiNoExiste(user.uid, { email: user.email, name: user.displayName });
+        for (const userToCreate of usersToCreate) {
+            const result = await crearPerfilSiNoExiste(userToCreate.uid, { email: userToCreate.email, name: userToCreate.displayName });
             if (result.success && !result.skipped) {
                 createdCount++;
             } else if (!result.success) {
@@ -158,16 +161,20 @@ export default function SyncProfilesPage() {
                         <div className="flex justify-center items-center h-40">
                             <Loader2 className="h-8 w-8 animate-spin text-primary"/>
                         </div>
+                    ) : !user ? (
+                        <div className="p-4 bg-yellow-100/10 border border-yellow-500/30 rounded-lg text-center">
+                             <p className="font-semibold text-yellow-400">Por favor, inicie sesión para verificar su perfil.</p>
+                        </div>
                     ) : usersNeedingProfile.length > 0 ? (
                         <div className="space-y-4">
                              <div className="p-4 bg-destructive/10 border border-destructive/30 rounded-lg">
-                                <h3 className="font-semibold text-destructive flex items-center gap-2"><AlertTriangle/> ¡Atención! Se encontraron usuarios sin perfil</h3>
-                                <p className="text-destructive/80 text-sm mt-1">Los siguientes usuarios están autenticados pero no tienen un perfil en la base de datos. Esto puede causar errores en la aplicación.</p>
+                                <h3 className="font-semibold text-destructive flex items-center gap-2"><AlertTriangle/> ¡Atención! Se encontró un usuario sin perfil</h3>
+                                <p className="text-destructive/80 text-sm mt-1">El siguiente usuario está autenticado pero no tiene un perfil en la base de datos. Esto puede causar errores en la aplicación.</p>
                             </div>
                             <ul className="list-disc pl-5 space-y-1">
-                                {usersNeedingProfile.map(user => (
-                                    <li key={user.uid} className="text-sm">
-                                        <span className="font-medium">{user.displayName || user.email}</span> ({user.uid})
+                                {usersNeedingProfile.map(u => (
+                                    <li key={u.uid} className="text-sm">
+                                        <span className="font-medium">{u.displayName || u.email}</span> ({u.uid})
                                     </li>
                                 ))}
                             </ul>
@@ -175,14 +182,14 @@ export default function SyncProfilesPage() {
                     ) : (
                          <div className="p-4 bg-success/10 border border-success/30 rounded-lg">
                             <h3 className="font-semibold text-success flex items-center gap-2"><UserCheck/> Todo Sincronizado</h3>
-                            <p className="text-success/80 text-sm mt-1">Todos los usuarios verificados tienen un perfil en la base de datos.</p>
+                            <p className="text-success/80 text-sm mt-1">El usuario actual tiene un perfil en la base de datos.</p>
                         </div>
                     )}
                 </CardContent>
                 <CardFooter>
                     <Button onClick={handleSync} disabled={syncing || usersNeedingProfile.length === 0}>
                         {syncing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <UserPlus className="mr-2 h-4 w-4"/>}
-                        {syncing ? 'Creando perfiles...' : `Crear ${usersNeedingProfile.length} Perfil(es) Faltante(s)`}
+                        {syncing ? 'Creando perfil...' : `Crear Perfil Faltante`}
                     </Button>
                 </CardFooter>
             </Card>
