@@ -494,7 +494,7 @@ export default function VerifyPaymentsPage() {
 
   const handleDownloadPdf = async () => {
     if (!receiptData || !companyInfo) return;
-    const { payment, ownerName, paidDebts, qrCodeUrl } = receiptData;
+    const { payment, paidDebts, qrCodeUrl } = receiptData;
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 14;
@@ -526,9 +526,10 @@ export default function VerifyPaymentsPage() {
         doc.addImage(qrCodeUrl, 'PNG', pageWidth - margin - qrSize, margin + 48, qrSize, qrSize);
     }
 
-
     let startY = margin + 60;
-    doc.setFontSize(10).text(`Nombre del Beneficiario: ${ownerName}`, margin, startY);
+    
+    const beneficiariesText = payment.beneficiaries.map(b => `${b.ownerName} (${b.street} - ${b.house})`).join('; ');
+    doc.setFontSize(10).text(`Beneficiario(s): ${beneficiariesText}`, margin, startY);
     startY += 6;
     doc.text(`Método de pago: ${payment.type}`, margin, startY);
     startY += 6;
@@ -570,7 +571,6 @@ export default function VerifyPaymentsPage() {
         });
         startY = (doc as any).lastAutoTable.finalY + 8;
     } else if (payment.type === 'adelanto') {
-        // Special case for advance payments that don't liquidate existing debts
         totalPaidInConcepts = payment.totalAmount; // totalAmount is in USD for advances
         (doc as any).autoTable({
             startY: startY,
@@ -787,8 +787,8 @@ export default function VerifyPaymentsPage() {
                         </div>
                         <hr className="my-2 border-gray-400"/>
                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                             <p><strong>Beneficiario:</strong></p><p>{receiptData.ownerName}</p>
-                             <p><strong>Unidad:</strong></p><p>{receiptData.ownerUnit}</p>
+                             <p><strong>Beneficiario(s):</strong></p><p>{receiptData.payment.beneficiaries.map(b => b.ownerName).join('; ')}</p>
+                             <p><strong>Unidad(es):</strong></p><p>{receiptData.ownerUnit}</p>
                              <p><strong>Método de pago:</strong></p><p>{receiptData.payment.type}</p>
                              <p><strong>Banco Emisor:</strong></p><p>{receiptData.payment.bank}</p>
                              <p><strong>N° de Referencia:</strong></p><p>{receiptData.payment.reference}</p>
@@ -880,3 +880,4 @@ export default function VerifyPaymentsPage() {
     
 
     
+
