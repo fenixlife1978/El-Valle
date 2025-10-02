@@ -1130,48 +1130,49 @@ export default function ReportsPage() {
         }
     };
 
-    const handleExportChart = async (chartId: string, title: string) => {
+    const handleExportChart = (chartId: string, title: string) => {
         const chartElement = document.getElementById(chartId);
         if (!chartElement) {
             toast({ variant: "destructive", title: "Error de exportación", description: "No se encontró el elemento del gráfico para exportar."});
             return;
         }
     
-        const { default: html2canvas } = await import('html2canvas');
-        const canvas = await html2canvas(chartElement, {
-            backgroundColor: '#1f2937', 
-            scale: 2,
-            useCORS: true, 
-        });
-        
-        const imgData = canvas.toDataURL('image/png');
-        const filename = `${title.toLowerCase().replace(/\s/g, '_')}_${format(new Date(), 'yyyy-MM-dd')}`;
+        import('html2canvas').then(html2canvas => {
+            html2canvas.default(chartElement, {
+                backgroundColor: '#1f2937', 
+                scale: 2,
+                useCORS: true, 
+            }).then(canvas => {
+                const imgData = canvas.toDataURL('image/png');
+                const filename = `${title.toLowerCase().replace(/\s/g, '_')}_${format(new Date(), 'yyyy-MM-dd')}`;
     
-        const doc = new jsPDF({
-            orientation: 'p',
-            unit: 'px',
-            format: 'a4'
+                const doc = new jsPDF({
+                    orientation: 'p',
+                    unit: 'px',
+                    format: 'a4'
+                });
+                
+                const pageWidth = doc.internal.pageSize.getWidth();
+                
+                const imgProps = doc.getImageProperties(imgData);
+                const imgWidth = pageWidth - 80;
+                const imgHeight = (imgProps.height * imgWidth) / imgProps.width;
+                
+                const x = (pageWidth - imgWidth) / 2;
+                
+                doc.setFontSize(16).setFont('helvetica', 'bold');
+                doc.text(title, pageWidth / 2, 60, { align: 'center'});
+
+                let periodString = "Período: Todos";
+                if (chartsDateRange.from && chartsDateRange.to) periodString = `Período: ${format(chartsDateRange.from, 'P', { locale: es })} - ${format(chartsDateRange.to, 'P', { locale: es })}`;
+                else if (chartsDateRange.from) periodString = `Período: Desde ${format(chartsDateRange.from, 'P', { locale: es })}`;
+                else if (chartsDateRange.to) periodString = `Período: Hasta ${format(chartsDateRange.to, 'P', { locale: es })}`;
+                doc.setFontSize(10).setFont('helvetica', 'normal').text(periodString, pageWidth / 2, 75, { align: 'center'});
+
+                doc.addImage(imgData, 'PNG', x, 100, imgWidth, imgHeight);
+                doc.save(`${filename}.pdf`);
+            });
         });
-        
-        const pageWidth = doc.internal.pageSize.getWidth();
-        
-        const imgProps = doc.getImageProperties(imgData);
-        const imgWidth = pageWidth - 80;
-        const imgHeight = (imgProps.height * imgWidth) / imgProps.width;
-        
-        const x = (pageWidth - imgWidth) / 2;
-        
-        doc.setFontSize(16).setFont('helvetica', 'bold');
-        doc.text(title, pageWidth / 2, 60, { align: 'center'});
-
-        let periodString = "Período: Todos";
-        if (chartsDateRange.from && chartsDateRange.to) periodString = `Período: ${format(chartsDateRange.from, 'P', { locale: es })} - ${format(chartsDateRange.to, 'P', { locale: es })}`;
-        else if (chartsDateRange.from) periodString = `Período: Desde ${format(chartsDateRange.from, 'P', { locale: es })}`;
-        else if (chartsDateRange.to) periodString = `Período: Hasta ${format(chartsDateRange.to, 'P', { locale: es })}`;
-        doc.setFontSize(10).setFont('helvetica', 'normal').text(periodString, pageWidth / 2, 75, { align: 'center'});
-
-        doc.addImage(imgData, 'PNG', x, 100, imgWidth, imgHeight);
-        doc.save(`${filename}.pdf`);
     };
 
     const renderSortIcon = (key: SortKey) => {

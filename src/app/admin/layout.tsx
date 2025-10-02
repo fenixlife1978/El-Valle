@@ -48,7 +48,7 @@ const adminNavItems: NavItem[] = [
 export default function AdminLayout({ children }: { children: ReactNode }) {
     // Authentication check has been removed to allow direct access.
     return (
-        <DashboardLayout userName="Administrador" userRole="Administrador" navItems={adminNavItems}>
+        <DashboardLayout userName="Edwin Aguiar" userRole="Administrador" navItems={adminNavItems}>
             {children}
         </DashboardLayout>
     );
