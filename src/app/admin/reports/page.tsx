@@ -156,9 +156,10 @@ const formatToTwoDecimals = (num: number) => {
 // Custom Label for Bar Charts
 const CustomBarLabel = (props: any) => {
     const { x, y, width, value } = props;
+    if (value === 0) return null;
     const formattedValue = `$${Math.round(value)}`;
     return (
-        <text x={x + width / 2} y={y} fill="#fff" textAnchor="middle" dy={-6} fontSize="12" fontWeight="bold" transform={`rotate(-90, ${x + width / 2}, ${y})`}>
+        <text x={x + width / 2} y={y} fill="#fff" textAnchor="middle" dy={-6} fontSize="12" fontWeight="bold">
             {formattedValue}
         </text>
     );
@@ -1176,7 +1177,7 @@ export default function ReportsPage() {
         if (!chartElement) return;
 
         const { default: html2canvas } = await import('html2canvas');
-        const canvas = await html2canvas(chartElement, { backgroundColor: '#1f2937' }); // Match dark bg
+        const canvas = await html2canvas(chartElement, { backgroundColor: '#111827' }); // Match dark bg
         const imgData = canvas.toDataURL('image/png');
         const filename = `${title.toLowerCase().replace(/\s/g, '_')}_${format(new Date(), 'yyyy-MM-dd')}`;
         const data = chartId === 'debt-chart-container' ? debtsByStreetChartData : incomeByStreetChartData;
@@ -1953,10 +1954,10 @@ export default function ReportsPage() {
                         </CardHeader>
                         <CardContent className="space-y-8">
                              <div className="p-4 bg-gray-800 text-white rounded-lg" id="debt-chart-container">
-                                <h3 className="font-semibold text-center mb-4">Deudas Actuales por Calle (USD)</h3>
+                                <h3 className="font-semibold text-center mb-4">Gráfico de Deuda por Calle (USD)</h3>
                                 {debtsByStreetChartData.length > 0 ? (
-                                <ResponsiveContainer width="100%" height={450}>
-                                    <BarChart data={debtsByStreetChartData} margin={{ top: 40, right: 30, left: 20, bottom: 60 }}>
+                                <ResponsiveContainer width="100%" height={350}>
+                                    <BarChart data={debtsByStreetChartData} margin={{ top: 30, right: 20, left: -10, bottom: 50 }}>
                                         <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
                                         <XAxis dataKey="name" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} angle={-90} textAnchor="end" height={50} interval={0} />
                                         <YAxis stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
@@ -1975,10 +1976,10 @@ export default function ReportsPage() {
                                 </div>
                              </div>
                              <div className="p-4 bg-gray-800 text-white rounded-lg" id="income-chart-container">
-                                <h3 className="font-semibold text-center mb-4">Ingresos por Calle (USD)</h3>
+                                <h3 className="font-semibold text-center mb-4">Gráfico de Ingresos por Calle (USD)</h3>
                                 {incomeByStreetChartData.length > 0 ? (
-                                <ResponsiveContainer width="100%" height={450}>
-                                    <BarChart data={incomeByStreetChartData} margin={{ top: 40, right: 30, left: 20, bottom: 60 }}>
+                                <ResponsiveContainer width="100%" height={350}>
+                                    <BarChart data={incomeByStreetChartData} margin={{ top: 30, right: 20, left: -10, bottom: 50 }}>
                                         <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
                                         <XAxis dataKey="name" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} angle={-90} textAnchor="end" height={50} interval={0} />
                                         <YAxis stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
@@ -2003,6 +2004,7 @@ export default function ReportsPage() {
         </div>
     );
 }
+
 
 
 
