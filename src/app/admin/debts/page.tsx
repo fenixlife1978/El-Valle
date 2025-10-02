@@ -297,8 +297,8 @@ export default function DebtManagementPage() {
                     
                     // --- ALL READS FIRST ---
                     const ownerDoc = await transaction.get(ownerRef);
-                    const pendingDebtsSnapshot = await transaction.get(pendingDebtsQuery);
-                    const allExistingDebtsSnap = await transaction.get(allExistingDebtsQuery);
+                    const pendingDebtsSnapshot = await getDocs(pendingDebtsQuery); // Not a transaction read, but happens before logic
+                    const allExistingDebtsSnap = await getDocs(allExistingDebtsQuery); // Same as above
 
                     if (!ownerDoc.exists()) throw new Error(`Propietario ${owner.id} no encontrado.`);
 
@@ -308,12 +308,10 @@ export default function DebtManagementPage() {
                     // --- LOGIC AND CALCULATION ---
                     let balanceChanged = false;
 
-                    // Sort pending debts client-side
                     const sortedDebts = pendingDebtsSnapshot.docs
                         .map(d => ({ ref: d.ref, id: d.id, ...d.data() } as Debt & { ref: any }))
                         .sort((a, b) => a.year - b.year || a.month - b.month);
 
-                    // Phase 1: Pay off existing pending debts
                     if (sortedDebts.length > 0) {
                         for (const debt of sortedDebts) {
                             const debtAmountBs = debt.amountUSD * activeRate;
@@ -321,7 +319,6 @@ export default function DebtManagementPage() {
                                 availableBalance -= debtAmountBs;
                                 balanceChanged = true;
 
-                                // --- WRITES FOR THIS OPERATION ---
                                 const paymentRef = doc(collection(db, "payments"));
                                 transaction.set(paymentRef, {
                                     reportedBy: owner.id,
@@ -340,7 +337,6 @@ export default function DebtManagementPage() {
                         }
                     }
 
-                    // Phase 2: Proactively pay future fees
                     if (owner.properties && owner.properties.length > 0 && Math.round(availableBalance * 100) >= Math.round(condoFeeInBs * 100)) {
                         const existingDebtPeriodsByProp = new Map<string, Set<string>>();
                         allExistingDebtsSnap.docs.forEach(d => {
@@ -359,7 +355,7 @@ export default function DebtManagementPage() {
                              const propKey = `${property.street}-${property.house}`;
                              const existingDebtsForProp = existingDebtPeriodsByProp.get(propKey) || new Set();
 
-                             for (let i = 0; i < 12; i++) { // Look ahead 12 months
+                             for (let i = 0; i < 12; i++) {
                                 if (Math.round(availableBalance * 100) < Math.round(condoFeeInBs * 100)) break;
 
                                 const futureDebtDate = addMonths(startDate, i);
@@ -387,7 +383,6 @@ export default function DebtManagementPage() {
                                     description: "Cuota de Condominio (Pagada por adelantado)", status: 'paid', paidAmountUSD: condoFee,
                                     paymentDate: paymentDate, paymentId: paymentRef.id,
                                 });
-                                // Add to set to avoid duplicates in the same transaction run
                                 existingDebtsForProp.add(periodKey);
                             }
                         }
@@ -681,93 +676,65 @@ export default function DebtManagementPage() {
         try {
             if (activeRate <= 0) throw "No hay una tasa de cambio activa o registrada configurada.";
             
-            const existingDebtQuery = query(collection(db, 'debts'), 
-                where('ownerId', '==', selectedOwner.id),
-                where('property.street', '==', propertyForMassDebt.street),
-                where('property.house', '==', propertyForMassDebt.house)
-            );
-            const existingHistoricalPaymentQuery = query(collection(db, 'historical_payments'), 
-                where('ownerId', '==', selectedOwner.id),
-                where('property.street', '==', propertyForMassDebt.street),
-                where('property.house', '==', propertyForMassDebt.house)
-            );
+            // These reads happen outside the transaction, which is fine.
+            const existingDebtQuery = query(collection(db, 'debts'), where('ownerId', '==', selectedOwner.id), where('property.street', '==', propertyForMassDebt.street), where('property.house', '==', propertyForMassDebt.house));
+            const existingHistoricalPaymentQuery = query(collection(db, 'historical_payments'), where('ownerId', '==', selectedOwner.id), where('property.street', '==', propertyForMassDebt.street), where('property.house', '==', propertyForMassDebt.house));
+            const [existingDebtsSnapshot, existingHistoricalSnapshot] = await Promise.all([ getDocs(existingDebtQuery), getDocs(existingHistoricalPaymentQuery) ]);
             
-            const [existingDebtsSnapshot, existingHistoricalSnapshot] = await Promise.all([
-                getDocs(existingDebtQuery),
-                getDocs(existingHistoricalPaymentQuery)
-            ]);
-            
-            const existingDebtPeriods = new Set(existingDebtsSnapshot.docs.map(d => `${d.data().year}-${d.data().month}`));
-            existingHistoricalSnapshot.forEach(d => {
-                existingDebtPeriods.add(`${d.data().referenceYear}-${d.data().referenceMonth}`);
-            });
-            
+            const existingDebtPeriods = new Set([...existingDebtsSnapshot.docs.map(d => `${d.data().year}-${d.data().month}`), ...existingHistoricalSnapshot.docs.map(d => `${d.data().referenceYear}-${d.data().referenceMonth}`)]);
             let newDebtsCreated = 0;
-
+            
             await runTransaction(db, async (transaction) => {
+                // --- 1. ALL READS FIRST ---
                 const ownerRef = doc(db, "owners", selectedOwner.id);
                 const ownerDoc = await transaction.get(ownerRef);
                 if (!ownerDoc.exists()) throw "El documento del propietario no existe.";
 
+                // --- 2. LOGIC & WRITES ---
                 let currentBalanceBs = ownerDoc.data().balance || 0;
+                let balanceUpdated = false;
 
                 for (let i = 0; i < monthsToGenerate; i++) {
                     const debtDate = addMonths(startDate, i);
                     const debtYear = debtDate.getFullYear();
                     const debtMonth = debtDate.getMonth() + 1;
                     
-                    if (existingDebtPeriods.has(`${debtYear}-${debtMonth}`)) {
-                        continue; 
-                    }
+                    if (existingDebtPeriods.has(`${debtYear}-${debtMonth}`)) continue; 
 
                     newDebtsCreated++;
                     const debtAmountBs = amountUSD * activeRate;
                     const debtRef = doc(collection(db, "debts"));
-                    let debtData: any = {
-                        ownerId: selectedOwner.id, 
-                        property: propertyForMassDebt,
-                        year: debtYear, 
-                        month: debtMonth,
-                        amountUSD: amountUSD, 
-                        description: description, 
-                        status: 'pending'
-                    };
+                    let debtData: any = { ownerId: selectedOwner.id, property: propertyForMassDebt, year: debtYear, month: debtMonth, amountUSD: amountUSD, description: description, status: 'pending' };
 
                     if (currentBalanceBs >= debtAmountBs) {
                         currentBalanceBs -= debtAmountBs;
+                        balanceUpdated = true;
                         const paymentDate = Timestamp.now();
 
                         const paymentRef = doc(collection(db, "payments"));
                         transaction.set(paymentRef, {
                             reportedBy: selectedOwner.id,
                             beneficiaries: [{ ownerId: selectedOwner.id, ownerName: selectedOwner.name, ...propertyForMassDebt, amount: debtAmountBs }],
-                            totalAmount: debtAmountBs,
-                            exchangeRate: activeRate,
-                            paymentDate: paymentDate,
-                            reportedAt: paymentDate,
-                            paymentMethod: 'conciliacion',
-                            bank: 'Sistema (Saldo a Favor)',
-                            reference: `CONC-DEBT-${paymentDate.toMillis()}`,
-                            status: 'aprobado',
+                            totalAmount: debtAmountBs, exchangeRate: activeRate, paymentDate: paymentDate, reportedAt: paymentDate,
+                            paymentMethod: 'conciliacion', bank: 'Sistema (Saldo a Favor)', reference: `CONC-DEBT-${paymentDate.toMillis()}`, status: 'aprobado',
                             observations: `Cuota de ${months.find(m=>m.value === debtMonth)?.label} ${debtYear} para ${propertyForMassDebt.street}-${propertyForMassDebt.house} pagada por conciliación.`,
                         });
 
-                        debtData = {
-                            ...debtData,
-                            status: 'paid',
-                            paidAmountUSD: amountUSD,
-                            paymentDate: paymentDate,
-                            paymentId: paymentRef.id,
-                        };
+                        debtData = { ...debtData, status: 'paid', paidAmountUSD: amountUSD, paymentDate: paymentDate, paymentId: paymentRef.id, };
                     }
-                    
                     transaction.set(debtRef, debtData);
                 }
                 
-                transaction.update(ownerRef, { balance: currentBalanceBs });
+                if (balanceUpdated) {
+                    transaction.update(ownerRef, { balance: currentBalanceBs });
+                }
             });
 
-            toast({ title: 'Proceso Completado', description: `Se procesaron ${monthsToGenerate} meses y se generaron ${newDebtsCreated} nuevas deudas. El saldo del propietario fue actualizado.` });
+            if (newDebtsCreated > 0) {
+                 toast({ title: 'Proceso Completado', description: `Se procesaron ${monthsToGenerate} meses y se generaron ${newDebtsCreated} nuevas deudas. El saldo del propietario fue actualizado.` });
+            } else {
+                toast({ title: "Sin Cambios", description: "Todos los meses en el rango seleccionado ya tienen un registro.", variant: "default" });
+            }
 
         } catch (error) {
             console.error("Error generating mass debts: ", error);
@@ -1273,3 +1240,4 @@ export default function DebtManagementPage() {
     
 
     
+
