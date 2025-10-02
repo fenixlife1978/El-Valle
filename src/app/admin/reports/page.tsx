@@ -1131,26 +1131,18 @@ export default function ReportsPage() {
     };
 
     const handleExportChart = async (chartId: string, title: string) => {
-        const chartElement = document.getElementById(chartId);
+        const chartElement = document.getElementById(chartId)?.parentElement;
         if (!chartElement || !companyInfo) {
-            console.error('Chart container or company info not found');
             toast({ variant: "destructive", title: "Error de exportación", description: "No se encontró el elemento del gráfico para exportar."});
             return;
         }
     
-        // Temporarily hide buttons before capturing
-        const buttonsContainer = chartElement.nextElementSibling;
-        if (buttonsContainer) (buttonsContainer as HTMLElement).style.display = 'none';
-        
         const { default: html2canvas } = await import('html2canvas');
         const canvas = await html2canvas(chartElement, {
             backgroundColor: '#1f2937', 
             scale: 2,
             useCORS: true, 
         });
-    
-        // Show buttons again after capturing
-        if (buttonsContainer) (buttonsContainer as HTMLElement).style.display = 'flex';
         
         const imgData = canvas.toDataURL('image/png');
         const filename = `${title.toLowerCase().replace(/\s/g, '_')}_${format(new Date(), 'yyyy-MM-dd')}`;
@@ -1163,39 +1155,48 @@ export default function ReportsPage() {
         
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
-        const margin = 20;
+        const margin = 40;
 
-        // Header
+        // 1. Encabezado
         if (companyInfo.logo) {
-            try { doc.addImage(companyInfo.logo, 'PNG', margin, margin, 40, 40); }
+            try { doc.addImage(companyInfo.logo, 'PNG', margin, margin, 50, 50); }
             catch(e) { console.error("Error adding logo to PDF", e); }
         }
-        doc.setFontSize(14).setFont('helvetica', 'bold').text(companyInfo.name, margin + 50, margin + 15);
+        
+        const headerX = margin + 60;
+        doc.setFontSize(14).setFont('helvetica', 'bold').text(companyInfo.name, headerX, margin + 10);
         doc.setFontSize(10).setFont('helvetica', 'normal');
-        doc.text(`${companyInfo.rif} | ${companyInfo.phone}`, margin + 50, margin + 25);
-        doc.text(companyInfo.address, margin + 50, margin + 35);
+        doc.text(`${companyInfo.address}`, headerX, margin + 22);
+        doc.text(`Tel: ${companyInfo.phone} | Email: ${companyInfo.email}`, headerX, margin + 32);
         
-        const dateStr = `Fecha de Emisión: ${format(new Date(), 'dd/MM/yyyy')}`;
-        doc.setFontSize(10).text(dateStr, pageWidth - margin, margin + 15, { align: 'right' });
+        const dateStr = `Fecha de emisión: ${format(new Date(), 'dd MMMM, yyyy', { locale: es })}`;
+        doc.setFontSize(10).text(dateStr, pageWidth - margin, margin, { align: 'right' });
         
+        // 2. Título del Documento
+        doc.setFontSize(18).setFont('helvetica', 'bold');
+        const titleY = margin + 100;
+        doc.text(title, pageWidth / 2, titleY, { align: 'center'});
+
         let periodString = "Período: Todos";
         if (chartsDateRange.from && chartsDateRange.to) periodString = `Período: ${format(chartsDateRange.from, 'P', { locale: es })} - ${format(chartsDateRange.to, 'P', { locale: es })}`;
         else if (chartsDateRange.from) periodString = `Período: Desde ${format(chartsDateRange.from, 'P', { locale: es })}`;
         else if (chartsDateRange.to) periodString = `Período: Hasta ${format(chartsDateRange.to, 'P', { locale: es })}`;
-        
-        doc.setFontSize(10).text(periodString, pageWidth - margin, margin + 25, { align: 'right' });
+        doc.setFontSize(10).setFont('helvetica', 'normal').text(periodString, pageWidth / 2, titleY + 12, { align: 'center'});
 
-        // Image
+        // 3. Gráfico Principal
         const imgProps = doc.getImageProperties(imgData);
         const imgWidth = pageWidth - (margin * 2);
         const imgHeight = (imgProps.height * imgWidth) / imgProps.width;
         
-        let imageY = margin + 60;
-        if (imageY + imgHeight > pageHeight) {
-            imageY = margin + 10; // Adjust if header is too large
-        }
+        const imageY = titleY + 30;
 
         doc.addImage(imgData, 'PNG', margin, imageY, imgWidth, imgHeight);
+
+        // 4. Pie de Página
+        const footerY = pageHeight - margin;
+        doc.setLineWidth(0.5).line(margin, footerY - 10, pageWidth - margin, footerY - 10);
+        doc.setFontSize(8).text(`Reporte generado por: ${companyInfo.name}`, margin, footerY);
+        doc.text(`Página 1 de 1`, pageWidth - margin, footerY, { align: 'right'});
 
         doc.save(`${filename}.pdf`);
     };
@@ -1991,6 +1992,7 @@ export default function ReportsPage() {
         </div>
     );
 }
+
 
 
 
