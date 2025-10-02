@@ -103,8 +103,7 @@ type PublishedReport = {
 
 export default function OwnerDashboardPage() {
     const router = useRouter();
-    const [session, setSession] = useState<any>(null);
-
+    
     const [loading, setLoading] = useState(true);
     const [userData, setUserData] = useState<UserData | null>(null);
     const [payments, setPayments] = useState<Payment[]>([]);
@@ -121,30 +120,15 @@ export default function OwnerDashboardPage() {
     const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
     const [isReceiptPreviewOpen, setIsReceiptPreviewOpen] = useState(false);
     
-    // New state for published reports
     const [latestIntegralReport, setLatestIntegralReport] = useState<PublishedReport | null>(null);
     const [latestFinancialBalance, setLatestFinancialBalance] = useState<PublishedReport | null>(null);
 
     
     useEffect(() => {
-        const userSession = localStorage.getItem('user-session');
-        if (!userSession) {
-            // No need to redirect if public access is intended.
-            // But for a owner dashboard, it's good practice.
-            // For now, let's allow access for debugging.
-        } else {
-            const parsedSession = JSON.parse(userSession);
-            setSession(parsedSession);
-        }
-        
-        let settingsUnsubscribe: () => void;
-        let userUnsubscribe: () => void;
-        let paymentsUnsubscribe: () => void;
-        let debtsUnsubscribe: () => void;
-        let reportsUnsubscribe: () => void;
-    
+        const userId = 'G0sNyT874aexl5g5n5h8pE3g7yT2'; // Hardcoded ID for now
+
         const settingsRef = doc(db, 'config', 'mainSettings');
-        settingsUnsubscribe = onSnapshot(settingsRef, (settingsSnap) => {
+        const settingsUnsubscribe = onSnapshot(settingsRef, (settingsSnap) => {
             let activeRate = 0;
             if (settingsSnap.exists()) {
                 const settings = settingsSnap.data();
@@ -157,112 +141,98 @@ export default function OwnerDashboardPage() {
                     const sortedRates = [...rates].sort((a:any,b:any) => new Date(b.date).getTime() - new Date(a.date).getTime());
                     activeRate = sortedRates[0].rate;
                 }
+            }
+             setDashboardStats(prev => ({ ...prev, exchangeRate: activeRate }));
+        });
+
+        const userDocRef = doc(db, "owners", userId);
+        const userUnsubscribe = onSnapshot(userDocRef, (userSnap) => {
+            if (userSnap.exists()) {
+                const data = userSnap.data();
+                const ownerData = { 
+                    id: userSnap.id, 
+                    name: data.name,
+                    properties: data.properties || [],
+                    unit: (data.properties && data.properties.length > 0) ? `${data.properties[0].street} - ${data.properties[0].house}` : 'N/A',
+                    balance: data.balance || 0,
+                } as UserData;
+                setUserData(ownerData);
+                setDashboardStats(prev => ({ ...prev, balanceInFavor: ownerData.balance || 0 }));
             } else {
-                console.error("Settings document not found!");
+                console.log("No such user document!");
+            }
+            setLoading(false);
+        });
+
+        const debtsQuery = query(collection(db, "debts"), where("ownerId", "==", userId));
+        const debtsUnsubscribe = onSnapshot(debtsQuery, async (debtsSnapshot) => {
+            const allDebtsData: Debt[] = [];
+            debtsSnapshot.forEach(d => allDebtsData.push({ id: d.id, ...d.data() } as Debt));
+
+            const pendingDebts = allDebtsData.filter(d => d.status === 'pending');
+            const totalDebtUSD = pendingDebts.reduce((sum, d) => sum + d.amountUSD, 0);
+
+            setDebts(pendingDebts.sort((a, b) => b.year - b.year || b.month - b.month));
+            setDashboardStats(prev => ({...prev, totalDebtUSD }));
+            
+            let firstUnpaidMonth: Date | null = null;
+            const paidDebts = allDebtsData.filter(d => d.status === 'paid');
+            const lastPaidDebt = paidDebts.sort((a, b) => new Date(b.year, b.month -1).getTime() - new Date(a.year, a.month - 1).getTime())[0];
+            const lastPaidMonth = lastPaidDebt ? new Date(lastPaidDebt.year, lastPaidDebt.month - 1) : null;
+            
+            const oldestDebt = [...allDebtsData].sort((a, b) => new Date(a.year, a.month -1).getTime() - new Date(b.year, b.month-1).getTime())[0];
+            
+            if (oldestDebt) {
+                const oldestDate = startOfMonth(new Date(oldestDebt.year, oldestDebt.month - 1));
+                for (let d = oldestDate; isBefore(d, new Date()); d = addMonths(d, 1)) {
+                    const year = d.getFullYear();
+                    const month = d.getMonth() + 1;
+                    const hasPendingDebtForMonth = allDebtsData.some(debt => debt.year === year && debt.month === month && debt.status === 'pending');
+                    if (hasPendingDebtForMonth) {
+                        firstUnpaidMonth = d;
+                        break;
+                    }
+                }
             }
 
-            const userId = 'G0sNyT874aexl5g5n5h8pE3g7yT2'; // Hardcoded ID for now
-    
-            if (userUnsubscribe) userUnsubscribe();
-            const userDocRef = doc(db, "owners", userId);
-            userUnsubscribe = onSnapshot(userDocRef, (userSnap) => {
-                if (userSnap.exists()) {
-                    const data = userSnap.data();
-                    const ownerData = { 
-                        id: userSnap.id, 
-                        name: data.name,
-                        properties: data.properties || [],
-                        unit: (data.properties && data.properties.length > 0) ? `${data.properties[0].street} - ${data.properties[0].house}` : 'N/A',
-                        balance: data.balance || 0,
-                    } as UserData;
-                    setUserData(ownerData);
-    
-                    setDashboardStats(prev => ({
-                        ...prev,
-                        balanceInFavor: ownerData.balance || 0,
-                        exchangeRate: activeRate
-                    }));
-
-                    if (debtsUnsubscribe) debtsUnsubscribe();
-                    const debtsQuery = query(collection(db, "debts"), where("ownerId", "==", userId));
-                    debtsUnsubscribe = onSnapshot(debtsQuery, async (debtsSnapshot) => {
-                        const allDebtsData: Debt[] = [];
-                        debtsSnapshot.forEach(d => allDebtsData.push({ id: d.id, ...d.data() } as Debt));
-
-                        const pendingDebts = allDebtsData.filter(d => d.status === 'pending');
-                        const totalDebtUSD = pendingDebts.reduce((sum, d) => sum + d.amountUSD, 0);
-
-                        setDebts(pendingDebts.sort((a, b) => b.year - b.year || b.month - b.month));
-                        setDashboardStats(prev => ({...prev, totalDebtUSD }));
-                        
-                        let firstUnpaidMonth: Date | null = null;
-                        const paidDebts = allDebtsData.filter(d => d.status === 'paid');
-                        const lastPaidDebt = paidDebts.sort((a, b) => new Date(b.year, b.month -1).getTime() - new Date(a.year, a.month - 1).getTime())[0];
-                        const lastPaidMonth = lastPaidDebt ? new Date(lastPaidDebt.year, lastPaidDebt.month - 1) : null;
-                        
-                        const oldestDebt = [...allDebtsData].sort((a, b) => new Date(a.year, a.month -1).getTime() - new Date(b.year, b.month-1).getTime())[0];
-                        
-                        if (oldestDebt) {
-                            const oldestDate = startOfMonth(new Date(oldestDebt.year, oldestDebt.month - 1));
-                            for (let d = oldestDate; isBefore(d, new Date()); d = addMonths(d, 1)) {
-                                const year = d.getFullYear();
-                                const month = d.getMonth() + 1;
-                                const hasPendingDebtForMonth = allDebtsData.some(debt => debt.year === year && debt.month === month && debt.status === 'pending');
-                                if (hasPendingDebtForMonth) {
-                                    firstUnpaidMonth = d;
-                                    break;
-                                }
-                            }
-                        }
-
-                        if (firstUnpaidMonth) {
-                            setSolvencyStatus('moroso');
-                            setSolvencyPeriod(`Desde ${format(firstUnpaidMonth, 'MMMM yyyy', { locale: es })}`);
-                        } else {
-                            setSolvencyStatus('solvente');
-                            if (lastPaidMonth) {
-                                setSolvencyPeriod(`Hasta ${format(lastPaidMonth, 'MMMM yyyy', { locale: es })}`);
-                            } else {
-                                setSolvencyPeriod('Al día');
-                            }
-                        }
-                    });
-                    
-                    if (paymentsUnsubscribe) paymentsUnsubscribe();
-                    const paymentsQuery = query(collection(db, "payments"), where("beneficiaryIds", "array-contains", userId), orderBy('paymentDate', 'desc'), limit(3));
-                    paymentsUnsubscribe = onSnapshot(paymentsQuery, (snapshot) => {
-                        const paymentsData: Payment[] = [];
-                        snapshot.forEach((doc) => {
-                            paymentsData.push({ id: doc.id, ...doc.data() } as Payment);
-                        });
-                        setPayments(paymentsData);
-                    });
-    
+            if (firstUnpaidMonth) {
+                setSolvencyStatus('moroso');
+                setSolvencyPeriod(`Desde ${format(firstUnpaidMonth, 'MMMM yyyy', { locale: es })}`);
+            } else {
+                setSolvencyStatus('solvente');
+                if (lastPaidMonth) {
+                    setSolvencyPeriod(`Hasta ${format(lastPaidMonth, 'MMMM yyyy', { locale: es })}`);
                 } else {
-                    console.log("No such user document!");
+                    setSolvencyPeriod('Al día');
                 }
-                setLoading(false);
-            });
-
-             if(reportsUnsubscribe) reportsUnsubscribe();
-             const reportsQuery = query(collection(db, "published_reports"), orderBy('createdAt', 'desc'));
-             reportsUnsubscribe = onSnapshot(reportsQuery, (snapshot) => {
-                 const reports = snapshot.docs.map(doc => ({...doc.data(), id: doc.id } as PublishedReport));
-                 const latestIntegral = reports.find(r => r.type === 'integral');
-                 const latestBalance = reports.find(r => r.type === 'balance');
-                 setLatestIntegralReport(latestIntegral || null);
-                 setLatestFinancialBalance(latestBalance || null);
-             });
-
-
+            }
         });
+        
+        const paymentsQuery = query(collection(db, "payments"), where("beneficiaryIds", "array-contains", userId), orderBy('paymentDate', 'desc'), limit(3));
+        const paymentsUnsubscribe = onSnapshot(paymentsQuery, (snapshot) => {
+            const paymentsData: Payment[] = [];
+            snapshot.forEach((doc) => {
+                paymentsData.push({ id: doc.id, ...doc.data() } as Payment);
+            });
+            setPayments(paymentsData);
+        });
+
+         const reportsQuery = query(collection(db, "published_reports"), orderBy('createdAt', 'desc'));
+         const reportsUnsubscribe = onSnapshot(reportsQuery, (snapshot) => {
+             const reports = snapshot.docs.map(doc => ({...doc.data(), id: doc.id } as PublishedReport));
+             const latestIntegral = reports.find(r => r.type === 'integral');
+             const latestBalance = reports.find(r => r.type === 'balance');
+             setLatestIntegralReport(latestIntegral || null);
+             setLatestFinancialBalance(latestBalance || null);
+         });
+
     
         return () => {
-            if (settingsUnsubscribe) settingsUnsubscribe();
-            if (userUnsubscribe) userUnsubscribe();
-            if (paymentsUnsubscribe) paymentsUnsubscribe();
-            if (debtsUnsubscribe) debtsUnsubscribe();
-            if(reportsUnsubscribe) reportsUnsubscribe();
+            settingsUnsubscribe();
+            userUnsubscribe();
+            paymentsUnsubscribe();
+            debtsUnsubscribe();
+            reportsUnsubscribe();
         };
     
     }, []);
@@ -753,3 +723,4 @@ export default function OwnerDashboardPage() {
     </div>
   );
 }
+
