@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, UserPlus, RefreshCw, AlertTriangle, UserCheck } from 'lucide-react';
-import { collection, doc, getDoc, setDoc, Timestamp, getDocs } from 'firebase/firestore';
+import { doc, getDoc, setDoc, Timestamp, getDocs, collection } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase'; // Import auth from central config
 import { type User } from 'firebase/auth';
 import { cn } from "@/lib/utils";
