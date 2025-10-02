@@ -1131,8 +1131,8 @@ export default function ReportsPage() {
     };
 
     const handleExportChart = async (chartId: string, title: string) => {
-        const chartElement = document.getElementById(chartId)?.parentElement;
-        if (!chartElement || !companyInfo) {
+        const chartElement = document.getElementById(chartId);
+        if (!chartElement) {
             toast({ variant: "destructive", title: "Error de exportación", description: "No se encontró el elemento del gráfico para exportar."});
             return;
         }
@@ -1154,50 +1154,23 @@ export default function ReportsPage() {
         });
         
         const pageWidth = doc.internal.pageSize.getWidth();
-        const pageHeight = doc.internal.pageSize.getHeight();
-        const margin = 40;
-
-        // 1. Encabezado
-        if (companyInfo.logo) {
-            try { doc.addImage(companyInfo.logo, 'PNG', margin, margin, 50, 50); }
-            catch(e) { console.error("Error adding logo to PDF", e); }
-        }
         
-        const headerX = margin + 60;
-        doc.setFontSize(14).setFont('helvetica', 'bold').text(companyInfo.name, headerX, margin + 10);
-        doc.setFontSize(10).setFont('helvetica', 'normal');
-        doc.text(`${companyInfo.address}`, headerX, margin + 22);
-        doc.text(`Tel: ${companyInfo.phone} | Email: ${companyInfo.email}`, headerX, margin + 32);
+        const imgProps = doc.getImageProperties(imgData);
+        const imgWidth = pageWidth - 80;
+        const imgHeight = (imgProps.height * imgWidth) / imgProps.width;
         
-        const dateStr = `Fecha de emisión: ${format(new Date(), 'dd MMMM, yyyy', { locale: es })}`;
-        doc.setFontSize(10).text(dateStr, pageWidth - margin, margin, { align: 'right' });
+        const x = (pageWidth - imgWidth) / 2;
         
-        // 2. Título del Documento
-        doc.setFontSize(18).setFont('helvetica', 'bold');
-        const titleY = margin + 100;
-        doc.text(title, pageWidth / 2, titleY, { align: 'center'});
+        doc.setFontSize(16).setFont('helvetica', 'bold');
+        doc.text(title, pageWidth / 2, 60, { align: 'center'});
 
         let periodString = "Período: Todos";
         if (chartsDateRange.from && chartsDateRange.to) periodString = `Período: ${format(chartsDateRange.from, 'P', { locale: es })} - ${format(chartsDateRange.to, 'P', { locale: es })}`;
         else if (chartsDateRange.from) periodString = `Período: Desde ${format(chartsDateRange.from, 'P', { locale: es })}`;
         else if (chartsDateRange.to) periodString = `Período: Hasta ${format(chartsDateRange.to, 'P', { locale: es })}`;
-        doc.setFontSize(10).setFont('helvetica', 'normal').text(periodString, pageWidth / 2, titleY + 12, { align: 'center'});
+        doc.setFontSize(10).setFont('helvetica', 'normal').text(periodString, pageWidth / 2, 75, { align: 'center'});
 
-        // 3. Gráfico Principal
-        const imgProps = doc.getImageProperties(imgData);
-        const imgWidth = pageWidth - (margin * 2);
-        const imgHeight = (imgProps.height * imgWidth) / imgProps.width;
-        
-        const imageY = titleY + 30;
-
-        doc.addImage(imgData, 'PNG', margin, imageY, imgWidth, imgHeight);
-
-        // 4. Pie de Página
-        const footerY = pageHeight - margin;
-        doc.setLineWidth(0.5).line(margin, footerY - 10, pageWidth - margin, footerY - 10);
-        doc.setFontSize(8).text(`Reporte generado por: ${companyInfo.name}`, margin, footerY);
-        doc.text(`Página 1 de 1`, pageWidth - margin, footerY, { align: 'right'});
-
+        doc.addImage(imgData, 'PNG', x, 100, imgWidth, imgHeight);
         doc.save(`${filename}.pdf`);
     };
 
@@ -1939,48 +1912,44 @@ export default function ReportsPage() {
                             </div>
                         </CardHeader>
                         <CardContent className="space-y-8">
-                             <div className="p-4 bg-gray-800 text-white rounded-lg">
-                                <div id="debt-chart-container">
-                                    <h3 className="font-semibold text-center mb-4">Gráfico de Deuda por Calle (USD)</h3>
-                                    {debtsByStreetChartData.length > 0 ? (
-                                    <ResponsiveContainer width="100%" height={350}>
-                                        <BarChart data={debtsByStreetChartData} margin={{ top: 30, right: 20, left: -10, bottom: 50 }}>
-                                            <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
-                                            <XAxis dataKey="name" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} angle={-45} textAnchor="end" height={50} interval={0} />
-                                            <YAxis stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
-                                            <Tooltip cursor={{fill: 'rgba(255, 255, 255, 0.1)'}} contentStyle={{backgroundColor: '#334155', border: 'none', borderRadius: '0.5rem'}} />
-                                            <Bar dataKey="TotalDeuda" fill="#dc2626" name="Deuda Total (USD)" radius={[4, 4, 0, 0]}>
-                                                <LabelList dataKey="TotalDeuda" content={<CustomBarLabel />} />
-                                            </Bar>
-                                        </BarChart>
-                                    </ResponsiveContainer>
-                                    ) : (
-                                        <p className="text-center text-gray-400 py-8">No hay datos de deuda para mostrar en el período seleccionado.</p>
-                                    )}
-                                </div>
+                             <div id="debt-chart-container" className="p-4 bg-gray-800 text-white rounded-lg">
+                                <h3 className="font-semibold text-center mb-4">Gráfico de Deuda por Calle (USD)</h3>
+                                {debtsByStreetChartData.length > 0 ? (
+                                <ResponsiveContainer width="100%" height={350}>
+                                    <BarChart data={debtsByStreetChartData} margin={{ top: 30, right: 20, left: -10, bottom: 50 }}>
+                                        <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
+                                        <XAxis dataKey="name" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} angle={-45} textAnchor="end" height={50} interval={0} />
+                                        <YAxis stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
+                                        <Tooltip cursor={{fill: 'rgba(255, 255, 255, 0.1)'}} contentStyle={{backgroundColor: '#334155', border: 'none', borderRadius: '0.5rem'}} />
+                                        <Bar dataKey="TotalDeuda" fill="#dc2626" name="Deuda Total (USD)" radius={[4, 4, 0, 0]}>
+                                            <LabelList dataKey="TotalDeuda" content={<CustomBarLabel />} />
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                                ) : (
+                                    <p className="text-center text-gray-400 py-8">No hay datos de deuda para mostrar en el período seleccionado.</p>
+                                )}
                                 <div className="flex justify-center gap-2 mt-4">
                                    <Button size="sm" variant="outline" onClick={() => handleExportChart('debt-chart-container', 'Gráfico de Deuda por Calle (USD)')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
                                 </div>
                              </div>
-                             <div className="p-4 bg-gray-800 text-white rounded-lg">
-                                <div id="income-chart-container">
-                                    <h3 className="font-semibold text-center mb-4">Gráfico de Ingresos por Calle (USD)</h3>
-                                    {incomeByStreetChartData.length > 0 ? (
-                                    <ResponsiveContainer width="100%" height={350}>
-                                        <BarChart data={incomeByStreetChartData} margin={{ top: 30, right: 20, left: -10, bottom: 50 }}>
-                                            <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
-                                            <XAxis dataKey="name" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} angle={-45} textAnchor="end" height={50} interval={0} />
-                                            <YAxis stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
-                                            <Tooltip cursor={{fill: 'rgba(255, 255, 255, 0.1)'}} contentStyle={{backgroundColor: '#334155', border: 'none', borderRadius: '0.5rem'}} />
-                                            <Bar dataKey="TotalIngresos" fill="#2563eb" name="Ingreso Total (USD)" radius={[4, 4, 0, 0]}>
-                                                <LabelList dataKey="TotalIngresos" content={<CustomBarLabel />} />
-                                            </Bar>
-                                        </BarChart>
-                                    </ResponsiveContainer>
-                                    ) : (
-                                        <p className="text-center text-gray-400 py-8">No hay datos de ingresos para mostrar en el período seleccionado.</p>
-                                    )}
-                                </div>
+                             <div id="income-chart-container" className="p-4 bg-gray-800 text-white rounded-lg">
+                                <h3 className="font-semibold text-center mb-4">Gráfico de Ingresos por Calle (USD)</h3>
+                                {incomeByStreetChartData.length > 0 ? (
+                                <ResponsiveContainer width="100%" height={350}>
+                                    <BarChart data={incomeByStreetChartData} margin={{ top: 30, right: 20, left: -10, bottom: 50 }}>
+                                        <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
+                                        <XAxis dataKey="name" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} angle={-45} textAnchor="end" height={50} interval={0} />
+                                        <YAxis stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
+                                        <Tooltip cursor={{fill: 'rgba(255, 255, 255, 0.1)'}} contentStyle={{backgroundColor: '#334155', border: 'none', borderRadius: '0.5rem'}} />
+                                        <Bar dataKey="TotalIngresos" fill="#2563eb" name="Ingreso Total (USD)" radius={[4, 4, 0, 0]}>
+                                            <LabelList dataKey="TotalIngresos" content={<CustomBarLabel />} />
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                                ) : (
+                                    <p className="text-center text-gray-400 py-8">No hay datos de ingresos para mostrar en el período seleccionado.</p>
+                                )}
                                  <div className="flex justify-center gap-2 mt-4">
                                      <Button size="sm" variant="outline" onClick={() => handleExportChart('income-chart-container', 'Gráfico de Ingresos por Calle (USD)')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
                                  </div>
@@ -1992,13 +1961,3 @@ export default function ReportsPage() {
         </div>
     );
 }
-
-
-
-
-
-
-
-
-
-
