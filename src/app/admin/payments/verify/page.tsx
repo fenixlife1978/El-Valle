@@ -678,6 +678,7 @@ export default function VerifyPaymentsPage() {
                             <TableHead>Monto</TableHead>
                             <TableHead>Fecha</TableHead>
                             <TableHead>Banco</TableHead>
+                            <TableHead>Referencia</TableHead>
                             <TableHead>Estado</TableHead>
                             <TableHead className="text-right">Acciones</TableHead>
                         </TableRow>
@@ -685,13 +686,13 @@ export default function VerifyPaymentsPage() {
                     <TableBody>
                         {loading ? (
                             <TableRow>
-                                <TableCell colSpan={7} className="h-24 text-center">
+                                <TableCell colSpan={8} className="h-24 text-center">
                                     <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
                                 </TableCell>
                             </TableRow>
                         ) : filteredPayments.length === 0 ? (
                              <TableRow>
-                                <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                                <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
                                     No hay pagos que coincidan con el filtro seleccionado.
                                 </TableCell>
                              </TableRow>
@@ -708,6 +709,7 @@ export default function VerifyPaymentsPage() {
                                 </TableCell>
                                 <TableCell>{new Date(payment.date).toLocaleDateString('es-VE')}</TableCell>
                                 <TableCell>{payment.bank}</TableCell>
+                                <TableCell>{payment.reference}</TableCell>
                                 <TableCell>
                                     <Badge variant={statusVariantMap[payment.status]}>
                                         {statusTextMap[payment.status]}
