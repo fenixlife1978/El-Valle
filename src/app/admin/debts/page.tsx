@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -291,75 +292,56 @@ export default function DebtManagementPage() {
             try {
                 await runTransaction(db, async (transaction) => {
                     const ownerRef = doc(db, 'owners', owner.id);
+                    const pendingDebtsQuery = query(collection(db, 'debts'), where('ownerId', '==', owner.id), where('status', '==', 'pending'));
+                    const allExistingDebtsQuery = query(collection(db, 'debts'), where('ownerId', '==', owner.id));
+                    
+                    // --- ALL READS FIRST ---
                     const ownerDoc = await transaction.get(ownerRef);
+                    const pendingDebtsSnapshot = await transaction.get(pendingDebtsQuery);
+                    const allExistingDebtsSnap = await transaction.get(allExistingDebtsQuery);
+
                     if (!ownerDoc.exists()) throw new Error(`Propietario ${owner.id} no encontrado.`);
 
                     let availableBalance = Number(ownerDoc.data().balance || 0);
-                    if (availableBalance <= 0) return;
+                    if (availableBalance <= 0) return; // No balance to process
 
-                    // --- Phase 1: Pay off existing pending debts ---
-                    // Fetch all pending debts for the owner without complex ordering on the server
-                    const debtsQuery = query(
-                        collection(db, 'debts'),
-                        where('ownerId', '==', owner.id),
-                        where('status', '==', 'pending')
-                    );
-                    
-                    const debtsSnapshot = await getDocs(debtsQuery);
-                    // Sort the documents client-side
-                    const sortedDebts = debtsSnapshot.docs.sort((a, b) => {
-                        const dataA = a.data();
-                        const dataB = b.data();
-                        if (dataA.year !== dataB.year) {
-                            return dataA.year - dataB.year;
-                        }
-                        return dataA.month - dataB.month;
-                    });
-                    
+                    // --- LOGIC AND CALCULATION ---
                     let balanceChanged = false;
 
+                    // Sort pending debts client-side
+                    const sortedDebts = pendingDebtsSnapshot.docs
+                        .map(d => ({ ref: d.ref, id: d.id, ...d.data() } as Debt & { ref: any }))
+                        .sort((a, b) => a.year - b.year || a.month - b.month);
+
+                    // Phase 1: Pay off existing pending debts
                     if (sortedDebts.length > 0) {
-                        for (const debtDoc of sortedDebts) {
-                            const debt = { id: debtDoc.id, ...debtDoc.data() } as Debt;
+                        for (const debt of sortedDebts) {
                             const debtAmountBs = debt.amountUSD * activeRate;
-                            
                             if (Math.round(availableBalance * 100) >= Math.round(debtAmountBs * 100)) {
                                 availableBalance -= debtAmountBs;
-                                
+                                balanceChanged = true;
+
+                                // --- WRITES FOR THIS OPERATION ---
                                 const paymentRef = doc(collection(db, "payments"));
                                 transaction.set(paymentRef, {
                                     reportedBy: owner.id,
                                     beneficiaries: [{ ownerId: owner.id, ownerName: owner.name, ...debt.property, amount: debtAmountBs }],
-                                    totalAmount: debtAmountBs,
-                                    exchangeRate: activeRate,
-                                    paymentDate: Timestamp.now(),
-                                    reportedAt: Timestamp.now(),
-                                    paymentMethod: 'conciliacion',
-                                    bank: 'Sistema (Saldo a Favor)',
-                                    reference: `CONC-${debt.year}-${debt.month}`,
-                                    status: 'aprobado',
+                                    totalAmount: debtAmountBs, exchangeRate: activeRate, paymentDate: Timestamp.now(), reportedAt: Timestamp.now(),
+                                    paymentMethod: 'conciliacion', bank: 'Sistema (Saldo a Favor)', reference: `CONC-${debt.year}-${debt.month}`, status: 'aprobado',
                                     observations: `Cuota de ${months.find(m=>m.value === debt.month)?.label} ${debt.year} pagada por conciliación para ${debt.property.street} - ${debt.property.house}.`,
                                 });
 
-                                transaction.update(debtDoc.ref, {
-                                    status: 'paid',
-                                    paidAmountUSD: debt.amountUSD,
-                                    paymentDate: Timestamp.now(),
-                                    paymentId: paymentRef.id
+                                transaction.update(debt.ref, {
+                                    status: 'paid', paidAmountUSD: debt.amountUSD, paymentDate: Timestamp.now(), paymentId: paymentRef.id
                                 });
-
-                                balanceChanged = true;
                             } else {
                                 break; 
                             }
                         }
                     }
 
-                    // --- Phase 2: Proactively pay future fees with remaining balance ---
+                    // Phase 2: Proactively pay future fees
                     if (owner.properties && owner.properties.length > 0 && Math.round(availableBalance * 100) >= Math.round(condoFeeInBs * 100)) {
-                        
-                        const allExistingDebtsQuery = query(collection(db, 'debts'), where('ownerId', '==', owner.id));
-                        const allExistingDebtsSnap = await getDocs(allExistingDebtsQuery);
                         const existingDebtPeriodsByProp = new Map<string, Set<string>>();
                         allExistingDebtsSnap.docs.forEach(d => {
                             const debtData = d.data();
@@ -378,50 +360,35 @@ export default function DebtManagementPage() {
                              const existingDebtsForProp = existingDebtPeriodsByProp.get(propKey) || new Set();
 
                              for (let i = 0; i < 12; i++) { // Look ahead 12 months
+                                if (Math.round(availableBalance * 100) < Math.round(condoFeeInBs * 100)) break;
+
                                 const futureDebtDate = addMonths(startDate, i);
                                 const futureYear = futureDebtDate.getFullYear();
                                 const futureMonth = futureDebtDate.getMonth() + 1;
                                 const periodKey = `${futureYear}-${futureMonth}`;
                                 
-                                if (existingDebtsForProp.has(periodKey)) continue; // Skip if debt already exists for this prop
+                                if (existingDebtsForProp.has(periodKey)) continue;
 
-                                if (Math.round(availableBalance * 100) >= Math.round(condoFeeInBs * 100)) {
-                                    availableBalance -= condoFeeInBs;
-                                    const paymentDate = Timestamp.now();
-                                    const paymentRef = doc(collection(db, 'payments'));
-                                    transaction.set(paymentRef, {
-                                        reportedBy: owner.id,
-                                        beneficiaries: [{ ownerId: owner.id, ownerName: owner.name, ...property, amount: condoFeeInBs }],
-                                        totalAmount: condoFeeInBs,
-                                        exchangeRate: activeRate,
-                                        paymentDate: paymentDate,
-                                        reportedAt: paymentDate,
-                                        paymentMethod: 'conciliacion',
-                                        bank: 'Sistema (Adelanto por Saldo)',
-                                        reference: `CONC-ADV-${futureYear}-${futureMonth}`,
-                                        status: 'aprobado',
-                                        observations: `Cuota de ${months.find(m=>m.value === futureMonth)?.label} ${futureYear} para ${property.street} - ${property.house} pagada por adelanto automático.`
-                                    });
+                                availableBalance -= condoFeeInBs;
+                                balanceChanged = true;
 
-                                    const debtRef = doc(collection(db, 'debts'));
-                                    transaction.set(debtRef, {
-                                        ownerId: owner.id,
-                                        property: property,
-                                        year: futureYear,
-                                        month: futureMonth,
-                                        amountUSD: condoFee,
-                                        description: "Cuota de Condominio (Pagada por adelantado)",
-                                        status: 'paid',
-                                        paidAmountUSD: condoFee,
-                                        paymentDate: paymentDate,
-                                        paymentId: paymentRef.id,
-                                    });
+                                const paymentDate = Timestamp.now();
+                                const paymentRef = doc(collection(db, 'payments'));
+                                transaction.set(paymentRef, {
+                                    reportedBy: owner.id, beneficiaries: [{ ownerId: owner.id, ownerName: owner.name, ...property, amount: condoFeeInBs }],
+                                    totalAmount: condoFeeInBs, exchangeRate: activeRate, paymentDate: paymentDate, reportedAt: paymentDate,
+                                    paymentMethod: 'conciliacion', bank: 'Sistema (Adelanto por Saldo)', reference: `CONC-ADV-${futureYear}-${futureMonth}`, status: 'aprobado',
+                                    observations: `Cuota de ${months.find(m=>m.value === futureMonth)?.label} ${futureYear} para ${property.street} - ${property.house} pagada por adelanto automático.`
+                                });
 
-                                    balanceChanged = true;
-
-                                } else {
-                                    break;
-                                }
+                                const debtRef = doc(collection(db, 'debts'));
+                                transaction.set(debtRef, {
+                                    ownerId: owner.id, property: property, year: futureYear, month: futureMonth, amountUSD: condoFee,
+                                    description: "Cuota de Condominio (Pagada por adelantado)", status: 'paid', paidAmountUSD: condoFee,
+                                    paymentDate: paymentDate, paymentId: paymentRef.id,
+                                });
+                                // Add to set to avoid duplicates in the same transaction run
+                                existingDebtsForProp.add(periodKey);
                             }
                         }
                     }
@@ -462,9 +429,6 @@ export default function DebtManagementPage() {
 
         try {
             const today = new Date();
-            // REMOVED: Day 6 check is no longer needed.
-            // if (today.getDate() < 6) { ... }
-
             const year = today.getFullYear();
             const month = today.getMonth() + 1;
 
