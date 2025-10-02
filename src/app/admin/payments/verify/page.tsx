@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { CheckCircle2, XCircle, MoreHorizontal, Printer, Filter, Loader2, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -47,6 +47,7 @@ type FullPayment = {
   type: PaymentMethod;
   reference: string;
   receiptNumber?: string;
+  receiptNumbers?: { [ownerId: string]: string };
   reportedBy: string;
   reportedAt?: Timestamp;
   observations?: string;
@@ -78,6 +79,7 @@ type CompanyInfo = {
 
 type ReceiptData = {
     payment: FullPayment;
+    beneficiary: Beneficiary;
     ownerName: string; 
     ownerUnit: string; 
     paidDebts: Debt[];
@@ -175,6 +177,7 @@ export default function VerifyPaymentsPage() {
                 type: data.paymentMethod,
                 reference: data.reference,
                 receiptNumber: data.receiptNumber,
+                receiptNumbers: data.receiptNumbers,
                 status: data.status,
                 beneficiaries: data.beneficiaries,
                 beneficiaryIds: data.beneficiaryIds || [],
@@ -228,72 +231,68 @@ export default function VerifyPaymentsPage() {
     if (newStatus === 'aprobado') {
         try {
             await runTransaction(db, async (transaction) => {
+                // --- 1. READS ---
                 const paymentDoc = await transaction.get(paymentRef);
                 if (!paymentDoc.exists() || paymentDoc.data().status === 'aprobado') {
                     throw new Error('El pago no existe o ya fue aprobado anteriormente.');
                 }
-    
                 const paymentData = { id: paymentDoc.id, ...paymentDoc.data() } as FullPayment;
 
-                // For 'adelanto' payments, the rate is irrelevant.
-                if (paymentData.type !== 'adelanto') {
-                    const settingsRef = doc(db, 'config', 'mainSettings');
-                    const settingsSnap = await getDoc(settingsRef);
-                    if (!settingsSnap.exists()) throw new Error('No se encontró el documento de configuración.');
-                    
-                    const allRates = (settingsSnap.data().exchangeRates || []) as {date: string, rate: number}[];
-                    const paymentDateString = format(paymentData.paymentDate.toDate(), 'yyyy-MM-dd');
-                    const applicableRates = allRates
-                        .filter(r => r.date <= paymentDateString)
-                        .sort((a, b) => b.date.localeCompare(a.date));
-
-                    const exchangeRate = applicableRates.length > 0 ? applicableRates[0].rate : 0;
-                    
-                    if (!exchangeRate || exchangeRate <= 0) throw new Error('La tasa de cambio para este pago es inválida o no está definida.');
-                    paymentData.exchangeRate = exchangeRate; // Update paymentData with the correct rate
-                }
-
-
-                if (condoFee <= 0 && paymentData.type !== 'adelanto') throw new Error('La cuota de condominio no está configurada.');
+                const settingsRef = doc(db, 'config', 'mainSettings');
+                const settingsSnap = await transaction.get(settingsRef); // Read inside transaction
+                if (!settingsSnap.exists()) throw new Error('No se encontró el documento de configuración.');
+                const settingsData = settingsSnap.data();
                 
+                const allRates = (settingsData.exchangeRates || []) as {date: string, rate: number}[];
+                const currentCondoFee = settingsData.condoFee || 0;
+                if (currentCondoFee <= 0 && paymentData.type !== 'adelanto') throw new Error('La cuota de condominio no está configurada.');
+
+                const paymentDateString = format(paymentData.paymentDate.toDate(), 'yyyy-MM-dd');
+                const applicableRates = allRates.filter(r => r.date <= paymentDateString).sort((a, b) => b.date.localeCompare(a.date));
+                const exchangeRate = applicableRates.length > 0 ? applicableRates[0].rate : 0;
+                if (!exchangeRate || exchangeRate <= 0) throw new Error('La tasa de cambio para este pago es inválida o no está definida.');
+                paymentData.exchangeRate = exchangeRate;
+
                 const allBeneficiaryIds = Array.from(new Set(paymentData.beneficiaries.map(b => b.ownerId)));
                 if (allBeneficiaryIds.length === 0) throw new Error("El pago no tiene beneficiarios definidos.");
 
-                for (const ownerId of allBeneficiaryIds) {
-                    const ownerRef = doc(db, 'owners', ownerId);
-                    const ownerDoc = await transaction.get(ownerRef);
-                    if (!ownerDoc.exists()) throw new Error(`El propietario ${ownerId} no fue encontrado.`);
-                    
-                    const ownerData = ownerDoc.data();
-                    const initialBalance = ownerData.balance || 0;
-                    const paymentAmountForOwner = paymentData.beneficiaries
-                        .filter(b => b.ownerId === ownerId)
-                        .reduce((sum, b) => sum + b.amount, 0);
+                const ownerDocs = await Promise.all(allBeneficiaryIds.map(ownerId => transaction.get(doc(db, 'owners', ownerId))));
+                const ownerDataMap = new Map<string, any>();
+                ownerDocs.forEach((ownerDoc) => {
+                    if (!ownerDoc.exists()) throw new Error(`El propietario ${ownerDoc.id} no fue encontrado.`);
+                    ownerDataMap.set(ownerDoc.id, ownerDoc.data());
+                });
 
+                // --- 2. LOGIC AND WRITES ---
+                const newReceiptNumbers: { [key: string]: string } = {};
+
+                for (const beneficiary of paymentData.beneficiaries) {
+                    const ownerId = beneficiary.ownerId;
+                    const ownerData = ownerDataMap.get(ownerId);
+                    if (!ownerData) continue;
+
+                    const ownerRef = doc(db, 'owners', ownerId);
                     const receiptCounter = ownerData.receiptCounter || 0;
                     const newReceiptCounter = receiptCounter + 1;
-                    const receiptNumber = `REC-${ownerId.substring(0, 5).toUpperCase()}-${String(newReceiptCounter).padStart(4, '0')}`;
-                    
+                    const receiptNumber = `REC-${ownerId.substring(0, 4).toUpperCase()}-${String(newReceiptCounter).padStart(5, '0')}`;
+                    newReceiptNumbers[ownerId] = receiptNumber;
+
+                    const initialBalance = ownerData.balance || 0;
+                    const paymentAmountForOwner = beneficiary.amount;
+
                     let availableFundsInCents = Math.round(paymentAmountForOwner * 100) + Math.round(initialBalance * 100);
                     
-                    const debtsQuery = query(
-                        collection(db, 'debts'),
-                        where('ownerId', '==', ownerId),
-                        where('status', '==', 'pending')
-                    );
-                    const debtsSnapshot = await getDocs(debtsQuery);
+                    const debtsQuery = query(collection(db, 'debts'), where('ownerId', '==', ownerId), where('status', '==', 'pending'));
+                    const debtsSnapshot = await getDocs(debtsQuery); // This read is outside transaction but fine as it is before writes.
                     
                     const sortedDebts = debtsSnapshot.docs
-                        .map(doc => ({ id: doc.id, ...doc.data() } as Debt))
-                        .sort((a, b) => {
-                            if (a.year !== b.year) return a.year - b.year;
-                            return a.month - b.month;
-                        });
+                        .map(d => ({ id: d.id, ...d.data() } as Debt))
+                        .sort((a, b) => a.year - b.year || a.month - b.month);
                     
                     if (sortedDebts.length > 0) {
                         for (const debt of sortedDebts) {
                             const debtRef = doc(db, 'debts', debt.id);
-                            const debtAmountInCents = Math.round(debt.amountUSD * paymentData.exchangeRate * 100);
+                            const debtAmountInCents = Math.round(debt.amountUSD * exchangeRate * 100);
                             
                             if (availableFundsInCents >= debtAmountInCents) {
                                 availableFundsInCents -= debtAmountInCents;
@@ -307,17 +306,17 @@ export default function VerifyPaymentsPage() {
                         }
                     }
                     
-                    const condoFeeInCents = Math.round(condoFee * paymentData.exchangeRate * 100);
-                    if (availableFundsInCents >= condoFeeInCents) {
+                    const condoFeeInCents = Math.round(currentCondoFee * exchangeRate * 100);
+                    if (paymentData.type !== 'adelanto' && availableFundsInCents >= condoFeeInCents) {
                         const allExistingDebtsQuery = query(collection(db, 'debts'), where('ownerId', '==', ownerId));
-                        const allExistingDebtsSnap = await getDocs(allExistingDebtsQuery);
+                        const allExistingDebtsSnap = await getDocs(allExistingDebtsQuery); // Outside transaction read
                         const existingDebtPeriods = new Set(allExistingDebtsSnap.docs.map(d => `${d.data().year}-${d.data().month}`));
 
                         const startDate = startOfMonth(new Date());
 
                         if (ownerData.properties && ownerData.properties.length > 0) {
                              for (const property of ownerData.properties) {
-                                for (let i = 0; i < 24; i++) {
+                                for (let i = 0; i < 24; i++) { // Limit future debt creation
                                     if (availableFundsInCents < condoFeeInCents) break;
 
                                     const futureDebtDate = addMonths(startDate, i);
@@ -334,12 +333,12 @@ export default function VerifyPaymentsPage() {
                                         ownerId: ownerId,
                                         property: property,
                                         year: futureYear, month: futureMonth,
-                                        amountUSD: condoFee,
+                                        amountUSD: currentCondoFee,
                                         description: "Cuota de Condominio (Pagada por adelantado)",
-                                        status: 'paid', paidAmountUSD: condoFee,
+                                        status: 'paid', paidAmountUSD: currentCondoFee,
                                         paymentDate: paymentData.paymentDate, paymentId: paymentData.id,
                                     });
-                                    existingDebtPeriods.add(periodKey); // Avoid creating duplicate future debts in same transaction
+                                    existingDebtPeriods.add(periodKey);
                                 }
                                 if (availableFundsInCents < condoFeeInCents) break;
                             }
@@ -347,16 +346,16 @@ export default function VerifyPaymentsPage() {
                     }
                     
                     const finalBalance = availableFundsInCents / 100;
-                    const observationNote = `Pago por Bs. ${formatToTwoDecimals(paymentAmountForOwner)}. Tasa aplicada: Bs. ${formatToTwoDecimals(paymentData.exchangeRate)}. Saldo Anterior: Bs. ${formatToTwoDecimals(initialBalance)}. Saldo a Favor Actual: Bs. ${formatToTwoDecimals(finalBalance)}.`;
-                    
                     transaction.update(ownerRef, { balance: finalBalance, receiptCounter: newReceiptCounter });
-                    transaction.update(paymentRef, { status: 'aprobado', observations: observationNote, exchangeRate: paymentData.exchangeRate, receiptNumber: receiptNumber });
                 }
+                 const observationNote = `Pago aprobado. Tasa aplicada: Bs. ${formatToTwoDecimals(exchangeRate)}.`;
+                 transaction.update(paymentRef, { status: 'aprobado', observations: observationNote, exchangeRate: exchangeRate, receiptNumbers: newReceiptNumbers });
+
             });
     
             toast({
                 title: 'Pago Aprobado y Procesado',
-                description: 'El saldo del propietario y las deudas han sido actualizados.',
+                description: 'El saldo de los propietarios y las deudas han sido actualizados.',
                 className: 'bg-green-100 border-green-400 text-green-800',
             });
         } catch (error) {
@@ -367,21 +366,20 @@ export default function VerifyPaymentsPage() {
     }
   };
 
-  const showReceiptPdfPreview = async (payment: FullPayment) => {
-    if (!payment.id) {
-        toast({ variant: 'destructive', title: 'Error', description: 'ID de pago inválido.' });
+  const showReceiptPdfPreview = async (payment: FullPayment, beneficiary: Beneficiary) => {
+    if (!payment.id || !beneficiary) {
+        toast({ variant: 'destructive', title: 'Error', description: 'Datos de pago o beneficiario inválidos.' });
         return;
     }
     try {
-        const ownerName = payment.user || 'Beneficiario no identificado';
-        
-        const ownerUnitSummary = payment.beneficiaries.length > 1 
-            ? "Múltiples Propiedades" 
-            : (payment.unit || 'N/A');
+        const ownerUnitSummary = (beneficiary.street && beneficiary.house) 
+            ? `${beneficiary.street} - ${beneficiary.house}`
+            : "Propiedad no especificada";
 
         const paidDebtsQuery = query(
             collection(db, "debts"),
-            where("paymentId", "==", payment.id)
+            where("paymentId", "==", payment.id),
+            where("ownerId", "==", beneficiary.ownerId)
         );
         const paidDebtsSnapshot = await getDocs(paidDebtsQuery);
         const paidDebts = paidDebtsSnapshot.docs
@@ -391,13 +389,15 @@ export default function VerifyPaymentsPage() {
                 return a.month - b.month;
             });
         
+        const receiptNumber = payment.receiptNumbers?.[beneficiary.ownerId] || payment.id.substring(0, 10);
+        
         // --- QR Code Generation ---
-        const receiptUrl = `${window.location.origin}/receipt/${payment.id}`;
+        const receiptUrl = `${window.location.origin}/receipt/${payment.id}/${beneficiary.ownerId}`;
         const qrDataContent = JSON.stringify({
-            receiptNumber: payment.receiptNumber,
+            receiptNumber: receiptNumber,
             date: format(new Date(), 'yyyy-MM-dd'),
-            amount: payment.totalAmount,
-            ownerId: payment.beneficiaries[0]?.ownerId,
+            amount: beneficiary.amount,
+            ownerId: beneficiary.ownerId,
             url: receiptUrl,
         });
 
@@ -410,7 +410,8 @@ export default function VerifyPaymentsPage() {
 
         setReceiptData({ 
             payment, 
-            ownerName: ownerName,
+            beneficiary,
+            ownerName: beneficiary.ownerName,
             ownerUnit: ownerUnitSummary, 
             paidDebts,
             qrCodeUrl,
@@ -494,7 +495,7 @@ export default function VerifyPaymentsPage() {
 
   const handleDownloadPdf = async () => {
     if (!receiptData || !companyInfo) return;
-    const { payment, paidDebts, qrCodeUrl } = receiptData;
+    const { payment, beneficiary, paidDebts, qrCodeUrl } = receiptData;
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 14;
@@ -517,9 +518,10 @@ export default function VerifyPaymentsPage() {
 
     doc.setFontSize(16).setFont('helvetica', 'bold').text("RECIBO DE PAGO", pageWidth / 2, margin + 45, { align: 'center' });
     
+    const receiptNumber = payment.receiptNumbers?.[beneficiary.ownerId] || payment.id.substring(0, 10);
     // --- Right-side Info (Receipt No. + QR) ---
     doc.setFontSize(10).setFont('helvetica', 'normal');
-    doc.text(`N° de recibo: ${payment.receiptNumber || payment.id.substring(0, 10)}`, pageWidth - margin, margin + 45, { align: 'right' });
+    doc.text(`N° de recibo: ${receiptNumber}`, pageWidth - margin, margin + 45, { align: 'right' });
     
     if (qrCodeUrl) {
         const qrSize = 30;
@@ -528,8 +530,7 @@ export default function VerifyPaymentsPage() {
 
     let startY = margin + 60;
     
-    const beneficiariesText = payment.beneficiaries.map(b => `${b.ownerName} (${b.street} - ${b.house})`).join('; ');
-    doc.setFontSize(10).text(`Beneficiario(s): ${beneficiariesText}`, margin, startY);
+    doc.setFontSize(10).text(`Beneficiario: ${beneficiary.ownerName} (${beneficiary.street} - ${beneficiary.house})`, margin, startY);
     startY += 6;
     doc.text(`Método de pago: ${payment.type}`, margin, startY);
     startY += 6;
@@ -570,29 +571,12 @@ export default function VerifyPaymentsPage() {
             didDrawPage: (data: any) => { startY = data.cursor.y; }
         });
         startY = (doc as any).lastAutoTable.finalY + 8;
-    } else if (payment.type === 'adelanto') {
-        totalPaidInConcepts = payment.totalAmount; // totalAmount is in USD for advances
-        (doc as any).autoTable({
-            startY: startY,
-            head: [['Concepto', 'Propiedades Beneficiadas', 'Monto Pagado ($)']],
-            body: payment.beneficiaries.map(b => [
-                'Pago por Adelantado',
-                `${b.street} - ${b.house}`,
-                `$${formatToTwoDecimals(b.amount)}`,
-            ]),
-            theme: 'striped',
-            headStyles: { fillColor: [44, 62, 80], textColor: 255 },
-            styles: { fontSize: 9, cellPadding: 2.5 },
-            didDrawPage: (data: any) => { startY = data.cursor.y; }
-        });
-         startY = (doc as any).lastAutoTable.finalY + 8;
-    }
-     else {
-        totalPaidInConcepts = payment.totalAmount;
+    } else {
+        totalPaidInConcepts = beneficiary.amount;
         (doc as any).autoTable({
             startY: startY,
             head: [['Concepto', 'Monto Pagado (Bs)']],
-            body: [['Abono a Saldo a Favor', `Bs. ${formatToTwoDecimals(payment.totalAmount)}`]],
+            body: [['Abono a Saldo a Favor', `Bs. ${formatToTwoDecimals(beneficiary.amount)}`]],
             theme: 'striped',
             headStyles: { fillColor: [44, 62, 80], textColor: 255 },
             styles: { fontSize: 9, cellPadding: 2.5 },
@@ -603,7 +587,7 @@ export default function VerifyPaymentsPage() {
     
     // Totals Section
     const totalLabel = "TOTAL PAGADO:";
-    const totalValue = payment.type === 'adelanto' ? `$${formatToTwoDecimals(totalPaidInConcepts)}` : `Bs. ${formatToTwoDecimals(totalPaidInConcepts)}`;
+    const totalValue = `Bs. ${formatToTwoDecimals(totalPaidInConcepts)}`;
     doc.setFontSize(11).setFont('helvetica', 'bold');
     const totalValueWidth = doc.getStringUnitWidth(totalValue) * 11 / doc.internal.scaleFactor;
     doc.text(totalValue, pageWidth - margin, startY, { align: 'right' });
@@ -636,7 +620,7 @@ export default function VerifyPaymentsPage() {
     doc.setFontSize(7).setFont('helvetica', 'italic').text('Este recibo se generó de manera automática y es válido sin firma manuscrita.', pageWidth / 2, noteY, { align: 'center'});
 
 
-    doc.save(`Recibo_de_Pago_${payment.receiptNumber || payment.id.substring(0,7)}.pdf`);
+    doc.save(`Recibo_de_Pago_${receiptNumber}.pdf`);
     setIsReceiptPdfPreviewOpen(false);
   };
 
@@ -734,13 +718,30 @@ export default function VerifyPaymentsPage() {
                                                         <XCircle className="mr-2 h-4 w-4" />
                                                         Rechazar
                                                     </DropdownMenuItem>
+                                                    <DropdownMenuSeparator />
                                                 </>
                                             )}
                                             {payment.status === 'aprobado' && (
-                                                <DropdownMenuItem onClick={() => showReceiptPdfPreview(payment)}>
-                                                    <Printer className="mr-2 h-4 w-4" />
-                                                    Generar Recibo
-                                                </DropdownMenuItem>
+                                                payment.beneficiaries.length > 1 ? (
+                                                    <DropdownMenuSub>
+                                                        <DropdownMenuSubTrigger>
+                                                            <Printer className="mr-2 h-4 w-4" />
+                                                            Generar Recibo
+                                                        </DropdownMenuSubTrigger>
+                                                        <DropdownMenuSubContent>
+                                                            {payment.beneficiaries.map(beneficiary => (
+                                                                <DropdownMenuItem key={beneficiary.ownerId} onClick={() => showReceiptPdfPreview(payment, beneficiary)}>
+                                                                    {beneficiary.ownerName}
+                                                                </DropdownMenuItem>
+                                                            ))}
+                                                        </DropdownMenuSubContent>
+                                                    </DropdownMenuSub>
+                                                ) : (
+                                                    <DropdownMenuItem onClick={() => showReceiptPdfPreview(payment, payment.beneficiaries[0])}>
+                                                        <Printer className="mr-2 h-4 w-4" />
+                                                        Generar Recibo
+                                                    </DropdownMenuItem>
+                                                )
                                             )}
                                              <DropdownMenuItem onClick={() => handleDeletePayment(payment)} className="text-destructive">
                                                 <Trash2 className="mr-2 h-4 w-4" />
@@ -781,14 +782,14 @@ export default function VerifyPaymentsPage() {
                             <div className="text-right flex flex-col items-end">
                                 <p className="font-bold text-lg">RECIBO DE PAGO</p>
                                 <p><strong>Fecha Emisión:</strong> {format(new Date(), 'dd/MM/yyyy')}</p>
-                                <p><strong>N° Recibo:</strong> {receiptData.payment.receiptNumber || receiptData.payment.id.substring(0, 10)}</p>
+                                <p><strong>N° Recibo:</strong> {receiptData.payment.receiptNumbers?.[receiptData.beneficiary.ownerId] || receiptData.payment.id.substring(0, 10)}</p>
                                 {receiptData.qrCodeUrl && <img src={receiptData.qrCodeUrl} alt="QR Code" className="w-20 h-20 mt-2"/>}
                             </div>
                         </div>
                         <hr className="my-2 border-gray-400"/>
                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                             <p><strong>Beneficiario(s):</strong></p><p>{receiptData.payment.beneficiaries.map(b => b.ownerName).join('; ')}</p>
-                             <p><strong>Unidad(es):</strong></p><p>{receiptData.ownerUnit}</p>
+                             <p><strong>Beneficiario:</strong></p><p>{receiptData.ownerName}</p>
+                             <p><strong>Unidad:</strong></p><p>{receiptData.ownerUnit}</p>
                              <p><strong>Método de pago:</strong></p><p>{receiptData.payment.type}</p>
                              <p><strong>Banco Emisor:</strong></p><p>{receiptData.payment.bank}</p>
                              <p><strong>N° de Referencia:</strong></p><p>{receiptData.payment.reference}</p>
@@ -816,13 +817,13 @@ export default function VerifyPaymentsPage() {
                                     ))
                                 ) : (
                                     <TableRow>
-                                        <TableCell colSpan={4} className="h-24 text-center">Abono a Saldo a Favor</TableCell>
+                                        <TableCell colSpan={4} className="h-24 text-center">Abono a Saldo a Favor por Bs. {formatToTwoDecimals(receiptData.beneficiary.amount)}</TableCell>
                                     </TableRow>
                                 )}
                             </TableBody>
                         </Table>
                          <div className="text-right font-bold mt-2 pr-4">
-                            Total Pagado: Bs. {formatToTwoDecimals(receiptData.paidDebts.reduce((acc, debt) => acc + ((debt.paidAmountUSD || debt.amountUSD) * receiptData.payment.exchangeRate), 0) > 0 ? receiptData.paidDebts.reduce((acc, debt) => acc + ((debt.paidAmountUSD || debt.amountUSD) * receiptData.payment.exchangeRate), 0) : receiptData.payment.amount)}
+                            Total Pagado: Bs. {formatToTwoDecimals(receiptData.paidDebts.length > 0 ? receiptData.paidDebts.reduce((acc, debt) => acc + ((debt.paidAmountUSD || debt.amountUSD) * receiptData.payment.exchangeRate), 0) : receiptData.beneficiary.amount)}
                          </div>
                          {receiptData.payment.observations && (
                             <div className="mt-4 p-2 border-t text-xs">
@@ -880,4 +881,5 @@ export default function VerifyPaymentsPage() {
     
 
     
+
 
