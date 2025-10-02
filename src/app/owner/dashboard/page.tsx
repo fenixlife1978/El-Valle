@@ -7,11 +7,12 @@ import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/componen
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Landmark, AlertCircle, Building, Eye, Printer, Megaphone, Loader2, Wallet, FileText, CalendarClock, Scale, Calculator, Minus, Equal, ShieldCheck, TrendingUp, TrendingDown, Info } from "lucide-react";
+import { Landmark, AlertCircle, Building, Eye, Printer, Megaphone, Loader2, Wallet, FileText, CalendarClock, Scale, Calculator, Minus, Equal, ShieldCheck, BookOpen, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getCommunityUpdates } from '@/ai/flows/community-updates';
 import { db } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { doc, onSnapshot, collection, query, where, orderBy, limit, getDoc, getDocs, Timestamp } from 'firebase/firestore';
 import { format, isBefore, startOfMonth, addMonths, isEqual } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -94,6 +95,12 @@ const formatToTwoDecimals = (num: number) => {
     return truncated.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
+type PublishedReport = {
+    id: string; // e.g., '2025-10'
+    type: 'balance' | 'integral';
+    createdAt: string;
+};
+
 export default function OwnerDashboardPage() {
     const router = useRouter();
     const [session, setSession] = useState<any>(null);
@@ -102,7 +109,6 @@ export default function OwnerDashboardPage() {
     const [userData, setUserData] = useState<UserData | null>(null);
     const [payments, setPayments] = useState<Payment[]>([]);
     const [debts, setDebts] = useState<Debt[]>([]);
-    const [allOwnerDebts, setAllOwnerDebts] = useState<Debt[]>([]);
     const [dashboardStats, setDashboardStats] = useState({
         balanceInFavor: 0,
         totalDebtUSD: 0,
@@ -110,11 +116,15 @@ export default function OwnerDashboardPage() {
     });
     const [solvencyStatus, setSolvencyStatus] = useState<SolvencyStatus>('cargando...');
     const [solvencyPeriod, setSolvencyPeriod] = useState('');
-    const [communityUpdates, setCommunityUpdates] = useState<string[]>([]);
     const [selectedDebts, setSelectedDebts] = useState<string[]>([]);
     const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
     const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
     const [isReceiptPreviewOpen, setIsReceiptPreviewOpen] = useState(false);
+    
+    // New state for published reports
+    const [latestIntegralReport, setLatestIntegralReport] = useState<PublishedReport | null>(null);
+    const [latestFinancialBalance, setLatestFinancialBalance] = useState<PublishedReport | null>(null);
+
     
     useEffect(() => {
         const userSession = localStorage.getItem('user-session');
@@ -130,6 +140,7 @@ export default function OwnerDashboardPage() {
         let userUnsubscribe: () => void;
         let paymentsUnsubscribe: () => void;
         let debtsUnsubscribe: () => void;
+        let reportsUnsubscribe: () => void;
     
         const settingsRef = doc(db, 'config', 'mainSettings');
         settingsUnsubscribe = onSnapshot(settingsRef, (settingsSnap) => {
@@ -174,7 +185,6 @@ export default function OwnerDashboardPage() {
                     debtsUnsubscribe = onSnapshot(debtsQuery, async (debtsSnapshot) => {
                         const allDebtsData: Debt[] = [];
                         debtsSnapshot.forEach(d => allDebtsData.push({ id: d.id, ...d.data() } as Debt));
-                        setAllOwnerDebts(allDebtsData);
 
                         const pendingDebts = allDebtsData.filter(d => d.status === 'pending');
                         const totalDebtUSD = pendingDebts.reduce((sum, d) => sum + d.amountUSD, 0);
@@ -182,54 +192,24 @@ export default function OwnerDashboardPage() {
                         setDebts(pendingDebts.sort((a, b) => b.year - b.year || b.month - b.month));
                         setDashboardStats(prev => ({...prev, totalDebtUSD }));
                         
-                        // New Solvency Logic
                         let firstUnpaidMonth: Date | null = null;
-                        let lastPaidMonth: Date | null = null;
-
-                        const allRecords = allDebtsData.map(d => new Date(d.year, d.month - 1))
-                            .sort((a, b) => a.getTime() - b.getTime());
-
-                        if (allRecords.length > 0) {
-                            const oldestRecordDate = allRecords[0];
-                            const today = new Date();
-
-                            for (let d = oldestRecordDate; isBefore(d, today) || isEqual(d, startOfMonth(today)); d = addMonths(d, 1)) {
+                        const paidDebts = allDebtsData.filter(d => d.status === 'paid');
+                        const lastPaidDebt = paidDebts.sort((a, b) => new Date(b.year, b.month -1).getTime() - new Date(a.year, a.month - 1).getTime())[0];
+                        const lastPaidMonth = lastPaidDebt ? new Date(lastPaidDebt.year, lastPaidDebt.month - 1) : null;
+                        
+                        const oldestDebt = [...allDebtsData].sort((a, b) => new Date(a.year, a.month -1).getTime() - new Date(b.year, b.month-1).getTime())[0];
+                        
+                        if (oldestDebt) {
+                            const oldestDate = startOfMonth(new Date(oldestDebt.year, oldestDebt.month - 1));
+                            for (let d = oldestDate; isBefore(d, new Date()); d = addMonths(d, 1)) {
                                 const year = d.getFullYear();
                                 const month = d.getMonth() + 1;
-
-                                const isMonthFullyPaid = !allDebtsData.some(debt =>
-                                    debt.year === year && debt.month === month && debt.status === 'pending'
-                                );
-
-                                if (isMonthFullyPaid) {
-                                    lastPaidMonth = d;
-                                } else {
-                                    if (!firstUnpaidMonth) {
-                                        firstUnpaidMonth = d;
-                                    }
+                                const hasPendingDebtForMonth = allDebtsData.some(debt => debt.year === year && debt.month === month && debt.status === 'pending');
+                                if (hasPendingDebtForMonth) {
+                                    firstUnpaidMonth = d;
+                                    break;
                                 }
                             }
-                        }
-
-                        if (!firstUnpaidMonth) { // Potentially solvent, check for future payments
-                            const futurePaidDebts = allDebtsData
-                                .filter(d => d.status === 'paid' && isBefore(new Date(), new Date(d.year, d.month - 1)))
-                                .sort((a, b) => new Date(a.year, a.month - 1).getTime() - new Date(b.year, b.month - 1).getTime());
-                            
-                            let consecutiveLastPaid = lastPaidMonth ? new Date(lastPaidMonth) : null;
-                            if(consecutiveLastPaid) {
-                                for(const debt of futurePaidDebts) {
-                                    const nextMonth = addMonths(consecutiveLastPaid, 1);
-                                    const isFutureMonthFullyPaid = !allDebtsData.some(d => d.year === debt.year && d.month === debt.month && d.status === 'pending');
-
-                                    if(debt.year === nextMonth.getFullYear() && debt.month === nextMonth.getMonth() + 1 && isFutureMonthFullyPaid) {
-                                        consecutiveLastPaid = new Date(debt.year, debt.month -1);
-                                    } else {
-                                        break;
-                                    }
-                                }
-                            }
-                            lastPaidMonth = consecutiveLastPaid;
                         }
 
                         if (firstUnpaidMonth) {
@@ -260,6 +240,18 @@ export default function OwnerDashboardPage() {
                 }
                 setLoading(false);
             });
+
+             if(reportsUnsubscribe) reportsUnsubscribe();
+             const reportsQuery = query(collection(db, "published_reports"), orderBy('createdAt', 'desc'));
+             reportsUnsubscribe = onSnapshot(reportsQuery, (snapshot) => {
+                 const reports = snapshot.docs.map(doc => ({...doc.data(), id: doc.id } as PublishedReport));
+                 const latestIntegral = reports.find(r => r.type === 'integral');
+                 const latestBalance = reports.find(r => r.type === 'balance');
+                 setLatestIntegralReport(latestIntegral || null);
+                 setLatestFinancialBalance(latestBalance || null);
+             });
+
+
         });
     
         return () => {
@@ -267,6 +259,7 @@ export default function OwnerDashboardPage() {
             if (userUnsubscribe) userUnsubscribe();
             if (paymentsUnsubscribe) paymentsUnsubscribe();
             if (debtsUnsubscribe) debtsUnsubscribe();
+            if(reportsUnsubscribe) reportsUnsubscribe();
         };
     
     }, [router]);
@@ -489,6 +482,57 @@ export default function OwnerDashboardPage() {
                  <div className="text-xs text-muted-foreground">
                     Tasa de cambio del día: Bs. {formatToTwoDecimals(dashboardStats.exchangeRate)} por USD
                  </div>
+            </CardContent>
+        </Card>
+
+        <Card>
+            <CardHeader>
+                <div className="flex items-center justify-between">
+                    <CardTitle className="text-xl font-bold font-headline">Publicaciones del Condominio</CardTitle>
+                    <Link href="/owner/history">
+                        <Button variant="outline" size="sm">
+                            <Clock className="mr-2 h-4 w-4"/>
+                            Ver Historial Completo
+                        </Button>
+                    </Link>
+                </div>
+                <CardDescription>Consulta los últimos reportes publicados por la administración.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid md:grid-cols-2 gap-4">
+                <Card className="flex flex-col">
+                    <CardHeader className="flex-row gap-4 items-center">
+                        <BookOpen className="w-8 h-8 text-primary"/>
+                        <div>
+                            <CardTitle>Último Reporte Integral</CardTitle>
+                            <CardDescription>Estado de solvencia de todos los propietarios.</CardDescription>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="flex-grow">
+                        {latestIntegralReport ? (
+                            <p className="font-semibold">Publicado: {format(new Date(latestIntegralReport.createdAt), 'dd MMMM, yyyy', {locale: es})}</p>
+                        ) : (
+                            <p className="text-muted-foreground">Aún no hay reportes publicados.</p>
+                        )}
+                    </CardContent>
+                    {latestIntegralReport && <CardFooter><Button className="w-full" disabled>Ver Reporte</Button></CardFooter>}
+                </Card>
+                <Card className="flex flex-col">
+                    <CardHeader className="flex-row gap-4 items-center">
+                        <Scale className="w-8 h-8 text-primary"/>
+                        <div>
+                            <CardTitle>Último Balance Financiero</CardTitle>
+                            <CardDescription>Resumen de ingresos y egresos del mes.</CardDescription>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="flex-grow">
+                        {latestFinancialBalance ? (
+                            <p className="font-semibold">Publicado: {format(new Date(latestFinancialBalance.createdAt), 'dd MMMM, yyyy', {locale: es})}</p>
+                        ) : (
+                             <p className="text-muted-foreground">Aún no hay balances publicados.</p>
+                        )}
+                    </CardContent>
+                     {latestFinancialBalance && <CardFooter><Button className="w-full" disabled>Ver Balance</Button></CardFooter>}
+                </Card>
             </CardContent>
         </Card>
 
@@ -716,3 +760,4 @@ export default function OwnerDashboardPage() {
 
 
     
+

@@ -5,6 +5,7 @@ import {
     Home,
     Landmark,
     Settings,
+    History
 } from 'lucide-react';
 import { type ReactNode } from 'react';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
@@ -16,6 +17,7 @@ const ownerNavItems: NavItem[] = [
       icon: Landmark, 
       label: "Reportar Pago",
     },
+    { href: "/owner/history", icon: History, label: "Historial de Reportes"},
     { href: "/owner/settings", icon: Settings, label: "Configuración" },
 ];
 

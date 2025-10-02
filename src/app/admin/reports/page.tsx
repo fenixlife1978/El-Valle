@@ -159,7 +159,7 @@ const CustomBarLabel = (props: any) => {
     if (value === 0) return null;
     const formattedValue = `$${Math.round(value)}`;
     return (
-        <text x={x + width / 2} y={y} fill="#fff" textAnchor="middle" dy={-6} fontSize="12" fontWeight="bold">
+        <text x={x + width / 2} y={y} fill="#fff" textAnchor="middle" dy={-6} fontSize="12" fontWeight="bold" angle={-90}>
             {formattedValue}
         </text>
     );
@@ -342,89 +342,38 @@ export default function ReportsPage() {
             return aKeys.houseNum - bKeys.houseNum;
         });
         
-        const currentMonthStart = startOfMonth(new Date());
-
         return sortedOwners.map(owner => {
             const ownerAllDebts = allDebts.filter(d => d.ownerId === owner.id);
-            const ownerHistoricalPayments = allHistoricalPayments.filter(p => p.ownerId === owner.id);
             
-            // --- New Solvency Logic ---
             let firstUnpaidMonth: Date | null = null;
-            let lastPaidMonth: Date | null = null;
-            let oldestRecordDate: Date | null = null;
-
-            // Step 1: Find the oldest record to start checking from
-            const allRecords = [
-                ...ownerAllDebts.map(d => new Date(d.year, d.month - 1)),
-                ...ownerHistoricalPayments.map(p => new Date(p.referenceYear, p.referenceMonth - 1))
-            ].sort((a, b) => a.getTime() - b.getTime());
-
-            if (allRecords.length > 0) {
-                oldestRecordDate = allRecords[0];
-            }
-
-            // Step 2: Iterate month by month to find the first unpaid month and last paid month
-            if (oldestRecordDate) {
-                const today = new Date();
-                for (let d = oldestRecordDate; isBefore(d, today) || isEqual(d, startOfMonth(today)); d = addMonths(d, 1)) {
+            
+            const paidDebts = ownerAllDebts.filter(d => d.status === 'paid');
+            const lastPaidDebt = paidDebts.sort((a, b) => new Date(b.year, b.month -1).getTime() - new Date(a.year, a.month - 1).getTime())[0];
+            const lastPaidMonth = lastPaidDebt ? new Date(lastPaidDebt.year, lastPaidDebt.month - 1) : null;
+            
+            const oldestDebt = [...ownerAllDebts].sort((a, b) => new Date(a.year, a.month -1).getTime() - new Date(b.year, b.month-1).getTime())[0];
+            
+            if (oldestDebt) {
+                const oldestDate = startOfMonth(new Date(oldestDebt.year, oldestDebt.month - 1));
+                for (let d = oldestDate; isBefore(d, new Date()); d = addMonths(d, 1)) {
                     const year = d.getFullYear();
                     const month = d.getMonth() + 1;
-
-                    // A month is fully paid if there are NO pending debts for it (base fee or adjustment).
-                    const isMonthFullyPaid = !ownerAllDebts.some(debt =>
-                        debt.year === year && debt.month === month && debt.status === 'pending'
-                    );
-
-                    if (isMonthFullyPaid) {
-                        lastPaidMonth = d;
-                    } else {
-                        // This is the first gap.
-                        if (!firstUnpaidMonth) {
-                            firstUnpaidMonth = d;
-                        }
+                    const hasPendingDebtForMonth = ownerAllDebts.some(debt => debt.year === year && debt.month === month && debt.status === 'pending');
+                    if (hasPendingDebtForMonth) {
+                        firstUnpaidMonth = d;
+                        break;
                     }
                 }
             }
-             // Step 2.5: Consider future paid months only if completely solvent up to now
-            if (!firstUnpaidMonth) {
-                const futurePaidDebts = ownerAllDebts
-                    .filter(d => d.status === 'paid' && isBefore(new Date(), new Date(d.year, d.month - 1)))
-                    .sort((a, b) => new Date(a.year, a.month - 1).getTime() - new Date(b.year, b.month - 1).getTime());
 
-                let consecutiveLastPaid = lastPaidMonth ? new Date(lastPaidMonth) : null;
-                if (consecutiveLastPaid) {
-                     for (const debt of futurePaidDebts) {
-                        const nextMonth = addMonths(consecutiveLastPaid, 1);
-                        if (debt.year === nextMonth.getFullYear() && debt.month === nextMonth.getMonth() + 1) {
-                           // Check if this future month is fully paid
-                            const isFutureMonthFullyPaid = !ownerAllDebts.some(d =>
-                                d.year === debt.year && d.month === debt.month && d.status === 'pending'
-                            );
-                            if(isFutureMonthFullyPaid) {
-                                consecutiveLastPaid = new Date(debt.year, debt.month - 1);
-                            } else {
-                                break; // Not consecutively paid, stop.
-                            }
-                        } else {
-                            break; // Gap found, stop.
-                        }
-                    }
-                }
-               lastPaidMonth = consecutiveLastPaid;
-            }
-
-
-            // Step 3: Determine solvency status and period based on findings.
             const status: 'Solvente' | 'No Solvente' = !firstUnpaidMonth ? 'Solvente' : 'No Solvente';
             let solvencyPeriod = 'N/A';
             if (status === 'No Solvente' && firstUnpaidMonth) {
                 solvencyPeriod = `Desde ${format(firstUnpaidMonth, 'MMM yyyy', { locale: es })}`;
             } else if (status === 'Solvente' && lastPaidMonth) {
-                solvencyPeriod = `Hasta ${format(lastPaidMonth, 'MMM yyyy', { locale: es })}`;
+                 solvencyPeriod = `Hasta ${format(lastPaidMonth, 'MMM yyyy', { locale: es })}`;
             }
 
-
-            // Phase 4: Calculate total months owed and adjustment debt.
             const monthsOwed = ownerAllDebts.filter(d => 
                 d.status === 'pending' && d.description.toLowerCase().includes('condominio')
             ).length;
@@ -433,7 +382,6 @@ export default function ReportsPage() {
                 .filter(d => d.status === 'pending' && d.description.toLowerCase().includes('ajuste'))
                 .reduce((sum, d) => sum + d.amountUSD, 0);
 
-            // Phase 5: Filter payments for reporting based on date range.
             const fromDate = integralDateRange.from;
             const toDate = integralDateRange.to;
             if (fromDate) fromDate.setHours(0, 0, 0, 0);
@@ -476,7 +424,7 @@ export default function ReportsPage() {
             const ownerMatch = !integralOwnerFilter || row.name.toLowerCase().includes(integralOwnerFilter.toLowerCase());
             return statusMatch && ownerMatch;
         });
-    }, [owners, allDebts, allPayments, allHistoricalPayments, integralDateRange, integralStatusFilter, integralOwnerFilter]);
+    }, [owners, allDebts, allPayments, integralDateRange, integralStatusFilter, integralOwnerFilter]);
 
     
     // --- Delinquency Report Logic ---
@@ -524,7 +472,6 @@ export default function ReportsPage() {
 
         const filteredDebts = allDebts.filter(debt => {
             if (debt.status !== 'pending') return false;
-            // Use optional chaining to safely access property
             const street = debt.property?.street;
             if (!street || !street.startsWith('Calle')) return false;
             const streetNumber = parseInt(street.replace('Calle ', ''));
@@ -538,7 +485,6 @@ export default function ReportsPage() {
         });
 
         const debtsByStreet = filteredDebts.reduce((acc, debt) => {
-            // This check is now safe due to the filter above
             const street = debt.property.street;
             if (!acc[street]) acc[street] = 0;
             acc[street] += debt.amountUSD;
@@ -574,7 +520,6 @@ export default function ReportsPage() {
                     if (streetNumber > 8) return;
 
                     if (!acc[beneficiary.street]) acc[beneficiary.street] = 0;
-                    // Approximate income in USD
                     const incomeUSD = beneficiary.amount / (payment.exchangeRate || activeRate || 1);
                     acc[beneficiary.street] += incomeUSD;
                 }
@@ -1959,7 +1904,7 @@ export default function ReportsPage() {
                                 <ResponsiveContainer width="100%" height={350}>
                                     <BarChart data={debtsByStreetChartData} margin={{ top: 30, right: 20, left: -10, bottom: 50 }}>
                                         <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
-                                        <XAxis dataKey="name" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} angle={-90} textAnchor="end" height={50} interval={0} />
+                                        <XAxis dataKey="name" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} angle={-45} textAnchor="end" height={50} interval={0} />
                                         <YAxis stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
                                         <Tooltip cursor={{fill: 'rgba(255, 255, 255, 0.1)'}} contentStyle={{backgroundColor: '#334155', border: 'none', borderRadius: '0.5rem'}} />
                                         <Bar dataKey="TotalDeuda" fill="#dc2626" name="Deuda Total (USD)" radius={[4, 4, 0, 0]}>
@@ -1981,7 +1926,7 @@ export default function ReportsPage() {
                                 <ResponsiveContainer width="100%" height={350}>
                                     <BarChart data={incomeByStreetChartData} margin={{ top: 30, right: 20, left: -10, bottom: 50 }}>
                                         <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
-                                        <XAxis dataKey="name" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} angle={-90} textAnchor="end" height={50} interval={0} />
+                                        <XAxis dataKey="name" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} angle={-45} textAnchor="end" height={50} interval={0} />
                                         <YAxis stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
                                         <Tooltip cursor={{fill: 'rgba(255, 255, 255, 0.1)'}} contentStyle={{backgroundColor: '#334155', border: 'none', borderRadius: '0.5rem'}} />
                                         <Bar dataKey="TotalIngresos" fill="#2563eb" name="Ingreso Total (USD)" radius={[4, 4, 0, 0]}>
@@ -2004,6 +1949,7 @@ export default function ReportsPage() {
         </div>
     );
 }
+
 
 
 
