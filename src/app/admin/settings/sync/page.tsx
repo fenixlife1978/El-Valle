@@ -33,24 +33,23 @@ export default function SyncProfilesPage() {
         setLoading(true);
 
         try {
-            await ensureAdminProfile(toast);
+            await ensureAdminProfile();
             
             const currentUser = auth.currentUser;
+            if (!currentUser) {
+                toast({ variant: 'destructive', title: "No autenticado", description: "No se encontró un usuario activo. Por favor, inicie sesión." });
+                setLoading(false);
+                return;
+            }
             
-            const simulatedUserList: AuthUser[] = currentUser ? [{
+            // This is a simulation. In a real server environment, you'd fetch this list securely.
+            const simulatedUserList: AuthUser[] = [{
                 uid: currentUser.uid,
                 email: currentUser.email,
                 displayName: currentUser.displayName
-            }] : [];
+            }];
             
             setAllUsers(simulatedUserList);
-
-            if (simulatedUserList.length === 0) {
-                 toast({ title: "No hay usuarios autenticados para verificar." });
-                 setMissingProfiles([]);
-                 setLoading(false);
-                 return;
-            }
 
             const profilesData: MissingProfile[] = [];
             for (const user of simulatedUserList) {
