@@ -344,34 +344,47 @@ export default function ReportsPage() {
         
         return sortedOwners.map(owner => {
             const ownerAllDebts = allDebts.filter(d => d.ownerId === owner.id);
+
+            const allPaidMonths = new Set(
+                ownerAllDebts
+                .filter(d => d.status === 'paid' && d.description.toLowerCase().includes('condominio'))
+                .map(d => `${d.year}-${d.month}`)
+            );
             
-            let firstUnpaidMonth: Date | null = null;
-            
-            const paidDebts = ownerAllDebts.filter(d => d.status === 'paid');
-            const lastPaidDebt = paidDebts.sort((a, b) => new Date(b.year, b.month -1).getTime() - new Date(a.year, a.month - 1).getTime())[0];
-            const lastPaidMonth = lastPaidDebt ? new Date(lastPaidDebt.year, lastPaidDebt.month - 1) : null;
-            
-            const oldestDebt = [...ownerAllDebts].sort((a, b) => new Date(a.year, a.month -1).getTime() - new Date(b.year, b.month-1).getTime())[0];
-            
-            if (oldestDebt) {
-                const oldestDate = startOfMonth(new Date(oldestDebt.year, oldestDebt.month - 1));
-                for (let d = oldestDate; isBefore(d, new Date()); d = addMonths(d, 1)) {
-                    const year = d.getFullYear();
-                    const month = d.getMonth() + 1;
-                    const hasPendingDebtForMonth = ownerAllDebts.some(debt => debt.year === year && debt.month === month && debt.status === 'pending');
-                    if (hasPendingDebtForMonth) {
-                        firstUnpaidMonth = d;
+            let lastConsecutivePaidMonth: Date | null = null;
+            if (ownerAllDebts.length > 0) {
+                const oldestDebt = [...ownerAllDebts].sort((a, b) => new Date(a.year, a.month -1).getTime() - new Date(b.year, b.month-1).getTime())[0];
+                const startDate = startOfMonth(new Date(oldestDebt.year, oldestDebt.month - 1));
+                
+                let currentMonth = startDate;
+                while (true) {
+                    const monthKey = `${currentMonth.getFullYear()}-${currentMonth.getMonth() + 1}`;
+                    if (allPaidMonths.has(monthKey)) {
+                        lastConsecutivePaidMonth = currentMonth;
+                        currentMonth = addMonths(currentMonth, 1);
+                    } else {
                         break;
                     }
                 }
             }
-
-            const status: 'Solvente' | 'No Solvente' = !firstUnpaidMonth ? 'Solvente' : 'No Solvente';
+            
+            const nextMonth = lastConsecutivePaidMonth ? addMonths(lastConsecutivePaidMonth, 1) : startOfMonth(new Date());
+            const hasPendingDebt = ownerAllDebts.some(d => d.status === 'pending');
+            
+            let status: 'Solvente' | 'No Solvente' = 'Solvente';
             let solvencyPeriod = 'N/A';
-            if (status === 'No Solvente' && firstUnpaidMonth) {
-                solvencyPeriod = `Desde ${format(firstUnpaidMonth, 'MMM yyyy', { locale: es })}`;
-            } else if (status === 'Solvente' && lastPaidMonth) {
-                 solvencyPeriod = `Hasta ${format(lastPaidMonth, 'MMM yyyy', { locale: es })}`;
+
+            if (hasPendingDebt) {
+                status = 'No Solvente';
+                const firstPendingDebt = ownerAllDebts
+                    .filter(d => d.status === 'pending')
+                    .sort((a,b) => new Date(a.year, a.month-1).getTime() - new Date(b.year, b.month-1).getTime())[0];
+                if (firstPendingDebt) {
+                    solvencyPeriod = `Desde ${format(new Date(firstPendingDebt.year, firstPendingDebt.month-1), 'MMM yyyy', { locale: es })}`;
+                }
+            } else if (lastConsecutivePaidMonth) {
+                status = 'Solvente';
+                solvencyPeriod = `Hasta ${format(lastConsecutivePaidMonth, 'MMM yyyy', { locale: es })}`;
             }
 
             const monthsOwed = ownerAllDebts.filter(d => 
@@ -1117,48 +1130,74 @@ export default function ReportsPage() {
         }
     };
 
-    const handleExportChart = async (chartId: string, title: string, formatType: 'pdf' | 'excel') => {
-        const chartContainer = document.getElementById(chartId);
-        if (!chartContainer) {
-            console.error('Chart container not found');
+    const handleExportChart = async (chartId: string, title: string) => {
+        const chartElement = document.getElementById(chartId);
+        if (!chartElement || !companyInfo) {
+            console.error('Chart container or company info not found');
+            toast({ variant: "destructive", title: "Error de exportación", description: "No se encontró el elemento del gráfico para exportar."});
             return;
         }
-
-        const chartElement = chartContainer.parentElement; // Capture the parent card for better context
-        if (!chartElement) {
-             console.error('Chart element parent not found');
-            return;
-        }
-
+    
+        // Temporarily hide buttons before capturing
+        const buttonsContainer = chartElement.nextElementSibling;
+        if (buttonsContainer) (buttonsContainer as HTMLElement).style.display = 'none';
+        
         const { default: html2canvas } = await import('html2canvas');
         const canvas = await html2canvas(chartElement, {
-            backgroundColor: '#1f2937', // A dark color to match the theme
-            scale: 2, // Increase resolution
+            backgroundColor: '#1f2937', 
+            scale: 2,
             useCORS: true, 
         });
+    
+        // Show buttons again after capturing
+        if (buttonsContainer) (buttonsContainer as HTMLElement).style.display = 'flex';
+        
         const imgData = canvas.toDataURL('image/png');
         const filename = `${title.toLowerCase().replace(/\s/g, '_')}_${format(new Date(), 'yyyy-MM-dd')}`;
-        const data = chartId === 'debt-chart-container' ? debtsByStreetChartData : incomeByStreetChartData;
+    
+        const doc = new jsPDF({
+            orientation: 'p',
+            unit: 'px',
+            format: 'a4'
+        });
+        
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+        const margin = 20;
 
-        if (formatType === 'pdf') {
-            const doc = new jsPDF({
-                orientation: 'portrait',
-                unit: 'px',
-                format: [canvas.width, canvas.height]
-            });
-            
-            const pageWidth = doc.internal.pageSize.getWidth();
-            const pageHeight = doc.internal.pageSize.getHeight();
-
-            doc.addImage(imgData, 'PNG', 0, 0, pageWidth, pageHeight);
-
-            doc.save(`${filename}.pdf`);
-        } else { // excel
-            const worksheet = XLSX.utils.json_to_sheet(data);
-            const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, worksheet, "Datos del Gráfico");
-            XLSX.writeFile(workbook, `${filename}.xlsx`);
+        // Header
+        if (companyInfo.logo) {
+            try { doc.addImage(companyInfo.logo, 'PNG', margin, margin, 40, 40); }
+            catch(e) { console.error("Error adding logo to PDF", e); }
         }
+        doc.setFontSize(14).setFont('helvetica', 'bold').text(companyInfo.name, margin + 50, margin + 15);
+        doc.setFontSize(10).setFont('helvetica', 'normal');
+        doc.text(`${companyInfo.rif} | ${companyInfo.phone}`, margin + 50, margin + 25);
+        doc.text(companyInfo.address, margin + 50, margin + 35);
+        
+        const dateStr = `Fecha de Emisión: ${format(new Date(), 'dd/MM/yyyy')}`;
+        doc.setFontSize(10).text(dateStr, pageWidth - margin, margin + 15, { align: 'right' });
+        
+        let periodString = "Período: Todos";
+        if (chartsDateRange.from && chartsDateRange.to) periodString = `Período: ${format(chartsDateRange.from, 'P', { locale: es })} - ${format(chartsDateRange.to, 'P', { locale: es })}`;
+        else if (chartsDateRange.from) periodString = `Período: Desde ${format(chartsDateRange.from, 'P', { locale: es })}`;
+        else if (chartsDateRange.to) periodString = `Período: Hasta ${format(chartsDateRange.to, 'P', { locale: es })}`;
+        
+        doc.setFontSize(10).text(periodString, pageWidth - margin, margin + 25, { align: 'right' });
+
+        // Image
+        const imgProps = doc.getImageProperties(imgData);
+        const imgWidth = pageWidth - (margin * 2);
+        const imgHeight = (imgProps.height * imgWidth) / imgProps.width;
+        
+        let imageY = margin + 60;
+        if (imageY + imgHeight > pageHeight) {
+            imageY = margin + 10; // Adjust if header is too large
+        }
+
+        doc.addImage(imgData, 'PNG', margin, imageY, imgWidth, imgHeight);
+
+        doc.save(`${filename}.pdf`);
     };
 
     const renderSortIcon = (key: SortKey) => {
@@ -1899,7 +1938,7 @@ export default function ReportsPage() {
                             </div>
                         </CardHeader>
                         <CardContent className="space-y-8">
-                             <div className="p-4 bg-gray-800 text-white rounded-lg" id="debt-chart-parent">
+                             <div className="p-4 bg-gray-800 text-white rounded-lg">
                                 <div id="debt-chart-container">
                                     <h3 className="font-semibold text-center mb-4">Gráfico de Deuda por Calle (USD)</h3>
                                     {debtsByStreetChartData.length > 0 ? (
@@ -1919,11 +1958,10 @@ export default function ReportsPage() {
                                     )}
                                 </div>
                                 <div className="flex justify-center gap-2 mt-4">
-                                   <Button size="sm" variant="outline" onClick={() => handleExportChart('debt-chart-container', 'Gráfico de Deuda por Calle (USD)', 'pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
-                                   <Button size="sm" variant="outline" onClick={() => handleExportChart('debt-chart-container', 'Gráfico de Deuda por Calle (USD)', 'excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
+                                   <Button size="sm" variant="outline" onClick={() => handleExportChart('debt-chart-container', 'Gráfico de Deuda por Calle (USD)')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
                                 </div>
                              </div>
-                             <div className="p-4 bg-gray-800 text-white rounded-lg" id="income-chart-parent">
+                             <div className="p-4 bg-gray-800 text-white rounded-lg">
                                 <div id="income-chart-container">
                                     <h3 className="font-semibold text-center mb-4">Gráfico de Ingresos por Calle (USD)</h3>
                                     {incomeByStreetChartData.length > 0 ? (
@@ -1943,8 +1981,7 @@ export default function ReportsPage() {
                                     )}
                                 </div>
                                  <div className="flex justify-center gap-2 mt-4">
-                                     <Button size="sm" variant="outline" onClick={() => handleExportChart('income-chart-container', 'Gráfico de Ingresos por Calle (USD)', 'pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
-                                     <Button size="sm" variant="outline" onClick={() => handleExportChart('income-chart-container', 'Gráfico de Ingresos por Calle (USD)', 'excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
+                                     <Button size="sm" variant="outline" onClick={() => handleExportChart('income-chart-container', 'Gráfico de Ingresos por Calle (USD)')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
                                  </div>
                              </div>
                         </CardContent>
@@ -1954,6 +1991,7 @@ export default function ReportsPage() {
         </div>
     );
 }
+
 
 
 
