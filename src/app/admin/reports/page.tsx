@@ -1118,38 +1118,39 @@ export default function ReportsPage() {
     };
 
     const handleExportChart = async (chartId: string, title: string, formatType: 'pdf' | 'excel') => {
-        const chartElement = document.getElementById(chartId);
-        if (!chartElement) return;
+        const chartContainer = document.getElementById(chartId);
+        if (!chartContainer) {
+            console.error('Chart container not found');
+            return;
+        }
+
+        const chartElement = chartContainer.parentElement; // Capture the parent card for better context
+        if (!chartElement) {
+             console.error('Chart element parent not found');
+            return;
+        }
 
         const { default: html2canvas } = await import('html2canvas');
-        const canvas = await html2canvas(chartElement, { backgroundColor: '#111827' }); // Match dark bg
+        const canvas = await html2canvas(chartElement, {
+            backgroundColor: '#1f2937', // A dark color to match the theme
+            scale: 2, // Increase resolution
+            useCORS: true, 
+        });
         const imgData = canvas.toDataURL('image/png');
         const filename = `${title.toLowerCase().replace(/\s/g, '_')}_${format(new Date(), 'yyyy-MM-dd')}`;
         const data = chartId === 'debt-chart-container' ? debtsByStreetChartData : incomeByStreetChartData;
 
         if (formatType === 'pdf') {
-            const doc = new jsPDF();
+            const doc = new jsPDF({
+                orientation: 'portrait',
+                unit: 'px',
+                format: [canvas.width, canvas.height]
+            });
+            
             const pageWidth = doc.internal.pageSize.getWidth();
-            const margin = 14;
+            const pageHeight = doc.internal.pageSize.getHeight();
 
-            // PDF Header
-            if (companyInfo?.logo) {
-                try { doc.addImage(companyInfo.logo, 'PNG', margin, margin, 20, 20); } 
-                catch (e) { console.error("Error adding logo to PDF:", e); }
-            }
-            if (companyInfo) {
-                doc.setFontSize(10).setFont('helvetica', 'bold').text(companyInfo.name, margin + 25, margin + 8);
-                doc.setFontSize(8).setFont('helvetica', 'normal').text(`${companyInfo.rif} | ${companyInfo.phone}`, margin + 25, margin + 13);
-            }
-            doc.setFontSize(8).setFont('helvetica', 'normal').text(`Fecha de Emisión: ${format(new Date(), "dd/MM/yyyy")}`, pageWidth - margin, margin + 8, { align: 'right'});
-            
-            // PDF Title
-            doc.setFontSize(14).setFont('helvetica', 'bold').text(title, pageWidth / 2, margin + 40, { align: 'center' });
-            
-            // Add Chart Image
-            const imgWidth = pageWidth - (margin * 2);
-            const imgHeight = (canvas.height * imgWidth) / canvas.width;
-            doc.addImage(imgData, 'PNG', margin, margin + 50, imgWidth, imgHeight);
+            doc.addImage(imgData, 'PNG', 0, 0, pageWidth, pageHeight);
 
             doc.save(`${filename}.pdf`);
         } else { // excel
@@ -1898,45 +1899,49 @@ export default function ReportsPage() {
                             </div>
                         </CardHeader>
                         <CardContent className="space-y-8">
-                             <div className="p-4 bg-gray-800 text-white rounded-lg" id="debt-chart-container">
-                                <h3 className="font-semibold text-center mb-4">Gráfico de Deuda por Calle (USD)</h3>
-                                {debtsByStreetChartData.length > 0 ? (
-                                <ResponsiveContainer width="100%" height={350}>
-                                    <BarChart data={debtsByStreetChartData} margin={{ top: 30, right: 20, left: -10, bottom: 50 }}>
-                                        <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
-                                        <XAxis dataKey="name" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} angle={-45} textAnchor="end" height={50} interval={0} />
-                                        <YAxis stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
-                                        <Tooltip cursor={{fill: 'rgba(255, 255, 255, 0.1)'}} contentStyle={{backgroundColor: '#334155', border: 'none', borderRadius: '0.5rem'}} />
-                                        <Bar dataKey="TotalDeuda" fill="#dc2626" name="Deuda Total (USD)" radius={[4, 4, 0, 0]}>
-                                            <LabelList dataKey="TotalDeuda" content={<CustomBarLabel />} />
-                                        </Bar>
-                                    </BarChart>
-                                </ResponsiveContainer>
-                                ) : (
-                                    <p className="text-center text-gray-400 py-8">No hay datos de deuda para mostrar en el período seleccionado.</p>
-                                )}
+                             <div className="p-4 bg-gray-800 text-white rounded-lg" id="debt-chart-parent">
+                                <div id="debt-chart-container">
+                                    <h3 className="font-semibold text-center mb-4">Gráfico de Deuda por Calle (USD)</h3>
+                                    {debtsByStreetChartData.length > 0 ? (
+                                    <ResponsiveContainer width="100%" height={350}>
+                                        <BarChart data={debtsByStreetChartData} margin={{ top: 30, right: 20, left: -10, bottom: 50 }}>
+                                            <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
+                                            <XAxis dataKey="name" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} angle={-45} textAnchor="end" height={50} interval={0} />
+                                            <YAxis stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
+                                            <Tooltip cursor={{fill: 'rgba(255, 255, 255, 0.1)'}} contentStyle={{backgroundColor: '#334155', border: 'none', borderRadius: '0.5rem'}} />
+                                            <Bar dataKey="TotalDeuda" fill="#dc2626" name="Deuda Total (USD)" radius={[4, 4, 0, 0]}>
+                                                <LabelList dataKey="TotalDeuda" content={<CustomBarLabel />} />
+                                            </Bar>
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                    ) : (
+                                        <p className="text-center text-gray-400 py-8">No hay datos de deuda para mostrar en el período seleccionado.</p>
+                                    )}
+                                </div>
                                 <div className="flex justify-center gap-2 mt-4">
                                    <Button size="sm" variant="outline" onClick={() => handleExportChart('debt-chart-container', 'Gráfico de Deuda por Calle (USD)', 'pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
                                    <Button size="sm" variant="outline" onClick={() => handleExportChart('debt-chart-container', 'Gráfico de Deuda por Calle (USD)', 'excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
                                 </div>
                              </div>
-                             <div className="p-4 bg-gray-800 text-white rounded-lg" id="income-chart-container">
-                                <h3 className="font-semibold text-center mb-4">Gráfico de Ingresos por Calle (USD)</h3>
-                                {incomeByStreetChartData.length > 0 ? (
-                                <ResponsiveContainer width="100%" height={350}>
-                                    <BarChart data={incomeByStreetChartData} margin={{ top: 30, right: 20, left: -10, bottom: 50 }}>
-                                        <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
-                                        <XAxis dataKey="name" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} angle={-45} textAnchor="end" height={50} interval={0} />
-                                        <YAxis stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
-                                        <Tooltip cursor={{fill: 'rgba(255, 255, 255, 0.1)'}} contentStyle={{backgroundColor: '#334155', border: 'none', borderRadius: '0.5rem'}} />
-                                        <Bar dataKey="TotalIngresos" fill="#2563eb" name="Ingreso Total (USD)" radius={[4, 4, 0, 0]}>
-                                            <LabelList dataKey="TotalIngresos" content={<CustomBarLabel />} />
-                                        </Bar>
-                                    </BarChart>
-                                </ResponsiveContainer>
-                                ) : (
-                                    <p className="text-center text-gray-400 py-8">No hay datos de ingresos para mostrar en el período seleccionado.</p>
-                                )}
+                             <div className="p-4 bg-gray-800 text-white rounded-lg" id="income-chart-parent">
+                                <div id="income-chart-container">
+                                    <h3 className="font-semibold text-center mb-4">Gráfico de Ingresos por Calle (USD)</h3>
+                                    {incomeByStreetChartData.length > 0 ? (
+                                    <ResponsiveContainer width="100%" height={350}>
+                                        <BarChart data={incomeByStreetChartData} margin={{ top: 30, right: 20, left: -10, bottom: 50 }}>
+                                            <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
+                                            <XAxis dataKey="name" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} angle={-45} textAnchor="end" height={50} interval={0} />
+                                            <YAxis stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
+                                            <Tooltip cursor={{fill: 'rgba(255, 255, 255, 0.1)'}} contentStyle={{backgroundColor: '#334155', border: 'none', borderRadius: '0.5rem'}} />
+                                            <Bar dataKey="TotalIngresos" fill="#2563eb" name="Ingreso Total (USD)" radius={[4, 4, 0, 0]}>
+                                                <LabelList dataKey="TotalIngresos" content={<CustomBarLabel />} />
+                                            </Bar>
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                    ) : (
+                                        <p className="text-center text-gray-400 py-8">No hay datos de ingresos para mostrar en el período seleccionado.</p>
+                                    )}
+                                </div>
                                  <div className="flex justify-center gap-2 mt-4">
                                      <Button size="sm" variant="outline" onClick={() => handleExportChart('income-chart-container', 'Gráfico de Ingresos por Calle (USD)', 'pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
                                      <Button size="sm" variant="outline" onClick={() => handleExportChart('income-chart-container', 'Gráfico de Ingresos por Calle (USD)', 'excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
@@ -1949,6 +1954,7 @@ export default function ReportsPage() {
         </div>
     );
 }
+
 
 
 
