@@ -236,16 +236,17 @@ export default function PettyCashPage() {
         const doc = new jsPDF();
         const pageWidth = doc.internal.pageSize.getWidth();
         const margin = 14;
+        const infoX = margin + 30;
 
         if (companyInfo.logo) {
             try { doc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25); }
             catch (e) { console.error("Error adding logo:", e); }
         }
         
-        doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, margin + 30, margin + 8);
+        doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, infoX, margin + 8);
         doc.setFontSize(9).setFont('helvetica', 'normal');
-        doc.text(companyInfo.rif, margin + 30, margin + 14);
-        doc.text(companyInfo.address, margin + 30, margin + 19);
+        doc.text(companyInfo.rif, infoX, margin + 14);
+        doc.text(companyInfo.address, infoX, margin + 19);
         
         const qrContent = JSON.stringify({ repId: rep.id, date: format(new Date(), 'yyyy-MM-dd') });
         const qrCodeUrl = await QRCode.toDataURL(qrContent, { errorCorrectionLevel: 'M' });
