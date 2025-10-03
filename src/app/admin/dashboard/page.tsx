@@ -127,7 +127,7 @@ export default function AdminDashboardPage() {
         return acc;
     }, {} as { [key: string]: number });
     
-    setDebtsByStreetChartData(Object.entries(debtsByStreet).map(([name, TotalDeuda]) => ({ name, TotalDeuda: parseFloat(TotalDeuda.toFixed(2)) }))
+    setDebtsByStreetChartData(Object.entries(debtsByStreet).map(([name, TotalDeuda]) => ({ name, TotalDeuda }))
         .sort((a, b) => {
             const streetNumA = parseInt(a.name.replace('Calle ', ''));
             const streetNumB = parseInt(b.name.replace('Calle ', ''));
@@ -156,7 +156,7 @@ export default function AdminDashboardPage() {
         return acc;
     }, {} as { [key: string]: number });
 
-    setIncomeByStreetChartData(Object.entries(incomeByStreet).map(([name, TotalIngresos]) => ({ name, TotalIngresos: parseFloat(TotalIngresos.toFixed(2)) }))
+    setIncomeByStreetChartData(Object.entries(incomeByStreet).map(([name, TotalIngresos]) => ({ name, TotalIngresos }))
         .sort((a, b) => {
             const streetNumA = parseInt(a.name.replace('Calle ', ''));
             const streetNumB = parseInt(b.name.replace('Calle ', ''));
