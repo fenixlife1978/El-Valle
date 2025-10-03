@@ -68,7 +68,6 @@ const years = Array.from({ length: 10 }, (_, i) => String(new Date().getFullYear
 
 const formatToTwoDecimals = (num: number) => {
     if (typeof num !== 'number' || isNaN(num)) return '0,00';
-    // No rounding here, just formatting for display
     return num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
@@ -290,21 +289,29 @@ export default function FinancialBalancePage() {
             startY += 10;
             doc.setFontSize(10).text('Notas:', margin, startY);
             doc.setFontSize(10).setFont('helvetica', 'normal').text(statement.notas, margin, startY + 5, { maxWidth: 180 });
+            startY = doc.internal.pageSize.getHeight() > startY + 40 ? startY + 25 : doc.internal.pageSize.getHeight() - 40;
+
 
             // Signature lines
-            startY = doc.internal.pageSize.getHeight() - 40;
+            const signatureBlockY = startY;
+            const signatureWidth = 60;
+            const signatureSpacing = (pageWidth - margin * 2 - signatureWidth * 2) / 3;
+
+            const firstSignatureX = margin + signatureSpacing;
             doc.setLineWidth(0.5);
-            doc.line(margin, startY, margin + 60, startY);
-            doc.line(pageWidth - margin - 60, startY, pageWidth - margin, startY);
+            doc.line(firstSignatureX, signatureBlockY, firstSignatureX + signatureWidth, signatureBlockY);
+
+            const secondSignatureX = firstSignatureX + signatureWidth + signatureSpacing;
+            doc.line(secondSignatureX, signatureBlockY, secondSignatureX + signatureWidth, signatureBlockY);
 
             doc.setFontSize(8);
-            doc.text("Juan Garcia", margin, startY + 5);
-            doc.text("Presidente de Condominio", margin, startY + 9);
+            doc.text("Juan Garcia", firstSignatureX + signatureWidth / 2, signatureBlockY + 5, { align: 'center' });
+            doc.text("Presidente de Condominio", firstSignatureX + signatureWidth / 2, signatureBlockY + 9, { align: 'center' });
 
-            doc.text("Juana Khleif", pageWidth - margin - 60, startY + 5);
-            doc.text("Tesorera", pageWidth - margin - 60, startY + 9);
+            doc.text("Juana Khleif", secondSignatureX + signatureWidth / 2, signatureBlockY + 5, { align: 'center' });
+            doc.text("Tesorera", secondSignatureX + signatureWidth / 2, signatureBlockY + 9, { align: 'center' });
 
-            startY += 20;
+            startY = signatureBlockY + 20;
             doc.setFontSize(7).setFont('helvetica', 'italic').text('Este recibo se generó de manera automática y es válido sin firma manuscrita.', pageWidth / 2, startY, { align: 'center'});
 
             doc.save(`Balance_Financiero_${statement.id}.pdf`);
@@ -374,7 +381,7 @@ export default function FinancialBalancePage() {
                         {items.map((item) => (
                             <TableRow key={item.id}>
                                 <TableCell><Input value={item.concepto} onChange={e => manager.updateItem(item.id, 'concepto', e.target.value)} placeholder="Ej: Cuotas ordinarias" /></TableCell>
-                                <TableCell><Input type="number" value={item.monto} onChange={e => manager.updateItem(item.id, 'monto', e.target.value)} placeholder="0.00" className="text-right" /></TableCell>
+                                <TableCell><Input type="number" value={item.monto === 0 ? '' : item.monto} onChange={e => manager.updateItem(item.id, 'monto', e.target.value)} placeholder="0.00" className="text-right" /></TableCell>
                                 <TableCell>
                                     <Button size="icon" variant="ghost" onClick={() => manager.removeItem(item.id)} disabled={items.length <= 1}>
                                         <MinusCircle className="h-5 w-5 text-destructive" />
@@ -414,7 +421,9 @@ export default function FinancialBalancePage() {
                                     <TableRow><TableCell colSpan={3} className="h-24 text-center">No hay balances guardados.</TableCell></TableRow>
                                 ) : (
                                     statements.map(s => {
-                                        const saldoNeto = (s.ingresos.reduce((sum, i) => sum + i.monto, 0)) - (s.egresos.reduce((sum, e) => sum + e.monto, 0));
+                                        const totalIngresos = s.ingresos.reduce((sum, i) => sum + i.monto, 0);
+                                        const totalEgresos = s.egresos.reduce((sum, e) => sum + e.monto, 0);
+                                        const saldoNeto = totalIngresos - totalEgresos;
                                         return (
                                         <TableRow key={s.id}>
                                             <TableCell className="font-medium">{months.find(m => m.value === s.id.split('-')[1])?.label} {s.id.split('-')[0]}</TableCell>
@@ -486,18 +495,18 @@ export default function FinancialBalancePage() {
                     <div className="grid md:grid-cols-2 gap-4 pt-4">
                         <div className="space-y-2">
                             <Label htmlFor="pagar">Cuentas por Pagar (Bs.)</Label>
-                            <Input id="pagar" type="number" value={estadoFinanciero.cuentasPorPagar} onChange={e => handleStateChange('cuentasPorPagar', e.target.value)} placeholder="0.00" className="text-right" />
+                            <Input id="pagar" type="number" value={estadoFinanciero.cuentasPorPagar === 0 ? '' : estadoFinanciero.cuentasPorPagar} onChange={e => handleStateChange('cuentasPorPagar', e.target.value)} placeholder="0.00" className="text-right" />
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="efectivo">Efectivo Disponible (Caja Chica) (Bs.)</Label>
-                            <Input id="efectivo" type="number" value={estadoFinanciero.efectivoDisponible} onChange={e => handleStateChange('efectivoDisponible', e.target.value)} placeholder="0.00" className="text-right" />
+                            <Input id="efectivo" type="number" value={estadoFinanciero.efectivoDisponible === 0 ? '' : estadoFinanciero.efectivoDisponible} onChange={e => handleStateChange('efectivoDisponible', e.target.value)} placeholder="0.00" className="text-right" />
                         </div>
                          <div className="space-y-2">
                             <Label htmlFor="saldoFinalBanco">Saldo Final del Mes en Banco (Bs.)</Label>
-                            <Input id="saldoFinalBanco" type="number" value={estadoFinanciero.saldoFinalBanco} onChange={e => handleStateChange('saldoFinalBanco', e.target.value)} placeholder="0.00" className="text-right" />
+                            <Input id="saldoFinalBanco" type="number" value={estadoFinanciero.saldoFinalBanco === 0 ? '' : estadoFinanciero.saldoFinalBanco} onChange={e => handleStateChange('saldoFinalBanco', e.target.value)} placeholder="0.00" className="text-right" />
                         </div>
                         <div className="md:col-span-2 space-y-2">
-                           <Label htmlFor="totalEfectivoDisponible" className="text-base font-bold">Total Efectivo Disponible al Final del Mes (Bs.)</Label>
+                            <Label htmlFor="totalEfectivoDisponible" className="text-base font-bold">Total Efectivo Disponible al Final del Mes (Bs.)</Label>
                             <div className="p-2 bg-green-200 dark:bg-green-800/50 rounded-md">
                                 <p id="totalEfectivoDisponible" className="text-xl font-bold text-center text-green-900 dark:text-white">
                                     {formatToTwoDecimals(totals.totalEfectivoDisponible)}
@@ -517,5 +526,7 @@ export default function FinancialBalancePage() {
         </div>
     );
 }
+
+    
 
     
