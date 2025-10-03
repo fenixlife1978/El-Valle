@@ -41,7 +41,6 @@ type FinancialStatement = {
     estadoFinanciero: FinancialState & {
         saldoNeto: number;
         totalEfectivoDisponible: number;
-        cuentasPorCobrarUSD?: number; // Keep for backward compatibility reading
     };
     notas: string;
     qrValidacion?: string;
@@ -244,7 +243,8 @@ export default function FinancialBalancePage() {
                 head: [['INGRESOS', 'MONTO (Bs.)']],
                 body: statement.ingresos.map(i => [i.concepto, formatToTwoDecimals(i.monto as number)]),
                 foot: [['TOTAL INGRESOS', formatToTwoDecimals(totalIngresos)]],
-                startY: startY, theme: 'striped', headStyles: { fillColor: [22, 163, 74] }, footStyles: { fillColor: [22, 163, 74], textColor: 255, fontStyle: 'bold' }
+                startY: startY, theme: 'striped', headStyles: { fillColor: [22, 163, 74] }, footStyles: { fillColor: [22, 163, 74], textColor: 255, fontStyle: 'bold' },
+                columnStyles: { 1: { halign: 'right' } }
             });
             startY = (doc as any).lastAutoTable.finalY + 10;
             
@@ -253,7 +253,8 @@ export default function FinancialBalancePage() {
                 head: [['EGRESOS', 'MONTO (Bs.)']],
                 body: statement.egresos.map(e => [e.concepto, formatToTwoDecimals(e.monto as number)]),
                 foot: [['TOTAL EGRESOS', formatToTwoDecimals(totalEgresos)]],
-                startY: startY, theme: 'striped', headStyles: { fillColor: [220, 53, 69] }, footStyles: { fillColor: [220, 53, 69], textColor: 255, fontStyle: 'bold' }
+                startY: startY, theme: 'striped', headStyles: { fillColor: [220, 53, 69] }, footStyles: { fillColor: [220, 53, 69], textColor: 255, fontStyle: 'bold' },
+                columnStyles: { 1: { halign: 'right' } }
             });
             startY = (doc as any).lastAutoTable.finalY + 10;
 
@@ -269,7 +270,8 @@ export default function FinancialBalancePage() {
                 head: [['ESTADO FINANCIERO', '']],
                 body: summaryData,
                 startY: startY, theme: 'grid', headStyles: { fillColor: [44, 62, 80] },
-                bodyStyles: { fontStyle: 'bold' }
+                bodyStyles: { fontStyle: 'bold' },
+                columnStyles: { 1: { halign: 'right' } }
             });
             startY = (doc as any).lastAutoTable.finalY;
 
@@ -289,9 +291,26 @@ export default function FinancialBalancePage() {
             doc.setFontSize(10).text('Notas:', margin, startY);
             doc.setFontSize(10).setFont('helvetica', 'normal').text(statement.notas, margin, startY + 5, { maxWidth: 180 });
 
+            // Signature lines
+            startY = doc.internal.pageSize.getHeight() - 40;
+            doc.setLineWidth(0.5);
+            doc.line(margin, startY, margin + 60, startY);
+            doc.line(pageWidth - margin - 60, startY, pageWidth - margin, startY);
+
+            doc.setFontSize(8);
+            doc.text("Juan Garcia", margin, startY + 5);
+            doc.text("Presidente de Condominio", margin, startY + 9);
+
+            doc.text("Juana Khleif", pageWidth - margin - 60, startY + 5);
+            doc.text("Tesorera", pageWidth - margin - 60, startY + 9);
+
+            startY += 20;
+            doc.setFontSize(7).setFont('helvetica', 'italic').text('Este recibo se generó de manera automática y es válido sin firma manuscrita.', pageWidth / 2, startY, { align: 'center'});
+
             doc.save(`Balance_Financiero_${statement.id}.pdf`);
 
         } else { // Excel
+            const wb = XLSX.utils.book_new();
             const wsData = [
                 ['BALANCE FINANCIERO', period],
                 [],
@@ -355,7 +374,7 @@ export default function FinancialBalancePage() {
                         {items.map((item) => (
                             <TableRow key={item.id}>
                                 <TableCell><Input value={item.concepto} onChange={e => manager.updateItem(item.id, 'concepto', e.target.value)} placeholder="Ej: Cuotas ordinarias" /></TableCell>
-                                <TableCell><Input type="number" value={item.monto} onChange={e => manager.updateItem(item.id, 'monto', e.target.value)} placeholder="0.00" /></TableCell>
+                                <TableCell><Input type="number" value={item.monto} onChange={e => manager.updateItem(item.id, 'monto', e.target.value)} placeholder="0.00" className="text-right" /></TableCell>
                                 <TableCell>
                                     <Button size="icon" variant="ghost" onClick={() => manager.removeItem(item.id)} disabled={items.length <= 1}>
                                         <MinusCircle className="h-5 w-5 text-destructive" />
@@ -453,29 +472,29 @@ export default function FinancialBalancePage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-muted/50 rounded-lg">
                         <div className="space-y-1">
                             <p className="text-sm text-muted-foreground">Total Ingresos</p>
-                            <p className="text-xl font-bold text-green-500">Bs. {formatToTwoDecimals(totals.totalIngresos)}</p>
+                            <p className="text-xl font-bold text-green-500 text-right">Bs. {formatToTwoDecimals(totals.totalIngresos)}</p>
                         </div>
                          <div className="space-y-1">
                             <p className="text-sm text-muted-foreground">Total Egresos</p>
-                            <p className="text-xl font-bold text-destructive">Bs. {formatToTwoDecimals(totals.totalEgresos)}</p>
+                            <p className="text-xl font-bold text-destructive text-right">Bs. {formatToTwoDecimals(totals.totalEgresos)}</p>
                         </div>
                         <div className="md:col-span-2 space-y-1 border-t pt-4">
                             <p className="text-sm text-muted-foreground">SALDO NETO (Ingresos - Egresos)</p>
-                            <p className={`text-2xl font-bold ${totals.saldoNeto >= 0 ? 'text-primary' : 'text-destructive'}`}>Bs. {formatToTwoDecimals(totals.saldoNeto)}</p>
+                            <p className={`text-2xl font-bold text-right ${totals.saldoNeto >= 0 ? 'text-primary' : 'text-destructive'}`}>Bs. {formatToTwoDecimals(totals.saldoNeto)}</p>
                         </div>
                     </div>
                     <div className="grid md:grid-cols-2 gap-4 pt-4">
                         <div className="space-y-2">
                             <Label htmlFor="pagar">Cuentas por Pagar (Bs.)</Label>
-                            <Input id="pagar" type="number" value={estadoFinanciero.cuentasPorPagar} onChange={e => handleStateChange('cuentasPorPagar', e.target.value)} placeholder="0.00" />
+                            <Input id="pagar" type="number" value={estadoFinanciero.cuentasPorPagar} onChange={e => handleStateChange('cuentasPorPagar', e.target.value)} placeholder="0.00" className="text-right" />
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="efectivo">Efectivo Disponible (Caja Chica) (Bs.)</Label>
-                            <Input id="efectivo" type="number" value={estadoFinanciero.efectivoDisponible} onChange={e => handleStateChange('efectivoDisponible', e.target.value)} placeholder="0.00" />
+                            <Input id="efectivo" type="number" value={estadoFinanciero.efectivoDisponible} onChange={e => handleStateChange('efectivoDisponible', e.target.value)} placeholder="0.00" className="text-right" />
                         </div>
                          <div className="space-y-2">
                             <Label htmlFor="saldoFinalBanco">Saldo Final del Mes en Banco (Bs.)</Label>
-                            <Input id="saldoFinalBanco" type="number" value={estadoFinanciero.saldoFinalBanco} onChange={e => handleStateChange('saldoFinalBanco', e.target.value)} placeholder="0.00" />
+                            <Input id="saldoFinalBanco" type="number" value={estadoFinanciero.saldoFinalBanco} onChange={e => handleStateChange('saldoFinalBanco', e.target.value)} placeholder="0.00" className="text-right" />
                         </div>
                         <div className="md:col-span-2 space-y-2">
                            <Label htmlFor="totalEfectivoDisponible" className="text-base font-bold">Total Efectivo Disponible al Final del Mes (Bs.)</Label>
@@ -498,3 +517,5 @@ export default function FinancialBalancePage() {
         </div>
     );
 }
+
+    
