@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -11,13 +11,17 @@ import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { useToast } from '@/hooks/use-toast';
-import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, arrayUnion, arrayRemove, Timestamp, orderBy, query } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { PlusCircle, Trash2, Loader2, CalendarIcon, ChevronDown, ChevronRight, Wallet, TrendingDown, TrendingUp, BadgeEuro } from 'lucide-react';
+import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, arrayUnion, arrayRemove, Timestamp, orderBy, query, getDoc } from 'firebase/firestore';
+import { db, storage } from '@/lib/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { PlusCircle, Trash2, Loader2, CalendarIcon, ChevronDown, ChevronRight, Wallet, TrendingDown, TrendingUp, BadgeEuro, FileText, Paperclip, Eye, Upload } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+import QRCode from 'qrcode';
 
 
 type Expense = {
@@ -25,6 +29,7 @@ type Expense = {
     date: Timestamp;
     description: string;
     amount: number;
+    receiptUrl?: string;
 };
 
 type Replenishment = {
@@ -35,6 +40,16 @@ type Replenishment = {
     expenses: Expense[];
 };
 
+type CompanyInfo = {
+    name: string;
+    address: string;
+    rif: string;
+    phone: string;
+    email: string;
+    logo: string;
+};
+
+
 const formatToTwoDecimals = (num: number) => {
     if (typeof num !== 'number' || isNaN(num)) return '0,00';
     return num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -42,6 +57,7 @@ const formatToTwoDecimals = (num: number) => {
 
 export default function PettyCashPage() {
     const [replenishments, setReplenishments] = useState<Replenishment[]>([]);
+    const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
     const [loading, setLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     
@@ -58,9 +74,21 @@ export default function PettyCashPage() {
     const [expenseAmount, setExpenseAmount] = useState('');
     const [currentRepId, setCurrentRepId] = useState<string | null>(null);
 
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [uploadingExpense, setUploadingExpense] = useState<{repId: string, expenseId: string} | null>(null);
+
     const { toast } = useToast();
 
     useEffect(() => {
+        const fetchSettings = async () => {
+             const settingsRef = doc(db, 'config', 'mainSettings');
+             const docSnap = await getDoc(settingsRef);
+             if (docSnap.exists()) {
+                 setCompanyInfo(docSnap.data().companyInfo as CompanyInfo);
+             }
+        };
+        fetchSettings();
+
         const q = query(collection(db, "petty_cash_replenishments"), orderBy("date", "desc"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Replenishment));
@@ -161,8 +189,113 @@ export default function PettyCashPage() {
         }
     };
 
+    const handleUploadClick = (repId: string, expenseId: string) => {
+        setUploadingExpense({ repId, expenseId });
+        fileInputRef.current?.click();
+    };
+
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files || e.target.files.length === 0 || !uploadingExpense) return;
+        
+        const file = e.target.files[0];
+        const { repId, expenseId } = uploadingExpense;
+        toast({ title: 'Subiendo soporte...', description: 'Por favor espere.' });
+
+        try {
+            const storageRef = ref(storage, `petty_cash_receipts/${repId}/${expenseId}-${file.name}`);
+            const snapshot = await uploadBytes(storageRef, file);
+            const downloadURL = await getDownloadURL(snapshot.ref);
+
+            const repDocRef = doc(db, 'petty_cash_replenishments', repId);
+            const repDoc = await getDoc(repDocRef);
+
+            if (repDoc.exists()) {
+                const replenishment = repDoc.data() as Replenishment;
+                const updatedExpenses = replenishment.expenses.map(exp => 
+                    exp.id === expenseId ? { ...exp, receiptUrl: downloadURL } : exp
+                );
+                await updateDoc(repDocRef, { expenses: updatedExpenses });
+                toast({ title: 'Soporte Subido', description: 'La imagen del recibo se ha guardado exitosamente.' });
+            }
+
+        } catch (error) {
+            console.error(error);
+            toast({ variant: 'destructive', title: 'Error de subida', description: 'No se pudo subir la imagen.' });
+        } finally {
+            setUploadingExpense(null);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+    };
+
+    const handleGeneratePdf = async (rep: Replenishment) => {
+        if (!companyInfo) {
+            toast({ variant: 'destructive', title: 'Falta información', description: 'No se pudo cargar la información de la empresa.' });
+            return;
+        }
+
+        const doc = new jsPDF();
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const margin = 14;
+
+        if (companyInfo.logo) {
+            try { doc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25); }
+            catch (e) { console.error("Error adding logo:", e); }
+        }
+        
+        doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, margin + 30, margin + 8);
+        doc.setFontSize(9).setFont('helvetica', 'normal');
+        doc.text(companyInfo.rif, margin + 30, margin + 14);
+        doc.text(companyInfo.address, margin + 30, margin + 19);
+        
+        doc.setFontSize(16).setFont('helvetica', 'bold').text('Reporte de Gastos de Caja Chica', pageWidth / 2, margin + 45, { align: 'center'});
+        
+        const qrContent = JSON.stringify({ repId: rep.id, date: format(new Date(), 'yyyy-MM-dd') });
+        const qrCodeUrl = await QRCode.toDataURL(qrContent, { errorCorrectionLevel: 'M' });
+        doc.addImage(qrCodeUrl, 'PNG', pageWidth - margin - 30, margin + 35, 30, 30);
+
+        let startY = margin + 60;
+        doc.setFontSize(10);
+        doc.text(`Fecha de Emisión: ${format(new Date(), "dd/MM/yyyy")}`, margin, startY);
+        doc.text(`Reposición: ${rep.description}`, pageWidth - margin, startY, { align: 'right' });
+        startY += 8;
+        
+        doc.text(`Fecha de Reposición: ${format(rep.date.toDate(), 'dd/MM/yyyy', { locale: es })}`, margin, startY);
+        startY += 8;
+
+        const totalExpenses = rep.expenses.reduce((sum, exp) => sum + exp.amount, 0);
+        const balance = rep.amount - totalExpenses;
+        
+        (doc as any).autoTable({
+            startY: startY,
+            head: [['Concepto', 'Fecha', 'Monto (Bs.)']],
+            body: rep.expenses.map(exp => [exp.description, format(exp.date.toDate(), 'dd/MM/yyyy'), formatToTwoDecimals(exp.amount)]),
+            theme: 'striped',
+            headStyles: { fillColor: [44, 62, 80] },
+            columnStyles: { 2: { halign: 'right' } }
+        });
+
+        startY = (doc as any).lastAutoTable.finalY + 10;
+        
+        const summary = [
+            ['Monto Total Repuesto:', `Bs. ${formatToTwoDecimals(rep.amount)}`],
+            ['Total Gastado:', `Bs. ${formatToTwoDecimals(totalExpenses)}`],
+            ['Saldo Restante:', `Bs. ${formatToTwoDecimals(balance)}`]
+        ];
+        
+        (doc as any).autoTable({
+            startY: startY,
+            body: summary,
+            theme: 'plain',
+            styles: { fontSize: 11, fontStyle: 'bold' },
+            columnStyles: { 0: { halign: 'right' }, 1: { halign: 'right'} }
+        });
+        
+        doc.save(`Reporte_CajaChica_${rep.id.substring(0, 5)}.pdf`);
+    };
+
     return (
         <div className="space-y-8">
+            <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileChange} accept="image/*" />
             <div className="flex items-center justify-between gap-4 flex-wrap">
                 <div>
                     <h1 className="text-3xl font-bold font-headline">Gestión de Caja Chica</h1>
@@ -193,8 +326,8 @@ export default function PettyCashPage() {
                         return (
                             <Collapsible key={rep.id} className="border rounded-lg">
                                 <Card>
-                                    <div className="flex items-center justify-between p-4 hover:bg-muted/50 rounded-t-lg group">
-                                        <CollapsibleTrigger asChild>
+                                     <div className="flex items-center p-4 hover:bg-muted/50 rounded-t-lg group">
+                                         <CollapsibleTrigger asChild>
                                             <div className="flex items-center gap-4 text-left flex-grow cursor-pointer">
                                                 <ChevronRight className="h-5 w-5 shrink-0 transition-transform duration-200 group-data-[state=open]:rotate-90" />
                                                 <div>
@@ -209,6 +342,9 @@ export default function PettyCashPage() {
                                             <div><p className="text-xs text-muted-foreground">Saldo</p><p className="font-bold">Bs. {formatToTwoDecimals(remainingAmount)}</p></div>
                                         </div>
                                         <div className="flex items-center gap-2 ml-4">
+                                             <Button size="sm" variant="outline" onClick={() => handleGeneratePdf(rep)}>
+                                                <FileText className="mr-2 h-4 w-4"/>Reporte
+                                            </Button>
                                             <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); setCurrentRepId(rep.id); setIsExpenseDialogOpen(true); }}>
                                                 <PlusCircle className="mr-2 h-4 w-4"/>Gasto
                                             </Button>
@@ -226,7 +362,7 @@ export default function PettyCashPage() {
                                                             <TableHead>Fecha del Gasto</TableHead>
                                                             <TableHead>Concepto</TableHead>
                                                             <TableHead className="text-right">Monto (Bs.)</TableHead>
-                                                            <TableHead className="w-[50px]"></TableHead>
+                                                            <TableHead className="text-center w-[150px]">Acciones</TableHead>
                                                         </TableRow>
                                                     </TableHeader>
                                                     <TableBody>
@@ -235,10 +371,23 @@ export default function PettyCashPage() {
                                                                 <TableCell>{format(exp.date.toDate(), 'dd/MM/yyyy')}</TableCell>
                                                                 <TableCell>{exp.description}</TableCell>
                                                                 <TableCell className="text-right">{formatToTwoDecimals(exp.amount)}</TableCell>
-                                                                <TableCell>
-                                                                     <Button size="icon" variant="ghost" className="text-destructive" onClick={() => handleDeleteExpense(rep.id, exp)}>
-                                                                        <Trash2 className="h-4 w-4"/>
-                                                                    </Button>
+                                                                <TableCell className="text-center">
+                                                                     <div className="flex justify-center gap-2">
+                                                                        {exp.receiptUrl ? (
+                                                                            <Button size="icon" variant="outline" asChild>
+                                                                                <a href={exp.receiptUrl} target="_blank" rel="noopener noreferrer">
+                                                                                    <Eye className="h-4 w-4"/>
+                                                                                </a>
+                                                                            </Button>
+                                                                        ) : (
+                                                                            <Button size="icon" variant="outline" onClick={() => handleUploadClick(rep.id, exp.id)} disabled={!!uploadingExpense}>
+                                                                                {uploadingExpense?.expenseId === exp.id ? <Loader2 className="h-4 w-4 animate-spin"/> : <Paperclip className="h-4 w-4"/>}
+                                                                            </Button>
+                                                                        )}
+                                                                        <Button size="icon" variant="ghost" className="text-destructive" onClick={() => handleDeleteExpense(rep.id, exp)}>
+                                                                            <Trash2 className="h-4 w-4"/>
+                                                                        </Button>
+                                                                    </div>
                                                                 </TableCell>
                                                             </TableRow>
                                                         ))}
