@@ -247,13 +247,14 @@ export default function PettyCashPage() {
         doc.text(companyInfo.rif, margin + 30, margin + 14);
         doc.text(companyInfo.address, margin + 30, margin + 19);
         
-        doc.setFontSize(16).setFont('helvetica', 'bold').text('Reporte de Gastos de Caja Chica', pageWidth / 2, margin + 45, { align: 'center'});
-        
         const qrContent = JSON.stringify({ repId: rep.id, date: format(new Date(), 'yyyy-MM-dd') });
         const qrCodeUrl = await QRCode.toDataURL(qrContent, { errorCorrectionLevel: 'M' });
-        doc.addImage(qrCodeUrl, 'PNG', pageWidth - margin - 30, margin + 35, 30, 30);
+        doc.addImage(qrCodeUrl, 'PNG', pageWidth - margin - 30, margin, 30, 30);
 
-        let startY = margin + 60;
+        let startY = margin + 40;
+        doc.setFontSize(16).setFont('helvetica', 'bold').text('Reporte de Gastos de Caja Chica', pageWidth / 2, startY, { align: 'center'});
+        
+        startY += 15;
         doc.setFontSize(10);
         doc.text(`Fecha de Emisión: ${format(new Date(), "dd/MM/yyyy")}`, margin, startY);
         doc.text(`Reposición: ${rep.description}`, pageWidth - margin, startY, { align: 'right' });
@@ -473,3 +474,5 @@ export default function PettyCashPage() {
         </div>
     );
 }
+
+    
