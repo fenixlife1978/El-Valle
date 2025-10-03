@@ -44,7 +44,6 @@ type FinancialStatement = {
         totalEfectivoDisponible: number;
     };
     notas: string;
-    firmadoPor: string;
     qrValidacion?: string;
     createdAt: string;
 };
@@ -185,7 +184,6 @@ export default function FinancialBalancePage() {
                 totalEfectivoDisponible: totals.totalEfectivoDisponible,
             },
             notas: notas,
-            firmadoPor: 'Administrador', // Hardcoded for now
             createdAt: new Date().toISOString(),
         };
 
@@ -204,7 +202,7 @@ export default function FinancialBalancePage() {
         const qrCodeUrl = await QRCode.toDataURL(`${window.location.origin}/balance/${statement.id}`, { errorCorrectionLevel: 'M', margin: 2, scale: 4 });
         
         const totalIngresos = statement.ingresos.reduce((sum, item) => sum + (item.monto as number), 0);
-        const totalEgresos = statement.egresos.reduce((sum, item) => sum + (item.monto as number), 0);
+        const totalEgresos = egresos.reduce((sum, item) => sum + (Number(item.monto) || 0), 0);
 
         const monthLabel = months.find(m => m.value === statement.id.split('-')[1])?.label;
         const yearLabel = statement.id.split('-')[0];
@@ -479,9 +477,3 @@ export default function FinancialBalancePage() {
         </div>
     );
 }
-
-    
-
-    
-
-    
