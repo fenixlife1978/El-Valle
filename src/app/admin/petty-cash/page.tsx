@@ -232,17 +232,19 @@ export default function PettyCashPage() {
             toast({ variant: 'destructive', title: 'Falta información', description: 'No se pudo cargar la información de la empresa.' });
             return;
         }
-
+    
         const doc = new jsPDF();
         const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
         const margin = 14;
-        const infoX = margin + 30;
-
+    
+        // --- Header ---
         if (companyInfo.logo) {
             try { doc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25); }
             catch (e) { console.error("Error adding logo:", e); }
         }
         
+        const infoX = margin + 30;
         doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, infoX, margin + 8);
         doc.setFontSize(9).setFont('helvetica', 'normal');
         doc.text(companyInfo.rif, infoX, margin + 14);
@@ -251,7 +253,7 @@ export default function PettyCashPage() {
         const qrContent = JSON.stringify({ repId: rep.id, date: format(new Date(), 'yyyy-MM-dd') });
         const qrCodeUrl = await QRCode.toDataURL(qrContent, { errorCorrectionLevel: 'M' });
         doc.addImage(qrCodeUrl, 'PNG', pageWidth - margin - 30, margin, 30, 30);
-
+    
         let startY = margin + 40;
         doc.setFontSize(16).setFont('helvetica', 'bold').text('Reporte de Gastos de Caja Chica', pageWidth / 2, startY, { align: 'center'});
         
@@ -263,7 +265,7 @@ export default function PettyCashPage() {
         
         doc.text(`Fecha de Reposición: ${format(rep.date.toDate(), 'dd/MM/yyyy', { locale: es })}`, margin, startY);
         startY += 8;
-
+    
         const totalExpenses = rep.expenses.reduce((sum, exp) => sum + exp.amount, 0);
         const balance = rep.amount - totalExpenses;
         
@@ -275,7 +277,7 @@ export default function PettyCashPage() {
             headStyles: { fillColor: [44, 62, 80] },
             columnStyles: { 2: { halign: 'right' } }
         });
-
+    
         startY = (doc as any).lastAutoTable.finalY + 10;
         
         const summary = [
@@ -291,6 +293,19 @@ export default function PettyCashPage() {
             styles: { fontSize: 11, fontStyle: 'bold' },
             columnStyles: { 0: { halign: 'right' }, 1: { halign: 'right'} }
         });
+
+        startY = (doc as any).lastAutoTable.finalY + 20;
+
+        // --- Signature ---
+        const signatureY = startY > pageHeight - 50 ? pageHeight - 50 : startY;
+        const signatureWidth = 80;
+        const signatureX = (pageWidth - signatureWidth) / 2;
+        doc.setLineWidth(0.5);
+        doc.line(signatureX, signatureY, signatureX + signatureWidth, signatureY);
+
+        doc.setFontSize(8);
+        doc.text("Juan A. García", pageWidth / 2, signatureY + 5, { align: 'center' });
+        doc.text("Presidente de Condominio", pageWidth / 2, signatureY + 9, { align: 'center' });
         
         doc.save(`Reporte_CajaChica_${rep.id.substring(0, 5)}.pdf`);
     };
