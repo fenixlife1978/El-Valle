@@ -274,10 +274,6 @@ export default function FinancialBalancePage() {
             // Footer
             doc.setFontSize(10).text('Notas:', margin, startY);
             doc.setFontSize(10).setFont('helvetica', 'normal').text(statement.notas, margin, startY + 5, { maxWidth: 180 });
-            
-            startY += 25;
-            doc.text('_________________________', margin, startY);
-            doc.text(`Firmado por: ${statement.firmadoPor}`, margin, startY + 5);
 
             doc.save(`Balance_Financiero_${statement.id}.pdf`);
 
@@ -463,8 +459,12 @@ export default function FinancialBalancePage() {
                             <Input id="saldoFinalBanco" type="number" value={estadoFinanciero.saldoFinalBanco} onChange={e => setEstadoFinanciero(p => ({...p, saldoFinalBanco: e.target.value}))} placeholder="0.00" />
                         </div>
                         <div className="md:col-span-2 space-y-2">
-                            <Label htmlFor="totalEfectivoDisponible">Total Efectivo Disponible al Final del Mes (Bs.)</Label>
-                            <Input id="totalEfectivoDisponible" type="number" value={totals.totalEfectivoDisponible.toFixed(2)} readOnly className="bg-muted/50 font-bold" />
+                           <Label htmlFor="totalEfectivoDisponible" className="text-base font-bold">Total Efectivo Disponible al Final del Mes (Bs.)</Label>
+                            <div className="p-2 bg-green-200 dark:bg-green-800/50 rounded-md">
+                                <p id="totalEfectivoDisponible" className="text-xl font-bold text-center text-green-900 dark:text-white">
+                                    {formatToTwoDecimals(totals.totalEfectivoDisponible)}
+                                </p>
+                            </div>
                         </div>
                     </div>
                      <div className="space-y-2">
@@ -479,6 +479,8 @@ export default function FinancialBalancePage() {
         </div>
     );
 }
+
+    
 
     
 
