@@ -286,6 +286,7 @@ export default function FinancialBalancePage() {
             doc.setTextColor(0, 0, 0); // Reset text color
 
             // Footer
+            startY += 10;
             doc.setFontSize(10).text('Notas:', margin, startY);
             doc.setFontSize(10).setFont('helvetica', 'normal').text(statement.notas, margin, startY + 5, { maxWidth: 180 });
 
@@ -326,13 +327,13 @@ export default function FinancialBalancePage() {
         removeItem: (id: string) => { if (items.length > 1) setItems(items.filter(item => item.id !== id)) },
         updateItem: (id: string, field: 'concepto' | 'monto', value: string) => {
             const isMonto = field === 'monto';
-            const parsedValue = isMonto ? parseFloat(value) || 0 : value;
+            const parsedValue = isMonto ? (value === '' ? 0 : parseFloat(value)) : value;
             setItems(items.map(item => item.id === id ? { ...item, [field]: parsedValue } : item));
         }
     });
 
     const handleStateChange = (field: keyof FinancialState, value: string) => {
-        const parsedValue = parseFloat(value);
+        const parsedValue = value === '' ? 0 : parseFloat(value);
         setEstadoFinanciero(prevState => ({
             ...prevState,
             [field]: isNaN(parsedValue) ? 0 : parsedValue
@@ -358,7 +359,7 @@ export default function FinancialBalancePage() {
                         {items.map((item) => (
                             <TableRow key={item.id}>
                                 <TableCell><Input value={item.concepto} onChange={e => manager.updateItem(item.id, 'concepto', e.target.value)} placeholder="Ej: Cuotas ordinarias" /></TableCell>
-                                <TableCell><Input type="number" value={item.monto} onChange={e => manager.updateItem(item.id, 'monto', e.target.value)} placeholder="0.00" /></TableCell>
+                                <TableCell><Input type="number" value={Number.isNaN(item.monto) ? '' : item.monto} onChange={e => manager.updateItem(item.id, 'monto', e.target.value)} placeholder="0.00" /></TableCell>
                                 <TableCell>
                                     <Button size="icon" variant="ghost" onClick={() => manager.removeItem(item.id)} disabled={items.length <= 1}>
                                         <MinusCircle className="h-5 w-5 text-destructive" />
@@ -468,19 +469,19 @@ export default function FinancialBalancePage() {
                     <div className="grid md:grid-cols-2 gap-4 pt-4">
                         <div className="space-y-2">
                             <Label htmlFor="cobrar">Cuentas por Cobrar (USD)</Label>
-                            <Input id="cobrar" type="number" value={estadoFinanciero.cuentasPorCobrarUSD} onChange={e => handleStateChange('cuentasPorCobrarUSD', e.target.value)} placeholder="0.00" />
+                            <Input id="cobrar" type="number" value={isNaN(estadoFinanciero.cuentasPorCobrarUSD) ? 0 : estadoFinanciero.cuentasPorCobrarUSD} onChange={e => handleStateChange('cuentasPorCobrarUSD', e.target.value)} placeholder="0.00" />
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="pagar">Cuentas por Pagar (Bs.)</Label>
-                            <Input id="pagar" type="number" value={estadoFinanciero.cuentasPorPagar} onChange={e => handleStateChange('cuentasPorPagar', e.target.value)} placeholder="0.00" />
+                            <Input id="pagar" type="number" value={isNaN(estadoFinanciero.cuentasPorPagar) ? 0 : estadoFinanciero.cuentasPorPagar} onChange={e => handleStateChange('cuentasPorPagar', e.target.value)} placeholder="0.00" />
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="efectivo">Efectivo Disponible (Caja Chica) (Bs.)</Label>
-                            <Input id="efectivo" type="number" value={estadoFinanciero.efectivoDisponible} onChange={e => handleStateChange('efectivoDisponible', e.target.value)} placeholder="0.00" />
+                            <Input id="efectivo" type="number" value={isNaN(estadoFinanciero.efectivoDisponible) ? 0 : estadoFinanciero.efectivoDisponible} onChange={e => handleStateChange('efectivoDisponible', e.target.value)} placeholder="0.00" />
                         </div>
                          <div className="space-y-2">
                             <Label htmlFor="saldoFinalBanco">Saldo Final del Mes en Banco (Bs.)</Label>
-                            <Input id="saldoFinalBanco" type="number" value={estadoFinanciero.saldoFinalBanco} onChange={e => handleStateChange('saldoFinalBanco', e.target.value)} placeholder="0.00" />
+                            <Input id="saldoFinalBanco" type="number" value={isNaN(estadoFinanciero.saldoFinalBanco) ? 0 : estadoFinanciero.saldoFinalBanco} onChange={e => handleStateChange('saldoFinalBanco', e.target.value)} placeholder="0.00" />
                         </div>
                         <div className="md:col-span-2 space-y-2">
                            <Label htmlFor="totalEfectivoDisponible" className="text-base font-bold">Total Efectivo Disponible al Final del Mes (Bs.)</Label>
