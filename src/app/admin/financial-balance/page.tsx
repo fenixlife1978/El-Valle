@@ -29,7 +29,6 @@ type FinancialItem = {
 };
 
 type FinancialState = {
-    cuentasPorCobrarUSD: number;
     cuentasPorPagar: number;
     efectivoDisponible: number;
     saldoFinalBanco: number;
@@ -42,6 +41,7 @@ type FinancialStatement = {
     estadoFinanciero: FinancialState & {
         saldoNeto: number;
         totalEfectivoDisponible: number;
+        cuentasPorCobrarUSD?: number; // Keep for backward compatibility reading
     };
     notas: string;
     qrValidacion?: string;
@@ -59,7 +59,6 @@ type CompanyInfo = {
 
 const initialItem = { id: Date.now().toString(), concepto: '', monto: 0 };
 const initialFinancialState: FinancialState = {
-    cuentasPorCobrarUSD: 0,
     cuentasPorPagar: 0,
     efectivoDisponible: 0,
     saldoFinalBanco: 0,
@@ -70,8 +69,8 @@ const years = Array.from({ length: 10 }, (_, i) => String(new Date().getFullYear
 
 const formatToTwoDecimals = (num: number) => {
     if (typeof num !== 'number' || isNaN(num)) return '0,00';
-    const truncated = Math.trunc(num * 100) / 100;
-    return truncated.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    // No rounding here, just formatting for display
+    return num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
 
@@ -151,7 +150,6 @@ export default function FinancialBalancePage() {
         setIngresos(statement.ingresos.map(i => ({...i, id: Math.random().toString() })));
         setEgresos(statement.egresos.map(e => ({...e, id: Math.random().toString() })));
         setEstadoFinanciero({
-            cuentasPorCobrarUSD: statement.estadoFinanciero.cuentasPorCobrarUSD,
             cuentasPorPagar: statement.estadoFinanciero.cuentasPorPagar,
             efectivoDisponible: statement.estadoFinanciero.efectivoDisponible,
             saldoFinalBanco: statement.estadoFinanciero.saldoFinalBanco
@@ -183,7 +181,6 @@ export default function FinancialBalancePage() {
             estadoFinanciero: {
                 ...estadoFinanciero,
                 saldoNeto: totals.saldoNeto,
-                cuentasPorCobrarUSD: Number(estadoFinanciero.cuentasPorCobrarUSD),
                 cuentasPorPagar: Number(estadoFinanciero.cuentasPorPagar),
                 efectivoDisponible: Number(estadoFinanciero.efectivoDisponible),
                 saldoFinalBanco: Number(estadoFinanciero.saldoFinalBanco),
@@ -209,6 +206,9 @@ export default function FinancialBalancePage() {
         
         const totalIngresos = statement.ingresos.reduce((sum, item) => sum + (item.monto as number), 0);
         const totalEgresos = statement.egresos.reduce((sum, item) => sum + (Number(item.monto) || 0), 0);
+        const saldoNeto = totalIngresos - totalEgresos;
+        const totalEfectivo = (statement.estadoFinanciero.efectivoDisponible || 0) + (statement.estadoFinanciero.saldoFinalBanco || 0);
+
 
         const monthLabel = months.find(m => m.value === statement.id.split('-')[1])?.label;
         const yearLabel = statement.id.split('-')[0];
@@ -260,8 +260,7 @@ export default function FinancialBalancePage() {
             // Summary
             const ef = statement.estadoFinanciero;
             const summaryData = [
-                ['SALDO NETO (Ingresos - Egresos)', formatToTwoDecimals(ef.saldoNeto)],
-                ['Cuentas por Cobrar (USD)', `$${formatToTwoDecimals(ef.cuentasPorCobrarUSD as number)}`],
+                ['SALDO NETO (Ingresos - Egresos)', formatToTwoDecimals(saldoNeto)],
                 ['Cuentas por Pagar (Bs)', formatToTwoDecimals(ef.cuentasPorPagar as number)],
                 ['Efectivo Disponible (Caja Chica) (Bs)', formatToTwoDecimals(ef.efectivoDisponible as number)],
                 ['Saldo Final del Mes en Banco (Bs)', formatToTwoDecimals(ef.saldoFinalBanco as number)],
@@ -281,7 +280,7 @@ export default function FinancialBalancePage() {
             doc.rect(margin, totalEfectivoY - 5, pageWidth - margin * 2, 10, 'F');
             doc.setTextColor(34, 139, 34); // Forest green text
             doc.text('TOTAL EFECTIVO DISPONIBLE AL FINAL DEL MES (Bs.)', margin + 2, totalEfectivoY);
-            doc.text(formatToTwoDecimals(ef.totalEfectivoDisponible as number), pageWidth - margin - 2, totalEfectivoY, { align: 'right' });
+            doc.text(formatToTwoDecimals(totalEfectivo), pageWidth - margin - 2, totalEfectivoY, { align: 'right' });
             startY = totalEfectivoY + 10;
             doc.setTextColor(0, 0, 0); // Reset text color
 
@@ -293,7 +292,6 @@ export default function FinancialBalancePage() {
             doc.save(`Balance_Financiero_${statement.id}.pdf`);
 
         } else { // Excel
-            const wb = XLSX.utils.book_new();
             const wsData = [
                 ['BALANCE FINANCIERO', period],
                 [],
@@ -306,12 +304,11 @@ export default function FinancialBalancePage() {
                 ['TOTAL EGRESOS', totalEgresos],
                 [],
                 ['ESTADO FINANCIERO', ''],
-                ['SALDO NETO', statement.estadoFinanciero.saldoNeto],
-                ['Cuentas por Cobrar (USD)', statement.estadoFinanciero.cuentasPorCobrarUSD],
+                ['SALDO NETO', saldoNeto],
                 ['Cuentas por Pagar (Bs)', statement.estadoFinanciero.cuentasPorPagar],
                 ['Efectivo Disponible (Caja Chica) (Bs)', statement.estadoFinanciero.efectivoDisponible],
                 ['Saldo Final del Mes en Banco (Bs)', statement.estadoFinanciero.saldoFinalBanco],
-                ['Total Efectivo Disponible al Final del Mes (Bs)', statement.estadoFinanciero.totalEfectivoDisponible],
+                ['Total Efectivo Disponible al Final del Mes (Bs)', totalEfectivo],
                 [],
                 ['Notas', statement.notas]
             ];
@@ -327,13 +324,12 @@ export default function FinancialBalancePage() {
         removeItem: (id: string) => { if (items.length > 1) setItems(items.filter(item => item.id !== id)) },
         updateItem: (id: string, field: 'concepto' | 'monto', value: string) => {
             const isMonto = field === 'monto';
-            const parsedValue = isMonto ? (value === '' ? 0 : parseFloat(value)) : value;
-            setItems(items.map(item => item.id === id ? { ...item, [field]: parsedValue } : item));
+            setItems(items.map(item => item.id === id ? { ...item, [field]: isMonto ? Number(value) : value } : item));
         }
     });
 
     const handleStateChange = (field: keyof FinancialState, value: string) => {
-        const parsedValue = value === '' ? 0 : parseFloat(value);
+        const parsedValue = parseFloat(value);
         setEstadoFinanciero(prevState => ({
             ...prevState,
             [field]: isNaN(parsedValue) ? 0 : parsedValue
@@ -359,7 +355,7 @@ export default function FinancialBalancePage() {
                         {items.map((item) => (
                             <TableRow key={item.id}>
                                 <TableCell><Input value={item.concepto} onChange={e => manager.updateItem(item.id, 'concepto', e.target.value)} placeholder="Ej: Cuotas ordinarias" /></TableCell>
-                                <TableCell><Input type="number" value={Number.isNaN(item.monto) ? '' : item.monto} onChange={e => manager.updateItem(item.id, 'monto', e.target.value)} placeholder="0.00" /></TableCell>
+                                <TableCell><Input type="number" value={item.monto} onChange={e => manager.updateItem(item.id, 'monto', e.target.value)} placeholder="0.00" /></TableCell>
                                 <TableCell>
                                     <Button size="icon" variant="ghost" onClick={() => manager.removeItem(item.id)} disabled={items.length <= 1}>
                                         <MinusCircle className="h-5 w-5 text-destructive" />
@@ -398,10 +394,12 @@ export default function FinancialBalancePage() {
                                 {statements.length === 0 ? (
                                     <TableRow><TableCell colSpan={3} className="h-24 text-center">No hay balances guardados.</TableCell></TableRow>
                                 ) : (
-                                    statements.map(s => (
+                                    statements.map(s => {
+                                        const saldoNeto = (s.ingresos.reduce((sum, i) => sum + i.monto, 0)) - (s.egresos.reduce((sum, e) => sum + e.monto, 0));
+                                        return (
                                         <TableRow key={s.id}>
                                             <TableCell className="font-medium">{months.find(m => m.value === s.id.split('-')[1])?.label} {s.id.split('-')[0]}</TableCell>
-                                            <TableCell className={`text-right font-bold ${s.estadoFinanciero.saldoNeto >= 0 ? 'text-green-500' : 'text-destructive'}`}>{formatToTwoDecimals(s.estadoFinanciero.saldoNeto)}</TableCell>
+                                            <TableCell className={`text-right font-bold ${saldoNeto >= 0 ? 'text-green-500' : 'text-destructive'}`}>{formatToTwoDecimals(saldoNeto)}</TableCell>
                                             <TableCell className="text-right">
                                                 <DropdownMenu>
                                                     <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
@@ -414,7 +412,7 @@ export default function FinancialBalancePage() {
                                                 </DropdownMenu>
                                             </TableCell>
                                         </TableRow>
-                                    ))
+                                    )})
                                 )}
                             </TableBody>
                         </Table>
@@ -468,20 +466,16 @@ export default function FinancialBalancePage() {
                     </div>
                     <div className="grid md:grid-cols-2 gap-4 pt-4">
                         <div className="space-y-2">
-                            <Label htmlFor="cobrar">Cuentas por Cobrar (USD)</Label>
-                            <Input id="cobrar" type="number" value={isNaN(estadoFinanciero.cuentasPorCobrarUSD) ? 0 : estadoFinanciero.cuentasPorCobrarUSD} onChange={e => handleStateChange('cuentasPorCobrarUSD', e.target.value)} placeholder="0.00" />
-                        </div>
-                        <div className="space-y-2">
                             <Label htmlFor="pagar">Cuentas por Pagar (Bs.)</Label>
-                            <Input id="pagar" type="number" value={isNaN(estadoFinanciero.cuentasPorPagar) ? 0 : estadoFinanciero.cuentasPorPagar} onChange={e => handleStateChange('cuentasPorPagar', e.target.value)} placeholder="0.00" />
+                            <Input id="pagar" type="number" value={estadoFinanciero.cuentasPorPagar} onChange={e => handleStateChange('cuentasPorPagar', e.target.value)} placeholder="0.00" />
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="efectivo">Efectivo Disponible (Caja Chica) (Bs.)</Label>
-                            <Input id="efectivo" type="number" value={isNaN(estadoFinanciero.efectivoDisponible) ? 0 : estadoFinanciero.efectivoDisponible} onChange={e => handleStateChange('efectivoDisponible', e.target.value)} placeholder="0.00" />
+                            <Input id="efectivo" type="number" value={estadoFinanciero.efectivoDisponible} onChange={e => handleStateChange('efectivoDisponible', e.target.value)} placeholder="0.00" />
                         </div>
                          <div className="space-y-2">
                             <Label htmlFor="saldoFinalBanco">Saldo Final del Mes en Banco (Bs.)</Label>
-                            <Input id="saldoFinalBanco" type="number" value={isNaN(estadoFinanciero.saldoFinalBanco) ? 0 : estadoFinanciero.saldoFinalBanco} onChange={e => handleStateChange('saldoFinalBanco', e.target.value)} placeholder="0.00" />
+                            <Input id="saldoFinalBanco" type="number" value={estadoFinanciero.saldoFinalBanco} onChange={e => handleStateChange('saldoFinalBanco', e.target.value)} placeholder="0.00" />
                         </div>
                         <div className="md:col-span-2 space-y-2">
                            <Label htmlFor="totalEfectivoDisponible" className="text-base font-bold">Total Efectivo Disponible al Final del Mes (Bs.)</Label>
@@ -504,5 +498,3 @@ export default function FinancialBalancePage() {
         </div>
     );
 }
-
-    
