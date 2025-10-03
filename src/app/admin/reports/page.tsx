@@ -23,7 +23,6 @@ import { Calendar } from "@/components/ui/calendar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from '@/components/ui/label';
 import { format, addMonths, startOfMonth, parse, getMonth, getYear, isBefore, isEqual, differenceInCalendarMonths, differenceInMonths } from 'date-fns';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList } from 'recharts';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -153,18 +152,6 @@ const formatToTwoDecimals = (num: number) => {
     return truncated.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-// Custom Label for Bar Charts
-const CustomBarLabel = (props: any) => {
-    const { x, y, width, value } = props;
-    if (value === 0) return null;
-    const formattedValue = `$${Math.round(value)}`;
-    return (
-        <text x={x + width / 2} y={y} fill="#fff" textAnchor="middle" dy={-6} fontSize="12" fontWeight="bold" angle={-90}>
-            {formattedValue}
-        </text>
-    );
-};
-
 const ADMIN_USER_ID = 'valle-admin-main-account';
 
 const getSortKeys = (owner: Owner | DelinquentOwner | BalanceOwner) => {
@@ -232,10 +219,6 @@ export default function ReportsPage() {
     // State for Balance Report
     const [balanceOwners, setBalanceOwners] = useState<BalanceOwner[]>([]);
     const [balanceSearchTerm, setBalanceSearchTerm] = useState('');
-
-    // State for Charts
-    const [chartsDateRange, setChartsDateRange] = useState<{ from?: Date; to?: Date }>({});
-
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -476,78 +459,6 @@ export default function ReportsPage() {
 
         return owners;
     }, [allDelinquentOwners, delinquencyFilterType, customMonthRange, delinquencySearchTerm, delinquencySortConfig]);
-
-     const debtsByStreetChartData = useMemo(() => {
-        const fromDate = chartsDateRange.from;
-        const toDate = chartsDateRange.to;
-        if(fromDate) fromDate.setHours(0,0,0,0);
-        if(toDate) toDate.setHours(23,59,59,999);
-
-        const filteredDebts = allDebts.filter(debt => {
-            if (debt.status !== 'pending') return false;
-            const street = debt.property?.street;
-            if (!street || !street.startsWith('Calle')) return false;
-            const streetNumber = parseInt(street.replace('Calle ', ''));
-            if (streetNumber > 8) return false;
-
-
-            const debtDate = new Date(debt.year, debt.month - 1);
-            if (fromDate && debtDate < fromDate) return false;
-            if (toDate && debtDate > toDate) return false;
-            return true;
-        });
-
-        const debtsByStreet = filteredDebts.reduce((acc, debt) => {
-            const street = debt.property.street;
-            if (!acc[street]) acc[street] = 0;
-            acc[street] += debt.amountUSD;
-            return acc;
-        }, {} as { [key: string]: number });
-        
-        return Object.entries(debtsByStreet).map(([name, TotalDeuda]) => ({ name, TotalDeuda: parseFloat(TotalDeuda.toFixed(2)) }))
-            .sort((a, b) => {
-                const streetNumA = parseInt(a.name.replace('Calle ', ''));
-                const streetNumB = parseInt(b.name.replace('Calle ', ''));
-                return streetNumA - streetNumB;
-            });
-    }, [allDebts, chartsDateRange]);
-
-    const incomeByStreetChartData = useMemo(() => {
-        const fromDate = chartsDateRange.from;
-        const toDate = chartsDateRange.to;
-        if(fromDate) fromDate.setHours(0,0,0,0);
-        if(toDate) toDate.setHours(23,59,59,999);
-
-        const filteredPayments = allPayments.filter(payment => {
-            if (payment.status !== 'aprobado') return false;
-            const paymentDate = payment.paymentDate.toDate();
-            if (fromDate && paymentDate < fromDate) return false;
-            if (toDate && paymentDate > toDate) return false;
-            return true;
-        });
-        
-        const incomeByStreet = filteredPayments.reduce((acc, payment) => {
-            payment.beneficiaries.forEach(beneficiary => {
-                if (beneficiary.street && beneficiary.street.startsWith('Calle')) {
-                    const streetNumber = parseInt(beneficiary.street.replace('Calle ', ''));
-                    if (streetNumber > 8) return;
-
-                    if (!acc[beneficiary.street]) acc[beneficiary.street] = 0;
-                    const incomeUSD = beneficiary.amount / (payment.exchangeRate || activeRate || 1);
-                    acc[beneficiary.street] += incomeUSD;
-                }
-            });
-            return acc;
-        }, {} as { [key: string]: number });
-
-        return Object.entries(incomeByStreet).map(([name, TotalIngresos]) => ({ name, TotalIngresos: parseFloat(TotalIngresos.toFixed(2)) }))
-            .sort((a, b) => {
-                const streetNumA = parseInt(a.name.replace('Calle ', ''));
-                const streetNumB = parseInt(b.name.replace('Calle ', ''));
-                return streetNumA - streetNumB;
-            });
-    }, [allPayments, chartsDateRange, activeRate]);
-
 
     useEffect(() => {
         setSelectedDelinquentOwners(new Set(filteredAndSortedDelinquents.map(o => o.id)));
@@ -1130,51 +1041,6 @@ export default function ReportsPage() {
         }
     };
 
-    const handleExportChart = (chartId: string, title: string) => {
-        const chartElement = document.getElementById(chartId);
-        if (!chartElement) {
-            toast({ variant: "destructive", title: "Error de exportación", description: "No se encontró el elemento del gráfico para exportar."});
-            return;
-        }
-    
-        import('html2canvas').then(html2canvas => {
-            html2canvas.default(chartElement, {
-                backgroundColor: '#1f2937', 
-                scale: 2,
-                useCORS: true, 
-            }).then(canvas => {
-                const imgData = canvas.toDataURL('image/png');
-                const filename = `${title.toLowerCase().replace(/\s/g, '_')}_${format(new Date(), 'yyyy-MM-dd')}`;
-    
-                const doc = new jsPDF({
-                    orientation: 'p',
-                    unit: 'px',
-                    format: 'a4'
-                });
-                
-                const pageWidth = doc.internal.pageSize.getWidth();
-                
-                const imgProps = doc.getImageProperties(imgData);
-                const imgWidth = pageWidth - 80;
-                const imgHeight = (imgProps.height * imgWidth) / imgProps.width;
-                
-                const x = (pageWidth - imgWidth) / 2;
-                
-                doc.setFontSize(16).setFont('helvetica', 'bold');
-                doc.text(title, pageWidth / 2, 60, { align: 'center'});
-
-                let periodString = "Período: Todos";
-                if (chartsDateRange.from && chartsDateRange.to) periodString = `Período: ${format(chartsDateRange.from, 'P', { locale: es })} - ${format(chartsDateRange.to, 'P', { locale: es })}`;
-                else if (chartsDateRange.from) periodString = `Período: Desde ${format(chartsDateRange.from, 'P', { locale: es })}`;
-                else if (chartsDateRange.to) periodString = `Período: Hasta ${format(chartsDateRange.to, 'P', { locale: es })}`;
-                doc.setFontSize(10).setFont('helvetica', 'normal').text(periodString, pageWidth / 2, 75, { align: 'center'});
-
-                doc.addImage(imgData, 'PNG', x, 100, imgWidth, imgHeight);
-                doc.save(`${filename}.pdf`);
-            });
-        });
-    };
-
     const renderSortIcon = (key: SortKey) => {
         if (delinquencySortConfig.key !== key) return <ArrowUpDown className="h-4 w-4 opacity-50" />;
         return delinquencySortConfig.direction === 'asc' ? '▲' : '▼';
@@ -1222,7 +1088,7 @@ export default function ReportsPage() {
             </div>
             
             <Tabs defaultValue="integral" className="w-full">
-                 <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-6 h-auto flex-wrap">
+                 <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 h-auto flex-wrap">
                     <TabsTrigger value="integral">Integral</TabsTrigger>
                     <TabsTrigger value="individual">Ficha Individual</TabsTrigger>
                     <TabsTrigger value="estado-de-cuenta">Estado de Cuenta</TabsTrigger>
@@ -1230,7 +1096,6 @@ export default function ReportsPage() {
                     <TabsTrigger value="balance">Saldos a Favor</TabsTrigger>
                     <TabsTrigger value="income">Ingresos</TabsTrigger>
                     <TabsTrigger value="advance_payments">Pagos Anticipados</TabsTrigger>
-                    <TabsTrigger value="charts">Gráficos</TabsTrigger>
                 </TabsList>
                 
                 <TabsContent value="integral">
@@ -1879,85 +1744,6 @@ export default function ReportsPage() {
                         </CardContent>
                     </Card>
                 </TabsContent>
-
-                 <TabsContent value="charts">
-                     <Card>
-                        <CardHeader>
-                            <CardTitle>Gráficos de Gestión</CardTitle>
-                            <CardDescription>Visualizaciones de datos clave del condominio, filtradas por período.</CardDescription>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
-                                <div className="space-y-2">
-                                    <Label>Desde</Label>
-                                    <Popover>
-                                        <PopoverTrigger asChild>
-                                            <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !chartsDateRange.from && "text-muted-foreground")}>
-                                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                                {chartsDateRange.from ? format(chartsDateRange.from, "PPP", { locale: es }) : <span>Seleccione fecha de inicio</span>}
-                                            </Button>
-                                        </PopoverTrigger>
-                                        <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={chartsDateRange.from} onSelect={d => setChartsDateRange(prev => ({ ...prev, from: d }))} /></PopoverContent>
-                                    </Popover>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Hasta</Label>
-                                    <Popover>
-                                        <PopoverTrigger asChild>
-                                            <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !chartsDateRange.to && "text-muted-foreground")}>
-                                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                                {chartsDateRange.to ? format(chartsDateRange.to, "PPP", { locale: es }) : <span>Seleccione fecha final</span>}
-                                            </Button>
-                                        </PopoverTrigger>
-                                        <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={chartsDateRange.to} onSelect={d => setChartsDateRange(prev => ({ ...prev, to: d }))} /></PopoverContent>
-                                    </Popover>
-                                </div>
-                            </div>
-                        </CardHeader>
-                        <CardContent className="space-y-8">
-                             <div id="debt-chart-container" className="p-4 bg-gray-800 text-white rounded-lg">
-                                <h3 className="font-semibold text-center mb-4">Gráfico de Deuda por Calle (USD)</h3>
-                                {debtsByStreetChartData.length > 0 ? (
-                                <ResponsiveContainer width="100%" height={350}>
-                                    <BarChart data={debtsByStreetChartData} margin={{ top: 30, right: 20, left: -10, bottom: 50 }}>
-                                        <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
-                                        <XAxis dataKey="name" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} angle={-45} textAnchor="end" height={50} interval={0} />
-                                        <YAxis stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
-                                        <Tooltip cursor={{fill: 'rgba(255, 255, 255, 0.1)'}} contentStyle={{backgroundColor: '#334155', border: 'none', borderRadius: '0.5rem'}} />
-                                        <Bar dataKey="TotalDeuda" fill="#dc2626" name="Deuda Total (USD)" radius={[4, 4, 0, 0]}>
-                                            <LabelList dataKey="TotalDeuda" content={<CustomBarLabel />} />
-                                        </Bar>
-                                    </BarChart>
-                                </ResponsiveContainer>
-                                ) : (
-                                    <p className="text-center text-gray-400 py-8">No hay datos de deuda para mostrar en el período seleccionado.</p>
-                                )}
-                                <div className="flex justify-center gap-2 mt-4">
-                                   <Button size="sm" variant="outline" onClick={() => handleExportChart('debt-chart-container', 'Gráfico de Deuda por Calle (USD)')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
-                                </div>
-                             </div>
-                             <div id="income-chart-container" className="p-4 bg-gray-800 text-white rounded-lg">
-                                <h3 className="font-semibold text-center mb-4">Gráfico de Ingresos por Calle (USD)</h3>
-                                {incomeByStreetChartData.length > 0 ? (
-                                <ResponsiveContainer width="100%" height={350}>
-                                    <BarChart data={incomeByStreetChartData} margin={{ top: 30, right: 20, left: -10, bottom: 50 }}>
-                                        <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
-                                        <XAxis dataKey="name" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} angle={-45} textAnchor="end" height={50} interval={0} />
-                                        <YAxis stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
-                                        <Tooltip cursor={{fill: 'rgba(255, 255, 255, 0.1)'}} contentStyle={{backgroundColor: '#334155', border: 'none', borderRadius: '0.5rem'}} />
-                                        <Bar dataKey="TotalIngresos" fill="#2563eb" name="Ingreso Total (USD)" radius={[4, 4, 0, 0]}>
-                                            <LabelList dataKey="TotalIngresos" content={<CustomBarLabel />} />
-                                        </Bar>
-                                    </BarChart>
-                                </ResponsiveContainer>
-                                ) : (
-                                    <p className="text-center text-gray-400 py-8">No hay datos de ingresos para mostrar en el período seleccionado.</p>
-                                )}
-                                 <div className="flex justify-center gap-2 mt-4">
-                                     <Button size="sm" variant="outline" onClick={() => handleExportChart('income-chart-container', 'Gráfico de Ingresos por Calle (USD)')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
-                                 </div>
-                             </div>
-                        </CardContent>
-                     </Card>
-                 </TabsContent>
             </Tabs>
         </div>
     );
