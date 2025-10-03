@@ -25,14 +25,14 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 type FinancialItem = {
     id: string;
     concepto: string;
-    monto: number | string;
+    monto: number;
 };
 
 type FinancialState = {
-    cuentasPorCobrarUSD: number | string;
-    cuentasPorPagar: number | string;
-    efectivoDisponible: number | string;
-    saldoFinalBanco: number | string;
+    cuentasPorCobrarUSD: number;
+    cuentasPorPagar: number;
+    efectivoDisponible: number;
+    saldoFinalBanco: number;
 };
 
 type FinancialStatement = {
@@ -57,7 +57,7 @@ type CompanyInfo = {
     logo: string;
 };
 
-const initialItem = { id: Date.now().toString(), concepto: '', monto: '' };
+const initialItem = { id: Date.now().toString(), concepto: '', monto: 0 };
 
 const months = Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: format(new Date(2000, i), 'MMMM', { locale: es }) }));
 const years = Array.from({ length: 10 }, (_, i) => String(new Date().getFullYear() + 1 - i));
@@ -79,7 +79,7 @@ export default function FinancialBalancePage() {
     const [selectedYear, setSelectedYear] = useState<string>(String(new Date().getFullYear()));
     const [ingresos, setIngresos] = useState<FinancialItem[]>([initialItem]);
     const [egresos, setEgresos] = useState<FinancialItem[]>([initialItem]);
-    const [estadoFinanciero, setEstadoFinanciero] = useState<FinancialState>({ cuentasPorCobrarUSD: '', cuentasPorPagar: '', efectivoDisponible: '', saldoFinalBanco: '' });
+    const [estadoFinanciero, setEstadoFinanciero] = useState<FinancialState>({ cuentasPorCobrarUSD: 0, cuentasPorPagar: 0, efectivoDisponible: 0, saldoFinalBanco: 0 });
     const [notas, setNotas] = useState('');
     
     const [statements, setStatements] = useState<FinancialStatement[]>([]);
@@ -124,9 +124,9 @@ export default function FinancialBalancePage() {
         setIsEditing(false);
         setSelectedMonth(String(new Date().getMonth() + 1));
         setSelectedYear(String(new Date().getFullYear()));
-        setIngresos([{ id: Date.now().toString(), concepto: '', monto: '' }]);
-        setEgresos([{ id: Date.now().toString(), concepto: '', monto: '' }]);
-        setEstadoFinanciero({ cuentasPorCobrarUSD: '', cuentasPorPagar: '', efectivoDisponible: '', saldoFinalBanco: '' });
+        setIngresos([{ id: Date.now().toString(), concepto: '', monto: 0 }]);
+        setEgresos([{ id: Date.now().toString(), concepto: '', monto: 0 }]);
+        setEstadoFinanciero({ cuentasPorCobrarUSD: 0, cuentasPorPagar: 0, efectivoDisponible: 0, saldoFinalBanco: 0 });
         setNotas('');
     };
 
@@ -202,7 +202,7 @@ export default function FinancialBalancePage() {
         const qrCodeUrl = await QRCode.toDataURL(`${window.location.origin}/balance/${statement.id}`, { errorCorrectionLevel: 'M', margin: 2, scale: 4 });
         
         const totalIngresos = statement.ingresos.reduce((sum, item) => sum + (item.monto as number), 0);
-        const totalEgresos = egresos.reduce((sum, item) => sum + (Number(item.monto) || 0), 0);
+        const totalEgresos = statement.egresos.reduce((sum, item) => sum + (Number(item.monto) || 0), 0);
 
         const monthLabel = months.find(m => m.value === statement.id.split('-')[1])?.label;
         const yearLabel = statement.id.split('-')[0];
@@ -306,10 +306,12 @@ export default function FinancialBalancePage() {
 
 
     const createItemManager = (items: FinancialItem[], setItems: React.Dispatch<React.SetStateAction<FinancialItem[]>>) => ({
-        addItem: () => setItems([...items, { id: Date.now().toString(), concepto: '', monto: '' }]),
+        addItem: () => setItems([...items, { id: Date.now().toString(), concepto: '', monto: 0 }]),
         removeItem: (id: string) => { if (items.length > 1) setItems(items.filter(item => item.id !== id)) },
         updateItem: (id: string, field: 'concepto' | 'monto', value: string) => {
-            setItems(items.map(item => item.id === id ? { ...item, [field]: value } : item));
+            const isMonto = field === 'monto';
+            const parsedValue = isMonto ? parseFloat(value) || 0 : value;
+            setItems(items.map(item => item.id === id ? { ...item, [field]: parsedValue } : item));
         }
     });
 
@@ -442,19 +444,19 @@ export default function FinancialBalancePage() {
                     <div className="grid md:grid-cols-2 gap-4 pt-4">
                         <div className="space-y-2">
                             <Label htmlFor="cobrar">Cuentas por Cobrar (USD)</Label>
-                            <Input id="cobrar" type="number" value={estadoFinanciero.cuentasPorCobrarUSD} onChange={e => setEstadoFinanciero(p => ({...p, cuentasPorCobrarUSD: e.target.value}))} placeholder="0.00" />
+                            <Input id="cobrar" type="number" value={estadoFinanciero.cuentasPorCobrarUSD} onChange={e => setEstadoFinanciero(p => ({...p, cuentasPorCobrarUSD: parseFloat(e.target.value) || 0}))} placeholder="0.00" />
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="pagar">Cuentas por Pagar (Bs.)</Label>
-                            <Input id="pagar" type="number" value={estadoFinanciero.cuentasPorPagar} onChange={e => setEstadoFinanciero(p => ({...p, cuentasPorPagar: e.target.value}))} placeholder="0.00" />
+                            <Input id="pagar" type="number" value={estadoFinanciero.cuentasPorPagar} onChange={e => setEstadoFinanciero(p => ({...p, cuentasPorPagar: parseFloat(e.target.value) || 0}))} placeholder="0.00" />
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="efectivo">Efectivo Disponible (Caja Chica) (Bs.)</Label>
-                            <Input id="efectivo" type="number" value={estadoFinanciero.efectivoDisponible} onChange={e => setEstadoFinanciero(p => ({...p, efectivoDisponible: e.target.value}))} placeholder="0.00" />
+                            <Input id="efectivo" type="number" value={estadoFinanciero.efectivoDisponible} onChange={e => setEstadoFinanciero(p => ({...p, efectivoDisponible: parseFloat(e.target.value) || 0}))} placeholder="0.00" />
                         </div>
                          <div className="space-y-2">
                             <Label htmlFor="saldoFinalBanco">Saldo Final del Mes en Banco (Bs.)</Label>
-                            <Input id="saldoFinalBanco" type="number" value={estadoFinanciero.saldoFinalBanco} onChange={e => setEstadoFinanciero(p => ({...p, saldoFinalBanco: e.target.value}))} placeholder="0.00" />
+                            <Input id="saldoFinalBanco" type="number" value={estadoFinanciero.saldoFinalBanco} onChange={e => setEstadoFinanciero(p => ({...p, saldoFinalBanco: parseFloat(e.target.value) || 0}))} placeholder="0.00" />
                         </div>
                         <div className="md:col-span-2 space-y-2">
                            <Label htmlFor="totalEfectivoDisponible" className="text-base font-bold">Total Efectivo Disponible al Final del Mes (Bs.)</Label>
