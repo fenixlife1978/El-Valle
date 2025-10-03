@@ -9,7 +9,7 @@ import { Landmark, AlertCircle, Building, Eye, Printer, Loader2 } from "lucide-r
 import { Button } from "@/components/ui/button";
 import { collection, onSnapshot, query, where, limit, orderBy, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList } from 'recharts';
+
 
 type Payment = {
   id: string;
@@ -20,6 +20,7 @@ type Payment = {
   bank: string;
   type: string;
   status: 'aprobado' | 'pendiente' | 'rechazado';
+  reference: string;
 };
 
 type Owner = {
@@ -28,33 +29,11 @@ type Owner = {
     properties?: { street: string, house: string }[];
 };
 
-type Debt = {
-    id: string;
-    ownerId: string;
-    year: number;
-    month: number;
-    amountUSD: number;
-    description: string;
-    status: 'pending' | 'paid';
-    property: { street: string, house: string };
-};
-
 const formatToTwoDecimals = (num: number) => {
     const truncated = Math.trunc(num * 100) / 100;
     return truncated.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-// Custom Label for Bar Charts
-const CustomBarLabel = (props: any) => {
-    const { x, y, width, value } = props;
-    if (value === 0) return null;
-    const formattedValue = `$${Math.round(value)}`;
-    return (
-        <text x={x + width / 2} y={y} fill="#fff" textAnchor="middle" dy={-6} fontSize="12" fontWeight="bold" angle={-90}>
-            {formattedValue}
-        </text>
-    );
-};
 
 export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(true);
@@ -66,103 +45,6 @@ export default function AdminDashboardPage() {
   });
   const [recentPayments, setRecentPayments] = useState<Payment[]>([]);
   const [ownersMap, setOwnersMap] = useState<Map<string, Owner>>(new Map());
-  const [debtsByStreetChartData, setDebtsByStreetChartData] = useState<any[]>([]);
-  const [incomeByStreetChartData, setIncomeByStreetChartData] = useState<any[]>([]);
-  const [allDebts, setAllDebts] = useState<Debt[]>([]);
-  const [allPayments, setAllPayments] = useState<any[]>([]);
-  const [activeRate, setActiveRate] = useState(0);
-
-  useEffect(() => {
-    const fetchSettings = async () => {
-         try {
-            const settingsRef = doc(db, 'config', 'mainSettings');
-            const settingsSnap = await getDoc(settingsRef);
-            if (settingsSnap.exists()) {
-                const settings = settingsSnap.data();
-                const rates = (settings.exchangeRates || []);
-                const activeRateObj = rates.find((r: any) => r.active);
-                if (activeRateObj) {
-                    setActiveRate(activeRateObj.rate);
-                } else if (rates.length > 0) {
-                    const sortedRates = [...rates].sort((a:any,b:any) => new Date(b.date).getTime() - new Date(a.date).getTime());
-                    setActiveRate(sortedRates[0].rate);
-                }
-            }
-        } catch (error) {
-            console.error("Error fetching settings:", error);
-        }
-    };
-    fetchSettings();
-
-    const debtsUnsubscribe = onSnapshot(query(collection(db, "debts")), (snapshot) => {
-        const debtsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Debt));
-        setAllDebts(debtsData);
-    });
-
-    const allPaymentsUnsubscribe = onSnapshot(query(collection(db, "payments")), (snapshot) => {
-        const paymentsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setAllPayments(paymentsData);
-    });
-
-    return () => {
-        debtsUnsubscribe();
-        allPaymentsUnsubscribe();
-    }
-  }, []);
-
-  useEffect(() => {
-     const filteredDebts = allDebts.filter(debt => {
-        if (debt.status !== 'pending') return false;
-        const street = debt.property?.street;
-        if (!street || !street.startsWith('Calle')) return false;
-        const streetNumber = parseInt(street.replace('Calle ', ''));
-        if (streetNumber > 8) return false;
-        return true;
-    });
-
-    const debtsByStreet = filteredDebts.reduce((acc, debt) => {
-        const street = debt.property.street;
-        if (!acc[street]) acc[street] = 0;
-        acc[street] += debt.amountUSD;
-        return acc;
-    }, {} as { [key: string]: number });
-    
-    setDebtsByStreetChartData(Object.entries(debtsByStreet).map(([name, TotalDeuda]) => ({ name, TotalDeuda }))
-        .sort((a, b) => {
-            const streetNumA = parseInt(a.name.replace('Calle ', ''));
-            const streetNumB = parseInt(b.name.replace('Calle ', ''));
-            return streetNumA - streetNumB;
-        }));
-
-  }, [allDebts]);
-  
-  useEffect(() => {
-     const filteredPayments = allPayments.filter(payment => {
-        if (payment.status !== 'aprobado') return false;
-        return true;
-    });
-    
-    const incomeByStreet = filteredPayments.reduce((acc, payment) => {
-        payment.beneficiaries.forEach((beneficiary: any) => {
-            if (beneficiary.street && beneficiary.street.startsWith('Calle')) {
-                const streetNumber = parseInt(beneficiary.street.replace('Calle ', ''));
-                if (streetNumber > 8) return;
-
-                if (!acc[beneficiary.street]) acc[beneficiary.street] = 0;
-                const incomeUSD = beneficiary.amount / (payment.exchangeRate || activeRate || 1);
-                acc[beneficiary.street] += incomeUSD;
-            }
-        });
-        return acc;
-    }, {} as { [key: string]: number });
-
-    setIncomeByStreetChartData(Object.entries(incomeByStreet).map(([name, TotalIngresos]) => ({ name, TotalIngresos }))
-        .sort((a, b) => {
-            const streetNumA = parseInt(a.name.replace('Calle ', ''));
-            const streetNumB = parseInt(b.name.replace('Calle ', ''));
-            return streetNumA - streetNumB;
-        }));
-  }, [allPayments, activeRate]);
 
   useEffect(() => {
     setLoading(true);
@@ -302,45 +184,6 @@ export default function AdminDashboardPage() {
           </CardContent>
         </Card>
       </div>
-
-       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div className="p-4 bg-gray-800 text-white rounded-lg">
-                <h3 className="font-semibold text-center mb-4">Gráfico de Deuda por Calle (USD)</h3>
-                {debtsByStreetChartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={350}>
-                    <BarChart data={debtsByStreetChartData} margin={{ top: 30, right: 20, left: -10, bottom: 50 }}>
-                        <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
-                        <XAxis dataKey="name" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} angle={-45} textAnchor="end" height={50} interval={0} />
-                        <YAxis stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
-                        <Tooltip cursor={{fill: 'rgba(255, 255, 255, 0.1)'}} contentStyle={{backgroundColor: '#334155', border: 'none', borderRadius: '0.5rem'}} />
-                        <Bar dataKey="TotalDeuda" fill="#dc2626" name="Deuda Total (USD)" radius={[4, 4, 0, 0]}>
-                            <LabelList dataKey="TotalDeuda" content={<CustomBarLabel />} />
-                        </Bar>
-                    </BarChart>
-                </ResponsiveContainer>
-                ) : (
-                    <p className="text-center text-gray-400 py-8">No hay datos de deuda para mostrar.</p>
-                )}
-            </div>
-            <div className="p-4 bg-gray-800 text-white rounded-lg">
-                <h3 className="font-semibold text-center mb-4">Gráfico de Ingresos por Calle (USD)</h3>
-                {incomeByStreetChartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={350}>
-                    <BarChart data={incomeByStreetChartData} margin={{ top: 30, right: 20, left: -10, bottom: 50 }}>
-                        <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
-                        <XAxis dataKey="name" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} angle={-45} textAnchor="end" height={50} interval={0} />
-                        <YAxis stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
-                        <Tooltip cursor={{fill: 'rgba(255, 255, 255, 0.1)'}} contentStyle={{backgroundColor: '#334155', border: 'none', borderRadius: '0.5rem'}} />
-                        <Bar dataKey="TotalIngresos" fill="#2563eb" name="Ingreso Total (USD)" radius={[4, 4, 0, 0]}>
-                            <LabelList dataKey="TotalIngresos" content={<CustomBarLabel />} />
-                        </Bar>
-                    </BarChart>
-                </ResponsiveContainer>
-                ) : (
-                    <p className="text-center text-gray-400 py-8">No hay datos de ingresos para mostrar.</p>
-                )}
-            </div>
-        </div>
 
       <div>
         <h2 className="text-2xl font-bold mb-4 font-headline">Últimos Pagos Registrados</h2>
