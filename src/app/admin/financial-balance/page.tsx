@@ -200,7 +200,7 @@ export default function FinancialBalancePage() {
         }
     };
     
-    const handleExport = async (formatType: 'pdf' | 'excel'), statement: FinancialStatement) => {
+    const handleExport = async (formatType: 'pdf' | 'excel', statement: FinancialStatement) => {
         const qrCodeUrl = await QRCode.toDataURL(`${window.location.origin}/balance/${statement.id}`, { errorCorrectionLevel: 'M', margin: 2, scale: 4 });
         
         const totalIngresos = statement.ingresos.reduce((sum, item) => sum + (item.monto as number), 0);
