@@ -30,10 +30,11 @@ type FinancialItem = {
 
 type FinancialState = {
     saldoNeto: number;
-    cuentasPorCobrar: number | string;
+    cuentasPorCobrarUSD: number | string; // Changed to USD
     cuentasPorPagar: number | string;
     efectivoDisponible: number | string;
     saldoFinalBanco: number | string;
+    totalEfectivoDisponible: number; // New field
 };
 
 type FinancialStatement = {
@@ -78,7 +79,7 @@ export default function FinancialBalancePage() {
     const [selectedYear, setSelectedYear] = useState<string>(String(new Date().getFullYear()));
     const [ingresos, setIngresos] = useState<FinancialItem[]>([initialItem]);
     const [egresos, setEgresos] = useState<FinancialItem[]>([initialItem]);
-    const [estadoFinanciero, setEstadoFinanciero] = useState<FinancialState>({ saldoNeto: 0, cuentasPorCobrar: '', cuentasPorPagar: '', efectivoDisponible: '', saldoFinalBanco: '' });
+    const [estadoFinanciero, setEstadoFinanciero] = useState<FinancialState>({ saldoNeto: 0, cuentasPorCobrarUSD: '', cuentasPorPagar: '', efectivoDisponible: '', saldoFinalBanco: '', totalEfectivoDisponible: 0 });
     const [notas, setNotas] = useState('');
     
     const [statements, setStatements] = useState<FinancialStatement[]>([]);
@@ -110,9 +111,15 @@ export default function FinancialBalancePage() {
         const totalIngresos = ingresos.reduce((sum, item) => sum + (Number(item.monto) || 0), 0);
         const totalEgresos = egresos.reduce((sum, item) => sum + (Number(item.monto) || 0), 0);
         const saldoNeto = totalIngresos - totalEgresos;
-        setEstadoFinanciero(prev => ({...prev, saldoNeto }));
+        
+        const efectivo = Number(estadoFinanciero.efectivoDisponible) || 0;
+        const banco = Number(estadoFinanciero.saldoFinalBanco) || 0;
+        const totalEfectivo = efectivo + banco;
+
+        setEstadoFinanciero(prev => ({...prev, saldoNeto, totalEfectivoDisponible: totalEfectivo }));
         return { totalIngresos, totalEgresos, saldoNeto };
-    }, [ingresos, egresos]);
+    }, [ingresos, egresos, estadoFinanciero.efectivoDisponible, estadoFinanciero.saldoFinalBanco]);
+
 
     const resetForm = () => {
         setIsEditing(false);
@@ -120,7 +127,7 @@ export default function FinancialBalancePage() {
         setSelectedYear(String(new Date().getFullYear()));
         setIngresos([{ id: Date.now().toString(), concepto: '', monto: '' }]);
         setEgresos([{ id: Date.now().toString(), concepto: '', monto: '' }]);
-        setEstadoFinanciero({ saldoNeto: 0, cuentasPorCobrar: '', cuentasPorPagar: '', efectivoDisponible: '', saldoFinalBanco: '' });
+        setEstadoFinanciero({ saldoNeto: 0, cuentasPorCobrarUSD: '', cuentasPorPagar: '', efectivoDisponible: '', saldoFinalBanco: '', totalEfectivoDisponible: 0 });
         setNotas('');
     };
 
@@ -165,10 +172,11 @@ export default function FinancialBalancePage() {
             egresos: finalEgresos,
             estadoFinanciero: {
                 saldoNeto: totals.saldoNeto,
-                cuentasPorCobrar: Number(estadoFinanciero.cuentasPorCobrar),
+                cuentasPorCobrarUSD: Number(estadoFinanciero.cuentasPorCobrarUSD),
                 cuentasPorPagar: Number(estadoFinanciero.cuentasPorPagar),
                 efectivoDisponible: Number(estadoFinanciero.efectivoDisponible),
                 saldoFinalBanco: Number(estadoFinanciero.saldoFinalBanco),
+                totalEfectivoDisponible: estadoFinanciero.totalEfectivoDisponible,
             },
             notas: notas,
             firmadoPor: 'Administrador', // Hardcoded for now
@@ -243,10 +251,11 @@ export default function FinancialBalancePage() {
             const ef = statement.estadoFinanciero;
             const summaryData = [
                 ['SALDO NETO (Ingresos - Egresos)', formatToTwoDecimals(ef.saldoNeto)],
-                ['Cuentas por Cobrar', formatToTwoDecimals(ef.cuentasPorCobrar as number)],
-                ['Cuentas por Pagar', formatToTwoDecimals(ef.cuentasPorPagar as number)],
-                ['Efectivo Disponible (Caja Chica)', formatToTwoDecimals(ef.efectivoDisponible as number)],
-                ['Saldo Final del Mes en Banco', formatToTwoDecimals(ef.saldoFinalBanco as number)],
+                ['Cuentas por Cobrar (USD)', `$${formatToTwoDecimals(ef.cuentasPorCobrarUSD as number)}`],
+                ['Cuentas por Pagar (Bs)', formatToTwoDecimals(ef.cuentasPorPagar as number)],
+                ['Efectivo Disponible (Caja Chica) (Bs)', formatToTwoDecimals(ef.efectivoDisponible as number)],
+                ['Saldo Final del Mes en Banco (Bs)', formatToTwoDecimals(ef.saldoFinalBanco as number)],
+                ['Total Efectivo Disponible al Final del Mes (Bs)', formatToTwoDecimals(ef.totalEfectivoDisponible as number)],
             ];
             (doc as any).autoTable({
                 head: [['ESTADO FINANCIERO', '']],
@@ -281,10 +290,11 @@ export default function FinancialBalancePage() {
                 [],
                 ['ESTADO FINANCIERO', ''],
                 ['SALDO NETO', statement.estadoFinanciero.saldoNeto],
-                ['Cuentas por Cobrar', statement.estadoFinanciero.cuentasPorCobrar],
-                ['Cuentas por Pagar', statement.estadoFinanciero.cuentasPorPagar],
-                ['Efectivo Disponible (Caja Chica)', statement.estadoFinanciero.efectivoDisponible],
-                ['Saldo Final del Mes en Banco', statement.estadoFinanciero.saldoFinalBanco],
+                ['Cuentas por Cobrar (USD)', statement.estadoFinanciero.cuentasPorCobrarUSD],
+                ['Cuentas por Pagar (Bs)', statement.estadoFinanciero.cuentasPorPagar],
+                ['Efectivo Disponible (Caja Chica) (Bs)', statement.estadoFinanciero.efectivoDisponible],
+                ['Saldo Final del Mes en Banco (Bs)', statement.estadoFinanciero.saldoFinalBanco],
+                ['Total Efectivo Disponible al Final del Mes (Bs)', statement.estadoFinanciero.totalEfectivoDisponible],
                 [],
                 ['Notas', statement.notas]
             ];
@@ -431,8 +441,8 @@ export default function FinancialBalancePage() {
                     </div>
                     <div className="grid md:grid-cols-2 gap-4 pt-4">
                         <div className="space-y-2">
-                            <Label htmlFor="cobrar">Cuentas por Cobrar (Bs.)</Label>
-                            <Input id="cobrar" type="number" value={estadoFinanciero.cuentasPorCobrar} onChange={e => setEstadoFinanciero(p => ({...p, cuentasPorCobrar: e.target.value}))} placeholder="0.00" />
+                            <Label htmlFor="cobrar">Cuentas por Cobrar (USD)</Label>
+                            <Input id="cobrar" type="number" value={estadoFinanciero.cuentasPorCobrarUSD} onChange={e => setEstadoFinanciero(p => ({...p, cuentasPorCobrarUSD: e.target.value}))} placeholder="0.00" />
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="pagar">Cuentas por Pagar (Bs.)</Label>
@@ -445,6 +455,10 @@ export default function FinancialBalancePage() {
                          <div className="space-y-2">
                             <Label htmlFor="saldoFinalBanco">Saldo Final del Mes en Banco (Bs.)</Label>
                             <Input id="saldoFinalBanco" type="number" value={estadoFinanciero.saldoFinalBanco} onChange={e => setEstadoFinanciero(p => ({...p, saldoFinalBanco: e.target.value}))} placeholder="0.00" />
+                        </div>
+                        <div className="md:col-span-2 space-y-2">
+                            <Label htmlFor="totalEfectivoDisponible">Total Efectivo Disponible al Final del Mes (Bs.)</Label>
+                            <Input id="totalEfectivoDisponible" type="number" value={estadoFinanciero.totalEfectivoDisponible.toFixed(2)} readOnly className="bg-muted/50 font-bold" />
                         </div>
                     </div>
                      <div className="space-y-2">
@@ -459,3 +473,5 @@ export default function FinancialBalancePage() {
         </div>
     );
 }
+
+    
