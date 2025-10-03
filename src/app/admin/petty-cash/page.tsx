@@ -193,30 +193,30 @@ export default function PettyCashPage() {
                         return (
                             <Collapsible key={rep.id} className="border rounded-lg">
                                 <Card>
-                                    <CollapsibleTrigger className="w-full p-4 hover:bg-muted/50 rounded-t-lg group">
-                                        <div className="flex items-center justify-between gap-4">
-                                            <div className="flex items-center gap-4 text-left">
+                                    <div className="flex items-center justify-between p-4 hover:bg-muted/50 rounded-t-lg group">
+                                        <CollapsibleTrigger asChild>
+                                            <div className="flex items-center gap-4 text-left flex-grow cursor-pointer">
                                                 <ChevronRight className="h-5 w-5 shrink-0 transition-transform duration-200 group-data-[state=open]:rotate-90" />
                                                 <div>
                                                     <p className="font-semibold text-primary">{rep.description}</p>
                                                     <p className="text-sm text-muted-foreground">{format(rep.date.toDate(), 'dd MMMM, yyyy', { locale: es })}</p>
                                                 </div>
                                             </div>
-                                            <div className="hidden md:flex gap-6 text-right">
-                                                <div><p className="text-xs text-muted-foreground">Monto Repuesto</p><p className="font-bold text-success">Bs. {formatToTwoDecimals(rep.amount)}</p></div>
-                                                <div><p className="text-xs text-muted-foreground">Gastado</p><p className="font-bold text-destructive">Bs. {formatToTwoDecimals(totalExpenses)}</p></div>
-                                                <div><p className="text-xs text-muted-foreground">Saldo</p><p className="font-bold">Bs. {formatToTwoDecimals(remainingAmount)}</p></div>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); setCurrentRepId(rep.id); setIsExpenseDialogOpen(true); }}>
-                                                    <PlusCircle className="mr-2 h-4 w-4"/>Gasto
-                                                </Button>
-                                                <Button size="icon" variant="ghost" className="text-destructive" onClick={(e) => { e.stopPropagation(); handleDeleteReplenishment(rep.id); }}>
-                                                    <Trash2 className="h-4 w-4"/>
-                                                </Button>
-                                            </div>
+                                        </CollapsibleTrigger>
+                                        <div className="hidden md:flex gap-6 text-right">
+                                            <div><p className="text-xs text-muted-foreground">Monto Repuesto</p><p className="font-bold text-success">Bs. {formatToTwoDecimals(rep.amount)}</p></div>
+                                            <div><p className="text-xs text-muted-foreground">Gastado</p><p className="font-bold text-destructive">Bs. {formatToTwoDecimals(totalExpenses)}</p></div>
+                                            <div><p className="text-xs text-muted-foreground">Saldo</p><p className="font-bold">Bs. {formatToTwoDecimals(remainingAmount)}</p></div>
                                         </div>
-                                    </CollapsibleTrigger>
+                                        <div className="flex items-center gap-2 ml-4">
+                                            <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); setCurrentRepId(rep.id); setIsExpenseDialogOpen(true); }}>
+                                                <PlusCircle className="mr-2 h-4 w-4"/>Gasto
+                                            </Button>
+                                            <Button size="icon" variant="ghost" className="text-destructive" onClick={(e) => { e.stopPropagation(); handleDeleteReplenishment(rep.id); }}>
+                                                <Trash2 className="h-4 w-4"/>
+                                            </Button>
+                                        </div>
+                                    </div>
                                     <CollapsibleContent>
                                         <div className="border-t p-4">
                                             {rep.expenses.length > 0 ? (
