@@ -8,9 +8,8 @@ import {
     Settings,
     FileSearch,
     CircleDollarSign,
-    ListChecks,
-    RefreshCw,
     TrendingUp,
+    Wallet
 } from 'lucide-react';
 import { ReactNode } from 'react';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
@@ -32,6 +31,7 @@ const adminNavItems: NavItem[] = [
     },
     { href: "/admin/debts", icon: CircleDollarSign, label: "Gestión de Deudas" },
     { href: "/admin/financial-balance", icon: TrendingUp, label: "Balance Financiero" },
+    { href: "/admin/petty-cash", icon: Wallet, label: "Caja Chica" },
     { href: "/admin/reports", icon: FileSearch, label: "Informes" },
     { href: "/admin/people", icon: Users, label: "Personas" },
     { 
