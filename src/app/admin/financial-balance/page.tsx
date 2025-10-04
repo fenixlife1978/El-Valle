@@ -242,8 +242,8 @@ export default function FinancialBalancePage() {
             (doc as any).autoTable({
                 head: [['INGRESOS', 'MONTO (Bs.)']],
                 body: statement.ingresos.map(i => [i.concepto, formatToTwoDecimals(i.monto as number)]),
-                foot: [['TOTAL INGRESOS', formatToTwoDecimals(totalIngresos)]],
-                startY: startY, theme: 'striped', headStyles: { fillColor: [22, 163, 74] }, footStyles: { fillColor: [22, 163, 74], textColor: 255, fontStyle: 'bold' },
+                foot: [[{ content: 'TOTAL INGRESOS', styles: { halign: 'right' } }, { content: formatToTwoDecimals(totalIngresos), styles: { halign: 'right' } }]],
+                startY: startY, theme: 'striped', headStyles: { fillColor: [22, 163, 74], halign: 'center' }, footStyles: { fillColor: [22, 163, 74], textColor: 255, fontStyle: 'bold' },
                 columnStyles: { 1: { halign: 'right' } }
             });
             startY = (doc as any).lastAutoTable.finalY + 10;
@@ -252,23 +252,12 @@ export default function FinancialBalancePage() {
             (doc as any).autoTable({
                 head: [['EGRESOS', 'MONTO (Bs.)']],
                 body: statement.egresos.map(e => [e.concepto, formatToTwoDecimals(e.monto as number)]),
-                startY: startY, theme: 'striped', headStyles: { fillColor: [220, 53, 69] },
-                columnStyles: { 1: { halign: 'right' } },
-                didDrawPage: (data: any) => {
-                    // Evita que el footer de la tabla anterior se dibuje de nuevo
-                    if (data.pageNumber > 1) {
-                         // Lógica para redibujar cabeceras si es necesario
-                    }
-                }
-            });
-            startY = (doc as any).lastAutoTable.finalY;
-            // Dibuja el footer manualmente después de la tabla
-            doc.autoTable({
-                body: [['TOTAL EGRESOS', formatToTwoDecimals(totalEgresos)]],
+                foot: [[{ content: 'TOTAL EGRESOS', styles: { halign: 'right' } }, { content: formatToTwoDecimals(totalEgresos), styles: { halign: 'right' } }]],
                 startY: startY,
                 theme: 'striped',
-                styles: { fontStyle: 'bold', fillColor: [220, 53, 69], textColor: 255, halign: 'right' },
-                columnStyles: { 0: { halign: 'left' } }
+                headStyles: { fillColor: [220, 53, 69], halign: 'center' },
+                footStyles: { fillColor: [220, 53, 69], textColor: 255, fontStyle: 'bold' },
+                columnStyles: { 1: { halign: 'right' } },
             });
             startY = (doc as any).lastAutoTable.finalY + 10;
 
@@ -283,7 +272,7 @@ export default function FinancialBalancePage() {
             (doc as any).autoTable({
                 head: [['ESTADO FINANCIERO', '']],
                 body: summaryData,
-                startY: startY, theme: 'grid', headStyles: { fillColor: [44, 62, 80] },
+                startY: startY, theme: 'grid', headStyles: { fillColor: [44, 62, 80], halign: 'center' },
                 bodyStyles: { fontStyle: 'bold' },
                 columnStyles: { 1: { halign: 'right' } }
             });
@@ -388,7 +377,7 @@ export default function FinancialBalancePage() {
                     <TableHeader>
                         <TableRow>
                             <TableHead>Concepto</TableHead>
-                            <TableHead className="w-[150px]">Monto (Bs.)</TableHead>
+                            <TableHead className="w-[150px] text-right">Monto (Bs.)</TableHead>
                             <TableHead className="w-[50px]"></TableHead>
                         </TableRow>
                     </TableHeader>
@@ -473,7 +462,7 @@ export default function FinancialBalancePage() {
                     <CardTitle>{isEditing ? 'Editando' : 'Creando'} Balance Financiero</CardTitle>
                     <CardDescription>Selecciona el período y completa los campos.</CardDescription>
                 </CardHeader>
-                <CardContent className="grid grid-cols-2 gap-4">
+                <CardContent className="grid md:grid-cols-2 gap-4">
                      <div className="space-y-2">
                         <Label>Año</Label>
                         <Select value={selectedYear} onValueChange={setSelectedYear} disabled={isEditing}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent></Select>
