@@ -340,7 +340,8 @@ export default function ReportsPage() {
                 const startDate = startOfMonth(new Date(oldestDebt.year, oldestDebt.month - 1));
                 
                 let currentMonth = startDate;
-                while (true) {
+                // Look up to 5 years into the future for consecutive payments
+                for (let i = 0; i < 60; i++) {
                     const monthKey = `${currentMonth.getFullYear()}-${currentMonth.getMonth() + 1}`;
                     if (allPaidMonths.has(monthKey)) {
                         lastConsecutivePaidMonth = currentMonth;
@@ -1752,3 +1753,4 @@ export default function ReportsPage() {
         </div>
     );
 }
+
