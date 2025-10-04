@@ -30,7 +30,6 @@ type FinancialItem = {
 };
 
 type FinancialState = {
-    cuentasPorPagar: number;
     efectivoDisponible: number;
     saldoFinalBanco: number;
 };
@@ -42,6 +41,7 @@ type FinancialStatement = {
     estadoFinanciero: FinancialState & {
         saldoNeto: number;
         totalEfectivoDisponible: number;
+        cuentasPorPagar: number; // Mantener por compatibilidad con datos viejos
     };
     notas: string;
     qrValidacion?: string;
@@ -59,7 +59,6 @@ type CompanyInfo = {
 
 const initialItem = { id: Date.now().toString(), concepto: '', monto: 0 };
 const initialFinancialState: FinancialState = {
-    cuentasPorPagar: 0,
     efectivoDisponible: 0,
     saldoFinalBanco: 0,
 };
@@ -112,12 +111,12 @@ export default function FinancialBalancePage() {
     }, []);
 
     const totals = useMemo(() => {
-        const totalIngresos = ingresos.reduce((sum, item) => sum + (Number(item.monto) || 0), 0);
-        const totalEgresos = egresos.reduce((sum, item) => sum + (Number(item.monto) || 0), 0);
+        const totalIngresos = ingresos.reduce((sum, item) => sum + Number(item.monto), 0);
+        const totalEgresos = egresos.reduce((sum, item) => sum + Number(item.monto), 0);
         const saldoNeto = totalIngresos - totalEgresos;
         
-        const efectivo = Number(estadoFinanciero.efectivoDisponible) || 0;
-        const banco = Number(estadoFinanciero.saldoFinalBanco) || 0;
+        const efectivo = Number(estadoFinanciero.efectivoDisponible);
+        const banco = Number(estadoFinanciero.saldoFinalBanco);
         const totalEfectivoDisponible = efectivo + banco;
 
         return { totalIngresos, totalEgresos, saldoNeto, totalEfectivoDisponible };
@@ -149,7 +148,6 @@ export default function FinancialBalancePage() {
         setIngresos(statement.ingresos.map(i => ({...i, id: Math.random().toString() })));
         setEgresos(statement.egresos.map(e => ({...e, id: Math.random().toString() })));
         setEstadoFinanciero({
-            cuentasPorPagar: statement.estadoFinanciero.cuentasPorPagar,
             efectivoDisponible: statement.estadoFinanciero.efectivoDisponible,
             saldoFinalBanco: statement.estadoFinanciero.saldoFinalBanco
         });
@@ -174,13 +172,13 @@ export default function FinancialBalancePage() {
             return;
         }
 
-        const data: Omit<FinancialStatement, 'id'> = {
+        const data: Omit<FinancialStatement, 'id' | 'estadoFinanciero'> & { estadoFinanciero: any } = {
             ingresos: finalIngresos,
             egresos: finalEgresos,
             estadoFinanciero: {
                 ...estadoFinanciero,
+                cuentasPorPagar: 0, // Campo eliminado, se guarda como 0
                 saldoNeto: totals.saldoNeto,
-                cuentasPorPagar: Number(estadoFinanciero.cuentasPorPagar),
                 efectivoDisponible: Number(estadoFinanciero.efectivoDisponible),
                 saldoFinalBanco: Number(estadoFinanciero.saldoFinalBanco),
                 totalEfectivoDisponible: totals.totalEfectivoDisponible,
@@ -203,8 +201,8 @@ export default function FinancialBalancePage() {
     const handleExport = async (formatType: 'pdf' | 'excel', statement: FinancialStatement) => {
         const qrCodeUrl = await QRCode.toDataURL(`${window.location.origin}/balance/${statement.id}`, { errorCorrectionLevel: 'M', margin: 2, scale: 4 });
         
-        const totalIngresos = statement.ingresos.reduce((sum, item) => sum + (item.monto as number), 0);
-        const totalEgresos = statement.egresos.reduce((sum, item) => sum + (Number(item.monto) || 0), 0);
+        const totalIngresos = statement.ingresos.reduce((sum, item) => sum + item.monto, 0);
+        const totalEgresos = statement.egresos.reduce((sum, item) => sum + item.monto, 0);
         const saldoNeto = totalIngresos - totalEgresos;
         const totalEfectivo = (statement.estadoFinanciero.efectivoDisponible || 0) + (statement.estadoFinanciero.saldoFinalBanco || 0);
 
@@ -241,23 +239,23 @@ export default function FinancialBalancePage() {
             // Ingresos
             (doc as any).autoTable({
                 head: [['INGRESOS', 'MONTO (Bs.)']],
-                body: statement.ingresos.map(i => [i.concepto, formatToTwoDecimals(i.monto as number)]),
+                body: statement.ingresos.map(i => [i.concepto, { content: formatToTwoDecimals(i.monto), styles: { halign: 'right' } }]),
                 foot: [[{ content: 'TOTAL INGRESOS', styles: { halign: 'right' } }, { content: formatToTwoDecimals(totalIngresos), styles: { halign: 'right' } }]],
                 startY: startY, theme: 'striped', headStyles: { fillColor: [22, 163, 74], halign: 'center' }, footStyles: { fillColor: [22, 163, 74], textColor: 255, fontStyle: 'bold' },
-                columnStyles: { 1: { halign: 'right' } }
             });
             startY = (doc as any).lastAutoTable.finalY + 10;
             
             // Egresos
             (doc as any).autoTable({
                 head: [['EGRESOS', 'MONTO (Bs.)']],
-                body: statement.egresos.map(e => [e.concepto, formatToTwoDecimals(e.monto as number)]),
+                body: statement.egresos.map(e => [e.concepto, { content: formatToTwoDecimals(e.monto), styles: { halign: 'right' } }]),
                 foot: [[{ content: 'TOTAL EGRESOS', styles: { halign: 'right' } }, { content: formatToTwoDecimals(totalEgresos), styles: { halign: 'right' } }]],
                 startY: startY,
                 theme: 'striped',
+                showHead: 'firstPage',
+                showFoot: 'lastPage',
                 headStyles: { fillColor: [220, 53, 69], halign: 'center' },
                 footStyles: { fillColor: [220, 53, 69], textColor: 255, fontStyle: 'bold' },
-                columnStyles: { 1: { halign: 'right' } },
             });
             startY = (doc as any).lastAutoTable.finalY + 10;
 
@@ -265,9 +263,8 @@ export default function FinancialBalancePage() {
             const ef = statement.estadoFinanciero;
             const summaryData = [
                 ['SALDO NETO (Ingresos - Egresos)', formatToTwoDecimals(saldoNeto)],
-                ['Cuentas por Pagar (Bs)', formatToTwoDecimals(ef.cuentasPorPagar as number)],
-                ['Efectivo Disponible (Caja Chica) (Bs)', formatToTwoDecimals(ef.efectivoDisponible as number)],
-                ['Saldo Final del Mes en Banco (Bs)', formatToTwoDecimals(ef.saldoFinalBanco as number)],
+                ['Efectivo Disponible (Caja Chica) (Bs)', formatToTwoDecimals(ef.efectivoDisponible)],
+                ['Saldo Final del Mes en Banco (Bs)', formatToTwoDecimals(ef.saldoFinalBanco)],
             ];
             (doc as any).autoTable({
                 head: [['ESTADO FINANCIERO', '']],
@@ -293,11 +290,10 @@ export default function FinancialBalancePage() {
             startY += 10;
             doc.setFontSize(10).text('Notas:', margin, startY);
             doc.setFontSize(10).setFont('helvetica', 'normal').text(statement.notas, margin, startY + 5, { maxWidth: 180 });
-            startY = doc.internal.pageSize.getHeight() > startY + 40 ? startY + 25 : doc.internal.pageSize.getHeight() - 40;
-
+            
+            const signatureBlockY = (doc.internal.pageSize.getHeight() > startY + 40) ? startY + 25 : doc.internal.pageSize.getHeight() - 40;
 
             // Signature lines
-            const signatureBlockY = startY;
             const signatureWidth = 60;
             const signatureSpacing = (pageWidth - margin * 2 - signatureWidth * 2) / 3;
 
@@ -335,7 +331,6 @@ export default function FinancialBalancePage() {
                 [],
                 ['ESTADO FINANCIERO', ''],
                 ['SALDO NETO', saldoNeto],
-                ['Cuentas por Pagar (Bs)', statement.estadoFinanciero.cuentasPorPagar],
                 ['Efectivo Disponible (Caja Chica) (Bs)', statement.estadoFinanciero.efectivoDisponible],
                 ['Saldo Final del Mes en Banco (Bs)', statement.estadoFinanciero.saldoFinalBanco],
                 ['Total Efectivo Disponible al Final del Mes (Bs)', totalEfectivo],
@@ -498,10 +493,6 @@ export default function FinancialBalancePage() {
                     </div>
                     <div className="grid md:grid-cols-2 gap-4 pt-4">
                         <div className="space-y-2">
-                            <Label htmlFor="pagar">Cuentas por Pagar (Bs.)</Label>
-                            <Input id="pagar" type="number" value={estadoFinanciero.cuentasPorPagar === 0 ? '' : estadoFinanciero.cuentasPorPagar} onChange={e => handleStateChange('cuentasPorPagar', e.target.value)} placeholder="0.00" className="text-right" />
-                        </div>
-                        <div className="space-y-2">
                             <Label htmlFor="efectivo">Efectivo Disponible (Caja Chica) (Bs.)</Label>
                             <Input id="efectivo" type="number" value={estadoFinanciero.efectivoDisponible === 0 ? '' : estadoFinanciero.efectivoDisponible} onChange={e => handleStateChange('efectivoDisponible', e.target.value)} placeholder="0.00" className="text-right" />
                         </div>
@@ -534,3 +525,4 @@ export default function FinancialBalancePage() {
     
 
     
+
