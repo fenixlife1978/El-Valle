@@ -248,7 +248,7 @@ export default function FinancialBalancePage() {
             doc.setFillColor(232, 255, 236); // Light green background
             doc.rect(margin, totalEfectivoY - 5, pageWidth - margin * 2, 10, 'F');
             doc.setTextColor(34, 139, 34); // Forest green text
-            doc.text('SALDO NETO O SALDO FINAL DEL MES EN BANCO (Bs.)', margin + 2, totalEfectivoY);
+            doc.text('SALDO NETO O SALDO FINAL DEL MES EN BANCO (Ingresos - Egresos)', margin + 2, totalEfectivoY);
             doc.text(formatToTwoDecimals(saldoNeto), pageWidth - margin - 2, totalEfectivoY, { align: 'right' });
             startY = totalEfectivoY + 10;
             doc.setTextColor(0, 0, 0); // Reset text color
@@ -442,7 +442,7 @@ export default function FinancialBalancePage() {
                             <p className="text-xl font-bold text-destructive text-right">Bs. {formatToTwoDecimals(totals.totalEgresos)}</p>
                         </div>
                         <div className="md:col-span-2 space-y-1 border-t pt-4">
-                            <Label htmlFor="saldoNeto" className="text-base font-bold">SALDO NETO O SALDO FINAL DEL MES EN BANCO (Bs.)</Label>
+                            <Label htmlFor="saldoNeto" className="text-base font-bold">SALDO NETO O SALDO FINAL DEL MES EN BANCO (Ingresos - Egresos)</Label>
                             <div className="p-2 bg-primary/10 rounded-md">
                                 <p id="saldoNeto" className={`text-2xl font-bold text-center ${totals.saldoNeto >= 0 ? 'text-primary' : 'text-destructive'}`}>
                                     {formatToTwoDecimals(totals.saldoNeto)}
