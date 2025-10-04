@@ -228,7 +228,7 @@ export default function OwnerDashboardPage() {
 
         const allPaidMonths = new Set([
             ...allDebts
-                .filter(d => d.status === 'paid' && d.description.toLowerCase().includes('condominio'))
+                .filter(d => d.status === 'paid' && d.description.toLowerCase().includes('condominio') && (d.paidAmountUSD || d.amountUSD) >= 15)
                 .map(d => `${d.year}-${d.month}`),
             ...allHistoricalPayments.map(p => `${p.referenceYear}-${p.referenceMonth}`)
         ]);
@@ -239,42 +239,36 @@ export default function OwnerDashboardPage() {
                 .map(d => `${d.year}-${d.month}`),
             ...allHistoricalPayments.map(p => `${p.referenceYear}-${p.referenceMonth}`)
         ]);
-        
+
         let firstMonth: Date | null = null;
         if (allDebtMonths.size > 0) {
-            const oldestDebt = Array.from(allDebtMonths).sort()[0];
+            const oldestDebt = Array.from(allDebtMonths).sort((a, b) => {
+                const [yearA, monthA] = a.split('-').map(Number);
+                const [yearB, monthB] = b.split('-').map(Number);
+                return yearA - yearB || monthA - monthB;
+            })[0];
             const [year, month] = oldestDebt.split('-').map(Number);
             firstMonth = startOfMonth(new Date(year, month - 1));
         }
-        
-        let lastConsecutivePaidMonth: Date | null = null;
-        let firstUnpaidMonth: Date | null = null;
 
+        let lastConsecutivePaidMonth: Date | null = null;
         if (firstMonth) {
-            let currentMonth = firstMonth;
-            while (true) {
-                const monthKey = `${currentMonth.getFullYear()}-${currentMonth.getMonth() + 1}`;
-                if (allPaidMonths.has(monthKey)) {
-                    lastConsecutivePaidMonth = currentMonth;
-                    currentMonth = addMonths(currentMonth, 1);
-                } else {
-                    firstUnpaidMonth = currentMonth;
-                    break;
-                }
+            let currentCheckMonth = firstMonth;
+            while (allPaidMonths.has(`${currentCheckMonth.getFullYear()}-${currentCheckMonth.getMonth() + 1}`)) {
+                lastConsecutivePaidMonth = currentCheckMonth;
+                currentCheckMonth = addMonths(currentCheckMonth, 1);
             }
         }
-
+        
         const today = startOfMonth(new Date());
 
-        if (firstUnpaidMonth && isBefore(firstUnpaidMonth, today)) {
-            setSolvencyStatus('moroso');
-            setSolvencyPeriod(`Desde ${format(firstUnpaidMonth, 'MMMM yyyy', { locale: es })}`);
-        } else if (lastConsecutivePaidMonth) {
+        if (lastConsecutivePaidMonth && !isBefore(lastConsecutivePaidMonth, today)) {
             setSolvencyStatus('solvente');
             setSolvencyPeriod(`Hasta ${format(lastConsecutivePaidMonth, 'MMMM yyyy', { locale: es })}`);
         } else {
-             setSolvencyStatus('solvente');
-             setSolvencyPeriod('Al día');
+            setSolvencyStatus('moroso');
+            const nextMonth = lastConsecutivePaidMonth ? addMonths(lastConsecutivePaidMonth, 1) : (firstMonth || today);
+            setSolvencyPeriod(`Desde ${format(nextMonth, 'MMMM yyyy', { locale: es })}`);
         }
 
     }, [allDebts, allHistoricalPayments, loading]);
@@ -771,4 +765,5 @@ export default function OwnerDashboardPage() {
     </div>
   );
 }
+
 

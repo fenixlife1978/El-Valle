@@ -324,61 +324,58 @@ export default function ReportsPage() {
             if (aKeys.streetNum !== bKeys.streetNum) return aKeys.streetNum - bKeys.streetNum;
             return aKeys.houseNum - bKeys.houseNum;
         });
-        
+    
         return sortedOwners.map(owner => {
             const ownerAllDebts = allDebts.filter(d => d.ownerId === owner.id);
             const ownerAllHistoricalPayments = allHistoricalPayments.filter(p => p.ownerId === owner.id);
-
+    
             const allPaidMonths = new Set([
                 ...ownerAllDebts
-                    .filter(d => d.status === 'paid' && d.description.toLowerCase().includes('condominio'))
+                    .filter(d => d.status === 'paid' && d.description.toLowerCase().includes('condominio') && (d.paidAmountUSD || d.amountUSD) >= 15)
                     .map(d => `${d.year}-${d.month}`),
                 ...ownerAllHistoricalPayments.map(p => `${p.referenceYear}-${p.referenceMonth}`)
             ]);
-
+    
             const allDebtMonths = new Set([
                 ...ownerAllDebts
                     .filter(d => d.description.toLowerCase().includes('condominio'))
                     .map(d => `${d.year}-${d.month}`),
                 ...ownerAllHistoricalPayments.map(p => `${p.referenceYear}-${p.referenceMonth}`)
             ]);
-            
+    
             let firstMonth: Date | null = null;
             if (allDebtMonths.size > 0) {
-                const oldestDebt = Array.from(allDebtMonths).sort()[0];
+                const oldestDebt = Array.from(allDebtMonths).sort((a, b) => {
+                    const [yearA, monthA] = a.split('-').map(Number);
+                    const [yearB, monthB] = b.split('-').map(Number);
+                    return yearA - yearB || monthA - monthB;
+                })[0];
                 const [year, month] = oldestDebt.split('-').map(Number);
                 firstMonth = startOfMonth(new Date(year, month - 1));
             }
-            
+    
             let lastConsecutivePaidMonth: Date | null = null;
-            let firstUnpaidMonth: Date | null = null;
-
             if (firstMonth) {
-                let currentMonth = firstMonth;
-                while (true) {
-                    const monthKey = `${currentMonth.getFullYear()}-${currentMonth.getMonth() + 1}`;
-                    if (allPaidMonths.has(monthKey)) {
-                        lastConsecutivePaidMonth = currentMonth;
-                        currentMonth = addMonths(currentMonth, 1);
-                    } else {
-                        firstUnpaidMonth = currentMonth;
-                        break;
-                    }
+                let currentCheckMonth = firstMonth;
+                while (allPaidMonths.has(`${currentCheckMonth.getFullYear()}-${currentCheckMonth.getMonth() + 1}`)) {
+                    lastConsecutivePaidMonth = currentCheckMonth;
+                    currentCheckMonth = addMonths(currentCheckMonth, 1);
                 }
             }
-
-            let status: 'Solvente' | 'No Solvente' = 'Solvente';
-            let solvencyPeriod = 'Al día';
-            const today = startOfMonth(new Date());
-
-            if (firstUnpaidMonth && isBefore(firstUnpaidMonth, today)) {
-                status = 'No Solvente';
-                solvencyPeriod = `Desde ${format(firstUnpaidMonth, 'MMM yyyy', { locale: es })}`;
-            } else if (lastConsecutivePaidMonth) {
-                status = 'Solvente';
-                solvencyPeriod = `Hasta ${format(lastConsecutivePaidMonth, 'MMM yyyy', { locale: es })}`;
-            }
             
+            const today = startOfMonth(new Date());
+            let status: 'Solvente' | 'No Solvente';
+            let solvencyPeriod: string;
+    
+            if (lastConsecutivePaidMonth && !isBefore(lastConsecutivePaidMonth, today)) {
+                status = 'Solvente';
+                solvencyPeriod = `Hasta ${format(lastConsecutivePaidMonth, 'MMMM yyyy', { locale: es })}`;
+            } else {
+                status = 'No Solvente';
+                const nextMonth = lastConsecutivePaidMonth ? addMonths(lastConsecutivePaidMonth, 1) : (firstMonth || today);
+                solvencyPeriod = `Desde ${format(nextMonth, 'MMMM yyyy', { locale: es })}`;
+            }
+
             const monthsOwed = ownerAllDebts.filter(d => {
                 const debtDate = startOfMonth(new Date(d.year, d.month - 1));
                 return d.status === 'pending' &&
@@ -387,14 +384,14 @@ export default function ReportsPage() {
             }).length;
 
             const adjustmentDebtUSD = ownerAllDebts
-                .filter(d => d.status === 'pending' && d.description.toLowerCase().includes('ajuste'))
+                .filter(d => d.status === 'pending' && d.description.toLowerCase().includes('ajuste') && isBefore(startOfMonth(new Date(d.year, d.month - 1)), today))
                 .reduce((sum, d) => sum + d.amountUSD, 0);
-
+    
             const fromDate = integralDateRange.from;
             const toDate = integralDateRange.to;
             if (fromDate) fromDate.setHours(0, 0, 0, 0);
             if (toDate) toDate.setHours(23, 59, 59, 999);
-
+    
             const ownerPayments = allPayments.filter(p => {
                 const isOwnerPayment = p.beneficiaries.some(b => b.ownerId === owner.id) && p.status === 'aprobado';
                 if (!isOwnerPayment) return false;
@@ -403,17 +400,17 @@ export default function ReportsPage() {
                 if (toDate && paymentDate > toDate) return false;
                 return true;
             });
-
+    
             const totalPaid = ownerPayments.reduce((sum, p) => sum + p.totalAmount, 0);
             const totalRateWeight = ownerPayments.reduce((sum, p) => sum + ((p.exchangeRate || 0) * p.totalAmount), 0);
             const avgRate = totalPaid > 0 ? totalRateWeight / totalPaid : 0;
-
+    
             let lastPaymentDate = '';
             if (ownerPayments.length > 0) {
                 const lastPayment = [...ownerPayments].sort((a, b) => b.paymentDate.toMillis() - a.paymentDate.toMillis())[0];
                 lastPaymentDate = format(lastPayment.paymentDate.toDate(), 'dd/MM/yyyy');
             }
-
+    
             return {
                 ownerId: owner.id,
                 name: owner.name,
@@ -1759,4 +1756,5 @@ export default function ReportsPage() {
         </div>
     );
 }
+
 
