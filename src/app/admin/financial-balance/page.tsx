@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -251,9 +252,23 @@ export default function FinancialBalancePage() {
             (doc as any).autoTable({
                 head: [['EGRESOS', 'MONTO (Bs.)']],
                 body: statement.egresos.map(e => [e.concepto, formatToTwoDecimals(e.monto as number)]),
-                foot: [['TOTAL EGRESOS', formatToTwoDecimals(totalEgresos)]],
-                startY: startY, theme: 'striped', headStyles: { fillColor: [220, 53, 69] }, footStyles: { fillColor: [220, 53, 69], textColor: 255, fontStyle: 'bold' },
-                columnStyles: { 1: { halign: 'right' } }
+                startY: startY, theme: 'striped', headStyles: { fillColor: [220, 53, 69] },
+                columnStyles: { 1: { halign: 'right' } },
+                didDrawPage: (data: any) => {
+                    // Evita que el footer de la tabla anterior se dibuje de nuevo
+                    if (data.pageNumber > 1) {
+                         // Lógica para redibujar cabeceras si es necesario
+                    }
+                }
+            });
+            startY = (doc as any).lastAutoTable.finalY;
+            // Dibuja el footer manualmente después de la tabla
+            doc.autoTable({
+                body: [['TOTAL EGRESOS', formatToTwoDecimals(totalEgresos)]],
+                startY: startY,
+                theme: 'striped',
+                styles: { fontStyle: 'bold', fillColor: [220, 53, 69], textColor: 255, halign: 'right' },
+                columnStyles: { 0: { halign: 'left' } }
             });
             startY = (doc as any).lastAutoTable.finalY + 10;
 
