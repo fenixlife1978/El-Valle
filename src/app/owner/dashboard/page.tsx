@@ -75,6 +75,12 @@ type ReceiptData = {
     paidDebts: Debt[];
 } | null;
 
+type HistoricalPayment = {
+    ownerId: string;
+    referenceMonth: number;
+    referenceYear: number;
+};
+
 
 type SolvencyStatus = 'solvente' | 'moroso' | 'cargando...';
 
@@ -107,7 +113,8 @@ export default function OwnerDashboardPage() {
     const [loading, setLoading] = useState(true);
     const [userData, setUserData] = useState<UserData | null>(null);
     const [payments, setPayments] = useState<Payment[]>([]);
-    const [debts, setDebts] = useState<Debt[]>([]);
+    const [allDebts, setAllDebts] = useState<Debt[]>([]);
+    const [allHistoricalPayments, setAllHistoricalPayments] = useState<HistoricalPayment[]>([]);
     const [dashboardStats, setDashboardStats] = useState({
         balanceInFavor: 0,
         totalDebtUSD: 0,
@@ -165,40 +172,17 @@ export default function OwnerDashboardPage() {
         });
 
         const debtsQuery = query(collection(db, "debts"), where("ownerId", "==", userId));
-        const debtsUnsubscribe = onSnapshot(debtsQuery, async (debtsSnapshot) => {
-            const allDebtsData: Debt[] = [];
-            debtsSnapshot.forEach(d => allDebtsData.push({ id: d.id, ...d.data() } as Debt));
+        const debtsUnsubscribe = onSnapshot(debtsQuery, (debtsSnapshot) => {
+            const debtsData: Debt[] = [];
+            debtsSnapshot.forEach(d => debtsData.push({ id: d.id, ...d.data() } as Debt));
+            setAllDebts(debtsData);
+        });
 
-            const pendingDebts = allDebtsData.filter(d => d.status === 'pending');
-            const totalDebtUSD = pendingDebts.reduce((sum, d) => sum + d.amountUSD, 0);
-
-            setDebts(pendingDebts.sort((a, b) => b.year - b.year || b.month - b.month));
-            setDashboardStats(prev => ({...prev, totalDebtUSD }));
-            
-            // --- Solvency Logic ---
-            const today = startOfMonth(new Date());
-
-            const firstPendingOverdueDebt = allDebtsData
-                .filter(d => {
-                    const debtDate = startOfMonth(new Date(d.year, d.month - 1));
-                    return d.status === 'pending' && (isBefore(debtDate, today) || isEqual(debtDate, today));
-                })
-                .sort((a, b) => new Date(a.year, a.month - 1).getTime() - new Date(b.year, b.month - 1).getTime())[0];
-
-            if (firstPendingOverdueDebt) {
-                setSolvencyStatus('moroso');
-                setSolvencyPeriod(`Desde ${format(new Date(firstPendingOverdueDebt.year, firstPendingOverdueDebt.month - 1), 'MMMM yyyy', { locale: es })}`);
-            } else {
-                 setSolvencyStatus('solvente');
-                 const lastPaidDebt = allDebtsData
-                    .filter(d => d.status === 'paid')
-                    .sort((a,b) => new Date(b.year, b.month - 1).getTime() - new Date(a.year, a.month - 1).getTime())[0];
-                if (lastPaidDebt) {
-                    setSolvencyPeriod(`Hasta ${format(new Date(lastPaidDebt.year, lastPaidDebt.month - 1), 'MMMM yyyy', { locale: es })}`);
-                } else {
-                    setSolvencyPeriod('Al día');
-                }
-            }
+        const historicalPaymentsQuery = query(collection(db, "historical_payments"), where("ownerId", "==", userId));
+        const historicalPaymentsUnsubscribe = onSnapshot(historicalPaymentsQuery, (snapshot) => {
+            const historicalData: HistoricalPayment[] = [];
+            snapshot.forEach(d => historicalData.push(d.data() as HistoricalPayment));
+            setAllHistoricalPayments(historicalData);
         });
         
         const paymentsQuery = query(collection(db, "payments"), where("beneficiaryIds", "array-contains", userId), orderBy('paymentDate', 'desc'), limit(3));
@@ -225,11 +209,79 @@ export default function OwnerDashboardPage() {
             userUnsubscribe();
             paymentsUnsubscribe();
             debtsUnsubscribe();
+            historicalPaymentsUnsubscribe();
             reportsUnsubscribe();
         };
     
     }, []);
-    
+
+    useEffect(() => {
+        if (loading) return;
+
+        const pendingDebts = allDebts.filter(d => d.status === 'pending');
+        const totalDebtUSD = pendingDebts.reduce((sum, d) => sum + d.amountUSD, 0);
+        
+        setDashboardStats(prev => ({ ...prev, totalDebtUSD }));
+
+        const allPaidMonths = new Set([
+            ...allDebts
+                .filter(d => d.status === 'paid' && d.description.toLowerCase().includes('condominio'))
+                .map(d => `${d.year}-${d.month}`),
+            ...allHistoricalPayments.map(p => `${p.referenceYear}-${p.referenceMonth}`)
+        ]);
+
+        const allDebtMonths = new Set([
+            ...allDebts
+                .filter(d => d.description.toLowerCase().includes('condominio'))
+                .map(d => `${d.year}-${d.month}`),
+            ...allHistoricalPayments.map(p => `${p.referenceYear}-${p.referenceMonth}`)
+        ]);
+        
+        let firstMonth: Date | null = null;
+        if (allDebtMonths.size > 0) {
+            const oldestDebt = Array.from(allDebtMonths).sort()[0];
+            const [year, month] = oldestDebt.split('-').map(Number);
+            firstMonth = startOfMonth(new Date(year, month - 1));
+        }
+        
+        let lastConsecutivePaidMonth: Date | null = null;
+        let firstUnpaidMonth: Date | null = null;
+
+        if (firstMonth) {
+            let currentMonth = firstMonth;
+            while (true) {
+                const monthKey = `${currentMonth.getFullYear()}-${currentMonth.getMonth() + 1}`;
+                if (allPaidMonths.has(monthKey)) {
+                    lastConsecutivePaidMonth = currentMonth;
+                    currentMonth = addMonths(currentMonth, 1);
+                } else {
+                    firstUnpaidMonth = currentMonth;
+                    break;
+                }
+            }
+        }
+
+        const today = startOfMonth(new Date());
+
+        if (firstUnpaidMonth && isBefore(firstUnpaidMonth, today)) {
+            setSolvencyStatus('moroso');
+            setSolvencyPeriod(`Desde ${format(firstUnpaidMonth, 'MMMM yyyy', { locale: es })}`);
+        } else if (lastConsecutivePaidMonth) {
+            setSolvencyStatus('solvente');
+            setSolvencyPeriod(`Hasta ${format(lastConsecutivePaidMonth, 'MMMM yyyy', { locale: es })}`);
+        } else {
+            setSolvencyStatus('solvente');
+            setSolvencyPeriod('Al día');
+        }
+
+    }, [allDebts, allHistoricalPayments, loading]);
+
+    const pendingDebts = useMemo(() => {
+         return allDebts
+            .filter(d => d.status === 'pending')
+            .sort((a, b) => b.year - b.year || b.month - b.month);
+    }, [allDebts]);
+
     const handleDebtSelection = (debtId: string) => {
         setSelectedDebts(prev => 
             prev.includes(debtId) ? prev.filter(id => id !== debtId) : [...prev, debtId]
@@ -237,7 +289,7 @@ export default function OwnerDashboardPage() {
     };
 
     const paymentCalculator = useMemo(() => {
-        const totalSelectedDebtUSD = debts
+        const totalSelectedDebtUSD = pendingDebts
             .filter(debt => selectedDebts.includes(debt.id))
             .reduce((sum, debt) => sum + debt.amountUSD, 0);
             
@@ -250,7 +302,7 @@ export default function OwnerDashboardPage() {
             totalToPay: totalToPay,
             hasSelection: selectedDebts.length > 0,
         };
-    }, [selectedDebts, debts, dashboardStats]);
+    }, [selectedDebts, pendingDebts, dashboardStats]);
 
   const showReceiptPreview = async (payment: Payment) => {
     if (!userData) return;
@@ -519,10 +571,10 @@ export default function OwnerDashboardPage() {
                 <TableBody>
                     {loading ? (
                         <TableRow><TableCell colSpan={5} className="h-24 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto"/></TableCell></TableRow>
-                    ) : debts.length === 0 ? (
+                    ) : pendingDebts.length === 0 ? (
                         <TableRow><TableCell colSpan={5} className="h-24 text-center text-muted-foreground">¡Felicidades! No tienes deudas pendientes.</TableCell></TableRow>
                     ) : (
-                    debts.map((debt) => {
+                    pendingDebts.map((debt) => {
                         const debtMonthDate = startOfMonth(new Date(debt.year, debt.month - 1));
                         const isOverdue = isBefore(debtMonthDate, startOfMonth(new Date()));
                         return (
@@ -716,4 +768,5 @@ export default function OwnerDashboardPage() {
     </div>
   );
 }
+
 
