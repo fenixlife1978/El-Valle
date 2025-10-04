@@ -327,50 +327,58 @@ export default function ReportsPage() {
         
         return sortedOwners.map(owner => {
             const ownerAllDebts = allDebts.filter(d => d.ownerId === owner.id);
+            const ownerAllHistoricalPayments = allHistoricalPayments.filter(p => p.ownerId === owner.id);
 
-            const allPaidMonths = new Set(
-                ownerAllDebts
-                .filter(d => d.status === 'paid' && d.description.toLowerCase().includes('condominio'))
-                .map(d => `${d.year}-${d.month}`)
-            );
+            const allPaidMonths = new Set([
+                ...ownerAllDebts
+                    .filter(d => d.status === 'paid' && d.description.toLowerCase().includes('condominio'))
+                    .map(d => `${d.year}-${d.month}`),
+                ...ownerAllHistoricalPayments.map(p => `${p.referenceYear}-${p.referenceMonth}`)
+            ]);
+
+            const allDebtMonths = new Set([
+                ...ownerAllDebts
+                    .filter(d => d.description.toLowerCase().includes('condominio'))
+                    .map(d => `${d.year}-${d.month}`),
+                ...ownerAllHistoricalPayments.map(p => `${p.referenceYear}-${p.referenceMonth}`)
+            ]);
+            
+            let firstMonth: Date | null = null;
+            if (allDebtMonths.size > 0) {
+                const oldestDebt = Array.from(allDebtMonths).sort()[0];
+                const [year, month] = oldestDebt.split('-').map(Number);
+                firstMonth = startOfMonth(new Date(year, month - 1));
+            }
             
             let lastConsecutivePaidMonth: Date | null = null;
-            if (ownerAllDebts.length > 0) {
-                const oldestDebt = [...ownerAllDebts].sort((a, b) => new Date(a.year, a.month -1).getTime() - new Date(b.year, b.month-1).getTime())[0];
-                const startDate = startOfMonth(new Date(oldestDebt.year, oldestDebt.month - 1));
-                
-                let currentMonth = startDate;
-                // Look up to 5 years into the future for consecutive payments
-                for (let i = 0; i < 60; i++) {
+            let firstUnpaidMonth: Date | null = null;
+
+            if (firstMonth) {
+                let currentMonth = firstMonth;
+                while (true) {
                     const monthKey = `${currentMonth.getFullYear()}-${currentMonth.getMonth() + 1}`;
                     if (allPaidMonths.has(monthKey)) {
                         lastConsecutivePaidMonth = currentMonth;
                         currentMonth = addMonths(currentMonth, 1);
                     } else {
+                        firstUnpaidMonth = currentMonth;
                         break;
                     }
                 }
             }
-            
-            const hasPendingDebt = ownerAllDebts.some(d => d.status === 'pending');
-            
+
             let status: 'Solvente' | 'No Solvente' = 'Solvente';
             let solvencyPeriod = 'Al día';
+            const today = startOfMonth(new Date());
 
-            const firstPendingDebt = ownerAllDebts
-                .filter(d => d.status === 'pending')
-                .sort((a, b) => new Date(a.year, a.month - 1).getTime() - new Date(b.year, b.month - 1).getTime())[0];
-                
-            if (firstPendingDebt) {
+            if (firstUnpaidMonth && isBefore(firstUnpaidMonth, today)) {
                 status = 'No Solvente';
-                solvencyPeriod = `Desde ${format(new Date(firstPendingDebt.year, firstPendingDebt.month - 1), 'MMM yyyy', { locale: es })}`;
+                solvencyPeriod = `Desde ${format(firstUnpaidMonth, 'MMM yyyy', { locale: es })}`;
             } else if (lastConsecutivePaidMonth) {
                 status = 'Solvente';
                 solvencyPeriod = `Hasta ${format(lastConsecutivePaidMonth, 'MMM yyyy', { locale: es })}`;
             }
-
-
-            const today = startOfMonth(new Date());
+            
             const monthsOwed = ownerAllDebts.filter(d => {
                 const debtDate = startOfMonth(new Date(d.year, d.month - 1));
                 return d.status === 'pending' &&
@@ -424,8 +432,7 @@ export default function ReportsPage() {
             const ownerMatch = !integralOwnerFilter || row.name.toLowerCase().includes(integralOwnerFilter.toLowerCase());
             return statusMatch && ownerMatch;
         });
-    }, [owners, allDebts, allPayments, integralDateRange, integralStatusFilter, integralOwnerFilter]);
-
+    }, [owners, allDebts, allHistoricalPayments, allPayments, integralDateRange, integralStatusFilter, integralOwnerFilter]);
     
     // --- Delinquency Report Logic ---
     const filteredAndSortedDelinquents = useMemo(() => {
