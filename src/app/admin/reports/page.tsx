@@ -357,18 +357,18 @@ export default function ReportsPage() {
             let status: 'Solvente' | 'No Solvente' = 'Solvente';
             let solvencyPeriod = 'Al día';
 
-            if (hasPendingDebt) {
+            const firstPendingDebt = ownerAllDebts
+                .filter(d => d.status === 'pending')
+                .sort((a, b) => new Date(a.year, a.month - 1).getTime() - new Date(b.year, b.month - 1).getTime())[0];
+                
+            if (firstPendingDebt) {
                 status = 'No Solvente';
-                const firstPendingDebt = ownerAllDebts
-                    .filter(d => d.status === 'pending')
-                    .sort((a,b) => new Date(a.year, a.month-1).getTime() - new Date(b.year, b.month-1).getTime())[0];
-                if (firstPendingDebt) {
-                    solvencyPeriod = `Desde ${format(new Date(firstPendingDebt.year, firstPendingDebt.month-1), 'MMM yyyy', { locale: es })}`;
-                }
+                solvencyPeriod = `Desde ${format(new Date(firstPendingDebt.year, firstPendingDebt.month - 1), 'MMM yyyy', { locale: es })}`;
             } else if (lastConsecutivePaidMonth) {
                 status = 'Solvente';
                 solvencyPeriod = `Hasta ${format(lastConsecutivePaidMonth, 'MMM yyyy', { locale: es })}`;
             }
+
 
             const today = startOfMonth(new Date());
             const monthsOwed = ownerAllDebts.filter(d => {
@@ -574,7 +574,7 @@ export default function ReportsPage() {
         const paymentsWithDebts: PaymentWithDebts[] = [];
         for (const payment of allApprovedPayments) {
             const liquidatedDebts = allDebts.filter(d => d.paymentId === payment.id)
-                .sort((a,b) => a.year - b.year || a.month - b.month);
+                .sort((a,b) => a.year - b.year || a.month - a.month);
             
             paymentsWithDebts.push({
                 ...payment,
@@ -1752,3 +1752,4 @@ export default function ReportsPage() {
         </div>
     );
 }
+
