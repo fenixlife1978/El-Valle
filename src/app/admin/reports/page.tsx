@@ -329,37 +329,47 @@ export default function ReportsPage() {
             const ownerAllDebts = allDebts.filter(d => d.ownerId === owner.id);
             const ownerAllHistoricalPayments = allHistoricalPayments.filter(p => p.ownerId === owner.id);
     
-            const allPaidMonths = new Set([
-                ...ownerAllDebts
-                    .filter(d => d.status === 'paid' && d.description.toLowerCase().includes('condominio') && (d.paidAmountUSD || d.amountUSD) >= 15)
-                    .map(d => `${d.year}-${d.month}`),
-                ...ownerAllHistoricalPayments.map(p => `${p.referenceYear}-${p.referenceMonth}`)
-            ]);
-    
-            const allDebtMonths = new Set([
+            // Create a set of all periods with a condo fee debt or historical payment
+            const allCondoFeePeriods = new Set([
                 ...ownerAllDebts
                     .filter(d => d.description.toLowerCase().includes('condominio'))
                     .map(d => `${d.year}-${d.month}`),
                 ...ownerAllHistoricalPayments.map(p => `${p.referenceYear}-${p.referenceMonth}`)
             ]);
     
+            // Find the very first month a debt was ever recorded for this owner
             let firstMonth: Date | null = null;
-            if (allDebtMonths.size > 0) {
-                const oldestDebt = Array.from(allDebtMonths).sort((a, b) => {
+            if (allCondoFeePeriods.size > 0) {
+                const oldestPeriod = Array.from(allCondoFeePeriods).sort((a, b) => {
                     const [yearA, monthA] = a.split('-').map(Number);
                     const [yearB, monthB] = b.split('-').map(Number);
                     return yearA - yearB || monthA - monthB;
                 })[0];
-                const [year, month] = oldestDebt.split('-').map(Number);
+                const [year, month] = oldestPeriod.split('-').map(Number);
                 firstMonth = startOfMonth(new Date(year, month - 1));
             }
     
+            // Find the last consecutively paid month
             let lastConsecutivePaidMonth: Date | null = null;
             if (firstMonth) {
+                const paidCondoFeeMonths = new Set(
+                    ownerAllDebts
+                        .filter(d => d.status === 'paid' && d.description.toLowerCase().includes('condominio') && (d.paidAmountUSD || d.amountUSD) >= 15)
+                        .map(d => `${d.year}-${d.month}`)
+                );
+                // Also consider historical payments as paid
+                ownerAllHistoricalPayments.forEach(p => paidCondoFeeMonths.add(`${p.referenceYear}-${p.referenceMonth}`));
+    
                 let currentCheckMonth = firstMonth;
-                while (allPaidMonths.has(`${currentCheckMonth.getFullYear()}-${currentCheckMonth.getMonth() + 1}`)) {
-                    lastConsecutivePaidMonth = currentCheckMonth;
-                    currentCheckMonth = addMonths(currentCheckMonth, 1);
+                // We check for up to 10 years into the future to find the last consecutive payment
+                for (let i = 0; i < 120; i++) { 
+                    const periodKey = `${currentCheckMonth.getFullYear()}-${currentCheckMonth.getMonth() + 1}`;
+                    if (paidCondoFeeMonths.has(periodKey)) {
+                        lastConsecutivePaidMonth = currentCheckMonth;
+                        currentCheckMonth = addMonths(currentCheckMonth, 1);
+                    } else {
+                        break; // End of consecutive payments
+                    }
                 }
             }
             
@@ -372,17 +382,17 @@ export default function ReportsPage() {
                 solvencyPeriod = `Hasta ${format(lastConsecutivePaidMonth, 'MMMM yyyy', { locale: es })}`;
             } else {
                 status = 'No Solvente';
-                const nextMonth = lastConsecutivePaidMonth ? addMonths(lastConsecutivePaidMonth, 1) : (firstMonth || today);
-                solvencyPeriod = `Desde ${format(nextMonth, 'MMMM yyyy', { locale: es })}`;
+                const firstUnpaidMonth = lastConsecutivePaidMonth ? addMonths(lastConsecutivePaidMonth, 1) : (firstMonth || today);
+                solvencyPeriod = `Desde ${format(firstUnpaidMonth, 'MMMM yyyy', { locale: es })}`;
             }
-
+    
             const monthsOwed = ownerAllDebts.filter(d => {
                 const debtDate = startOfMonth(new Date(d.year, d.month - 1));
                 return d.status === 'pending' &&
                        d.description.toLowerCase().includes('condominio') &&
                        (isBefore(debtDate, today) || isEqual(debtDate, today));
             }).length;
-
+    
             const adjustmentDebtUSD = ownerAllDebts
                 .filter(d => d.status === 'pending' && d.description.toLowerCase().includes('ajuste') && isBefore(startOfMonth(new Date(d.year, d.month - 1)), today))
                 .reduce((sum, d) => sum + d.amountUSD, 0);
@@ -1756,6 +1766,7 @@ export default function ReportsPage() {
         </div>
     );
 }
+
 
 
 
