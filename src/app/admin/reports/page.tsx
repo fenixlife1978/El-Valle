@@ -370,9 +370,13 @@ export default function ReportsPage() {
                 solvencyPeriod = `Hasta ${format(lastConsecutivePaidMonth, 'MMM yyyy', { locale: es })}`;
             }
 
-            const monthsOwed = ownerAllDebts.filter(d => 
-                d.status === 'pending' && d.description.toLowerCase().includes('condominio')
-            ).length;
+            const today = startOfMonth(new Date());
+            const monthsOwed = ownerAllDebts.filter(d => {
+                const debtDate = startOfMonth(new Date(d.year, d.month - 1));
+                return d.status === 'pending' &&
+                       d.description.toLowerCase().includes('condominio') &&
+                       (isBefore(debtDate, today) || isEqual(debtDate, today));
+            }).length;
 
             const adjustmentDebtUSD = ownerAllDebts
                 .filter(d => d.status === 'pending' && d.description.toLowerCase().includes('ajuste'))
