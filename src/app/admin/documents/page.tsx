@@ -15,6 +15,7 @@ import { format } from 'date-fns';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 type ExpenseItem = {
     id: string;
@@ -388,4 +389,5 @@ export default function DocumentsPage() {
         </div>
     );
 }
+
 
