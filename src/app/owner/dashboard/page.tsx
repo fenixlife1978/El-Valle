@@ -175,33 +175,26 @@ export default function OwnerDashboardPage() {
             setDebts(pendingDebts.sort((a, b) => b.year - b.year || b.month - b.month));
             setDashboardStats(prev => ({...prev, totalDebtUSD }));
             
-            let firstUnpaidMonth: Date | null = null;
-            const paidDebts = allDebtsData.filter(d => d.status === 'paid');
-            const lastPaidDebt = paidDebts.sort((a, b) => new Date(b.year, b.month -1).getTime() - new Date(a.year, a.month - 1).getTime())[0];
-            const lastPaidMonth = lastPaidDebt ? new Date(lastPaidDebt.year, lastPaidDebt.month - 1) : null;
-            
-            const oldestDebt = [...allDebtsData].sort((a, b) => new Date(a.year, a.month -1).getTime() - new Date(b.year, b.month-1).getTime())[0];
-            
-            if (oldestDebt) {
-                const oldestDate = startOfMonth(new Date(oldestDebt.year, oldestDebt.month - 1));
-                for (let d = oldestDate; isBefore(d, new Date()); d = addMonths(d, 1)) {
-                    const year = d.getFullYear();
-                    const month = d.getMonth() + 1;
-                    const hasPendingDebtForMonth = allDebtsData.some(debt => debt.year === year && debt.month === month && debt.status === 'pending');
-                    if (hasPendingDebtForMonth) {
-                        firstUnpaidMonth = d;
-                        break;
-                    }
-                }
-            }
+            // --- Solvency Logic ---
+            const today = startOfMonth(new Date());
 
-            if (firstUnpaidMonth) {
+            const firstPendingOverdueDebt = allDebtsData
+                .filter(d => {
+                    const debtDate = startOfMonth(new Date(d.year, d.month - 1));
+                    return d.status === 'pending' && (isBefore(debtDate, today) || isEqual(debtDate, today));
+                })
+                .sort((a, b) => new Date(a.year, a.month - 1).getTime() - new Date(b.year, b.month - 1).getTime())[0];
+
+            if (firstPendingOverdueDebt) {
                 setSolvencyStatus('moroso');
-                setSolvencyPeriod(`Desde ${format(firstUnpaidMonth, 'MMMM yyyy', { locale: es })}`);
+                setSolvencyPeriod(`Desde ${format(new Date(firstPendingOverdueDebt.year, firstPendingOverdueDebt.month - 1), 'MMMM yyyy', { locale: es })}`);
             } else {
-                setSolvencyStatus('solvente');
-                if (lastPaidMonth) {
-                    setSolvencyPeriod(`Hasta ${format(lastPaidMonth, 'MMMM yyyy', { locale: es })}`);
+                 setSolvencyStatus('solvente');
+                 const lastPaidDebt = allDebtsData
+                    .filter(d => d.status === 'paid')
+                    .sort((a,b) => new Date(b.year, b.month - 1).getTime() - new Date(a.year, a.month - 1).getTime())[0];
+                if (lastPaidDebt) {
+                    setSolvencyPeriod(`Hasta ${format(new Date(lastPaidDebt.year, lastPaidDebt.month - 1), 'MMMM yyyy', { locale: es })}`);
                 } else {
                     setSolvencyPeriod('Al día');
                 }
