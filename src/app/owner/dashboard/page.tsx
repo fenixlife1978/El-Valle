@@ -218,9 +218,12 @@ export default function OwnerDashboardPage() {
     useEffect(() => {
         if (loading) return;
 
-        const pendingDebts = allDebts.filter(d => d.status === 'pending');
+        const pendingDebts = allDebts.filter(d => {
+            const debtDate = startOfMonth(new Date(d.year, d.month - 1));
+            return d.status === 'pending' && !isBefore(startOfMonth(new Date()), debtDate);
+        });
+
         const totalDebtUSD = pendingDebts.reduce((sum, d) => sum + d.amountUSD, 0);
-        
         setDashboardStats(prev => ({ ...prev, totalDebtUSD }));
 
         const allPaidMonths = new Set([
@@ -270,8 +273,8 @@ export default function OwnerDashboardPage() {
             setSolvencyStatus('solvente');
             setSolvencyPeriod(`Hasta ${format(lastConsecutivePaidMonth, 'MMMM yyyy', { locale: es })}`);
         } else {
-            setSolvencyStatus('solvente');
-            setSolvencyPeriod('Al día');
+             setSolvencyStatus('solvente');
+             setSolvencyPeriod('Al día');
         }
 
     }, [allDebts, allHistoricalPayments, loading]);
@@ -768,5 +771,4 @@ export default function OwnerDashboardPage() {
     </div>
   );
 }
-
 
