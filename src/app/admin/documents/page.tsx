@@ -283,7 +283,7 @@ export default function DocumentsPage() {
                                 documents.map((doc) => (
                                     <TableRow key={doc.id}>
                                         <TableCell className="font-medium">{doc.title}</TableCell>
-                                        <TableCell>{format(doc.createdAt.toDate(), "dd/MM/yyyy HH:mm")}</TableCell>
+                                        <TableCell>{doc.createdAt ? format(doc.createdAt.toDate(), "dd/MM/yyyy HH:mm") : '-'}</TableCell>
                                         <TableCell className="text-right">
                                             <DropdownMenu>
                                                 <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4"/></Button></DropdownMenuTrigger>
