@@ -352,11 +352,10 @@ export default function ReportsPage() {
                 }
             }
             
-            const nextMonth = lastConsecutivePaidMonth ? addMonths(lastConsecutivePaidMonth, 1) : startOfMonth(new Date());
             const hasPendingDebt = ownerAllDebts.some(d => d.status === 'pending');
             
             let status: 'Solvente' | 'No Solvente' = 'Solvente';
-            let solvencyPeriod = 'N/A';
+            let solvencyPeriod = 'Al día';
 
             if (hasPendingDebt) {
                 status = 'No Solvente';
@@ -1753,4 +1752,3 @@ export default function ReportsPage() {
         </div>
     );
 }
-
