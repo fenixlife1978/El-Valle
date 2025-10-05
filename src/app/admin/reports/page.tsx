@@ -341,11 +341,11 @@ export default function ReportsPage() {
 
             let lastConsecutivePaidMonth: Date | null = null;
             let firstUnpaidMonth: Date | null = null;
-            const july2025 = new Date(2025, 6, 1);
+            const july2025 = new Date(2025, 6, 1); // Represents July 2025
 
             if (firstMonthEver) {
                 let currentCheckMonth = firstMonthEver;
-                const limitDate = addMonths(new Date(), 120);
+                const limitDate = addMonths(new Date(), 120); // Check up to 10 years in the future
 
                 while (isBefore(currentCheckMonth, limitDate)) {
                     const year = getYear(currentCheckMonth);
@@ -372,17 +372,18 @@ export default function ReportsPage() {
                         const paidAmount = mainDebt.paidAmountUSD || mainDebt.amountUSD;
                         const isBeforeAug2025 = isBefore(currentCheckMonth, july2025);
 
-                        if (isBeforeAug2025) {
-                            if (paidAmount >= 15) {
+                        if (isBeforeAug2025) { // Logic for months up to July 2025
+                             if (paidAmount >= 15) {
                                 isMonthFullyPaid = true;
                             } else if (paidAmount >= 10) {
+                                // If paid $10, it's fully paid if an adjustment debt was also paid OR if no adjustment was ever needed for that month
                                 if (adjustmentDebt && adjustmentDebt.status === 'paid') {
                                     isMonthFullyPaid = true;
                                 } else if (!adjustmentDebt) {
-                                    isMonthFullyPaid = true;
+                                    isMonthFullyPaid = true; 
                                 }
                             }
-                        } else {
+                        } else { // Logic for August 2025 onwards
                             if (paidAmount >= 15) isMonthFullyPaid = true;
                         }
                     }
@@ -402,18 +403,18 @@ export default function ReportsPage() {
             let solvencyPeriod = '';
             
             if (status === 'No Solvente') {
-                 if(firstUnpaidMonth) {
+                if (firstUnpaidMonth) {
                     solvencyPeriod = `Desde ${format(firstUnpaidMonth, 'MMMM yyyy', { locale: es })}`;
-                 }
+                } else {
+                    solvencyPeriod = "Desde este mes"; // Fallback
+                }
             } else { // Solvente
                 if (lastConsecutivePaidMonth) {
                     solvencyPeriod = `Hasta ${format(lastConsecutivePaidMonth, 'MMMM yyyy', { locale: es })}`;
                 } else {
-                    // Fallback for solvent users with no history: solvent up to the current month.
-                    solvencyPeriod = `Hasta ${format(new Date(), 'MMMM yyyy', { locale: es })}`;
+                     solvencyPeriod = `Hasta ${format(new Date(), 'MMMM yyyy', { locale: es })}`;
                 }
             }
-            
             // --- End of New Solvency Logic ---
 
             const fromDate = integralDateRange.from;
@@ -1196,7 +1197,7 @@ export default function ReportsPage() {
                                             <TableCell>
                                                 <span className={cn('font-semibold', row.status === 'No Solvente' ? 'text-destructive' : 'text-green-600')}>{row.status}</span>
                                             </TableCell>
-                                            <TableCell>{row.solvencyPeriod}</TableCell>
+                                            <TableCell className="capitalize">{row.solvencyPeriod}</TableCell>
                                             <TableCell className="text-center">{row.monthsOwed > 0 ? row.monthsOwed : ''}</TableCell>
                                             <TableCell className="text-right">{row.adjustmentDebtUSD > 0 ? `$${row.adjustmentDebtUSD.toFixed(2)}`: ''}</TableCell>
                                         </TableRow>
@@ -1747,11 +1748,3 @@ export default function ReportsPage() {
         </div>
     );
 }
-
-    
-
-    
-
-    
-
-    

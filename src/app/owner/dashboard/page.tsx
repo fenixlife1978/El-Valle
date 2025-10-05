@@ -230,12 +230,11 @@ export default function OwnerDashboardPage() {
 
         let lastConsecutivePaidMonth: Date | null = null;
         let firstUnpaidMonth: Date | null = null;
-        const july2025 = new Date(2025, 6, 1);
-        const today = startOfMonth(new Date());
+        const july2025 = new Date(2025, 6, 1); // Represents July 2025
 
         if (firstMonthEver) {
             let currentCheckMonth = firstMonthEver;
-            const limitDate = addMonths(today, 60);
+            const limitDate = addMonths(new Date(), 120); // Check up to 10 years in the future
 
             while (isBefore(currentCheckMonth, limitDate)) {
                 const year = getYear(currentCheckMonth);
@@ -256,23 +255,23 @@ export default function OwnerDashboardPage() {
                 
                 const mainDebt = debtsForMonth.find(d => d.description.toLowerCase().includes('condominio'));
                 const adjustmentDebt = debtsForMonth.find(d => d.description.toLowerCase().includes('ajuste'));
-
                 let isMonthFullyPaid = false;
+
                 if (mainDebt?.status === 'paid') {
                     const paidAmount = mainDebt.paidAmountUSD || mainDebt.amountUSD;
                     const isBeforeAug2025 = isBefore(currentCheckMonth, july2025);
 
-                    if (isBeforeAug2025) {
-                        if (paidAmount >= 15) {
+                    if (isBeforeAug2025) { // Logic for months up to July 2025
+                         if (paidAmount >= 15) {
                             isMonthFullyPaid = true;
-                        } else if (paidAmount >= 10) { // Should be 10 for old logic
+                        } else if (paidAmount >= 10) {
                             if (adjustmentDebt && adjustmentDebt.status === 'paid') {
-                                isMonthFullyPaid = true; // $10 + adjustment paid
+                                isMonthFullyPaid = true;
                             } else if (!adjustmentDebt) {
-                                isMonthFullyPaid = true; // Old month without adjustment
+                                isMonthFullyPaid = true; 
                             }
                         }
-                    } else { // From August 2025 onwards
+                    } else { // Logic for August 2025 onwards
                         if (paidAmount >= 15) isMonthFullyPaid = true;
                     }
                 }
@@ -287,24 +286,21 @@ export default function OwnerDashboardPage() {
             }
         }
         
-        const hasPendingDebtsOnOrBeforeToday = allDebts.some(d => {
-            const debtDate = startOfMonth(new Date(d.year, d.month - 1));
-            return d.status === 'pending' && !isBefore(today, debtDate);
-        });
+        const hasAnyPendingDebt = allDebts.some(d => d.status === 'pending');
         
-        if (hasPendingDebtsOnOrBeforeToday) {
+        if (hasAnyPendingDebt) {
             setSolvencyStatus('moroso');
             if (firstUnpaidMonth) {
                 setSolvencyPeriod(`Desde ${format(firstUnpaidMonth, 'MMMM yyyy', { locale: es })}`);
             } else {
-                 setSolvencyPeriod(`Desde ${format(today, 'MMMM yyyy', { locale: es })}`);
+                setSolvencyPeriod(`Desde ${format(new Date(), 'MMMM yyyy', { locale: es })}`); // Fallback
             }
         } else {
             setSolvencyStatus('solvente');
              if (lastConsecutivePaidMonth) {
                 setSolvencyPeriod(`Hasta ${format(lastConsecutivePaidMonth, 'MMMM yyyy', { locale: es })}`);
              } else {
-                setSolvencyPeriod(`Hasta ${format(today, 'MMMM yyyy', { locale: es })}`);
+                setSolvencyPeriod(`Hasta ${format(new Date(), 'MMMM yyyy', { locale: es })}`);
              }
         }
 
@@ -530,7 +526,7 @@ export default function OwnerDashboardPage() {
                         {solvencyStatus === 'moroso' ? <AlertCircle className="mr-2 h-4 w-4"/> : <ShieldCheck className="mr-2 h-4 w-4"/>}
                         {solvencyStatus}
                     </Badge>
-                     {solvencyPeriod && <p className="text-sm font-semibold text-muted-foreground">{solvencyPeriod}</p>}
+                     {solvencyPeriod && <p className="text-sm font-semibold text-muted-foreground capitalize">{solvencyPeriod}</p>}
                  </div>
             </CardHeader>
             <CardContent className="px-6 pb-6">
