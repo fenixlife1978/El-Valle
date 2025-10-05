@@ -26,7 +26,6 @@ import { format, addMonths, startOfMonth, parse, getMonth, getYear, isBefore, is
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { getCommunityUpdates } from '@/ai/flows/community-updates';
 
 
 type Owner = {
@@ -1058,36 +1057,6 @@ export default function ReportsPage() {
         return delinquencySortConfig.direction === 'asc' ? '▲' : '▼';
     };
 
-    const generateCommunityUpdates = async () => {
-        setGeneratingReport(true);
-        if (!selectedIndividual) return;
-
-        try {
-            const owner = selectedIndividual;
-            const ownerAllDebts = allDebts.filter(d => d.ownerId === owner.id);
-            const paymentHistory = ownerAllDebts.map(d => `${monthsLocale[d.month]} ${d.year}: ${d.status}`).join(', ');
-
-            const communityUpdatesText = await getDocs(collection(db, 'announcements'))
-            .then(snapshot => snapshot.docs.map(doc => doc.data().text).join('\\n'));
-
-            const aiInput = {
-                userProfile: `Name: ${owner.name}, Properties: ${owner.properties.map(p => `${p.street}-${p.house}`).join(', ')}`,
-                paymentHistory: paymentHistory,
-                allUpdates: communityUpdatesText,
-            };
-
-            const updates = await getCommunityUpdates(aiInput);
-            setCommunityUpdates(updates.updates);
-
-        } catch (error) {
-             console.error('Error generating community updates:', error);
-             toast({ variant: 'destructive', title: 'Error de IA', description: 'No se pudieron generar las actualizaciones de la comunidad.' });
-        } finally {
-            setGeneratingReport(false);
-        }
-    };
-
-
     if (loading) {
         return <div className="flex justify-center items-center h-full"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>;
     }
@@ -1237,27 +1206,11 @@ export default function ReportsPage() {
                                                 <CardDescription>{(selectedIndividual.properties || []).map(p => `${p.street} - ${p.house}`).join(', ')}</CardDescription>
                                             </div>
                                             <div className="flex gap-2">
-                                                <Button variant="outline" onClick={() => generateCommunityUpdates()} disabled={generatingReport}>
-                                                    {generatingReport ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Wand2 className="mr-2 h-4 w-4"/>}
-                                                    Resumen con IA
-                                                </Button>
                                                 <Button variant="outline" onClick={() => handleExportIndividual('pdf')}><FileText className="mr-2 h-4 w-4" /> Exportar PDF</Button>
                                             </div>
                                         </div>
                                     </CardHeader>
                                     <CardContent className="space-y-6">
-                                        {communityUpdates.length > 0 && (
-                                            <Card>
-                                                <CardHeader>
-                                                    <CardTitle className="text-lg">Actualizaciones Relevantes para ti</CardTitle>
-                                                </CardHeader>
-                                                <CardContent>
-                                                    <ul className="list-disc pl-5 space-y-2">
-                                                        {communityUpdates.map((update, index) => <li key={index}>{update}</li>)}
-                                                    </ul>
-                                                </CardContent>
-                                            </Card>
-                                        )}
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <Card>
                                                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -1760,3 +1713,4 @@ export default function ReportsPage() {
         </div>
     );
 }
+
