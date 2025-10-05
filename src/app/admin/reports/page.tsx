@@ -322,11 +322,11 @@ export default function ReportsPage() {
             return aKeys.houseNum - bKeys.houseNum;
         });
         const today = startOfMonth(new Date());
-    
+
         return sortedOwners.map(owner => {
             const ownerDebts = allDebts.filter(d => d.ownerId === owner.id);
             const ownerHistoricalPayments = allHistoricalPayments.filter(p => p.ownerId === owner.id);
-    
+
             const allOwnerPeriods = [
                 ...ownerDebts.map(d => ({ year: d.year, month: d.month })),
                 ...ownerHistoricalPayments.map(p => ({ year: p.referenceYear, month: p.referenceMonth }))
@@ -337,54 +337,52 @@ export default function ReportsPage() {
                 const oldestPeriod = allOwnerPeriods.sort((a, b) => a.year - b.year || a.month - b.month)[0];
                 firstMonthEver = startOfMonth(new Date(oldestPeriod.year, oldestPeriod.month - 1));
             }
-    
+
             let lastConsecutivePaidMonth: Date | null = null;
             let firstUnpaidMonth: Date | null = null;
-    
+            const july2025 = new Date(2025, 6, 1); // July is month 6
+
             if (firstMonthEver) {
                 let currentCheckMonth = firstMonthEver;
-                // Iterate up to 5 years in the future from today to check for advance payments
-                const limitDate = addMonths(today, 60); 
+                const limitDate = addMonths(today, 60);
 
                 while (isBefore(currentCheckMonth, limitDate)) {
                     const year = getYear(currentCheckMonth);
                     const month = getMonth(currentCheckMonth) + 1;
-    
-                    // Check historical payments first
+
                     const isInHistorical = ownerHistoricalPayments.some(p => p.referenceYear === year && p.referenceMonth === month);
                     if (isInHistorical) {
                         lastConsecutivePaidMonth = currentCheckMonth;
                         currentCheckMonth = addMonths(currentCheckMonth, 1);
                         continue;
                     }
-    
-                    // Check debts for the period
+
                     const debtsForMonth = ownerDebts.filter(d => d.year === year && d.month === month);
                     if (debtsForMonth.length === 0) {
-                        // No debt record for this month, break the chain
                         firstUnpaidMonth = currentCheckMonth;
                         break;
                     }
 
-                    // Check if the month is fully paid based on new rules
-                    const july2025 = new Date(2025, 6, 1); // July is month 6
-                    const isBeforeAug2025 = isBefore(currentCheckMonth, july2025) || isEqual(currentCheckMonth, july2025);
-                    
                     const mainDebt = debtsForMonth.find(d => d.description.toLowerCase().includes('condominio'));
                     const adjustmentDebt = debtsForMonth.find(d => d.description.toLowerCase().includes('ajuste'));
 
                     let isMonthFullyPaid = false;
                     if (mainDebt?.status === 'paid') {
                         const paidAmount = mainDebt.paidAmountUSD || mainDebt.amountUSD;
+                        const isBeforeAug2025 = isBefore(currentCheckMonth, july2025);
+
                         if (isBeforeAug2025) {
-                            if(paidAmount >= 10) {
+                            if (paidAmount >= 15) {
                                 isMonthFullyPaid = true;
-                                if (paidAmount === 10 && adjustmentDebt && adjustmentDebt.status !== 'paid') {
-                                    isMonthFullyPaid = false; // Has adjustment pending
+                            } else if (paidAmount === 10) {
+                                if (adjustmentDebt && adjustmentDebt.status === 'paid') {
+                                    isMonthFullyPaid = true; // Special case for $10 + adjustment paid
+                                } else if (!adjustmentDebt) {
+                                    isMonthFullyPaid = true; // No adjustment existed for this old month
                                 }
                             }
                         } else { // From August 2025 onwards
-                            if(paidAmount >= 15) isMonthFullyPaid = true;
+                            if (paidAmount >= 15) isMonthFullyPaid = true;
                         }
                     }
                     
@@ -394,17 +392,17 @@ export default function ReportsPage() {
                         firstUnpaidMonth = currentCheckMonth;
                         break;
                     }
-    
+
                     currentCheckMonth = addMonths(currentCheckMonth, 1);
                 }
             }
-
-            const hasPendingDebtsBeforeToday = ownerDebts.some(d => {
+            
+            const hasPendingDebtsOnOrBeforeToday = ownerDebts.some(d => {
                 const debtDate = startOfMonth(new Date(d.year, d.month - 1));
                 return d.status === 'pending' && !isBefore(today, debtDate);
             });
-    
-            const isSolvent = !hasPendingDebtsBeforeToday;
+
+            const isSolvent = !hasPendingDebtsOnOrBeforeToday;
             let solvencyPeriod = '';
 
             if (isSolvent) {
@@ -420,12 +418,12 @@ export default function ReportsPage() {
                     solvencyPeriod = 'Desde ' + format(today, 'MMMM yyyy', { locale: es });
                 }
             }
-    
+
             const fromDate = integralDateRange.from;
             const toDate = integralDateRange.to;
             if (fromDate) fromDate.setHours(0, 0, 0, 0);
             if (toDate) toDate.setHours(23, 59, 59, 999);
-    
+
             const ownerPayments = allPayments.filter(p => {
                 const isOwnerPayment = p.beneficiaries.some(b => b.ownerId === owner.id) && p.status === 'aprobado';
                 if (!isOwnerPayment) return false;
@@ -444,16 +442,16 @@ export default function ReportsPage() {
                 const lastPayment = [...ownerPayments].sort((a, b) => b.paymentDate.toMillis() - a.paymentDate.toMillis())[0];
                 lastPaymentDate = format(lastPayment.paymentDate.toDate(), 'dd/MM/yyyy');
             }
-    
+
             const adjustmentDebtUSD = ownerDebts
                 .filter(d => d.status === 'pending' && d.description.toLowerCase().includes('ajuste'))
                 .reduce((sum, d) => sum + d.amountUSD, 0);
-    
+
             const monthsOwed = ownerDebts.filter(d => {
                 const debtDate = startOfMonth(new Date(d.year, d.month - 1));
                 return d.status === 'pending' && !isBefore(today, debtDate) && d.description.toLowerCase().includes('condominio');
             }).length;
-    
+
             return {
                 ownerId: owner.id,
                 name: owner.name,
@@ -473,7 +471,6 @@ export default function ReportsPage() {
             return statusMatch && ownerMatch;
         });
     }, [owners, allDebts, allPayments, allHistoricalPayments, integralDateRange, integralStatusFilter, integralOwnerFilter]);
-
     
     // --- Delinquency Report Logic ---
     const filteredAndSortedDelinquents = useMemo(() => {
