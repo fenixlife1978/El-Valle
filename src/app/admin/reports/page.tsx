@@ -331,14 +331,17 @@ export default function ReportsPage() {
             
             const allPaidPeriods = new Set<string>();
             ownerDebts
-                .filter(d => d.status === 'paid' && (d.paidAmountUSD || d.amountUSD) >= 15) // Paid in full
+                .filter(d => d.status === 'paid' && (d.paidAmountUSD || d.amountUSD) >= 15)
                 .forEach(d => allPaidPeriods.add(`${d.year}-${d.month}`));
             ownerHistoricalPayments.forEach(p => allPaidPeriods.add(`${p.referenceYear}-${p.referenceMonth}`));
 
             let firstMonthEver: Date | null = null;
             if (ownerDebts.length > 0 || ownerHistoricalPayments.length > 0) {
-                const allPeriods = [...ownerDebts.map(d => `${d.year}-${d.month}`), ...ownerHistoricalPayments.map(p => `${p.referenceYear}-${p.referenceMonth}`)];
-                const oldestPeriod = allPeriods.sort((a, b) => {
+                const allOwnerPeriods = [
+                    ...ownerDebts.map(d => `${d.year}-${d.month}`),
+                    ...ownerHistoricalPayments.map(p => `${p.referenceYear}-${p.referenceMonth}`)
+                ];
+                const oldestPeriod = allOwnerPeriods.sort((a, b) => {
                     const [yearA, monthA] = a.split('-').map(Number);
                     const [yearB, monthB] = b.split('-').map(Number);
                     return yearA - yearB || monthA - monthB;
@@ -357,28 +360,30 @@ export default function ReportsPage() {
                     currentCheckMonth = addMonths(currentCheckMonth, 1);
                 }
             }
-            
-            const hasPendingDebtsBeforeToday = ownerDebts.some(d => d.status === 'pending' && !isBefore(today, startOfMonth(new Date(d.year, d.month - 1))));
 
-            let status: 'Solvente' | 'No Solvente' = 'Solvente';
+            const firstUnpaidMonth = lastConsecutivePaidMonth ? addMonths(lastConsecutivePaidMonth, 1) : firstMonthEver;
+            const hasPendingDebtsBeforeToday = ownerDebts.some(d => {
+                const debtDate = startOfMonth(new Date(d.year, d.month - 1));
+                return d.status === 'pending' && !isBefore(today, debtDate);
+            });
+            
+            const isSolvent = !hasPendingDebtsBeforeToday;
             let solvencyPeriod = '';
 
-            if (hasPendingDebtsBeforeToday) {
-                status = 'No Solvente';
-                const firstUnpaidMonth = lastConsecutivePaidMonth ? addMonths(lastConsecutivePaidMonth, 1) : firstMonthEver;
-                if (firstUnpaidMonth) {
-                     solvencyPeriod = `Desde ${format(firstUnpaidMonth, 'MMMM yyyy', { locale: es })}`;
-                } else {
-                    solvencyPeriod = `Desde ${format(today, 'MMMM yyyy', { locale: es })}`;
-                }
-            } else {
-                 status = 'Solvente';
+            if (isSolvent) {
                  if (lastConsecutivePaidMonth) {
-                    solvencyPeriod = `Hasta ${format(lastConsecutivePaidMonth, 'MMMM yyyy', { locale: es })}`;
+                     solvencyPeriod = `Hasta ${format(lastConsecutivePaidMonth, 'MMMM yyyy', { locale: es })}`;
                  } else {
-                    solvencyPeriod = "Al día"; // Fallback, should not happen if they have payments
+                     solvencyPeriod = `Hasta ${format(today, 'MMMM yyyy', { locale: es })}`;
                  }
+            } else {
+                if (firstUnpaidMonth) {
+                    solvencyPeriod = `Desde ${format(firstUnpaidMonth, 'MMMM yyyy', { locale: es })}`;
+                } else {
+                     solvencyPeriod = `Desde ${format(today, 'MMMM yyyy', { locale: es })}`;
+                }
             }
+
 
             const fromDate = integralDateRange.from;
             const toDate = integralDateRange.to;
@@ -421,7 +426,7 @@ export default function ReportsPage() {
                 paidAmount: totalPaid,
                 avgRate,
                 balance: owner.balance,
-                status,
+                status: isSolvent ? 'Solvente' : 'No Solvente',
                 solvencyPeriod,
                 monthsOwed,
                 adjustmentDebtUSD
@@ -1713,4 +1718,3 @@ export default function ReportsPage() {
         </div>
     );
 }
-

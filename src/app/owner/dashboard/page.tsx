@@ -9,7 +9,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Landmark, AlertCircle, Building, Eye, Printer, Megaphone, Loader2, Wallet, FileText, CalendarClock, Scale, Calculator, Minus, Equal, ShieldCheck, BookOpen, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { getCommunityUpdates } from '@/ai/flows/community-updates';
 import { db } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -226,8 +225,11 @@ export default function OwnerDashboardPage() {
 
         let firstMonthEver: Date | null = null;
         if (allDebts.length > 0 || allHistoricalPayments.length > 0) {
-            const allPeriods = [...allDebts.map(d => `${d.year}-${d.month}`), ...allHistoricalPayments.map(p => `${p.referenceYear}-${p.referenceMonth}`)];
-            const oldestPeriod = allPeriods.sort((a, b) => {
+            const allOwnerPeriods = [
+                ...allDebts.map(d => `${d.year}-${d.month}`),
+                ...allHistoricalPayments.map(p => `${p.referenceYear}-${p.referenceMonth}`)
+            ];
+            const oldestPeriod = allOwnerPeriods.sort((a, b) => {
                 const [yearA, monthA] = a.split('-').map(Number);
                 const [yearB, monthB] = b.split('-').map(Number);
                 return yearA - yearB || monthA - monthB;
@@ -246,8 +248,12 @@ export default function OwnerDashboardPage() {
                 currentCheckMonth = addMonths(currentCheckMonth, 1);
             }
         }
-
-        const hasPendingDebtsBeforeToday = allDebts.some(d => d.status === 'pending' && !isBefore(startOfMonth(new Date()), startOfMonth(new Date(d.year, d.month - 1))));
+        
+        const today = startOfMonth(new Date());
+        const hasPendingDebtsBeforeToday = allDebts.some(d => {
+            const debtDate = startOfMonth(new Date(d.year, d.month - 1));
+            return d.status === 'pending' && !isBefore(today, debtDate);
+        });
         
         if (hasPendingDebtsBeforeToday) {
             setSolvencyStatus('moroso');
@@ -255,15 +261,15 @@ export default function OwnerDashboardPage() {
             if (firstUnpaidMonth) {
                 setSolvencyPeriod(`Desde ${format(firstUnpaidMonth, 'MMMM yyyy', { locale: es })}`);
             } else {
-                 setSolvencyPeriod(`Desde ${format(new Date(), 'MMMM yyyy', { locale: es })}`);
+                 setSolvencyPeriod(`Desde ${format(today, 'MMMM yyyy', { locale: es })}`);
             }
         } else {
             setSolvencyStatus('solvente');
-            if (lastConsecutivePaidMonth) {
+             if (lastConsecutivePaidMonth) {
                 setSolvencyPeriod(`Hasta ${format(lastConsecutivePaidMonth, 'MMMM yyyy', { locale: es })}`);
-            } else {
-                setSolvencyPeriod("Al día");
-            }
+             } else {
+                setSolvencyPeriod(`Hasta ${format(today, 'MMMM yyyy', { locale: es })}`);
+             }
         }
 
         const totalDebtUSD = allDebts.filter(d => d.status === 'pending').reduce((sum, d) => sum + d.amountUSD, 0);
