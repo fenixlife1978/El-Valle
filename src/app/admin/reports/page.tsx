@@ -21,7 +21,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Calendar } from "@/components/ui/calendar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from '@/components/ui/label';
-import { format, addMonths, startOfMonth, parse, getMonth, getYear, isBefore, isEqual, differenceInCalendarMonths, differenceInMonths } from 'date-fns';
+import { format, addMonths, startOfMonth, parse, getYear, getMonth, isBefore, isEqual, differenceInCalendarMonths, differenceInMonths } from 'date-fns';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -349,7 +349,6 @@ export default function ReportsPage() {
                 while (isBefore(currentCheckMonth, limitDate)) {
                     const year = getYear(currentCheckMonth);
                     const month = getMonth(currentCheckMonth) + 1;
-                    const periodKey = `${year}-${month}`;
     
                     // Check historical payments first
                     const isInHistorical = ownerHistoricalPayments.some(p => p.referenceYear === year && p.referenceMonth === month);
@@ -370,7 +369,6 @@ export default function ReportsPage() {
                     // Check if the month is fully paid based on new rules
                     const july2025 = new Date(2025, 6, 1); // July is month 6
                     const isBeforeAug2025 = isBefore(currentCheckMonth, july2025) || isEqual(currentCheckMonth, july2025);
-                    const requiredAmount = isBeforeAug2025 ? 10 : 15;
                     
                     const mainDebt = debtsForMonth.find(d => d.description.toLowerCase().includes('condominio'));
                     const adjustmentDebt = debtsForMonth.find(d => d.description.toLowerCase().includes('ajuste'));
@@ -379,14 +377,15 @@ export default function ReportsPage() {
                     if (mainDebt?.status === 'paid') {
                         const paidAmount = mainDebt.paidAmountUSD || mainDebt.amountUSD;
                         if (isBeforeAug2025) {
-                            if(paidAmount >= 10) isMonthFullyPaid = true;
-                        } else {
+                            if(paidAmount >= 10) {
+                                isMonthFullyPaid = true;
+                                if (paidAmount === 10 && adjustmentDebt && adjustmentDebt.status !== 'paid') {
+                                    isMonthFullyPaid = false; // Has adjustment pending
+                                }
+                            }
+                        } else { // From August 2025 onwards
                             if(paidAmount >= 15) isMonthFullyPaid = true;
                         }
-                    }
-
-                    if (mainDebt?.status === 'paid' && paidAmount >= 10 && isBeforeAug2025 && adjustmentDebt && adjustmentDebt.status === 'paid') {
-                        isMonthFullyPaid = true; // Special case for $10 + adjustment paid
                     }
                     
                     if (isMonthFullyPaid) {
@@ -412,14 +411,12 @@ export default function ReportsPage() {
                 if (lastConsecutivePaidMonth) {
                     solvencyPeriod = `Hasta ${format(lastConsecutivePaidMonth, 'MMMM yyyy', { locale: es })}`;
                 } else {
-                    // This case means no debts/payments at all, but no pending debts up to today. So, solvent up to current month.
                     solvencyPeriod = `Hasta ${format(today, 'MMMM yyyy', { locale: es })}`;
                 }
             } else {
                 if (firstUnpaidMonth) {
                     solvencyPeriod = `Desde ${format(firstUnpaidMonth, 'MMMM yyyy', { locale: es })}`;
                 } else {
-                    // Fallback if logic fails, shouldn't happen
                     solvencyPeriod = 'Desde ' + format(today, 'MMMM yyyy', { locale: es });
                 }
             }
