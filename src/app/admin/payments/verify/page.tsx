@@ -27,6 +27,7 @@ type Owner = {
     name: string;
     properties?: { street: string, house: string }[];
     receiptCounter?: number;
+    balance: number;
 };
 
 type Beneficiary = { ownerId: string; ownerName: string; amount: number; street?: string; house?: string; };
@@ -80,9 +81,11 @@ type CompanyInfo = {
 type ReceiptData = {
     payment: FullPayment;
     beneficiary: Beneficiary;
-    ownerName: string; 
-    ownerUnit: string; 
+    ownerName: string;
+    ownerUnit: string;
     paidDebts: Debt[];
+    previousBalance: number;
+    currentBalance: number;
     qrCodeUrl?: string;
 } | null;
 
@@ -372,6 +375,14 @@ export default function VerifyPaymentsPage() {
         return;
     }
     try {
+        const ownerDoc = await getDoc(doc(db, "owners", beneficiary.ownerId));
+        if (!ownerDoc.exists()) {
+             toast({ variant: 'destructive', title: 'Error', description: 'No se encontró al propietario.' });
+            return;
+        }
+        const currentOwnerData = ownerDoc.data() as Owner;
+        const currentBalance = currentOwnerData.balance || 0;
+
         const ownerUnitSummary = (beneficiary.street && beneficiary.house) 
             ? `${beneficiary.street} - ${beneficiary.house}`
             : "Propiedad no especificada";
@@ -388,6 +399,13 @@ export default function VerifyPaymentsPage() {
                 if (a.year !== b.year) return a.year - b.year;
                 return a.month - b.month;
             });
+
+        const totalDebtPaidWithPayment = paidDebts.reduce((sum, debt) => {
+             const debtAmountBs = (debt.paidAmountUSD || debt.amountUSD) * payment.exchangeRate;
+             return sum + debtAmountBs;
+        }, 0);
+        const paymentAmountForOwner = beneficiary.amount;
+        const previousBalance = currentBalance - (paymentAmountForOwner - totalDebtPaidWithPayment);
         
         const receiptNumber = payment.receiptNumbers?.[beneficiary.ownerId] || payment.id.substring(0, 10);
         
@@ -414,6 +432,8 @@ export default function VerifyPaymentsPage() {
             ownerName: beneficiary.ownerName,
             ownerUnit: ownerUnitSummary, 
             paidDebts,
+            previousBalance,
+            currentBalance,
             qrCodeUrl,
         });
         setIsReceiptPdfPreviewOpen(true);
@@ -495,7 +515,7 @@ export default function VerifyPaymentsPage() {
 
   const handleDownloadPdf = async () => {
     if (!receiptData || !companyInfo) return;
-    const { payment, beneficiary, paidDebts, qrCodeUrl } = receiptData;
+    const { payment, beneficiary, paidDebts, qrCodeUrl, previousBalance, currentBalance } = receiptData;
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 14;
@@ -570,7 +590,7 @@ export default function VerifyPaymentsPage() {
             styles: { fontSize: 9, cellPadding: 2.5 },
             didDrawPage: (data: any) => { startY = data.cursor.y; }
         });
-        startY = (doc as any).lastAutoTable.finalY + 8;
+        startY = (doc as any).lastAutoTable.finalY;
     } else {
         totalPaidInConcepts = beneficiary.amount;
         (doc as any).autoTable({
@@ -582,12 +602,30 @@ export default function VerifyPaymentsPage() {
             styles: { fontSize: 9, cellPadding: 2.5 },
             didDrawPage: (data: any) => { startY = data.cursor.y; }
         });
-        startY = (doc as any).lastAutoTable.finalY + 8;
+        startY = (doc as any).lastAutoTable.finalY;
     }
+
+    startY += 8;
     
-    // Totals Section
+    const summaryData = [
+        ['Saldo a Favor Anterior:', `Bs. ${formatToTwoDecimals(previousBalance)}`],
+        ['Monto del Pago Recibido:', `Bs. ${formatToTwoDecimals(beneficiary.amount)}`],
+        ['Total Abonado en Deudas:', `Bs. ${formatToTwoDecimals(totalPaidInConcepts)}`],
+        ['Saldo a Favor Actual:', `Bs. ${formatToTwoDecimals(currentBalance)}`],
+    ];
+
+    (doc as any).autoTable({
+        startY: startY,
+        body: summaryData,
+        theme: 'plain',
+        styles: { fontSize: 9, fontStyle: 'bold' },
+        columnStyles: { 0: { halign: 'right' }, 1: { halign: 'right'} },
+        didDrawPage: (data: any) => { startY = data.cursor.y; }
+    });
+    startY = (doc as any).lastAutoTable.finalY + 10;
+    
     const totalLabel = "TOTAL PAGADO:";
-    const totalValue = `Bs. ${formatToTwoDecimals(totalPaidInConcepts)}`;
+    const totalValue = `Bs. ${formatToTwoDecimals(beneficiary.amount)}`;
     doc.setFontSize(11).setFont('helvetica', 'bold');
     const totalValueWidth = doc.getStringUnitWidth(totalValue) * 11 / doc.internal.scaleFactor;
     doc.text(totalValue, pageWidth - margin, startY, { align: 'right' });
@@ -822,10 +860,12 @@ export default function VerifyPaymentsPage() {
                                 )}
                             </TableBody>
                         </Table>
-                         <div className="text-right font-bold mt-2 pr-4">
-                            Total Pagado: Bs. {formatToTwoDecimals(receiptData.paidDebts.length > 0 ? receiptData.paidDebts.reduce((acc, debt) => acc + ((debt.paidAmountUSD || debt.amountUSD) * receiptData.payment.exchangeRate), 0) : receiptData.beneficiary.amount)}
+                         <div className="space-y-1 text-xs text-right mt-2 pr-4">
+                            <p><strong>Saldo Anterior:</strong> Bs. {formatToTwoDecimals(receiptData.previousBalance)}</p>
+                            <p><strong>Monto Pagado:</strong> Bs. {formatToTwoDecimals(receiptData.beneficiary.amount)}</p>
+                            <p><strong>Saldo Actual:</strong> Bs. {formatToTwoDecimals(receiptData.currentBalance)}</p>
                          </div>
-                         {receiptData.payment.observations && (
+                        {receiptData.payment.observations && (
                             <div className="mt-4 p-2 border-t text-xs">
                                 <p className="font-bold">Observaciones:</p>
                                 <p className="italic whitespace-pre-wrap">{receiptData.payment.observations}</p>
@@ -881,5 +921,6 @@ export default function VerifyPaymentsPage() {
     
 
     
+
 
 
