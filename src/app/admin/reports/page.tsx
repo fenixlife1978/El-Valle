@@ -22,7 +22,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Calendar } from "@/components/ui/calendar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from '@/components/ui/label';
-import { format, addMonths, startOfMonth, parse, getYear, getMonth, isBefore, isEqual, differenceInCalendarMonths, differenceInMonths } from 'date-fns';
+import { format, addMonths, startOfMonth, parse, getYear, getMonth, isBefore, isEqual, differenceInCalendarMonths, differenceInMonths, endOfMonth, isSameMonth } from 'date-fns';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -327,7 +327,7 @@ export default function ReportsPage() {
             const ownerDebts = allDebts.filter(d => d.ownerId === owner.id);
             const ownerHistoricalPayments = allHistoricalPayments.filter(p => p.ownerId === owner.id);
             
-            // --- New Solvency Logic ---
+            // --- Solvency Logic ---
             const allOwnerPeriods = [
                 ...ownerDebts.map(d => ({ year: d.year, month: d.month })),
                 ...ownerHistoricalPayments.map(p => ({ year: p.referenceYear, month: p.referenceMonth }))
@@ -341,50 +341,41 @@ export default function ReportsPage() {
 
             let lastConsecutivePaidMonth: Date | null = null;
             let firstUnpaidMonth: Date | null = null;
-            const july2025 = new Date(2025, 6, 1); // Represents July 2025
-
+            
             if (firstMonthEver) {
                 let currentCheckMonth = firstMonthEver;
-                const limitDate = addMonths(new Date(), 120); // Check up to 10 years in the future
+                const limitDate = endOfMonth(addMonths(new Date(), 240)); 
 
                 while (isBefore(currentCheckMonth, limitDate)) {
                     const year = getYear(currentCheckMonth);
                     const month = getMonth(currentCheckMonth) + 1;
-
-                    const isInHistorical = ownerHistoricalPayments.some(p => p.referenceYear === year && p.referenceMonth === month);
-                    if (isInHistorical) {
-                        lastConsecutivePaidMonth = currentCheckMonth;
-                        currentCheckMonth = addMonths(currentCheckMonth, 1);
-                        continue;
-                    }
-
-                    const debtsForMonth = ownerDebts.filter(d => d.year === year && d.month === month);
-                    if (debtsForMonth.length === 0) {
-                        firstUnpaidMonth = currentCheckMonth;
-                        break;
-                    }
-                    
-                    const mainDebt = debtsForMonth.find(d => d.description.toLowerCase().includes('condominio'));
-                    const adjustmentDebt = debtsForMonth.find(d => d.description.toLowerCase().includes('ajuste'));
+                    const july2025 = new Date(2025, 6, 1);
                     let isMonthFullyPaid = false;
+                    
+                    const isInHistorical = ownerHistoricalPayments.some(p => p.referenceYear === year && p.referenceMonth === month);
+                    
+                    if (isInHistorical) {
+                        isMonthFullyPaid = true;
+                    } else {
+                        const debtsForMonth = ownerDebts.filter(d => d.year === year && d.month === month);
+                        if (debtsForMonth.length > 0) {
+                            const mainDebt = debtsForMonth.find(d => d.description.toLowerCase().includes('condominio'));
+                            const adjustmentDebt = debtsForMonth.find(d => d.description.toLowerCase().includes('ajuste'));
 
-                    if (mainDebt?.status === 'paid') {
-                        const paidAmount = mainDebt.paidAmountUSD || mainDebt.amountUSD;
-                        const isBeforeAug2025 = isBefore(currentCheckMonth, july2025);
+                            if (mainDebt?.status === 'paid') {
+                                const paidAmount = mainDebt.paidAmountUSD || mainDebt.amountUSD;
+                                const isBeforeAug2025 = isBefore(currentCheckMonth, july2025);
 
-                        if (isBeforeAug2025) { // Logic for months up to July 2025
-                             if (paidAmount >= 15) {
-                                isMonthFullyPaid = true;
-                            } else if (paidAmount >= 10) {
-                                // If paid $10, it's fully paid if an adjustment debt was also paid OR if no adjustment was ever needed for that month
-                                if (adjustmentDebt && adjustmentDebt.status === 'paid') {
-                                    isMonthFullyPaid = true;
-                                } else if (!adjustmentDebt) {
-                                    isMonthFullyPaid = true; 
+                                if (isBeforeAug2025) {
+                                    if (paidAmount >= 15) {
+                                        isMonthFullyPaid = true;
+                                    } else if (paidAmount >= 10) {
+                                        isMonthFullyPaid = !adjustmentDebt || adjustmentDebt.status === 'paid';
+                                    }
+                                } else {
+                                    if (paidAmount >= 15) isMonthFullyPaid = true;
                                 }
                             }
-                        } else { // Logic for August 2025 onwards
-                            if (paidAmount >= 15) isMonthFullyPaid = true;
                         }
                     }
 
@@ -392,7 +383,7 @@ export default function ReportsPage() {
                         lastConsecutivePaidMonth = currentCheckMonth;
                     } else {
                         firstUnpaidMonth = currentCheckMonth;
-                        break;
+                        break; 
                     }
                     currentCheckMonth = addMonths(currentCheckMonth, 1);
                 }
@@ -403,19 +394,28 @@ export default function ReportsPage() {
             let solvencyPeriod = '';
             
             if (status === 'No Solvente') {
-                if (firstUnpaidMonth) {
-                    solvencyPeriod = `Desde ${format(firstUnpaidMonth, 'MMMM yyyy', { locale: es })}`;
+                 if (lastConsecutivePaidMonth && !isSameMonth(lastConsecutivePaidMonth, new Date())) {
+                     solvencyPeriod = `Desde ${format(addMonths(lastConsecutivePaidMonth, 1), 'MMMM yyyy', { locale: es })}`;
+                } else if (firstUnpaidMonth) {
+                     solvencyPeriod = `Desde ${format(firstUnpaidMonth, 'MMMM yyyy', { locale: es })}`;
+                } else if (!lastConsecutivePaidMonth && hasAnyPendingDebt) {
+                    const oldestPending = [...ownerDebts].filter(d=>d.status==='pending').sort((a,b) => a.year - b.year || a.month - b.month)[0];
+                    if(oldestPending) {
+                       solvencyPeriod = `Desde ${format(new Date(oldestPending.year, oldestPending.month-1), 'MMMM yyyy', { locale: es })}`;
+                    } else {
+                        solvencyPeriod = `Desde ${format(new Date(), 'MMMM yyyy', { locale: es })}`;
+                    }
                 } else {
-                    solvencyPeriod = "Desde este mes"; // Fallback
+                     solvencyPeriod = `Desde ${format(new Date(), 'MMMM yyyy', { locale: es })}`;
                 }
             } else { // Solvente
                 if (lastConsecutivePaidMonth) {
                     solvencyPeriod = `Hasta ${format(lastConsecutivePaidMonth, 'MMMM yyyy', { locale: es })}`;
-                } else {
+                } else if (!hasAnyPendingDebt) {
                      solvencyPeriod = `Hasta ${format(new Date(), 'MMMM yyyy', { locale: es })}`;
                 }
             }
-            // --- End of New Solvency Logic ---
+            // --- End of Solvency Logic ---
 
             const fromDate = integralDateRange.from;
             const toDate = integralDateRange.to;
