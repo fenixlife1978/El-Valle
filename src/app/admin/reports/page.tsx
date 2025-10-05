@@ -339,15 +339,17 @@ export default function ReportsPage() {
             }
 
             let lastConsecutivePaidMonth: Date | null = null;
+            let firstUnpaidMonth: Date | null = null;
             
             if (firstMonthEver) {
                 let currentCheckMonth = firstMonthEver;
-                const limitDate = endOfMonth(addMonths(new Date(), 240)); 
+                const limitDate = endOfMonth(addMonths(new Date(), 120)); 
 
                 while (isBefore(currentCheckMonth, limitDate)) {
                     const year = getYear(currentCheckMonth);
                     const month = getMonth(currentCheckMonth) + 1;
                     const july2025 = new Date(2025, 6, 1);
+                    const isBeforeAug2025 = isBefore(currentCheckMonth, july2025);
                     let isMonthFullyPaid = false;
                     
                     const isInHistorical = ownerHistoricalPayments.some(p => p.referenceYear === year && p.referenceMonth === month);
@@ -362,11 +364,9 @@ export default function ReportsPage() {
 
                             if (mainDebt?.status === 'paid') {
                                 const mainPaidAmount = mainDebt.paidAmountUSD || mainDebt.amountUSD;
-                                const isBeforeAug2025 = isBefore(currentCheckMonth, july2025);
-
                                 if (mainPaidAmount >= 15) {
                                     isMonthFullyPaid = true;
-                                } else if (isBeforeAug2025 && mainPaidAmount >= 10) {
+                                } else if (mainPaidAmount >= 10 && isBeforeAug2025) {
                                     isMonthFullyPaid = !adjustmentDebt || adjustmentDebt.status === 'paid';
                                 }
                             }
@@ -376,6 +376,9 @@ export default function ReportsPage() {
                     if (isMonthFullyPaid) {
                         lastConsecutivePaidMonth = currentCheckMonth;
                     } else {
+                        if (!firstUnpaidMonth) {
+                            firstUnpaidMonth = currentCheckMonth;
+                        }
                         break; 
                     }
                     currentCheckMonth = addMonths(currentCheckMonth, 1);
@@ -387,9 +390,8 @@ export default function ReportsPage() {
             let solvencyPeriod = '';
 
             if (status === 'No Solvente') {
-                 if (lastConsecutivePaidMonth) {
-                    const firstUnpaidDate = addMonths(lastConsecutivePaidMonth, 1);
-                    solvencyPeriod = `Desde ${format(firstUnpaidDate, 'MMMM yyyy', { locale: es })}`;
+                 if (firstUnpaidMonth) {
+                    solvencyPeriod = `Desde ${format(firstUnpaidMonth, 'MMMM yyyy', { locale: es })}`;
                 } else if(firstMonthEver) {
                     solvencyPeriod = `Desde ${format(firstMonthEver, 'MMMM yyyy', { locale: es })}`;
                 } else {

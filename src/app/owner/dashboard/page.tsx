@@ -217,9 +217,12 @@ export default function OwnerDashboardPage() {
     useEffect(() => {
         if (loading || !userData) return;
 
+        const ownerDebts = allDebts;
+        const ownerHistoricalPayments = allHistoricalPayments;
+
         const allOwnerPeriods = [
-            ...allDebts.map(d => ({ year: d.year, month: d.month })),
-            ...allHistoricalPayments.map(p => ({ year: p.referenceYear, month: p.referenceMonth }))
+            ...ownerDebts.map(d => ({ year: d.year, month: d.month })),
+            ...ownerHistoricalPayments.map(p => ({ year: p.referenceYear, month: p.referenceMonth }))
         ];
 
         let firstMonthEver: Date | null = null;
@@ -229,34 +232,34 @@ export default function OwnerDashboardPage() {
         }
 
         let lastConsecutivePaidMonth: Date | null = null;
-        
+        let firstUnpaidMonth: Date | null = null;
+
         if (firstMonthEver) {
             let currentCheckMonth = firstMonthEver;
-            const limitDate = endOfMonth(addMonths(new Date(), 240)); 
+            const limitDate = endOfMonth(addMonths(new Date(), 120)); // Look up to 10 years in the future
 
             while (isBefore(currentCheckMonth, limitDate)) {
                 const year = getYear(currentCheckMonth);
                 const month = getMonth(currentCheckMonth) + 1;
                 const july2025 = new Date(2025, 6, 1);
+                const isBeforeAug2025 = isBefore(currentCheckMonth, july2025);
                 let isMonthFullyPaid = false;
-                
-                const isInHistorical = allHistoricalPayments.some(p => p.referenceYear === year && p.referenceMonth === month);
-                
+
+                const isInHistorical = ownerHistoricalPayments.some(p => p.referenceYear === year && p.referenceMonth === month);
+
                 if (isInHistorical) {
                     isMonthFullyPaid = true;
                 } else {
-                    const debtsForMonth = allDebts.filter(d => d.year === year && d.month === month);
+                    const debtsForMonth = ownerDebts.filter(d => d.year === year && d.month === month);
                     if (debtsForMonth.length > 0) {
                         const mainDebt = debtsForMonth.find(d => d.description.toLowerCase().includes('condominio'));
                         const adjustmentDebt = debtsForMonth.find(d => d.description.toLowerCase().includes('ajuste'));
 
                         if (mainDebt?.status === 'paid') {
                             const mainPaidAmount = mainDebt.paidAmountUSD || mainDebt.amountUSD;
-                            const isBeforeAug2025 = isBefore(currentCheckMonth, july2025);
-
                             if (mainPaidAmount >= 15) {
                                 isMonthFullyPaid = true;
-                            } else if (isBeforeAug2025 && mainPaidAmount >= 10) {
+                            } else if (mainPaidAmount >= 10 && isBeforeAug2025) {
                                 isMonthFullyPaid = !adjustmentDebt || adjustmentDebt.status === 'paid';
                             }
                         }
@@ -266,34 +269,36 @@ export default function OwnerDashboardPage() {
                 if (isMonthFullyPaid) {
                     lastConsecutivePaidMonth = currentCheckMonth;
                 } else {
-                    break; 
+                    if (!firstUnpaidMonth) {
+                        firstUnpaidMonth = currentCheckMonth;
+                    }
+                    break;
                 }
                 currentCheckMonth = addMonths(currentCheckMonth, 1);
             }
         }
-        
-        const hasAnyPendingDebt = allDebts.some(d => d.status === 'pending');
+
+        const hasAnyPendingDebt = ownerDebts.some(d => d.status === 'pending');
         
         if (hasAnyPendingDebt) {
             setSolvencyStatus('moroso');
-            if (lastConsecutivePaidMonth) {
-                const firstUnpaidDate = addMonths(lastConsecutivePaidMonth, 1);
-                setSolvencyPeriod(`Desde ${format(firstUnpaidDate, 'MMMM yyyy', { locale: es })}`);
-            } else if(firstMonthEver) {
+            if (firstUnpaidMonth) {
+                setSolvencyPeriod(`Desde ${format(firstUnpaidMonth, 'MMMM yyyy', { locale: es })}`);
+            } else if (firstMonthEver) {
                 setSolvencyPeriod(`Desde ${format(firstMonthEver, 'MMMM yyyy', { locale: es })}`);
             } else {
                 setSolvencyPeriod(`Desde ${format(new Date(), 'MMMM yyyy', { locale: es })}`);
             }
         } else {
             setSolvencyStatus('solvente');
-             if (lastConsecutivePaidMonth) {
+            if (lastConsecutivePaidMonth) {
                 setSolvencyPeriod(`Hasta ${format(lastConsecutivePaidMonth, 'MMMM yyyy', { locale: es })}`);
-             } else {
+            } else {
                 setSolvencyPeriod(`Hasta ${format(new Date(), 'MMMM yyyy', { locale: es })}`);
-             }
+            }
         }
 
-        const totalDebtUSD = allDebts.filter(d => d.status === 'pending').reduce((sum, d) => sum + d.amountUSD, 0);
+        const totalDebtUSD = ownerDebts.filter(d => d.status === 'pending').reduce((sum, d) => sum + d.amountUSD, 0);
         setDashboardStats(prev => ({ ...prev, totalDebtUSD }));
     
     }, [allDebts, allHistoricalPayments, loading, userData]);
