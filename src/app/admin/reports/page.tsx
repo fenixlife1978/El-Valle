@@ -340,11 +340,11 @@ export default function ReportsPage() {
 
             let lastConsecutivePaidMonth: Date | null = null;
             let firstUnpaidMonth: Date | null = null;
-            const july2025 = new Date(2025, 6, 1); // July is month 6
+            const july2025 = new Date(2025, 6, 1);
 
             if (firstMonthEver) {
                 let currentCheckMonth = firstMonthEver;
-                const limitDate = addMonths(today, 60);
+                const limitDate = addMonths(today, 60); // Check up to 5 years in the future
 
                 while (isBefore(currentCheckMonth, limitDate)) {
                     const year = getYear(currentCheckMonth);
@@ -374,11 +374,11 @@ export default function ReportsPage() {
                         if (isBeforeAug2025) {
                             if (paidAmount >= 15) {
                                 isMonthFullyPaid = true;
-                            } else if (paidAmount === 10) {
+                            } else if (paidAmount >= 10) {
                                 if (adjustmentDebt && adjustmentDebt.status === 'paid') {
-                                    isMonthFullyPaid = true; // Special case for $10 + adjustment paid
+                                    isMonthFullyPaid = true; // $10 + adjustment paid
                                 } else if (!adjustmentDebt) {
-                                    isMonthFullyPaid = true; // No adjustment existed for this old month
+                                    isMonthFullyPaid = true; // Old month without adjustment, $10 is enough
                                 }
                             }
                         } else { // From August 2025 onwards
@@ -392,7 +392,6 @@ export default function ReportsPage() {
                         firstUnpaidMonth = currentCheckMonth;
                         break;
                     }
-
                     currentCheckMonth = addMonths(currentCheckMonth, 1);
                 }
             }
@@ -409,13 +408,13 @@ export default function ReportsPage() {
                 if (lastConsecutivePaidMonth) {
                     solvencyPeriod = `Hasta ${format(lastConsecutivePaidMonth, 'MMMM yyyy', { locale: es })}`;
                 } else {
-                    solvencyPeriod = `Hasta ${format(today, 'MMMM yyyy', { locale: es })}`;
+                     solvencyPeriod = `Hasta ${format(addMonths(today, -1), 'MMMM yyyy', { locale: es })}`;
                 }
             } else {
                 if (firstUnpaidMonth) {
                     solvencyPeriod = `Desde ${format(firstUnpaidMonth, 'MMMM yyyy', { locale: es })}`;
                 } else {
-                    solvencyPeriod = 'Desde ' + format(today, 'MMMM yyyy', { locale: es });
+                    solvencyPeriod = `Desde ${format(today, 'MMMM yyyy', { locale: es })}`;
                 }
             }
 
