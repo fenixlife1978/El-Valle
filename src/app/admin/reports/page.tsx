@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -325,12 +326,13 @@ export default function ReportsPage() {
         return sortedOwners.map(owner => {
             const ownerDebts = allDebts.filter(d => d.ownerId === owner.id);
             const ownerHistoricalPayments = allHistoricalPayments.filter(p => p.ownerId === owner.id);
-
+            
+            // --- New Solvency Logic ---
             const allOwnerPeriods = [
                 ...ownerDebts.map(d => ({ year: d.year, month: d.month })),
                 ...ownerHistoricalPayments.map(p => ({ year: p.referenceYear, month: p.referenceMonth }))
             ];
-            
+
             let firstMonthEver: Date | null = null;
             if (allOwnerPeriods.length > 0) {
                 const oldestPeriod = allOwnerPeriods.sort((a, b) => a.year - b.year || a.month - b.month)[0];
@@ -339,82 +341,81 @@ export default function ReportsPage() {
 
             let lastConsecutivePaidMonth: Date | null = null;
             let firstUnpaidMonth: Date | null = null;
-            const july2025 = new Date(2025, 6, 1); // Represents July 2025
+            const july2025 = new Date(2025, 6, 1);
+            const today = startOfMonth(new Date());
 
             if (firstMonthEver) {
-                let currentCheckMonth = firstMonthEver;
-                const limitDate = addMonths(new Date(), 60); // Check up to 5 years in the future
+                let currentCheckMonth = addMonths(firstMonthEver, -1);
+                const limitDate = addMonths(new Date(), 60);
 
                 while (isBefore(currentCheckMonth, limitDate)) {
-                    const year = getYear(currentCheckMonth);
-                    const month = getMonth(currentCheckMonth) + 1;
-
-                    const isInHistorical = ownerHistoricalPayments.some(p => p.referenceYear === year && p.referenceMonth === month);
-                    if (isInHistorical) {
-                        lastConsecutivePaidMonth = currentCheckMonth;
-                        currentCheckMonth = addMonths(currentCheckMonth, 1);
-                        continue;
-                    }
-
-                    const debtsForMonth = ownerDebts.filter(d => d.year === year && d.month === month);
-                    if (debtsForMonth.length === 0) {
-                        firstUnpaidMonth = currentCheckMonth;
-                        break;
-                    }
-
-                    const mainDebt = debtsForMonth.find(d => d.description.toLowerCase().includes('condominio'));
-                    const adjustmentDebt = debtsForMonth.find(d => d.description.toLowerCase().includes('ajuste'));
+                    const nextMonth = addMonths(currentCheckMonth, 1);
+                    const year = getYear(nextMonth);
+                    const month = getMonth(nextMonth) + 1;
 
                     let isMonthFullyPaid = false;
-                    if (mainDebt?.status === 'paid') {
-                        const paidAmount = mainDebt.paidAmountUSD || mainDebt.amountUSD;
-                        const isBeforeAug2025 = isBefore(currentCheckMonth, july2025);
+                    const isInHistorical = ownerHistoricalPayments.some(p => p.referenceYear === year && p.referenceMonth === month);
+                    
+                    if (isInHistorical) {
+                        isMonthFullyPaid = true;
+                    } else {
+                        const debtsForMonth = ownerDebts.filter(d => d.year === year && d.month === month);
+                        if (debtsForMonth.length > 0) {
+                            const mainDebt = debtsForMonth.find(d => d.description.toLowerCase().includes('condominio'));
+                            const adjustmentDebt = debtsForMonth.find(d => d.description.toLowerCase().includes('ajuste'));
+                            
+                            if (mainDebt?.status === 'paid') {
+                                const paidAmount = mainDebt.paidAmountUSD || mainDebt.amountUSD;
+                                const isBeforeAug2025 = isBefore(nextMonth, july2025);
 
-                        if (isBeforeAug2025) {
-                            if (paidAmount >= 15) {
-                                isMonthFullyPaid = true;
-                            } else if (paidAmount >= 10) {
-                                if (adjustmentDebt && adjustmentDebt.status === 'paid') {
-                                    isMonthFullyPaid = true; // $10 + adjustment paid
-                                } else if (!adjustmentDebt) {
-                                    isMonthFullyPaid = true; // Old month without adjustment, $10 is enough
+                                if (isBeforeAug2025) {
+                                    if (paidAmount >= 15) {
+                                        isMonthFullyPaid = true;
+                                    } else if (paidAmount >= 10) {
+                                        if (adjustmentDebt && adjustmentDebt.status === 'paid') {
+                                            isMonthFullyPaid = true;
+                                        } else if (!adjustmentDebt) {
+                                            isMonthFullyPaid = true;
+                                        }
+                                    }
+                                } else {
+                                    if (paidAmount >= 15) isMonthFullyPaid = true;
                                 }
                             }
-                        } else { // From August 2025 onwards
-                            if (paidAmount >= 15) isMonthFullyPaid = true;
                         }
                     }
-                    
+
                     if (isMonthFullyPaid) {
-                        lastConsecutivePaidMonth = currentCheckMonth;
+                        lastConsecutivePaidMonth = nextMonth;
+                        currentCheckMonth = nextMonth;
                     } else {
-                        firstUnpaidMonth = currentCheckMonth;
-                        break;
+                        firstUnpaidMonth = nextMonth;
+                        break; 
                     }
-                    currentCheckMonth = addMonths(currentCheckMonth, 1);
                 }
             }
-            
-            const hasAnyPendingDebt = ownerDebts.some(d => d.status === 'pending');
-            const isSolvent = !hasAnyPendingDebt;
 
+            const hasPendingDebtsOnOrBeforeToday = ownerDebts.some(d => {
+                const debtDate = startOfMonth(new Date(d.year, d.month - 1));
+                return d.status === 'pending' && !isBefore(today, debtDate);
+            });
+
+            let status: 'Solvente' | 'No Solvente' = 'Solvente';
             let solvencyPeriod = '';
-            if (isSolvent) {
-                if (lastConsecutivePaidMonth) {
-                    solvencyPeriod = `Hasta ${format(lastConsecutivePaidMonth, 'MMMM yyyy', { locale: es })}`;
-                } else {
-                    solvencyPeriod = 'Hasta la fecha'; // Fallback if no paid months found but still solvent.
-                }
-            } else {
+
+            if (hasPendingDebtsOnOrBeforeToday) {
+                status = 'No Solvente';
                 if (firstUnpaidMonth) {
-                    solvencyPeriod = `Desde ${format(firstUnpaidMonth, 'MMMM yyyy', { locale: es })}`;
+                     solvencyPeriod = `Desde ${format(firstUnpaidMonth, 'MMMM yyyy', { locale: es })}`;
                 } else if(firstMonthEver) {
                     solvencyPeriod = `Desde ${format(firstMonthEver, 'MMMM yyyy', { locale: es })}`;
-                } else {
-                    solvencyPeriod = `Desde ${format(new Date(), 'MMMM yyyy', { locale: es })}`;
+                }
+            } else {
+                if (lastConsecutivePaidMonth) {
+                     solvencyPeriod = `Hasta ${format(lastConsecutivePaidMonth, 'MMMM yyyy', { locale: es })}`;
                 }
             }
-            
+            // --- End of New Solvency Logic ---
 
             const fromDate = integralDateRange.from;
             const toDate = integralDateRange.to;
@@ -445,7 +446,6 @@ export default function ReportsPage() {
                 .reduce((sum, d) => sum + d.amountUSD, 0);
 
             const monthsOwed = ownerDebts.filter(d => {
-                const debtDate = startOfMonth(new Date(d.year, d.month - 1));
                 return d.status === 'pending' && d.description.toLowerCase().includes('condominio');
             }).length;
 
@@ -457,7 +457,7 @@ export default function ReportsPage() {
                 paidAmount: totalPaid,
                 avgRate,
                 balance: owner.balance,
-                status: isSolvent ? 'Solvente' : 'No Solvente',
+                status,
                 solvencyPeriod,
                 monthsOwed,
                 adjustmentDebtUSD
@@ -1748,5 +1748,7 @@ export default function ReportsPage() {
         </div>
     );
 }
+
+    
 
     
