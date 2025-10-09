@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -26,12 +27,10 @@ export default function LoginPage() {
     const role = searchParams.get('role');
 
     useEffect(() => {
-        if (role === 'admin') {
-            setEmail('edwinfaguiars@gmail.com');
-        } else {
-            setEmail('');
+        if (!role) {
+            router.replace('/');
         }
-    }, [role]);
+    }, [role, router]);
 
 
     if (!role) {
@@ -134,7 +133,7 @@ export default function LoginPage() {
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
-                                disabled={loading || role === 'admin'}
+                                disabled={loading}
                             />
                         </div>
                         <div className="space-y-2">
