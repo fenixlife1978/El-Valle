@@ -12,6 +12,7 @@ import { db } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
 import { doc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { useAuth } from '@/hooks/use-auth';
 
 
 type OwnerProfile = {
@@ -31,7 +32,7 @@ const emptyOwnerProfile: OwnerProfile = {
 export default function OwnerSettingsPage() {
     const { toast } = useToast();
     const router = useRouter();
-    const [session, setSession] = useState<any>(null);
+    const { user: authUser, loading: authLoading } = useAuth();
 
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -41,15 +42,13 @@ export default function OwnerSettingsPage() {
 
 
     useEffect(() => {
-        const userSession = localStorage.getItem('user-session');
-        if (!userSession) {
+        if (authLoading) return;
+        if (!authUser) {
             router.push('/login?role=owner');
             return;
         }
-        const parsedSession = JSON.parse(userSession);
-        setSession(parsedSession);
 
-        const userRef = doc(db, 'owners', parsedSession.uid);
+        const userRef = doc(db, 'owners', authUser.uid);
         const unsubscribe = onSnapshot(userRef, (snapshot) => {
             if (snapshot.exists()) {
                 const data = snapshot.data();
@@ -70,7 +69,7 @@ export default function OwnerSettingsPage() {
         });
 
         return () => unsubscribe();
-    }, [router, toast]);
+    }, [router, toast, authUser, authLoading]);
 
     const handleProfileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setProfile({ ...profile, [e.target.name]: e.target.value });
@@ -116,7 +115,7 @@ export default function OwnerSettingsPage() {
     };
 
 
-    if (loading) {
+    if (loading || authLoading) {
         return (
             <div className="flex justify-center items-center h-full">
                 <Loader2 className="h-10 w-10 animate-spin text-primary" />
