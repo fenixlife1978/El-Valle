@@ -1,8 +1,9 @@
+
 'use client';
 
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Shield, User, UserPlus, LogIn } from 'lucide-react';
+import { Shield, User, UserPlus } from 'lucide-react';
 import Image from 'next/image';
 
 export default function WelcomePage() {
