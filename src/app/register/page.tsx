@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -65,10 +66,10 @@ export default function RegisterPage() {
             await setDoc(doc(db, "owners", user.uid), {
                 name,
                 email,
-                role,
+                role: role,
                 balance: 0,
                 properties: [],
-                passwordChanged: role === 'admin', // Admins don't need to change password, owners do.
+                passwordChanged: role === 'administrador', // Admins don't need to change password, owners do.
                 createdAt: Timestamp.now()
             });
 
