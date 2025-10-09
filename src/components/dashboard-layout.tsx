@@ -1,7 +1,8 @@
+
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { Building2, LogOut, type LucideIcon, ChevronDown, TrendingUp } from 'lucide-react';
 import * as React from 'react';
 import { doc, onSnapshot, Timestamp } from 'firebase/firestore';
@@ -41,8 +42,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { Card } from '@/components/ui/card';
-import { useAuth } from '@/hooks/use-auth';
-import { getAuth } from 'firebase/auth';
 
 export type NavItem = {
   href: string;
@@ -71,9 +70,7 @@ const BCVLogo = () => (
 );
 
 
-const CustomHeader = () => {
-    const { user, ownerData } = useAuth();
-    const router = useRouter();
+const CustomHeader = ({userName, userRole}: {userName: string, userRole: string}) => {
     const [activeRate, setActiveRate] = React.useState<ExchangeRate | null>(null);
 
     React.useEffect(() => {
@@ -95,19 +92,11 @@ const CustomHeader = () => {
         };
     }, []);
 
-    const handleLogout = () => {
-        getAuth().signOut();
-        router.push('/login');
-    };
-
-    const displayName = ownerData?.name || user?.displayName || 'Usuario';
-    const avatarSrc = ownerData?.avatar || user?.photoURL || '';
-
     return (
         <header className="sticky top-0 z-10 flex h-auto flex-col items-center gap-2 border-b bg-background/80 p-2 backdrop-blur-sm sm:flex-row sm:h-16 sm:px-4">
              <div className="flex w-full items-center justify-between sm:w-auto">
                 <SidebarTrigger className="sm:hidden" />
-                <h1 className="text-md font-semibold text-foreground">Hola, {displayName}</h1>
+                <h1 className="text-md font-semibold text-foreground">Hola, {userName}</h1>
             </div>
 
             <div className="flex w-full items-center justify-between gap-4 sm:w-auto sm:ml-auto">
@@ -126,23 +115,18 @@ const CustomHeader = () => {
                     <DropdownMenuTrigger asChild>
                     <Button variant="ghost" className="relative h-10 w-10 rounded-full">
                         <Avatar className="h-10 w-10">
-                        <AvatarImage src={avatarSrc} alt={displayName} data-ai-hint="profile picture"/>
-                        <AvatarFallback>{displayName.charAt(0)}</AvatarFallback>
+                        <AvatarImage src="" alt={userName} data-ai-hint="profile picture"/>
+                        <AvatarFallback>{userName.charAt(0)}</AvatarFallback>
                         </Avatar>
                     </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                     <DropdownMenuLabel>
                         <div className="flex flex-col space-y-1">
-                        <p className="text-sm font-medium leading-none font-headline">{displayName}</p>
-                        <p className="text-xs leading-none text-muted-foreground">{user?.email}</p>
+                        <p className="text-sm font-medium leading-none font-headline">{userName}</p>
+                        <p className="text-xs leading-none text-muted-foreground">{userRole}</p>
                         </div>
                     </DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
-                        <LogOut className="mr-2 h-4 w-4" />
-                        <span>Salir</span>
-                    </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>
             </div>
@@ -153,10 +137,12 @@ const CustomHeader = () => {
 
 export function DashboardLayout({
   children,
+  userName,
+  userRole,
   navItems,
 }: {
   children: React.ReactNode;
-  userName: string; // These are now fallbacks if useAuth is not ready
+  userName: string;
   userRole: string;
   navItems: NavItem[];
 }) {
@@ -242,7 +228,7 @@ export function DashboardLayout({
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>
-        <CustomHeader />
+        <CustomHeader userName={userName} userRole={userRole}/>
         <main className="flex-1 p-4 md:p-8 bg-background">{children}</main>
         <footer className="bg-secondary text-secondary-foreground p-4 text-center text-sm">
            © {new Date().getFullYear()} {companyInfo?.name || 'CondoConnect'}. Todos los derechos reservados.

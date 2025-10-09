@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -14,10 +15,6 @@ import {
 } from 'lucide-react';
 import { type ReactNode } from 'react';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
-import { useAuth } from '@/hooks/use-auth';
-import { useRouter } from 'next/navigation';
-import { Loader2 } from 'lucide-react';
-
 
 const adminNavItems: NavItem[] = [
     { href: "/admin/dashboard", icon: Home, label: "Dashboard" },
@@ -52,29 +49,8 @@ const adminNavItems: NavItem[] = [
 ];
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
-    const { user, loading, role } = useAuth();
-    const router = useRouter();
-
-    if (loading) {
-        return (
-            <div className="flex h-screen items-center justify-center">
-                <Loader2 className="h-12 w-12 animate-spin text-primary" />
-            </div>
-        );
-    }
-
-    if (!user) {
-        router.replace('/login');
-        return null;
-    }
-    
-    if (role && role !== 'administrador') {
-        router.replace('/owner/dashboard'); // Or a generic unauthorized page
-        return null;
-    }
-
     return (
-        <DashboardLayout userName={user.displayName || 'Admin'} userRole="Administrador" navItems={adminNavItems}>
+        <DashboardLayout userName="Administrador" userRole="Administrador" navItems={adminNavItems}>
             {children}
         </DashboardLayout>
     );
