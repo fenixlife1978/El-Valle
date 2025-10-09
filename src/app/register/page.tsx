@@ -66,7 +66,7 @@ export default function RegisterPage() {
             await setDoc(doc(db, "owners", user.uid), {
                 name,
                 email,
-                role: role === 'admin' ? 'administrador' : 'propietario', // <-- FIX: Assign role from URL
+                role: role === 'admin' ? 'administrador' : 'propietario',
                 balance: 0,
                 properties: [],
                 passwordChanged: role === 'admin', // Admins don't need to change password, owners do.
