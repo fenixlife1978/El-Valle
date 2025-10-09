@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { signInWithEmailAndPassword, getAuth } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -10,16 +10,34 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, LogIn } from 'lucide-react';
+import { Loader2, LogIn, ArrowLeft } from 'lucide-react';
 import Image from 'next/image';
+import Link from 'next/link';
 
 export default function LoginPage() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const router = useRouter();
+    const searchParams = useSearchParams();
     const { toast } = useToast();
     const auth = getAuth();
+
+    const role = searchParams.get('role');
+
+    useEffect(() => {
+        if (role === 'admin') {
+            setEmail('vallecondo@gmail.com');
+        } else {
+            setEmail('');
+        }
+    }, [role]);
+
+
+    if (!role) {
+         router.replace('/');
+         return null;
+    }
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -42,7 +60,11 @@ export default function LoginPage() {
 
             if (userDoc.exists()) {
                 const userData = userDoc.data();
-                const role = userData.role;
+                const userRole = userData.role;
+
+                if (role !== userRole) {
+                    throw new Error(`Acceso denegado. Este usuario no tiene el rol de ${role}.`);
+                }
 
                 toast({
                     title: 'Inicio de Sesión Exitoso',
@@ -50,10 +72,9 @@ export default function LoginPage() {
                     className: 'bg-green-100 border-green-400'
                 });
 
-                if (role === 'administrador') {
+                if (userRole === 'administrador') {
                     router.push('/admin/dashboard');
-                } else if (role === 'propietario') {
-                    // Check if password needs changing
+                } else if (userRole === 'propietario') {
                     if (!userData.passwordChanged) {
                         router.push('/owner/change-password');
                     } else {
@@ -83,16 +104,22 @@ export default function LoginPage() {
             setLoading(false);
         }
     };
+    
+    const title = role === 'admin' ? 'Acceso de Administrador' : 'Portal de Propietario';
+    const description = role === 'admin' ? 'Inicia sesión para gestionar el condominio.' : 'Inicia sesión para consultar tu información.';
 
     return (
-        <main className="min-h-screen flex items-center justify-center bg-background p-4">
+        <main className="min-h-screen flex items-center justify-center bg-background p-4 relative">
+            <Link href="/" className="absolute top-4 left-4">
+                <Button variant="outline"><ArrowLeft className="mr-2 h-4 w-4" /> Volver</Button>
+            </Link>
             <Card className="w-full max-w-sm">
                 <CardHeader className="text-center">
                     <div className="mx-auto mb-4">
                         <Image src="/logo.png" alt="Logo" width={80} height={80} data-ai-hint="logo for a condo app"/>
                     </div>
-                    <CardTitle>CondoConnect</CardTitle>
-                    <CardDescription>Inicia sesión para acceder a tu panel</CardDescription>
+                    <CardTitle className="capitalize font-headline">{title}</CardTitle>
+                    <CardDescription>{description}</CardDescription>
                 </CardHeader>
                 <form onSubmit={handleLogin}>
                     <CardContent className="space-y-4">
@@ -105,7 +132,7 @@ export default function LoginPage() {
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
-                                disabled={loading}
+                                disabled={loading || role === 'admin'}
                             />
                         </div>
                         <div className="space-y-2">
