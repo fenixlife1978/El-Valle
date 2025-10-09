@@ -25,13 +25,13 @@
     --accent: 45 93% 47%; /* Yellow */
     --accent-foreground: 224 71% 4%;
 
-    --destructive: 24 95% 53%; /* Dark Orange */
+    --destructive: 24 95% 53%; /* Dark Orange, fallback */
     --destructive-foreground: 0 0% 98%;
     
     --success: 142 71% 41%;
     --success-foreground: 0 0% 98%;
     
-    --warning: 35 92% 55%; /* Orange */
+    --warning: 35 92% 55%; /* Orange, fallback */
     --warning-foreground: 0 0% 98%;
 
     --border: 210 40% 89%;
@@ -78,13 +78,13 @@
     --accent: 45 93% 47%; /* Yellow */
     --accent-foreground: 224 71% 4%;
     
-    --destructive: 24 95% 53%; /* Dark Orange */
-    --destructive-foreground: 0 0% 98%;
+    --destructive: 45 93% 47%; /* Yellow for destructive actions */
+    --destructive-foreground: 224 71% 4%;
     
     --success: 142 71% 41%;
     --success-foreground: 0 0% 98%;
 
-    --warning: 35 92% 55%; /* Orange */
+    --warning: 35 92% 55%; /* Orange, fallback */
     --warning-foreground: 0 0% 98%;
 
     --border: 224 71% 14%;
