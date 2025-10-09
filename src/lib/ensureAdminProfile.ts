@@ -1,11 +1,10 @@
-
 import { doc, getDoc, setDoc, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
 // This function now returns a boolean indicating if the profile existed before the check.
 export const ensureAdminProfile = async (showToast?: (options: any) => void): Promise<boolean> => {
     const adminId = 'valle-admin-main-account'; // A hardcoded, unique ID for the main admin
-    const adminEmail = 'vallecondo@gmail.com';
+    const adminEmail = 'edwinfaguiars@gmail.com';
     const adminName = 'Valle Admin';
     const adminRef = doc(db, "owners", adminId);
     

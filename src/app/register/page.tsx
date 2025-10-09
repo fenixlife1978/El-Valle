@@ -2,19 +2,20 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { signInWithEmailAndPassword, getAuth } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { createUserWithEmailAndPassword, getAuth } from 'firebase/auth';
+import { doc, setDoc, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, LogIn, ArrowLeft } from 'lucide-react';
+import { Loader2, UserPlus, ArrowLeft } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 
-export default function LoginPage() {
+export default function RegisterPage() {
+    const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
@@ -26,80 +27,71 @@ export default function LoginPage() {
     const role = searchParams.get('role');
 
     useEffect(() => {
-        if (role === 'admin') {
-            setEmail('edwinfaguiars@gmail.com');
-        } else {
-            setEmail('');
+        if (!role) {
+            router.replace('/');
         }
-    }, [role]);
-
+    }, [role, router]);
 
     if (!role) {
-         router.replace('/');
-         return null;
+        return null;
     }
 
-    const handleLogin = async (e: React.FormEvent) => {
+    const handleRegister = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!email || !password) {
+        if (!name || !email || !password) {
             toast({
                 variant: 'destructive',
                 title: 'Campos requeridos',
-                description: 'Por favor, ingrese su email y contraseña.',
+                description: 'Por favor, complete todos los campos.',
+            });
+            return;
+        }
+        if (password.length < 6) {
+            toast({
+                variant: 'destructive',
+                title: 'Contraseña Débil',
+                description: 'La contraseña debe tener al menos 6 caracteres.',
             });
             return;
         }
 
         setLoading(true);
         try {
-            const userCredential = await signInWithEmailAndPassword(auth, email, password);
+            // 1. Create user in Firebase Authentication
+            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
 
-            const userDocRef = doc(db, 'owners', user.uid);
-            const userDoc = await getDoc(userDocRef);
+            // 2. Create user profile in Firestore
+            await setDoc(doc(db, "owners", user.uid), {
+                name,
+                email,
+                role,
+                balance: 0,
+                properties: [],
+                passwordChanged: role === 'admin', // Admins don't need to change password, owners do.
+                createdAt: Timestamp.now()
+            });
 
-            if (userDoc.exists()) {
-                const userData = userDoc.data();
-                const userRole = userData.role;
+            toast({
+                title: 'Registro Exitoso',
+                description: `¡Bienvenido, ${name}! Tu cuenta ha sido creada.`,
+                className: 'bg-green-100 border-green-400'
+            });
 
-                if (role !== userRole) {
-                    throw new Error(`Acceso denegado. Este usuario no tiene el rol de ${role}.`);
-                }
-
-                toast({
-                    title: 'Inicio de Sesión Exitoso',
-                    description: `Bienvenido, ${userData.name || 'usuario'}.`,
-                    className: 'bg-green-100 border-green-400'
-                });
-                
-                localStorage.setItem('user-session', JSON.stringify({ uid: user.uid, role: userRole }));
-
-                if (userRole === 'administrador') {
-                    router.push('/admin/dashboard');
-                } else if (userRole === 'propietario') {
-                    if (!userData.passwordChanged) {
-                        router.push('/owner/change-password');
-                    } else {
-                        router.push('/owner/dashboard');
-                    }
-                } else {
-                    throw new Error('Rol de usuario no reconocido.');
-                }
-            } else {
-                throw new Error('No se encontró un perfil asociado a esta cuenta.');
-            }
+            // 3. Redirect to login page
+            router.push(`/login?role=${role}`);
 
         } catch (error: any) {
-            console.error('Login error:', error);
+            console.error('Registration error:', error);
             let description = 'Ocurrió un error inesperado. Por favor, intente de nuevo.';
-            if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-                description = 'El email o la contraseña son incorrectos.';
-            } else if (error.message) {
-                description = error.message;
+            if (error.code === 'auth/email-already-in-use') {
+                description = 'Este correo electrónico ya está en uso por otra cuenta.';
+            } else if (error.code === 'auth/invalid-email') {
+                description = 'El formato del correo electrónico no es válido.';
             }
             toast({
                 variant: 'destructive',
-                title: 'Error de Autenticación',
+                title: 'Error de Registro',
                 description,
             });
         } finally {
@@ -107,8 +99,8 @@ export default function LoginPage() {
         }
     };
     
-    const title = role === 'admin' ? 'Acceso de Administrador' : 'Portal de Propietario';
-    const description = role === 'admin' ? 'Inicia sesión para gestionar el condominio.' : 'Inicia sesión para consultar tu información.';
+    const title = role === 'admin' ? 'Registro de Administrador' : 'Registro de Propietario';
+    const description = role === 'admin' ? 'Crea una cuenta para gestionar el condominio.' : 'Crea tu cuenta para acceder al portal.';
 
     return (
         <main className="min-h-screen flex items-center justify-center bg-background p-4 relative">
@@ -123,8 +115,20 @@ export default function LoginPage() {
                     <CardTitle className="capitalize font-headline">{title}</CardTitle>
                     <CardDescription>{description}</CardDescription>
                 </CardHeader>
-                <form onSubmit={handleLogin}>
+                <form onSubmit={handleRegister}>
                     <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="name">Nombre Completo</Label>
+                            <Input
+                                id="name"
+                                type="text"
+                                placeholder="John Doe"
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
+                                required
+                                disabled={loading}
+                            />
+                        </div>
                         <div className="space-y-2">
                             <Label htmlFor="email">Email</Label>
                             <Input
@@ -134,11 +138,11 @@ export default function LoginPage() {
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
-                                disabled={loading || role === 'admin'}
+                                disabled={loading}
                             />
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="password">Contraseña</Label>
+                            <Label htmlFor="password">Contraseña (mín. 6 caracteres)</Label>
                             <Input
                                 id="password"
                                 type="password"
@@ -154,9 +158,9 @@ export default function LoginPage() {
                             {loading ? (
                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                             ) : (
-                                <LogIn className="mr-2 h-4 w-4" />
+                                <UserPlus className="mr-2 h-4 w-4" />
                             )}
-                            {loading ? 'Ingresando...' : 'Ingresar'}
+                            {loading ? 'Registrando...' : 'Crear Cuenta'}
                         </Button>
                     </CardFooter>
                 </form>
