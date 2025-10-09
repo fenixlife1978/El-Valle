@@ -1,4 +1,3 @@
-
 'use client';
 
 import Link from 'next/link';
@@ -42,7 +41,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { Card } from '@/components/ui/card';
-import { Loader2 } from 'lucide-react';
+import { useAuth } from '@/hooks/use-auth';
+import { getAuth } from 'firebase/auth';
 
 export type NavItem = {
   href: string;
@@ -71,7 +71,8 @@ const BCVLogo = () => (
 );
 
 
-const CustomHeader = ({ userRole, userName }: { userRole: string, userName: string }) => {
+const CustomHeader = () => {
+    const { user, ownerData } = useAuth();
     const router = useRouter();
     const [activeRate, setActiveRate] = React.useState<ExchangeRate | null>(null);
 
@@ -95,11 +96,12 @@ const CustomHeader = ({ userRole, userName }: { userRole: string, userName: stri
     }, []);
 
     const handleLogout = () => {
-        localStorage.removeItem('user-session');
+        getAuth().signOut();
         router.push('/login');
     };
 
-    const displayName = userName;
+    const displayName = ownerData?.name || user?.displayName || 'Usuario';
+    const avatarSrc = ownerData?.avatar || user?.photoURL || '';
 
     return (
         <header className="sticky top-0 z-10 flex h-auto flex-col items-center gap-2 border-b bg-background/80 p-2 backdrop-blur-sm sm:flex-row sm:h-16 sm:px-4">
@@ -124,7 +126,7 @@ const CustomHeader = ({ userRole, userName }: { userRole: string, userName: stri
                     <DropdownMenuTrigger asChild>
                     <Button variant="ghost" className="relative h-10 w-10 rounded-full">
                         <Avatar className="h-10 w-10">
-                        <AvatarImage src="" alt={displayName} data-ai-hint="profile picture"/>
+                        <AvatarImage src={avatarSrc} alt={displayName} data-ai-hint="profile picture"/>
                         <AvatarFallback>{displayName.charAt(0)}</AvatarFallback>
                         </Avatar>
                     </Button>
@@ -133,6 +135,7 @@ const CustomHeader = ({ userRole, userName }: { userRole: string, userName: stri
                     <DropdownMenuLabel>
                         <div className="flex flex-col space-y-1">
                         <p className="text-sm font-medium leading-none font-headline">{displayName}</p>
+                        <p className="text-xs leading-none text-muted-foreground">{user?.email}</p>
                         </div>
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
@@ -150,16 +153,13 @@ const CustomHeader = ({ userRole, userName }: { userRole: string, userName: stri
 
 export function DashboardLayout({
   children,
-  userName,
-  userRole,
   navItems,
 }: {
   children: React.ReactNode;
-  userName: string;
+  userName: string; // These are now fallbacks if useAuth is not ready
   userRole: string;
   navItems: NavItem[];
 }) {
-  const router = useRouter();
   const [companyInfo, setCompanyInfo] = React.useState<CompanyInfo | null>(null);
 
   React.useEffect(() => {
@@ -242,7 +242,7 @@ export function DashboardLayout({
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>
-        <CustomHeader userRole={userRole} userName={userName} />
+        <CustomHeader />
         <main className="flex-1 p-4 md:p-8 bg-background">{children}</main>
         <footer className="bg-secondary text-secondary-foreground p-4 text-center text-sm">
            © {new Date().getFullYear()} {companyInfo?.name || 'CondoConnect'}. Todos los derechos reservados.
