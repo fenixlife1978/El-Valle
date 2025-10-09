@@ -28,7 +28,7 @@ export default function RegisterPage() {
     const role = searchParams.get('role');
 
     useEffect(() => {
-        if (!role) {
+        if (role !== 'admin' && role !== 'owner') {
             router.replace('/');
         }
     }, [role, router]);
@@ -62,14 +62,14 @@ export default function RegisterPage() {
             const userCredential = await createUserWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
 
-            // 2. Create user profile in Firestore
+            // 2. Create user profile in Firestore with the correct role
             await setDoc(doc(db, "owners", user.uid), {
                 name,
                 email,
-                role: role,
+                role: role === 'admin' ? 'administrador' : 'propietario', // <-- FIX: Assign role from URL
                 balance: 0,
                 properties: [],
-                passwordChanged: role === 'administrador', // Admins don't need to change password, owners do.
+                passwordChanged: role === 'admin', // Admins don't need to change password, owners do.
                 createdAt: Timestamp.now()
             });
 
