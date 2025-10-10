@@ -8,7 +8,7 @@ import {
     History
 } from 'lucide-react';
 import { type ReactNode, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
 import { useAuth } from '@/hooks/use-auth';
 import { Loader2 } from 'lucide-react';
@@ -27,6 +27,7 @@ const ownerNavItems: NavItem[] = [
 export default function OwnerLayout({ children }: { children: ReactNode }) {
     const { user, role, loading, ownerData } = useAuth();
     const router = useRouter();
+    const pathname = usePathname();
 
     useEffect(() => {
         if (!loading) {
@@ -37,16 +38,24 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
             } else if (ownerData && !ownerData.passwordChanged) {
                 // If the user is an owner and hasn't changed their password,
                 // force them to the change password page, unless they are already there.
-                if (router.pathname !== '/owner/change-password') {
+                if (pathname !== '/owner/change-password') {
                      router.push('/owner/change-password');
                 }
             }
         }
-    }, [user, role, loading, ownerData, router]);
+    }, [user, role, loading, ownerData, router, pathname]);
 
     if (loading || !user || role !== 'propietario') {
         return (
             <div className="flex h-screen w-full items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin" />
+            </div>
+        );
+    }
+    
+    if (ownerData && !ownerData.passwordChanged && pathname !== '/owner/change-password') {
+        return (
+             <div className="flex h-screen w-full items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin" />
             </div>
         );

@@ -28,11 +28,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     const auth = getAuth();
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setLoading(true);
       if (firebaseUser) {
         // User is signed in, begin sync logic.
         const { uid, email } = firebaseUser;
         let userDocRef;
-        let userDataFromDb: any | null = null;
         
         // 1. Try to find user by UID first (most common case for returning users)
         const docByUidRef = doc(db, 'owners', uid);
@@ -43,7 +43,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         } else if (email) {
             // 2. If no doc by UID, try to find by email to link a legacy profile
             const ownersRef = collection(db, "owners");
-            const q = query(ownersRef, where("email", "==", email));
+            const q = query(ownersRef, where("email", "==", email), where("uid", "==", null));
             const querySnapshot = await getDocs(q);
 
             if (!querySnapshot.empty) {
