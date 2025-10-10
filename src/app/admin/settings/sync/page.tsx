@@ -5,21 +5,25 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, UserCheck, RefreshCw, UserCog } from 'lucide-react';
-import { ensureAdminProfile, ensureOwnerProfile } from '@/lib/ensureAdminProfile';
+import { Loader2, UserCheck, RefreshCw, UserCog, Users } from 'lucide-react';
+import { ensureAdminProfile } from '@/lib/user-sync';
 import { cn } from "@/lib/utils";
-import { useAuth } from '@/hooks/use-auth';
 import { Separator } from '@/components/ui/separator';
+import { Progress } from '@/components/ui/progress';
+import { collection, getDocs, writeBatch, doc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+
+const ADMIN_USER_ID = 'valle-admin-main-account';
 
 export default function SyncProfilesPage() {
     const { toast } = useToast();
-    const { user, loading: authLoading } = useAuth();
     
     const [loadingAdmin, setLoadingAdmin] = useState(true);
-    const [loadingOwner, setLoadingOwner] = useState(false);
-    
     const [adminProfileExists, setAdminProfileExists] = useState(false);
-    const [ownerProfileStatus, setOwnerProfileStatus] = useState<'idle' | 'checked' | 'created'>('idle');
+    
+    const [isSyncingOwners, setIsSyncingOwners] = useState(false);
+    const [syncProgress, setSyncProgress] = useState(0);
+    const [syncSummary, setSyncSummary] = useState({ checked: 0, updated: 0 });
 
     const checkAdminProfile = async () => {
         setLoadingAdmin(true);
@@ -33,44 +37,100 @@ export default function SyncProfilesPage() {
             setLoadingAdmin(false);
         }
     };
+    
+    const handleSyncAllOwners = async () => {
+        setIsSyncingOwners(true);
+        setSyncProgress(0);
+        setSyncSummary({ checked: 0, updated: 0 });
+        toast({ title: 'Iniciando Sincronización', description: 'Verificando todos los perfiles de propietarios...' });
 
-    const checkOwnerProfile = async () => {
-        if (!user) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Debe iniciar sesión para sincronizar su perfil.' });
-            return;
-        }
-        setLoadingOwner(true);
-        setOwnerProfileStatus('idle');
         try {
-            const result = await ensureOwnerProfile(user, toast);
-            setOwnerProfileStatus(result);
+            const ownersQuery = collection(db, "owners");
+            const querySnapshot = await getDocs(ownersQuery);
+            
+            const totalOwners = querySnapshot.docs.length;
+            if (totalOwners === 0) {
+                toast({ title: 'No hay Propietarios', description: 'No se encontraron propietarios para sincronizar.' });
+                setIsSyncingOwners(false);
+                return;
+            }
+
+            const batch = writeBatch(db);
+            let updatedCount = 0;
+            let checkedCount = 0;
+
+            for (const docSnap of querySnapshot.docs) {
+                if (docSnap.id === ADMIN_USER_ID) {
+                    checkedCount++;
+                    continue;
+                }
+
+                const data = docSnap.data();
+                let needsUpdate = false;
+                const updates: { [key: string]: any } = {};
+
+                if (typeof data.balance !== 'number') {
+                    updates.balance = 0;
+                    needsUpdate = true;
+                }
+                if (data.role !== 'propietario' && data.role !== 'administrador') {
+                    updates.role = 'propietario';
+                    needsUpdate = true;
+                }
+                 if (typeof data.passwordChanged !== 'boolean') {
+                    updates.passwordChanged = false; // Default to false
+                    needsUpdate = true;
+                }
+
+                if (needsUpdate) {
+                    batch.update(doc(db, "owners", docSnap.id), updates);
+                    updatedCount++;
+                }
+                
+                checkedCount++;
+                setSyncProgress((checkedCount / totalOwners) * 100);
+            }
+            
+            if (updatedCount > 0) {
+                await batch.commit();
+            }
+
+            setSyncSummary({ checked: checkedCount, updated: updatedCount });
+
+            toast({
+                title: 'Sincronización Completada',
+                description: `Se revisaron ${checkedCount} perfiles y se actualizaron ${updatedCount}.`,
+                className: 'bg-green-100 border-green-400 text-green-800'
+            });
+
         } catch (error) {
-            console.error("Error checking owner profile:", error);
-            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo verificar su perfil de propietario.' });
+            console.error("Error syncing all owners:", error);
+            const errorMessage = error instanceof Error ? error.message : "Error desconocido.";
+            toast({ variant: 'destructive', title: 'Error en Sincronización Masiva', description: errorMessage });
         } finally {
-            setLoadingOwner(false);
+            setIsSyncingOwners(false);
         }
-    }
+    };
+
 
     useEffect(() => {
         checkAdminProfile();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const isLoading = loadingAdmin || authLoading;
 
     return (
         <div className="space-y-8">
             <div>
                 <h1 className="text-3xl font-bold font-headline">Sincronizar Perfiles de Usuario</h1>
-                <p className="text-muted-foreground">Asegura la existencia de perfiles críticos en la base de datos.</p>
+                <p className="text-muted-foreground">Asegura la existencia y consistencia de los perfiles en la base de datos.</p>
             </div>
 
             <Card>
                 <CardHeader>
-                    <CardTitle>Verificación de Perfiles</CardTitle>
+                    <CardTitle>Verificación de Perfiles Críticos</CardTitle>
                      <CardDescription>
-                        Esta herramienta verifica que los perfiles de usuario existan en la base de datos para el correcto funcionamiento del sistema.
+                        Herramientas para verificar y reparar perfiles de usuario en la base de datos de Firestore.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
@@ -89,7 +149,7 @@ export default function SyncProfilesPage() {
                             </Button>
                         </div>
                     </div>
-                     {isLoading ? (
+                     {loadingAdmin ? (
                         <div className="flex justify-center items-center h-24">
                             <Loader2 className="h-8 w-8 animate-spin text-primary"/>
                         </div>
@@ -105,37 +165,39 @@ export default function SyncProfilesPage() {
 
                     <Separator />
                     
-                    {/* Owner Profile Section */}
+                    {/* All Owners Profile Section */}
                      <div className="flex flex-col md:flex-row gap-4 pt-4">
                         <div className="flex-1">
-                            <h3 className="font-semibold flex items-center gap-2"><UserCheck className="h-5 w-5 text-primary"/>Sincronización de Perfil de Propietario</h3>
+                            <h3 className="font-semibold flex items-center gap-2"><Users className="h-5 w-5 text-primary"/>Sincronización Masiva de Propietarios</h3>
                             <p className="text-sm text-muted-foreground mt-1">
-                                Si ha iniciado sesión pero su perfil no se creó correctamente, esta herramienta lo generará.
+                                Recorre todos los perfiles de propietarios y repara los que no tengan campos esenciales (como rol, saldo, etc.).
                             </p>
                         </div>
                         <div className="w-full md:w-auto">
-                            <Button onClick={checkOwnerProfile} disabled={loadingOwner || authLoading} className="w-full md:w-auto">
-                                <RefreshCw className={cn("mr-2 h-4 w-4", loadingOwner && "animate-spin")} />
-                                Sincronizar Mi Perfil
+                            <Button onClick={handleSyncAllOwners} disabled={isSyncingOwners} className="w-full md:w-auto">
+                                <RefreshCw className={cn("mr-2 h-4 w-4", isSyncingOwners && "animate-spin")} />
+                                Sincronizar Todos los Propietarios
                             </Button>
                         </div>
                     </div>
-                    {loadingOwner ? (
-                        <div className="flex justify-center items-center h-24">
-                            <Loader2 className="h-8 w-8 animate-spin text-primary"/>
+                    {isSyncingOwners && (
+                        <div className="space-y-2">
+                             <Progress value={syncProgress} className="w-full" />
+                             <p className="text-sm text-muted-foreground text-center">Procesando... {Math.round(syncProgress)}%</p>
                         </div>
-                    ) : ownerProfileStatus !== 'idle' && (
+                    )}
+                    {syncSummary.checked > 0 && !isSyncingOwners && (
                         <div className="p-4 bg-success/10 border border-success/30 rounded-lg">
-                             <h3 className="font-semibold text-success flex items-center gap-2"><UserCheck/> Perfil de Propietario Sincronizado</h3>
+                            <h3 className="font-semibold text-success flex items-center gap-2"><UserCheck/> Sincronización Finalizada</h3>
                             <p className="text-success/80 text-sm mt-1">
-                                {ownerProfileStatus === 'checked' ? 'Tu perfil de propietario ya existe y está sincronizado.' : 'Tu perfil de propietario ha sido creado exitosamente.'}
+                                Se revisaron {syncSummary.checked} perfiles y se actualizaron {syncSummary.updated} de ellos.
                             </p>
                         </div>
                     )}
 
                 </CardContent>
                  <CardFooter>
-                    <p className="text-xs text-muted-foreground">La sincronización de perfiles es manual y debe ejecutarse si encuentra problemas con su cuenta.</p>
+                    <p className="text-xs text-muted-foreground">La sincronización masiva es útil para reparar perfiles después de una importación o si se detectan errores generalizados.</p>
                 </CardFooter>
             </Card>
         </div>
