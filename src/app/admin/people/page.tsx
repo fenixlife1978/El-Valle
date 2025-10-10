@@ -17,7 +17,8 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc, setDoc, getDocs, writeBatch } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db, auth } from '@/lib/firebase';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
 
 
 type Role = 'propietario' | 'administrador';
@@ -46,12 +47,13 @@ type CompanyInfo = {
     logo: string;
 };
 
-const emptyOwner: Omit<Owner, 'id' | 'balance'> & { id?: string; balance: number | string; } = { 
+const emptyOwner: Omit<Owner, 'id' | 'balance'> & { id?: string; balance: number | string; password?: string; } = { 
     name: '', 
     properties: [{ street: '', house: '' }], 
     email: '', 
     balance: 0, 
     role: 'propietario',
+    password: '',
     passwordChanged: false,
 };
 
@@ -88,7 +90,7 @@ export default function PeopleManagementPage() {
     const [loading, setLoading] = useState(true);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
-    const [currentOwner, setCurrentOwner] = useState<Omit<Owner, 'id'> & { id?: string; balance: number | string; }>(emptyOwner);
+    const [currentOwner, setCurrentOwner] = useState<Omit<Owner, 'id' | 'balance'> & { id?: string; balance: number | string; password?: string; }>(emptyOwner);
     const [ownerToDelete, setOwnerToDelete] = useState<Owner | null>(null);
     const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
@@ -189,8 +191,15 @@ export default function PeopleManagementPage() {
             toast({ variant: 'destructive', title: 'Error de Validación', description: 'Nombre, Email, calle y casa son obligatorios.' });
             return;
         }
+
+        const isNewUser = !currentOwner.id;
+
+        if (isNewUser && (!currentOwner.password || currentOwner.password.length < 6)) {
+             toast({ variant: 'destructive', title: 'Contraseña Requerida', description: 'La contraseña inicial debe tener al menos 6 caracteres.' });
+            return;
+        }
     
-        const { id, ...ownerData } = currentOwner;
+        const { id, password, ...ownerData } = currentOwner;
         const balanceValue = parseFloat(String(ownerData.balance).replace(',', '.') || '0');
         const dataToSave: any = {
             name: ownerData.name,
@@ -202,21 +211,37 @@ export default function PeopleManagementPage() {
         };
     
         try {
-            if (id) { // Editing existing owner
+            if (isNewUser && password) {
+                 // 1. Create Firebase Auth user
+                const userCredential = await createUserWithEmailAndPassword(auth, dataToSave.email, password);
+                const user = userCredential.user;
+
+                // 2. Add UID to data and save to Firestore
+                dataToSave.uid = user.uid;
+                await setDoc(doc(db, "owners", user.uid), dataToSave);
+                
+                toast({ 
+                    title: 'Propietario y Cuenta Creados', 
+                    description: `Se ha creado el perfil y la cuenta de autenticación para ${dataToSave.name}.` 
+                });
+
+            } else if (id) { // Editing existing owner
                 const ownerRef = doc(db, "owners", id);
                 await updateDoc(ownerRef, dataToSave);
                 toast({ title: 'Propietario Actualizado', description: 'Los datos han sido guardados exitosamente.' });
-            } else { // Creating new owner
-                const newOwnerRef = doc(collection(db, "owners"));
-                await setDoc(newOwnerRef, dataToSave);
-                toast({ 
-                    title: 'Propietario Agregado', 
-                    description: `Se ha creado el perfil para ${dataToSave.name}. Ahora debe crear manualmente la cuenta de autenticación en Firebase con la contraseña '123456'.` 
-                });
+            } else {
+                 toast({ variant: 'destructive', title: 'Error', description: 'No se pudo determinar la acción a realizar.' });
             }
+
         } catch (error: any) {
             console.error("Error saving owner: ", error);
-            toast({ variant: 'destructive', title: 'Error', description: error.message || 'No se pudieron guardar los cambios.' });
+            let errorMessage = 'No se pudieron guardar los cambios.';
+            if (error.code === 'auth/email-already-in-use') {
+                errorMessage = 'El correo electrónico ya está en uso por otra cuenta de autenticación.';
+            } else if (error.code === 'auth/invalid-email') {
+                errorMessage = 'El formato del correo electrónico no es válido.';
+            }
+            toast({ variant: 'destructive', title: 'Error', description: errorMessage });
         } finally {
             setIsDialogOpen(false);
             setCurrentOwner(emptyOwner);
@@ -519,7 +544,7 @@ export default function PeopleManagementPage() {
                     <DialogHeader>
                         <DialogTitle>{currentOwner.id ? 'Editar Persona' : 'Agregar Nueva Persona'}</DialogTitle>
                         <DialogDescription>
-                            Completa la información aquí. Haz clic en guardar cuando termines.
+                           {currentOwner.id ? 'Modifique la información y haga clic en guardar.' : 'Esto creará tanto el perfil en la base de datos como la cuenta de autenticación del usuario.'}
                         </DialogDescription>
                     </DialogHeader>
                     <div className="flex-grow overflow-y-auto pr-6 -mr-6">
@@ -532,6 +557,14 @@ export default function PeopleManagementPage() {
                                 <Label htmlFor="email">Email</Label>
                                 <Input id="email" type="email" value={currentOwner.email || ''} onChange={handleInputChange} />
                             </div>
+                            
+                            {!currentOwner.id && (
+                                <div className="space-y-2">
+                                    <Label htmlFor="password">Contraseña Inicial</Label>
+                                    <Input id="password" type="password" value={currentOwner.password || ''} onChange={handleInputChange} />
+                                </div>
+                            )}
+
                             <div className="space-y-2">
                                 <Label htmlFor="role">Rol</Label>
                                 <Select onValueChange={handleRoleChange} value={currentOwner.role}>
