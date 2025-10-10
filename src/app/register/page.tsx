@@ -58,7 +58,7 @@ export default function RegisterPage() {
 
         setLoading(true);
         try {
-            // 1. Create user in Firebase Authentication
+            // 1. Create user in Firebase Authentication with the user-provided password
             const userCredential = await createUserWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
 
