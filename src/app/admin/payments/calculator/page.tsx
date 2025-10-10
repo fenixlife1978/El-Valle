@@ -120,10 +120,11 @@ export default function PaymentCalculatorPage() {
 
     const filteredOwners = useMemo(() => {
         if (!searchTerm || searchTerm.length < 3) return [];
-        return owners.filter(owner => 
-            owner.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            String(owner.house).toLowerCase().includes(searchTerm.toLowerCase())
-        );
+        return owners.filter(owner => {
+            const ownerNameMatch = owner.name && owner.name.toLowerCase().includes(searchTerm.toLowerCase());
+            const houseMatch = String(owner.house).toLowerCase().includes(searchTerm.toLowerCase());
+            return ownerNameMatch || houseMatch;
+        });
     }, [searchTerm, owners]);
 
     const handleSelectOwner = async (owner: Owner) => {
