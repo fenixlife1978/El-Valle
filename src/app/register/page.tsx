@@ -39,16 +39,21 @@ export default function RegisterPage() {
 
     const handleRegister = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!name || !email || !password) {
+        
+        const isOwner = role === 'owner';
+        const finalPassword = isOwner ? '123456.Aa' : password;
+
+        if (!name || !email) {
             toast({
                 variant: 'destructive',
                 title: 'Campos requeridos',
-                description: 'Por favor, complete todos los campos.',
+                description: 'Por favor, complete nombre y email.',
             });
             return;
         }
-        if (password.length < 6) {
-            toast({
+
+        if (!isOwner && (!finalPassword || finalPassword.length < 6)) {
+             toast({
                 variant: 'destructive',
                 title: 'Contraseña Débil',
                 description: 'La contraseña debe tener al menos 6 caracteres.',
@@ -58,18 +63,16 @@ export default function RegisterPage() {
 
         setLoading(true);
         try {
-            // 1. Create user in Firebase Authentication with the user-provided password
-            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+            const userCredential = await createUserWithEmailAndPassword(auth, email, finalPassword);
             const user = userCredential.user;
 
-            // 2. Create user profile in Firestore with the correct role
             await setDoc(doc(db, "owners", user.uid), {
                 name,
                 email,
-                role: role === 'admin' ? 'administrador' : 'propietario',
+                role: isOwner ? 'propietario' : 'administrador',
                 balance: 0,
                 properties: [],
-                passwordChanged: role === 'admin', // Admins don't need to change password, owners do.
+                passwordChanged: !isOwner, // Owners must change password, admins don't.
                 createdAt: Timestamp.now()
             });
 
@@ -79,7 +82,6 @@ export default function RegisterPage() {
                 className: 'bg-green-100 border-green-400'
             });
 
-            // 3. Redirect to login page
             router.push(`/login?role=${role}`);
 
         } catch (error: any) {
@@ -142,17 +144,24 @@ export default function RegisterPage() {
                                 disabled={loading}
                             />
                         </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="password">Contraseña (mín. 6 caracteres)</Label>
-                            <Input
-                                id="password"
-                                type="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                required
-                                disabled={loading}
-                            />
-                        </div>
+                         {role === 'admin' && (
+                            <div className="space-y-2">
+                                <Label htmlFor="password">Contraseña (mín. 6 caracteres)</Label>
+                                <Input
+                                    id="password"
+                                    type="password"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    required
+                                    disabled={loading}
+                                />
+                            </div>
+                        )}
+                        {role === 'owner' && (
+                             <div className="text-sm text-muted-foreground p-2 border rounded-md bg-muted">
+                                <p>Se te asignará una contraseña temporal. Deberás cambiarla en tu primer inicio de sesión.</p>
+                            </div>
+                        )}
                     </CardContent>
                     <CardFooter>
                         <Button type="submit" className="w-full" disabled={loading}>
