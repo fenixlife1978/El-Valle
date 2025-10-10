@@ -61,31 +61,39 @@ export default function LoginPage() {
                 const userRole = userData.role;
                 const validRoles = ['administrador', 'propietario'];
 
-                if (!validRoles.includes(userRole)) {
-                    throw new Error('Rol de usuario no reconocido.');
-                }
-                
-                if (role !== userRole) {
-                    throw new Error(`Acceso denegado. Este usuario no tiene el rol de ${role}.`);
-                }
-
-                toast({
-                    title: 'Inicio de Sesión Exitoso',
-                    description: `Bienvenido, ${userData.name || 'usuario'}.`,
-                    className: 'bg-green-100 border-green-400'
-                });
-                
-                if (userRole === 'administrador') {
-                    router.push('/admin/dashboard');
-                } else if (userRole === 'propietario') {
-                    if (!userData.passwordChanged) {
-                        router.push('/owner/change-password');
+                if (validRoles.includes(userRole)) {
+                    if (role !== userRole) {
+                        // Using toast for role mismatch is more user-friendly than throwing an error here.
+                        toast({
+                            variant: 'destructive',
+                            title: 'Acceso Denegado',
+                            description: `Este usuario no tiene el rol de ${role}.`,
+                        });
+                        await auth.signOut(); // Log out the user
                     } else {
-                        router.push('/owner/dashboard');
+                         toast({
+                            title: 'Inicio de Sesión Exitoso',
+                            description: `Bienvenido, ${userData.name || 'usuario'}.`,
+                            className: 'bg-green-100 border-green-400'
+                        });
+                        
+                        if (userRole === 'administrador') {
+                            router.push('/admin/dashboard');
+                        } else if (userRole === 'propietario') {
+                            if (!userData.passwordChanged) {
+                                router.push('/owner/change-password');
+                            } else {
+                                router.push('/owner/dashboard');
+                            }
+                        }
                     }
+                } else {
+                    console.warn(`Rol no reconocido: ${userRole}`);
+                    router.push('/error-rol');
                 }
             } else {
-                throw new Error('No se encontró un perfil asociado a esta cuenta.');
+                console.error('No se encontró un perfil asociado a esta cuenta.');
+                router.push('/error-perfil');
             }
 
         } catch (error: any) {
