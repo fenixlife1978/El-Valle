@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -58,7 +59,12 @@ export default function LoginPage() {
             if (userDoc.exists()) {
                 const userData = userDoc.data();
                 const userRole = userData.role;
+                const validRoles = ['administrador', 'propietario'];
 
+                if (!validRoles.includes(userRole)) {
+                    throw new Error('Rol de usuario no reconocido.');
+                }
+                
                 if (role !== userRole) {
                     throw new Error(`Acceso denegado. Este usuario no tiene el rol de ${role}.`);
                 }
@@ -77,8 +83,6 @@ export default function LoginPage() {
                     } else {
                         router.push('/owner/dashboard');
                     }
-                } else {
-                    throw new Error('Rol de usuario no reconocido.');
                 }
             } else {
                 throw new Error('No se encontró un perfil asociado a esta cuenta.');
