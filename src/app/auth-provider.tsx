@@ -2,7 +2,7 @@
 
 import { createContext, useEffect, useState, ReactNode } from 'react';
 import { getAuth, onAuthStateChanged, type User } from 'firebase/auth';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot, getDoc, setDoc, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
 type AuthContextType = {
@@ -27,19 +27,38 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const auth = getAuth();
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       if (firebaseUser) {
         // User is signed in, get their role from Firestore
         const userDocRef = doc(db, 'owners', firebaseUser.uid);
-        const unsubSnapshot = onSnapshot(userDocRef, (docSnap) => {
+
+        const unsubSnapshot = onSnapshot(userDocRef, async (docSnap) => {
           if (docSnap.exists()) {
             const data = docSnap.data();
             setRole(data.role);
             setOwnerData(data);
           } else {
-            setRole(null);
-            setOwnerData(null);
+            // Profile doesn't exist, so we create it automatically.
+            console.log(`Profile for ${firebaseUser.email} not found, creating one.`);
+            try {
+                await setDoc(userDocRef, {
+                    name: firebaseUser.displayName || firebaseUser.email,
+                    email: firebaseUser.email,
+                    role: 'propietario', // Default role for auto-created profiles
+                    balance: 0,
+                    properties: [],
+                    passwordChanged: false, 
+                    createdAt: Timestamp.now(),
+                    createdBy: 'auto-sync'
+                });
+                // The onSnapshot listener will be triggered again by the setDoc,
+                // so we don't need to set state here.
+            } catch (error) {
+                console.error("Error creating user profile automatically: ", error);
+                setRole(null);
+                setOwnerData(null);
+            }
           }
           setLoading(false);
         }, () => {
