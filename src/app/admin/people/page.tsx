@@ -232,7 +232,8 @@ export default function PeopleManagementPage() {
             } else {
                  toast({ variant: 'destructive', title: 'Error', description: 'No se pudo determinar la acción a realizar.' });
             }
-
+            setIsDialogOpen(false);
+            setCurrentOwner(emptyOwner);
         } catch (error: any) {
             console.error("Error saving owner: ", error);
             let errorMessage = 'No se pudieron guardar los cambios.';
@@ -242,9 +243,6 @@ export default function PeopleManagementPage() {
                 errorMessage = 'El formato del correo electrónico no es válido.';
             }
             toast({ variant: 'destructive', title: 'Error', description: errorMessage });
-        } finally {
-            setIsDialogOpen(false);
-            setCurrentOwner(emptyOwner);
         }
     };
 
