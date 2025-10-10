@@ -58,12 +58,19 @@ export default function ChangePasswordPage() {
 
         } catch (error: any) {
             console.error("Password change error:", error);
-            const message = error.code === 'auth/requires-recent-login'
-                ? 'Esta operación es sensible y requiere una autenticación reciente. Por favor, inicie sesión de nuevo.'
-                : 'Ocurrió un error al cambiar la contraseña.';
-            toast({ variant: "destructive", title: "Error", description: message });
             if (error.code === 'auth/requires-recent-login') {
+                toast({ 
+                    variant: "destructive", 
+                    title: "Inicio de Sesión Requerido", 
+                    description: 'Esta operación es sensible y requiere una autenticación reciente. Por favor, inicie sesión de nuevo.' 
+                });
                 router.push('/login?role=owner');
+            } else {
+                 toast({ 
+                    variant: "destructive", 
+                    title: "Error", 
+                    description: 'Ocurrió un error al cambiar la contraseña.'
+                });
             }
         } finally {
             setLoading(false);
