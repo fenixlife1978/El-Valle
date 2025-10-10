@@ -142,12 +142,6 @@ export default function LoginPage() {
                             )}
                             {isSubmitting || authLoading ? 'Verificando...' : 'Ingresar'}
                         </Button>
-                         <p className="text-xs text-muted-foreground">
-                            ¿No tienes cuenta?{' '}
-                            <Link href={`/register?role=${targetRole}`} className="underline text-primary">
-                                Regístrate aquí
-                            </Link>
-                        </p>
                     </CardFooter>
                 </form>
             </Card>
