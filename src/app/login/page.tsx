@@ -62,7 +62,7 @@ export default function LoginPage() {
                 const validRoles = ['administrador', 'propietario'];
 
                 if (validRoles.includes(userRole)) {
-                    if (role !== userRole) {
+                    if (role !== userRole && (role === 'admin' && userRole !== 'administrador') || (role === 'owner' && userRole !== 'propietario')) {
                         toast({
                             variant: 'destructive',
                             title: 'Acceso Denegado',
