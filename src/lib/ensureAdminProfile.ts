@@ -1,5 +1,6 @@
 import { doc, getDoc, setDoc, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { type User } from 'firebase/auth';
 
 // This function now returns a boolean indicating if the profile existed before the check.
 export const ensureAdminProfile = async (showToast?: (options: any) => void): Promise<boolean> => {
@@ -38,3 +39,39 @@ export const ensureAdminProfile = async (showToast?: (options: any) => void): Pr
         return true; 
     }
 };
+
+
+export const ensureOwnerProfile = async (user: User, showToast?: (options: any) => void): Promise<'checked' | 'created'> => {
+    const ownerRef = doc(db, "owners", user.uid);
+
+    try {
+        const ownerSnap = await getDoc(ownerRef);
+
+        if (!ownerSnap.exists()) {
+             await setDoc(ownerRef, {
+                name: user.displayName || 'Propietario sin nombre',
+                email: user.email,
+                role: 'propietario', // Default role for this function
+                balance: 0,
+                properties: [],
+                passwordChanged: false, 
+                createdAt: Timestamp.now(),
+                createdBy: 'sync-tool'
+            });
+            if (showToast) {
+                showToast({ title: "Perfil de Propietario Creado", description: `Se ha creado un perfil para ${user.email}.` });
+            }
+            return 'created';
+        }
+        if (showToast) {
+             showToast({ title: "Perfil de Propietario Verificado", description: "Tu perfil ya existe en la base de datos." });
+        }
+        return 'checked';
+    } catch (error) {
+        console.error("Error ensuring owner profile:", error);
+         if (showToast) {
+            showToast({ variant: 'destructive', title: 'Error de Sincronización', description: 'No se pudo verificar o crear tu perfil.' });
+        }
+        throw error;
+    }
+}
