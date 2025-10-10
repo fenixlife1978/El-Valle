@@ -63,13 +63,12 @@ export default function LoginPage() {
 
                 if (validRoles.includes(userRole)) {
                     if (role !== userRole) {
-                        // Using toast for role mismatch is more user-friendly than throwing an error here.
                         toast({
                             variant: 'destructive',
                             title: 'Acceso Denegado',
                             description: `Este usuario no tiene el rol de ${role}.`,
                         });
-                        await auth.signOut(); // Log out the user
+                        await auth.signOut();
                     } else {
                          toast({
                             title: 'Inicio de Sesión Exitoso',
