@@ -2,15 +2,38 @@
 
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Shield, User } from 'lucide-react';
+import { Shield, User, Loader2 } from 'lucide-react';
 import Image from 'next/image';
+import { useEffect, useState } from 'react';
+import { getAuth, signOut } from 'firebase/auth';
 
 export default function WelcomePage() {
     const router = useRouter();
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const auth = getAuth();
+        if (auth.currentUser) {
+            signOut(auth).finally(() => {
+                setLoading(false);
+            });
+        } else {
+            setLoading(false);
+        }
+    }, []);
 
     const handleRoleSelection = (role: 'admin' | 'owner') => {
         router.push(`/login?role=${role}`);
     };
+
+    if (loading) {
+        return (
+            <main className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
+                <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                <p className="text-muted-foreground mt-4">Cerrando sesión anterior...</p>
+            </main>
+        );
+    }
 
     return (
         <main className="min-h-screen flex flex-col items-center justify-center bg-background p-4 text-center">
