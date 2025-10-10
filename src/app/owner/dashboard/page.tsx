@@ -184,13 +184,17 @@ export default function OwnerDashboardPage() {
             setAllHistoricalPayments(historicalData);
         });
         
-        const paymentsQuery = query(collection(db, "payments"), where("beneficiaryIds", "array-contains", userId), orderBy('paymentDate', 'desc'), limit(3));
+        const paymentsQuery = query(collection(db, "payments"), where("beneficiaryIds", "array-contains", userId), limit(10));
         const paymentsUnsubscribe = onSnapshot(paymentsQuery, (snapshot) => {
             const paymentsData: Payment[] = [];
             snapshot.forEach((doc) => {
                 paymentsData.push({ id: doc.id, ...doc.data() } as Payment);
             });
-            setPayments(paymentsData);
+            // Sort client-side
+            const sortedPayments = paymentsData.sort((a,b) => b.paymentDate.toMillis() - a.paymentDate.toMillis()).slice(0, 3);
+            setPayments(sortedPayments);
+        }, (error) => {
+            console.error("Error fetching payments: ", error);
         });
 
          const reportsQuery = query(collection(db, "published_reports"), orderBy('createdAt', 'desc'));
