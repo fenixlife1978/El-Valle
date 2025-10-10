@@ -5,17 +5,24 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, UserCheck, RefreshCw } from 'lucide-react';
-import { ensureAdminProfile } from '@/lib/ensureAdminProfile';
+import { Loader2, UserCheck, RefreshCw, UserCog } from 'lucide-react';
+import { ensureAdminProfile, ensureOwnerProfile } from '@/lib/ensureAdminProfile';
 import { cn } from "@/lib/utils";
+import { useAuth } from '@/hooks/use-auth';
+import { Separator } from '@/components/ui/separator';
 
 export default function SyncProfilesPage() {
     const { toast } = useToast();
-    const [loading, setLoading] = useState(true);
+    const { user, loading: authLoading } = useAuth();
+    
+    const [loadingAdmin, setLoadingAdmin] = useState(true);
+    const [loadingOwner, setLoadingOwner] = useState(false);
+    
     const [adminProfileExists, setAdminProfileExists] = useState(false);
+    const [ownerProfileStatus, setOwnerProfileStatus] = useState<'idle' | 'checked' | 'created'>('idle');
 
     const checkAdminProfile = async () => {
-        setLoading(true);
+        setLoadingAdmin(true);
         try {
             const exists = await ensureAdminProfile(toast);
             setAdminProfileExists(exists);
@@ -23,14 +30,34 @@ export default function SyncProfilesPage() {
             console.error("Error checking admin profile:", error);
             toast({ variant: 'destructive', title: 'Error', description: 'No se pudo verificar el perfil del administrador.' });
         } finally {
-            setLoading(false);
+            setLoadingAdmin(false);
         }
     };
+
+    const checkOwnerProfile = async () => {
+        if (!user) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Debe iniciar sesión para sincronizar su perfil.' });
+            return;
+        }
+        setLoadingOwner(true);
+        setOwnerProfileStatus('idle');
+        try {
+            const result = await ensureOwnerProfile(user, toast);
+            setOwnerProfileStatus(result);
+        } catch (error) {
+            console.error("Error checking owner profile:", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo verificar su perfil de propietario.' });
+        } finally {
+            setLoadingOwner(false);
+        }
+    }
 
     useEffect(() => {
         checkAdminProfile();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    const isLoading = loadingAdmin || authLoading;
 
     return (
         <div className="space-y-8">
@@ -41,20 +68,29 @@ export default function SyncProfilesPage() {
 
             <Card>
                 <CardHeader>
-                    <div className="flex justify-between items-center">
-                        <CardTitle>Verificación de Perfil de Administrador</CardTitle>
-                         <Button variant="outline" onClick={checkAdminProfile} disabled={loading}>
-                            <RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} />
-                            Volver a Verificar
-                        </Button>
-                    </div>
+                    <CardTitle>Verificación de Perfiles</CardTitle>
                      <CardDescription>
-                        Esta herramienta verifica que el perfil principal del administrador exista en la base de datos para el correcto funcionamiento del sistema.
+                        Esta herramienta verifica que los perfiles de usuario existan en la base de datos para el correcto funcionamiento del sistema.
                     </CardDescription>
                 </CardHeader>
-                <CardContent>
-                    {loading ? (
-                        <div className="flex justify-center items-center h-40">
+                <CardContent className="space-y-6">
+                    {/* Admin Profile Section */}
+                    <div className="flex flex-col md:flex-row gap-4">
+                        <div className="flex-1">
+                            <h3 className="font-semibold flex items-center gap-2"><UserCog className="h-5 w-5 text-primary"/>Verificación de Perfil de Administrador</h3>
+                            <p className="text-sm text-muted-foreground mt-1">
+                                Verifica que el perfil principal del administrador del sistema exista en la base de datos.
+                            </p>
+                        </div>
+                        <div className="w-full md:w-auto">
+                            <Button variant="outline" onClick={checkAdminProfile} disabled={loadingAdmin} className="w-full md:w-auto">
+                                <RefreshCw className={cn("mr-2 h-4 w-4", loadingAdmin && "animate-spin")} />
+                                Volver a Verificar
+                            </Button>
+                        </div>
+                    </div>
+                     {isLoading ? (
+                        <div className="flex justify-center items-center h-24">
                             <Loader2 className="h-8 w-8 animate-spin text-primary"/>
                         </div>
                     ) : (
@@ -65,24 +101,42 @@ export default function SyncProfilesPage() {
                             </p>
                         </div>
                     )}
+                    <p className="text-xs text-muted-foreground text-center">La verificación del administrador es automática al cargar la página.</p>
+
+                    <Separator />
+                    
+                    {/* Owner Profile Section */}
+                     <div className="flex flex-col md:flex-row gap-4 pt-4">
+                        <div className="flex-1">
+                            <h3 className="font-semibold flex items-center gap-2"><UserCheck className="h-5 w-5 text-primary"/>Sincronización de Perfil de Propietario</h3>
+                            <p className="text-sm text-muted-foreground mt-1">
+                                Si ha iniciado sesión pero su perfil no se creó correctamente, esta herramienta lo generará.
+                            </p>
+                        </div>
+                        <div className="w-full md:w-auto">
+                            <Button onClick={checkOwnerProfile} disabled={loadingOwner || authLoading} className="w-full md:w-auto">
+                                <RefreshCw className={cn("mr-2 h-4 w-4", loadingOwner && "animate-spin")} />
+                                Sincronizar Mi Perfil
+                            </Button>
+                        </div>
+                    </div>
+                    {loadingOwner ? (
+                        <div className="flex justify-center items-center h-24">
+                            <Loader2 className="h-8 w-8 animate-spin text-primary"/>
+                        </div>
+                    ) : ownerProfileStatus !== 'idle' && (
+                        <div className="p-4 bg-success/10 border border-success/30 rounded-lg">
+                             <h3 className="font-semibold text-success flex items-center gap-2"><UserCheck/> Perfil de Propietario Sincronizado</h3>
+                            <p className="text-success/80 text-sm mt-1">
+                                {ownerProfileStatus === 'checked' ? 'Tu perfil de propietario ya existe y está sincronizado.' : 'Tu perfil de propietario ha sido creado exitosamente.'}
+                            </p>
+                        </div>
+                    )}
+
                 </CardContent>
-                <CardFooter>
-                    <p className="text-xs text-muted-foreground">Esta operación es automática al cargar la página.</p>
+                 <CardFooter>
+                    <p className="text-xs text-muted-foreground">La sincronización de perfiles es manual y debe ejecutarse si encuentra problemas con su cuenta.</p>
                 </CardFooter>
-            </Card>
-            
-            <Card className="bg-muted/50">
-                <CardHeader>
-                    <CardTitle className="text-base">Nota Importante sobre la Implementación</CardTitle>
-                </CardHeader>
-                <CardContent className="text-sm text-muted-foreground">
-                    <p>
-                        Ya que no hay un sistema de autenticación activo, esta página se limita a verificar y/o crear el perfil del administrador del sistema.
-                    </p>
-                    <p className="mt-2">
-                        Para una sincronización completa de múltiples usuarios, se necesitaría un sistema de autenticación y un entorno de servidor (como Cloud Functions) para listar y comparar todos los usuarios.
-                    </p>
-                </CardContent>
             </Card>
         </div>
     );
