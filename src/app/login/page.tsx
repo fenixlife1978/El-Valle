@@ -4,8 +4,6 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { signInWithEmailAndPassword, getAuth } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,12 +17,11 @@ import { useAuth } from '@/hooks/use-auth';
 export default function LoginPage() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [loading, setLoading] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const router = useRouter();
     const searchParams = useSearchParams();
     const { toast } = useToast();
-    const auth = getAuth();
-    const { user, role, ownerData } = useAuth();
+    const { user, role, ownerData, loading: authLoading } = useAuth();
 
     const targetRole = searchParams.get('role');
 
@@ -35,14 +32,16 @@ export default function LoginPage() {
     }, [targetRole, router]);
 
     useEffect(() => {
-        if (user && role && ownerData) {
-            if ((targetRole === 'admin' && role === 'administrador') || (targetRole === 'owner' && role === 'propietario')) {
+        if (!authLoading && user && role && ownerData) {
+            const isTargetRoleMatch = (targetRole === 'admin' && role === 'administrador') || (targetRole === 'owner' && role === 'propietario');
+            
+            if (isTargetRoleMatch) {
                 toast({
                     title: 'Inicio de Sesión Exitoso',
                     description: `Bienvenido de nuevo, ${ownerData.name || 'usuario'}.`,
                     className: 'bg-green-100 border-green-400'
                 });
-                
+
                 if (role === 'administrador') {
                     router.push('/admin/dashboard');
                 } else { // propietario
@@ -54,12 +53,7 @@ export default function LoginPage() {
                 }
             }
         }
-    }, [user, role, ownerData, router, targetRole, toast]);
-
-
-    if (!targetRole) {
-         return null;
-    }
+    }, [user, role, ownerData, authLoading, router, targetRole, toast]);
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -72,11 +66,11 @@ export default function LoginPage() {
             return;
         }
 
-        setLoading(true);
+        setIsSubmitting(true);
         try {
+            const auth = getAuth();
             await signInWithEmailAndPassword(auth, email, password);
-            // The useEffect hook will handle redirection and toasts on successful login.
-
+            // The useEffect hook now handles all redirection and success logic after AuthProvider syncs.
         } catch (error: any) {
             console.error('Login error:', error);
             let description = 'Ocurrió un error inesperado. Por favor, intente de nuevo.';
@@ -89,10 +83,14 @@ export default function LoginPage() {
                 description,
             });
         } finally {
-            setLoading(false);
+            setIsSubmitting(false);
         }
     };
     
+    if (!targetRole) {
+        return null;
+    }
+
     const title = targetRole === 'admin' ? 'Acceso de Administrador' : 'Portal de Propietario';
     const description = targetRole === 'admin' ? 'Inicia sesión para gestionar el condominio.' : 'Inicia sesión para consultar tu información.';
 
@@ -120,7 +118,7 @@ export default function LoginPage() {
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
-                                disabled={loading}
+                                disabled={isSubmitting || authLoading}
                             />
                         </div>
                         <div className="space-y-2">
@@ -131,18 +129,18 @@ export default function LoginPage() {
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 required
-                                disabled={loading}
+                                disabled={isSubmitting || authLoading}
                             />
                         </div>
                     </CardContent>
                     <CardFooter className="flex-col gap-4">
-                        <Button type="submit" className="w-full" disabled={loading}>
-                            {loading ? (
+                        <Button type="submit" className="w-full" disabled={isSubmitting || authLoading}>
+                            {isSubmitting || authLoading ? (
                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                             ) : (
                                 <LogIn className="mr-2 h-4 w-4" />
                             )}
-                            {loading ? 'Ingresando...' : 'Ingresar'}
+                            {isSubmitting || authLoading ? 'Verificando...' : 'Ingresar'}
                         </Button>
                          <p className="text-xs text-muted-foreground">
                             ¿No tienes cuenta?{' '}

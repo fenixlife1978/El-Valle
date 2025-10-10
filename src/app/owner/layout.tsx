@@ -34,9 +34,15 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
                 router.push('/login?role=owner');
             } else if (role !== 'propietario') {
                 router.push('/login?role=admin');
+            } else if (ownerData && !ownerData.passwordChanged) {
+                // If the user is an owner and hasn't changed their password,
+                // force them to the change password page, unless they are already there.
+                if (router.pathname !== '/owner/change-password') {
+                     router.push('/owner/change-password');
+                }
             }
         }
-    }, [user, role, loading, router]);
+    }, [user, role, loading, ownerData, router]);
 
     if (loading || !user || role !== 'propietario') {
         return (

@@ -33,10 +33,6 @@ export default function RegisterPage() {
         }
     }, [role, router]);
 
-    if (!role) {
-        return null;
-    }
-
     const handleRegister = async (e: React.FormEvent) => {
         e.preventDefault();
         
@@ -67,6 +63,7 @@ export default function RegisterPage() {
             const user = userCredential.user;
 
             await setDoc(doc(db, "owners", user.uid), {
+                uid: user.uid,
                 name,
                 email,
                 role: isOwner ? 'propietario' : 'administrador',
@@ -102,6 +99,10 @@ export default function RegisterPage() {
         }
     };
     
+    if (!role) {
+        return null;
+    }
+
     const title = role === 'admin' ? 'Registro de Administrador' : 'Registro de Propietario';
     const description = role === 'admin' ? 'Crea una cuenta para gestionar el condominio.' : 'Crea tu cuenta para acceder al portal.';
 
@@ -159,7 +160,7 @@ export default function RegisterPage() {
                         )}
                         {role === 'owner' && (
                              <div className="text-sm text-muted-foreground p-2 border rounded-md bg-muted">
-                                <p>Se te asignará una contraseña temporal. Deberás cambiarla en tu primer inicio de sesión.</p>
+                                <p>Se te asignará la contraseña temporal <code className="font-mono bg-background/50 px-1 py-0.5 rounded">123456.Aa</code>. Deberás cambiarla en tu primer inicio de sesión.</p>
                             </div>
                         )}
                     </CardContent>
