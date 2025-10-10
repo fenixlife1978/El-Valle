@@ -1,21 +1,20 @@
-import { doc, getDoc, setDoc, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, Timestamp, collection, getDocs, writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { type User } from 'firebase/auth';
 
+const ADMIN_USER_ID = 'valle-admin-main-account';
+
 // This function now returns a boolean indicating if the profile existed before the check.
 export const ensureAdminProfile = async (showToast?: (options: any) => void): Promise<boolean> => {
-    const adminId = 'valle-admin-main-account'; // A hardcoded, unique ID for the main admin
-    const adminEmail = 'edwinfaguiars@gmail.com';
-    const adminName = 'Valle Admin';
-    const adminRef = doc(db, "owners", adminId);
+    const adminRef = doc(db, "owners", ADMIN_USER_ID);
     
     try {
         const adminSnap = await getDoc(adminRef);
 
         if (!adminSnap.exists()) {
             await setDoc(adminRef, {
-                name: adminName,
-                email: adminEmail,
+                name: 'Valle Admin',
+                email: 'edwinfaguiars@gmail.com',
                 role: 'administrador',
                 balance: 0,
                 properties: [{ street: 'N/A', house: 'N/A' }],
