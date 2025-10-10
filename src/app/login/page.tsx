@@ -14,6 +14,7 @@ import { Label } from '@/components/ui/label';
 import { Loader2, LogIn, ArrowLeft } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useAuth } from '@/hooks/use-auth';
 
 export default function LoginPage() {
     const [email, setEmail] = useState('');
@@ -23,17 +24,40 @@ export default function LoginPage() {
     const searchParams = useSearchParams();
     const { toast } = useToast();
     const auth = getAuth();
+    const { user, role, ownerData } = useAuth();
 
-    const role = searchParams.get('role');
+    const targetRole = searchParams.get('role');
 
     useEffect(() => {
-        if (!role) {
+        if (!targetRole) {
             router.replace('/');
         }
-    }, [role, router]);
+    }, [targetRole, router]);
+
+    useEffect(() => {
+        if (user && role && ownerData) {
+            if ((targetRole === 'admin' && role === 'administrador') || (targetRole === 'owner' && role === 'propietario')) {
+                toast({
+                    title: 'Inicio de Sesión Exitoso',
+                    description: `Bienvenido de nuevo, ${ownerData.name || 'usuario'}.`,
+                    className: 'bg-green-100 border-green-400'
+                });
+                
+                if (role === 'administrador') {
+                    router.push('/admin/dashboard');
+                } else { // propietario
+                    if (!ownerData.passwordChanged) {
+                        router.push('/owner/change-password');
+                    } else {
+                        router.push('/owner/dashboard');
+                    }
+                }
+            }
+        }
+    }, [user, role, ownerData, router, targetRole, toast]);
 
 
-    if (!role) {
+    if (!targetRole) {
          return null;
     }
 
@@ -50,48 +74,8 @@ export default function LoginPage() {
 
         setLoading(true);
         try {
-            const userCredential = await signInWithEmailAndPassword(auth, email, password);
-            const user = userCredential.user;
-
-            const userDocRef = doc(db, 'owners', user.uid);
-            const userDoc = await getDoc(userDocRef);
-
-            if (userDoc.exists()) {
-                const userData = userDoc.data();
-                const userRole = userData.role;
-                const validRoles = ['administrador', 'propietario'];
-
-                if (validRoles.includes(userRole)) {
-                    if ((role === 'admin' && userRole !== 'administrador') || (role === 'owner' && userRole !== 'propietario')) {
-                        toast({
-                            variant: 'destructive',
-                            title: 'Acceso Denegado',
-                            description: `Este usuario no tiene el rol de ${role === 'admin' ? 'Administrador' : 'Propietario'}.`,
-                        });
-                        await auth.signOut();
-                    } else {
-                         toast({
-                            title: 'Inicio de Sesión Exitoso',
-                            description: `Bienvenido, ${userData.name || 'usuario'}.`,
-                            className: 'bg-green-100 border-green-400'
-                        });
-                        
-                        if (userRole === 'administrador') {
-                            router.push('/admin/dashboard');
-                        } else if (userRole === 'propietario') {
-                            if (!userData.passwordChanged) {
-                                router.push('/owner/change-password');
-                            } else {
-                                router.push('/owner/dashboard');
-                            }
-                        }
-                    }
-                } else {
-                    router.push('/error-rol');
-                }
-            } else {
-                router.push('/error-perfil');
-            }
+            await signInWithEmailAndPassword(auth, email, password);
+            // The useEffect hook will handle redirection and toasts on successful login.
 
         } catch (error: any) {
             console.error('Login error:', error);
@@ -109,8 +93,8 @@ export default function LoginPage() {
         }
     };
     
-    const title = role === 'admin' ? 'Acceso de Administrador' : 'Portal de Propietario';
-    const description = role === 'admin' ? 'Inicia sesión para gestionar el condominio.' : 'Inicia sesión para consultar tu información.';
+    const title = targetRole === 'admin' ? 'Acceso de Administrador' : 'Portal de Propietario';
+    const description = targetRole === 'admin' ? 'Inicia sesión para gestionar el condominio.' : 'Inicia sesión para consultar tu información.';
 
     return (
         <main className="min-h-screen flex items-center justify-center bg-background p-4 relative">
@@ -162,7 +146,7 @@ export default function LoginPage() {
                         </Button>
                          <p className="text-xs text-muted-foreground">
                             ¿No tienes cuenta?{' '}
-                            <Link href={`/register?role=${role}`} className="underline text-primary">
+                            <Link href={`/register?role=${targetRole}`} className="underline text-primary">
                                 Regístrate aquí
                             </Link>
                         </p>

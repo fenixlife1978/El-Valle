@@ -2,7 +2,7 @@
 
 import { createContext, useEffect, useState, ReactNode } from 'react';
 import { getAuth, onAuthStateChanged, type User } from 'firebase/auth';
-import { doc, onSnapshot, getDoc, setDoc, Timestamp, collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
+import { doc, onSnapshot, getDoc, setDoc, Timestamp, collection, query, where, getDocs, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
 type AuthContextType = {
@@ -31,42 +31,51 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (firebaseUser) {
         // User is signed in, begin sync logic.
         const { uid, email } = firebaseUser;
-        const ownersRef = collection(db, "owners");
-        const q = query(ownersRef, where("email", "==", email));
-
-        const querySnapshot = await getDocs(q);
         let userDocRef;
-        let userDataFromDb = null;
+        let userDataFromDb: any | null = null;
+        
+        // 1. Try to find user by UID first (most common case for returning users)
+        const docByUidRef = doc(db, 'owners', uid);
+        const docByUidSnap = await getDoc(docByUidRef);
 
-        if (!querySnapshot.empty) {
-          // Profile with this email already exists.
-          const existingDoc = querySnapshot.docs[0];
-          userDocRef = existingDoc.ref;
-          userDataFromDb = existingDoc.data();
-          
-          if (!userDataFromDb.uid) {
-            // If the profile exists but has no UID, link it.
-            await updateDoc(userDocRef, { uid: uid });
-            userDataFromDb.uid = uid; // Update local copy
-          }
+        if (docByUidSnap.exists()) {
+            userDocRef = docByUidRef;
+            userDataFromDb = docByUidSnap.data();
         } else {
-          // No profile found, create a new one.
-          userDocRef = doc(db, 'owners', uid);
-          const newProfile = {
-            uid: uid,
-            name: firebaseUser.displayName || email,
-            email: email,
-            role: 'propietario', // Default role
-            balance: 0,
-            properties: [],
-            passwordChanged: false, 
-            createdAt: Timestamp.now(),
-            createdBy: 'auto-sync'
-          };
-          await setDoc(userDocRef, newProfile);
-          userDataFromDb = newProfile;
-        }
+            // 2. If no doc by UID, try to find by email to link an existing profile
+            const ownersRef = collection(db, "owners");
+            const q = query(ownersRef, where("email", "==", email));
+            const querySnapshot = await getDocs(q);
 
+            if (!querySnapshot.empty) {
+              // Profile with this email already exists, link it by updating UID
+              const existingDoc = querySnapshot.docs[0];
+              userDocRef = existingDoc.ref;
+              await updateDoc(userDocRef, { uid: uid }); // Link the profile
+              
+              // Get the fresh data after linking
+              const updatedDoc = await getDoc(userDocRef);
+              userDataFromDb = updatedDoc.data();
+
+            } else {
+              // 3. No profile found, create a new one.
+              userDocRef = doc(db, 'owners', uid);
+              const newProfile = {
+                uid: uid,
+                name: firebaseUser.displayName || email,
+                email: email,
+                role: 'propietario', // Default role
+                balance: 0,
+                properties: [],
+                passwordChanged: false, 
+                createdAt: Timestamp.now(),
+                createdBy: 'auto-sync'
+              };
+              await setDoc(userDocRef, newProfile);
+              userDataFromDb = newProfile;
+            }
+        }
+        
         // Set user and subscribe to profile changes
         setUser(firebaseUser);
         
@@ -76,7 +85,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setRole(data.role);
             setOwnerData(data);
           } else {
-            // This case should be rare after the sync logic above, but it's good practice.
             setRole(null);
             setOwnerData(null);
           }
@@ -84,6 +92,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         });
 
         return () => unsubSnapshot();
+
       } else {
         // User is signed out
         setUser(null);
