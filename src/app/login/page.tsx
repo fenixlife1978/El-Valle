@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -34,7 +33,6 @@ export default function LoginPage() {
 
 
     if (!role) {
-         router.replace('/');
          return null;
     }
 
@@ -71,8 +69,6 @@ export default function LoginPage() {
                     className: 'bg-green-100 border-green-400'
                 });
                 
-                localStorage.setItem('user-session', JSON.stringify({ uid: user.uid, role: userRole }));
-
                 if (userRole === 'administrador') {
                     router.push('/admin/dashboard');
                 } else if (userRole === 'propietario') {
@@ -148,7 +144,7 @@ export default function LoginPage() {
                             />
                         </div>
                     </CardContent>
-                    <CardFooter>
+                    <CardFooter className="flex-col gap-4">
                         <Button type="submit" className="w-full" disabled={loading}>
                             {loading ? (
                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -157,6 +153,12 @@ export default function LoginPage() {
                             )}
                             {loading ? 'Ingresando...' : 'Ingresar'}
                         </Button>
+                         <p className="text-xs text-muted-foreground">
+                            ¿No tienes cuenta?{' '}
+                            <Link href={`/register?role=${role}`} className="underline text-primary">
+                                Regístrate aquí
+                            </Link>
+                        </p>
                     </CardFooter>
                 </form>
             </Card>
