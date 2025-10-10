@@ -62,11 +62,11 @@ export default function LoginPage() {
                 const validRoles = ['administrador', 'propietario'];
 
                 if (validRoles.includes(userRole)) {
-                    if (role !== userRole && (role === 'admin' && userRole !== 'administrador') || (role === 'owner' && userRole !== 'propietario')) {
+                    if ((role === 'admin' && userRole !== 'administrador') || (role === 'owner' && userRole !== 'propietario')) {
                         toast({
                             variant: 'destructive',
                             title: 'Acceso Denegado',
-                            description: `Este usuario no tiene el rol de ${role}.`,
+                            description: `Este usuario no tiene el rol de ${role === 'admin' ? 'Administrador' : 'Propietario'}.`,
                         });
                         await auth.signOut();
                     } else {
@@ -87,11 +87,9 @@ export default function LoginPage() {
                         }
                     }
                 } else {
-                    console.warn(`Rol no reconocido: ${userRole}`);
                     router.push('/error-rol');
                 }
             } else {
-                console.error('No se encontró un perfil asociado a esta cuenta.');
                 router.push('/error-perfil');
             }
 
@@ -100,8 +98,6 @@ export default function LoginPage() {
             let description = 'Ocurrió un error inesperado. Por favor, intente de nuevo.';
             if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
                 description = 'El email o la contraseña son incorrectos.';
-            } else if (error.message) {
-                description = error.message;
             }
             toast({
                 variant: 'destructive',
