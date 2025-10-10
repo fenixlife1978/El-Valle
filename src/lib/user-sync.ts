@@ -12,6 +12,7 @@ export const ensureAdminProfile = async (showToast?: (options: any) => void): Pr
 
         if (!adminSnap.exists()) {
             await setDoc(adminRef, {
+                uid: ADMIN_USER_ID, // Ensure admin has a UID
                 name: 'Valle Admin',
                 email: 'edwinfaguiars@gmail.com',
                 role: 'administrador',
@@ -25,6 +26,9 @@ export const ensureAdminProfile = async (showToast?: (options: any) => void): Pr
                 showToast({ title: "Perfil de Administrador Creado", description: "El perfil principal de administrador fue creado exitosamente." });
             }
             return false; // Did not exist
+        } else if (!adminSnap.data().uid) {
+            // If admin exists but UID is missing, add it.
+            await setDoc(adminRef, { uid: ADMIN_USER_ID }, { merge: true });
         }
         return true; // Existed
     } catch (error) {

@@ -2,7 +2,7 @@
 
 import { createContext, useEffect, useState, ReactNode } from 'react';
 import { getAuth, onAuthStateChanged, type User } from 'firebase/auth';
-import { doc, onSnapshot, getDoc, setDoc, Timestamp } from 'firebase/firestore';
+import { doc, onSnapshot, getDoc, setDoc, Timestamp, collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
 type AuthContextType = {
@@ -28,50 +28,65 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     const auth = getAuth();
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setUser(firebaseUser);
       if (firebaseUser) {
-        // User is signed in, get their role from Firestore
-        const userDocRef = doc(db, 'owners', firebaseUser.uid);
+        // User is signed in, begin sync logic.
+        const { uid, email } = firebaseUser;
+        const ownersRef = collection(db, "owners");
+        const q = query(ownersRef, where("email", "==", email));
 
-        const unsubSnapshot = onSnapshot(userDocRef, async (docSnap) => {
+        const querySnapshot = await getDocs(q);
+        let userDocRef;
+        let userDataFromDb = null;
+
+        if (!querySnapshot.empty) {
+          // Profile with this email already exists.
+          const existingDoc = querySnapshot.docs[0];
+          userDocRef = existingDoc.ref;
+          userDataFromDb = existingDoc.data();
+          
+          if (!userDataFromDb.uid) {
+            // If the profile exists but has no UID, link it.
+            await updateDoc(userDocRef, { uid: uid });
+            userDataFromDb.uid = uid; // Update local copy
+          }
+        } else {
+          // No profile found, create a new one.
+          userDocRef = doc(db, 'owners', uid);
+          const newProfile = {
+            uid: uid,
+            name: firebaseUser.displayName || email,
+            email: email,
+            role: 'propietario', // Default role
+            balance: 0,
+            properties: [],
+            passwordChanged: false, 
+            createdAt: Timestamp.now(),
+            createdBy: 'auto-sync'
+          };
+          await setDoc(userDocRef, newProfile);
+          userDataFromDb = newProfile;
+        }
+
+        // Set user and subscribe to profile changes
+        setUser(firebaseUser);
+        
+        const unsubSnapshot = onSnapshot(userDocRef, (docSnap) => {
           if (docSnap.exists()) {
             const data = docSnap.data();
             setRole(data.role);
             setOwnerData(data);
           } else {
-            // Profile doesn't exist, so we create it automatically.
-            console.log(`Profile for ${firebaseUser.email} not found, creating one.`);
-            try {
-                await setDoc(userDocRef, {
-                    name: firebaseUser.displayName || firebaseUser.email,
-                    email: firebaseUser.email,
-                    role: 'propietario', // Default role for auto-created profiles
-                    balance: 0,
-                    properties: [],
-                    passwordChanged: false, 
-                    createdAt: Timestamp.now(),
-                    createdBy: 'auto-sync'
-                });
-                // The onSnapshot listener will be triggered again by the setDoc,
-                // so we don't need to set state here.
-            } catch (error) {
-                console.error("Error creating user profile automatically: ", error);
-                setRole(null);
-                setOwnerData(null);
-            }
-          }
-          setLoading(false);
-        }, () => {
-            // Error handling for snapshot listener
+            // This case should be rare after the sync logic above, but it's good practice.
             setRole(null);
             setOwnerData(null);
-            setLoading(false);
+          }
+          setLoading(false);
         });
 
         return () => unsubSnapshot();
-
       } else {
         // User is signed out
+        setUser(null);
         setRole(null);
         setOwnerData(null);
         setLoading(false);
