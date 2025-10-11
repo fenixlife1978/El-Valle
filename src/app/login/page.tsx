@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -101,7 +102,7 @@ export default function LoginPage() {
             <Card className="w-full max-w-sm">
                 <CardHeader className="text-center">
                     <div className="mx-auto mb-4">
-                        <Image src="/logo.png" alt="Logo" width={80} height={80} data-ai-hint="logo for a condo app"/>
+                        <Image src="/logo.png" alt="Logo de VALLECONDO" width={80} height={80} data-ai-hint="logo for a condo app"/>
                     </div>
                     <CardTitle className="capitalize font-headline">{title}</CardTitle>
                     <CardDescription>{description}</CardDescription>
