@@ -5,7 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider } from './auth-provider';
 
 export const metadata: Metadata = {
-  title: 'CondoConnect',
+  title: 'VALLECONDO',
   description: 'Condominium Management App',
 };
 
