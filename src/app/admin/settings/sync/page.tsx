@@ -44,7 +44,7 @@ export default function SyncProfilesPage() {
                 <CardHeader>
                     <CardTitle>Verificación de Perfil de Administrador</CardTitle>
                      <CardDescription>
-                        Esta herramienta verifica que el perfil principal del sistema exista en la base de datos. La sincronización ahora es automática al iniciar sesión para todos los usuarios.
+                        Esta herramienta verifica que el perfil principal del sistema exista en la base de datos. La sincronización para todos los usuarios ahora es automática al iniciar sesión.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
@@ -76,7 +76,7 @@ export default function SyncProfilesPage() {
                     )}
                 </CardContent>
                  <CardFooter>
-                    <p className="text-xs text-muted-foreground">La verificación del administrador es automática al cargar esta página. Si un usuario (propietario o admin) no tiene perfil al iniciar sesión, se le creará uno automáticamente.</p>
+                    <p className="text-xs text-muted-foreground">La verificación del administrador es automática al cargar esta página. Si un usuario (propietario o admin) no tiene perfil al iniciar sesión, el sistema intentará vincularlo o crearlo automáticamente.</p>
                 </CardFooter>
             </Card>
         </div>
