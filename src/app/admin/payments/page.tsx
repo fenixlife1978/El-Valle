@@ -321,7 +321,7 @@ export default function UnifiedPaymentsPage() {
     const getFilteredOwners = (searchTerm: string) => {
         if (!searchTerm || searchTerm.length < 3) return [];
         return allOwners.filter(owner =>
-            owner.name.toLowerCase().includes(searchTerm.toLowerCase())
+            owner.name && owner.name.toLowerCase().includes(searchTerm.toLowerCase())
         );
     };
 
