@@ -28,7 +28,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     const auth = getAuth();
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setLoading(true);
       if (firebaseUser) {
         // User is signed in, begin sync logic.
         const { uid, email } = firebaseUser;
@@ -43,7 +42,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         } else if (email) {
             // 2. If no doc by UID, try to find by email to link a legacy profile
             const ownersRef = collection(db, "owners");
-            const q = query(ownersRef, where("email", "==", email));
+            const q = query(ownersRef, where("email", "==", email), where("uid", "==", null)); // Find profiles with matching email but no UID
             const querySnapshot = await getDocs(q);
 
             if (!querySnapshot.empty) {
@@ -52,7 +51,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               userDocRef = existingDoc.ref;
               await updateDoc(userDocRef, { uid: uid }); // Link the profile
             } else {
-              // 3. No profile found by UID or email, create a new one.
+              // 3. No profile found by UID or a linkable email, create a new one.
               userDocRef = doc(db, 'owners', uid);
               const newProfile = {
                 uid: uid,
@@ -61,15 +60,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 role: 'propietario', // Default role for auto-created profiles
                 balance: 0,
                 properties: [],
-                passwordChanged: false, // Force password change for new profiles
+                passwordChanged: false,
                 createdAt: Timestamp.now(),
                 createdBy: 'auto-sync'
               };
               await setDoc(userDocRef, newProfile);
             }
         } else {
-            // This case is unlikely (user with no email), but we should handle it.
-            // Create a doc with UID to avoid leaving user in a broken state.
+            // This case is unlikely (user with no email), but we must handle it to prevent broken states.
             userDocRef = doc(db, 'owners', uid);
             if (!(await getDoc(userDocRef)).exists()){
                  await setDoc(userDocRef, {
