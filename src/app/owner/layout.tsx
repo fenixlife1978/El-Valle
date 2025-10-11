@@ -1,4 +1,3 @@
-
 'use client';
 
 import {
@@ -53,7 +52,9 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
         );
     }
     
-    if (ownerData && !ownerData.passwordChanged && pathname !== '/owner/change-password') {
+    // While loading is false, ownerData might still be null briefly.
+    // Also check for passwordChanged status before rendering layout, unless on the change-password page itself.
+    if (pathname !== '/owner/change-password' && (!ownerData || !ownerData.passwordChanged)) {
         return (
              <div className="flex h-screen w-full items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin" />

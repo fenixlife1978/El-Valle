@@ -43,7 +43,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         } else if (email) {
             // 2. If no doc by UID, try to find by email to link a legacy profile
             const ownersRef = collection(db, "owners");
-            const q = query(ownersRef, where("email", "==", email), where("uid", "==", null));
+            const q = query(ownersRef, where("email", "==", email));
             const querySnapshot = await getDocs(q);
 
             if (!querySnapshot.empty) {
