@@ -44,6 +44,7 @@ import {
 import { cn } from '@/lib/utils';
 import { Card } from '@/components/ui/card';
 import { useAuth } from '@/hooks/use-auth';
+import { Skeleton } from './ui/skeleton';
 
 export type NavItem = {
   href: string;
@@ -76,6 +77,7 @@ const CustomHeader = () => {
     const { ownerData, userRole } = useAuth();
     const router = useRouter();
     const [activeRate, setActiveRate] = React.useState<ExchangeRate | null>(null);
+    const [loadingRate, setLoadingRate] = React.useState(true);
 
     React.useEffect(() => {
         const settingsRef = doc(db, 'config', 'mainSettings');
@@ -89,6 +91,10 @@ const CustomHeader = () => {
                 }
                 setActiveRate(currentActiveRate);
             }
+            setLoadingRate(false);
+        }, () => {
+            // Handle error case if needed
+            setLoadingRate(false);
         });
 
         return () => {
@@ -112,7 +118,9 @@ const CustomHeader = () => {
             </div>
 
             <div className="flex w-full items-center justify-between gap-4 sm:w-auto sm:ml-auto">
-                {activeRate && (
+                 {loadingRate ? (
+                    <Skeleton className="h-12 w-48 rounded-lg" />
+                 ) : activeRate && (
                     <Card className="flex items-center gap-3 p-2 rounded-lg bg-card/50 flex-shrink-0">
                        <BCVLogo />
                        <div>
