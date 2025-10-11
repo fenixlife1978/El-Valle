@@ -37,9 +37,11 @@ export default function WelcomePage() {
     }
 
     return (
-        <main className="min-h-screen flex flex-col items-center justify-center bg-background p-4 text-center">
+        <main className="min-h-screen flex flex-col items-center justify-center bg-background p-4 text-center relative">
+            <div className="absolute top-8 left-8">
+                 <Image src="/logo.png" alt="Logo de VALLECONDO" width={80} height={80} className="rounded-full" data-ai-hint="logo for a condo app"/>
+            </div>
             <div className="mb-8">
-                <Image src="/logo.png" alt="Logo de VALLECONDO" width={100} height={100} className="rounded-full" data-ai-hint="logo for a condo app"/>
                 <h1 className="text-4xl font-bold mt-4 font-headline">Bienvenido a VALLECONDO</h1>
                 <p className="text-muted-foreground mt-2">"tu condominio"</p>
             </div>
