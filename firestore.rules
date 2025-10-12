@@ -1,61 +1,41 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    // ADMIN-ONLY RULES
-    match /config/{docId} {
-      allow read, write: if get(/databases/$(database)/documents/owners/$(request.auth.uid)).data.role == 'administrador';
-    }
-
-    match /custom_documents/{docId} {
-       allow read, write: if get(/databases/$(database)/documents/owners/$(request.auth.uid)).data.role == 'administrador';
-    }
-
-    match /certificates/{docId} {
-      allow read, write: if get(/databases/$(database)/documents/owners/$(request.auth.uid)).data.role == 'administrador';
-    }
-
-     match /petty_cash_replenishments/{docId} {
-      allow read, write: if get(/databases/$(database)/documents/owners/$(request.auth.uid)).data.role == 'administrador';
-    }
     
-    // OWNER-ACCESSIBLE RULES
+    // Helper function to check if the user is an admin
+    function isAdmin() {
+      return get(/databases/$(database)/documents/owners/$(request.auth.uid)).data.role == 'administrador';
+    }
+
+    // Rules for the 'owners' collection
     match /owners/{ownerId} {
-      // Owners can read and write their own profile
-      allow read, update: if request.auth != null && request.auth.uid == ownerId;
-      // Admins can read, create, and update any owner profile
-      allow read, create, update: if get(/databases/$(database)/documents/owners/$(request.auth.uid)).data.role == 'administrador';
-      // Only admins can delete profiles (for now, restricted)
-      allow delete: if get(/databases/$(database)/documents/owners/$(request.auth.uid)).data.role == 'administrador';
-    }
-
-    match /payments/{paymentId} {
-       // Owners can create payments (report them)
-       allow create: if request.auth != null;
-       // Owners can read payments where they are a beneficiary
-       allow read: if request.auth != null && resource.data.beneficiaryIds.hasAny([request.auth.uid]);
-       // Admins can read, update (approve/reject), and delete any payment
-       allow read, update, delete: if get(/databases/$(database)/documents/owners/$(request.auth.uid)).data.role == 'administrador';
+      // Any authenticated user can read any owner's profile.
+      // This is necessary for many UI features like searching for owners.
+      allow read: if request.auth != null;
+      
+      // An owner can write to their own document.
+      // An admin can write to any owner's document.
+      allow write: if (request.auth != null && request.auth.uid == ownerId) || isAdmin();
     }
     
-    match /debts/{debtId} {
-      // Owners can read their own debts
-      allow read: if request.auth != null && resource.data.ownerId == request.auth.uid;
-      // Admins can manage all debts
-      allow read, create, update, delete: if get(/databases/$(database)/documents/owners/$(request.auth.uid)).data.role == 'administrador';
+    // Rules for general configuration
+    match /config/{docId} {
+      // Allow any authenticated user to read configuration.
+      allow read: if request.auth != null;
+      // Only admins can change the configuration.
+      allow write: if isAdmin();
     }
 
-     match /historical_payments/{paymentId} {
-        // Owners can read their own historical payments
-        allow read: if request.auth != null && resource.data.ownerId == request.auth.uid;
-        // Admins can manage all historical payments
-        allow read, create, delete: if get(/databases/$(database)/documents/owners/$(request.auth.uid)).data.role == 'administrador';
-     }
-
-     match /published_reports/{reportId} {
-        // All authenticated users can read published reports
-        allow read: if request.auth != null;
-        // Only admins can create/update them
-        allow write: if get(/databases/$(database)/documents/owners/$(request.auth.uid)).data.role == 'administrador';
-     }
+    // Rules for all other collections (payments, debts, etc.)
+    // This is a broad rule, can be made more granular if needed.
+    match /{collection}/{docId} {
+      // Any authenticated user can read data from any other collection.
+      // This is needed for owners to see their debts, payments, etc.
+      allow read: if request.auth != null;
+      
+      // Only administrators can create, update, or delete records in other collections.
+      allow create, update, delete: if isAdmin();
+    }
   }
 }
