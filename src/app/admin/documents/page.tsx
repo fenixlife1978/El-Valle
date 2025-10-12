@@ -158,10 +158,11 @@ export default function DocumentsPage() {
         const doc = new jsPDF();
         const pageWidth = doc.internal.pageSize.getWidth();
         const margin = 20;
+        let currentY = 15;
 
-        // Header
+        // --- Header ---
         const logoX = margin;
-        const logoY = 15;
+        const logoY = currentY;
         const logoWidth = 30;
         const logoHeight = 30;
         if (companyInfo.logo) {
@@ -169,31 +170,48 @@ export default function DocumentsPage() {
             catch(e) { console.error(e); }
         }
         
-        const infoX = logoX + logoWidth + 5;
         doc.setFontSize(10).setFont('helvetica', 'normal');
+        const infoX = logoX + logoWidth + 5;
+        const infoMaxWidth = pageWidth - infoX - margin;
+        
         doc.text(companyInfo.name, infoX, logoY + 5);
         doc.text(companyInfo.rif, infoX, logoY + 10);
-        doc.text(companyInfo.address, infoX, logoY + 15);
+        
+        const addressLines = doc.splitTextToSize(companyInfo.address, infoMaxWidth);
+        doc.text(addressLines, infoX, logoY + 15);
+        
+        currentY = logoY + logoHeight + 5; // Y position after header block
+        
+        // --- Date ---
+        doc.setFontSize(10).setFont('helvetica', 'normal');
+        const dateStr = `Independencia, ${format(new Date(), 'dd \'de\' MMMM \'de\' yyyy', { locale: require('date-fns/locale/es') })}`;
+        doc.text(dateStr, pageWidth - margin, currentY, { align: 'right' });
+        currentY += 15;
+        
+        // --- Title ---
+        doc.setFontSize(16).setFont('helvetica', 'bold');
+        doc.text(title, pageWidth / 2, currentY, { align: 'center' });
+        currentY += 15;
 
-
-        // Title
-        doc.setFontSize(16).setFont('helvetica', 'bold').text(title, pageWidth / 2, 70, { align: 'center' });
-
-        // Body
+        // --- Body ---
         doc.setFontSize(12).setFont('helvetica', 'normal');
         const splitBody = doc.splitTextToSize(body, pageWidth - (margin * 2));
-        doc.text(splitBody, margin, 90);
+        doc.text(splitBody, margin, currentY, { align: 'justify' });
+        const bodyHeight = doc.getTextDimensions(splitBody).h;
+        currentY += bodyHeight + 20;
         
         // --- Signature ---
-        const lastBodyLineY = 90 + (splitBody.length * 5); // Approximate Y position
-        const signatureBlockY = lastBodyLineY + 40;
+        const signatureBlockY = currentY + 20;
 
-        doc.setFontSize(12).setFont('helvetica', 'normal').text('Atentamente,', pageWidth / 2, signatureBlockY, { align: 'center'});
+        doc.setFontSize(12).setFont('helvetica', 'normal');
+        doc.text('Atentamente,', pageWidth / 2, signatureBlockY, { align: 'center'});
 
         const signatureLineY = signatureBlockY + 20;
         doc.setLineWidth(0.5);
         doc.line(pageWidth/2 - 40, signatureLineY, pageWidth/2 + 40, signatureLineY);
-        doc.setFontSize(10).setFont('helvetica', 'bold').text('Junta de Condominio', pageWidth / 2, signatureLineY + 8, { align: 'center' });
+        
+        doc.setFontSize(10).setFont('helvetica', 'bold');
+        doc.text('Junta de Condominio', pageWidth / 2, signatureLineY + 8, { align: 'center' });
 
 
         doc.save(`${title.replace(/\s/g, '_')}_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
