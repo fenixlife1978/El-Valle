@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent, CardFooter, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +15,7 @@ import { doc, onSnapshot, collection, query, where, orderBy, limit, getDoc, getD
 import { format, isBefore, startOfMonth, addMonths, isEqual, getYear, getMonth, endOfMonth, isSameMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { useAuth } from '@/hooks/use-auth';
@@ -787,3 +787,4 @@ export default function OwnerDashboardPage() {
     </div>
   );
 }
+
