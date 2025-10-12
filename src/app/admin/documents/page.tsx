@@ -217,25 +217,27 @@ export default function DocumentsPage() {
             catch(e) { console.error(e); }
         }
         
-        const infoX = logoX + logoWidth + 5;
-        const infoMaxWidth = pageWidth - infoX - margin;
+        const infoX = margin;
+        let infoY = logoY + logoHeight + 5;
+        
         doc.setFontSize(10).setFont('helvetica', 'normal');
+        doc.text(companyInfo.name, infoX, infoY);
+        infoY += 5;
+        doc.text(companyInfo.rif, infoX, infoY);
+        infoY += 5;
         
-        doc.text(companyInfo.name, infoX, logoY + 5);
-        doc.text(companyInfo.rif, infoX, logoY + 10);
+        const addressLines = doc.splitTextToSize(companyInfo.address, (pageWidth / 2) - margin);
+        doc.text(addressLines, infoX, infoY);
         
-        const addressLines = doc.splitTextToSize(companyInfo.address, infoMaxWidth);
-        doc.text(addressLines, infoX, logoY + 15);
-        
-        currentY = Math.max(logoY + logoHeight, logoY + 15 + (addressLines.length * 5)) + 15;
+        currentY = infoY + (addressLines.length * 5) + 15;
         
         // --- Date ---
         doc.setFontSize(10).setFont('helvetica', 'normal');
         const dateStr = `Independencia, ${format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: es })}`;
-        doc.text(dateStr, pageWidth - margin, currentY, { align: 'right' });
-        currentY += 15;
+        doc.text(dateStr, pageWidth - margin, logoY + 5, { align: 'right' });
         
         // --- Title ---
+        currentY += 10;
         doc.setFontSize(16).setFont('helvetica', 'bold');
         doc.text(title, pageWidth / 2, currentY, { align: 'center' });
         currentY += 15;
@@ -260,7 +262,7 @@ export default function DocumentsPage() {
         doc.setFontSize(10).setFont('helvetica', 'bold');
         doc.text('Junta de Condominio', pageWidth / 2, signatureLineY + 8, { align: 'center' });
 
-        doc.save(`${title.replace(/\s/g, '_')}_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+        doc.output('dataurlnewwindow');
     };
 
     return (
