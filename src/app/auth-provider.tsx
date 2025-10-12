@@ -1,3 +1,4 @@
+
 'use client';
 
 import { createContext, useEffect, useState, ReactNode } from 'react';
@@ -42,14 +43,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         } else if (email) {
             // 2. If no doc by UID, try to find by email to link a legacy profile
             const ownersRef = collection(db, "owners");
-            const q = query(ownersRef, where("email", "==", email), where("uid", "==", null)); // Find profiles with matching email but no UID
+            const q = query(ownersRef, where("email", "==", email)); // Find any profile with this email.
             const querySnapshot = await getDocs(q);
 
             if (!querySnapshot.empty) {
               // Profile with this email already exists, link it by updating UID
               const existingDoc = querySnapshot.docs[0];
               userDocRef = existingDoc.ref;
-              await updateDoc(userDocRef, { uid: uid }); // Link the profile
+              if (!existingDoc.data().uid) { // Only update if UID is missing
+                await updateDoc(userDocRef, { uid: uid }); // Link the profile
+              }
             } else {
               // 3. No profile found by UID or a linkable email, create a new one.
               userDocRef = doc(db, 'owners', uid);
