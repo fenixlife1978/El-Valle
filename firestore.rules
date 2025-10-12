@@ -1,41 +1,46 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Helper function to check if the user is an admin
-    function isAdmin() {
-      return get(/databases/$(database)/documents/owners/$(request.auth.uid)).data.role == 'administrador';
+
+    // Allow authenticated users to read any document.
+    // This is necessary for the admin dashboard to query collections.
+    match /{document=**} {
+      allow read: if request.auth != null;
     }
 
-    // Rules for the 'owners' collection
+    // Owners can only write to their own document.
     match /owners/{ownerId} {
-      // Any authenticated user can read any owner's profile.
-      // This is necessary for many UI features like searching for owners.
-      allow read: if request.auth != null;
-      
-      // An owner can write to their own document.
-      // An admin can write to any owner's document.
-      allow write: if (request.auth != null && request.auth.uid == ownerId) || isAdmin();
-    }
-    
-    // Rules for general configuration
-    match /config/{docId} {
-      // Allow any authenticated user to read configuration.
-      allow read: if request.auth != null;
-      // Only admins can change the configuration.
-      allow write: if isAdmin();
+      allow write: if request.auth != null && request.auth.uid == ownerId;
     }
 
-    // Rules for all other collections (payments, debts, etc.)
-    // This is a broad rule, can be made more granular if needed.
-    match /{collection}/{docId} {
-      // Any authenticated user can read data from any other collection.
-      // This is needed for owners to see their debts, payments, etc.
-      allow read: if request.auth != null;
-      
-      // Only administrators can create, update, or delete records in other collections.
-      allow create, update, delete: if isAdmin();
+    // Admins can write to any collection.
+    // A user is an admin if their document in 'owners' has role == 'administrador'.
+    match /owners/{userId} {
+      allow write: if get(/databases/$(database)/documents/owners/$(request.auth.uid)).data.role == 'administrador';
+    }
+    
+    match /payments/{paymentId} {
+        allow write: if get(/databases/$(database)/documents/owners/$(request.auth.uid)).data.role == 'administrador';
+    }
+
+    match /debts/{debtId} {
+        allow write: if get(/databases/$(database)/documents/owners/$(request.auth.uid)).data.role == 'administrador';
+    }
+    
+    match /config/{configId} {
+       allow write: if get(/databases/$(database)/documents/owners/$(request.auth.uid)).data.role == 'administrador';
+    }
+    
+    match /certificates/{certId} {
+       allow write: if get(/databases/$(database)/documents/owners/$(request.auth.uid)).data.role == 'administrador';
+    }
+    
+    match /custom_documents/{docId} {
+       allow write: if get(/databases/$(database)/documents/owners/$(request.auth.uid)).data.role == 'administrador';
+    }
+    
+    match /petty_cash_replenishments/{repId} {
+       allow write: if get(/databases/$(database)/documents/owners/$(request.auth.uid)).data.role == 'administrador';
     }
   }
 }
