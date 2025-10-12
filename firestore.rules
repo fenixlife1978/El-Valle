@@ -1,46 +1,9 @@
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // Allow authenticated users to read any document.
-    // This is necessary for the admin dashboard to query collections.
     match /{document=**} {
-      allow read: if request.auth != null;
-    }
-
-    // Owners can only write to their own document.
-    match /owners/{ownerId} {
-      allow write: if request.auth != null && request.auth.uid == ownerId;
-    }
-
-    // Admins can write to any collection.
-    // A user is an admin if their document in 'owners' has role == 'administrador'.
-    match /owners/{userId} {
-      allow write: if get(/databases/$(database)/documents/owners/$(request.auth.uid)).data.role == 'administrador';
-    }
-    
-    match /payments/{paymentId} {
-        allow write: if get(/databases/$(database)/documents/owners/$(request.auth.uid)).data.role == 'administrador';
-    }
-
-    match /debts/{debtId} {
-        allow write: if get(/databases/$(database)/documents/owners/$(request.auth.uid)).data.role == 'administrador';
-    }
-    
-    match /config/{configId} {
-       allow write: if get(/databases/$(database)/documents/owners/$(request.auth.uid)).data.role == 'administrador';
-    }
-    
-    match /certificates/{certId} {
-       allow write: if get(/databases/$(database)/documents/owners/$(request.auth.uid)).data.role == 'administrador';
-    }
-    
-    match /custom_documents/{docId} {
-       allow write: if get(/databases/$(database)/documents/owners/$(request.auth.uid)).data.role == 'administrador';
-    }
-    
-    match /petty_cash_replenishments/{repId} {
-       allow write: if get(/databases/$(database)/documents/owners/$(request.auth.uid)).data.role == 'administrador';
+      allow read, write: if true;
     }
   }
 }
