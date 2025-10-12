@@ -3,7 +3,7 @@
 
 import { createContext, useEffect, useState, ReactNode } from 'react';
 import { getAuth, onAuthStateChanged, type User } from 'firebase/auth';
-import { doc, onSnapshot, getDoc, setDoc, Timestamp, collection, query, where, getDocs, updateDoc } from 'firebase/firestore';
+import { doc, onSnapshot, getDoc, setDoc, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
 type AuthContextType = {
@@ -20,6 +20,8 @@ export const AuthContext = createContext<AuthContextType>({
   ownerData: null,
 });
 
+const ADMIN_USER_ID = 'valle-admin-main-account';
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -30,16 +32,32 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const auth = getAuth();
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        // User is signed in, begin sync logic.
+        setUser(firebaseUser); // Set user immediately
+
+        // Now, determine the role and fetch data
         const { uid, email } = firebaseUser;
-        const userDocRef = doc(db, 'owners', uid);
+        
+        let userDocRef;
+        let isPotentiallyAdmin = email === 'edwinfaguiars@gmail.com'; // Admin email check
 
-        try {
-            const docSnap = await getDoc(userDocRef);
+        // If the UID matches the known admin UID, treat as admin
+        if (uid === ADMIN_USER_ID) {
+            userDocRef = doc(db, 'owners', ADMIN_USER_ID);
+        } 
+        // If not, treat as a regular owner
+        else {
+            userDocRef = doc(db, 'owners', uid);
+        }
 
-            if (!docSnap.exists()) {
-                // If the user's document doesn't exist by UID, create it.
-                // This handles new user registration and first-time logins for pre-existing auth accounts.
+        const unsubSnapshot = onSnapshot(userDocRef, async (docSnap) => {
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            setRole(data.role);
+            setOwnerData(data);
+            setLoading(false);
+          } else {
+             // If document doesn't exist, create it for the owner
+             if (uid !== ADMIN_USER_ID) {
                 const newProfile = {
                     uid: uid,
                     name: firebaseUser.displayName || email,
@@ -52,33 +70,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                     createdBy: 'auto-sync'
                 };
                 await setDoc(userDocRef, newProfile);
-            }
-            
-            // Now that we're sure the document exists, subscribe to it.
-            const unsubSnapshot = onSnapshot(userDocRef, (docSnap) => {
-              if (docSnap.exists()) {
-                const data = docSnap.data();
-                setRole(data.role);
-                setOwnerData(data);
-                setUser(firebaseUser); // Set user only after we have role and data
-              } else {
+                // The onSnapshot will re-trigger with the new data
+             } else {
+                 // This case is for the admin, which should already exist.
+                 // If it doesn't, it indicates a setup problem.
                 setRole(null);
                 setOwnerData(null);
-                setUser(null);
-              }
-              setLoading(false);
-            });
-            
-            return () => unsubSnapshot();
-
-        } catch (error) {
-            console.error("Error during user profile sync:", error);
-            // In case of error (e.g., permissions), sign out to avoid an inconsistent state.
-            setUser(null);
+                setLoading(false);
+             }
+          }
+        }, (error) => {
+            console.error("Error subscribing to user document:", error);
             setRole(null);
             setOwnerData(null);
             setLoading(false);
-        }
+        });
+
+        return () => unsubSnapshot();
 
       } else {
         // User is signed out
