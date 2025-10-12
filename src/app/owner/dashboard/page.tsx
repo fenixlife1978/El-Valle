@@ -15,7 +15,7 @@ import { doc, onSnapshot, collection, query, where, orderBy, limit, getDoc, getD
 import { format, isBefore, startOfMonth, addMonths, isEqual, getYear, getMonth, endOfMonth, isSameMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { useAuth } from '@/hooks/use-auth';
