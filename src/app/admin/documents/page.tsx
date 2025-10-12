@@ -217,16 +217,15 @@ export default function DocumentsPage() {
             catch(e) { console.error(e); }
         }
         
-        const infoX = margin;
-        let infoY = logoY + logoHeight + 5;
-        
+        let infoX = logoX + logoWidth + 5;
+        let infoY = logoY + 5;
         doc.setFontSize(10).setFont('helvetica', 'normal');
         doc.text(companyInfo.name, infoX, infoY);
         infoY += 5;
         doc.text(companyInfo.rif, infoX, infoY);
         infoY += 5;
         
-        const addressLines = doc.splitTextToSize(companyInfo.address, (pageWidth / 2) - margin);
+        const addressLines = doc.splitTextToSize(companyInfo.address, (pageWidth / 2) - infoX);
         doc.text(addressLines, infoX, infoY);
         
         currentY = infoY + (addressLines.length * 5) + 15;
