@@ -3,7 +3,7 @@
 
 import { createContext, useEffect, useState, ReactNode } from 'react';
 import { getAuth, onAuthStateChanged, type User } from 'firebase/auth';
-import { doc, onSnapshot, getDoc, setDoc, Timestamp } from 'firebase/firestore';
+import { doc, onSnapshot, getDoc, setDoc, Timestamp, collection, query, where, writeBatch, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
 type AuthContextType = {
@@ -31,52 +31,71 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     const auth = getAuth();
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setLoading(true);
       if (firebaseUser) {
         setUser(firebaseUser); // Set user immediately
 
-        // Now, determine the role and fetch data
-        const { uid, email } = firebaseUser;
-        
         let userDocRef;
-        let isPotentiallyAdmin = email === 'edwinfaguiars@gmail.com'; // Admin email check
+        let roleFromDoc = null;
 
-        // If the UID matches the known admin UID, treat as admin
-        if (uid === ADMIN_USER_ID) {
+        // Is it the admin?
+        if (firebaseUser.uid === ADMIN_USER_ID || firebaseUser.email === 'edwinfaguiars@gmail.com') {
             userDocRef = doc(db, 'owners', ADMIN_USER_ID);
-        } 
-        // If not, treat as a regular owner
-        else {
-            userDocRef = doc(db, 'owners', uid);
+            roleFromDoc = 'administrador';
+        } else {
+            // It's a regular owner
+            userDocRef = doc(db, 'owners', firebaseUser.uid);
+            roleFromDoc = 'propietario';
         }
 
         const unsubSnapshot = onSnapshot(userDocRef, async (docSnap) => {
           if (docSnap.exists()) {
             const data = docSnap.data();
-            setRole(data.role);
+            setRole(data.role || roleFromDoc); // Use role from doc, fallback to determined role
             setOwnerData(data);
             setLoading(false);
           } else {
-             // If document doesn't exist, create it for the owner
-             if (uid !== ADMIN_USER_ID) {
-                const newProfile = {
-                    uid: uid,
-                    name: firebaseUser.displayName || email,
-                    email: email,
-                    role: 'propietario', // Default role
-                    balance: 0,
-                    properties: [],
-                    passwordChanged: false,
-                    createdAt: Timestamp.now(),
-                    createdBy: 'auto-sync'
-                };
-                await setDoc(userDocRef, newProfile);
-                // The onSnapshot will re-trigger with the new data
+             // Profile doesn't exist under UID, let's try to find it by email
+             const q = query(collection(db, "owners"), where("email", "==", firebaseUser.email));
+             const querySnapshot = await getDocs(q);
+
+             if (!querySnapshot.empty) {
+                 // Found a profile with this email. Let's link it.
+                 const legacyDoc = querySnapshot.docs[0];
+                 const batch = writeBatch(db);
+
+                 // Move data to new doc with UID as ID
+                 const newDocRef = doc(db, 'owners', firebaseUser.uid);
+                 batch.set(newDocRef, { ...legacyDoc.data(), uid: firebaseUser.uid });
+                 
+                 // Delete old doc
+                 batch.delete(legacyDoc.ref);
+                 
+                 await batch.commit();
+                 // The onSnapshot listener will be re-triggered for the new document.
+                 // We don't setLoading(false) here to wait for the new data.
+
              } else {
-                 // This case is for the admin, which should already exist.
-                 // If it doesn't, it indicates a setup problem.
-                setRole(null);
-                setOwnerData(null);
-                setLoading(false);
+                 // Really doesn't exist, let's create it. Only for owners.
+                 if (roleFromDoc === 'propietario') {
+                     const newProfile = {
+                         uid: firebaseUser.uid,
+                         name: firebaseUser.displayName || firebaseUser.email,
+                         email: firebaseUser.email,
+                         role: 'propietario',
+                         balance: 0,
+                         properties: [],
+                         passwordChanged: false,
+                         createdAt: Timestamp.now(),
+                     };
+                     await setDoc(userDocRef, newProfile);
+                     // onSnapshot will re-trigger
+                 } else {
+                     // This is an admin that doesn't have a profile, which is an error state.
+                     setRole(null);
+                     setOwnerData(null);
+                     setLoading(false);
+                 }
              }
           }
         }, (error) => {
