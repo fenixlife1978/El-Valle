@@ -217,13 +217,13 @@ export default function DocumentsPage() {
             catch(e) { console.error(e); }
         }
         
-        const infoX = logoX + logoWidth + 10;
+        const infoX = logoX + logoWidth + 5;
+        const infoMaxWidth = pageWidth - infoX - margin;
         doc.setFontSize(10).setFont('helvetica', 'normal');
         
         doc.text(companyInfo.name, infoX, logoY + 5);
         doc.text(companyInfo.rif, infoX, logoY + 10);
         
-        const infoMaxWidth = pageWidth - infoX - margin;
         const addressLines = doc.splitTextToSize(companyInfo.address, infoMaxWidth);
         doc.text(addressLines, infoX, logoY + 15);
         
@@ -231,7 +231,7 @@ export default function DocumentsPage() {
         
         // --- Date ---
         doc.setFontSize(10).setFont('helvetica', 'normal');
-        const dateStr = `Independencia, ${format(new Date(), 'dd \'de\' MMMM \'de\' yyyy', { locale: es })}`;
+        const dateStr = `Independencia, ${format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: es })}`;
         doc.text(dateStr, pageWidth - margin, currentY, { align: 'right' });
         currentY += 15;
         
