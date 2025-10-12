@@ -12,6 +12,7 @@ import { collection, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, onSnapsh
 import { db } from '@/lib/firebase';
 import { PlusCircle, Trash2, Loader2, FileText, Edit, MoreHorizontal } from 'lucide-react';
 import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -184,7 +185,7 @@ export default function DocumentsPage() {
         
         // --- Date ---
         doc.setFontSize(10).setFont('helvetica', 'normal');
-        const dateStr = `Independencia, ${format(new Date(), 'dd \'de\' MMMM \'de\' yyyy', { locale: require('date-fns/locale/es') })}`;
+        const dateStr = `Independencia, ${format(new Date(), 'dd \'de\' MMMM \'de\' yyyy', { locale: es })}`;
         doc.text(dateStr, pageWidth - margin, currentY, { align: 'right' });
         currentY += 15;
         
