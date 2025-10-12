@@ -32,78 +32,53 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (firebaseUser) {
         // User is signed in, begin sync logic.
         const { uid, email } = firebaseUser;
-        let userDocRef;
-        
-        // 1. Try to find user by UID first (most common case for returning users)
-        const docByUidRef = doc(db, 'owners', uid);
-        const docByUidSnap = await getDoc(docByUidRef);
+        const userDocRef = doc(db, 'owners', uid);
 
-        if (docByUidSnap.exists()) {
-            userDocRef = docByUidRef;
-        } else if (email) {
-            // 2. If no doc by UID, try to find by email to link a legacy profile
-            const ownersRef = collection(db, "owners");
-            const q = query(ownersRef, where("email", "==", email)); // Find any profile with this email.
-            const querySnapshot = await getDocs(q);
+        try {
+            const docSnap = await getDoc(userDocRef);
 
-            if (!querySnapshot.empty) {
-              // Profile with this email already exists, link it by updating UID
-              const existingDoc = querySnapshot.docs[0];
-              userDocRef = existingDoc.ref;
-              if (!existingDoc.data().uid) { // Only update if UID is missing
-                await updateDoc(userDocRef, { uid: uid }); // Link the profile
-              }
-            } else {
-              // 3. No profile found by UID or a linkable email, create a new one.
-              userDocRef = doc(db, 'owners', uid);
-              const newProfile = {
-                uid: uid,
-                name: firebaseUser.displayName || email,
-                email: email,
-                role: 'propietario', // Default role for auto-created profiles
-                balance: 0,
-                properties: [],
-                passwordChanged: false,
-                createdAt: Timestamp.now(),
-                createdBy: 'auto-sync'
-              };
-              await setDoc(userDocRef, newProfile);
-            }
-        } else {
-            // This case is unlikely (user with no email), but we must handle it to prevent broken states.
-            userDocRef = doc(db, 'owners', uid);
-            if (!(await getDoc(userDocRef)).exists()){
-                 await setDoc(userDocRef, {
+            if (!docSnap.exists()) {
+                // If the user's document doesn't exist by UID, create it.
+                // This handles new user registration and first-time logins for pre-existing auth accounts.
+                const newProfile = {
                     uid: uid,
-                    name: 'Usuario sin email',
-                    email: null,
-                    role: 'propietario',
+                    name: firebaseUser.displayName || email,
+                    email: email,
+                    role: 'propietario', // Default role
                     balance: 0,
                     properties: [],
                     passwordChanged: false,
                     createdAt: Timestamp.now(),
-                 });
+                    createdBy: 'auto-sync'
+                };
+                await setDoc(userDocRef, newProfile);
             }
-        }
-        
-        // At this point, userDocRef is guaranteed to be set.
-        // Set user and subscribe to profile changes
-        setUser(firebaseUser);
-        
-        const unsubSnapshot = onSnapshot(userDocRef, (docSnap) => {
-          if (docSnap.exists()) {
-            const data = docSnap.data();
-            setRole(data.role);
-            setOwnerData(data);
-          } else {
-            // This should ideally not happen after the sync logic above
+            
+            // Now that we're sure the document exists, subscribe to it.
+            const unsubSnapshot = onSnapshot(userDocRef, (docSnap) => {
+              if (docSnap.exists()) {
+                const data = docSnap.data();
+                setRole(data.role);
+                setOwnerData(data);
+                setUser(firebaseUser); // Set user only after we have role and data
+              } else {
+                setRole(null);
+                setOwnerData(null);
+                setUser(null);
+              }
+              setLoading(false);
+            });
+            
+            return () => unsubSnapshot();
+
+        } catch (error) {
+            console.error("Error during user profile sync:", error);
+            // In case of error (e.g., permissions), sign out to avoid an inconsistent state.
+            setUser(null);
             setRole(null);
             setOwnerData(null);
-          }
-          setLoading(false);
-        });
-
-        return () => unsubSnapshot();
+            setLoading(false);
+        }
 
       } else {
         // User is signed out
