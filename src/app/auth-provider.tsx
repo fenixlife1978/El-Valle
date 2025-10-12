@@ -34,26 +34,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setLoading(true);
       if (firebaseUser) {
-        setUser(firebaseUser); // Set user immediately
+        setUser(firebaseUser);
 
         let userDocRef;
-        let roleFromAuth;
+        let roleFromAuth: 'administrador' | 'propietario' | null = null;
         let effectiveUid = firebaseUser.uid;
 
-        // 1. Determine role and effective UID
-        if (firebaseUser.uid === ADMIN_USER_ID || firebaseUser.email === ADMIN_EMAIL) {
+        // 1. Determine if the authenticated user is the administrator.
+        const isAdminAuth = firebaseUser.email === ADMIN_EMAIL;
+        
+        if (isAdminAuth) {
             roleFromAuth = 'administrador';
-            effectiveUid = ADMIN_USER_ID; // Always use the canonical admin ID
+            effectiveUid = ADMIN_USER_ID; 
         } else {
             roleFromAuth = 'propietario';
         }
-        userDocRef = doc(db, 'owners', effectiveUid);
         
+        userDocRef = doc(db, 'owners', effectiveUid);
+
         // 2. Set up a listener for the definitive user document
         const unsubSnapshot = onSnapshot(userDocRef, async (docSnap) => {
           if (docSnap.exists()) {
             const data = docSnap.data();
-            setRole(data.role || roleFromAuth); // Use role from doc, fallback to determined role
+            setRole(data.role || roleFromAuth);
             setOwnerData({ id: docSnap.id, ...data });
             setLoading(false);
           } else {
@@ -64,17 +67,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 const querySnapshot = await getDocs(q);
 
                 if (!querySnapshot.empty) {
-                    // Legacy user found by email. Migrate them.
                     const legacyDoc = querySnapshot.docs[0];
                     const batch = writeBatch(db);
-                    const newDocRefWithUid = doc(db, 'owners', firebaseUser.uid);
                     
+                    // Create a new document with the UID as the ID
+                    const newDocRefWithUid = doc(db, 'owners', firebaseUser.uid);
                     batch.set(newDocRefWithUid, { ...legacyDoc.data(), uid: firebaseUser.uid });
+                    
+                    // Delete the old document
                     batch.delete(legacyDoc.ref);
                     
-                    await batch.commit();
-                    // The listener will be re-triggered for the new document with the correct UID.
-                    // We don't set loading to false here, we wait for the correct snapshot.
+                    try {
+                        await batch.commit();
+                        // The listener will be re-triggered for the new document with the correct UID.
+                    } catch (commitError) {
+                        console.error("Error migrating legacy user:", commitError);
+                        setLoading(false);
+                    }
                 } else {
                     // Brand new user, profile needs to be created.
                     const newProfile = {
@@ -88,7 +97,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                         createdAt: Timestamp.now(),
                     };
                     await setDoc(doc(db, 'owners', firebaseUser.uid), newProfile);
-                    // Listener will pick up the new doc.
                 }
              } else { // Admin profile does not exist, which is an error state
                  console.error("Admin user is authenticated but admin profile does not exist in Firestore!");
