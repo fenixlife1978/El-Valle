@@ -2,23 +2,10 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // Allow logged-in users to read their own profile, and admins to read any profile
-    match /owners/{ownerId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth.uid == ownerId || get(/databases/$(database)/documents/owners/$(request.auth.uid)).data.role == 'administrador';
-    }
-
-    // Allow admins to manage settings, but everyone can read them
-    match /config/{docId} {
-      allow read: if request.auth != null;
-      allow write: if get(/databases/$(database)/documents/owners/$(request.auth.uid)).data.role == 'administrador';
-    }
-
-    // For all other collections, allow authenticated users to read, but only admins to write.
-    match /{collection}/{docId} {
-        allow read: if request.auth != null;
-        allow create, update, delete: if get(/databases/$(database)/documents/owners/$(request.auth.uid)).data.role == 'administrador';
+    match /{document=**} {
+      // ATENCIÓN: Esto permite el acceso público total.
+      // Ideal para desarrollo, pero debe ser asegurado para producción.
+      allow read, write: if true;
     }
   }
 }
