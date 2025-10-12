@@ -12,11 +12,8 @@ import {
     FileSignature,
     Award
 } from 'lucide-react';
-import { type ReactNode, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { type ReactNode } from 'react';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
-import { useAuth } from '@/hooks/use-auth';
-import { Loader2 } from 'lucide-react';
 
 const adminNavItems: NavItem[] = [
     { href: "/admin/dashboard", icon: Home, label: "Dashboard" },
@@ -51,27 +48,6 @@ const adminNavItems: NavItem[] = [
 ];
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
-    const { user, role, loading } = useAuth();
-    const router = useRouter();
-
-    useEffect(() => {
-        if (!loading) {
-            if (!user) {
-                router.push('/login?role=admin');
-            } else if (role !== 'administrador') {
-                router.push('/login?role=owner'); 
-            }
-        }
-    }, [user, role, loading, router]);
-
-    if (loading || !user || role !== 'administrador') {
-        return (
-            <div className="flex h-screen w-full items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin" />
-            </div>
-        );
-    }
-    
     return (
         <DashboardLayout userName="Administrador" userRole="Administrador" navItems={adminNavItems}>
             {children}
