@@ -1,30 +1,30 @@
 
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { collection, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, Timestamp, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { PlusCircle, Trash2, Loader2, FileText, Edit, MoreHorizontal } from 'lucide-react';
+import { PlusCircle, Trash2, Loader2, FileText, Edit, MoreHorizontal, Bold, Italic, Underline, List, ListOrdered } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import dynamic from 'next/dynamic';
+import { cn } from '@/lib/utils';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 
-const ReactQuill = dynamic(() => import('react-quill'), { ssr: false });
 
 type CustomDocument = {
     id: string;
     title: string;
-    body: string;
+    body: string; // Body will now store HTML
     createdAt: Timestamp;
     updatedAt: Timestamp;
 };
@@ -42,6 +42,46 @@ const emptyDocument: Omit<CustomDocument, 'id' | 'createdAt' | 'updatedAt'> = {
     title: '',
     body: '',
 };
+
+const RichTextEditor = ({ value, onChange }: { value: string, onChange: (value: string) => void }) => {
+    const editorRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (editorRef.current && editorRef.current.innerHTML !== value) {
+            editorRef.current.innerHTML = value;
+        }
+    }, [value]);
+
+    const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
+        onChange(e.currentTarget.innerHTML);
+    };
+
+    const execCommand = (command: string, value?: string) => {
+        document.execCommand(command, false, value);
+        if(editorRef.current) editorRef.current.focus();
+    }
+
+    return (
+        <div className="rounded-md border border-input">
+            <div className="p-2 border-b">
+                 <ToggleGroup type="multiple" className="flex items-center gap-1">
+                    <Button type="button" variant="outline" size="sm" onClick={() => execCommand('bold')}><Bold className="h-4 w-4"/></Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => execCommand('italic')}><Italic className="h-4 w-4"/></Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => execCommand('underline')}><Underline className="h-4 w-4"/></Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => execCommand('insertUnorderedList')}><List className="h-4 w-4"/></Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => execCommand('insertOrderedList')}><ListOrdered className="h-4 w-4"/></Button>
+                </ToggleGroup>
+            </div>
+            <div
+                ref={editorRef}
+                contentEditable
+                onInput={handleInput}
+                className="w-full min-h-[300px] rounded-b-md bg-background p-3 text-base ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+            />
+        </div>
+    );
+};
+
 
 export default function DocumentsPage() {
     const { toast } = useToast();
@@ -157,6 +197,10 @@ export default function DocumentsPage() {
         }
 
         const { title, body } = docData;
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = body;
+        const textBody = tempDiv.textContent || tempDiv.innerText || "";
+
 
         const doc = new jsPDF();
         const pageWidth = doc.internal.pageSize.getWidth();
@@ -198,7 +242,7 @@ export default function DocumentsPage() {
 
         // --- Body ---
         doc.setFontSize(12).setFont('helvetica', 'normal');
-        const splitBody = doc.splitTextToSize(body.replace(/<[^>]*>/g, ''), pageWidth - (margin * 2));
+        const splitBody = doc.splitTextToSize(textBody, pageWidth - (margin * 2));
         doc.text(splitBody, margin, currentY, { align: 'justify' });
         const bodyHeight = doc.getTextDimensions(splitBody).h;
         currentY += bodyHeight + 20;
@@ -217,19 +261,6 @@ export default function DocumentsPage() {
         doc.text('Junta de Condominio', pageWidth / 2, signatureLineY + 8, { align: 'center' });
 
         doc.save(`${title.replace(/\s/g, '_')}_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
-    };
-
-    const quillModules = {
-        toolbar: [
-          [{ 'header': [1, 2, 3, 4, 5, 6, false] }],
-          [{ 'font': [] }],
-          ['bold', 'italic', 'underline', 'strike', 'blockquote'],
-          [{'list': 'ordered'}, {'list': 'bullet'}, {'indent': '-1'}, {'indent': '+1'}],
-          [{ 'align': [] }],
-          [{ 'color': [] }, { 'background': [] }],
-          ['link', 'image'],
-          ['clean']
-        ],
     };
 
     return (
@@ -307,12 +338,9 @@ export default function DocumentsPage() {
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="document-body">Cuerpo del Documento</Label>
-                            <ReactQuill
-                                theme="snow"
+                             <RichTextEditor 
                                 value={currentDocument.body}
                                 onChange={(value) => setCurrentDocument(d => ({...d, body: value}))}
-                                modules={quillModules}
-                                className="bg-background"
                             />
                         </div>
                     </div>
