@@ -217,17 +217,17 @@ export default function DocumentsPage() {
             catch(e) { console.error(e); }
         }
         
-        const infoX = logoX + logoWidth + 5;
-        const infoMaxWidth = pageWidth - infoX - margin;
+        const infoX = pageWidth - margin;
         doc.setFontSize(10).setFont('helvetica', 'normal');
         
-        doc.text(companyInfo.name, infoX, logoY + 5);
-        doc.text(companyInfo.rif, infoX, logoY + 10);
+        doc.text(companyInfo.name, infoX, logoY + 5, { align: 'right' });
+        doc.text(companyInfo.rif, infoX, logoY + 10, { align: 'right' });
         
+        const infoMaxWidth = pageWidth - (margin * 2) - logoWidth - 5;
         const addressLines = doc.splitTextToSize(companyInfo.address, infoMaxWidth);
-        doc.text(addressLines, infoX, logoY + 15);
+        doc.text(addressLines, infoX, logoY + 15, { align: 'right' });
         
-        currentY = Math.max(logoY + logoHeight, logoY + 15 + (addressLines.length * 5)) + 5;
+        currentY = Math.max(logoY + logoHeight, logoY + 15 + (addressLines.length * 5)) + 15;
         
         // --- Date ---
         doc.setFontSize(10).setFont('helvetica', 'normal');
