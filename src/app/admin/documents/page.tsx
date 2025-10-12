@@ -160,14 +160,21 @@ export default function DocumentsPage() {
         const margin = 20;
 
         // Header
+        const logoX = margin;
+        const logoY = 15;
+        const logoWidth = 30;
+        const logoHeight = 30;
         if (companyInfo.logo) {
-            try { doc.addImage(companyInfo.logo, 'PNG', margin, 15, 30, 30); }
+            try { doc.addImage(companyInfo.logo, 'PNG', logoX, logoY, logoWidth, logoHeight); }
             catch(e) { console.error(e); }
         }
+        
+        const infoX = logoX + logoWidth + 5;
+        doc.setFontSize(10).setFont('helvetica', 'normal');
+        doc.text(companyInfo.name, infoX, logoY + 5);
+        doc.text(companyInfo.rif, infoX, logoY + 10);
+        doc.text(companyInfo.address, infoX, logoY + 15);
 
-        doc.setFontSize(10).setFont('helvetica', 'normal').text(companyInfo.name, pageWidth - margin, 20, { align: 'right' });
-        doc.text(companyInfo.rif, pageWidth - margin, 25, { align: 'right' });
-        doc.text(companyInfo.address, pageWidth - margin, 30, { align: 'right' });
 
         // Title
         doc.setFontSize(16).setFont('helvetica', 'bold').text(title, pageWidth / 2, 70, { align: 'center' });
@@ -177,6 +184,18 @@ export default function DocumentsPage() {
         const splitBody = doc.splitTextToSize(body, pageWidth - (margin * 2));
         doc.text(splitBody, margin, 90);
         
+        // --- Signature ---
+        const lastBodyLineY = 90 + (splitBody.length * 5); // Approximate Y position
+        const signatureBlockY = lastBodyLineY + 40;
+
+        doc.setFontSize(12).setFont('helvetica', 'normal').text('Atentamente,', pageWidth / 2, signatureBlockY, { align: 'center'});
+
+        const signatureLineY = signatureBlockY + 20;
+        doc.setLineWidth(0.5);
+        doc.line(pageWidth/2 - 40, signatureLineY, pageWidth/2 + 40, signatureLineY);
+        doc.setFontSize(10).setFont('helvetica', 'bold').text('Junta de Condominio', pageWidth / 2, signatureLineY + 8, { align: 'center' });
+
+
         doc.save(`${title.replace(/\s/g, '_')}_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
     };
 
