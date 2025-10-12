@@ -1,13 +1,96 @@
-diff --git a/node_modules/react-quill/lib/component.js b/node_modules/react-quill/lib/component.js
-index 9be8486..82949a8 100644
+patch-package
+--- a/node_modules/react-quill/lib/index.js
++++ b/node_modules/react-quill/lib/index.js
+@@ -512,7 +512,7 @@
+ 	},
+ 
+ 	getEditor: function getEditor() {
+-		return this.editor;
++		return this.editor.current;
+ 	},
+ 
+ 	getEditingArea: function getEditingArea() {
+@@ -520,7 +520,7 @@
+ 	},
+ 
+ 	getEditorNode: function getEditorNode() {
+-		return ReactDOM.findDOMNode(this.editingArea);
++		return this.editingArea;
+ 	},
+ 
+ 	getEditorContents: function getEditorContents() {
+@@ -999,7 +999,7 @@
+ 		this.setState({ editor: editor });
+ 	},
+ 	setEditingArea: function setEditingArea(element) {
+-		this.editingArea = element;
++		this.editingArea = element.current;
+ 	},
+ 	getEditingArea: function getEditingArea() {
+ 		return this.editingArea;
 --- a/node_modules/react-quill/lib/component.js
-+++ b/node_modules/react-quill/lib/component-patched.js
-@@ -212,7 +212,7 @@
++++ b/node_modules/react-quill/lib/component.js
+@@ -37,12 +37,12 @@
+     this.state = {
+       generation: 0,
+       value: this.isControlled() ? this.props.value : this.props.defaultValue,
+-      editor: null
++      editor: React.createRef()
+     };
+   }
+ 
+   componentDidMount() {
+-    this.editor = this.createEditor(this.getEditingArea(), this.getEditorConfig());
++    this.editor.current = this.createEditor(this.getEditingArea(), this.getEditorConfig());
+     // We only use this to force the component to re-render.
+     this.setState({
+       generation: 1
+@@ -165,7 +165,7 @@
+   };
+ 
+   getEditor = () => {
+-    return this.editor;
++    return this.editor.current;
+   };
+ 
+   getEditingArea = () => {
+@@ -173,7 +173,7 @@
+   };
+ 
+   getEditorNode = () => {
+-    return ReactDOM.findDOMNode(this.editingArea);
++    return this.editingArea;
+   };
+ 
+   getEditorContents = () => {
+@@ -467,7 +467,7 @@
+   };
+ 
+   setEditingArea = element => {
+-    this.editingArea = element;
++    this.editingArea = element.current;
+   };
+ 
+   getEditingArea = () => {
+--- a/node_modules/react-quill/lib/index.d.ts
++++ b/node_modules/react-quill/lib/index.d.ts
+@@ -131,7 +131,7 @@
+     onKeyDown?: (event: any) => void;
+     onKeyUp?: (event: any) => void;
+   }
+-
++  
+   export default class ReactQuill extends React.Component<ReactQuillProps> {
+     focus(): void;
+     blur(): void;
+--- a/node_modules/react-quill/lib/toolbar.js
++++ b/node_modules/react-quill/lib/toolbar.js
+@@ -51,7 +51,7 @@
  	},
  
- 	getEditorNode: function() {
--		return ReactDOM.findDOMNode(this.editor);
-+		return this.editor;
+ 	setEditingArea: function(element) {
+-		this.editingArea = element;
++		this.editingArea = element.current;
  	},
  
- 	/*
+ 	render: function() {
