@@ -21,6 +21,7 @@ export const AuthContext = createContext<AuthContextType>({
 });
 
 const ADMIN_USER_ID = 'valle-admin-main-account';
+const ADMIN_EMAIL = 'edwinfaguiars@gmail.com';
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -36,66 +37,64 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setUser(firebaseUser); // Set user immediately
 
         let userDocRef;
-        let roleFromDoc = null;
+        let roleFromAuth;
+        let effectiveUid = firebaseUser.uid;
 
-        // Is it the admin?
-        if (firebaseUser.uid === ADMIN_USER_ID || firebaseUser.email === 'edwinfaguiars@gmail.com') {
-            userDocRef = doc(db, 'owners', ADMIN_USER_ID);
-            roleFromDoc = 'administrador';
+        // 1. Determine role and effective UID
+        if (firebaseUser.uid === ADMIN_USER_ID || firebaseUser.email === ADMIN_EMAIL) {
+            roleFromAuth = 'administrador';
+            effectiveUid = ADMIN_USER_ID; // Always use the canonical admin ID
         } else {
-            // It's a regular owner
-            userDocRef = doc(db, 'owners', firebaseUser.uid);
-            roleFromDoc = 'propietario';
+            roleFromAuth = 'propietario';
         }
-
+        userDocRef = doc(db, 'owners', effectiveUid);
+        
+        // 2. Set up a listener for the definitive user document
         const unsubSnapshot = onSnapshot(userDocRef, async (docSnap) => {
           if (docSnap.exists()) {
             const data = docSnap.data();
-            setRole(data.role || roleFromDoc); // Use role from doc, fallback to determined role
-            setOwnerData(data);
+            setRole(data.role || roleFromAuth); // Use role from doc, fallback to determined role
+            setOwnerData({ id: docSnap.id, ...data });
             setLoading(false);
           } else {
-             // Profile doesn't exist under UID, let's try to find it by email
-             const q = query(collection(db, "owners"), where("email", "==", firebaseUser.email));
-             const querySnapshot = await getDocs(q);
+             // If the main doc doesn't exist, this might be a first-time login for a legacy user
+             // or a brand new user.
+             if (roleFromAuth === 'propietario') {
+                const q = query(collection(db, "owners"), where("email", "==", firebaseUser.email));
+                const querySnapshot = await getDocs(q);
 
-             if (!querySnapshot.empty) {
-                 // Found a profile with this email. Let's link it.
-                 const legacyDoc = querySnapshot.docs[0];
-                 const batch = writeBatch(db);
-
-                 // Move data to new doc with UID as ID
-                 const newDocRef = doc(db, 'owners', firebaseUser.uid);
-                 batch.set(newDocRef, { ...legacyDoc.data(), uid: firebaseUser.uid });
-                 
-                 // Delete old doc
-                 batch.delete(legacyDoc.ref);
-                 
-                 await batch.commit();
-                 // The onSnapshot listener will be re-triggered for the new document.
-                 // We don't setLoading(false) here to wait for the new data.
-
-             } else {
-                 // Really doesn't exist, let's create it. Only for owners.
-                 if (roleFromDoc === 'propietario') {
-                     const newProfile = {
-                         uid: firebaseUser.uid,
-                         name: firebaseUser.displayName || firebaseUser.email,
-                         email: firebaseUser.email,
-                         role: 'propietario',
-                         balance: 0,
-                         properties: [],
-                         passwordChanged: false,
-                         createdAt: Timestamp.now(),
-                     };
-                     await setDoc(userDocRef, newProfile);
-                     // onSnapshot will re-trigger
-                 } else {
-                     // This is an admin that doesn't have a profile, which is an error state.
-                     setRole(null);
-                     setOwnerData(null);
-                     setLoading(false);
-                 }
+                if (!querySnapshot.empty) {
+                    // Legacy user found by email. Migrate them.
+                    const legacyDoc = querySnapshot.docs[0];
+                    const batch = writeBatch(db);
+                    const newDocRefWithUid = doc(db, 'owners', firebaseUser.uid);
+                    
+                    batch.set(newDocRefWithUid, { ...legacyDoc.data(), uid: firebaseUser.uid });
+                    batch.delete(legacyDoc.ref);
+                    
+                    await batch.commit();
+                    // The listener will be re-triggered for the new document with the correct UID.
+                    // We don't set loading to false here, we wait for the correct snapshot.
+                } else {
+                    // Brand new user, profile needs to be created.
+                    const newProfile = {
+                        uid: firebaseUser.uid,
+                        name: firebaseUser.displayName || firebaseUser.email,
+                        email: firebaseUser.email,
+                        role: 'propietario',
+                        balance: 0,
+                        properties: [],
+                        passwordChanged: false,
+                        createdAt: Timestamp.now(),
+                    };
+                    await setDoc(doc(db, 'owners', firebaseUser.uid), newProfile);
+                    // Listener will pick up the new doc.
+                }
+             } else { // Admin profile does not exist, which is an error state
+                 console.error("Admin user is authenticated but admin profile does not exist in Firestore!");
+                 setRole(null);
+                 setOwnerData(null);
+                 setLoading(false);
              }
           }
         }, (error) => {
