@@ -4,8 +4,9 @@
 import { createContext, useEffect, useState, ReactNode } from 'react';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { ensureAdminProfile } from '@/lib/user-sync';
 
-// Mock user type, since we are not using Firebase Auth user object anymore
+// Mock user type
 type MockUser = {
   uid: string;
   email: string;
@@ -35,29 +36,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const bootstrapAdminSession = async () => {
-      // Directly create a mock admin session
+      // Ensure the admin profile document exists in Firestore.
+      await ensureAdminProfile();
+      
       const adminUser: MockUser = {
         uid: ADMIN_USER_ID,
-        email: 'edwinfaguiars@gmail.com',
+        email: 'edwinfaguiars@gmail.com', // Using a placeholder email
       };
       setUser(adminUser);
 
-      // Fetch the admin profile from Firestore
       const adminDocRef = doc(db, "owners", ADMIN_USER_ID);
       const adminSnap = await getDoc(adminDocRef);
 
       if (adminSnap.exists()) {
-        setOwnerData({ id: adminSnap.id, ...adminSnap.data() });
-        setRole('administrador');
-      } else {
-        // Fallback in case the admin document doesn't exist, create a mock one.
-        const mockAdminData = {
-          id: ADMIN_USER_ID,
-          name: 'Administrador Principal',
-          role: 'administrador',
-          email: adminUser.email,
-        };
-        setOwnerData(mockAdminData);
+        const adminData = { id: adminSnap.id, ...adminSnap.data() };
+        setOwnerData(adminData);
         setRole('administrador');
       }
       
