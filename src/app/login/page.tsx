@@ -32,7 +32,7 @@ export default function LoginPage() {
     }, [targetRole, router]);
 
     useEffect(() => {
-        // Only redirect if auth has finished loading and we have a valid, complete session.
+        // This effect handles redirection after a successful login and data sync.
         if (!authLoading && user && role && ownerData) {
             const isTargetRoleMatch = (targetRole === 'admin' && role === 'administrador') || (targetRole === 'owner' && role === 'propietario');
             
@@ -91,6 +91,17 @@ export default function LoginPage() {
     if (!targetRole) {
         return null;
     }
+    
+    // Display loading indicator if auth is in progress but not yet complete
+    if (authLoading) {
+         return (
+            <main className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
+                <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                <p className="text-muted-foreground mt-4">Verificando sesión...</p>
+            </main>
+        );
+    }
+
 
     const title = targetRole === 'admin' ? 'Acceso de Administrador' : 'Portal de Propietario';
     const description = targetRole === 'admin' ? 'Inicia sesión para gestionar el condominio.' : 'Inicia sesión para consultar tu información.';
@@ -119,7 +130,7 @@ export default function LoginPage() {
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
-                                disabled={isSubmitting || authLoading}
+                                disabled={isSubmitting}
                             />
                         </div>
                         <div className="space-y-2">
@@ -130,18 +141,18 @@ export default function LoginPage() {
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 required
-                                disabled={isSubmitting || authLoading}
+                                disabled={isSubmitting}
                             />
                         </div>
                     </CardContent>
                     <CardFooter className="flex-col gap-4">
-                        <Button type="submit" className="w-full" disabled={isSubmitting || authLoading}>
-                            {isSubmitting || authLoading ? (
+                        <Button type="submit" className="w-full" disabled={isSubmitting}>
+                            {isSubmitting ? (
                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                             ) : (
                                 <LogIn className="mr-2 h-4 w-4" />
                             )}
-                            {isSubmitting || authLoading ? 'Verificando...' : 'Ingresar'}
+                            {isSubmitting ? 'Verificando...' : 'Ingresar'}
                         </Button>
                     </CardFooter>
                 </form>
