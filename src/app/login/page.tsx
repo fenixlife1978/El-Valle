@@ -32,6 +32,7 @@ export default function LoginPage() {
     }, [targetRole, router]);
 
     useEffect(() => {
+        // Only redirect if auth has finished loading and we have a valid, complete session.
         if (!authLoading && user && role && ownerData) {
             const isTargetRoleMatch = (targetRole === 'admin' && role === 'administrador') || (targetRole === 'owner' && role === 'propietario');
             
