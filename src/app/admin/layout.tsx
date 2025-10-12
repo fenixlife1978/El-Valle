@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -12,12 +13,8 @@ import {
     FileSignature,
     Award
 } from 'lucide-react';
-import { type ReactNode, useEffect } from 'react';
+import { type ReactNode } from 'react';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
-import { useAuth } from '@/hooks/use-auth';
-import { useRouter } from 'next/navigation';
-import { Loader2 } from 'lucide-react';
-
 
 const adminNavItems: NavItem[] = [
     { href: "/admin/dashboard", icon: Home, label: "Dashboard" },
@@ -52,30 +49,10 @@ const adminNavItems: NavItem[] = [
 ];
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
-    const { user, role, loading, ownerData } = useAuth();
-    const router = useRouter();
-
-    useEffect(() => {
-        if (!loading) {
-            if (!user) {
-                router.push('/login?role=admin');
-            } else if (role !== 'administrador') {
-                // If an owner somehow lands here, send them to their dashboard
-                router.push('/owner/dashboard');
-            }
-        }
-    }, [user, role, loading, router]);
-
-    if (loading || !user || role !== 'administrador') {
-        return (
-            <div className="flex h-screen w-full items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin" />
-            </div>
-        );
-    }
+    // Authentication guard has been removed for direct access.
     
     return (
-        <DashboardLayout userName={ownerData?.name || 'Administrador'} userRole="Administrador" navItems={adminNavItems}>
+        <DashboardLayout userName={'Administrador'} userRole="Administrador" navItems={adminNavItems}>
             {children}
         </DashboardLayout>
     );

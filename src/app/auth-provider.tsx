@@ -1,13 +1,18 @@
+
 'use client';
 
 import { createContext, useEffect, useState, ReactNode } from 'react';
-import { getAuth, onAuthStateChanged, type User } from 'firebase/auth';
-import { doc, getDoc, setDoc, Timestamp, collection, query, where, writeBatch, getDocs, updateDoc } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { ensureAdminProfile } from '@/lib/user-sync';
+
+// Mock user type, since we are not using Firebase Auth user object anymore
+type MockUser = {
+  uid: string;
+  email: string;
+};
 
 type AuthContextType = {
-  user: User | null;
+  user: MockUser | null;
   loading: boolean;
   role: string | null;
   ownerData: any | null; 
@@ -21,83 +26,45 @@ export const AuthContext = createContext<AuthContextType>({
 });
 
 const ADMIN_USER_ID = 'valle-admin-main-account';
-const ADMIN_EMAIL = 'edwinfaguiars@gmail.com';
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<MockUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<string | null>(null);
   const [ownerData, setOwnerData] = useState<any | null>(null);
 
   useEffect(() => {
-    const auth = getAuth();
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        setUser(user);
-        
-        let userRole: string | null = null;
-        let finalOwnerData: any | null = null;
+    const bootstrapAdminSession = async () => {
+      // Directly create a mock admin session
+      const adminUser: MockUser = {
+        uid: ADMIN_USER_ID,
+        email: 'edwinfaguiars@gmail.com',
+      };
+      setUser(adminUser);
 
-        // Special case: check if the logged-in user is the administrator
-        if (user.email === ADMIN_EMAIL) {
-            await ensureAdminProfile(); // Ensure the admin profile exists
-            const adminDocRef = doc(db, "owners", ADMIN_USER_ID);
-            const adminSnap = await getDoc(adminDocRef);
-            if (adminSnap.exists()) {
-                finalOwnerData = { id: adminSnap.id, ...adminSnap.data() };
-                userRole = 'administrador';
-            }
-        } else {
-            // Standard owner login
-            const userDocRef = doc(db, "owners", user.uid);
-            const userSnap = await getDoc(userDocRef);
+      // Fetch the admin profile from Firestore
+      const adminDocRef = doc(db, "owners", ADMIN_USER_ID);
+      const adminSnap = await getDoc(adminDocRef);
 
-            if (userSnap.exists()) {
-                finalOwnerData = { id: userSnap.id, ...userSnap.data() };
-                userRole = finalOwnerData.role;
-            } else {
-                // If doc doesn't exist with UID, try to find by email and link it.
-                // This handles legacy users who were created without an auth account.
-                const q = query(collection(db, 'owners'), where('email', '==', user.email), where('uid', '==', null));
-                const legacyUserSnap = await getDocs(q);
-
-                if (!legacyUserSnap.empty) {
-                    const legacyDoc = legacyUserSnap.docs[0];
-                    const legacyDocRef = legacyDoc.ref;
-                    await updateDoc(legacyDocRef, { uid: user.uid });
-                    finalOwnerData = { id: legacyDocRef.id, uid: user.uid, ...legacyDoc.data() };
-                    userRole = finalOwnerData.role;
-                } else {
-                     // If still no user, create one.
-                    await setDoc(userDocRef, {
-                        uid: user.uid,
-                        name: user.displayName || 'Nuevo Propietario',
-                        email: user.email,
-                        role: 'propietario',
-                        balance: 0,
-                        properties: [],
-                        passwordChanged: false,
-                        createdAt: Timestamp.now(),
-                    });
-                    const newUserSnap = await getDoc(userDocRef);
-                    finalOwnerData = { id: newUserSnap.id, ...newUserSnap.data() };
-                    userRole = 'propietario';
-                }
-            }
-        }
-        
-        setOwnerData(finalOwnerData);
-        setRole(userRole);
-        
+      if (adminSnap.exists()) {
+        setOwnerData({ id: adminSnap.id, ...adminSnap.data() });
+        setRole('administrador');
       } else {
-        setUser(null);
-        setRole(null);
-        setOwnerData(null);
+        // Fallback in case the admin document doesn't exist, create a mock one.
+        const mockAdminData = {
+          id: ADMIN_USER_ID,
+          name: 'Administrador Principal',
+          role: 'administrador',
+          email: adminUser.email,
+        };
+        setOwnerData(mockAdminData);
+        setRole('administrador');
       }
+      
       setLoading(false);
-    });
+    };
 
-    return () => unsubscribe();
+    bootstrapAdminSession();
   }, []);
 
   return (
