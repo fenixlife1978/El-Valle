@@ -217,8 +217,9 @@ export default function DocumentsPage() {
             catch(e) { console.error(e); }
         }
         
-        let infoX = logoX + logoWidth + 5;
-        let infoY = logoY + 5;
+        let infoX = logoX; // Align with logo
+        let infoY = logoY + logoHeight + 5; // Position below logo
+        
         doc.setFontSize(10).setFont('helvetica', 'normal');
         doc.text(companyInfo.name, infoX, infoY);
         infoY += 5;
@@ -261,7 +262,7 @@ export default function DocumentsPage() {
         doc.setFontSize(10).setFont('helvetica', 'bold');
         doc.text('Junta de Condominio', pageWidth / 2, signatureLineY + 8, { align: 'center' });
 
-        doc.output('dataurlnewwindow');
+        doc.save(`${title.replace(/\s/g, '_')}.pdf`);
     };
 
     return (
