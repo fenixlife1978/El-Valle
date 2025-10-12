@@ -1,52 +1,8 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
-  
-    function isOwner(userId) {
-      return request.auth.uid == userId;
-    }
-
-    function isSignedIn() {
-      return request.auth != null;
-    }
-    
-    function getUserRole(userId) {
-      return get(/databases/$(database)/documents/owners/$(userId)).data.role;
-    }
-
-    function isAdmin() {
-      return isSignedIn() && getUserRole(request.auth.uid) == 'administrador';
-    }
-
-    // Owners collection: Users can read their own data. Admins can read all.
-    match /owners/{userId} {
-      allow read: if isSignedIn() && (isOwner(userId) || isAdmin());
-      allow write: if isAdmin(); // Only admins can create/update owner profiles
-    }
-
-    // Config collection: Read-only for all signed-in users.
-    match /config/{docId} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin();
-    }
-    
-    // Payments: Owners can create. Admins can read/update all.
-    match /payments/{paymentId} {
-      allow read: if isSignedIn(); // Owners see their payments on client-side, admins need broad read
-      allow create: if isSignedIn();
-      allow update, delete: if isAdmin();
-    }
-    
-    // Debts: Read-only for owners. Full access for admins.
-    match /debts/{debtId} {
-        allow read: if isSignedIn();
-        allow create, update, delete: if isAdmin();
-    }
-
-    // All other collections: Admin only for safety.
-    match /{document=**} {
-      allow read, write: if isAdmin();
+    match /owners/{ownerId} {
+      allow read, write: if request.auth != null && request.auth.uid == ownerId;
     }
   }
 }
