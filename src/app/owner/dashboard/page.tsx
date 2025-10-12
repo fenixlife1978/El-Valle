@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -19,6 +18,7 @@ import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+import { useAuth } from '@/hooks/use-auth';
 
 
 type Payment = {
@@ -108,9 +108,9 @@ type PublishedReport = {
 
 export default function OwnerDashboardPage() {
     const router = useRouter();
+    const { user, ownerData, loading: authLoading } = useAuth();
     
     const [loading, setLoading] = useState(true);
-    const [userData, setUserData] = useState<UserData | null>(null);
     const [payments, setPayments] = useState<Payment[]>([]);
     const [allDebts, setAllDebts] = useState<Debt[]>([]);
     const [allHistoricalPayments, setAllHistoricalPayments] = useState<HistoricalPayment[]>([]);
@@ -131,7 +131,8 @@ export default function OwnerDashboardPage() {
 
     
     useEffect(() => {
-        const userId = 'G0sNyT874aexl5g5n5h8pE3g7yT2'; // Hardcoded ID for now
+        if (authLoading || !user || !ownerData) return;
+        const userId = user.uid;
 
         const settingsRef = doc(db, 'config', 'mainSettings');
         const settingsUnsubscribe = onSnapshot(settingsRef, (settingsSnap) => {
@@ -151,25 +152,8 @@ export default function OwnerDashboardPage() {
              setDashboardStats(prev => ({ ...prev, exchangeRate: activeRate }));
         });
 
-        const userDocRef = doc(db, "owners", userId);
-        const userUnsubscribe = onSnapshot(userDocRef, (userSnap) => {
-            if (userSnap.exists()) {
-                const data = userSnap.data();
-                const ownerData = { 
-                    id: userSnap.id, 
-                    name: data.name,
-                    properties: data.properties || [],
-                    unit: (data.properties && data.properties.length > 0) ? `${data.properties[0].street} - ${data.properties[0].house}` : 'N/A',
-                    balance: data.balance || 0,
-                } as UserData;
-                setUserData(ownerData);
-                setDashboardStats(prev => ({ ...prev, balanceInFavor: ownerData.balance || 0 }));
-            } else {
-                console.log("No such user document!");
-            }
-            setLoading(false);
-        });
-
+        setDashboardStats(prev => ({ ...prev, balanceInFavor: ownerData.balance || 0 }));
+        
         const debtsQuery = query(collection(db, "debts"), where("ownerId", "==", userId));
         const debtsUnsubscribe = onSnapshot(debtsQuery, (debtsSnapshot) => {
             const debtsData: Debt[] = [];
@@ -206,20 +190,20 @@ export default function OwnerDashboardPage() {
              setLatestFinancialBalance(latestBalance || null);
          });
 
+        setLoading(false);
     
         return () => {
             settingsUnsubscribe();
-            userUnsubscribe();
             paymentsUnsubscribe();
             debtsUnsubscribe();
             historicalPaymentsUnsubscribe();
             reportsUnsubscribe();
         };
     
-    }, []);
+    }, [authLoading, user, ownerData]);
 
     useEffect(() => {
-        if (loading || !userData) return;
+        if (loading || !ownerData) return;
 
         const ownerDebts = allDebts;
         const ownerHistoricalPayments = allHistoricalPayments;
@@ -305,7 +289,7 @@ export default function OwnerDashboardPage() {
         const totalDebtUSD = ownerDebts.filter(d => d.status === 'pending').reduce((sum, d) => sum + d.amountUSD, 0);
         setDashboardStats(prev => ({ ...prev, totalDebtUSD }));
     
-    }, [allDebts, allHistoricalPayments, loading, userData]);
+    }, [allDebts, allHistoricalPayments, loading, ownerData]);
 
     const pendingDebts = useMemo(() => {
          return allDebts
@@ -336,12 +320,16 @@ export default function OwnerDashboardPage() {
     }, [selectedDebts, pendingDebts, dashboardStats]);
 
   const showReceiptPreview = async (payment: Payment) => {
-    if (!userData) return;
+    if (!ownerData) return;
 
     try {
         const ownerName = (payment.beneficiaries && payment.beneficiaries.length > 0 && payment.beneficiaries[0].ownerName) 
             ? payment.beneficiaries[0].ownerName 
-            : userData.name;
+            : ownerData.name;
+        
+        const ownerUnit = (ownerData.properties && ownerData.properties.length > 0) 
+            ? `${ownerData.properties[0].street} - ${ownerData.properties[0].house}` 
+            : 'N/A';
 
         const paidDebtsQuery = query(
             collection(db, "debts"),
@@ -358,7 +346,7 @@ export default function OwnerDashboardPage() {
         setReceiptData({ 
             payment, 
             ownerName: ownerName,
-            ownerUnit: userData.unit,
+            ownerUnit: ownerUnit,
             paidDebts 
         });
         setIsReceiptPreviewOpen(true);
@@ -479,7 +467,7 @@ export default function OwnerDashboardPage() {
     setIsReceiptPreviewOpen(false);
   };
 
-  if (loading) {
+  if (loading || authLoading) {
     return (
         <div className="flex justify-center items-center h-full">
             <Loader2 className="h-10 w-10 animate-spin text-primary" />
@@ -487,7 +475,7 @@ export default function OwnerDashboardPage() {
     );
   }
 
-  if (!userData) {
+  if (!ownerData) {
     return (
         <div className="flex flex-col justify-center items-center h-full gap-4">
             <p className="text-lg">No se encontró información del propietario.</p>
@@ -499,7 +487,7 @@ export default function OwnerDashboardPage() {
     <div className="space-y-8">
         <div>
             <h1 className="text-3xl font-bold font-headline">Panel de Propietario</h1>
-            <p className="text-muted-foreground">Bienvenido, {userData?.name || 'Propietario'}. Aquí está el resumen de tu cuenta.</p>
+            <p className="text-muted-foreground">Bienvenido, {ownerData?.name || 'Propietario'}. Aquí está el resumen de tu cuenta.</p>
         </div>
       
       <Card className="w-full rounded-2xl shadow-lg border-2 border-border/20">
