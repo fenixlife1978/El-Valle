@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,7 +17,9 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Textarea } from '@/components/ui/textarea';
+import dynamic from 'next/dynamic';
+
+const ReactQuill = dynamic(() => import('react-quill'), { ssr: false });
 
 type CustomDocument = {
     id: string;
@@ -171,9 +173,9 @@ export default function DocumentsPage() {
             catch(e) { console.error(e); }
         }
         
-        doc.setFontSize(10).setFont('helvetica', 'normal');
         const infoX = logoX + logoWidth + 5;
         const infoMaxWidth = pageWidth - infoX - margin;
+        doc.setFontSize(10).setFont('helvetica', 'normal');
         
         doc.text(companyInfo.name, infoX, logoY + 5);
         doc.text(companyInfo.rif, infoX, logoY + 10);
@@ -181,7 +183,7 @@ export default function DocumentsPage() {
         const addressLines = doc.splitTextToSize(companyInfo.address, infoMaxWidth);
         doc.text(addressLines, infoX, logoY + 15);
         
-        currentY = logoY + logoHeight + 5; // Y position after header block
+        currentY = Math.max(logoY + logoHeight, logoY + 15 + (addressLines.length * 5)) + 5;
         
         // --- Date ---
         doc.setFontSize(10).setFont('helvetica', 'normal');
@@ -196,7 +198,7 @@ export default function DocumentsPage() {
 
         // --- Body ---
         doc.setFontSize(12).setFont('helvetica', 'normal');
-        const splitBody = doc.splitTextToSize(body, pageWidth - (margin * 2));
+        const splitBody = doc.splitTextToSize(body.replace(/<[^>]*>/g, ''), pageWidth - (margin * 2));
         doc.text(splitBody, margin, currentY, { align: 'justify' });
         const bodyHeight = doc.getTextDimensions(splitBody).h;
         currentY += bodyHeight + 20;
@@ -214,8 +216,20 @@ export default function DocumentsPage() {
         doc.setFontSize(10).setFont('helvetica', 'bold');
         doc.text('Junta de Condominio', pageWidth / 2, signatureLineY + 8, { align: 'center' });
 
-
         doc.save(`${title.replace(/\s/g, '_')}_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+    };
+
+    const quillModules = {
+        toolbar: [
+          [{ 'header': [1, 2, 3, 4, 5, 6, false] }],
+          [{ 'font': [] }],
+          ['bold', 'italic', 'underline', 'strike', 'blockquote'],
+          [{'list': 'ordered'}, {'list': 'bullet'}, {'indent': '-1'}, {'indent': '+1'}],
+          [{ 'align': [] }],
+          [{ 'color': [] }, { 'background': [] }],
+          ['link', 'image'],
+          ['clean']
+        ],
     };
 
     return (
@@ -293,12 +307,12 @@ export default function DocumentsPage() {
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="document-body">Cuerpo del Documento</Label>
-                            <Textarea 
-                                id="document-body"
+                            <ReactQuill
+                                theme="snow"
                                 value={currentDocument.body}
-                                onChange={(e) => setCurrentDocument(d => ({...d, body: e.target.value}))}
-                                placeholder="Escriba aquí el contenido del documento..."
-                                className="min-h-[300px]"
+                                onChange={(value) => setCurrentDocument(d => ({...d, body: value}))}
+                                modules={quillModules}
+                                className="bg-background"
                             />
                         </div>
                     </div>

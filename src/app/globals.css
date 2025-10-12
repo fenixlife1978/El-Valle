@@ -1,3 +1,5 @@
+@import 'react-quill/dist/quill.snow.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -116,3 +118,35 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Styles for React Quill */
+.ql-toolbar {
+    @apply rounded-t-md border-border;
+}
+.ql-container {
+    @apply rounded-b-md border-border text-base;
+}
+.ql-editor {
+    @apply min-h-[300px] bg-background text-foreground;
+}
+
+/* Dark mode styles for React Quill */
+.dark .ql-toolbar {
+    @apply bg-card text-foreground;
+}
+.dark .ql-picker-label {
+    @apply text-foreground;
+}
+.dark .ql-stroke {
+    @apply stroke-foreground;
+}
+.dark .ql-fill {
+    @apply fill-foreground;
+}
+.dark .ql-picker-options {
+    @apply bg-popover text-popover-foreground;
+}
+.dark .ql-picker-item:hover {
+    @apply text-primary;
+}
+
