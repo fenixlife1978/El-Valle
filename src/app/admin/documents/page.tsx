@@ -204,53 +204,57 @@ export default function DocumentsPage() {
 
         const doc = new jsPDF();
         const pageWidth = doc.internal.pageSize.getWidth();
-        const margin = 20;
-        let currentY = 15;
+        const pageHeight = doc.internal.pageSize.getHeight();
+        const margin = 85; // 3cm en puntos (1cm = 28.35 puntos)
+        let currentY = margin;
 
         // --- Header ---
-        const logoX = margin;
-        const logoY = currentY;
         const logoWidth = 30;
         const logoHeight = 30;
         if (companyInfo.logo) {
-            try { doc.addImage(companyInfo.logo, 'PNG', logoX, logoY, logoWidth, logoHeight); }
+            try { doc.addImage(companyInfo.logo, 'PNG', margin, margin, logoWidth, logoHeight); }
             catch(e) { console.error(e); }
         }
         
-        let infoX = logoX; // Align with logo
-        let infoY = logoY + logoHeight + 5; // Position below logo
+        let infoX = margin + logoWidth + 10;
+        let infoY = margin + 5;
         
-        doc.setFontSize(10).setFont('helvetica', 'normal');
+        doc.setFontSize(10).setFont('helvetica', 'bold');
         doc.text(companyInfo.name, infoX, infoY);
         infoY += 5;
+        doc.setFontSize(9).setFont('helvetica', 'normal');
         doc.text(companyInfo.rif, infoX, infoY);
         infoY += 5;
         
-        const addressLines = doc.splitTextToSize(companyInfo.address, (pageWidth / 2) - infoX);
+        const addressLines = doc.splitTextToSize(companyInfo.address, pageWidth - infoX - margin);
         doc.text(addressLines, infoX, infoY);
         
-        currentY = infoY + (addressLines.length * 5) + 15;
+        currentY = Math.max(currentY, margin + logoHeight);
         
         // --- Date ---
         doc.setFontSize(10).setFont('helvetica', 'normal');
         const dateStr = `Independencia, ${format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: es })}`;
-        doc.text(dateStr, pageWidth - margin, logoY + 5, { align: 'right' });
+        doc.text(dateStr, pageWidth - margin, margin + 5, { align: 'right' });
         
         // --- Title ---
-        currentY += 10;
+        currentY += 30; // Espacio después del encabezado
         doc.setFontSize(16).setFont('helvetica', 'bold');
         doc.text(title, pageWidth / 2, currentY, { align: 'center' });
-        currentY += 15;
+        currentY += 20;
 
         // --- Body ---
         doc.setFontSize(12).setFont('helvetica', 'normal');
-        const splitBody = doc.splitTextToSize(textBody, pageWidth - (margin * 2));
+        const bodyWidth = pageWidth - (margin * 2);
+        const splitBody = doc.splitTextToSize(textBody, bodyWidth);
         doc.text(splitBody, margin, currentY, { align: 'justify' });
         const bodyHeight = doc.getTextDimensions(splitBody).h;
         currentY += bodyHeight + 20;
         
         // --- Signature ---
-        const signatureBlockY = currentY + 20;
+        let signatureBlockY = currentY + 30;
+        if (signatureBlockY > pageHeight - margin) {
+            signatureBlockY = pageHeight - margin - 30;
+        }
 
         doc.setFontSize(12).setFont('helvetica', 'normal');
         doc.text('Atentamente,', pageWidth / 2, signatureBlockY, { align: 'center'});
@@ -354,7 +358,7 @@ export default function DocumentsPage() {
                         </Button>
                         <Button onClick={() => handleExportPDF(currentDocument)} variant="secondary" disabled={!currentDocument.title.trim()}>
                             <FileText className="mr-2 h-4 w-4" />
-                            Previsualizar PDF
+                            Descargar PDF
                         </Button>
                     </DialogFooter>
                 </DialogContent>
