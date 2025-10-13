@@ -10,13 +10,15 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { collection, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, Timestamp, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { PlusCircle, Trash2, Loader2, FileText, Edit, MoreHorizontal, Bold, Italic, Underline, List, ListOrdered } from 'lucide-react';
+import { PlusCircle, Trash2, Loader2, FileText, Edit, MoreHorizontal, Bold, Italic, Underline, List, ListOrdered, AlignLeft, AlignCenter, AlignRight, AlignJustify } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+
 
 type CustomDocument = {
     id: string;
@@ -52,7 +54,7 @@ const RichTextEditor = ({ value, onChange }: { value: string, onChange: (value: 
     const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
         onChange(e.currentTarget.innerHTML);
     };
-
+    
     const execCommand = (command: string, value?: string) => {
         document.execCommand(command, false, value);
         if(editorRef.current) editorRef.current.focus();
@@ -61,13 +63,17 @@ const RichTextEditor = ({ value, onChange }: { value: string, onChange: (value: 
     return (
         <div className="rounded-md border border-input">
             <div className="p-2 border-b">
-                 <div className="flex items-center gap-1">
-                    <Button type="button" variant="outline" size="sm" onClick={() => execCommand('bold')}><Bold className="h-4 w-4"/></Button>
-                    <Button type="button" variant="outline" size="sm" onClick={() => execCommand('italic')}><Italic className="h-4 w-4"/></Button>
-                    <Button type="button" variant="outline" size="sm" onClick={() => execCommand('underline')}><Underline className="h-4 w-4"/></Button>
-                    <Button type="button" variant="outline" size="sm" onClick={() => execCommand('insertUnorderedList')}><List className="h-4 w-4"/></Button>
-                    <Button type="button" variant="outline" size="sm" onClick={() => execCommand('insertOrderedList')}><ListOrdered className="h-4 w-4"/></Button>
-                </div>
+                 <ToggleGroup type="multiple" className="flex items-center gap-1 justify-start flex-wrap">
+                    <ToggleGroupItem value="bold" aria-label="Toggle bold" onClick={() => execCommand('bold')}><Bold className="h-4 w-4"/></ToggleGroupItem>
+                    <ToggleGroupItem value="italic" aria-label="Toggle italic" onClick={() => execCommand('italic')}><Italic className="h-4 w-4"/></ToggleGroupItem>
+                    <ToggleGroupItem value="underline" aria-label="Toggle underline" onClick={() => execCommand('underline')}><Underline className="h-4 w-4"/></ToggleGroupItem>
+                    <ToggleGroupItem value="justifyLeft" aria-label="Align left" onClick={() => execCommand('justifyLeft')}><AlignLeft className="h-4 w-4"/></ToggleGroupItem>
+                    <ToggleGroupItem value="justifyCenter" aria-label="Align center" onClick={() => execCommand('justifyCenter')}><AlignCenter className="h-4 w-4"/></ToggleGroupItem>
+                    <ToggleGroupItem value="justifyRight" aria-label="Align right" onClick={() => execCommand('justifyRight')}><AlignRight className="h-4 w-4"/></ToggleGroupItem>
+                    <ToggleGroupItem value="justifyFull" aria-label="Align justify" onClick={() => execCommand('justifyFull')}><AlignJustify className="h-4 w-4"/></ToggleGroupItem>
+                    <ToggleGroupItem value="insertUnorderedList" aria-label="Bullet list" onClick={() => execCommand('insertUnorderedList')}><List className="h-4 w-4"/></ToggleGroupItem>
+                    <ToggleGroupItem value="insertOrderedList" aria-label="Numbered list" onClick={() => execCommand('insertOrderedList')}><ListOrdered className="h-4 w-4"/></ToggleGroupItem>
+                </ToggleGroup>
             </div>
             <div
                 ref={editorRef}
@@ -202,36 +208,25 @@ export default function DocumentsPage() {
         const doc = new jsPDF();
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
-        const margin = 85; // 3cm en puntos (1cm = ~28.35 puntos)
+        
+        // 3cm margin = 85.05 points. We'll use 85.
+        const margin = 85; 
+        const maxLineWidth = pageWidth - (margin * 2);
         let currentY = margin;
 
         // --- Header ---
         const logoWidth = 30;
         const logoHeight = 30;
         if (companyInfo.logo) {
-            try { doc.addImage(companyInfo.logo, 'PNG', margin, margin, logoWidth, logoHeight); }
+            try { doc.addImage(companyInfo.logo, 'PNG', margin, currentY, logoWidth, logoHeight); }
             catch(e) { console.error(e); }
         }
         
-        let infoX = margin + logoWidth + 10;
-        let infoY = margin + 5;
-        
-        doc.setFontSize(10).setFont('helvetica', 'bold');
-        doc.text(companyInfo.name, infoX, infoY);
-        infoY += 5;
-        doc.setFontSize(9).setFont('helvetica', 'normal');
-        doc.text(companyInfo.rif, infoX, infoY);
-        infoY += 5;
-        
-        const addressLines = doc.splitTextToSize(companyInfo.address, pageWidth - infoX - margin);
-        doc.text(addressLines, infoX, infoY);
-        
-        // --- Date ---
         doc.setFontSize(10).setFont('helvetica', 'normal');
         const dateStr = `Independencia, ${format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: es })}`;
-        doc.text(dateStr, pageWidth - margin, margin, { align: 'right' });
+        doc.text(dateStr, pageWidth - margin, currentY, { align: 'right' });
         
-        currentY = Math.max(currentY, margin + logoHeight) + 30; // Space after header
+        currentY = Math.max(currentY, margin + logoHeight) + 30;
         
         // --- Title ---
         doc.setFontSize(16).setFont('helvetica', 'bold');
@@ -240,8 +235,7 @@ export default function DocumentsPage() {
 
         // --- Body ---
         doc.setFontSize(12).setFont('helvetica', 'normal');
-        const bodyWidth = pageWidth - (margin * 2);
-        const splitBody = doc.splitTextToSize(textBody, bodyWidth);
+        const splitBody = doc.splitTextToSize(textBody, maxLineWidth);
         doc.text(splitBody, margin, currentY, { align: 'justify' });
         const bodyHeight = doc.getTextDimensions(splitBody).h;
         currentY += bodyHeight + 20;
@@ -249,7 +243,7 @@ export default function DocumentsPage() {
         // --- Signature ---
         let signatureBlockY = currentY + 30;
         if (signatureBlockY > pageHeight - margin) {
-            signatureBlockY = pageHeight - margin;
+            signatureBlockY = pageHeight - margin - 30; // ensure it fits
         }
 
         doc.setFontSize(12).setFont('helvetica', 'normal');
