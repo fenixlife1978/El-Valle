@@ -75,21 +75,21 @@ const templates: Template[] = [
         name: 'Constancia de Residencia',
         title: 'CONSTANCIA DE RESIDENCIA',
         generateBody: (person, property) => 
-            `Por medio de la presente, la Junta de Condominio del Conjunto Residencial Valle de Chara, hace constar que el(la) ciudadano(a) ${person.name}, titular de la Cédula de Identidad N° ${person.cedula || '[Cédula no registrada]'}, reside en este conjunto residencial, en la propiedad identificada como ${property.street}, Casa N° ${property.house}.\n\nConstancia que se expide a petición de la parte interesada en la ciudad de Charallave, a los ${format(new Date(), 'dd')} días del mes de ${format(new Date(), 'MMMM', { locale: es })} de ${format(new Date(), 'yyyy')}.`
+            `Por medio de la presente, la Junta de Condominio del Conjunto Residencial El Valle, hace constar que el(la) ciudadano(a) ${person.name}, titular de la Cédula de Identidad N° ${person.cedula || '[Cédula no registrada]'}, reside en este conjunto residencial, en la propiedad identificada como ${property.street}, Casa N° ${property.house}.\n\nConstancia que se expide a petición de la parte interesada en la ciudad de Independencia, Estado Yaracuy, a los ${format(new Date(), 'dd')} días del mes de ${format(new Date(), 'MMMM', { locale: es })} de ${format(new Date(), 'yyyy')}.`
     },
     {
         id: 'solvencia',
         name: 'Constancia de Solvencia',
         title: 'CONSTANCIA DE SOLVENCIA',
         generateBody: (person, property) => 
-            `Por medio de la presente, la Junta de Condominio del Conjunto Residencial Valle de Chara, hace constar que el(la) ciudadano(a) ${person.name}, titular de la Cédula de Identidad N° ${person.cedula || '[Cédula no registrada]'}, propietario(a) de la vivienda ubicada en la ${property.street}, Casa N° ${property.house}, se encuentra SOLVENTE con las obligaciones y cuotas de condominio hasta la presente fecha.\n\nConstancia que se expide a petición de la parte interesada en la ciudad de Charallave, a los ${format(new Date(), 'dd')} días del mes de ${format(new Date(), 'MMMM', { locale: es })} de ${format(new Date(), 'yyyy')}.`
+            `Por medio de la presente, la Junta de Condominio del Conjunto Residencial El Valle, hace constar que el(la) ciudadano(a) ${person.name}, titular de la Cédula de Identidad N° ${person.cedula || '[Cédula no registrada]'}, propietario(a) de la vivienda ubicada en la ${property.street}, Casa N° ${property.house}, se encuentra SOLVENTE con las obligaciones y cuotas de condominio hasta la presente fecha.\n\nConstancia que se expide a petición de la parte interesada en la ciudad de Independencia, Estado Yaracuy, a los ${format(new Date(), 'dd')} días del mes de ${format(new Date(), 'MMMM', { locale: es })} de ${format(new Date(), 'yyyy')}.`
     },
     {
         id: 'remodelacion',
         name: 'Permiso de Remodelación',
         title: 'PERMISO DE REMODELACIÓN',
         generateBody: (person, property, description) => 
-            `Por medio de la presente, la Junta de Condominio del Conjunto Residencial Valle de Chara, otorga el permiso al ciudadano(a) ${person.name}, titular de la Cédula de Identidad N° ${person.cedula || '[Cédula no registrada]'}, para realizar trabajos de remodelación en la propiedad ubicada en la ${property.street}, Casa N° ${property.house}.\n\nLos trabajos a realizar consisten en: ${description || '[Describir trabajos]'}\n\nEl propietario se compromete a cumplir con el horario establecido para trabajos (lunes a viernes de 8:00 a.m. a 5:00 p.m. y sábados de 9:00 a.m. a 2:00 p.m.), así como a mantener la limpieza de las áreas comunes y a reparar cualquier daño que pudiera ocasionar.\n\nPermiso válido desde la fecha de su emisión.`
+            `Por medio de la presente, la Junta de Condominio del Conjunto Residencial El Valle, otorga el permiso al ciudadano(a) ${person.name}, titular de la Cédula de Identidad N° ${person.cedula || '[Cédula no registrada]'}, para realizar trabajos de remodelación en la propiedad ubicada en la ${property.street}, Casa N° ${property.house}.\n\nLos trabajos a realizar consisten en: ${description || '[Describir trabajos]'}\n\nEl propietario se compromete a cumplir con el horario establecido para trabajos (lunes a viernes de 8:00 a.m. a 5:00 p.m. y sábados de 9:00 a.m. a 2:00 p.m.), así como a mantener la limpieza de las áreas comunes y a reparar cualquier daño que pudiera ocasionar.\n\nPermiso válido desde la fecha de su emisión.`
     },
     {
         id: 'personalizada',
