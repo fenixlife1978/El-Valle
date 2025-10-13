@@ -505,7 +505,7 @@ export default function ReportsPage() {
 
     const filteredStatementOwners = useMemo(() => {
         if (!statementSearchTerm) return [];
-        return owners.filter(o => o.name.toLowerCase().includes(statementSearchTerm.toLowerCase()));
+        return owners.filter(o => o.name && o.name.toLowerCase().includes(statementSearchTerm.toLowerCase()));
     }, [statementSearchTerm, owners]);
 
     const filteredBalanceOwners = useMemo(() => {
