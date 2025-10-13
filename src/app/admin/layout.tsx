@@ -10,7 +10,6 @@ import {
     CircleDollarSign,
     TrendingUp,
     Wallet,
-    FileSignature,
     Award
 } from 'lucide-react';
 import { type ReactNode } from 'react';
@@ -34,7 +33,6 @@ const adminNavItems: NavItem[] = [
     { href: "/admin/financial-balance", icon: TrendingUp, label: "Balance Financiero" },
     { href: "/admin/petty-cash", icon: Wallet, label: "Caja Chica" },
     { href: "/admin/reports", icon: FileSearch, label: "Informes" },
-    { href: "/admin/documents", icon: FileSignature, label: "Documentos" },
     { href: "/admin/certificates", icon: Award, label: "Constancias" },
     { href: "/admin/people", icon: Users, label: "Personas" },
     { 
