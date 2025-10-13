@@ -10,13 +10,13 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { collection, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, Timestamp, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { PlusCircle, Trash2, Loader2, FileText, Edit, MoreHorizontal, Bold, Italic, Underline, List, ListOrdered, AlignLeft, AlignCenter, AlignRight, AlignJustify } from 'lucide-react';
+import { PlusCircle, Trash2, Loader2, FileText, Edit, MoreHorizontal, Bold, Italic, Underline, List, ListOrdered, AlignLeft, AlignCenter, AlignRight, AlignJustify, Download, Share2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 
 
@@ -193,10 +193,10 @@ export default function DocumentsPage() {
         }
     };
     
-    const handleExportPDF = (docData: Pick<CustomDocument, 'title' | 'body'>) => {
+    const generatePdfInstance = (docData: Pick<CustomDocument, 'title' | 'body'>): jsPDF | null => {
         if (!companyInfo) {
             toast({ variant: 'destructive', title: 'Error', description: 'No se ha cargado la información de la empresa.'});
-            return;
+            return null;
         }
     
         const { title, body } = docData;
@@ -205,62 +205,80 @@ export default function DocumentsPage() {
         const textBody = tempDiv.textContent || tempDiv.innerText || "";
     
         const doc = new jsPDF();
+        const margin = 85; 
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
-        const margin = 85; // 3cm margin = 85.039... points
-        const maxLineWidth = pageWidth - (margin * 2);
     
-        let currentY = margin;
-    
-        // --- Header ---
-        const logoWidth = 30;
-        const logoHeight = 30;
         if (companyInfo.logo) {
-            try { doc.addImage(companyInfo.logo, 'PNG', margin, currentY - (logoHeight / 2), logoWidth, logoHeight); }
-            catch(e) { console.error(e); }
+            doc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25);
         }
-    
-        doc.setFontSize(10).setFont('helvetica', 'normal');
-        const companyInfoX = margin + logoWidth + 5;
-        doc.text(companyInfo.name, companyInfoX, currentY - 5);
-        doc.text(companyInfo.rif, companyInfoX, currentY);
-        const addressLines = doc.splitTextToSize(companyInfo.address, maxLineWidth - logoWidth - 5);
-        doc.text(addressLines, companyInfoX, currentY + 5);
         
+        doc.setFontSize(10);
+        doc.text(`${companyInfo.name} | ${companyInfo.rif}`, margin + 30, margin + 10);
+        doc.text(companyInfo.address, margin + 30, margin + 16);
+        doc.text(companyInfo.phone || "", margin + 30, margin + 22);
+
         const dateStr = `Independencia, ${format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: es })}`;
-        doc.text(dateStr, pageWidth - margin, currentY, { align: 'right' });
+        doc.text(dateStr, pageWidth - margin, margin + 10, { align: 'right' });
         
-        currentY += Math.max(logoHeight, addressLines.length * 5) + 30;
+        let currentY = margin + 50;
         
-        // --- Title ---
         doc.setFontSize(14).setFont('helvetica', 'bold');
         doc.text(title, pageWidth / 2, currentY, { align: 'center' });
         currentY += 20;
     
-        // --- Body ---
         doc.setFontSize(12).setFont('helvetica', 'normal');
-        const splitBody = doc.splitTextToSize(textBody, maxLineWidth);
+        const splitBody = doc.splitTextToSize(textBody, pageWidth - (margin * 2));
         doc.text(splitBody, margin, currentY, { align: 'justify' });
-        const bodyHeight = doc.getTextDimensions(splitBody).h;
-        currentY += bodyHeight + 30;
         
-        // --- Signature ---
-        let signatureBlockY = currentY + 30;
-        if (signatureBlockY > pageHeight - margin) {
-            signatureBlockY = pageHeight - margin; 
-        }
-    
+        const bodyHeight = doc.getTextDimensions(splitBody).h;
+        currentY += bodyHeight;
+        
+        const signatureBlockY = pageHeight - margin - 30;
         doc.setFontSize(12).setFont('helvetica', 'normal');
         doc.text('Atentamente,', pageWidth / 2, signatureBlockY, { align: 'center'});
     
         const signatureLineY = signatureBlockY + 20;
         doc.setLineWidth(0.5);
-        doc.line(pageWidth/2 - 40, signatureLineY, pageWidth/2 + 40, signatureLineY);
+        doc.line(pageWidth / 2 - 40, signatureLineY, pageWidth / 2 + 40, signatureLineY);
         
         doc.setFontSize(10).setFont('helvetica', 'bold');
         doc.text('Junta de Condominio', pageWidth / 2, signatureLineY + 8, { align: 'center' });
 
-        doc.output('dataurlnewwindow');
+        return doc;
+    };
+
+    const handlePreviewPDF = (docData: Pick<CustomDocument, 'title' | 'body'>) => {
+        const doc = generatePdfInstance(docData);
+        if (doc) doc.output('dataurlnewwindow');
+    };
+    
+    const handleDownloadPDF = (docData: Pick<CustomDocument, 'title' | 'body'>) => {
+        const doc = generatePdfInstance(docData);
+        if (doc) doc.save(`${docData.title.replace(/\s+/g, '_')}.pdf`);
+    };
+
+    const handleSharePDF = async (docData: Pick<CustomDocument, 'title' | 'body'>) => {
+        const doc = generatePdfInstance(docData);
+        if (!doc) return;
+
+        if (!navigator.share) {
+            toast({ variant: 'destructive', title: 'No Soportado', description: 'La función de compartir no está disponible en este navegador.' });
+            return;
+        }
+
+        try {
+            const pdfBlob = doc.output('blob');
+            const pdfFile = new File([pdfBlob], `${docData.title.replace(/\s+/g, '_')}.pdf`, { type: 'application/pdf' });
+            await navigator.share({
+                title: docData.title,
+                text: `Documento: ${docData.title}`,
+                files: [pdfFile],
+            });
+        } catch (error) {
+            console.error('Error al compartir:', error);
+            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo compartir el documento.' });
+        }
     };
 
     return (
@@ -312,7 +330,11 @@ export default function DocumentsPage() {
                                                 <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4"/></Button></DropdownMenuTrigger>
                                                 <DropdownMenuContent align="end">
                                                     <DropdownMenuItem onClick={() => handleEditDocument(doc)}><Edit className="mr-2 h-4 w-4"/>Editar</DropdownMenuItem>
-                                                    <DropdownMenuItem onClick={() => handleExportPDF(doc)}><FileText className="mr-2 h-4 w-4"/>Previsualizar PDF</DropdownMenuItem>
+                                                    <DropdownMenuSeparator />
+                                                    <DropdownMenuItem onClick={() => handlePreviewPDF(doc)}><FileText className="mr-2 h-4 w-4"/>Previsualizar</DropdownMenuItem>
+                                                    <DropdownMenuItem onClick={() => handleDownloadPDF(doc)}><Download className="mr-2 h-4 w-4"/>Descargar PDF</DropdownMenuItem>
+                                                    <DropdownMenuItem onClick={() => handleSharePDF(doc)}><Share2 className="mr-2 h-4 w-4"/>Compartir</DropdownMenuItem>
+                                                    <DropdownMenuSeparator />
                                                     <DropdownMenuItem onClick={() => handleDeleteDocument(doc)} className="text-destructive focus:text-destructive"><Trash2 className="mr-2 h-4 w-4"/>Eliminar</DropdownMenuItem>
                                                 </DropdownMenuContent>
                                             </DropdownMenu>
