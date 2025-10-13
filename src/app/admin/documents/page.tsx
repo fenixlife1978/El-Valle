@@ -206,7 +206,7 @@ export default function DocumentsPage() {
             toast({ variant: 'destructive', title: 'Error', description: 'No se ha cargado la información de la empresa.'});
             return null;
         }
-    
+
         const { title, body } = docData;
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = body;
@@ -217,23 +217,33 @@ export default function DocumentsPage() {
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
     
+        // --- HEADER ---
+        // Logo
         if (companyInfo.logo) {
             try { doc.addImage(companyInfo.logo, 'PNG', margin, 15, 25, 25); }
             catch(e) { console.error("Error adding logo to PDF", e); }
         }
-        
+    
+        // Company Info
         doc.setFontSize(10);
-        const rifAndPhone = `${companyInfo.rif} | ${companyInfo.phone}`;
+        doc.setFont('helvetica', 'normal');
+        let infoX = margin; 
+        let infoY = 50; 
+        doc.text(companyInfo.name, infoX, infoY);
+        infoY += 5;
+        doc.text(companyInfo.rif, infoX, infoY);
+        infoY += 5;
         const addressLines = doc.splitTextToSize(companyInfo.address, 100);
-        doc.text(companyInfo.name, margin, 50);
-        doc.text(rifAndPhone, margin, 55);
-        doc.text(addressLines, margin, 60);
-
+        doc.text(addressLines, infoX, infoY);
+        infoY += (addressLines.length * 4);
+    
+        // Date
         const dateStr = `Independencia, ${format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: es })}`;
         doc.text(dateStr, pageWidth - margin, 50, { align: 'right' });
-        
-        let currentY = margin + 20;
-        
+    
+        // --- CONTENT ---
+        let currentY = infoY + 20; 
+    
         doc.setFontSize(14).setFont('helvetica', 'bold');
         doc.text(title.toUpperCase(), pageWidth / 2, currentY, { align: 'center' });
         currentY += 20;
@@ -245,8 +255,9 @@ export default function DocumentsPage() {
         const bodyHeight = doc.getTextDimensions(splitBody).h;
         currentY += bodyHeight;
         
+        // --- FOOTER ---
         const signatureBlockY = Math.max(currentY + 40, pageHeight - margin - 30);
-
+    
         doc.setFontSize(12).setFont('helvetica', 'normal');
         doc.text('Atentamente,', pageWidth / 2, signatureBlockY, { align: 'center'});
     
@@ -291,6 +302,13 @@ export default function DocumentsPage() {
             }
         }
     };
+    
+    const getPreviewText = (html: string) => {
+        if (typeof window === 'undefined') return '';
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = html;
+        return tempDiv.textContent || tempDiv.innerText || '';
+    }
 
     return (
         <div className="space-y-8">
@@ -409,10 +427,7 @@ export default function DocumentsPage() {
                         {documentToPreview && (
                              <>
                                 <h3 className="text-lg font-bold text-center uppercase">{documentToPreview.title}</h3>
-                                <div 
-                                    className="prose prose-sm max-w-none" 
-                                    dangerouslySetInnerHTML={{ __html: documentToPreview.body }}
-                                />
+                                <p className="whitespace-pre-wrap">{getPreviewText(documentToPreview.body)}</p>
                              </>
                         )}
                     </div>
