@@ -275,29 +275,27 @@ export default function CertificatesPage() {
         if (companyInfo.logo) {
             try { 
                 doc.addImage(companyInfo.logo, 'PNG', margin, logoY, logoSize, logoSize); 
-                headerY += logoSize + 5; // Move Y position below the logo
             }
             catch(e) { console.error("Error adding logo:", e); }
         }
 
         doc.setFontSize(10).setFont('helvetica', 'normal');
-        doc.text(companyInfo.name, margin, headerY);
-        headerY += 5;
-        doc.text(companyInfo.rif, margin, headerY);
-        headerY += 5;
+        const companyInfoY = logoY + logoSize + 5;
+        doc.text(companyInfo.name, margin, companyInfoY);
+        doc.text(companyInfo.rif, margin, companyInfoY + 5);
         const addressLines = doc.splitTextToSize(companyInfo.address, pageWidth - (margin * 2) - logoSize - 10);
-        doc.text(addressLines, margin, headerY);
+        doc.text(addressLines, margin, companyInfoY + 10);
         
         doc.text(`Fecha: ${format(new Date(), 'dd/MM/yyyy')}`, pageWidth - margin, 20, { align: 'right' });
 
 
         const template = templates.find(t => t.id === certificate.type);
         const title = template ? template.title : "DOCUMENTO";
-        doc.setFontSize(16).setFont('helvetica', 'bold').text(title, pageWidth / 2, 70, { align: 'center' });
+        doc.setFontSize(16).setFont('helvetica', 'bold').text(title, pageWidth / 2, 85, { align: 'center' });
 
         doc.setFontSize(12).setFont('helvetica', 'normal');
         const splitBody = doc.splitTextToSize(certificate.body, pageWidth - (margin * 2));
-        doc.text(splitBody, margin, 90);
+        doc.text(splitBody, margin, 100, { align: 'justify' });
 
         const qrContent = `ID:${certificate.id}\nFecha:${format(certificate.createdAt.toDate(), 'yyyy-MM-dd')}\nPropietario:${certificate.ownerName}`;
         const qrCodeUrl = await QRCode.toDataURL(qrContent, { errorCorrectionLevel: 'M' });
