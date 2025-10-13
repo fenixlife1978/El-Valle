@@ -11,9 +11,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { collection, query, onSnapshot, addDoc, doc, getDoc, orderBy, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { collection, query, onSnapshot, addDoc, doc, getDoc, orderBy, serverTimestamp, Timestamp, deleteDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { PlusCircle, Trash2, Loader2, Search, XCircle, FileText, Award, User, Home, Info, Stamp, Edit } from 'lucide-react';
+import { PlusCircle, Trash2, Loader2, Search, XCircle, FileText, Award, User, Home, Info, Stamp, Edit, MoreHorizontal } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -21,6 +21,7 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import QRCode from 'qrcode';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 
 type Owner = {
@@ -123,6 +124,10 @@ export default function CertificatesPage() {
     const [additionalInfo, setAdditionalInfo] = useState(''); // For remodelacion description or custom body
     const [historySearchTerm, setHistorySearchTerm] = useState('');
     
+    // Delete confirmation state
+    const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
+    const [certificateToDelete, setCertificateToDelete] = useState<Certificate | null>(null);
+
     useEffect(() => {
         const ownersQuery = query(collection(db, "owners"));
         const ownersUnsubscribe = onSnapshot(ownersQuery, (snapshot) => {
@@ -303,6 +308,20 @@ export default function CertificatesPage() {
         doc.save(`constancia_${certificate.type}_${certificate.ownerName.replace(/\s/g, '_')}.pdf`);
     };
 
+    const handleDeleteCertificate = async () => {
+        if (!certificateToDelete) return;
+        try {
+            await deleteDoc(doc(db, "certificates", certificateToDelete.id));
+            toast({ title: "Constancia Eliminada", description: "El registro ha sido eliminado exitosamente." });
+        } catch (error) {
+            console.error("Error deleting certificate: ", error);
+            toast({ variant: "destructive", title: "Error", description: "No se pudo eliminar la constancia." });
+        } finally {
+            setCertificateToDelete(null);
+            setIsDeleteConfirmationOpen(false);
+        }
+    };
+
     return (
         <div className="space-y-8">
             <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -346,9 +365,30 @@ export default function CertificatesPage() {
                                         <TableCell>{templates.find(t => t.id === cert.type)?.name || cert.type}</TableCell>
                                         <TableCell>{cert.createdAt ? format(cert.createdAt.toDate(), "dd MMMM, yyyy", { locale: es }) : '-'}</TableCell>
                                         <TableCell className="text-right">
-                                            <Button variant="outline" size="sm" onClick={() => generatePDF(cert)}>
-                                                <FileText className="mr-2 h-4 w-4"/> Regenerar PDF
-                                            </Button>
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button variant="ghost" className="h-8 w-8 p-0">
+                                                        <span className="sr-only">Abrir menú</span>
+                                                        <MoreHorizontal className="h-4 w-4" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end">
+                                                    <DropdownMenuItem onClick={() => generatePDF(cert)}>
+                                                        <FileText className="mr-2 h-4 w-4"/>
+                                                        Regenerar PDF
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem
+                                                        className="text-destructive"
+                                                        onClick={() => {
+                                                            setCertificateToDelete(cert);
+                                                            setIsDeleteConfirmationOpen(true);
+                                                        }}
+                                                    >
+                                                        <Trash2 className="mr-2 h-4 w-4" />
+                                                        Eliminar
+                                                    </DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
                                         </TableCell>
                                     </TableRow>
                                 ))
@@ -500,8 +540,22 @@ export default function CertificatesPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            {/* Delete Confirmation Dialog */}
+            <Dialog open={isDeleteConfirmationOpen} onOpenChange={setIsDeleteConfirmationOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Confirmar Eliminación</DialogTitle>
+                        <DialogDescription>
+                            ¿Está seguro de que desea eliminar esta constancia? Esta acción no se puede deshacer.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsDeleteConfirmationOpen(false)}>Cancelar</Button>
+                        <Button variant="destructive" onClick={handleDeleteCertificate}>Eliminar</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
-
-    
