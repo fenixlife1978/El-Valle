@@ -11,15 +11,17 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { collection, query, onSnapshot, addDoc, doc, getDoc, orderBy, serverTimestamp, Timestamp, where, getDocs } from 'firebase/firestore';
+import { collection, query, onSnapshot, addDoc, doc, getDoc, orderBy, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { PlusCircle, Trash2, Loader2, Search, XCircle, FileText, Award, User, Home, Info, Stamp } from 'lucide-react';
+import { PlusCircle, Trash2, Loader2, Search, XCircle, FileText, Award, User, Home, Info, Stamp, Edit } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import QRCode from 'qrcode';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+
 
 type Owner = {
     id: string;
@@ -29,9 +31,19 @@ type Owner = {
     properties: { street: string, house: string }[];
 };
 
+type ManualPerson = {
+    name: string;
+    cedula: string;
+    street: string;
+    house: string;
+    estadoCivil?: string;
+    profesion?: string;
+    otros?: string;
+};
+
 type Certificate = {
     id: string;
-    ownerId: string;
+    ownerId?: string; // Optional now
     ownerName: string;
     ownerCedula: string;
     property: { street: string, house: string };
@@ -41,10 +53,10 @@ type Certificate = {
 };
 
 type Template = {
-    id: 'residencia' | 'solvencia' | 'remodelacion';
+    id: 'residencia' | 'solvencia' | 'remodelacion' | 'personalizada';
     name: string;
     title: string;
-    generateBody: (owner: Owner, property: { street: string; house: string }, additionalInfo?: string) => string;
+    generateBody: (person: Partial<Owner & ManualPerson>, property: { street: string; house: string }, additionalInfo?: string) => string;
 };
 
 type CompanyInfo = {
@@ -61,22 +73,28 @@ const templates: Template[] = [
         id: 'residencia',
         name: 'Constancia de Residencia',
         title: 'CONSTANCIA DE RESIDENCIA',
-        generateBody: (owner, property) => 
-            `Por medio de la presente, la Junta de Condominio del Conjunto Residencial Valle de Chara, hace constar que el(la) ciudadano(a) ${owner.name}, titular de la Cédula de Identidad N° ${owner.cedula || '[Cédula no registrada]'}, reside en este conjunto residencial, en la propiedad identificada como ${property.street}, Casa N° ${property.house}.\n\nConstancia que se expide a petición de la parte interesada en la ciudad de Charallave, a los ${format(new Date(), 'dd')} días del mes de ${format(new Date(), 'MMMM', { locale: es })} de ${format(new Date(), 'yyyy')}.`
+        generateBody: (person, property) => 
+            `Por medio de la presente, la Junta de Condominio del Conjunto Residencial Valle de Chara, hace constar que el(la) ciudadano(a) ${person.name}, titular de la Cédula de Identidad N° ${person.cedula || '[Cédula no registrada]'}, reside en este conjunto residencial, en la propiedad identificada como ${property.street}, Casa N° ${property.house}.\n\nConstancia que se expide a petición de la parte interesada en la ciudad de Charallave, a los ${format(new Date(), 'dd')} días del mes de ${format(new Date(), 'MMMM', { locale: es })} de ${format(new Date(), 'yyyy')}.`
     },
     {
         id: 'solvencia',
         name: 'Constancia de Solvencia',
         title: 'CONSTANCIA DE SOLVENCIA',
-        generateBody: (owner, property) => 
-            `Por medio de la presente, la Junta de Condominio del Conjunto Residencial Valle de Chara, hace constar que el(la) ciudadano(a) ${owner.name}, titular de la Cédula de Identidad N° ${owner.cedula || '[Cédula no registrada]'}, propietario(a) de la vivienda ubicada en la ${property.street}, Casa N° ${property.house}, se encuentra SOLVENTE con las obligaciones y cuotas de condominio hasta la presente fecha.\n\nConstancia que se expide a petición de la parte interesada en la ciudad de Charallave, a los ${format(new Date(), 'dd')} días del mes de ${format(new Date(), 'MMMM', { locale: es })} de ${format(new Date(), 'yyyy')}.`
+        generateBody: (person, property) => 
+            `Por medio de la presente, la Junta de Condominio del Conjunto Residencial Valle de Chara, hace constar que el(la) ciudadano(a) ${person.name}, titular de la Cédula de Identidad N° ${person.cedula || '[Cédula no registrada]'}, propietario(a) de la vivienda ubicada en la ${property.street}, Casa N° ${property.house}, se encuentra SOLVENTE con las obligaciones y cuotas de condominio hasta la presente fecha.\n\nConstancia que se expide a petición de la parte interesada en la ciudad de Charallave, a los ${format(new Date(), 'dd')} días del mes de ${format(new Date(), 'MMMM', { locale: es })} de ${format(new Date(), 'yyyy')}.`
     },
     {
         id: 'remodelacion',
         name: 'Permiso de Remodelación',
         title: 'PERMISO DE REMODELACIÓN',
-        generateBody: (owner, property, description) => 
-            `Por medio de la presente, la Junta de Condominio del Conjunto Residencial Valle de Chara, otorga el permiso al ciudadano(a) ${owner.name}, titular de la Cédula de Identidad N° ${owner.cedula || '[Cédula no registrada]'}, para realizar trabajos de remodelación en la propiedad ubicada en la ${property.street}, Casa N° ${property.house}.\n\nLos trabajos a realizar consisten en: ${description || '[Describir trabajos]'}\n\nEl propietario se compromete a cumplir con el horario establecido para trabajos (lunes a viernes de 8:00 a.m. a 5:00 p.m. y sábados de 9:00 a.m. a 2:00 p.m.), así como a mantener la limpieza de las áreas comunes y a reparar cualquier daño que pudiera ocasionar.\n\nPermiso válido desde la fecha de su emisión.`
+        generateBody: (person, property, description) => 
+            `Por medio de la presente, la Junta de Condominio del Conjunto Residencial Valle de Chara, otorga el permiso al ciudadano(a) ${person.name}, titular de la Cédula de Identidad N° ${person.cedula || '[Cédula no registrada]'}, para realizar trabajos de remodelación en la propiedad ubicada en la ${property.street}, Casa N° ${property.house}.\n\nLos trabajos a realizar consisten en: ${description || '[Describir trabajos]'}\n\nEl propietario se compromete a cumplir con el horario establecido para trabajos (lunes a viernes de 8:00 a.m. a 5:00 p.m. y sábados de 9:00 a.m. a 2:00 p.m.), así como a mantener la limpieza de las áreas comunes y a reparar cualquier daño que pudiera ocasionar.\n\nPermiso válido desde la fecha de su emisión.`
+    },
+    {
+        id: 'personalizada',
+        name: 'Plantilla Personalizada',
+        title: 'DOCUMENTO PERSONALIZADO',
+        generateBody: (person, property, description) => `${description || '[Escriba aquí el cuerpo del documento]'}`
     }
 ];
 
@@ -90,12 +108,19 @@ export default function CertificatesPage() {
 
     // Dialog State
     const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [entryMode, setEntryMode] = useState<'search' | 'manual'>('search');
+    
+    // Search mode state
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedOwner, setSelectedOwner] = useState<Owner | null>(null);
     const [selectedProperty, setSelectedProperty] = useState<{ street: string, house: string } | null>(null);
+
+    // Manual mode state
+    const [manualData, setManualData] = useState<ManualPerson>({ name: '', cedula: '', street: '', house: '', estadoCivil: '', profesion: '' });
+
     const [selectedTemplateId, setSelectedTemplateId] = useState<Template['id'] | ''>('');
     const [certificateBody, setCertificateBody] = useState('');
-    const [additionalInfo, setAdditionalInfo] = useState('');
+    const [additionalInfo, setAdditionalInfo] = useState(''); // For remodelacion description or custom body
     const [historySearchTerm, setHistorySearchTerm] = useState('');
     
     useEffect(() => {
@@ -124,13 +149,24 @@ export default function CertificatesPage() {
     }, []);
 
     useEffect(() => {
-        if (selectedOwner && selectedProperty && selectedTemplateId) {
+        let person: Partial<Owner & ManualPerson> | null = null;
+        let property: { street: string; house: string } | null = null;
+
+        if (entryMode === 'search' && selectedOwner && selectedProperty) {
+            person = selectedOwner;
+            property = selectedProperty;
+        } else if (entryMode === 'manual' && manualData.name && manualData.street && manualData.house) {
+            person = manualData;
+            property = { street: manualData.street, house: manualData.house };
+        }
+
+        if (person && property && selectedTemplateId) {
             const template = templates.find(t => t.id === selectedTemplateId);
             if (template) {
-                setCertificateBody(template.generateBody(selectedOwner, selectedProperty, additionalInfo));
+                setCertificateBody(template.generateBody(person, property, additionalInfo));
             }
         }
-    }, [selectedOwner, selectedProperty, selectedTemplateId, additionalInfo]);
+    }, [selectedOwner, selectedProperty, selectedTemplateId, additionalInfo, manualData, entryMode]);
 
     const filteredOwners = useMemo(() => {
         if (!searchTerm || searchTerm.length < 3) return [];
@@ -152,9 +188,11 @@ export default function CertificatesPage() {
         setSearchTerm('');
         setSelectedOwner(null);
         setSelectedProperty(null);
+        setManualData({ name: '', cedula: '', street: '', house: '', estadoCivil: '', profesion: '' });
         setSelectedTemplateId('');
         setCertificateBody('');
         setAdditionalInfo('');
+        setEntryMode('search');
     };
 
     const handleSelectOwner = (owner: Owner) => {
@@ -164,19 +202,42 @@ export default function CertificatesPage() {
             setSelectedProperty(owner.properties[0]);
         }
     };
+
+    const handleManualDataChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setManualData({ ...manualData, [e.target.id]: e.target.value });
+    };
     
     const handleGenerateAndSave = async () => {
-        if (!selectedOwner || !selectedProperty || !selectedTemplateId || !certificateBody) {
-            toast({ variant: 'destructive', title: 'Datos Incompletos', description: 'Debe seleccionar un propietario, propiedad, plantilla y tener contenido en el cuerpo del documento.' });
+        let person: Partial<Owner & ManualPerson> | null = null;
+        let property: { street: string; house: string } | null = null;
+
+        if (entryMode === 'search') {
+            if (!selectedOwner || !selectedProperty) {
+                toast({ variant: 'destructive', title: 'Datos Incompletos', description: 'Debe seleccionar un propietario y una propiedad.' });
+                return;
+            }
+            person = selectedOwner;
+            property = selectedProperty;
+        } else { // manual mode
+            if (!manualData.name || !manualData.cedula || !manualData.street || !manualData.house) {
+                toast({ variant: 'destructive', title: 'Datos Incompletos', description: 'Nombre, Cédula, Calle y Casa son obligatorios en modo manual.' });
+                return;
+            }
+            person = manualData;
+            property = { street: manualData.street, house: manualData.house };
+        }
+
+        if (!selectedTemplateId || !certificateBody) {
+            toast({ variant: 'destructive', title: 'Datos Incompletos', description: 'Debe seleccionar una plantilla y tener contenido en el cuerpo del documento.' });
             return;
         }
         setIsSubmitting(true);
         try {
             const docData = {
-                ownerId: selectedOwner.id,
-                ownerName: selectedOwner.name,
-                ownerCedula: selectedOwner.cedula || 'N/A',
-                property: selectedProperty,
+                ownerId: entryMode === 'search' ? person.id : 'manual',
+                ownerName: person.name,
+                ownerCedula: person.cedula || 'N/A',
+                property: property,
                 type: selectedTemplateId,
                 body: certificateBody,
                 createdAt: serverTimestamp() as Timestamp,
@@ -202,14 +263,24 @@ export default function CertificatesPage() {
         const pageWidth = doc.internal.pageSize.getWidth();
         const margin = 20;
 
+        // Header
         if (companyInfo.logo) {
             try { doc.addImage(companyInfo.logo, 'PNG', margin, 15, 30, 30); }
-            catch(e) { console.error(e); }
+            catch(e) { console.error("Error adding logo:", e); }
         }
 
-        doc.setFontSize(10).setFont('helvetica', 'normal').text(companyInfo.name, pageWidth - margin, 20, { align: 'right' });
-        doc.text(companyInfo.rif, pageWidth - margin, 25, { align: 'right' });
-        doc.text(companyInfo.address, pageWidth - margin, 30, { align: 'right' });
+        let headerY = 20;
+        doc.setFontSize(10).setFont('helvetica', 'normal');
+        doc.text(companyInfo.name, margin, headerY);
+        headerY += 5;
+        doc.text(companyInfo.rif, margin, headerY);
+        headerY += 5;
+        const addressLines = doc.splitTextToSize(companyInfo.address, 100); // Wrap address
+        doc.text(addressLines, margin, headerY);
+        headerY += (addressLines.length * 4);
+        
+        doc.text(`Fecha: ${format(new Date(), 'dd/MM/yyyy')}`, pageWidth - margin, 20, { align: 'right' });
+
 
         const template = templates.find(t => t.id === certificate.type);
         const title = template ? template.title : "DOCUMENTO";
@@ -229,7 +300,7 @@ export default function CertificatesPage() {
         doc.line(pageWidth/2 - 40, signatureY, pageWidth/2 + 40, signatureY);
         doc.setFontSize(10).setFont('helvetica', 'bold').text('Junta de Condominio', pageWidth / 2, signatureY + 8, { align: 'center' });
 
-        doc.save(`constancia_${certificate.type}_${certificate.ownerName.replace(' ', '_')}.pdf`);
+        doc.save(`constancia_${certificate.type}_${certificate.ownerName.replace(/\s/g, '_')}.pdf`);
     };
 
     return (
@@ -257,7 +328,7 @@ export default function CertificatesPage() {
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead>Propietario</TableHead>
+                                <TableHead>Residente</TableHead>
                                 <TableHead>Tipo de Documento</TableHead>
                                 <TableHead>Fecha de Emisión</TableHead>
                                 <TableHead className="text-right">Acciones</TableHead>
@@ -294,36 +365,81 @@ export default function CertificatesPage() {
                         <DialogDescription>Complete el formulario para generar un nuevo documento.</DialogDescription>
                     </DialogHeader>
                     <div className="flex-grow overflow-y-auto pr-6 -mr-6 space-y-6">
-                        <Card className="bg-muted/50">
+                        
+                         <Card className="bg-muted/50">
                             <CardHeader>
-                                <CardTitle className="text-lg flex items-center gap-2"><User className="h-5 w-5"/>1. Seleccione el Propietario</CardTitle>
+                                <CardTitle className="text-lg flex items-center gap-2"><User className="h-5 w-5"/>1. Seleccione el Destinatario</CardTitle>
                             </CardHeader>
                             <CardContent>
-                                {!selectedOwner ? (
+                                <RadioGroup defaultValue="search" value={entryMode} onValueChange={(v) => setEntryMode(v as 'search' | 'manual')} className="mb-4 flex gap-4">
+                                    <div className="flex items-center space-x-2">
+                                        <RadioGroupItem value="search" id="r1" />
+                                        <Label htmlFor="r1">Buscar Propietario Existente</Label>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                        <RadioGroupItem value="manual" id="r2" />
+                                        <Label htmlFor="r2">Ingresar Datos Manualmente</Label>
+                                    </div>
+                                </RadioGroup>
+
+                                {entryMode === 'search' && (
                                     <>
-                                        <div className="relative">
-                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                            <Input placeholder="Buscar por nombre (mín. 3 caracteres)..." className="pl-9" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-                                        </div>
-                                        {filteredOwners.length > 0 && (
-                                            <Card className="mt-2 border rounded-md">
-                                                <ScrollArea className="h-40">{filteredOwners.map(owner => (<div key={owner.id} onClick={() => handleSelectOwner(owner)} className="p-3 hover:bg-background cursor-pointer border-b last:border-b-0"><p className="font-medium">{owner.name}</p></div>))}</ScrollArea>
-                                            </Card>
+                                        {!selectedOwner ? (
+                                            <>
+                                                <div className="relative">
+                                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                                    <Input placeholder="Buscar por nombre (mín. 3 caracteres)..." className="pl-9" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                                                </div>
+                                                {filteredOwners.length > 0 && (
+                                                    <Card className="mt-2 border rounded-md">
+                                                        <ScrollArea className="h-40">{filteredOwners.map(owner => (<div key={owner.id} onClick={() => handleSelectOwner(owner)} className="p-3 hover:bg-background cursor-pointer border-b last:border-b-0"><p className="font-medium">{owner.name}</p></div>))}</ScrollArea>
+                                                    </Card>
+                                                )}
+                                            </>
+                                        ) : (
+                                            <div className="flex items-center justify-between p-3 bg-background rounded-md">
+                                                <div>
+                                                    <p className="font-semibold text-primary">{selectedOwner.name}</p>
+                                                    <p className="text-sm text-muted-foreground">C.I: {selectedOwner.cedula || 'No registrada'}</p>
+                                                </div>
+                                                <Button variant="ghost" size="icon" onClick={() => {setSelectedOwner(null); setSelectedProperty(null);}}><XCircle className="h-5 w-5 text-destructive"/></Button>
+                                            </div>
                                         )}
                                     </>
-                                ) : (
-                                    <div className="flex items-center justify-between p-3 bg-background rounded-md">
-                                        <div>
-                                            <p className="font-semibold text-primary">{selectedOwner.name}</p>
-                                            <p className="text-sm text-muted-foreground">C.I: {selectedOwner.cedula || 'No registrada'}</p>
+                                )}
+
+                                {entryMode === 'manual' && (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
+                                        <div className="space-y-2">
+                                            <Label htmlFor="name">Nombre y Apellidos</Label>
+                                            <Input id="name" value={manualData.name} onChange={handleManualDataChange} />
                                         </div>
-                                        <Button variant="ghost" size="icon" onClick={() => setSelectedOwner(null)}><XCircle className="h-5 w-5 text-destructive"/></Button>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="cedula">Cédula de Identidad</Label>
+                                            <Input id="cedula" value={manualData.cedula} onChange={handleManualDataChange} />
+                                        </div>
+                                         <div className="space-y-2">
+                                            <Label htmlFor="street">Calle</Label>
+                                            <Input id="street" value={manualData.street} onChange={handleManualDataChange} />
+                                        </div>
+                                         <div className="space-y-2">
+                                            <Label htmlFor="house">Casa</Label>
+                                            <Input id="house" value={manualData.house} onChange={handleManualDataChange} />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="estadoCivil">Estado Civil (Opcional)</Label>
+                                            <Input id="estadoCivil" value={manualData.estadoCivil} onChange={handleManualDataChange} />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="profesion">Profesión (Opcional)</Label>
+                                            <Input id="profesion" value={manualData.profesion} onChange={handleManualDataChange} />
+                                        </div>
                                     </div>
                                 )}
                             </CardContent>
                         </Card>
                         
-                        {selectedOwner && (
+                        {entryMode === 'search' && selectedOwner && (
                              <Card className="bg-muted/50">
                                 <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Home className="h-5 w-5"/>2. Seleccione la Propiedad</CardTitle></CardHeader>
                                 <CardContent>
@@ -335,9 +451,9 @@ export default function CertificatesPage() {
                             </Card>
                         )}
                         
-                        {selectedOwner && selectedProperty && (
+                        {((entryMode === 'search' && selectedProperty) || (entryMode === 'manual' && manualData.house)) && (
                              <Card className="bg-muted/50">
-                                <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Award className="h-5 w-5"/>3. Tipo de Documento</CardTitle></CardHeader>
+                                <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Award className="h-5 w-5"/>{entryMode === 'search' ? '3.' : '2.'} Tipo de Documento</CardTitle></CardHeader>
                                 <CardContent>
                                     <Select onValueChange={(v) => setSelectedTemplateId(v as Template['id'])} value={selectedTemplateId}>
                                         <SelectTrigger><SelectValue placeholder="Seleccione una plantilla..." /></SelectTrigger>
@@ -349,12 +465,18 @@ export default function CertificatesPage() {
                         
                         {selectedTemplateId && (
                              <Card className="bg-muted/50">
-                                <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Stamp className="h-5 w-5"/>4. Contenido del Documento</CardTitle></CardHeader>
+                                <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Stamp className="h-5 w-5"/>{entryMode === 'search' ? '4.' : '3.'} Contenido del Documento</CardTitle></CardHeader>
                                 <CardContent className="space-y-4">
                                      {selectedTemplateId === 'remodelacion' && (
                                         <div className="space-y-2">
                                             <Label htmlFor="additional-info">Descripción de los Trabajos de Remodelación</Label>
                                             <Textarea id="additional-info" value={additionalInfo} onChange={e => setAdditionalInfo(e.target.value)} placeholder="Ej: Cambio de cerámica en el baño principal, pintura de paredes internas..." />
+                                        </div>
+                                    )}
+                                     {selectedTemplateId === 'personalizada' && (
+                                        <div className="space-y-2">
+                                            <Label htmlFor="additional-info">Cuerpo del Documento Personalizado</Label>
+                                            <Textarea id="additional-info" value={additionalInfo} onChange={e => setAdditionalInfo(e.target.value)} rows={8} placeholder="Escriba aquí el contenido completo del documento. Puede usar placeholders como {{nombre}}, {{cedula}}, {{calle}}, {{casa}} que serán reemplazados automáticamente." />
                                         </div>
                                     )}
                                      <div className="p-4 border bg-background rounded-md">
@@ -381,3 +503,5 @@ export default function CertificatesPage() {
         </div>
     );
 }
+
+    
