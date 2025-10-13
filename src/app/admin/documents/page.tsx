@@ -218,21 +218,21 @@ export default function DocumentsPage() {
         const pageHeight = doc.internal.pageSize.getHeight();
     
         if (companyInfo.logo) {
-            try { doc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25); }
+            try { doc.addImage(companyInfo.logo, 'PNG', margin, 15, 25, 25); }
             catch(e) { console.error("Error adding logo to PDF", e); }
         }
         
         doc.setFontSize(10);
-        doc.text(companyInfo.name, margin + 30, margin + 8);
-        doc.text(companyInfo.rif, margin + 30, margin + 14);
-        
+        const rifAndPhone = `${companyInfo.rif} | ${companyInfo.phone}`;
         const addressLines = doc.splitTextToSize(companyInfo.address, 100);
-        doc.text(addressLines, margin + 30, margin + 20);
+        doc.text(companyInfo.name, margin, 50);
+        doc.text(rifAndPhone, margin, 55);
+        doc.text(addressLines, margin, 60);
 
         const dateStr = `Independencia, ${format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: es })}`;
-        doc.text(dateStr, pageWidth - margin, margin + 10, { align: 'right' });
+        doc.text(dateStr, pageWidth - margin, 50, { align: 'right' });
         
-        let currentY = margin + 50;
+        let currentY = margin + 20;
         
         doc.setFontSize(14).setFont('helvetica', 'bold');
         doc.text(title.toUpperCase(), pageWidth / 2, currentY, { align: 'center' });
@@ -262,7 +262,9 @@ export default function DocumentsPage() {
     
     const handleDownloadPDF = (docData: Pick<CustomDocument, 'title' | 'body'>) => {
         const doc = generatePdfInstance(docData);
-        if (doc) doc.save(`${docData.title.replace(/\s+/g, '_')}.pdf`);
+        if (doc) {
+            doc.save(`${docData.title.replace(/\s+/g, '_')}.pdf`);
+        }
     };
 
     const handleSharePDF = async (docData: Pick<CustomDocument, 'title' | 'body'>) => {
@@ -284,7 +286,6 @@ export default function DocumentsPage() {
             });
         } catch (error) {
             console.error('Error al compartir:', error);
-            // Don't show toast for abort error
             if ((error as Error).name !== 'AbortError') {
                  toast({ variant: 'destructive', title: 'Error', description: 'No se pudo compartir el documento.' });
             }
@@ -404,7 +405,7 @@ export default function DocumentsPage() {
                            Revise el documento. Si todo está correcto, puede descargarlo o compartirlo.
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="flex-grow overflow-y-auto pr-4 -mr-4 border rounded-md p-4 bg-white text-black font-sans text-sm space-y-4">
+                     <div className="flex-grow overflow-y-auto pr-4 -mr-4 border rounded-md p-4 bg-white text-black font-sans text-sm space-y-4">
                         {documentToPreview && (
                              <>
                                 <h3 className="text-lg font-bold text-center uppercase">{documentToPreview.title}</h3>
@@ -417,7 +418,10 @@ export default function DocumentsPage() {
                     </div>
                     <DialogFooter className="mt-auto pt-4 border-t">
                         <Button variant="outline" onClick={() => setIsPreviewOpen(false)}>Cerrar</Button>
-                        <Button onClick={() => documentToPreview && handleDownloadPDF(documentToPreview)}>
+                        <Button 
+                            onClick={() => documentToPreview && handleDownloadPDF(documentToPreview)}
+                            ref={(button) => button?.focus()}
+                        >
                             <Download className="mr-2 h-4 w-4"/> Descargar PDF
                         </Button>
                         <Button onClick={() => documentToPreview && handleSharePDF(documentToPreview)}>
