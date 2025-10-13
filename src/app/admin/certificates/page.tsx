@@ -269,7 +269,6 @@ export default function CertificatesPage() {
         const margin = 20;
         const logoSize = 30;
         const logoY = 15;
-        let headerY = logoY;
 
         // Header
         if (companyInfo.logo) {
@@ -278,11 +277,13 @@ export default function CertificatesPage() {
             }
             catch(e) { console.error("Error adding logo:", e); }
         }
-
+        
         doc.setFontSize(10).setFont('helvetica', 'normal');
+        // Position company info under the logo
         const companyInfoY = logoY + logoSize + 5;
         doc.text(companyInfo.name, margin, companyInfoY);
         doc.text(companyInfo.rif, margin, companyInfoY + 5);
+        // Ensure address wraps within a reasonable width
         const addressLines = doc.splitTextToSize(companyInfo.address, pageWidth - (margin * 2) - logoSize - 10);
         doc.text(addressLines, margin, companyInfoY + 10);
         
@@ -295,7 +296,7 @@ export default function CertificatesPage() {
 
         doc.setFontSize(12).setFont('helvetica', 'normal');
         const splitBody = doc.splitTextToSize(certificate.body, pageWidth - (margin * 2));
-        doc.text(splitBody, margin, 100, { align: 'justify' });
+        doc.text(splitBody, margin, 100); // Removed align: 'justify'
 
         const qrContent = `ID:${certificate.id}\nFecha:${format(certificate.createdAt.toDate(), 'yyyy-MM-dd')}\nPropietario:${certificate.ownerName}`;
         const qrCodeUrl = await QRCode.toDataURL(qrContent, { errorCorrectionLevel: 'M' });
