@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { collection, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, Timestamp, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { PlusCircle, Trash2, Loader2, FileText, Edit, MoreHorizontal, Bold, Italic, Underline, List, ListOrdered, AlignLeft, AlignCenter, AlignRight, AlignJustify, Download, Share2 } from 'lucide-react';
+import { PlusCircle, Trash2, Loader2, FileText, Edit, MoreHorizontal, Bold, Italic, Underline, List, ListOrdered, AlignLeft, AlignCenter, AlignRight, AlignJustify, Download, Share2, Eye } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import jsPDF from 'jspdf';
@@ -95,6 +95,9 @@ export default function DocumentsPage() {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
     const [documentToDelete, setDocumentToDelete] = useState<CustomDocument | null>(null);
+    const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+    const [documentToPreview, setDocumentToPreview] = useState<CustomDocument | null>(null);
+
 
     const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
     const [loading, setLoading] = useState(true);
@@ -192,6 +195,11 @@ export default function DocumentsPage() {
             setIsSubmitting(false);
         }
     };
+
+    const handleOpenPreview = (docToPreview: CustomDocument) => {
+        setDocumentToPreview(docToPreview);
+        setIsPreviewOpen(true);
+    }
     
     const generatePdfInstance = (docData: Pick<CustomDocument, 'title' | 'body'>): jsPDF | null => {
         if (!companyInfo) {
@@ -210,13 +218,16 @@ export default function DocumentsPage() {
         const pageHeight = doc.internal.pageSize.getHeight();
     
         if (companyInfo.logo) {
-            doc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25);
+            try { doc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25); }
+            catch(e) { console.error("Error adding logo to PDF", e); }
         }
         
         doc.setFontSize(10);
-        doc.text(`${companyInfo.name} | ${companyInfo.rif}`, margin + 30, margin + 10);
-        doc.text(companyInfo.address, margin + 30, margin + 16);
-        doc.text(companyInfo.phone || "", margin + 30, margin + 22);
+        doc.text(companyInfo.name, margin + 30, margin + 8);
+        doc.text(companyInfo.rif, margin + 30, margin + 14);
+        
+        const addressLines = doc.splitTextToSize(companyInfo.address, 100);
+        doc.text(addressLines, margin + 30, margin + 20);
 
         const dateStr = `Independencia, ${format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: es })}`;
         doc.text(dateStr, pageWidth - margin, margin + 10, { align: 'right' });
@@ -224,7 +235,7 @@ export default function DocumentsPage() {
         let currentY = margin + 50;
         
         doc.setFontSize(14).setFont('helvetica', 'bold');
-        doc.text(title, pageWidth / 2, currentY, { align: 'center' });
+        doc.text(title.toUpperCase(), pageWidth / 2, currentY, { align: 'center' });
         currentY += 20;
     
         doc.setFontSize(12).setFont('helvetica', 'normal');
@@ -234,7 +245,8 @@ export default function DocumentsPage() {
         const bodyHeight = doc.getTextDimensions(splitBody).h;
         currentY += bodyHeight;
         
-        const signatureBlockY = pageHeight - margin - 30;
+        const signatureBlockY = Math.max(currentY + 40, pageHeight - margin - 30);
+
         doc.setFontSize(12).setFont('helvetica', 'normal');
         doc.text('Atentamente,', pageWidth / 2, signatureBlockY, { align: 'center'});
     
@@ -246,11 +258,6 @@ export default function DocumentsPage() {
         doc.text('Junta de Condominio', pageWidth / 2, signatureLineY + 8, { align: 'center' });
 
         return doc;
-    };
-
-    const handlePreviewPDF = (docData: Pick<CustomDocument, 'title' | 'body'>) => {
-        const doc = generatePdfInstance(docData);
-        if (doc) doc.output('dataurlnewwindow');
     };
     
     const handleDownloadPDF = (docData: Pick<CustomDocument, 'title' | 'body'>) => {
@@ -277,7 +284,10 @@ export default function DocumentsPage() {
             });
         } catch (error) {
             console.error('Error al compartir:', error);
-            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo compartir el documento.' });
+            // Don't show toast for abort error
+            if ((error as Error).name !== 'AbortError') {
+                 toast({ variant: 'destructive', title: 'Error', description: 'No se pudo compartir el documento.' });
+            }
         }
     };
 
@@ -330,10 +340,7 @@ export default function DocumentsPage() {
                                                 <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4"/></Button></DropdownMenuTrigger>
                                                 <DropdownMenuContent align="end">
                                                     <DropdownMenuItem onClick={() => handleEditDocument(doc)}><Edit className="mr-2 h-4 w-4"/>Editar</DropdownMenuItem>
-                                                    <DropdownMenuSeparator />
-                                                    <DropdownMenuItem onClick={() => handlePreviewPDF(doc)}><FileText className="mr-2 h-4 w-4"/>Previsualizar</DropdownMenuItem>
-                                                    <DropdownMenuItem onClick={() => handleDownloadPDF(doc)}><Download className="mr-2 h-4 w-4"/>Descargar PDF</DropdownMenuItem>
-                                                    <DropdownMenuItem onClick={() => handleSharePDF(doc)}><Share2 className="mr-2 h-4 w-4"/>Compartir</DropdownMenuItem>
+                                                    <DropdownMenuItem onClick={() => handleOpenPreview(doc)}><FileText className="mr-2 h-4 w-4"/>Exportar a PDF...</DropdownMenuItem>
                                                     <DropdownMenuSeparator />
                                                     <DropdownMenuItem onClick={() => handleDeleteDocument(doc)} className="text-destructive focus:text-destructive"><Trash2 className="mr-2 h-4 w-4"/>Eliminar</DropdownMenuItem>
                                                 </DropdownMenuContent>
@@ -385,6 +392,37 @@ export default function DocumentsPage() {
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setIsDeleteConfirmationOpen(false)}>Cancelar</Button>
                         <Button variant="destructive" onClick={confirmDelete}>Sí, eliminar</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+            
+            <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+                <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col">
+                    <DialogHeader>
+                        <DialogTitle>Previsualización y Exportación</DialogTitle>
+                        <DialogDescription>
+                           Revise el documento. Si todo está correcto, puede descargarlo o compartirlo.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="flex-grow overflow-y-auto pr-4 -mr-4 border rounded-md p-4 bg-white text-black font-sans text-sm space-y-4">
+                        {documentToPreview && (
+                             <>
+                                <h3 className="text-lg font-bold text-center uppercase">{documentToPreview.title}</h3>
+                                <div 
+                                    className="prose prose-sm max-w-none" 
+                                    dangerouslySetInnerHTML={{ __html: documentToPreview.body }}
+                                />
+                             </>
+                        )}
+                    </div>
+                    <DialogFooter className="mt-auto pt-4 border-t">
+                        <Button variant="outline" onClick={() => setIsPreviewOpen(false)}>Cerrar</Button>
+                        <Button onClick={() => documentToPreview && handleDownloadPDF(documentToPreview)}>
+                            <Download className="mr-2 h-4 w-4"/> Descargar PDF
+                        </Button>
+                        <Button onClick={() => documentToPreview && handleSharePDF(documentToPreview)}>
+                            <Share2 className="mr-2 h-4 w-4"/> Compartir
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
