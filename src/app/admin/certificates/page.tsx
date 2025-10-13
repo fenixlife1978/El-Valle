@@ -267,22 +267,26 @@ export default function CertificatesPage() {
         const doc = new jsPDF();
         const pageWidth = doc.internal.pageSize.getWidth();
         const margin = 20;
+        const logoSize = 30;
+        const logoY = 15;
+        let headerY = logoY;
 
         // Header
         if (companyInfo.logo) {
-            try { doc.addImage(companyInfo.logo, 'PNG', margin, 15, 30, 30); }
+            try { 
+                doc.addImage(companyInfo.logo, 'PNG', margin, logoY, logoSize, logoSize); 
+                headerY += logoSize + 5; // Move Y position below the logo
+            }
             catch(e) { console.error("Error adding logo:", e); }
         }
 
-        let headerY = 20;
         doc.setFontSize(10).setFont('helvetica', 'normal');
         doc.text(companyInfo.name, margin, headerY);
         headerY += 5;
         doc.text(companyInfo.rif, margin, headerY);
         headerY += 5;
-        const addressLines = doc.splitTextToSize(companyInfo.address, 100); // Wrap address
+        const addressLines = doc.splitTextToSize(companyInfo.address, pageWidth - (margin * 2) - logoSize - 10);
         doc.text(addressLines, margin, headerY);
-        headerY += (addressLines.length * 4);
         
         doc.text(`Fecha: ${format(new Date(), 'dd/MM/yyyy')}`, pageWidth - margin, 20, { align: 'right' });
 
