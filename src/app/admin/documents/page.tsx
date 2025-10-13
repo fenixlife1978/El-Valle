@@ -198,57 +198,61 @@ export default function DocumentsPage() {
             toast({ variant: 'destructive', title: 'Error', description: 'No se ha cargado la información de la empresa.'});
             return;
         }
-
+    
         const { title, body } = docData;
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = body;
         const textBody = tempDiv.textContent || tempDiv.innerText || "";
-
-
+    
         const doc = new jsPDF();
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
-        
-        // 3cm margin = 85.05 points. We'll use 85.
-        const margin = 85; 
+        const margin = 85; // 3cm margin = 85.039... points
         const maxLineWidth = pageWidth - (margin * 2);
+    
         let currentY = margin;
-
+    
         // --- Header ---
         const logoWidth = 30;
         const logoHeight = 30;
         if (companyInfo.logo) {
-            try { doc.addImage(companyInfo.logo, 'PNG', margin, currentY, logoWidth, logoHeight); }
+            try { doc.addImage(companyInfo.logo, 'PNG', margin, currentY - (logoHeight / 2), logoWidth, logoHeight); }
             catch(e) { console.error(e); }
         }
-        
+    
         doc.setFontSize(10).setFont('helvetica', 'normal');
+        const companyInfoX = margin + logoWidth + 5;
+        doc.text(companyInfo.name, companyInfoX, currentY - 5);
+        doc.text(companyInfo.rif, companyInfoX, currentY);
+        const addressLines = doc.splitTextToSize(companyInfo.address, maxLineWidth - logoWidth - 5);
+        doc.text(addressLines, companyInfoX, currentY + 5);
+        
         const dateStr = `Independencia, ${format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: es })}`;
         doc.text(dateStr, pageWidth - margin, currentY, { align: 'right' });
         
-        currentY = Math.max(currentY, margin + logoHeight) + 30;
+        currentY += Math.max(logoHeight, addressLines.length * 5) + 30;
         
         // --- Title ---
-        doc.setFontSize(16).setFont('helvetica', 'bold');
+        doc.setFontSize(14).setFont('helvetica', 'bold');
         doc.text(title, pageWidth / 2, currentY, { align: 'center' });
         currentY += 20;
-
+    
         // --- Body ---
         doc.setFontSize(12).setFont('helvetica', 'normal');
         const splitBody = doc.splitTextToSize(textBody, maxLineWidth);
         doc.text(splitBody, margin, currentY, { align: 'justify' });
         const bodyHeight = doc.getTextDimensions(splitBody).h;
-        currentY += bodyHeight + 20;
+        currentY += bodyHeight + 30;
         
         // --- Signature ---
         let signatureBlockY = currentY + 30;
         if (signatureBlockY > pageHeight - margin) {
-            signatureBlockY = pageHeight - margin - 30; // ensure it fits
+            signatureBlockY = pageHeight - margin; 
         }
-
+    
         doc.setFontSize(12).setFont('helvetica', 'normal');
         doc.text('Atentamente,', pageWidth / 2, signatureBlockY, { align: 'center'});
-
+    
         const signatureLineY = signatureBlockY + 20;
         doc.setLineWidth(0.5);
         doc.line(pageWidth/2 - 40, signatureLineY, pageWidth/2 + 40, signatureLineY);
@@ -256,7 +260,7 @@ export default function DocumentsPage() {
         doc.setFontSize(10).setFont('helvetica', 'bold');
         doc.text('Junta de Condominio', pageWidth / 2, signatureLineY + 8, { align: 'center' });
 
-        doc.save(`${title.replace(/\s/g, '_')}.pdf`);
+        doc.output('dataurlnewwindow');
     };
 
     return (
@@ -308,7 +312,7 @@ export default function DocumentsPage() {
                                                 <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4"/></Button></DropdownMenuTrigger>
                                                 <DropdownMenuContent align="end">
                                                     <DropdownMenuItem onClick={() => handleEditDocument(doc)}><Edit className="mr-2 h-4 w-4"/>Editar</DropdownMenuItem>
-                                                    <DropdownMenuItem onClick={() => handleExportPDF(doc)}><FileText className="mr-2 h-4 w-4"/>Exportar PDF</DropdownMenuItem>
+                                                    <DropdownMenuItem onClick={() => handleExportPDF(doc)}><FileText className="mr-2 h-4 w-4"/>Previsualizar PDF</DropdownMenuItem>
                                                     <DropdownMenuItem onClick={() => handleDeleteDocument(doc)} className="text-destructive focus:text-destructive"><Trash2 className="mr-2 h-4 w-4"/>Eliminar</DropdownMenuItem>
                                                 </DropdownMenuContent>
                                             </DropdownMenu>
