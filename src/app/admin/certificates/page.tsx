@@ -135,7 +135,7 @@ export default function CertificatesPage() {
     const filteredOwners = useMemo(() => {
         if (!searchTerm || searchTerm.length < 3) return [];
         return owners.filter(owner =>
-            owner.name.toLowerCase().includes(searchTerm.toLowerCase())
+            owner.name && owner.name.toLowerCase().includes(searchTerm.toLowerCase())
         );
     }, [searchTerm, owners]);
 
