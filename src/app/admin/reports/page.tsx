@@ -442,12 +442,7 @@ export default function ReportsPage() {
                 })
                 .reduce((sum, d) => sum + d.amountUSD, 0);
 
-            const monthsOwed = ownerDebts.filter(d => {
-                const debtDate = startOfMonth(new Date(d.year, d.month - 1));
-                return d.status === 'pending' && 
-                       d.description.toLowerCase().includes('condominio') &&
-                       isBefore(debtDate, startOfMonth(new Date()));
-            }).length;
+            const monthsOwed = ownerDebts.filter(d => d.status === 'pending' && d.description.toLowerCase().includes('condominio')).length;
 
             return {
                 ownerId: owner.id,
