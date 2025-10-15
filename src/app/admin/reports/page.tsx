@@ -257,7 +257,7 @@ export default function ReportsPage() {
 
              // --- Delinquency Data Calculation ---
             const debtsByOwner = new Map<string, { totalUSD: number, count: number }>();
-            debtsData.filter(d => d.status === 'pending').forEach(debt => {
+            debtsData.filter(d => d.status === 'pending' && d.ownerId !== ADMIN_USER_ID).forEach(debt => {
                 const ownerData = debtsByOwner.get(debt.ownerId) || { totalUSD: 0, count: 0 };
                 // We only count base fees for "months owed", not adjustments
                 if (debt.description.toLowerCase().includes('condominio')) {

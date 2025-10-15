@@ -278,8 +278,7 @@ export default function PeopleManagementPage() {
     };
     
     const handleExportExcel = () => {
-        const dataToExport = owners.flatMap(o => {
-            if (o.id === ADMIN_USER_ID) return []; // Exclude admin
+        const dataToExport = owners.filter(o => o.id !== ADMIN_USER_ID).flatMap(o => {
             const properties = (o.properties && o.properties.length > 0) ? o.properties : [{ street: 'N/A', house: 'N/A'}];
             return properties.map(p => ({
                 Nombre: o.name,
@@ -325,7 +324,7 @@ export default function PeopleManagementPage() {
 
         (doc as any).autoTable({
             head: [['Nombre', 'Propiedades', 'Email', 'Rol', 'Saldo a Favor (Bs.)']],
-            body: owners.filter(o => o.id !== ADMIN_USER_ID).map(o => { // Exclude admin
+            body: owners.filter(o => o.id !== ADMIN_USER_ID).map(o => {
                 const properties = (o.properties && o.properties.length > 0) 
                     ? o.properties.map(p => `${p.street} - ${p.house}`).join('\n') 
                     : 'N/A';
