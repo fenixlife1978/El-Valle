@@ -443,7 +443,10 @@ export default function ReportsPage() {
                 .reduce((sum, d) => sum + d.amountUSD, 0);
 
             const monthsOwed = ownerDebts.filter(d => {
-                return d.status === 'pending' && d.description.toLowerCase().includes('condominio');
+                const debtDate = startOfMonth(new Date(d.year, d.month - 1));
+                return d.status === 'pending' && 
+                       d.description.toLowerCase().includes('condominio') &&
+                       isBefore(debtDate, startOfMonth(new Date()));
             }).length;
 
             return {
@@ -461,7 +464,7 @@ export default function ReportsPage() {
             };
         }).filter(row => {
             const statusMatch = integralStatusFilter === 'todos' || row.status.toLowerCase().replace(' ', '') === integralStatusFilter.toLowerCase().replace(' ', '');
-            const ownerMatch = !integralOwnerFilter || row.name.toLowerCase().includes(integralOwnerFilter.toLowerCase());
+            const ownerMatch = !integralOwnerFilter || (row.name && row.name.toLowerCase().includes(integralOwnerFilter.toLowerCase()));
             return statusMatch && ownerMatch;
         });
     }, [owners, allDebts, allPayments, allHistoricalPayments, integralDateRange, integralStatusFilter, integralOwnerFilter]);
