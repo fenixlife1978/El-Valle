@@ -96,7 +96,7 @@ type IntegralReportRow = {
     status: 'Solvente' | 'No Solvente';
     solvencyPeriod: string;
     monthsOwed: number;
-    adjustmentDebtUSD: number; // New field for pending adjustment debt
+    adjustmentDebtUSD: number;
 };
 
 type DelinquentOwner = {
@@ -337,8 +337,11 @@ export default function ReportsPage() {
                 const oldestPeriod = allOwnerPeriods.sort((a, b) => a.year - b.year || a.month - b.month)[0];
                 firstMonthEver = startOfMonth(new Date(oldestPeriod.year, oldestPeriod.month - 1));
             }
-
+            
+            const today = new Date();
             let lastConsecutivePaidMonth: Date | null = null;
+            let hasPendingDebt = false;
+            let firstUnpaidMonth: Date | null = null;
             
             if (firstMonthEver) {
                 let currentCheckMonth = firstMonthEver;
@@ -348,58 +351,53 @@ export default function ReportsPage() {
                     const year = getYear(currentCheckMonth);
                     const month = getMonth(currentCheckMonth) + 1;
                     
-                    const isInHistorical = ownerHistoricalPayments.some(p => p.referenceYear === year && p.referenceMonth === month);
-                    let isMonthFullyPaid = false;
-
-                    if (isInHistorical) {
-                        isMonthFullyPaid = true;
+                    const isHistorical = ownerHistoricalPayments.some(p => p.referenceYear === year && p.referenceMonth === month);
+                    
+                    let isMonthPaid = false;
+                    if (isHistorical) {
+                        isMonthPaid = true;
                     } else {
                         const debtsForMonth = ownerDebts.filter(d => d.year === year && d.month === month);
-                        if (debtsForMonth.length > 0) {
-                            const mainDebt = debtsForMonth.find(d => d.description.toLowerCase().includes('condominio'));
-                            if (mainDebt?.status === 'paid') {
-                                isMonthFullyPaid = true;
-                            }
+                        const mainDebt = debtsForMonth.find(d => d.description.toLowerCase().includes('condominio'));
+                        if (mainDebt?.status === 'paid') {
+                           isMonthPaid = true;
                         }
                     }
 
-                    if (isMonthFullyPaid) {
+                    if (isMonthPaid) {
                         lastConsecutivePaidMonth = currentCheckMonth;
                     } else {
-                        break; // Stop at the first unpaid month
+                        firstUnpaidMonth = currentCheckMonth;
+                        // Now check if this unpaid month has a pending main debt
+                        const debtsForMonth = ownerDebts.filter(d => d.year === year && d.month === month);
+                        const mainDebt = debtsForMonth.find(d => d.description.toLowerCase().includes('condominio'));
+                        if (mainDebt?.status === 'pending' && isBefore(currentCheckMonth, today)) {
+                            hasPendingDebt = true;
+                        }
+                        break; 
                     }
                     currentCheckMonth = addMonths(currentCheckMonth, 1);
                 }
             }
-            
-            const today = new Date();
-            const hasAnyPendingMainDebt = ownerDebts.some(d => {
-                const isMainDebt = d.description.toLowerCase().includes('condominio');
-                if (!isMainDebt) return false;
-                
-                const debtDate = startOfMonth(new Date(d.year, d.month - 1));
-                // An adjustment debt is only considered pending if its month has come
-                const isAdjustmentDebt = d.description.toLowerCase().includes('ajuste');
-                if (isAdjustmentDebt && isBefore(today, debtDate)) {
-                    return false;
-                }
-                return d.status === 'pending';
-            });
-            
-            const status: 'Solvente' | 'No Solvente' = hasAnyPendingMainDebt ? 'No Solvente' : 'Solvente';
-            let solvencyPeriod = '';
 
+            const pendingAdjustments = ownerDebts.filter(d => 
+                d.status === 'pending' && 
+                d.description.toLowerCase().includes('ajuste') &&
+                isBefore(startOfMonth(new Date(d.year, d.month - 1)), today)
+            );
+            
+            if(pendingAdjustments.length > 0) {
+                hasPendingDebt = true;
+            }
+
+            const status: 'Solvente' | 'No Solvente' = !hasPendingDebt ? 'Solvente' : 'No Solvente';
+            let solvencyPeriod = '';
+            
             if (status === 'No Solvente') {
-                let firstUnpaidMonth: Date | null = null;
-                if(lastConsecutivePaidMonth) {
-                    firstUnpaidMonth = addMonths(lastConsecutivePaidMonth, 1);
-                } else if (firstMonthEver) {
-                    firstUnpaidMonth = firstMonthEver;
-                }
-                if (firstUnpaidMonth) {
+                if (firstUnpaidMonth && isBefore(firstUnpaidMonth, today)) {
                     solvencyPeriod = `Desde ${format(firstUnpaidMonth, 'MMMM yyyy', { locale: es })}`;
                 } else {
-                    solvencyPeriod = `Desde ${format(new Date(), 'MMMM yyyy', { locale: es })}`;
+                    solvencyPeriod = `Desde ${format(today, 'MMMM yyyy', { locale: es })}`;
                 }
             } else { // Solvente
                 if (lastConsecutivePaidMonth) {
@@ -433,16 +431,13 @@ export default function ReportsPage() {
                 lastPaymentDate = format(lastPayment.paymentDate.toDate(), 'dd/MM/yyyy');
             }
 
-            const adjustmentDebtUSD = ownerDebts
-                .filter(d => {
-                    const debtDate = startOfMonth(new Date(d.year, d.month - 1));
-                    return d.status === 'pending' && 
-                           d.description.toLowerCase().includes('ajuste') && 
-                           !isBefore(today, debtDate); // Only include if the month has started
-                })
-                .reduce((sum, d) => sum + d.amountUSD, 0);
+            const adjustmentDebtUSD = pendingAdjustments.reduce((sum, d) => sum + d.amountUSD, 0);
 
-            const monthsOwed = ownerDebts.filter(d => d.status === 'pending' && d.description.toLowerCase().includes('condominio')).length;
+            const monthsOwed = ownerDebts.filter(d => 
+                d.status === 'pending' && 
+                d.description.toLowerCase().includes('condominio') &&
+                isBefore(startOfMonth(new Date(d.year, d.month -1)), today)
+            ).length;
 
             return {
                 ownerId: owner.id,
@@ -707,7 +702,7 @@ export default function ReportsPage() {
             });
             doc.save(`${filename}.pdf`);
         } else {
-             const worksheet = XLSX.utils.json_to_sheet(data.map(row => ({
+             const dataToExport = data.map(row => ({
                  "Propietario": row.name, 
                  "Propiedad": row.properties, 
                  "Fecha Últ. Pago": row.lastPaymentDate, 
@@ -718,7 +713,8 @@ export default function ReportsPage() {
                  "Periodo": row.solvencyPeriod, 
                  "Meses Adeudados": row.monthsOwed,
                  "Deuda por Ajuste ($)": row.adjustmentDebtUSD
-            })));
+            }));
+            const worksheet = XLSX.utils.json_to_sheet(dataToExport);
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Reporte Integral");
             XLSX.writeFile(workbook, `${filename}.xlsx`);
