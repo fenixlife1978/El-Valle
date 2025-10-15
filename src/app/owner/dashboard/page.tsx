@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -204,34 +205,34 @@ export default function OwnerDashboardPage() {
 
     useEffect(() => {
         if (loading || !ownerData) return;
-
+    
         const ownerDebts = allDebts;
         const ownerHistoricalPayments = allHistoricalPayments;
-
+    
         const allOwnerPeriods = [
             ...ownerDebts.map(d => ({ year: d.year, month: d.month })),
             ...ownerHistoricalPayments.map(p => ({ year: p.referenceYear, month: p.referenceMonth }))
         ];
-
+    
         let firstMonthEver: Date | null = null;
         if (allOwnerPeriods.length > 0) {
             const oldestPeriod = allOwnerPeriods.sort((a, b) => a.year - b.year || a.month - b.month)[0];
             firstMonthEver = startOfMonth(new Date(oldestPeriod.year, oldestPeriod.month - 1));
         }
-
+    
         let lastConsecutivePaidMonth: Date | null = null;
         
         if (firstMonthEver) {
             let currentCheckMonth = firstMonthEver;
             const limitDate = endOfMonth(addMonths(new Date(), 120)); // Look up to 10 years in the future
-
+    
             while (isBefore(currentCheckMonth, limitDate)) {
                 const year = getYear(currentCheckMonth);
                 const month = getMonth(currentCheckMonth) + 1;
                 
                 const isInHistorical = ownerHistoricalPayments.some(p => p.referenceYear === year && p.referenceMonth === month);
                 let isMonthFullyPaid = false;
-
+    
                 if (isInHistorical) {
                     isMonthFullyPaid = true;
                 } else {
@@ -243,7 +244,7 @@ export default function OwnerDashboardPage() {
                         }
                     }
                 }
-
+    
                 if (isMonthFullyPaid) {
                     lastConsecutivePaidMonth = currentCheckMonth;
                 } else {
@@ -253,23 +254,35 @@ export default function OwnerDashboardPage() {
             }
         }
         
-        const hasAnyPendingMainDebt = ownerDebts.some(d => d.status === 'pending' && d.description.toLowerCase().includes('condominio'));
-
+        const today = new Date();
+        const hasAnyPendingMainDebt = ownerDebts.some(d => {
+            const isMainDebt = d.description.toLowerCase().includes('condominio');
+            if (!isMainDebt) return false;
+            
+            const debtDate = startOfMonth(new Date(d.year, d.month - 1));
+            // An adjustment debt is only considered pending if its month has come
+            const isAdjustmentDebt = d.description.toLowerCase().includes('ajuste');
+            if (isAdjustmentDebt && isBefore(today, debtDate)) {
+                return false;
+            }
+            return d.status === 'pending';
+        });
+    
         if (hasAnyPendingMainDebt) {
             setSolvencyStatus('moroso');
             let firstUnpaidMonth: Date | null = null;
-            if(lastConsecutivePaidMonth) {
+            if (lastConsecutivePaidMonth) {
                 firstUnpaidMonth = addMonths(lastConsecutivePaidMonth, 1);
             } else if (firstMonthEver) {
                 firstUnpaidMonth = firstMonthEver;
             }
-
+    
             if (firstUnpaidMonth) {
-                 setSolvencyPeriod(`Desde ${format(firstUnpaidMonth, 'MMMM yyyy', { locale: es })}`);
+                setSolvencyPeriod(`Desde ${format(firstUnpaidMonth, 'MMMM yyyy', { locale: es })}`);
             } else {
                 setSolvencyPeriod(`Desde ${format(new Date(), 'MMMM yyyy', { locale: es })}`);
             }
-
+    
         } else {
             setSolvencyStatus('solvente');
             if (lastConsecutivePaidMonth) {
@@ -278,10 +291,10 @@ export default function OwnerDashboardPage() {
                 setSolvencyPeriod('Al día');
             }
         }
-
+    
         const totalDebtUSD = ownerDebts.filter(d => d.status === 'pending').reduce((sum, d) => sum + d.amountUSD, 0);
         setDashboardStats(prev => ({ ...prev, totalDebtUSD }));
-    
+        
     }, [allDebts, allHistoricalPayments, loading, ownerData]);
 
     const pendingDebts = useMemo(() => {
