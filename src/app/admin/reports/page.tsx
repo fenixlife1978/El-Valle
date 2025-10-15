@@ -372,7 +372,19 @@ export default function ReportsPage() {
                 }
             }
             
-            const hasAnyPendingMainDebt = ownerDebts.some(d => d.status === 'pending' && d.description.toLowerCase().includes('condominio'));
+            const today = new Date();
+            const hasAnyPendingMainDebt = ownerDebts.some(d => {
+                const isMainDebt = d.description.toLowerCase().includes('condominio');
+                if (!isMainDebt) return false;
+                const isAdjustmentDebt = d.description.toLowerCase().includes('ajuste');
+                const debtDate = startOfMonth(new Date(d.year, d.month - 1));
+                // An adjustment debt is only considered pending if its month has come
+                if (isAdjustmentDebt && isBefore(today, debtDate)) {
+                    return false;
+                }
+                return d.status === 'pending';
+            });
+            
             const status: 'Solvente' | 'No Solvente' = hasAnyPendingMainDebt ? 'No Solvente' : 'Solvente';
             let solvencyPeriod = '';
 
