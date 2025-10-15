@@ -316,7 +316,7 @@ export default function ReportsPage() {
 
 
     const integralReportData = useMemo<IntegralReportRow[]>(() => {
-        const sortedOwners = [...owners].sort((a, b) => {
+        const sortedOwners = [...owners].filter(owner => owner.id !== ADMIN_USER_ID).sort((a, b) => {
             const aKeys = getSortKeys(a);
             const bKeys = getSortKeys(b);
             if (aKeys.streetNum !== bKeys.streetNum) return aKeys.streetNum - bKeys.streetNum;
