@@ -245,7 +245,7 @@ export default function ReportsPage() {
                  setActiveRate(rate);
             }
 
-            const ownersData = ownersSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Owner)).filter(o => o.id !== ADMIN_USER_ID);
+            const ownersData = ownersSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Owner));
             setOwners(ownersData);
 
             const paymentsData = paymentsSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Payment));
@@ -291,7 +291,7 @@ export default function ReportsPage() {
             setSelectedDelinquentOwners(new Set(delinquentData.map(o => o.id)));
 
             // --- Balance Report Data Calculation ---
-            const ownersWithBalance = ownersData.filter(o => o.balance > 0);
+            const ownersWithBalance = ownersData.filter(o => o.id !== ADMIN_USER_ID && o.balance > 0);
             
             const balanceReportData = ownersWithBalance.map(owner => {
                 return {
@@ -347,8 +347,6 @@ export default function ReportsPage() {
             
             const today = new Date();
             let lastConsecutivePaidMonth: Date | null = null;
-            let hasOverdueDebt = false;
-            let firstUnpaidMonth: Date | null = null;
             
             if (firstMonthEver) {
                 let currentCheckMonth = firstMonthEver;
@@ -376,7 +374,6 @@ export default function ReportsPage() {
                     if (isMonthFullyPaid) {
                         lastConsecutivePaidMonth = currentCheckMonth;
                     } else {
-                        firstUnpaidMonth = currentCheckMonth;
                         break; 
                     }
                     currentCheckMonth = addMonths(currentCheckMonth, 1);
@@ -386,20 +383,24 @@ export default function ReportsPage() {
             const anyOverdueDebt = ownerDebts.some(d => {
                 if (d.status !== 'pending') return false;
                 const debtDate = startOfMonth(new Date(d.year, d.month - 1));
+                
+                // An adjustment debt only counts if its month has come
+                const isAdjustmentDebt = d.description.toLowerCase().includes('ajuste');
+                if (isAdjustmentDebt && isBefore(today, debtDate)) {
+                    return false;
+                }
+                
                 return isBefore(debtDate, today);
             });
-            hasOverdueDebt = anyOverdueDebt;
 
 
-            const status: 'Solvente' | 'No Solvente' = !hasOverdueDebt ? 'Solvente' : 'No Solvente';
+            const status: 'Solvente' | 'No Solvente' = !anyOverdueDebt ? 'Solvente' : 'No Solvente';
             let solvencyPeriod = '';
             
             if (status === 'No Solvente') {
-                if (firstUnpaidMonth && isBefore(firstUnpaidMonth, today)) {
-                    solvencyPeriod = `Desde ${format(firstUnpaidMonth, 'MMMM yyyy', { locale: es })}`;
-                } else if (lastConsecutivePaidMonth) {
-                    solvencyPeriod = `Desde ${format(addMonths(lastConsecutivePaidMonth, 1), 'MMMM yyyy', { locale: es })}`;
-                } else if (firstMonthEver && isBefore(firstMonthEver, today)) {
+                if (lastConsecutivePaidMonth) {
+                     solvencyPeriod = `Desde ${format(addMonths(lastConsecutivePaidMonth, 1), 'MMMM yyyy', { locale: es })}`;
+                } else if (firstMonthEver) {
                      solvencyPeriod = `Desde ${format(firstMonthEver, 'MMMM yyyy', { locale: es })}`;
                 } else {
                     solvencyPeriod = `Desde ${format(today, 'MMMM yyyy', { locale: es })}`;
@@ -438,8 +439,7 @@ export default function ReportsPage() {
 
             const adjustmentDebtUSD = ownerDebts.filter(d => 
                 d.status === 'pending' && 
-                d.description.toLowerCase().includes('ajuste') &&
-                isBefore(startOfMonth(new Date(d.year, d.month - 1)), new Date())
+                d.description.toLowerCase().includes('ajuste')
             ).reduce((sum, d) => sum + d.amountUSD, 0);
             
             const monthsOwed = ownerDebts.filter(d => {
@@ -449,10 +449,8 @@ export default function ReportsPage() {
 
                 if (!isOverdue) return false;
 
+                // Only count main condo fees for "months owed"
                 if (d.description.toLowerCase().includes('condominio')) {
-                    return true;
-                }
-                if (d.description.toLowerCase().includes('ajuste')) {
                     return true;
                 }
                 return false;
@@ -522,7 +520,7 @@ export default function ReportsPage() {
 
     const filteredIndividualOwners = useMemo(() => {
         if (!individualSearchTerm) return [];
-        return owners.filter(o => o.name.toLowerCase().includes(individualSearchTerm.toLowerCase()));
+        return owners.filter(o => o.name && o.name.toLowerCase().includes(individualSearchTerm.toLowerCase()));
     }, [individualSearchTerm, owners]);
 
     const filteredStatementOwners = useMemo(() => {
@@ -1759,4 +1757,3 @@ export default function ReportsPage() {
         </div>
     );
 }
-
