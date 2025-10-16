@@ -353,28 +353,25 @@ export default function ReportsPage() {
                     
                     const isHistorical = ownerHistoricalPayments.some(p => p.referenceYear === year && p.referenceMonth === month);
                     
-                    let isMonthPaid = false;
+                    let isMonthFullyPaid = false;
                     if (isHistorical) {
-                        isMonthPaid = true;
+                        isMonthFullyPaid = true;
                     } else {
                         const debtsForMonth = ownerDebts.filter(d => d.year === year && d.month === month);
-                        const mainDebt = debtsForMonth.find(d => d.description.toLowerCase().includes('condominio'));
-                        if (mainDebt?.status === 'paid') {
-                           isMonthPaid = true;
+                        if (debtsForMonth.length > 0) {
+                            const mainDebt = debtsForMonth.find(d => d.description.toLowerCase().includes('condominio'));
+                            if (mainDebt?.status === 'paid') {
+                                isMonthFullyPaid = true;
+                            }
                         }
                     }
 
-                    if (isMonthPaid) {
+                    if (isMonthFullyPaid) {
                         lastConsecutivePaidMonth = currentCheckMonth;
                     } else {
                         firstUnpaidMonth = currentCheckMonth;
-                        // Check if this unpaid month has a main debt that is pending AND overdue
-                        const mainDebt = ownerDebts.find(d => 
-                            d.year === year && 
-                            d.month === month && 
-                            d.description.toLowerCase().includes('condominio')
-                        );
-                        if (mainDebt?.status === 'pending' && isBefore(currentCheckMonth, today)) {
+                        const pendingDebtsForMonth = ownerDebts.filter(d => d.year === year && d.month === month && d.status === 'pending');
+                        if (pendingDebtsForMonth.length > 0 && isBefore(currentCheckMonth, today)) {
                             hasOverdueDebt = true;
                         }
                         break; 
@@ -382,16 +379,17 @@ export default function ReportsPage() {
                     currentCheckMonth = addMonths(currentCheckMonth, 1);
                 }
             }
-
-            const pendingOverdueAdjustments = ownerDebts.filter(d => 
-                d.status === 'pending' && 
+            
+            // Re-check for any overdue adjustment debts, even if main fee is paid
+            const overdueAdjustments = ownerDebts.some(d => 
+                d.status === 'pending' &&
                 d.description.toLowerCase().includes('ajuste') &&
                 isBefore(startOfMonth(new Date(d.year, d.month - 1)), today)
             );
-            
-            if(pendingOverdueAdjustments.length > 0) {
+            if (overdueAdjustments) {
                 hasOverdueDebt = true;
             }
+
 
             const status: 'Solvente' | 'No Solvente' = !hasOverdueDebt ? 'Solvente' : 'No Solvente';
             let solvencyPeriod = '';
@@ -401,6 +399,8 @@ export default function ReportsPage() {
                     solvencyPeriod = `Desde ${format(firstUnpaidMonth, 'MMMM yyyy', { locale: es })}`;
                 } else if (lastConsecutivePaidMonth) {
                     solvencyPeriod = `Desde ${format(addMonths(lastConsecutivePaidMonth, 1), 'MMMM yyyy', { locale: es })}`;
+                } else if (firstMonthEver && isBefore(firstMonthEver, today)) {
+                     solvencyPeriod = `Desde ${format(firstMonthEver, 'MMMM yyyy', { locale: es })}`;
                 } else {
                     solvencyPeriod = `Desde ${format(today, 'MMMM yyyy', { locale: es })}`;
                 }
@@ -436,13 +436,25 @@ export default function ReportsPage() {
                 lastPaymentDate = format(lastPayment.paymentDate.toDate(), 'dd/MM/yyyy');
             }
 
-            const adjustmentDebtUSD = pendingOverdueAdjustments.reduce((sum, d) => sum + d.amountUSD, 0);
-            
-            const monthsOwed = ownerDebts.filter(d => 
+            // Deuda por ajuste: show ALL pending adjustments, regardless of date.
+            const adjustmentDebtUSD = ownerDebts.filter(d => 
                 d.status === 'pending' && 
-                d.description.toLowerCase().includes('condominio') &&
-                isBefore(startOfMonth(new Date(d.year, d.month -1)), today)
-            ).length;
+                d.description.toLowerCase().includes('ajuste')
+            ).reduce((sum, d) => sum + d.amountUSD, 0);
+            
+            // Meses adeudados: count pending MAIN condo fees + OVERDUE adjustment fees
+            const monthsOwed = ownerDebts.filter(d => {
+                if (d.status !== 'pending') return false;
+                const isOverdue = isBefore(startOfMonth(new Date(d.year, d.month -1)), today);
+                if (d.description.toLowerCase().includes('condominio')) {
+                    return isOverdue; // Count overdue main fees
+                }
+                if (d.description.toLowerCase().includes('ajuste')) {
+                    return isOverdue; // Count overdue adjustment fees
+                }
+                return false;
+            }).length;
+
 
             return {
                 ownerId: owner.id,
@@ -1744,3 +1756,4 @@ export default function ReportsPage() {
         </div>
     );
 }
+
