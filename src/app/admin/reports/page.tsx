@@ -134,6 +134,16 @@ type AccountStatementData = {
     balance: number;
 };
 
+type OldPaymentReportRow = {
+    ownerId: string;
+    ownerName: string;
+    property: string;
+    debtPeriod: string;
+    paymentDate: string;
+    paidAmountBs: number;
+    paymentRef: string;
+};
+
 
 const monthsLocale: { [key: number]: string } = {
     1: 'Ene', 2: 'Feb', 3: 'Mar', 4: 'Abr', 5: 'May', 6: 'Jun',
@@ -217,6 +227,10 @@ export default function ReportsPage() {
     // State for Balance Report
     const [balanceOwners, setBalanceOwners] = useState<BalanceOwner[]>([]);
     const [balanceSearchTerm, setBalanceSearchTerm] = useState('');
+
+    // State for Old Payments Report
+    const [oldPaymentsSearchTerm, setOldPaymentsSearchTerm] = useState('');
+
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -384,7 +398,6 @@ export default function ReportsPage() {
                 if (d.status !== 'pending') return false;
                 const debtDate = startOfMonth(new Date(d.year, d.month - 1));
                 
-                // An adjustment debt only counts if its month has come
                 const isAdjustmentDebt = d.description.toLowerCase().includes('ajuste');
                 if (isAdjustmentDebt && isBefore(today, debtDate)) {
                     return false;
@@ -439,18 +452,20 @@ export default function ReportsPage() {
 
             const adjustmentDebtUSD = ownerDebts.filter(d => 
                 d.status === 'pending' && 
-                d.description.toLowerCase().includes('ajuste')
+                d.description.toLowerCase().includes('ajuste') &&
+                isBefore(startOfMonth(new Date(d.year, d.month - 1)), new Date())
             ).reduce((sum, d) => sum + d.amountUSD, 0);
             
             const monthsOwed = ownerDebts.filter(d => {
                 if (d.status !== 'pending') return false;
                 const debtDate = startOfMonth(new Date(d.year, d.month - 1));
-                const isOverdue = isBefore(debtDate, today);
+                if (!isBefore(debtDate, startOfMonth(new Date()))) return false;
 
-                if (!isOverdue) return false;
-
-                // Only count main condo fees for "months owed"
                 if (d.description.toLowerCase().includes('condominio')) {
+                    return true;
+                }
+                
+                if (d.description.toLowerCase().includes('ajuste')) {
                     return true;
                 }
                 return false;
@@ -471,6 +486,7 @@ export default function ReportsPage() {
                 adjustmentDebtUSD
             };
         }).filter(row => {
+            if (!row.name) return false; // Filter out rows without name
             const statusMatch = integralStatusFilter === 'todos' || row.status.toLowerCase().replace(' ', '') === integralStatusFilter.toLowerCase().replace(' ', '');
             const ownerMatch = !integralOwnerFilter || (row.name && row.name.toLowerCase().includes(integralOwnerFilter.toLowerCase()));
             return statusMatch && ownerMatch;
@@ -581,6 +597,71 @@ export default function ReportsPage() {
 
         return Array.from(dataByOwner.values());
     }, [allDebts, owners]);
+
+    const oldPaymentsReportData = useMemo<OldPaymentReportRow[]>(() => {
+        const ownersMap = new Map(owners.map(o => [o.id, o]));
+    
+        const oldPaidDebts = allDebts.filter(debt => debt.year < 2025 && debt.status === 'paid' && debt.paymentId);
+    
+        const paymentDetails = new Map<string, { paymentDate: string, paymentRef: string, exchangeRate: number }>();
+    
+        allPayments.forEach(payment => {
+            paymentDetails.set(payment.id, {
+                paymentDate: format(payment.paymentDate.toDate(), 'dd/MM/yyyy'),
+                paymentRef: payment.reference || 'N/A',
+                exchangeRate: payment.exchangeRate || 0,
+            });
+        });
+    
+        let reportRows: OldPaymentReportRow[] = oldPaidDebts.map(debt => {
+            const owner = ownersMap.get(debt.ownerId);
+            const paymentInfo = paymentDetails.get(debt.paymentId!);
+    
+            if (!owner || !paymentInfo) return null;
+    
+            return {
+                ownerId: owner.id,
+                ownerName: owner.name,
+                property: `${debt.property.street} - ${debt.property.house}`,
+                debtPeriod: `${monthsLocale[debt.month]} ${debt.year}`,
+                paymentDate: paymentInfo.paymentDate,
+                paidAmountBs: (debt.paidAmountUSD || debt.amountUSD) * paymentInfo.exchangeRate,
+                paymentRef: paymentInfo.paymentRef,
+            };
+        }).filter((row): row is OldPaymentReportRow => row !== null);
+    
+        // Add historical payments
+        const historicalPaymentsAsDebts: OldPaymentReportRow[] = allHistoricalPayments.map(hp => {
+            if (hp.referenceYear >= 2025) return null;
+            const owner = ownersMap.get(hp.ownerId);
+            if (!owner) return null;
+
+            // Since these are historical, we don't have a direct payment link. We simulate it.
+            return {
+                 ownerId: owner.id,
+                 ownerName: owner.name,
+                 property: 'N/A',
+                 debtPeriod: `${monthsLocale[hp.referenceMonth]} ${hp.referenceYear}`,
+                 paymentDate: 'N/A (Histórico)',
+                 paidAmountBs: 0, // No Bs amount available
+                 paymentRef: 'Registro Histórico',
+            }
+
+        }).filter((row): row is OldPaymentReportRow => row !== null);
+
+        reportRows = [...reportRows, ...historicalPaymentsAsDebts];
+
+        if (oldPaymentsSearchTerm) {
+            const lowerCaseSearch = oldPaymentsSearchTerm.toLowerCase();
+            reportRows = reportRows.filter(row =>
+                row.ownerName.toLowerCase().includes(lowerCaseSearch) ||
+                row.property.toLowerCase().includes(lowerCaseSearch)
+            );
+        }
+    
+        return reportRows.sort((a,b) => new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime());
+    
+    }, [allDebts, allPayments, allHistoricalPayments, owners, oldPaymentsSearchTerm]);
 
 
     // --- Handlers ---
@@ -1095,6 +1176,53 @@ export default function ReportsPage() {
             toast({ title: "Exportación a Excel no implementada", description: "La exportación de reportes con celdas combinadas es compleja."});
         }
     };
+    
+    const handleExportOldPayments = (formatType: 'pdf' | 'excel') => {
+        const data = oldPaymentsReportData;
+        if (data.length === 0) {
+            toast({ variant: "destructive", title: "Nada para exportar", description: "No se encontraron pagos históricos." });
+            return;
+        }
+
+        const filename = `reporte_pagos_anteriores_a_2025_${format(new Date(), 'yyyy-MM-dd')}`;
+        const head = [['Propietario', 'Propiedad', 'Periodo de Deuda', 'Fecha de Pago', 'Monto (Bs)', 'Referencia']];
+        const body = data.map(row => [row.ownerName, row.property, row.debtPeriod, row.paymentDate, formatToTwoDecimals(row.paidAmountBs), row.paymentRef]);
+        
+        if (formatType === 'pdf') {
+            const doc = new jsPDF();
+            const pageWidth = doc.internal.pageSize.getWidth();
+            let startY = 15;
+            if (companyInfo?.logo) doc.addImage(companyInfo.logo, 'PNG', 15, startY, 20, 20);
+            if (companyInfo) doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, 40, startY + 5);
+
+            doc.setFontSize(16).setFont('helvetica', 'bold').text('Pagos de Años Anteriores (< 2025)', pageWidth / 2, startY + 15, { align: 'center'});
+            startY += 25;
+            doc.setFontSize(9).setFont('helvetica', 'normal');
+            doc.text(`Fecha de Emisión: ${format(new Date(), "dd/MM/yyyy")}`, pageWidth - 15, startY, { align: 'right'});
+            startY += 10;
+
+            (doc as any).autoTable({
+                head: head, body: body, startY: startY,
+                headStyles: { fillColor: [30, 80, 180] },
+                styles: { fontSize: 8, cellPadding: 2 }
+            });
+            doc.save(`${filename}.pdf`);
+        } else { // Excel
+            const worksheetData = data.map(row => ({
+                'Propietario': row.ownerName,
+                'Propiedad': row.property,
+                'Periodo de Deuda': row.debtPeriod,
+                'Fecha de Pago': row.paymentDate,
+                'Monto (Bs)': row.paidAmountBs,
+                'Referencia': row.paymentRef,
+            }));
+            const worksheet = XLSX.utils.json_to_sheet(worksheetData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Pagos Anteriores");
+            XLSX.writeFile(workbook, `${filename}.xlsx`);
+        }
+    };
+
 
     const renderSortIcon = (key: SortKey) => {
         if (delinquencySortConfig.key !== key) return <ArrowUpDown className="h-4 w-4 opacity-50" />;
@@ -1113,7 +1241,7 @@ export default function ReportsPage() {
             </div>
             
             <Tabs defaultValue="integral" className="w-full">
-                 <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 h-auto flex-wrap">
+                 <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 h-auto flex-wrap">
                     <TabsTrigger value="integral">Integral</TabsTrigger>
                     <TabsTrigger value="individual">Ficha Individual</TabsTrigger>
                     <TabsTrigger value="estado-de-cuenta">Estado de Cuenta</TabsTrigger>
@@ -1121,6 +1249,7 @@ export default function ReportsPage() {
                     <TabsTrigger value="balance">Saldos a Favor</TabsTrigger>
                     <TabsTrigger value="income">Ingresos</TabsTrigger>
                     <TabsTrigger value="advance_payments">Pagos Anticipados</TabsTrigger>
+                    <TabsTrigger value="old_payments">Pagos Años Anteriores</TabsTrigger>
                 </TabsList>
                 
                 <TabsContent value="integral">
@@ -1753,6 +1882,60 @@ export default function ReportsPage() {
                         </CardContent>
                     </Card>
                 </TabsContent>
+
+                <TabsContent value="old_payments">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Reporte de Pagos de Años Anteriores</CardTitle>
+                            <CardDescription>Consulta los pagos que liquidaron deudas de años anteriores a 2025.</CardDescription>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 items-end">
+                                <div className="space-y-2">
+                                    <Label>Buscar Propietario/Propiedad</Label>
+                                    <Input placeholder="Nombre, calle o casa..." value={oldPaymentsSearchTerm} onChange={e => setOldPaymentsSearchTerm(e.target.value)} />
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="flex justify-end gap-2 mb-4">
+                                <Button variant="outline" onClick={() => handleExportOldPayments('pdf')} disabled={generatingReport}>
+                                    <FileText className="mr-2 h-4 w-4" /> Exportar a PDF
+                                </Button>
+                                <Button variant="outline" onClick={() => handleExportOldPayments('excel')} disabled={generatingReport}>
+                                    <FileSpreadsheet className="mr-2 h-4 w-4" /> Exportar a Excel
+                                </Button>
+                            </div>
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Propietario</TableHead>
+                                        <TableHead>Propiedad</TableHead>
+                                        <TableHead>Período de Deuda</TableHead>
+                                        <TableHead>Fecha de Pago</TableHead>
+                                        <TableHead className="text-right">Monto (Bs.)</TableHead>
+                                        <TableHead className="text-right">Referencia</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {oldPaymentsReportData.length > 0 ? (
+                                        oldPaymentsReportData.map((row, index) => (
+                                            <TableRow key={`${row.ownerId}-${index}`}>
+                                                <TableCell>{row.ownerName}</TableCell>
+                                                <TableCell>{row.property}</TableCell>
+                                                <TableCell>{row.debtPeriod}</TableCell>
+                                                <TableCell>{row.paymentDate}</TableCell>
+                                                <TableCell className="text-right">{formatToTwoDecimals(row.paidAmountBs)}</TableCell>
+                                                <TableCell className="text-right">{row.paymentRef}</TableCell>
+                                            </TableRow>
+                                        ))
+                                    ) : (
+                                        <TableRow><TableCell colSpan={6} className="h-24 text-center">No se encontraron pagos para años anteriores a 2025.</TableCell></TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
             </Tabs>
         </div>
     );
