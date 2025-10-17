@@ -236,11 +236,6 @@ export default function ReportsPage() {
     const [balanceOwners, setBalanceOwners] = useState<BalanceOwner[]>([]);
     const [balanceSearchTerm, setBalanceSearchTerm] = useState('');
 
-    // State for Old Payments Report
-    const [oldPaymentsSearchTerm, setOldPaymentsSearchTerm] = useState('');
-    const [oldPaymentsDateRange, setOldPaymentsDateRange] = useState<{ from?: Date; to?: Date }>({});
-
-
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
@@ -605,96 +600,6 @@ export default function ReportsPage() {
 
         return Array.from(dataByOwner.values());
     }, [allDebts, owners]);
-
-    const oldPaymentsReportData = useMemo<OldPaymentReportGroup[]>(() => {
-        const ownersMap = new Map(owners.map(o => [o.id, o]));
-        const paymentDetails = new Map<string, { paymentDate: Date, paymentRef: string, exchangeRate: number }>();
-    
-        allPayments.forEach(payment => {
-            paymentDetails.set(payment.id, {
-                paymentDate: payment.paymentDate.toDate(),
-                paymentRef: payment.reference || 'N/A',
-                exchangeRate: payment.exchangeRate || 0,
-            });
-        });
-    
-        const paymentGroups = new Map<string, OldPaymentReportGroup>();
-    
-        // 1. Get all debts paid before 2025
-        const oldPaidDebts = allDebts.filter(debt => 
-            debt.year < 2025 && 
-            debt.status === 'paid' && 
-            debt.paymentId
-        );
-    
-        // 2. Filter those debts based on the payment date
-        const filteredDebts = oldPaidDebts.filter(debt => {
-            const paymentInfo = paymentDetails.get(debt.paymentId!);
-            if (!paymentInfo) return false;
-            
-            const fromDate = oldPaymentsDateRange.from;
-            const toDate = oldPaymentsDateRange.to;
-    
-            if (fromDate) fromDate.setHours(0, 0, 0, 0);
-            if (toDate) toDate.setHours(23, 59, 59, 999);
-    
-            const paymentDate = paymentInfo.paymentDate;
-            return (!fromDate || paymentDate >= fromDate) && (!toDate || paymentDate <= toDate);
-        });
-    
-        // 3. Group the filtered debts
-        filteredDebts.forEach(debt => {
-            const owner = ownersMap.get(debt.ownerId);
-            const paymentInfo = paymentDetails.get(debt.paymentId!);
-            if (!owner || !paymentInfo) return;
-    
-            if (!paymentGroups.has(owner.id)) {
-                paymentGroups.set(owner.id, {
-                    ownerId: owner.id,
-                    ownerName: owner.name,
-                    totalPaidBs: 0,
-                    totalPaidUsd: 0,
-                    payments: [],
-                });
-            }
-    
-            const group = paymentGroups.get(owner.id)!;
-            const paidAmountUsd = debt.paidAmountUSD || debt.amountUSD;
-            const paidAmountBs = paidAmountUsd * paymentInfo.exchangeRate;
-    
-            group.totalPaidBs += paidAmountBs;
-            group.totalPaidUsd += paidAmountUsd;
-            group.payments.push({
-                property: `${debt.property.street} - ${debt.property.house}`,
-                debtPeriod: `${monthsLocale[debt.month]} ${debt.year}`,
-                debtYear: debt.year,
-                debtMonth: debt.month,
-                paymentDate: format(paymentInfo.paymentDate, 'dd/MM/yyyy'),
-                paidAmountBs: paidAmountBs,
-                paidAmountUsd: paidAmountUsd,
-                paymentRef: paymentInfo.paymentRef,
-            });
-        });
-        
-        paymentGroups.forEach(group => {
-            group.payments.sort((a, b) => {
-                if (a.debtYear !== b.debtYear) return b.debtYear - a.debtYear;
-                return b.debtMonth - a.debtMonth;
-            });
-        });
-
-        let reportData = Array.from(paymentGroups.values());
-    
-        if (oldPaymentsSearchTerm) {
-            const lowerCaseSearch = oldPaymentsSearchTerm.toLowerCase();
-            reportData = reportData.filter(row =>
-                row.ownerName.toLowerCase().includes(lowerCaseSearch)
-            );
-        }
-    
-        return reportData;
-    }, [allDebts, allPayments, owners, oldPaymentsSearchTerm, oldPaymentsDateRange]);
-
 
     // --- Handlers ---
     const incomeReportRows = useMemo<IncomeReportRow[]>(() => {
@@ -1209,53 +1114,6 @@ export default function ReportsPage() {
         }
     };
     
-    const handleExportOldPayments = (formatType: 'pdf' | 'excel') => {
-        const data = oldPaymentsReportData;
-        if (data.length === 0) {
-            toast({ variant: "destructive", title: "Nada para exportar", description: "No se encontraron pagos históricos." });
-            return;
-        }
-
-        const filename = `reporte_pagos_anteriores_a_2025_${format(new Date(), 'yyyy-MM-dd')}`;
-        const head = [['Propietario', 'Propiedad', 'Periodo de Deuda', 'Fecha de Pago', 'Monto (Bs)', 'Referencia']];
-        const body = data.flatMap(group => group.payments.map(p => [group.ownerName, p.property, p.debtPeriod, p.paymentDate, formatToTwoDecimals(p.paidAmountBs), p.paymentRef]));
-        
-        if (formatType === 'pdf') {
-            const doc = new jsPDF();
-            const pageWidth = doc.internal.pageSize.getWidth();
-            let startY = 15;
-            if (companyInfo?.logo) doc.addImage(companyInfo.logo, 'PNG', 15, startY, 20, 20);
-            if (companyInfo) doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, 40, startY + 5);
-
-            doc.setFontSize(16).setFont('helvetica', 'bold').text('Pagos de Años Anteriores (< 2025)', pageWidth / 2, startY + 15, { align: 'center'});
-            startY += 25;
-            doc.setFontSize(9).setFont('helvetica', 'normal');
-            doc.text(`Fecha de Emisión: ${format(new Date(), "dd/MM/yyyy")}`, pageWidth - 15, startY, { align: 'right'});
-            startY += 10;
-
-            (doc as any).autoTable({
-                head: head, body: body, startY: startY,
-                headStyles: { fillColor: [30, 80, 180] },
-                styles: { fontSize: 8, cellPadding: 2 }
-            });
-            doc.save(`${filename}.pdf`);
-        } else { // Excel
-            const worksheetData = data.flatMap(group => group.payments.map(p => ({
-                'Propietario': group.ownerName,
-                'Propiedad': p.property,
-                'Periodo de Deuda': p.debtPeriod,
-                'Fecha de Pago': p.paymentDate,
-                'Monto (Bs)': p.paidAmountBs,
-                'Monto ($)': p.paidAmountUsd,
-                'Referencia': p.paymentRef,
-            })));
-            const worksheet = XLSX.utils.json_to_sheet(worksheetData);
-            const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, worksheet, "Pagos Anteriores");
-            XLSX.writeFile(workbook, `${filename}.xlsx`);
-        }
-    };
-
 
     const renderSortIcon = (key: SortKey) => {
         if (delinquencySortConfig.key !== key) return <ArrowUpDown className="h-4 w-4 opacity-50" />;
@@ -1282,7 +1140,6 @@ export default function ReportsPage() {
                     <TabsTrigger value="balance">Saldos a Favor</TabsTrigger>
                     <TabsTrigger value="income">Ingresos</TabsTrigger>
                     <TabsTrigger value="advance_payments">Pagos Anticipados</TabsTrigger>
-                    <TabsTrigger value="old_payments">Pagos Años Anteriores</TabsTrigger>
                 </TabsList>
                 
                 <TabsContent value="integral">
@@ -1916,124 +1773,7 @@ export default function ReportsPage() {
                     </Card>
                 </TabsContent>
 
-                <TabsContent value="old_payments">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Reporte de Pagos de Años Anteriores</CardTitle>
-                            <CardDescription>Consulta los pagos que liquidaron deudas de años anteriores a 2025.</CardDescription>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 items-end">
-                                <div className="space-y-2">
-                                    <Label>Buscar Propietario</Label>
-                                    <Input placeholder="Nombre..." value={oldPaymentsSearchTerm} onChange={e => setOldPaymentsSearchTerm(e.target.value)} />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Fecha de Pago Desde</Label>
-                                    <Popover>
-                                        <PopoverTrigger asChild>
-                                            <Button variant="outline" className={cn("w-full justify-start", !oldPaymentsDateRange.from && "text-muted-foreground")}>
-                                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                                {oldPaymentsDateRange.from ? format(oldPaymentsDateRange.from, 'P', { locale: es }) : "Fecha"}
-                                            </Button>
-                                        </PopoverTrigger>
-                                        <PopoverContent><Calendar mode="single" selected={oldPaymentsDateRange.from} onSelect={d => setOldPaymentsDateRange(prev => ({...prev, from: d}))} /></PopoverContent>
-                                    </Popover>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Fecha de Pago Hasta</Label>
-                                     <Popover>
-                                        <PopoverTrigger asChild>
-                                            <Button variant="outline" className={cn("w-full justify-start", !oldPaymentsDateRange.to && "text-muted-foreground")}>
-                                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                                {oldPaymentsDateRange.to ? format(oldPaymentsDateRange.to, 'P', { locale: es }) : "Fecha"}
-                                            </Button>
-                                        </PopoverTrigger>
-                                        <PopoverContent><Calendar mode="single" selected={oldPaymentsDateRange.to} onSelect={d => setOldPaymentsDateRange(prev => ({...prev, to: d}))} /></PopoverContent>
-                                    </Popover>
-                                </div>
-                            </div>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="flex justify-end gap-2 mb-4">
-                                <Button variant="outline" onClick={() => handleExportOldPayments('pdf')} disabled={generatingReport}>
-                                    <FileText className="mr-2 h-4 w-4" /> Exportar a PDF
-                                </Button>
-                                <Button variant="outline" onClick={() => handleExportOldPayments('excel')} disabled={generatingReport}>
-                                    <FileSpreadsheet className="mr-2 h-4 w-4" /> Exportar a Excel
-                                </Button>
-                            </div>
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Propietario</TableHead>
-                                        <TableHead className="text-right">Total Pagado (Bs.)</TableHead>
-                                        <TableHead className="text-right">Total Pagado ($)</TableHead>
-                                        <TableHead className="w-12"></TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {oldPaymentsReportData.length > 0 ? (
-                                        oldPaymentsReportData.map((group) => (
-                                            <Collapsible key={group.ownerId} asChild>
-                                                <React.Fragment>
-                                                    <TableRow>
-                                                        <TableCell className="font-medium">{group.ownerName}</TableCell>
-                                                        <TableCell className="text-right font-semibold">{formatToTwoDecimals(group.totalPaidBs)}</TableCell>
-                                                        <TableCell className="text-right font-semibold">${formatToTwoDecimals(group.totalPaidUsd)}</TableCell>
-                                                        <TableCell>
-                                                            <CollapsibleTrigger asChild>
-                                                                <Button variant="ghost" size="icon">
-                                                                    <ChevronDown className="h-4 w-4 transition-transform duration-200 group-data-[state=open]:rotate-180" />
-                                                                </Button>
-                                                            </CollapsibleTrigger>
-                                                        </TableCell>
-                                                    </TableRow>
-                                                    <CollapsibleContent asChild>
-                                                         <tr className="bg-muted/50">
-                                                            <TableCell colSpan={4} className="p-0">
-                                                                <div className="p-4">
-                                                                    <h4 className="font-semibold mb-2">Detalle de Pagos</h4>
-                                                                     <Table>
-                                                                        <TableHeader>
-                                                                            <TableRow>
-                                                                                <TableHead>Período</TableHead>
-                                                                                <TableHead>Propiedad</TableHead>
-                                                                                <TableHead>Fecha Pago</TableHead>
-                                                                                <TableHead>Ref.</TableHead>
-                                                                                <TableHead className="text-right">Monto (Bs)</TableHead>
-                                                                                <TableHead className="text-right">Monto ($)</TableHead>
-                                                                            </TableRow>
-                                                                        </TableHeader>
-                                                                        <TableBody>
-                                                                            {group.payments.map((p, i) => (
-                                                                                <TableRow key={i}>
-                                                                                    <TableCell>{p.debtPeriod}</TableCell>
-                                                                                    <TableCell>{p.property}</TableCell>
-                                                                                    <TableCell>{p.paymentDate}</TableCell>
-                                                                                    <TableCell>{p.paymentRef}</TableCell>
-                                                                                    <TableCell className="text-right">{formatToTwoDecimals(p.paidAmountBs)}</TableCell>
-                                                                                    <TableCell className="text-right">${p.paidAmountUsd.toFixed(2)}</TableCell>
-                                                                                </TableRow>
-                                                                            ))}
-                                                                        </TableBody>
-                                                                     </Table>
-                                                                </div>
-                                                            </TableCell>
-                                                        </tr>
-                                                    </CollapsibleContent>
-                                                </React.Fragment>
-                                            </Collapsible>
-                                        ))
-                                    ) : (
-                                        <TableRow><TableCell colSpan={4} className="h-24 text-center">No se encontraron pagos para los filtros seleccionados.</TableCell></TableRow>
-                                    )}
-                                </TableBody>
-                            </Table>
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-
             </Tabs>
         </div>
     );
 }
-
