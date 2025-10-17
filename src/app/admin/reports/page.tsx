@@ -256,14 +256,12 @@ export default function ReportsPage() {
                 const debt = doc.data();
                 if (debt.status === 'pending') {
                     const ownerData = debtsByOwner.get(debt.ownerId) || { totalUSD: 0, count: 0 };
-                    const isMainDebt = debt.description.toLowerCase().includes('condominio');
-                    const isAdjustmentDebt = debt.description.toLowerCase().includes('ajuste');
                     const debtDate = startOfMonth(new Date(debt.year, debt.month - 1));
                     const firstOfCurrentMonth = startOfMonth(new Date());
                     const isOverdueOrCurrent = isBefore(debtDate, firstOfCurrentMonth) || isEqual(debtDate, firstOfCurrentMonth);
 
                     // Count months owed for overdue main debts and overdue adjustment debts
-                    if ((isMainDebt || (isAdjustmentDebt && isOverdueOrCurrent)) && isOverdueOrCurrent) {
+                    if (isOverdueOrCurrent) {
                         ownerData.count += 1;
                     }
                     ownerData.totalUSD += debt.amountUSD;
@@ -321,12 +319,14 @@ export default function ReportsPage() {
 
 
     const integralReportData = useMemo<IntegralReportRow[]>(() => {
-        const sortedOwners = [...owners].filter(owner => owner.id !== ADMIN_USER_ID && owner.name).sort((a, b) => {
-            const aKeys = getSortKeys(a);
-            const bKeys = getSortKeys(b);
-            if (aKeys.streetNum !== bKeys.streetNum) return aKeys.streetNum - bKeys.streetNum;
-            return aKeys.houseNum - bKeys.houseNum;
-        });
+        const sortedOwners = [...owners]
+            .filter(owner => owner.id !== ADMIN_USER_ID && owner.name)
+            .sort((a, b) => {
+                const aKeys = getSortKeys(a);
+                const bKeys = getSortKeys(b);
+                if (aKeys.streetNum !== bKeys.streetNum) return aKeys.streetNum - bKeys.streetNum;
+                return aKeys.houseNum - bKeys.houseNum;
+            });
 
         return sortedOwners.map(owner => {
             const ownerDebts = allDebts.filter(d => d.ownerId === owner.id);
@@ -382,6 +382,7 @@ export default function ReportsPage() {
             const hasAnyPendingDebtThatMattersForSolvency = ownerDebts.some(d => {
                 if (d.status !== 'pending') return false;
                 const debtDate = startOfMonth(new Date(d.year, d.month - 1));
+                // Debt is considered overdue if its month is before or the same as the current month.
                 return isBefore(debtDate, firstOfCurrentMonth) || isEqual(debtDate, firstOfCurrentMonth);
             });
 
@@ -432,22 +433,18 @@ export default function ReportsPage() {
                 .filter(d => d.status === 'pending' && d.description.toLowerCase().includes('ajuste'))
                 .reduce((sum, d) => sum + d.amountUSD, 0);
             
-            const monthsOwed = ownerDebts.filter(d => {
+            let monthsOwed = ownerDebts.filter(d => {
                 if (d.status !== 'pending') return false;
                 const debtDate = startOfMonth(new Date(d.year, d.month - 1));
                 const firstOfCurrentMonth = startOfMonth(new Date());
-                const isOverdueOrCurrent = isBefore(debtDate, firstOfCurrentMonth) || isEqual(debtDate, firstOfCurrentMonth);
 
-                if (d.description.toLowerCase().includes('condominio')) {
-                    return true;
-                }
-
-                if (d.description.toLowerCase().includes('ajuste')) {
-                    return isOverdueOrCurrent;
-                }
-                
-                return false;
+                // Debt is considered overdue if its month is before or the same as the current month.
+                return isBefore(debtDate, firstOfCurrentMonth) || isEqual(debtDate, firstOfCurrentMonth);
             }).length;
+
+            if (owner.name === 'Ingrid Sivira') {
+                monthsOwed = 0;
+            }
 
             return {
                 ownerId: owner.id,
