@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import * as React from 'react';
@@ -142,6 +141,14 @@ type OldPaymentReportGroup = {
     }[];
 };
 
+type AdvancePaymentReportRow = {
+    ownerId: string;
+    ownerName: string;
+    october: { amount: number; status: string; toAdjust: number } | null;
+    november: { amount: number; status: string; toAdjust: number } | null;
+    december: { amount: number; status: string; toAdjust: number } | null;
+};
+
 
 const monthsLocale: { [key: number]: string } = {
     1: 'Ene', 2: 'Feb', 3: 'Mar', 4: 'Abr', 5: 'May', 6: 'Jun',
@@ -277,8 +284,13 @@ export default function ReportsPage() {
                 const debt = doc.data();
                 if (debt.status === 'pending') {
                     const ownerData = debtsByOwner.get(debt.ownerId) || { totalUSD: 0, count: 0 };
-                    // We only count base fees for "months owed", not adjustments
-                    if (debt.description.toLowerCase().includes('condominio')) {
+                    const isMainDebt = debt.description.toLowerCase().includes('condominio');
+                    const isAdjustmentDebt = debt.description.toLowerCase().includes('ajuste');
+                    const debtDate = startOfMonth(new Date(debt.year, debt.month - 1));
+                    const isOverdue = isBefore(debtDate, startOfMonth(new Date()));
+
+                    // Count months owed for overdue main debts and overdue adjustment debts
+                    if ((isMainDebt || (isAdjustmentDebt && isOverdue)) && isOverdue) {
                         ownerData.count += 1;
                     }
                     ownerData.totalUSD += debt.amountUSD;
@@ -290,7 +302,7 @@ export default function ReportsPage() {
             const delinquentData: DelinquentOwner[] = [];
             debtsByOwner.forEach((debtInfo, ownerId) => {
                 const owner = ownersData.find(o => o.id === ownerId);
-                if (owner) {
+                if (owner && debtInfo.count > 0) { // Only add if they owe at least one month
                     delinquentData.push({
                         id: ownerId,
                         name: owner.name,
@@ -450,7 +462,7 @@ export default function ReportsPage() {
             const adjustmentDebtUSD = ownerDebts
                 .filter(d => d.status === 'pending' && d.description.toLowerCase().includes('ajuste'))
                 .reduce((sum, d) => sum + d.amountUSD, 0);
-
+            
             const monthsOwed = ownerDebts.filter(d => {
                 if (d.status !== 'pending' || !d.description.toLowerCase().includes('condominio')) return false;
                 const debtDate = startOfMonth(new Date(d.year, d.month - 1));
@@ -1932,55 +1944,57 @@ export default function ReportsPage() {
                                 <TableBody>
                                     {oldPaymentsReportData.length > 0 ? (
                                         oldPaymentsReportData.map((group) => (
-                                            <Collapsible key={group.ownerId} asChild>
-                                                <React.Fragment>
-                                                    <TableRow>
-                                                        <TableCell className="font-medium">{group.ownerName}</TableCell>
-                                                        <TableCell className="text-right font-semibold">{formatToTwoDecimals(group.totalPaidBs)}</TableCell>
-                                                        <TableCell className="text-right font-semibold">${formatToTwoDecimals(group.totalPaidUsd)}</TableCell>
-                                                        <TableCell>
-                                                            <CollapsibleTrigger asChild>
-                                                                <Button variant="ghost" size="icon">
-                                                                    <ChevronDown className="h-4 w-4 transition-transform duration-200 group-data-[state=open]:rotate-180" />
-                                                                </Button>
-                                                            </CollapsibleTrigger>
-                                                        </TableCell>
-                                                    </TableRow>
-                                                    <CollapsibleContent asChild>
-                                                         <tr className="bg-muted/50">
-                                                            <TableCell colSpan={4} className="p-0">
-                                                                <div className="p-4">
-                                                                    <h4 className="font-semibold mb-2">Detalle de Pagos</h4>
-                                                                     <Table>
-                                                                        <TableHeader>
-                                                                            <TableRow>
-                                                                                <TableHead>Período</TableHead>
-                                                                                <TableHead>Propiedad</TableHead>
-                                                                                <TableHead>Fecha Pago</TableHead>
-                                                                                <TableHead>Ref.</TableHead>
-                                                                                <TableHead className="text-right">Monto (Bs)</TableHead>
-                                                                                <TableHead className="text-right">Monto ($)</TableHead>
-                                                                            </TableRow>
-                                                                        </TableHeader>
-                                                                        <TableBody>
-                                                                            {group.payments.map((p, i) => (
-                                                                                <TableRow key={i}>
-                                                                                    <TableCell>{p.debtPeriod}</TableCell>
-                                                                                    <TableCell>{p.property}</TableCell>
-                                                                                    <TableCell>{p.paymentDate}</TableCell>
-                                                                                    <TableCell>{p.paymentRef}</TableCell>
-                                                                                    <TableCell className="text-right">{formatToTwoDecimals(p.paidAmountBs)}</TableCell>
-                                                                                    <TableCell className="text-right">${p.paidAmountUsd.toFixed(2)}</TableCell>
-                                                                                </TableRow>
-                                                                            ))}
-                                                                        </TableBody>
-                                                                     </Table>
-                                                                </div>
+                                            <React.Fragment key={group.ownerId}>
+                                                <Collapsible asChild>
+                                                    <>
+                                                        <TableRow>
+                                                            <TableCell className="font-medium">{group.ownerName}</TableCell>
+                                                            <TableCell className="text-right font-semibold">{formatToTwoDecimals(group.totalPaidBs)}</TableCell>
+                                                            <TableCell className="text-right font-semibold">${formatToTwoDecimals(group.totalPaidUsd)}</TableCell>
+                                                            <TableCell>
+                                                                <CollapsibleTrigger asChild>
+                                                                    <Button variant="ghost" size="icon">
+                                                                        <ChevronDown className="h-4 w-4 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                                                                    </Button>
+                                                                </CollapsibleTrigger>
                                                             </TableCell>
-                                                        </tr>
-                                                    </CollapsibleContent>
-                                                </React.Fragment>
-                                            </Collapsible>
+                                                        </TableRow>
+                                                        <CollapsibleContent asChild>
+                                                             <tr className="bg-muted/50">
+                                                                <TableCell colSpan={4} className="p-0">
+                                                                    <div className="p-4">
+                                                                        <h4 className="font-semibold mb-2">Detalle de Pagos</h4>
+                                                                         <Table>
+                                                                            <TableHeader>
+                                                                                <TableRow>
+                                                                                    <TableHead>Período</TableHead>
+                                                                                    <TableHead>Propiedad</TableHead>
+                                                                                    <TableHead>Fecha Pago</TableHead>
+                                                                                    <TableHead>Ref.</TableHead>
+                                                                                    <TableHead className="text-right">Monto (Bs)</TableHead>
+                                                                                    <TableHead className="text-right">Monto ($)</TableHead>
+                                                                                </TableRow>
+                                                                            </TableHeader>
+                                                                            <TableBody>
+                                                                                {group.payments.map((p, i) => (
+                                                                                    <TableRow key={i}>
+                                                                                        <TableCell>{p.debtPeriod}</TableCell>
+                                                                                        <TableCell>{p.property}</TableCell>
+                                                                                        <TableCell>{p.paymentDate}</TableCell>
+                                                                                        <TableCell>{p.paymentRef}</TableCell>
+                                                                                        <TableCell className="text-right">{formatToTwoDecimals(p.paidAmountBs)}</TableCell>
+                                                                                        <TableCell className="text-right">${p.paidAmountUsd.toFixed(2)}</TableCell>
+                                                                                    </TableRow>
+                                                                                ))}
+                                                                            </TableBody>
+                                                                         </Table>
+                                                                    </div>
+                                                                </TableCell>
+                                                            </tr>
+                                                        </CollapsibleContent>
+                                                    </>
+                                                </Collapsible>
+                                            </React.Fragment>
                                         ))
                                     ) : (
                                         <TableRow><TableCell colSpan={4} className="h-24 text-center">No se encontraron pagos para los filtros seleccionados.</TableCell></TableRow>
@@ -1995,6 +2009,3 @@ export default function ReportsPage() {
         </div>
     );
 }
-
-
-
