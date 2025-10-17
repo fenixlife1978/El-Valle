@@ -134,6 +134,8 @@ type OldPaymentReportGroup = {
     payments: {
         property: string;
         debtPeriod: string;
+        debtYear: number;
+        debtMonth: number;
         paymentDate: string;
         paidAmountBs: number;
         paidAmountUsd: number;
@@ -405,18 +407,18 @@ export default function ReportsPage() {
                 }
             }
             
-            const hasAnyPendingMainDebt = ownerDebts.some(d => {
+            const hasAnyPendingMainOrOverdueAdjustmentDebt = ownerDebts.some(d => {
                 if (d.status !== 'pending') return false;
                 const debtDate = startOfMonth(new Date(d.year, d.month - 1));
-                 // Only count main condo fees for past/current months
-                if (d.description.toLowerCase().includes('condominio') && !isBefore(startOfMonth(today), debtDate)) {
-                    return true;
-                }
+                 // Debt is considered for solvency if it's a main fee, or an adjustment that is overdue
+                if (d.description.toLowerCase().includes('condominio')) return true;
+                if (d.description.toLowerCase().includes('ajuste') && isBefore(debtDate, startOfMonth(today))) return true;
+
                 return false;
             });
 
 
-            const status: 'Solvente' | 'No Solvente' = !hasAnyPendingMainDebt ? 'Solvente' : 'No Solvente';
+            const status: 'Solvente' | 'No Solvente' = !hasAnyPendingMainOrOverdueAdjustmentDebt ? 'Solvente' : 'No Solvente';
             let solvencyPeriod = '';
             
             if (status === 'No Solvente') {
@@ -464,9 +466,12 @@ export default function ReportsPage() {
                 .reduce((sum, d) => sum + d.amountUSD, 0);
             
             const monthsOwed = ownerDebts.filter(d => {
-                if (d.status !== 'pending' || !d.description.toLowerCase().includes('condominio')) return false;
+                if (d.status !== 'pending') return false;
                 const debtDate = startOfMonth(new Date(d.year, d.month - 1));
-                return !isBefore(startOfMonth(new Date()), debtDate); // Count if debt month is current or past
+                const isMainCondoFee = d.description.toLowerCase().includes('condominio');
+                const isOverdueAdjustment = d.description.toLowerCase().includes('ajuste') && isBefore(debtDate, startOfMonth(new Date()));
+
+                return isMainCondoFee || isOverdueAdjustment;
             }).length;
 
 
@@ -612,13 +617,15 @@ export default function ReportsPage() {
     
         // Filter debts for years before 2025
         const oldPaidDebts = allDebts.filter(debt => {
-            const paymentDate = paymentDetails.get(debt.paymentId || '')?.paymentDate;
             const fromDate = oldPaymentsDateRange.from;
             const toDate = oldPaymentsDateRange.to;
     
-            const paymentTimestamp = debt.paymentDate ? debt.paymentDate.toDate() : (paymentDate ? parse(paymentDate, 'dd/MM/yyyy', new Date()) : null);
+            const paymentTimestamp = debt.paymentDate ? debt.paymentDate.toDate() : null;
             if (!paymentTimestamp) return false;
-    
+            
+            if (fromDate) fromDate.setHours(0, 0, 0, 0);
+            if (toDate) toDate.setHours(23, 59, 59, 999);
+
             const dateMatch = (!fromDate || paymentTimestamp >= fromDate) && (!toDate || paymentTimestamp <= toDate);
             return debt.year < 2025 && debt.status === 'paid' && debt.paymentId && dateMatch;
         });
@@ -647,13 +654,24 @@ export default function ReportsPage() {
             group.payments.push({
                 property: `${debt.property.street} - ${debt.property.house}`,
                 debtPeriod: `${monthsLocale[debt.month]} ${debt.year}`,
+                debtYear: debt.year,
+                debtMonth: debt.month,
                 paymentDate: paymentInfo.paymentDate,
                 paidAmountBs: paidAmountBs,
                 paidAmountUsd: paidAmountUsd,
                 paymentRef: paymentInfo.paymentRef,
             });
         });
-    
+        
+        paymentGroups.forEach(group => {
+            group.payments.sort((a, b) => {
+                if (a.debtYear !== b.debtYear) {
+                    return b.debtYear - a.debtYear;
+                }
+                return b.debtMonth - a.debtMonth;
+            });
+        });
+
         let reportData = Array.from(paymentGroups.values());
     
         if (oldPaymentsSearchTerm) {
