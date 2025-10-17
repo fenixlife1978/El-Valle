@@ -259,10 +259,11 @@ export default function ReportsPage() {
                     const isMainDebt = debt.description.toLowerCase().includes('condominio');
                     const isAdjustmentDebt = debt.description.toLowerCase().includes('ajuste');
                     const debtDate = startOfMonth(new Date(debt.year, debt.month - 1));
-                    const isOverdue = isBefore(debtDate, startOfMonth(new Date()));
+                    const firstOfCurrentMonth = startOfMonth(new Date());
+                    const isOverdueOrCurrent = isBefore(debtDate, firstOfCurrentMonth) || isEqual(debtDate, firstOfCurrentMonth);
 
                     // Count months owed for overdue main debts and overdue adjustment debts
-                    if ((isMainDebt || (isAdjustmentDebt && isOverdue)) && isOverdue) {
+                    if ((isMainDebt || (isAdjustmentDebt && isOverdueOrCurrent)) && isOverdueOrCurrent) {
                         ownerData.count += 1;
                     }
                     ownerData.totalUSD += debt.amountUSD;
@@ -343,6 +344,7 @@ export default function ReportsPage() {
             }
             
             const today = new Date();
+            const firstOfCurrentMonth = startOfMonth(today);
             let lastConsecutivePaidMonth: Date | null = null;
             
             if (firstMonthEver) {
@@ -377,24 +379,11 @@ export default function ReportsPage() {
                 }
             }
             
-             const hasAnyPendingDebtThatMattersForSolvency = ownerDebts.some(d => {
+            const hasAnyPendingDebtThatMattersForSolvency = ownerDebts.some(d => {
                 if (d.status !== 'pending') return false;
-
                 const debtDate = startOfMonth(new Date(d.year, d.month - 1));
-                const firstOfCurrentMonth = startOfMonth(new Date());
-                const isOverdueOrCurrent = isBefore(debtDate, firstOfCurrentMonth) || isEqual(debtDate, firstOfCurrentMonth);
-                
-                // Main condo fees always matter if they are pending and for current/past month
-                if (d.description.toLowerCase().includes('condominio') && isOverdueOrCurrent) {
-                    return true;
-                }
-                // Adjustment debts only matter if they are for current/past month
-                if (d.description.toLowerCase().includes('ajuste') && isOverdueOrCurrent) {
-                    return true;
-                }
-                return false;
+                return isBefore(debtDate, firstOfCurrentMonth) || isEqual(debtDate, firstOfCurrentMonth);
             });
-
 
             const status: 'Solvente' | 'No Solvente' = !hasAnyPendingDebtThatMattersForSolvency ? 'Solvente' : 'No Solvente';
             let solvencyPeriod = '';
@@ -438,7 +427,7 @@ export default function ReportsPage() {
                 const lastPayment = [...ownerPayments].sort((a, b) => b.paymentDate.toMillis() - a.paymentDate.toMillis())[0];
                 lastPaymentDate = format(lastPayment.paymentDate.toDate(), 'dd/MM/yyyy');
             }
-
+            
             const adjustmentDebtUSD = ownerDebts
                 .filter(d => d.status === 'pending' && d.description.toLowerCase().includes('ajuste'))
                 .reduce((sum, d) => sum + d.amountUSD, 0);
@@ -449,11 +438,13 @@ export default function ReportsPage() {
                 const firstOfCurrentMonth = startOfMonth(new Date());
                 const isOverdueOrCurrent = isBefore(debtDate, firstOfCurrentMonth) || isEqual(debtDate, firstOfCurrentMonth);
 
-                const isMainCondoFee = d.description.toLowerCase().includes('condominio');
-                if (isMainCondoFee) return true;
+                if (d.description.toLowerCase().includes('condominio')) {
+                    return true;
+                }
 
-                const isAdjustmentDebt = d.description.toLowerCase().includes('ajuste');
-                if (isAdjustmentDebt && isOverdueOrCurrent) return true;
+                if (d.description.toLowerCase().includes('ajuste')) {
+                    return isOverdueOrCurrent;
+                }
                 
                 return false;
             }).length;
