@@ -2,6 +2,7 @@
 
 'use client';
 
+import * as React from 'react';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -116,14 +117,6 @@ type BalanceOwner = {
 
 type PaymentWithDebts = Payment & {
     liquidatedDebts: Debt[];
-};
-
-type AdvancePaymentReportRow = {
-    ownerId: string;
-    ownerName: string;
-    october: { amount: number; status: string; toAdjust: number; } | null;
-    november: { amount: number; status: string; toAdjust: number; } | null;
-    december: { amount: number; status: string; toAdjust: number; } | null;
 };
 
 type AccountStatementData = {
@@ -2002,5 +1995,6 @@ export default function ReportsPage() {
         </div>
     );
 }
+
 
 
