@@ -403,16 +403,10 @@ export default function ReportsPage() {
             const hasAnyPendingMainDebt = ownerDebts.some(d => {
                 if (d.status !== 'pending') return false;
                 const debtDate = startOfMonth(new Date(d.year, d.month - 1));
-                
-                // Only count main condo fees or adjustments for past/current months
-                if (d.description.toLowerCase().includes('condominio') && isBefore(debtDate, startOfMonth(today))) {
+                 // Only count main condo fees for past/current months
+                if (d.description.toLowerCase().includes('condominio') && !isBefore(startOfMonth(today), debtDate)) {
                     return true;
                 }
-                
-                if (d.description.toLowerCase().includes('ajuste') && isBefore(debtDate, startOfMonth(today))) {
-                    return true;
-                }
-                
                 return false;
             });
 
@@ -460,17 +454,14 @@ export default function ReportsPage() {
                 lastPaymentDate = format(lastPayment.paymentDate.toDate(), 'dd/MM/yyyy');
             }
 
-            const adjustmentDebtUSD = ownerDebts.filter(d => 
-                d.status === 'pending' && d.description.toLowerCase().includes('ajuste')
-            ).reduce((sum, d) => sum + d.amountUSD, 0);
-            
+            const adjustmentDebtUSD = ownerDebts
+                .filter(d => d.status === 'pending' && d.description.toLowerCase().includes('ajuste'))
+                .reduce((sum, d) => sum + d.amountUSD, 0);
+
             const monthsOwed = ownerDebts.filter(d => {
-                if (d.status !== 'pending') return false;
+                if (d.status !== 'pending' || !d.description.toLowerCase().includes('condominio')) return false;
                 const debtDate = startOfMonth(new Date(d.year, d.month - 1));
-                if (isBefore(startOfMonth(new Date()), debtDate)) return false; // Exclude future debts
-                
-                // Count main condo fee OR adjustment if they are from past months
-                return d.description.toLowerCase().includes('condominio') || d.description.toLowerCase().includes('ajuste');
+                return !isBefore(startOfMonth(new Date()), debtDate); // Count if debt month is current or past
             }).length;
 
 
@@ -1949,7 +1940,7 @@ export default function ReportsPage() {
                                     {oldPaymentsReportData.length > 0 ? (
                                         oldPaymentsReportData.map((group) => (
                                             <Collapsible key={group.ownerId} asChild>
-                                                <>
+                                                <React.Fragment>
                                                     <TableRow>
                                                         <TableCell className="font-medium">{group.ownerName}</TableCell>
                                                         <TableCell className="text-right font-semibold">{formatToTwoDecimals(group.totalPaidBs)}</TableCell>
@@ -1995,7 +1986,7 @@ export default function ReportsPage() {
                                                             </TableCell>
                                                         </tr>
                                                     </CollapsibleContent>
-                                                </>
+                                                </React.Fragment>
                                             </Collapsible>
                                         ))
                                     ) : (
@@ -2011,4 +2002,5 @@ export default function ReportsPage() {
         </div>
     );
 }
+
 
