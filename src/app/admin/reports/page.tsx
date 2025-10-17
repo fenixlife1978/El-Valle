@@ -377,18 +377,26 @@ export default function ReportsPage() {
                 }
             }
             
-            const hasAnyPendingMainOrOverdueAdjustmentDebt = ownerDebts.some(d => {
+             const hasAnyPendingDebtThatMattersForSolvency = ownerDebts.some(d => {
                 if (d.status !== 'pending') return false;
-                const debtDate = startOfMonth(new Date(d.year, d.month - 1));
-                 // Debt is considered for solvency if it's a main fee, or an adjustment that is overdue
-                if (d.description.toLowerCase().includes('condominio')) return true;
-                if (d.description.toLowerCase().includes('ajuste') && isBefore(debtDate, startOfMonth(today))) return true;
 
+                const debtDate = startOfMonth(new Date(d.year, d.month - 1));
+                const firstOfCurrentMonth = startOfMonth(new Date());
+                const isOverdueOrCurrent = isBefore(debtDate, firstOfCurrentMonth) || isEqual(debtDate, firstOfCurrentMonth);
+                
+                // Main condo fees always matter if they are pending and for current/past month
+                if (d.description.toLowerCase().includes('condominio') && isOverdueOrCurrent) {
+                    return true;
+                }
+                // Adjustment debts only matter if they are for current/past month
+                if (d.description.toLowerCase().includes('ajuste') && isOverdueOrCurrent) {
+                    return true;
+                }
                 return false;
             });
 
 
-            const status: 'Solvente' | 'No Solvente' = !hasAnyPendingMainOrOverdueAdjustmentDebt ? 'Solvente' : 'No Solvente';
+            const status: 'Solvente' | 'No Solvente' = !hasAnyPendingDebtThatMattersForSolvency ? 'Solvente' : 'No Solvente';
             let solvencyPeriod = '';
             
             if (status === 'No Solvente') {
@@ -439,18 +447,12 @@ export default function ReportsPage() {
                 if (d.status !== 'pending') return false;
                 const debtDate = startOfMonth(new Date(d.year, d.month - 1));
                 const firstOfCurrentMonth = startOfMonth(new Date());
-
-                // isBefore is exclusive, isEqual is inclusive.
-                // So this is true if the debt is for any month before this month, or for this month.
                 const isOverdueOrCurrent = isBefore(debtDate, firstOfCurrentMonth) || isEqual(debtDate, firstOfCurrentMonth);
 
                 const isMainCondoFee = d.description.toLowerCase().includes('condominio');
+                if (isMainCondoFee) return true;
+
                 const isAdjustmentDebt = d.description.toLowerCase().includes('ajuste');
-
-                // A main condo fee counts if it's pending.
-                if(isMainCondoFee) return true;
-
-                // An adjustment debt counts only if it's overdue or for the current month.
                 if (isAdjustmentDebt && isOverdueOrCurrent) return true;
                 
                 return false;
