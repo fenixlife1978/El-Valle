@@ -134,14 +134,19 @@ type AccountStatementData = {
     balance: number;
 };
 
-type OldPaymentReportRow = {
+type OldPaymentReportGroup = {
     ownerId: string;
     ownerName: string;
-    property: string;
-    debtPeriod: string;
-    paymentDate: string;
-    paidAmountBs: number;
-    paymentRef: string;
+    totalPaidBs: number;
+    totalPaidUsd: number;
+    payments: {
+        property: string;
+        debtPeriod: string;
+        paymentDate: string;
+        paidAmountBs: number;
+        paidAmountUsd: number;
+        paymentRef: string;
+    }[];
 };
 
 
@@ -230,6 +235,7 @@ export default function ReportsPage() {
 
     // State for Old Payments Report
     const [oldPaymentsSearchTerm, setOldPaymentsSearchTerm] = useState('');
+    const [oldPaymentsDateRange, setOldPaymentsDateRange] = useState<{ from?: Date; to?: Date }>({});
 
 
     const fetchData = useCallback(async () => {
@@ -394,20 +400,24 @@ export default function ReportsPage() {
                 }
             }
             
-            const anyOverdueDebt = ownerDebts.some(d => {
+            const hasAnyPendingMainDebt = ownerDebts.some(d => {
                 if (d.status !== 'pending') return false;
                 const debtDate = startOfMonth(new Date(d.year, d.month - 1));
                 
-                const isAdjustmentDebt = d.description.toLowerCase().includes('ajuste');
-                if (isAdjustmentDebt && isBefore(today, debtDate)) {
-                    return false;
+                // Only count main condo fees or adjustments for past/current months
+                if (d.description.toLowerCase().includes('condominio') && isBefore(debtDate, startOfMonth(today))) {
+                    return true;
                 }
                 
-                return isBefore(debtDate, today);
+                if (d.description.toLowerCase().includes('ajuste') && isBefore(debtDate, startOfMonth(today))) {
+                    return true;
+                }
+                
+                return false;
             });
 
 
-            const status: 'Solvente' | 'No Solvente' = !anyOverdueDebt ? 'Solvente' : 'No Solvente';
+            const status: 'Solvente' | 'No Solvente' = !hasAnyPendingMainDebt ? 'Solvente' : 'No Solvente';
             let solvencyPeriod = '';
             
             if (status === 'No Solvente') {
@@ -451,24 +461,16 @@ export default function ReportsPage() {
             }
 
             const adjustmentDebtUSD = ownerDebts.filter(d => 
-                d.status === 'pending' && 
-                d.description.toLowerCase().includes('ajuste') &&
-                isBefore(startOfMonth(new Date(d.year, d.month - 1)), new Date())
+                d.status === 'pending' && d.description.toLowerCase().includes('ajuste')
             ).reduce((sum, d) => sum + d.amountUSD, 0);
             
             const monthsOwed = ownerDebts.filter(d => {
                 if (d.status !== 'pending') return false;
                 const debtDate = startOfMonth(new Date(d.year, d.month - 1));
-                if (!isBefore(debtDate, startOfMonth(new Date()))) return false;
-
-                if (d.description.toLowerCase().includes('condominio')) {
-                    return true;
-                }
+                if (isBefore(startOfMonth(new Date()), debtDate)) return false; // Exclude future debts
                 
-                if (d.description.toLowerCase().includes('ajuste')) {
-                    return true;
-                }
-                return false;
+                // Count main condo fee OR adjustment if they are from past months
+                return d.description.toLowerCase().includes('condominio') || d.description.toLowerCase().includes('ajuste');
             }).length;
 
 
@@ -598,11 +600,8 @@ export default function ReportsPage() {
         return Array.from(dataByOwner.values());
     }, [allDebts, owners]);
 
-    const oldPaymentsReportData = useMemo<OldPaymentReportRow[]>(() => {
+    const oldPaymentsReportData = useMemo<OldPaymentReportGroup[]>(() => {
         const ownersMap = new Map(owners.map(o => [o.id, o]));
-    
-        const oldPaidDebts = allDebts.filter(debt => debt.year < 2025 && debt.status === 'paid' && debt.paymentId);
-    
         const paymentDetails = new Map<string, { paymentDate: string, paymentRef: string, exchangeRate: number }>();
     
         allPayments.forEach(payment => {
@@ -613,55 +612,63 @@ export default function ReportsPage() {
             });
         });
     
-        let reportRows: OldPaymentReportRow[] = oldPaidDebts.map(debt => {
+        const paymentGroups = new Map<string, OldPaymentReportGroup>();
+    
+        // Filter debts for years before 2025
+        const oldPaidDebts = allDebts.filter(debt => {
+            const paymentDate = paymentDetails.get(debt.paymentId || '')?.paymentDate;
+            const fromDate = oldPaymentsDateRange.from;
+            const toDate = oldPaymentsDateRange.to;
+    
+            const paymentTimestamp = debt.paymentDate ? debt.paymentDate.toDate() : (paymentDate ? parse(paymentDate, 'dd/MM/yyyy', new Date()) : null);
+            if (!paymentTimestamp) return false;
+    
+            const dateMatch = (!fromDate || paymentTimestamp >= fromDate) && (!toDate || paymentTimestamp <= toDate);
+            return debt.year < 2025 && debt.status === 'paid' && debt.paymentId && dateMatch;
+        });
+    
+        oldPaidDebts.forEach(debt => {
             const owner = ownersMap.get(debt.ownerId);
             const paymentInfo = paymentDetails.get(debt.paymentId!);
+            if (!owner || !paymentInfo) return;
     
-            if (!owner || !paymentInfo) return null;
+            if (!paymentGroups.has(owner.id)) {
+                paymentGroups.set(owner.id, {
+                    ownerId: owner.id,
+                    ownerName: owner.name,
+                    totalPaidBs: 0,
+                    totalPaidUsd: 0,
+                    payments: [],
+                });
+            }
     
-            return {
-                ownerId: owner.id,
-                ownerName: owner.name,
+            const group = paymentGroups.get(owner.id)!;
+            const paidAmountUsd = debt.paidAmountUSD || debt.amountUSD;
+            const paidAmountBs = paidAmountUsd * paymentInfo.exchangeRate;
+    
+            group.totalPaidBs += paidAmountBs;
+            group.totalPaidUsd += paidAmountUsd;
+            group.payments.push({
                 property: `${debt.property.street} - ${debt.property.house}`,
                 debtPeriod: `${monthsLocale[debt.month]} ${debt.year}`,
                 paymentDate: paymentInfo.paymentDate,
-                paidAmountBs: (debt.paidAmountUSD || debt.amountUSD) * paymentInfo.exchangeRate,
+                paidAmountBs: paidAmountBs,
+                paidAmountUsd: paidAmountUsd,
                 paymentRef: paymentInfo.paymentRef,
-            };
-        }).filter((row): row is OldPaymentReportRow => row !== null);
+            });
+        });
     
-        // Add historical payments
-        const historicalPaymentsAsDebts: OldPaymentReportRow[] = allHistoricalPayments.map(hp => {
-            if (hp.referenceYear >= 2025) return null;
-            const owner = ownersMap.get(hp.ownerId);
-            if (!owner) return null;
-
-            // Since these are historical, we don't have a direct payment link. We simulate it.
-            return {
-                 ownerId: owner.id,
-                 ownerName: owner.name,
-                 property: 'N/A',
-                 debtPeriod: `${monthsLocale[hp.referenceMonth]} ${hp.referenceYear}`,
-                 paymentDate: 'N/A (Histórico)',
-                 paidAmountBs: 0, // No Bs amount available
-                 paymentRef: 'Registro Histórico',
-            }
-
-        }).filter((row): row is OldPaymentReportRow => row !== null);
-
-        reportRows = [...reportRows, ...historicalPaymentsAsDebts];
-
+        let reportData = Array.from(paymentGroups.values());
+    
         if (oldPaymentsSearchTerm) {
             const lowerCaseSearch = oldPaymentsSearchTerm.toLowerCase();
-            reportRows = reportRows.filter(row =>
-                row.ownerName.toLowerCase().includes(lowerCaseSearch) ||
-                row.property.toLowerCase().includes(lowerCaseSearch)
+            reportData = reportData.filter(row =>
+                row.ownerName.toLowerCase().includes(lowerCaseSearch)
             );
         }
     
-        return reportRows.sort((a,b) => new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime());
-    
-    }, [allDebts, allPayments, allHistoricalPayments, owners, oldPaymentsSearchTerm]);
+        return reportData;
+    }, [allDebts, allPayments, owners, oldPaymentsSearchTerm, oldPaymentsDateRange]);
 
 
     // --- Handlers ---
@@ -1186,7 +1193,7 @@ export default function ReportsPage() {
 
         const filename = `reporte_pagos_anteriores_a_2025_${format(new Date(), 'yyyy-MM-dd')}`;
         const head = [['Propietario', 'Propiedad', 'Periodo de Deuda', 'Fecha de Pago', 'Monto (Bs)', 'Referencia']];
-        const body = data.map(row => [row.ownerName, row.property, row.debtPeriod, row.paymentDate, formatToTwoDecimals(row.paidAmountBs), row.paymentRef]);
+        const body = data.flatMap(group => group.payments.map(p => [group.ownerName, p.property, p.debtPeriod, p.paymentDate, formatToTwoDecimals(p.paidAmountBs), p.paymentRef]));
         
         if (formatType === 'pdf') {
             const doc = new jsPDF();
@@ -1208,14 +1215,15 @@ export default function ReportsPage() {
             });
             doc.save(`${filename}.pdf`);
         } else { // Excel
-            const worksheetData = data.map(row => ({
-                'Propietario': row.ownerName,
-                'Propiedad': row.property,
-                'Periodo de Deuda': row.debtPeriod,
-                'Fecha de Pago': row.paymentDate,
-                'Monto (Bs)': row.paidAmountBs,
-                'Referencia': row.paymentRef,
-            }));
+            const worksheetData = data.flatMap(group => group.payments.map(p => ({
+                'Propietario': group.ownerName,
+                'Propiedad': p.property,
+                'Periodo de Deuda': p.debtPeriod,
+                'Fecha de Pago': p.paymentDate,
+                'Monto (Bs)': p.paidAmountBs,
+                'Monto ($)': p.paidAmountUsd,
+                'Referencia': p.paymentRef,
+            })));
             const worksheet = XLSX.utils.json_to_sheet(worksheetData);
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Pagos Anteriores");
@@ -1890,8 +1898,32 @@ export default function ReportsPage() {
                             <CardDescription>Consulta los pagos que liquidaron deudas de años anteriores a 2025.</CardDescription>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 items-end">
                                 <div className="space-y-2">
-                                    <Label>Buscar Propietario/Propiedad</Label>
-                                    <Input placeholder="Nombre, calle o casa..." value={oldPaymentsSearchTerm} onChange={e => setOldPaymentsSearchTerm(e.target.value)} />
+                                    <Label>Buscar Propietario</Label>
+                                    <Input placeholder="Nombre..." value={oldPaymentsSearchTerm} onChange={e => setOldPaymentsSearchTerm(e.target.value)} />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Fecha de Pago Desde</Label>
+                                    <Popover>
+                                        <PopoverTrigger asChild>
+                                            <Button variant="outline" className={cn("w-full justify-start", !oldPaymentsDateRange.from && "text-muted-foreground")}>
+                                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                                {oldPaymentsDateRange.from ? format(oldPaymentsDateRange.from, 'P', { locale: es }) : "Fecha"}
+                                            </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent><Calendar mode="single" selected={oldPaymentsDateRange.from} onSelect={d => setOldPaymentsDateRange(prev => ({...prev, from: d}))} /></PopoverContent>
+                                    </Popover>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Fecha de Pago Hasta</Label>
+                                     <Popover>
+                                        <PopoverTrigger asChild>
+                                            <Button variant="outline" className={cn("w-full justify-start", !oldPaymentsDateRange.to && "text-muted-foreground")}>
+                                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                                {oldPaymentsDateRange.to ? format(oldPaymentsDateRange.to, 'P', { locale: es }) : "Fecha"}
+                                            </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent><Calendar mode="single" selected={oldPaymentsDateRange.to} onSelect={d => setOldPaymentsDateRange(prev => ({...prev, to: d}))} /></PopoverContent>
+                                    </Popover>
                                 </div>
                             </div>
                         </CardHeader>
@@ -1908,27 +1940,66 @@ export default function ReportsPage() {
                                 <TableHeader>
                                     <TableRow>
                                         <TableHead>Propietario</TableHead>
-                                        <TableHead>Propiedad</TableHead>
-                                        <TableHead>Período de Deuda</TableHead>
-                                        <TableHead>Fecha de Pago</TableHead>
-                                        <TableHead className="text-right">Monto (Bs.)</TableHead>
-                                        <TableHead className="text-right">Referencia</TableHead>
+                                        <TableHead className="text-right">Total Pagado (Bs.)</TableHead>
+                                        <TableHead className="text-right">Total Pagado ($)</TableHead>
+                                        <TableHead className="w-12"></TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {oldPaymentsReportData.length > 0 ? (
-                                        oldPaymentsReportData.map((row, index) => (
-                                            <TableRow key={`${row.ownerId}-${index}`}>
-                                                <TableCell>{row.ownerName}</TableCell>
-                                                <TableCell>{row.property}</TableCell>
-                                                <TableCell>{row.debtPeriod}</TableCell>
-                                                <TableCell>{row.paymentDate}</TableCell>
-                                                <TableCell className="text-right">{formatToTwoDecimals(row.paidAmountBs)}</TableCell>
-                                                <TableCell className="text-right">{row.paymentRef}</TableCell>
-                                            </TableRow>
+                                        oldPaymentsReportData.map((group) => (
+                                            <Collapsible key={group.ownerId} asChild>
+                                                <>
+                                                    <TableRow>
+                                                        <TableCell className="font-medium">{group.ownerName}</TableCell>
+                                                        <TableCell className="text-right font-semibold">{formatToTwoDecimals(group.totalPaidBs)}</TableCell>
+                                                        <TableCell className="text-right font-semibold">${formatToTwoDecimals(group.totalPaidUsd)}</TableCell>
+                                                        <TableCell>
+                                                            <CollapsibleTrigger asChild>
+                                                                <Button variant="ghost" size="icon">
+                                                                    <ChevronDown className="h-4 w-4 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                                                                </Button>
+                                                            </CollapsibleTrigger>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                    <CollapsibleContent asChild>
+                                                         <tr className="bg-muted/50">
+                                                            <TableCell colSpan={4} className="p-0">
+                                                                <div className="p-4">
+                                                                    <h4 className="font-semibold mb-2">Detalle de Pagos</h4>
+                                                                     <Table>
+                                                                        <TableHeader>
+                                                                            <TableRow>
+                                                                                <TableHead>Período</TableHead>
+                                                                                <TableHead>Propiedad</TableHead>
+                                                                                <TableHead>Fecha Pago</TableHead>
+                                                                                <TableHead>Ref.</TableHead>
+                                                                                <TableHead className="text-right">Monto (Bs)</TableHead>
+                                                                                <TableHead className="text-right">Monto ($)</TableHead>
+                                                                            </TableRow>
+                                                                        </TableHeader>
+                                                                        <TableBody>
+                                                                            {group.payments.map((p, i) => (
+                                                                                <TableRow key={i}>
+                                                                                    <TableCell>{p.debtPeriod}</TableCell>
+                                                                                    <TableCell>{p.property}</TableCell>
+                                                                                    <TableCell>{p.paymentDate}</TableCell>
+                                                                                    <TableCell>{p.paymentRef}</TableCell>
+                                                                                    <TableCell className="text-right">{formatToTwoDecimals(p.paidAmountBs)}</TableCell>
+                                                                                    <TableCell className="text-right">${p.paidAmountUsd.toFixed(2)}</TableCell>
+                                                                                </TableRow>
+                                                                            ))}
+                                                                        </TableBody>
+                                                                     </Table>
+                                                                </div>
+                                                            </TableCell>
+                                                        </tr>
+                                                    </CollapsibleContent>
+                                                </>
+                                            </Collapsible>
                                         ))
                                     ) : (
-                                        <TableRow><TableCell colSpan={6} className="h-24 text-center">No se encontraron pagos para años anteriores a 2025.</TableCell></TableRow>
+                                        <TableRow><TableCell colSpan={4} className="h-24 text-center">No se encontraron pagos para los filtros seleccionados.</TableCell></TableRow>
                                     )}
                                 </TableBody>
                             </Table>
@@ -1940,3 +2011,4 @@ export default function ReportsPage() {
         </div>
     );
 }
+
