@@ -5,16 +5,16 @@
 
 @layer base {
   :root {
-    --background: 210 40% 98%;
+    --background: 24 95% 53%;
     --foreground: 224 71% 4%;
 
-    --card: 210 40% 98%;
+    --card: 141 53% 24%;
     --card-foreground: 224 71% 4%;
 
-    --popover: 210 40% 98%;
+    --popover: 141 53% 24%;
     --popover-foreground: 224 71% 4%;
 
-    --primary: 217 91% 60%; /* Blue */
+    --primary: 217 91% 60%;
     --primary-foreground: 0 0% 98%;
 
     --secondary: 210 40% 91%;
@@ -26,13 +26,13 @@
     --accent: 45 93% 47%; /* Yellow */
     --accent-foreground: 224 71% 4%;
 
-    --destructive: 24 95% 53%; /* Dark Orange, fallback */
+    --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 98%;
     
     --success: 142 71% 41%;
     --success-foreground: 0 0% 98%;
     
-    --warning: 35 92% 55%; /* Orange, fallback */
+    --warning: 38 92% 50%;
     --warning-foreground: 0 0% 98%;
 
     --border: 210 40% 89%;
@@ -40,10 +40,10 @@
     --ring: 217 91% 60%;
 
     --radius: 0.5rem;
-
-    --chart-1: 217 91% 60%; /* Blue */
-    --chart-2: 45 93% 47%; /* Yellow */
-    --chart-3: 24 95% 53%; /* Dark Orange */
+    
+    --chart-1: 217 91% 60%;
+    --chart-2: 45 93% 47%;
+    --chart-3: 24 95% 53%;
     --chart-4: 142 71% 41%;
     --chart-5: 280 80% 60%;
     
@@ -58,16 +58,16 @@
   }
 
   .dark {
-    --background: 224 71% 4%;
-    --foreground: 0 0% 98%;
+    --background: 24 95% 53%;
+    --foreground: 224 71% 4%;
 
-    --card: 224 71% 9%;
-    --card-foreground: 0 0% 98%;
+    --card: 141 53% 24%;
+    --card-foreground: 224 71% 4%;
 
-    --popover: 224 71% 4%;
-    --popover-foreground: 0 0% 98%;
+    --popover: 141 53% 24%;
+    --popover-foreground: 224 71% 4%;
 
-    --primary: 217 91% 60%; /* Blue */
+    --primary: 217 91% 60%;
     --primary-foreground: 0 0% 98%;
 
     --secondary: 224 71% 14%;
@@ -76,30 +76,24 @@
     --muted: 224 71% 14%;
     --muted-foreground: 220 14% 65%;
 
-    --accent: 45 93% 47%; /* Yellow */
+    --accent: 45 93% 47%;
     --accent-foreground: 224 71% 4%;
     
-    --destructive: 45 93% 47%; /* Yellow for destructive actions */
-    --destructive-foreground: 224 71% 4%;
-    
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 0 0% 98%;
+
     --success: 142 71% 41%;
     --success-foreground: 0 0% 98%;
 
-    --warning: 35 92% 55%; /* Orange, fallback */
+    --warning: 38 92% 50%;
     --warning-foreground: 0 0% 98%;
 
     --border: 224 71% 14%;
     --input: 224 71% 14%;
     --ring: 217 91% 60%;
-
-    --chart-1: 217 91% 60%; /* Blue */
-    --chart-2: 45 93% 47%; /* Yellow */
-    --chart-3: 24 95% 53%; /* Dark Orange */
-    --chart-4: 142 71% 41%;
-    --chart-5: 280 80% 60%;
-
-    --sidebar-background: 224 71% 4%;
-    --sidebar-foreground: 0 0% 98%;
+    
+    --sidebar-background: 141 53% 24%;
+    --sidebar-foreground: 224 71% 4%;
     --sidebar-primary: 217 91% 60%;
     --sidebar-primary-foreground: 0 0% 98%;
     --sidebar-accent: 224 71% 14%;
@@ -117,5 +111,3 @@
     @apply bg-background text-foreground;
   }
 }
-
-
