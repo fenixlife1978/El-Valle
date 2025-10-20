@@ -42,7 +42,6 @@ const adminNavItems: NavItem[] = [
       label: "Configuración",
       items: [
         { href: "/admin/settings", label: "General" },
-        { href: "/admin/settings/appearance", label: "Apariencia" },
         { href: "/admin/settings/sync", label: "Sincronizar Perfiles" },
       ]
     },
