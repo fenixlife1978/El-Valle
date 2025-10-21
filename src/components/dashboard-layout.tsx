@@ -160,20 +160,16 @@ const CustomHeader = () => {
     );
 };
 
-
-export function DashboardLayout({
+function DashboardLayoutContent({
   children,
-  userName,
-  userRole,
   navItems,
 }: {
   children: React.ReactNode;
-  userName: string;
-  userRole: string;
   navItems: NavItem[];
 }) {
   const [companyInfo, setCompanyInfo] = React.useState<CompanyInfo | null>(null);
   const { isMobile, setOpenMobile } = useSidebar();
+  const pathname = usePathname();
 
   React.useEffect(() => {
     const settingsRef = doc(db, 'config', 'mainSettings');
@@ -192,13 +188,12 @@ export function DashboardLayout({
   };
 
   const isSubItemActive = (parentHref: string, items?: Omit<NavItem, 'icon' | 'items'>[]) => {
-    const pathname = usePathname();
     if (pathname === parentHref) return true;
     return items?.some(item => pathname === item.href) ?? false;
   }
   
   return (
-    <SidebarProvider>
+    <>
       <Sidebar>
         <SidebarHeader>
           <div className="flex items-center gap-2 p-2">
@@ -231,7 +226,7 @@ export function DashboardLayout({
                         {item.items.map(subItem => (
                           <SidebarMenuSubItem key={subItem.label}>
                              <Link href={subItem.href} passHref onClick={handleLinkClick}>
-                                <SidebarMenuSubButton asChild isActive={usePathname() === subItem.href}>
+                                <SidebarMenuSubButton asChild isActive={pathname === subItem.href}>
                                   <span>{subItem.label}</span>
                                 </SidebarMenuSubButton>
                             </Link>
@@ -244,7 +239,7 @@ export function DashboardLayout({
                   <SidebarMenuItem key={item.label}>
                     <Link href={item.href} onClick={handleLinkClick}>
                       <SidebarMenuButton
-                        isActive={usePathname() === item.href}
+                        isActive={pathname === item.href}
                         tooltip={{ children: item.label }}
                       >
                           <item.icon />
@@ -267,6 +262,26 @@ export function DashboardLayout({
            © {new Date().getFullYear()} {companyInfo?.name || 'CondoConnect'}. Todos los derechos reservados.
         </footer>
       </SidebarInset>
+    </>
+  );
+}
+
+export function DashboardLayout({
+  children,
+  userName,
+  userRole,
+  navItems,
+}: {
+  children: React.ReactNode;
+  userName: string;
+  userRole: string;
+  navItems: NavItem[];
+}) {
+  return (
+    <SidebarProvider>
+      <DashboardLayoutContent navItems={navItems}>
+        {children}
+      </DashboardLayoutContent>
     </SidebarProvider>
   );
 }
