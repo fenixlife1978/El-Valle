@@ -32,6 +32,7 @@ import {
   SidebarMenuSub,
   SidebarMenuSubItem,
   SidebarMenuSubButton,
+  useSidebar,
 } from '@/components/ui/sidebar';
 import {
   DropdownMenu,
@@ -172,6 +173,7 @@ export function DashboardLayout({
   navItems: NavItem[];
 }) {
   const [companyInfo, setCompanyInfo] = React.useState<CompanyInfo | null>(null);
+  const { isMobile, setOpenMobile } = useSidebar();
 
   React.useEffect(() => {
     const settingsRef = doc(db, 'config', 'mainSettings');
@@ -182,6 +184,12 @@ export function DashboardLayout({
     });
     return () => unsubscribe();
   }, []);
+
+  const handleLinkClick = () => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  };
 
   const isSubItemActive = (parentHref: string, items?: Omit<NavItem, 'icon' | 'items'>[]) => {
     const pathname = usePathname();
@@ -222,7 +230,7 @@ export function DashboardLayout({
                        <SidebarMenuSub>
                         {item.items.map(subItem => (
                           <SidebarMenuSubItem key={subItem.label}>
-                             <Link href={subItem.href} passHref>
+                             <Link href={subItem.href} passHref onClick={handleLinkClick}>
                                 <SidebarMenuSubButton asChild isActive={usePathname() === subItem.href}>
                                   <span>{subItem.label}</span>
                                 </SidebarMenuSubButton>
@@ -234,7 +242,7 @@ export function DashboardLayout({
                   </Collapsible>
                 ) : (
                   <SidebarMenuItem key={item.label}>
-                    <Link href={item.href}>
+                    <Link href={item.href} onClick={handleLinkClick}>
                       <SidebarMenuButton
                         isActive={usePathname() === item.href}
                         tooltip={{ children: item.label }}
