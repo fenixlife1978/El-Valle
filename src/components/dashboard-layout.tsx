@@ -44,7 +44,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { Card } from '@/components/ui/card';
-import { useAuth } from '@/hooks/use-auth';
 import { Skeleton } from './ui/skeleton';
 
 export type NavItem = {
@@ -74,8 +73,7 @@ const BCVLogo = () => (
 );
 
 
-const CustomHeader = () => {
-    const { ownerData, userRole } = useAuth();
+const CustomHeader = ({ ownerData, userRole }: { ownerData: any, userRole: string | null }) => {
     const router = useRouter();
     const [activeRate, setActiveRate] = React.useState<ExchangeRate | null>(null);
     const [loadingRate, setLoadingRate] = React.useState(true);
@@ -94,7 +92,6 @@ const CustomHeader = () => {
             }
             setLoadingRate(false);
         }, () => {
-            // Handle error case if needed
             setLoadingRate(false);
         });
 
@@ -163,9 +160,13 @@ const CustomHeader = () => {
 function DashboardLayoutContent({
   children,
   navItems,
+  ownerData,
+  userRole,
 }: {
   children: React.ReactNode;
   navItems: NavItem[];
+  ownerData: any;
+  userRole: string | null;
 }) {
   const [companyInfo, setCompanyInfo] = React.useState<CompanyInfo | null>(null);
   const { isMobile, setOpenMobile } = useSidebar();
@@ -252,11 +253,10 @@ function DashboardLayoutContent({
           </SidebarMenu>
         </SidebarContent>
         <SidebarFooter>
-            {/* Can add footer content here if needed */}
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>
-        <CustomHeader />
+        <CustomHeader ownerData={ownerData} userRole={userRole} />
         <main className="flex-1 p-4 md:p-8 bg-background">{children}</main>
         <footer className="bg-secondary text-secondary-foreground p-4 text-center text-sm">
            © {new Date().getFullYear()} {companyInfo?.name || 'CondoConnect'}. Todos los derechos reservados.
@@ -268,18 +268,18 @@ function DashboardLayoutContent({
 
 export function DashboardLayout({
   children,
-  userName,
+  ownerData,
   userRole,
   navItems,
 }: {
   children: React.ReactNode;
-  userName: string;
-  userRole: string;
+  ownerData: any;
+  userRole: string | null;
   navItems: NavItem[];
 }) {
   return (
     <SidebarProvider>
-      <DashboardLayoutContent navItems={navItems}>
+      <DashboardLayoutContent navItems={navItems} ownerData={ownerData} userRole={userRole}>
         {children}
       </DashboardLayoutContent>
     </SidebarProvider>
