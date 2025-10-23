@@ -8,11 +8,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Upload, Save, Loader2, UserCircle, KeyRound } from 'lucide-react';
-import { db } from '@/lib/firebase';
+import { db, auth } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
 import { doc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { onAuthStateChanged, User } from 'firebase/auth';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { useAuth } from '@/hooks/use-auth';
 
 
 type OwnerProfile = {
@@ -32,7 +32,9 @@ const emptyOwnerProfile: OwnerProfile = {
 export default function OwnerSettingsPage() {
     const { toast } = useToast();
     const router = useRouter();
-    const { user: authUser, loading: authLoading } = useAuth();
+    
+    const [authUser, setAuthUser] = useState<User | null>(null);
+    const [authLoading, setAuthLoading] = useState(true);
 
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -42,12 +44,20 @@ export default function OwnerSettingsPage() {
 
 
     useEffect(() => {
-        if (authLoading) return;
-        if (!authUser) {
-            router.push('/login?role=owner');
-            return;
-        }
+        const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+            if (user) {
+                setAuthUser(user);
+            } else {
+                router.push('/login?role=owner');
+            }
+            setAuthLoading(false);
+        });
+        return () => unsubscribeAuth();
+    }, [router]);
 
+    useEffect(() => {
+        if (authLoading || !authUser) return;
+        
         const userRef = doc(db, 'owners', authUser.uid);
         const unsubscribe = onSnapshot(userRef, (snapshot) => {
             if (snapshot.exists()) {

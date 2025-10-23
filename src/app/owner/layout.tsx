@@ -6,11 +6,13 @@ import {
     Settings,
     History
 } from 'lucide-react';
-import { type ReactNode, useEffect } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
-import { useAuth } from '@/hooks/use-auth';
 import { Loader2 } from 'lucide-react';
+import { getAuth, onAuthStateChanged, User } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 const ownerNavItems: NavItem[] = [
     { href: "/owner/dashboard", icon: Home, label: "Dashboard" },
@@ -24,27 +26,44 @@ const ownerNavItems: NavItem[] = [
 ];
 
 export default function OwnerLayout({ children }: { children: ReactNode }) {
-    const { user, role, loading, ownerData } = useAuth();
+    const [user, setUser] = useState<User | null>(null);
+    const [ownerData, setOwnerData] = useState<any | null>(null);
+    const [loading, setLoading] = useState(true);
     const router = useRouter();
     const pathname = usePathname();
 
     useEffect(() => {
-        if (!loading) {
-            if (!user) {
-                router.push('/login?role=owner');
-            } else if (role !== 'propietario') {
-                router.push('/login?role=admin');
-            } else if (ownerData && !ownerData.passwordChanged) {
-                // If the user is an owner and hasn't changed their password,
-                // force them to the change password page, unless they are already there.
-                if (pathname !== '/owner/change-password') {
-                     router.push('/owner/change-password');
-                }
-            }
-        }
-    }, [user, role, loading, ownerData, router, pathname]);
+        const auth = getAuth();
+        const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+            if (firebaseUser) {
+                setUser(firebaseUser);
+                const ownerDocRef = doc(db, "owners", firebaseUser.uid);
+                const ownerSnap = await getDoc(ownerDocRef);
+                if (ownerSnap.exists()) {
+                    const data = { id: ownerSnap.id, ...ownerSnap.data() };
+                    setOwnerData(data);
 
-    if (loading || !user || role !== 'propietario') {
+                    if (!data.passwordChanged && pathname !== '/owner/change-password') {
+                        router.push('/owner/change-password');
+                    }
+                } else {
+                    // This case might mean the user exists in Auth but not in Firestore 'owners' collection
+                    // Handle as appropriate, e.g. sign out or redirect
+                    router.push('/login?role=owner');
+                }
+            } else {
+                setUser(null);
+                setOwnerData(null);
+                router.push('/login?role=owner');
+            }
+            setLoading(false);
+        });
+
+        return () => unsubscribe();
+    }, [router, pathname]);
+
+
+    if (loading || !user || !ownerData) {
         return (
             <div className="flex h-screen w-full items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin" />
@@ -52,9 +71,8 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
         );
     }
     
-    // While loading is false, ownerData might still be null briefly.
-    // Also check for passwordChanged status before rendering layout, unless on the change-password page itself.
-    if (pathname !== '/owner/change-password' && (!ownerData || !ownerData.passwordChanged)) {
+    // Additional check for password change redirection
+    if (pathname !== '/owner/change-password' && !ownerData.passwordChanged) {
         return (
              <div className="flex h-screen w-full items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin" />
@@ -63,7 +81,7 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
     }
 
     return (
-        <DashboardLayout userName={ownerData?.name || 'Propietario'} userRole="Propietario" navItems={ownerNavItems}>
+        <DashboardLayout ownerData={ownerData} userRole="Propietario" navItems={ownerNavItems}>
             {children}
         </DashboardLayout>
     );

@@ -1,4 +1,3 @@
-
 'use client';
 
 import {
@@ -13,8 +12,13 @@ import {
     Award,
     Palette
 } from 'lucide-react';
-import { type ReactNode } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { ensureAdminProfile } from '@/lib/user-sync';
+import { Loader2 } from 'lucide-react';
+
 
 const adminNavItems: NavItem[] = [
     { href: "/admin/dashboard", icon: Home, label: "Dashboard" },
@@ -47,11 +51,55 @@ const adminNavItems: NavItem[] = [
     },
 ];
 
+type MockUser = {
+  uid: string;
+  email: string;
+};
+
+const ADMIN_USER_ID = 'valle-admin-main-account';
+
 export default function AdminLayout({ children }: { children: ReactNode }) {
-    // Authentication guard has been removed for direct access.
+    const [user, setUser] = useState<MockUser | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [role, setRole] = useState<string | null>(null);
+    const [ownerData, setOwnerData] = useState<any | null>(null);
+
+    useEffect(() => {
+        const bootstrapAdminSession = async () => {
+          // Ensure the admin profile document exists in Firestore.
+          await ensureAdminProfile();
+          
+          const adminUser: MockUser = {
+            uid: ADMIN_USER_ID,
+            email: 'edwinfaguiars@gmail.com', // Using a placeholder email
+          };
+          setUser(adminUser);
+    
+          const adminDocRef = doc(db, "owners", ADMIN_USER_ID);
+          const adminSnap = await getDoc(adminDocRef);
+    
+          if (adminSnap.exists()) {
+            const adminData = { id: adminSnap.id, ...adminSnap.data() };
+            setOwnerData(adminData);
+            setRole('administrador');
+          }
+          
+          setLoading(false);
+        };
+    
+        bootstrapAdminSession();
+    }, []);
+
+    if (loading) {
+        return (
+            <div className="flex h-screen w-full items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin" />
+            </div>
+        );
+    }
     
     return (
-        <DashboardLayout userName={'Administrador'} userRole="Administrador" navItems={adminNavItems}>
+        <DashboardLayout ownerData={ownerData} userRole={role} navItems={adminNavItems}>
             {children}
         </DashboardLayout>
     );
