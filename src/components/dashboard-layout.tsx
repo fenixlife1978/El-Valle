@@ -266,17 +266,14 @@ function DashboardLayoutContent({
   );
 }
 
-export function DashboardLayout({
-  children,
-  ownerData,
-  userRole,
-  navItems,
-}: {
+export function DashboardLayout(props: {
   children: React.ReactNode;
   ownerData: any;
   userRole: string | null;
   navItems: NavItem[];
+  params?: any; // To catch the params prop
 }) {
+  const { children, ownerData, userRole, navItems } = props;
   return (
     <SidebarProvider>
       <DashboardLayoutContent navItems={navItems} ownerData={ownerData} userRole={userRole}>
