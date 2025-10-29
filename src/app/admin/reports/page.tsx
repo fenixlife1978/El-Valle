@@ -538,7 +538,7 @@ export default function ReportsPage() {
 
         const monthsInRange: Date[] = [];
         let currentDate = startDate;
-        while(isBefore(currentDate, endDate)) {
+        while(isBefore(currentDate, endDate) || isEqual(currentDate, endDate)) {
             monthsInRange.push(currentDate);
             currentDate = addMonths(currentDate, 1);
         }
@@ -560,9 +560,6 @@ export default function ReportsPage() {
                 if (!debt) return 'N/A';
                 
                 if (debt.status === 'paid') {
-                    if (debt.paymentDate && isBefore(debt.paymentDate.toDate(), monthDate)) {
-                        return 'Adelantado';
-                    }
                     return 'Pagado';
                 }
                 return 'Pendiente';
@@ -576,21 +573,17 @@ export default function ReportsPage() {
             };
         });
 
-        const footers: { [key: string]: { paid: number, advanced: number } } = {};
+        const footers: { [key: string]: { paid: number } } = {};
         monthsInRange.forEach((monthDate, index) => {
             const header = headers[index];
-            footers[header] = { paid: 0, advanced: 0 };
+            footers[header] = { paid: 0 };
             const year = getYear(monthDate);
             const month = getMonth(monthDate) + 1;
 
             allDebts.forEach(debt => {
                  if (debt.year === year && debt.month === month && debt.status === 'paid' && debt.description.includes('Condominio')) {
                     const amount = debt.paidAmountUSD || debt.amountUSD;
-                    if(debt.paymentDate && isBefore(debt.paymentDate.toDate(), monthDate)) {
-                        footers[header].advanced += amount;
-                    } else {
-                        footers[header].paid += amount;
-                    }
+                    footers[header].paid += amount;
                  }
             });
         });
@@ -1072,7 +1065,6 @@ export default function ReportsPage() {
         const body = rows.map(row => [row.name, ...row.monthData]);
 
         const footerPaid = ['Total Pagado ($)', ...headers.map(h => `$${footers[h].paid.toFixed(2)}`)];
-        const footerAdvanced = ['Total Adelantado ($)', ...headers.map(h => `$${footers[h].advanced.toFixed(2)}`)];
 
         if (formatType === 'pdf') {
             const doc = new jsPDF({ orientation: 'landscape' });
@@ -1084,7 +1076,7 @@ export default function ReportsPage() {
             (doc as any).autoTable({
                 head: mainHeaders,
                 body: body,
-                foot: [footerPaid, footerAdvanced],
+                foot: [footerPaid],
                 startY: 40,
                 theme: 'grid',
                 headStyles: { fillColor: [30, 80, 180] },
@@ -1095,13 +1087,12 @@ export default function ReportsPage() {
                     if (data.section === 'body') {
                         if (data.cell.raw === 'Pagado') data.cell.styles.fillColor = '#d4edda'; // green
                         if (data.cell.raw === 'Pendiente') data.cell.styles.fillColor = '#f8d7da'; // red
-                        if (data.cell.raw === 'Adelantado') data.cell.styles.fillColor = '#d1ecf1'; // blue
                     }
                 }
             });
             doc.save(`${filename}.pdf`);
         } else {
-            const worksheet = XLSX.utils.aoa_to_sheet([...mainHeaders, ...body, footerPaid, footerAdvanced]);
+            const worksheet = XLSX.utils.aoa_to_sheet([...mainHeaders, ...body, footerPaid]);
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Analisis de Cobro");
             XLSX.writeFile(workbook, `${filename}.xlsx`);
@@ -1757,8 +1748,7 @@ export default function ReportsPage() {
                                                 {row.monthData.map((status, index) => (
                                                     <TableCell key={index} className={cn("text-center", 
                                                         status === 'Pagado' && 'text-green-600',
-                                                        status === 'Pendiente' && 'text-destructive',
-                                                        status === 'Adelantado' && 'text-blue-500'
+                                                        status === 'Pendiente' && 'text-destructive'
                                                     )}>
                                                         {status}
                                                     </TableCell>
@@ -1775,14 +1765,6 @@ export default function ReportsPage() {
                                                 </TableCell>
                                             ))}
                                         </TableRow>
-                                        <TableRow>
-                                             <TableCell className="sticky left-0 bg-secondary/90 z-20 font-bold">Total Adelantado ($)</TableCell>
-                                            {collectionAnalysisData.headers.map(header => (
-                                                <TableCell key={`advanced-${header}`} className="text-center font-bold">
-                                                    ${collectionAnalysisData.footers[header]?.advanced.toFixed(2)}
-                                                </TableCell>
-                                            ))}
-                                        </TableRow>
                                     </TableFooter>
                                 </Table>
                             </ScrollArea>
@@ -1794,3 +1776,4 @@ export default function ReportsPage() {
         </div>
     );
 }
+
