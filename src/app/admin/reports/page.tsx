@@ -578,10 +578,10 @@ export default function ReportsPage() {
             };
         });
 
-        const footers: { [key: string]: { paid: number; pending: number; na: number; } } = {};
+        const footers: { [key: string]: { paidCount: number; pendingCount: number; naCount: number; } } = {};
         monthsInRange.forEach((monthDate, index) => {
             const header = headers[index];
-            footers[header] = { paid: 0, pending: 0, na: 0 };
+            footers[header] = { paidCount: 0, pendingCount: 0, naCount: 0 };
             const year = getYear(monthDate);
             const month = getMonth(monthDate) + 1;
 
@@ -591,14 +591,12 @@ export default function ReportsPage() {
                 const debt = allDebts.find(d => d.ownerId === owner.id && d.year === year && d.month === month && d.description.includes('Condominio'));
                 const historicalPayment = allHistoricalPayments.find(hp => hp.ownerId === owner.id && hp.referenceYear === year && hp.referenceMonth === month);
 
-                if (debt?.status === 'paid') {
-                    footers[header].paid += (debt.paidAmountUSD || debt.amountUSD);
-                } else if (historicalPayment) {
-                    footers[header].paid += historicalPayment.amountUSD;
+                if (debt?.status === 'paid' || historicalPayment) {
+                    footers[header].paidCount += 1;
                 } else if (debt) { // Pending
-                    footers[header].pending += debt.amountUSD;
+                    footers[header].pendingCount += 1;
                 } else { // N/A
-                    footers[header].na += condoFee;
+                    footers[header].naCount += 1;
                 }
             });
         });
@@ -918,7 +916,7 @@ export default function ReportsPage() {
 
         doc.setFontSize(16).setFont('helvetica', 'bold').text('ESTADO DE CUENTA', pageWidth - margin, margin + 15, { align: 'right' });
         const dateText = `Fecha: ${format(new Date(), "dd/MM/yyyy 'a las' HH:mm:ss")}`;
-        doc.setFontSize(8).setFont('helvetica', 'normal').text(dateText, pageWidth - margin, margin + 22, { align: 'right' });
+        doc.setFontSize(8).setFont('helvetica', 'normal').text(dateText, pageWidth - margin, margin + 22, { align: 'right'});
         
         let startY = margin + 40;
 
@@ -1079,9 +1077,9 @@ export default function ReportsPage() {
         const mainHeaders = [['Propietario', ...headers]];
         const body = rows.map(row => [row.name, ...row.monthData]);
 
-        const footerPaid = ['Total Pagado ($)', ...headers.map(h => `$${footers[h].paid.toFixed(2)}`)];
-        const footerPending = ['Total Pendiente ($)', ...headers.map(h => `$${footers[h].pending.toFixed(2)}`)];
-        const footerNA = ['Total por Generar ($)', ...headers.map(h => `$${footers[h].na.toFixed(2)}`)];
+        const footerPaid = ['Total Pagado ($)', ...headers.map(h => `$${(footers[h].paidCount * condoFee).toFixed(2)}`)];
+        const footerPending = ['Total Pendiente ($)', ...headers.map(h => `$${(footers[h].pendingCount * condoFee).toFixed(2)}`)];
+        const footerNA = ['Total por Generar ($)', ...headers.map(h => `$${(footers[h].naCount * condoFee).toFixed(2)}`)];
 
         if (formatType === 'pdf') {
             const doc = new jsPDF({ orientation: 'landscape' });
@@ -1779,7 +1777,7 @@ export default function ReportsPage() {
                                             <TableCell className="sticky left-0 bg-secondary/90 z-20 font-bold">Total Pagado ($)</TableCell>
                                             {collectionAnalysisData.headers.map(header => (
                                                 <TableCell key={`paid-${header}`} className="text-center font-bold">
-                                                    ${collectionAnalysisData.footers[header]?.paid.toFixed(2)}
+                                                    ${(collectionAnalysisData.footers[header]?.paidCount * condoFee).toFixed(2)}
                                                 </TableCell>
                                             ))}
                                         </TableRow>
@@ -1787,7 +1785,7 @@ export default function ReportsPage() {
                                             <TableCell className="sticky left-0 bg-secondary/90 z-20 font-bold">Total Pendiente ($)</TableCell>
                                             {collectionAnalysisData.headers.map(header => (
                                                 <TableCell key={`pending-${header}`} className="text-center font-bold">
-                                                    ${collectionAnalysisData.footers[header]?.pending.toFixed(2)}
+                                                    ${(collectionAnalysisData.footers[header]?.pendingCount * condoFee).toFixed(2)}
                                                 </TableCell>
                                             ))}
                                         </TableRow>
@@ -1795,7 +1793,7 @@ export default function ReportsPage() {
                                             <TableCell className="sticky left-0 bg-secondary/90 z-20 font-bold">Total por Generar ($)</TableCell>
                                             {collectionAnalysisData.headers.map(header => (
                                                 <TableCell key={`na-${header}`} className="text-center font-bold">
-                                                    ${collectionAnalysisData.footers[header]?.na.toFixed(2)}
+                                                    ${(collectionAnalysisData.footers[header]?.naCount * condoFee).toFixed(2)}
                                                 </TableCell>
                                             ))}
                                         </TableRow>
@@ -1813,3 +1811,4 @@ export default function ReportsPage() {
 
 
 
+    
