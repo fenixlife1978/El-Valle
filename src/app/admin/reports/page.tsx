@@ -162,6 +162,8 @@ const getSortKeys = (owner: Owner | DelinquentOwner | BalanceOwner) => {
     return { streetNum, houseNum };
 };
 
+const years = Array.from({ length: 10 }, (_, i) => new Date().getFullYear() + 5 - i).map(String);
+const monthOptions = Object.entries(monthsLocale).map(([value, label]) => ({ value, label }));
 
 export default function ReportsPage() {
     const { toast } = useToast();
@@ -205,6 +207,13 @@ export default function ReportsPage() {
     const [selectedStatementOwner, setSelectedStatementOwner] = useState<Owner | null>(null);
     const [accountStatementData, setAccountStatementData] = useState<AccountStatementData | null>(null);
     
+    // State for Collection Analysis Report
+    const [collectionAnalysisRange, setCollectionAnalysisRange] = useState<{fromMonth: number, fromYear: number, toMonth: number, toYear: number}>({
+        fromMonth: 1,
+        fromYear: new Date().getFullYear(),
+        toMonth: new Date().getMonth() + 1,
+        toYear: new Date().getFullYear()
+    });
 
     // State for Balance Report
     const [balanceOwners, setBalanceOwners] = useState<BalanceOwner[]>([]);
@@ -379,10 +388,9 @@ export default function ReportsPage() {
                 }
             }
             
-            const hasAnyPendingDebtThatMattersForSolvency = ownerDebts.some(d => {
+             const hasAnyPendingDebtThatMattersForSolvency = ownerDebts.some(d => {
                 if (d.status !== 'pending') return false;
                 const debtDate = startOfMonth(new Date(d.year, d.month - 1));
-                // Debt is considered overdue if its month is before or the same as the current month.
                 return isBefore(debtDate, firstOfCurrentMonth) || isEqual(debtDate, firstOfCurrentMonth);
             });
 
@@ -437,8 +445,6 @@ export default function ReportsPage() {
                 if (d.status !== 'pending') return false;
                 const debtDate = startOfMonth(new Date(d.year, d.month - 1));
                 const firstOfCurrentMonth = startOfMonth(new Date());
-
-                // Debt is considered overdue if its month is before or the same as the current month.
                 return isBefore(debtDate, firstOfCurrentMonth) || isEqual(debtDate, firstOfCurrentMonth);
             }).length;
 
@@ -522,6 +528,75 @@ export default function ReportsPage() {
         if (!balanceSearchTerm) return balanceOwners;
         return balanceOwners.filter(o => o.name.toLowerCase().includes(balanceSearchTerm.toLowerCase()));
     }, [balanceSearchTerm, balanceOwners]);
+
+    // --- Collection Analysis Report Logic ---
+    const collectionAnalysisData = useMemo(() => {
+        const { fromMonth, fromYear, toMonth, toYear } = collectionAnalysisRange;
+        const startDate = startOfMonth(new Date(fromYear, fromMonth - 1));
+        const endDate = endOfMonth(new Date(toYear, toMonth - 1));
+        if (isBefore(endDate, startDate)) return { headers: [], rows: [], footers: {} };
+
+        const monthsInRange: Date[] = [];
+        let currentDate = startDate;
+        while(isBefore(currentDate, endDate)) {
+            monthsInRange.push(currentDate);
+            currentDate = addMonths(currentDate, 1);
+        }
+
+        const headers = monthsInRange.map(d => format(d, 'MMM yyyy', { locale: es }));
+
+        const ownersMap = new Map(owners.filter(o => o.id !== ADMIN_USER_ID).map(o => [o.id, {
+            ...o,
+            overallMonthsOwed: allDebts.filter(d => d.ownerId === o.id && d.status === 'pending' && isBefore(startOfMonth(new Date(d.year, d.month -1)), startOfMonth(new Date()))).length
+        }]));
+
+        const rows = Array.from(ownersMap.values()).map(owner => {
+            const monthData = monthsInRange.map(monthDate => {
+                const year = getYear(monthDate);
+                const month = getMonth(monthDate) + 1;
+                
+                const debt = allDebts.find(d => d.ownerId === owner.id && d.year === year && d.month === month && d.description.includes('Condominio'));
+                
+                if (!debt) return 'N/A';
+                
+                if (debt.status === 'paid') {
+                    if (debt.paymentDate && isBefore(debt.paymentDate.toDate(), monthDate)) {
+                        return 'Adelantado';
+                    }
+                    return 'Pagado';
+                }
+                return 'Pendiente';
+            });
+            return {
+                id: owner.id,
+                name: owner.name,
+                properties: (owner.properties || []).map(p => `${p.street}-${p.house}`).join(', '),
+                monthData,
+                isDelinquent: owner.overallMonthsOwed >= 3
+            };
+        });
+
+        const footers: { [key: string]: { paid: number, advanced: number } } = {};
+        monthsInRange.forEach((monthDate, index) => {
+            const header = headers[index];
+            footers[header] = { paid: 0, advanced: 0 };
+            const year = getYear(monthDate);
+            const month = getMonth(monthDate) + 1;
+
+            allDebts.forEach(debt => {
+                 if (debt.year === year && debt.month === month && debt.status === 'paid' && debt.description.includes('Condominio')) {
+                    const amount = debt.paidAmountUSD || debt.amountUSD;
+                    if(debt.paymentDate && isBefore(debt.paymentDate.toDate(), monthDate)) {
+                        footers[header].advanced += amount;
+                    } else {
+                        footers[header].paid += amount;
+                    }
+                 }
+            });
+        });
+
+        return { headers, rows, footers };
+    }, [collectionAnalysisRange, owners, allDebts]);
 
     // --- Handlers ---
     const incomeReportRows = useMemo<IncomeReportRow[]>(() => {
@@ -985,6 +1060,54 @@ export default function ReportsPage() {
         }
     };
     
+    const handleExportCollectionAnalysis = (formatType: 'pdf' | 'excel') => {
+        const { headers, rows, footers } = collectionAnalysisData;
+        if (rows.length === 0) {
+            toast({ variant: 'destructive', title: 'Sin datos', description: 'No hay datos para exportar en el rango seleccionado.' });
+            return;
+        }
+
+        const filename = `analisis_cobro_${collectionAnalysisRange.fromYear}-${collectionAnalysisRange.toYear}`;
+        const mainHeaders = [['Propietario', ...headers]];
+        const body = rows.map(row => [row.name, ...row.monthData]);
+
+        const footerPaid = ['Total Pagado ($)', ...headers.map(h => `$${footers[h].paid.toFixed(2)}`)];
+        const footerAdvanced = ['Total Adelantado ($)', ...headers.map(h => `$${footers[h].advanced.toFixed(2)}`)];
+
+        if (formatType === 'pdf') {
+            const doc = new jsPDF({ orientation: 'landscape' });
+            if (companyInfo?.logo) doc.addImage(companyInfo.logo, 'PNG', 15, 15, 20, 20);
+            if (companyInfo) doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, 40, 20);
+
+            doc.setFontSize(16).setFont('helvetica', 'bold').text('Análisis de Cobranza', doc.internal.pageSize.getWidth() / 2, 25, { align: 'center'});
+
+            (doc as any).autoTable({
+                head: mainHeaders,
+                body: body,
+                foot: [footerPaid, footerAdvanced],
+                startY: 40,
+                theme: 'grid',
+                headStyles: { fillColor: [30, 80, 180] },
+                footStyles: { fillColor: [230, 230, 230], textColor: 0, fontStyle: 'bold' },
+                styles: { fontSize: 7, cellPadding: 1.5, halign: 'center' },
+                columnStyles: { 0: { halign: 'left' } },
+                didParseCell: (data: any) => {
+                    if (data.section === 'body') {
+                        if (data.cell.raw === 'Pagado') data.cell.styles.fillColor = '#d4edda'; // green
+                        if (data.cell.raw === 'Pendiente') data.cell.styles.fillColor = '#f8d7da'; // red
+                        if (data.cell.raw === 'Adelantado') data.cell.styles.fillColor = '#d1ecf1'; // blue
+                    }
+                }
+            });
+            doc.save(`${filename}.pdf`);
+        } else {
+            const worksheet = XLSX.utils.aoa_to_sheet([...mainHeaders, ...body, footerPaid, footerAdvanced]);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Analisis de Cobro");
+            XLSX.writeFile(workbook, `${filename}.xlsx`);
+        }
+    };
+
 
     const renderSortIcon = (key: SortKey) => {
         if (delinquencySortConfig.key !== key) return <ArrowUpDown className="h-4 w-4 opacity-50" />;
@@ -1003,13 +1126,14 @@ export default function ReportsPage() {
             </div>
             
             <Tabs defaultValue="integral" className="w-full">
-                 <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-5 h-auto flex-wrap">
+                 <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 h-auto flex-wrap">
                     <TabsTrigger value="integral">Integral</TabsTrigger>
                     <TabsTrigger value="individual">Ficha Individual</TabsTrigger>
                     <TabsTrigger value="estado-de-cuenta">Estado de Cuenta</TabsTrigger>
                     <TabsTrigger value="delinquency">Morosidad</TabsTrigger>
                     <TabsTrigger value="balance">Saldos a Favor</TabsTrigger>
                     <TabsTrigger value="income">Ingresos</TabsTrigger>
+                    <TabsTrigger value="collection-analysis">Análisis de Cobro</TabsTrigger>
                 </TabsList>
                 
                 <TabsContent value="integral">
@@ -1577,9 +1701,96 @@ export default function ReportsPage() {
                     </Card>
                 </TabsContent>
 
+                <TabsContent value="collection-analysis">
+                     <Card>
+                        <CardHeader>
+                            <CardTitle>Análisis de Cobranza por Período</CardTitle>
+                            <CardDescription>Visualice el estado de pago de la cuota de condominio para cada propietario a lo largo de varios meses.</CardDescription>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 items-end">
+                                <div className="space-y-2">
+                                    <Label>Desde Mes</Label>
+                                    <Select value={String(collectionAnalysisRange.fromMonth)} onValueChange={v => setCollectionAnalysisRange(c => ({...c, fromMonth: Number(v)}))}>
+                                        <SelectTrigger><SelectValue/></SelectTrigger>
+                                        <SelectContent>{monthOptions.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                </div>
+                                 <div className="space-y-2">
+                                    <Label>Desde Año</Label>
+                                    <Select value={String(collectionAnalysisRange.fromYear)} onValueChange={v => setCollectionAnalysisRange(c => ({...c, fromYear: Number(v)}))}>
+                                        <SelectTrigger><SelectValue/></SelectTrigger>
+                                        <SelectContent>{years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Hasta Mes</Label>
+                                    <Select value={String(collectionAnalysisRange.toMonth)} onValueChange={v => setCollectionAnalysisRange(c => ({...c, toMonth: Number(v)}))}>
+                                        <SelectTrigger><SelectValue/></SelectTrigger>
+                                        <SelectContent>{monthOptions.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Hasta Año</Label>
+                                    <Select value={String(collectionAnalysisRange.toYear)} onValueChange={v => setCollectionAnalysisRange(c => ({...c, toYear: Number(v)}))}>
+                                        <SelectTrigger><SelectValue/></SelectTrigger>
+                                        <SelectContent>{years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                             <div className="flex justify-end gap-2 mb-4">
+                                <Button variant="outline" onClick={() => handleExportCollectionAnalysis('pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
+                                <Button variant="outline" onClick={() => handleExportCollectionAnalysis('excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
+                            </div>
+                            <ScrollArea className="w-full whitespace-nowrap rounded-md border" style={{ height: '600px' }}>
+                                <Table className="min-w-full">
+                                    <TableHeader className="sticky top-0 bg-background z-10">
+                                        <TableRow>
+                                            <TableHead className="min-w-[200px] sticky left-0 bg-background z-20">Propietario</TableHead>
+                                            {collectionAnalysisData.headers.map(header => <TableHead key={header} className="text-center">{header}</TableHead>)}
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {collectionAnalysisData.rows.map(row => (
+                                            <TableRow key={row.id} className={cn(row.isDelinquent && "bg-destructive/10")}>
+                                                <TableCell className="font-medium sticky left-0 bg-background z-20">{row.name}</TableCell>
+                                                {row.monthData.map((status, index) => (
+                                                    <TableCell key={index} className={cn("text-center", 
+                                                        status === 'Pagado' && 'text-green-600',
+                                                        status === 'Pendiente' && 'text-destructive',
+                                                        status === 'Adelantado' && 'text-blue-500'
+                                                    )}>
+                                                        {status}
+                                                    </TableCell>
+                                                ))}
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                     <TableFooter className="sticky bottom-0 bg-secondary/90 z-10">
+                                        <TableRow>
+                                            <TableCell className="sticky left-0 bg-secondary/90 z-20 font-bold">Total Pagado ($)</TableCell>
+                                            {collectionAnalysisData.headers.map(header => (
+                                                <TableCell key={`paid-${header}`} className="text-center font-bold">
+                                                    ${collectionAnalysisData.footers[header]?.paid.toFixed(2)}
+                                                </TableCell>
+                                            ))}
+                                        </TableRow>
+                                        <TableRow>
+                                             <TableCell className="sticky left-0 bg-secondary/90 z-20 font-bold">Total Adelantado ($)</TableCell>
+                                            {collectionAnalysisData.headers.map(header => (
+                                                <TableCell key={`advanced-${header}`} className="text-center font-bold">
+                                                    ${collectionAnalysisData.footers[header]?.advanced.toFixed(2)}
+                                                </TableCell>
+                                            ))}
+                                        </TableRow>
+                                    </TableFooter>
+                                </Table>
+                            </ScrollArea>
+                        </CardContent>
+                     </Card>
+                </TabsContent>
+
             </Tabs>
         </div>
     );
 }
-
-    
