@@ -578,10 +578,10 @@ export default function ReportsPage() {
             };
         });
 
-        const footers: { [key: string]: { paidCount: number; pendingCount: number; naCount: number; } } = {};
+        const footers: { [key: string]: { paidCount: number; pendingTotalUSD: number; naCount: number; } } = {};
         monthsInRange.forEach((monthDate, index) => {
             const header = headers[index];
-            footers[header] = { paidCount: 0, pendingCount: 0, naCount: 0 };
+            footers[header] = { paidCount: 0, pendingTotalUSD: 0, naCount: 0 };
             const year = getYear(monthDate);
             const month = getMonth(monthDate) + 1;
 
@@ -594,12 +594,13 @@ export default function ReportsPage() {
                 if (debt?.status === 'paid' || historicalPayment) {
                     footers[header].paidCount += 1;
                 } else if (debt) { // Pending
-                    footers[header].pendingCount += 1;
+                    footers[header].pendingTotalUSD += debt.amountUSD;
                 } else { // N/A
                     footers[header].naCount += 1;
                 }
             });
         });
+
 
         return { headers, rows, footers };
     }, [collectionAnalysisRange, owners, allDebts, allHistoricalPayments, condoFee]);
@@ -1078,7 +1079,7 @@ export default function ReportsPage() {
         const body = rows.map(row => [row.name, ...row.monthData]);
 
         const footerPaid = ['Total Pagado ($)', ...headers.map(h => `$${(footers[h].paidCount * condoFee).toFixed(2)}`)];
-        const footerPending = ['Total Pendiente ($)', ...headers.map(h => `$${(footers[h].pendingCount * condoFee).toFixed(2)}`)];
+        const footerPending = ['Total Pendiente ($)', ...headers.map(h => `$${footers[h].pendingTotalUSD.toFixed(2)}`)];
         const footerNA = ['Total por Generar ($)', ...headers.map(h => `$${(footers[h].naCount * condoFee).toFixed(2)}`)];
 
         if (formatType === 'pdf') {
@@ -1785,7 +1786,7 @@ export default function ReportsPage() {
                                             <TableCell className="sticky left-0 bg-secondary/90 z-20 font-bold">Total Pendiente ($)</TableCell>
                                             {collectionAnalysisData.headers.map(header => (
                                                 <TableCell key={`pending-${header}`} className="text-center font-bold">
-                                                    ${(collectionAnalysisData.footers[header]?.pendingCount * condoFee).toFixed(2)}
+                                                    ${collectionAnalysisData.footers[header]?.pendingTotalUSD.toFixed(2)}
                                                 </TableCell>
                                             ))}
                                         </TableRow>
