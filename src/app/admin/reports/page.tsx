@@ -62,6 +62,7 @@ type HistoricalPayment = {
     ownerId: string;
     referenceMonth: number;
     referenceYear: number;
+    amountUSD: number;
 };
 
 type Debt = {
@@ -556,13 +557,15 @@ export default function ReportsPage() {
                 const month = getMonth(monthDate) + 1;
                 
                 const debt = allDebts.find(d => d.ownerId === owner.id && d.year === year && d.month === month && d.description.includes('Condominio'));
+                const historicalPayment = allHistoricalPayments.find(hp => hp.ownerId === owner.id && hp.referenceYear === year && hp.referenceMonth === month);
                 
-                if (!debt) return 'N/A';
-                
-                if (debt.status === 'paid') {
+                if (debt?.status === 'paid' || historicalPayment) {
                     return 'Pagado';
                 }
-                return 'Pendiente';
+                if (debt) { // Exists but is not paid
+                    return 'Pendiente';
+                }
+                return 'N/A';
             });
             return {
                 id: owner.id,
@@ -586,10 +589,16 @@ export default function ReportsPage() {
                     footers[header].paid += amount;
                  }
             });
+            
+            allHistoricalPayments.forEach(hp => {
+                if(hp.referenceYear === year && hp.referenceMonth === month) {
+                    footers[header].paid += hp.amountUSD;
+                }
+            });
         });
 
         return { headers, rows, footers };
-    }, [collectionAnalysisRange, owners, allDebts]);
+    }, [collectionAnalysisRange, owners, allDebts, allHistoricalPayments]);
 
     // --- Handlers ---
     const incomeReportRows = useMemo<IncomeReportRow[]>(() => {
@@ -1776,4 +1785,5 @@ export default function ReportsPage() {
         </div>
     );
 }
+
 
