@@ -216,6 +216,8 @@ export default function ReportsPage() {
         toMonth: new Date().getMonth() + 1,
         toYear: new Date().getFullYear()
     });
+    const [selectedAnalysisOwners, setSelectedAnalysisOwners] = useState<Set<string>>(new Set());
+
 
     // State for Balance Report
     const [balanceOwners, setBalanceOwners] = useState<BalanceOwner[]>([]);
@@ -577,6 +579,8 @@ export default function ReportsPage() {
                 isDelinquent: owner.overallMonthsOwed >= 3
             };
         });
+        
+        const visibleRows = rows.filter(row => selectedAnalysisOwners.has(row.id));
 
         const footers: { [key: string]: { paidCount: number; pendingTotalUSD: number; naCount: number; } } = {};
         monthsInRange.forEach((monthDate, index) => {
@@ -585,8 +589,9 @@ export default function ReportsPage() {
             const year = getYear(monthDate);
             const month = getMonth(monthDate) + 1;
 
-            owners.forEach(owner => {
-                if (owner.id === ADMIN_USER_ID) return;
+            visibleRows.forEach(row => {
+                const owner = ownersMap.get(row.id);
+                if (!owner) return;
 
                 const debt = allDebts.find(d => d.ownerId === owner.id && d.year === year && d.month === month && d.description.includes('Condominio'));
                 const historicalPayment = allHistoricalPayments.find(hp => hp.ownerId === owner.id && hp.referenceYear === year && hp.referenceMonth === month);
@@ -603,7 +608,13 @@ export default function ReportsPage() {
 
 
         return { headers, rows, footers };
-    }, [collectionAnalysisRange, owners, allDebts, allHistoricalPayments, condoFee]);
+    }, [collectionAnalysisRange, owners, allDebts, allHistoricalPayments, condoFee, selectedAnalysisOwners]);
+    
+    // Effect to update selection when filters change
+    useEffect(() => {
+        setSelectedAnalysisOwners(new Set(collectionAnalysisData.rows.map(r => r.id)));
+    }, [collectionAnalysisRange]);
+
 
     // --- Handlers ---
     const incomeReportRows = useMemo<IncomeReportRow[]>(() => {
@@ -1069,14 +1080,16 @@ export default function ReportsPage() {
     
     const handleExportCollectionAnalysis = (formatType: 'pdf' | 'excel') => {
         const { headers, rows, footers } = collectionAnalysisData;
-        if (rows.length === 0) {
+        const visibleRows = rows.filter(row => selectedAnalysisOwners.has(row.id));
+
+        if (visibleRows.length === 0) {
             toast({ variant: 'destructive', title: 'Sin datos', description: 'No hay datos para exportar en el rango seleccionado.' });
             return;
         }
 
         const filename = `analisis_cobro_${collectionAnalysisRange.fromYear}-${collectionAnalysisRange.toYear}`;
         const mainHeaders = [['Propietario', ...headers]];
-        const body = rows.map(row => [row.name, ...row.monthData]);
+        const body = visibleRows.map(row => [row.name, ...row.monthData]);
 
         const footerPaid = ['Total Pagado ($)', ...headers.map(h => `$${(footers[h].paidCount * condoFee).toFixed(2)}`)];
         const footerPending = ['Total Pendiente ($)', ...headers.map(h => `$${footers[h].pendingTotalUSD.toFixed(2)}`)];
@@ -1746,22 +1759,50 @@ export default function ReportsPage() {
                             </div>
                         </CardHeader>
                         <CardContent>
-                             <div className="flex justify-end gap-2 mb-4">
-                                <Button variant="outline" onClick={() => handleExportCollectionAnalysis('pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
-                                <Button variant="outline" onClick={() => handleExportCollectionAnalysis('excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
+                             <div className="flex justify-between items-center mb-4">
+                                <p className="text-sm text-muted-foreground">
+                                    {selectedAnalysisOwners.size} de {collectionAnalysisData.rows.length} propietarios seleccionados.
+                                </p>
+                                <div className="flex gap-2">
+                                    <Button variant="outline" onClick={() => handleExportCollectionAnalysis('pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
+                                    <Button variant="outline" onClick={() => handleExportCollectionAnalysis('excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
+                                </div>
                             </div>
                             <ScrollArea className="w-full whitespace-nowrap rounded-md border" style={{ height: '600px' }}>
                                 <Table className="min-w-full">
                                     <TableHeader className="sticky top-0 bg-background z-10">
                                         <TableRow>
-                                            <TableHead className="min-w-[200px] sticky left-0 bg-background z-20">Propietario</TableHead>
+                                            <TableHead className="min-w-[250px] sticky left-0 bg-background z-20 flex items-center gap-2">
+                                                <Checkbox
+                                                    checked={selectedAnalysisOwners.size > 0 && selectedAnalysisOwners.size === collectionAnalysisData.rows.length}
+                                                    onCheckedChange={(checked) => {
+                                                        const allIds = new Set(collectionAnalysisData.rows.map(r => r.id));
+                                                        setSelectedAnalysisOwners(checked ? allIds : new Set());
+                                                    }}
+                                                />
+                                                Propietario
+                                            </TableHead>
                                             {collectionAnalysisData.headers.map(header => <TableHead key={header} className="text-center">{header}</TableHead>)}
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {collectionAnalysisData.rows.map(row => (
-                                            <TableRow key={row.id} className={cn(row.isDelinquent && "bg-destructive/10")}>
-                                                <TableCell className="font-medium sticky left-0 bg-background z-20">{row.name}</TableCell>
+                                            <TableRow key={row.id} className={cn(row.isDelinquent && "bg-destructive/10", !selectedAnalysisOwners.has(row.id) && "opacity-50")}>
+                                                <TableCell className="font-medium sticky left-0 bg-background z-20 flex items-center gap-2">
+                                                    <Checkbox
+                                                        checked={selectedAnalysisOwners.has(row.id)}
+                                                        onCheckedChange={() => {
+                                                            const newSelection = new Set(selectedAnalysisOwners);
+                                                            if (newSelection.has(row.id)) {
+                                                                newSelection.delete(row.id);
+                                                            } else {
+                                                                newSelection.add(row.id);
+                                                            }
+                                                            setSelectedAnalysisOwners(newSelection);
+                                                        }}
+                                                    />
+                                                    {row.name}
+                                                </TableCell>
                                                 {row.monthData.map((status, index) => (
                                                     <TableCell key={index} className={cn("text-center", 
                                                         status === 'Pagado' && 'text-green-600',
