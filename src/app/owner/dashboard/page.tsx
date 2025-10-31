@@ -25,15 +25,14 @@ import { useAuth } from '@/hooks/use-auth';
 type Payment = {
     id: string;
     date: string;
-    amount: number;
+    totalAmount: number; // Corrected from amount
     bank: string;
     type: string;
-    ref: string;
+    reference: string; // Corrected from ref
     status: 'aprobado' | 'pendiente' | 'rechazado';
     reportedAt: any;
     exchangeRate: number;
     paymentDate: Timestamp;
-    reference: string;
     beneficiaries: { ownerId: string, ownerName: string, house?: string, street?: string, amount: number }[];
 };
 
@@ -432,11 +431,11 @@ export default function OwnerDashboardPage() {
         });
         startY = (doc as any).lastAutoTable.finalY + 8;
     } else {
-        totalPaidInConcepts = payment.amount;
+        totalPaidInConcepts = payment.totalAmount;
         (doc as any).autoTable({
             startY: startY,
             head: [['Concepto', 'Monto Pagado (Bs)']],
-            body: [['Abono a Saldo a Favor', `Bs. ${formatToTwoDecimals(payment.amount)}`]],
+            body: [['Abono a Saldo a Favor', `Bs. ${formatToTwoDecimals(payment.totalAmount)}`]],
             theme: 'striped',
             headStyles: { fillColor: [44, 62, 80], textColor: 255 },
             styles: { fontSize: 9, cellPadding: 2.5 },
@@ -671,12 +670,12 @@ export default function OwnerDashboardPage() {
                         <TableCell>{format(payment.paymentDate.toDate(), 'dd/MM/yyyy')}</TableCell>
                         <TableCell>
                             {payment.type === 'adelanto' 
-                                ? `$${formatToTwoDecimals(payment.amount)}`
-                                : `Bs. ${formatToTwoDecimals(payment.amount)}`
+                                ? `$${formatToTwoDecimals(payment.totalAmount)}`
+                                : `Bs. ${formatToTwoDecimals(payment.totalAmount)}`
                             }
                         </TableCell>
                         <TableCell>{payment.bank}</TableCell>
-                        <TableCell>{payment.ref}</TableCell>
+                        <TableCell>{payment.reference}</TableCell>
                         <TableCell>
                           <Badge variant={payment.status === 'aprobado' ? 'success' : payment.status === 'rechazado' ? 'destructive' : 'warning'}>
                             {payment.status.charAt(0).toUpperCase() + payment.status.slice(1)}
@@ -770,7 +769,7 @@ export default function OwnerDashboardPage() {
                             </TableBody>
                         </Table>
                          <div className="text-right font-bold mt-2 pr-4">
-                            Total Pagado: Bs. {formatToTwoDecimals(receiptData.paidDebts.reduce((acc, debt) => acc + ((debt.paidAmountUSD || debt.amountUSD) * receiptData.payment.exchangeRate), 0) > 0 ? receiptData.paidDebts.reduce((acc, debt) => acc + ((debt.paidAmountUSD || debt.amountUSD) * receiptData.payment.exchangeRate), 0) : receiptData.payment.amount)}
+                            Total Pagado: Bs. {formatToTwoDecimals(receiptData.paidDebts.reduce((acc, debt) => acc + ((debt.paidAmountUSD || debt.amountUSD) * receiptData.payment.exchangeRate), 0) > 0 ? receiptData.paidDebts.reduce((acc, debt) => acc + ((debt.paidAmountUSD || debt.amountUSD) * receiptData.payment.exchangeRate), 0) : receiptData.payment.totalAmount)}
                          </div>
                         {/* Footer */}
                         <div className="mt-6 text-gray-600 text-[10px] space-y-2">
