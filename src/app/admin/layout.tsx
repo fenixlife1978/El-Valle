@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import {
@@ -23,7 +24,7 @@ import { useAuth } from '@/hooks/use-auth';
 const adminNavItems: NavItem[] = [
     { href: "/admin/dashboard", icon: Home, label: "Dashboard" },
     { 
-      href: "/admin/payments", 
+      href: "/admin/payments/verify", 
       icon: Landmark, 
       label: "Pagos",
       items: [
