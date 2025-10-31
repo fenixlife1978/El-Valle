@@ -10,7 +10,9 @@ import {
     TrendingUp,
     Wallet,
     Award,
-    Palette
+    Palette,
+    ShieldCheck,
+    Briefcase
 } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
@@ -40,6 +42,7 @@ const adminNavItems: NavItem[] = [
     { href: "/admin/reports", icon: FileSearch, label: "Informes" },
     { href: "/admin/certificates", icon: Award, label: "Constancias" },
     { href: "/admin/people", icon: Users, label: "Personas" },
+    { href: "/admin/cases", icon: Briefcase, label: "Casos Administrativos" },
     { 
       href: "/admin/settings", 
       icon: Settings, 
@@ -49,6 +52,7 @@ const adminNavItems: NavItem[] = [
         { href: "/admin/settings/sync", label: "Sincronizar Perfiles" },
       ]
     },
+     { href: "/admin/validation", icon: ShieldCheck, label: "Validación" },
 ];
 
 type MockUser = {
