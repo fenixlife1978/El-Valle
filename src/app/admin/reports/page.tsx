@@ -147,16 +147,11 @@ const formatToTwoDecimals = (num: number) => {
 
 const ADMIN_USER_ID = 'valle-admin-main-account';
 
-const getSortKeys = (owner: Owner | DelinquentOwner | BalanceOwner) => {
-    const properties = 'properties' in owner ? owner.properties : '';
+const getSortKeys = (propertiesString: string) => {
     let street = 'N/A', house = 'N/A';
-    
-    if (typeof properties === 'string' && properties !== '') {
-        const firstProp = properties.split(',')[0];
+    if (propertiesString) {
+        const firstProp = propertiesString.split(',')[0] || '';
         [street, house] = firstProp.split('-').map(s => s.trim());
-    } else if (Array.isArray(properties) && properties.length > 0) {
-        street = properties[0].street;
-        house = properties[0].house;
     }
 
     const streetNum = parseInt(String(street || '').replace('Calle ', '') || '999');
@@ -305,16 +300,14 @@ export default function ReportsPage() {
             // --- Balance Report Data Calculation ---
             const ownersWithBalance = ownersData.filter(o => o.id !== ADMIN_USER_ID && o.balance > 0);
             
-            const balanceReportData = ownersWithBalance.map(owner => {
-                return {
-                    id: owner.id,
-                    name: owner.name,
-                    properties: (owner.properties || []).map(p => `${p.street} - ${p.house}`).join(', '),
-                    balance: owner.balance,
-                };
-            }).sort((a,b) => {
-                const aKeys = getSortKeys(a);
-                const bKeys = getSortKeys(b);
+            const balanceReportData = ownersWithBalance.map(owner => ({
+                id: owner.id,
+                name: owner.name,
+                properties: (owner.properties || []).map(p => `${p.street} - ${p.house}`).join(', '),
+                balance: owner.balance,
+            })).sort((a,b) => {
+                const aKeys = getSortKeys(a.properties);
+                const bKeys = getSortKeys(b.properties);
                 if (aKeys.streetNum !== bKeys.streetNum) return aKeys.streetNum - bKeys.streetNum;
                 return aKeys.houseNum - bKeys.houseNum;
             });
@@ -337,11 +330,14 @@ export default function ReportsPage() {
     const integralReportData = useMemo<IntegralReportRow[]>(() => {
         const sortedOwners = [...owners]
             .filter(owner => owner.id !== ADMIN_USER_ID && owner.name)
+            .map(owner => {
+                const propertiesString = (owner.properties || []).map(p => `${p.street}-${p.house}`).join(', ');
+                const sortKeys = getSortKeys(propertiesString);
+                return { ...owner, sortKeys };
+            })
             .sort((a, b) => {
-                const aKeys = getSortKeys(a);
-                const bKeys = getSortKeys(b);
-                if (aKeys.streetNum !== bKeys.streetNum) return aKeys.streetNum - bKeys.streetNum;
-                return aKeys.houseNum - bKeys.houseNum;
+                if (a.sortKeys.streetNum !== b.sortKeys.streetNum) return a.sortKeys.streetNum - b.sortKeys.streetNum;
+                return a.sortKeys.houseNum - b.sortKeys.houseNum;
             });
 
         return sortedOwners.map(owner => {
@@ -505,8 +501,8 @@ export default function ReportsPage() {
                 if (a[delinquencySortConfig.key] > b[delinquencySortConfig.key]) return delinquencySortConfig.direction === 'asc' ? 1 : -1;
             }
            
-            const aKeys = getSortKeys(a);
-            const bKeys = getSortKeys(b);
+            const aKeys = getSortKeys(a.properties);
+            const bKeys = getSortKeys(b.properties);
 
             if (aKeys.streetNum !== bKeys.streetNum) return aKeys.streetNum - bKeys.streetNum;
             if (aKeys.houseNum !== bKeys.houseNum) return aKeys.houseNum - bKeys.houseNum;
@@ -1234,7 +1230,7 @@ export default function ReportsPage() {
                         </CardHeader>
                         <CardContent>
                              <div className="flex justify-end gap-2 mb-4">
-                                <Button variant="outline" onClick={() => handlePublishIntegralReport()} disabled={generatingReport}>
+                                <Button variant="outline" onClick={handlePublishIntegralReport} disabled={generatingReport}>
                                     <Megaphone className="mr-2 h-4 w-4" /> Publicar Reporte Integral
                                 </Button>
                                 <Button variant="outline" onClick={() => handleExportIntegral('pdf')} disabled={generatingReport}>
@@ -1441,7 +1437,7 @@ export default function ReportsPage() {
                                             </div>
                                             <div className="text-right">
                                                 <h2 className="text-2xl font-bold">ESTADO DE CUENTA</h2>
-                                                <p className="text-xs">Fecha: ${format(new Date(), "dd/MM/yyyy 'a las' HH:mm:ss")}</p>
+                                                <p className="text-xs">Fecha: {format(new Date(), "dd/MM/yyyy 'a las' HH:mm:ss")}</p>
                                                 <Button size="sm" variant="outline" className="mt-2" onClick={() => handleExportAccountStatement('pdf')}><FileText className="mr-2 h-4 w-4" /> Exportar PDF</Button>
                                             </div>
                                         </div>
@@ -1887,3 +1883,4 @@ export default function ReportsPage() {
     
 
     
+
