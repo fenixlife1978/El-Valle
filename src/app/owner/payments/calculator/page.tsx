@@ -110,7 +110,7 @@ export default function OwnerPaymentCalculatorPage() {
     };
 
     const handleAdvanceMonthSelection = (monthValue: string) => {
-        setSelectedAdvanceMonths(prev => prev.includes(monthValue) ? prev.filter(m => m !== monthValue) : [...prev, m]);
+        setSelectedAdvanceMonths(prev => prev.includes(monthValue) ? prev.filter(m => m !== monthValue) : [...prev, monthValue]);
     };
     
     const futureMonths = useMemo(() => {
