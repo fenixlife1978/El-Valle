@@ -6,7 +6,7 @@ import {
     Settings,
     History
 } from 'lucide-react';
-import { type ReactNode } from 'react';
+import { type ReactNode, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
 import { Loader2 } from 'lucide-react';
@@ -28,26 +28,35 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
     const router = useRouter();
     const pathname = usePathname();
 
-    if (loading) {
+    useEffect(() => {
+        if (loading) {
+            return; // Don't do anything while loading
+        }
+        if (!user) {
+            router.push('/login?role=owner');
+            return;
+        }
+        if (ownerData && !ownerData.passwordChanged && pathname !== '/owner/change-password') {
+            router.push('/owner/change-password');
+            return;
+        }
+    }, [loading, user, ownerData, pathname, router]);
+
+    if (loading || !user) {
         return (
             <div className="flex h-screen w-full items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin" />
+                <p className="ml-2">Cargando sesión...</p>
             </div>
         );
     }
     
-    if (!user) {
-        router.push('/login?role=owner');
-         return (
-            <div className="flex h-screen w-full items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin" />
-                <p className="ml-2">Redirigiendo al inicio de sesión...</p>
-            </div>
-        );
-    }
-    
-    if (ownerData && !ownerData.passwordChanged && pathname !== '/owner/change-password') {
-        router.push('/owner/change-password');
+    // This case covers the password change page which shouldn't have the main layout
+    if (ownerData && !ownerData.passwordChanged) {
+        if(pathname === '/owner/change-password') {
+            return <>{children}</>;
+        }
+        // While redirecting, show a loader
         return (
              <div className="flex h-screen w-full items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin" />

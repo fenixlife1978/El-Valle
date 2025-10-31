@@ -14,7 +14,7 @@ import {
     ShieldCheck,
     Briefcase
 } from 'lucide-react';
-import { type ReactNode } from 'react';
+import { type ReactNode, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
 import { Loader2 } from 'lucide-react';
@@ -57,20 +57,17 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     const { user, ownerData, loading, role } = useAuth();
     const router = useRouter();
 
-    if (loading) {
+    useEffect(() => {
+        if (!loading && (!user || role !== 'administrador')) {
+            router.push('/login?role=admin');
+        }
+    }, [loading, user, role, router]);
+
+    if (loading || !user || role !== 'administrador') {
         return (
             <div className="flex h-screen w-full items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin" />
-            </div>
-        );
-    }
-    
-    if (!user || role !== 'administrador') {
-        router.push('/login?role=admin');
-        return (
-            <div className="flex h-screen w-full items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin" />
-                <p className="ml-2">Redirigiendo al inicio de sesión...</p>
+                <p className="ml-2">Verificando acceso...</p>
             </div>
         );
     }
