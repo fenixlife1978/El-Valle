@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState } from 'react';
@@ -267,7 +268,7 @@ export default function ValidationPage() {
                 <Card className="md:col-span-2">
                     <CardHeader>
                         <CardTitle>Cambiar Correo de Propietario</CardTitle>
-                        <CardDescription>Busque a un propietario para actualizar su dirección de correo electrónico.</CardDescription>
+                        <CardDescription>Busque a un propietario para actualizar su dirección de correo electrónico. Esto es útil si el usuario pierde el acceso a su correo actual.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
                          <div className="flex items-end gap-2">
