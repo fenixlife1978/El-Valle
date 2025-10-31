@@ -13,11 +13,11 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from "@/lib/utils";
 import { es } from "date-fns/locale";
-import { Calendar as CalendarIcon, Download, Search, Loader2, FileText, FileSpreadsheet, ArrowUpDown, Building, BadgeInfo, BadgeCheck, BadgeX, History, ChevronDown, ChevronRight, TrendingUp, TrendingDown, DollarSign, Receipt, Wand2 } from "lucide-react";
+import { Calendar as CalendarIcon, Download, Search, Loader2, FileText, FileSpreadsheet, ArrowUpDown, Building, BadgeInfo, BadgeCheck, BadgeX, History, ChevronDown, ChevronRight, TrendingUp, TrendingDown, DollarSign, Receipt, Wand2, Megaphone } from "lucide-react";
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import * as XLSX from 'xlsx';
-import { collection, getDocs, query, where, doc, getDoc, orderBy, Timestamp } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, getDoc, orderBy, Timestamp, addDoc, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { Calendar } from "@/components/ui/calendar";
@@ -696,6 +696,28 @@ export default function ReportsPage() {
             balance: owner.balance,
         });
     };
+    
+    const handlePublishIntegralReport = async () => {
+        setGeneratingReport(true);
+        try {
+            const reportId = `integral-${format(new Date(), 'yyyy-MM-dd-HH-mm')}`;
+            const reportRef = doc(db, 'published_reports', reportId);
+            await setDoc(reportRef, {
+                type: 'integral',
+                createdAt: new Date().toISOString(),
+            });
+            toast({
+                title: 'Reporte Integral Publicado',
+                description: 'El reporte ahora es visible para los propietarios.',
+                className: 'bg-blue-100 text-blue-800'
+            });
+        } catch (error) {
+            console.error('Error publishing integral report:', error);
+            toast({ variant: 'destructive', title: 'Error de Publicación', description: 'No se pudo publicar el reporte.' });
+        } finally {
+            setGeneratingReport(false);
+        }
+    };
 
 
     const handleExportIntegral = (formatType: 'pdf' | 'excel') => {
@@ -1206,6 +1228,9 @@ export default function ReportsPage() {
                         </CardHeader>
                         <CardContent>
                              <div className="flex justify-end gap-2 mb-4">
+                                <Button variant="outline" onClick={() => handlePublishIntegralReport()} disabled={generatingReport}>
+                                    <Megaphone className="mr-2 h-4 w-4" /> Publicar Reporte Integral
+                                </Button>
                                 <Button variant="outline" onClick={() => handleExportIntegral('pdf')} disabled={generatingReport}>
                                     <FileText className="mr-2 h-4 w-4" /> Exportar a PDF
                                 </Button>
@@ -1411,7 +1436,7 @@ export default function ReportsPage() {
                                             <div className="text-right">
                                                 <h2 className="text-2xl font-bold">ESTADO DE CUENTA</h2>
                                                 <p className="text-xs">Fecha: ${format(new Date(), "dd/MM/yyyy 'a las' HH:mm:ss")}</p>
-                                                <Button size="sm" variant="outline" className="mt-2" onClick={() => handleExportAccountStatement('pdf')}><FileText className="mr-2 h-4 w-4" /> Exportar PDF</Button>
+                                                <Button size="sm" variant="outline" className="mt-2" onClick={()={() => handleExportAccountStatement('pdf')}}><FileText className="mr-2 h-4 w-4" /> Exportar PDF</Button>
                                             </div>
                                         </div>
                                     </CardHeader>
@@ -1575,7 +1600,7 @@ export default function ReportsPage() {
                                                 <TableCell>
                                                     <Checkbox
                                                         checked={selectedDelinquentOwners.has(owner.id)}
-                                                        onCheckedChange={() => {
+                                                        onCheckedChange={()={() => {
                                                             const newSelection = new Set(selectedDelinquentOwners);
                                                             if (newSelection.has(owner.id)) newSelection.delete(owner.id);
                                                             else newSelection.add(owner.id);
@@ -1613,8 +1638,8 @@ export default function ReportsPage() {
                                     <Input placeholder="Buscar por propietario..." className="pl-9" value={balanceSearchTerm} onChange={e => setBalanceSearchTerm(e.target.value)} />
                                 </div>
                                 <div className="flex gap-2">
-                                    <Button variant="outline" onClick={() => handleExportBalance('pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
-                                    <Button variant="outline" onClick={() => handleExportBalance('excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
+                                    <Button variant="outline" onClick={()={() => handleExportBalance('pdf')}}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
+                                    <Button variant="outline" onClick={()={() => handleExportBalance('excel')}}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
                                 </div>
                             </div>
                         </CardHeader>
@@ -1686,7 +1711,7 @@ export default function ReportsPage() {
                                 <Button variant="outline" onClick={() => handleExportIncomeReport('pdf')} disabled={generatingReport}>
                                     <FileText className="mr-2 h-4 w-4" /> Exportar a PDF
                                 </Button>
-                                <Button variant="outline" onClick={() => handleExportIncomeReport('excel')} disabled={generatingReport}>
+                                <Button variant="outline" onClick={()={() => handleExportIncomeReport('excel')}} disabled={generatingReport}>
                                     <FileSpreadsheet className="mr-2 h-4 w-4" /> Exportar a Excel
                                 </Button>
                             </div>
@@ -1791,7 +1816,7 @@ export default function ReportsPage() {
                                                 <TableCell className="font-medium sticky left-0 bg-background z-20 flex items-center gap-2">
                                                     <Checkbox
                                                         checked={selectedAnalysisOwners.has(row.id)}
-                                                        onCheckedChange={() => {
+                                                        onCheckedChange={()={() => {
                                                             const newSelection = new Set(selectedAnalysisOwners);
                                                             if (newSelection.has(row.id)) {
                                                                 newSelection.delete(row.id);
@@ -1852,5 +1877,7 @@ export default function ReportsPage() {
 }
 
 
+
+    
 
     
