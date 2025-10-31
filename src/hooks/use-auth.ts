@@ -17,25 +17,28 @@ export function useAuth() {
         const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
             if (firebaseUser) {
                 setUser(firebaseUser);
-                const ownerDocRef = doc(db, "owners", firebaseUser.uid);
                 try {
-                    const ownerSnap = await getDoc(ownerDocRef);
-                    if (ownerSnap.exists()) {
-                        const data = { id: ownerSnap.id, ...ownerSnap.data() };
+                    // Check if the logged-in user is the special admin
+                    const adminDocRef = doc(db, "owners", ADMIN_USER_ID);
+                    const adminSnap = await getDoc(adminDocRef);
+
+                    if (adminSnap.exists() && adminSnap.data().email.toLowerCase() === firebaseUser.email?.toLowerCase()) {
+                        // This is the admin user
+                        const data = { id: adminSnap.id, ...adminSnap.data() };
                         setOwnerData(data);
-                        setRole(data.role || 'propietario');
-                    } else if (firebaseUser.uid === ADMIN_USER_ID) {
-                        // Special case for the main admin user if their doc is under a different ID convention initially
-                         const adminDocRef = doc(db, "owners", ADMIN_USER_ID);
-                         const adminSnap = await getDoc(adminDocRef);
-                         if (adminSnap.exists()) {
-                            const data = { id: adminSnap.id, ...adminSnap.data() };
-                            setOwnerData(data);
-                            setRole('administrador');
-                         }
+                        setRole('administrador');
                     } else {
-                        setRole(null);
-                        setOwnerData(null);
+                        // This is a regular owner
+                        const ownerDocRef = doc(db, "owners", firebaseUser.uid);
+                        const ownerSnap = await getDoc(ownerDocRef);
+                        if (ownerSnap.exists()) {
+                            const data = { id: ownerSnap.id, ...ownerSnap.data() };
+                            setOwnerData(data);
+                            setRole(data.role || 'propietario');
+                        } else {
+                            setRole(null);
+                            setOwnerData(null);
+                        }
                     }
                 } catch (error) {
                     console.error("Error fetching user data from Firestore:", error);
