@@ -12,6 +12,7 @@ import { db } from '@/lib/firebase';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { isBefore, startOfMonth, format, addMonths } from 'date-fns';
+import { es } from 'date-fns/locale';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
@@ -354,5 +355,3 @@ export default function OwnerPaymentCalculatorPage() {
         </div>
     );
 }
-
-    
