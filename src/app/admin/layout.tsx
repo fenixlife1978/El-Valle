@@ -14,13 +14,11 @@ import {
     ShieldCheck,
     Briefcase
 } from 'lucide-react';
-import { type ReactNode, useEffect, useState } from 'react';
+import { type ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { ensureAdminProfile } from '@/lib/user-sync';
 import { Loader2 } from 'lucide-react';
-
+import { useAuth } from '@/hooks/use-auth';
 
 const adminNavItems: NavItem[] = [
     { href: "/admin/dashboard", icon: Home, label: "Dashboard" },
@@ -55,44 +53,9 @@ const adminNavItems: NavItem[] = [
      { href: "/admin/validation", icon: ShieldCheck, label: "Validación" },
 ];
 
-type MockUser = {
-  uid: string;
-  email: string;
-};
-
-const ADMIN_USER_ID = 'valle-admin-main-account';
-
 export default function AdminLayout({ children }: { children: ReactNode }) {
-    const [user, setUser] = useState<MockUser | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [role, setRole] = useState<string | null>(null);
-    const [ownerData, setOwnerData] = useState<any | null>(null);
-
-    useEffect(() => {
-        const bootstrapAdminSession = async () => {
-          // Ensure the admin profile document exists in Firestore.
-          await ensureAdminProfile();
-          
-          const adminUser: MockUser = {
-            uid: ADMIN_USER_ID,
-            email: 'edwinfaguiars@gmail.com', // Using a placeholder email
-          };
-          setUser(adminUser);
-    
-          const adminDocRef = doc(db, "owners", ADMIN_USER_ID);
-          const adminSnap = await getDoc(adminDocRef);
-    
-          if (adminSnap.exists()) {
-            const adminData = { id: adminSnap.id, ...adminSnap.data() };
-            setOwnerData(adminData);
-            setRole('administrador');
-          }
-          
-          setLoading(false);
-        };
-    
-        bootstrapAdminSession();
-    }, []);
+    const { user, ownerData, loading, role } = useAuth();
+    const router = useRouter();
 
     if (loading) {
         return (
@@ -102,6 +65,16 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         );
     }
     
+    if (!user || role !== 'administrador') {
+        router.push('/login?role=admin');
+        return (
+            <div className="flex h-screen w-full items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin" />
+                <p className="ml-2">Redirigiendo al inicio de sesión...</p>
+            </div>
+        );
+    }
+
     return (
         <DashboardLayout ownerData={ownerData} userRole={role} navItems={adminNavItems}>
             {children}
