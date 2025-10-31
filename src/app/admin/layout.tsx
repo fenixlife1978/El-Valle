@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -11,8 +12,7 @@ import {
     Wallet,
     Award,
     Palette,
-    ShieldCheck,
-    Briefcase
+    ShieldCheck
 } from 'lucide-react';
 import { type ReactNode, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -40,7 +40,6 @@ const adminNavItems: NavItem[] = [
     { href: "/admin/reports", icon: FileSearch, label: "Informes" },
     { href: "/admin/certificates", icon: Award, label: "Constancias" },
     { href: "/admin/people", icon: Users, label: "Personas" },
-    { href: "/admin/cases", icon: Briefcase, label: "Casos Administrativos" },
     { 
       href: "/admin/settings", 
       icon: Settings, 
