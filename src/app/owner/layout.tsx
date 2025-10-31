@@ -6,13 +6,11 @@ import {
     Settings,
     History
 } from 'lucide-react';
-import { type ReactNode, useEffect, useState } from 'react';
+import { type ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
 import { Loader2 } from 'lucide-react';
-import { getAuth, onAuthStateChanged, User } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { useAuth } from '@/hooks/use-auth';
 
 const ownerNavItems: NavItem[] = [
     { href: "/owner/dashboard", icon: Home, label: "Dashboard" },
@@ -26,44 +24,11 @@ const ownerNavItems: NavItem[] = [
 ];
 
 export default function OwnerLayout({ children }: { children: ReactNode }) {
-    const [user, setUser] = useState<User | null>(null);
-    const [ownerData, setOwnerData] = useState<any | null>(null);
-    const [loading, setLoading] = useState(true);
+    const { user, ownerData, loading, role } = useAuth();
     const router = useRouter();
     const pathname = usePathname();
 
-    useEffect(() => {
-        const auth = getAuth();
-        const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-            if (firebaseUser) {
-                setUser(firebaseUser);
-                const ownerDocRef = doc(db, "owners", firebaseUser.uid);
-                const ownerSnap = await getDoc(ownerDocRef);
-                if (ownerSnap.exists()) {
-                    const data = { id: ownerSnap.id, ...ownerSnap.data() };
-                    setOwnerData(data);
-
-                    if (!data.passwordChanged && pathname !== '/owner/change-password') {
-                        router.push('/owner/change-password');
-                    }
-                } else {
-                    // This case might mean the user exists in Auth but not in Firestore 'owners' collection
-                    // Handle as appropriate, e.g. sign out or redirect
-                    router.push('/login?role=owner');
-                }
-            } else {
-                setUser(null);
-                setOwnerData(null);
-                router.push('/login?role=owner');
-            }
-            setLoading(false);
-        });
-
-        return () => unsubscribe();
-    }, [router, pathname]);
-
-
-    if (loading || !user || !ownerData) {
+    if (loading) {
         return (
             <div className="flex h-screen w-full items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin" />
@@ -71,17 +36,28 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
         );
     }
     
-    // Additional check for password change redirection
-    if (pathname !== '/owner/change-password' && !ownerData.passwordChanged) {
+    if (!user) {
+        router.push('/login?role=owner');
+         return (
+            <div className="flex h-screen w-full items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin" />
+                <p className="ml-2">Redirigiendo al inicio de sesión...</p>
+            </div>
+        );
+    }
+    
+    if (ownerData && !ownerData.passwordChanged && pathname !== '/owner/change-password') {
+        router.push('/owner/change-password');
         return (
              <div className="flex h-screen w-full items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin" />
+                 <p className="ml-2">Redirigiendo para cambiar contraseña...</p>
             </div>
         );
     }
 
     return (
-        <DashboardLayout ownerData={ownerData} userRole="Propietario" navItems={ownerNavItems}>
+        <DashboardLayout ownerData={ownerData} userRole={role} navItems={ownerNavItems}>
             {children}
         </DashboardLayout>
     );

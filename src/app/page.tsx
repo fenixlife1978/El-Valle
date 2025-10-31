@@ -1,21 +1,45 @@
-
 'use client';
 
-import { useEffect } from 'react';
-import { useRouter }from 'next/navigation';
-import { Loader2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Shield, User } from 'lucide-react';
 
-export default function WelcomePage() {
-    const router = useRouter();
+export default function RoleSelectionPage() {
+  const router = useRouter();
 
-    useEffect(() => {
-        router.replace('/admin/dashboard');
-    }, [router]);
-
-    return (
-        <main className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
-            <Loader2 className="h-10 w-10 animate-spin text-primary" />
-            <p className="text-muted-foreground mt-4">Accediendo al panel de administrador...</p>
-        </main>
-    );
+  return (
+    <main className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
+      <div className="text-center mb-12">
+        <h1 className="text-4xl font-bold font-headline text-primary">Bienvenido a CondoConnect</h1>
+        <p className="text-lg text-muted-foreground mt-2">Seleccione su rol para continuar</p>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-2xl">
+        <Card className="hover:border-primary transition-all">
+          <CardHeader className="items-center text-center">
+            <Shield className="h-12 w-12 text-primary mb-4" />
+            <CardTitle>Administrador</CardTitle>
+            <CardDescription>Acceso al panel de gestión y configuración del condominio.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button className="w-full" onClick={() => router.push('/login?role=admin')}>
+              Entrar como Administrador
+            </Button>
+          </CardContent>
+        </Card>
+        <Card className="hover:border-primary transition-all">
+           <CardHeader className="items-center text-center">
+            <User className="h-12 w-12 text-primary mb-4" />
+            <CardTitle>Propietario</CardTitle>
+            <CardDescription>Consulte sus deudas, pagos y estado de cuenta.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button className="w-full" onClick={() => router.push('/login?role=owner')}>
+              Entrar como Propietario
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    </main>
+  );
 }
