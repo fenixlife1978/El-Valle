@@ -17,7 +17,7 @@ const ownerNavItems: NavItem[] = [
     { 
       href: "/owner/payments", 
       icon: Landmark, 
-      label: "Reportar Pago",
+      label: "Reportar un Pago",
     },
     { href: "/owner/history", icon: History, label: "Historial de Reportes"},
     { href: "/owner/settings", icon: Settings, label: "Configuración" },
