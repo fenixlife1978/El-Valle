@@ -7,7 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Upload, Save, Loader2, UserCircle, KeyRound } from 'lucide-react';
+import { Upload, Save, Loader2, UserCircle, KeyRound, ArrowLeft } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
 import { doc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
@@ -139,6 +139,10 @@ export default function OwnerSettingsPage() {
 
     return (
         <div className="space-y-8 max-w-4xl mx-auto">
+             <Button variant="outline" onClick={() => router.back()} className="mb-4">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Atrás
+            </Button>
             <div>
                 <h1 className="text-3xl font-bold font-headline">Configuración de la Cuenta</h1>
                 <p className="text-muted-foreground">Gestiona tu información personal y seguridad.</p>

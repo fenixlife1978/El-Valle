@@ -7,7 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { CheckCircle, Loader2, CalendarPlus, Info, Check, Search, XCircle, Trash2, PlusCircle } from 'lucide-react';
+import { CheckCircle, Loader2, CalendarPlus, Info, Check, Search, XCircle, Trash2, PlusCircle, ArrowLeft } from 'lucide-react';
 import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc, writeBatch, Timestamp, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { addMonths, format } from 'date-fns';
@@ -15,6 +15,7 @@ import { es } from 'date-fns/locale';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
+import { useRouter } from 'next/navigation';
 
 type Owner = {
     id: string;
@@ -38,6 +39,7 @@ const months = Array.from({ length: 12 }, (_, i) => {
 
 export default function AdvancePaymentPage() {
     const { toast } = useToast();
+    const router = useRouter();
     const [owners, setOwners] = useState<Owner[]>([]);
     const [loading, setLoading] = useState(false);
     
@@ -237,6 +239,10 @@ export default function AdvancePaymentPage() {
 
     return (
         <div className="space-y-8">
+            <Button variant="outline" onClick={() => router.back()} className="mb-4">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Atrás
+            </Button>
             <div>
                 <h1 className="text-3xl font-bold font-headline">Registrar Pago por Adelantado</h1>
                 <p className="text-muted-foreground">Seleccione un propietario y los meses futuros que desea cancelar para una o más propiedades.</p>
@@ -380,5 +386,4 @@ export default function AdvancePaymentPage() {
         </div>
     );
 }
-
     

@@ -10,7 +10,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PlusCircle, MoreHorizontal, Edit, Trash2, FileUp, FileDown, Loader2, MinusCircle, KeyRound, Search, RefreshCw } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, Edit, Trash2, FileUp, FileDown, Loader2, MinusCircle, KeyRound, Search, RefreshCw, ArrowLeft } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import * as XLSX from 'xlsx';
@@ -19,6 +19,7 @@ import 'jspdf-autotable';
 import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc, setDoc, getDocs, writeBatch } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { useRouter } from 'next/navigation';
 
 
 type Role = 'propietario' | 'administrador';
@@ -96,6 +97,7 @@ export default function PeopleManagementPage() {
     const [searchTerm, setSearchTerm] = useState('');
     const importFileRef = useRef<HTMLInputElement>(null);
     const { toast } = useToast();
+    const router = useRouter();
 
     useEffect(() => {
         const q = query(collection(db, "owners"));
@@ -419,6 +421,10 @@ export default function PeopleManagementPage() {
 
     return (
         <div className="space-y-8">
+             <Button variant="outline" onClick={() => router.back()} className="mb-4">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Atrás
+            </Button>
             <div className="flex items-center justify-between gap-4 flex-wrap">
                 <div>
                     <h1 className="text-3xl font-bold font-headline">Gestión de Personas</h1>
@@ -642,5 +648,4 @@ export default function PeopleManagementPage() {
         </div>
     );
 }
-
     

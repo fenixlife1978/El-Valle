@@ -5,12 +5,14 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, UserCheck, RefreshCw, UserCog } from 'lucide-react';
+import { Loader2, UserCheck, RefreshCw, UserCog, ArrowLeft } from 'lucide-react';
 import { ensureAdminProfile } from '@/lib/user-sync';
 import { cn } from "@/lib/utils";
+import { useRouter } from 'next/navigation';
 
 export default function SyncProfilesPage() {
     const { toast } = useToast();
+    const router = useRouter();
     
     const [loadingAdmin, setLoadingAdmin] = useState(true);
     const [adminProfileExists, setAdminProfileExists] = useState(false);
@@ -35,6 +37,10 @@ export default function SyncProfilesPage() {
 
     return (
         <div className="space-y-8">
+            <Button variant="outline" onClick={() => router.back()} className="mb-4">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Atrás
+            </Button>
             <div>
                 <h1 className="text-3xl font-bold font-headline">Sincronización de Perfiles</h1>
                 <p className="text-muted-foreground">Verifica la integridad de los perfiles de usuario críticos.</p>

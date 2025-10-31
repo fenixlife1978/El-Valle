@@ -21,6 +21,7 @@ import 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import QRCode from 'qrcode';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { useRouter } from 'next/navigation';
 
 
 type FinancialItem = {
@@ -69,6 +70,7 @@ const formatToTwoDecimals = (num: number) => {
 
 export default function FinancialBalancePage() {
     const { toast } = useToast();
+    const router = useRouter();
     const [view, setView] = useState<'list' | 'form'>('list');
     const [isEditing, setIsEditing] = useState(false);
     
@@ -377,6 +379,10 @@ export default function FinancialBalancePage() {
     if (view === 'list') {
         return (
             <div className="space-y-8">
+                 <Button variant="outline" onClick={() => router.back()} className="mb-4">
+                    <ArrowLeft className="mr-2 h-4 w-4" />
+                    Atrás
+                </Button>
                 <div className="flex justify-between items-center">
                     <div>
                         <h1 className="text-3xl font-bold font-headline">Balance Financiero</h1>
