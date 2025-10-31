@@ -28,7 +28,7 @@ type Payment = {
     totalAmount: number; // Corrected from amount
     bank: string;
     type: string;
-    reference: string; // Corrected from ref
+    reference: string;
     status: 'aprobado' | 'pendiente' | 'rechazado';
     reportedAt: any;
     exchangeRate: number;
@@ -101,7 +101,7 @@ const formatToTwoDecimals = (num: number) => {
 };
 
 type PublishedReport = {
-    id: string; // e.g., '2025-10'
+    id: string; 
     type: 'balance' | 'integral';
     createdAt: string;
 };
@@ -472,6 +472,14 @@ export default function OwnerDashboardPage() {
     setIsReceiptPreviewOpen(false);
   };
 
+  const getBalancePeriodText = (report: PublishedReport) => {
+    const [year, month] = report.id.split('-');
+    if (monthsLocale[parseInt(month)]) {
+        return `Balance de ${monthsLocale[parseInt(month)]} ${year}`;
+    }
+    return 'Balance Publicado';
+  };
+
   if (loading || authLoading) {
     return (
         <div className="flex justify-center items-center h-full">
@@ -556,7 +564,13 @@ export default function OwnerDashboardPage() {
                             <p className="text-muted-foreground">Aún no hay reportes publicados.</p>
                         )}
                     </CardContent>
-                    {latestIntegralReport && <CardFooter><Button className="w-full" disabled>Ver Reporte</Button></CardFooter>}
+                    {latestIntegralReport && (
+                        <CardFooter>
+                            <Button className="w-full" asChild>
+                                <Link href={`/owner/report/${latestIntegralReport.id}`}>Ver Reporte</Link>
+                            </Button>
+                        </CardFooter>
+                    )}
                 </Card>
                 <Card className="flex flex-col">
                     <CardHeader className="flex-row gap-4 items-center">
@@ -568,12 +582,18 @@ export default function OwnerDashboardPage() {
                     </CardHeader>
                     <CardContent className="flex-grow">
                         {latestFinancialBalance ? (
-                            <p className="font-semibold">Publicado: {format(new Date(latestFinancialBalance.createdAt), 'dd MMMM, yyyy', {locale: es})}</p>
+                            <p className="font-semibold">{getBalancePeriodText(latestFinancialBalance)}</p>
                         ) : (
                              <p className="text-muted-foreground">Aún no hay balances publicados.</p>
                         )}
                     </CardContent>
-                     {latestFinancialBalance && <CardFooter><Button className="w-full" disabled>Ver Balance</Button></CardFooter>}
+                     {latestFinancialBalance && (
+                        <CardFooter>
+                             <Button className="w-full" asChild>
+                                <Link href={`/owner/report/${latestFinancialBalance.id}`}>Ver Balance</Link>
+                            </Button>
+                        </CardFooter>
+                    )}
                 </Card>
             </CardContent>
         </Card>

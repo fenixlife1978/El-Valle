@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -12,11 +13,17 @@ import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import Link from 'next/link';
 
 type PublishedReport = {
-    id: string; // e.g., '2025-10'
+    id: string; // e.g., 'balance-2025-10'
     type: 'balance' | 'integral';
     createdAt: string;
+};
+
+const monthsLocale: { [key: number]: string } = {
+    1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril', 5: 'Mayo', 6: 'Junio',
+    7: 'Julio', 8: 'Agosto', 9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre'
 };
 
 export default function OwnerHistoryPage() {
@@ -49,8 +56,18 @@ export default function OwnerHistoryPage() {
         return report.type === filterType;
     });
 
-    const getReportName = (type: 'balance' | 'integral') => {
-        return type === 'balance' ? 'Balance Financiero' : 'Reporte Integral';
+    const getReportNameAndPeriod = (report: PublishedReport) => {
+        const parts = report.id.split('-');
+        if (report.type === 'balance' && parts.length === 3) {
+            const year = parts[1];
+            const month = parseInt(parts[2], 10);
+            const monthName = monthsLocale[month] || 'Mes Desconocido';
+            return `Balance Financiero - ${monthName} ${year}`;
+        }
+        if (report.type === 'integral') {
+            return 'Reporte Integral';
+        }
+        return 'Reporte';
     };
 
     return (
@@ -82,7 +99,7 @@ export default function OwnerHistoryPage() {
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead>Tipo de Reporte</TableHead>
+                                <TableHead>Tipo y Período del Reporte</TableHead>
                                 <TableHead>Fecha de Publicación</TableHead>
                                 <TableHead className="text-right">Acciones</TableHead>
                             </TableRow>
@@ -105,13 +122,15 @@ export default function OwnerHistoryPage() {
                                     <TableRow key={report.id}>
                                         <TableCell className="font-medium flex items-center gap-2">
                                             {report.type === 'balance' ? <Scale className="h-4 w-4 text-primary"/> : <FileText className="h-4 w-4 text-primary"/>}
-                                            {getReportName(report.type)}
+                                            {getReportNameAndPeriod(report)}
                                         </TableCell>
                                         <TableCell>
                                             {format(new Date(report.createdAt), 'dd MMMM, yyyy - hh:mm a', {locale: es})}
                                         </TableCell>
                                         <TableCell className="text-right">
-                                             <Button variant="outline" size="sm" disabled>Ver Reporte</Button>
+                                            <Button variant="outline" size="sm" asChild>
+                                                <Link href={`/owner/report/${report.id}`}>Ver Reporte</Link>
+                                            </Button>
                                         </TableCell>
                                     </TableRow>
                                 ))
