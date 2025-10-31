@@ -8,7 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Shield, User } from 'lucide-react';
-import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '@/lib/firebase'; // Import auth from your firebase config
 import Link from 'next/link';
 
 export default function LoginPage() {
@@ -42,7 +43,6 @@ export default function LoginPage() {
         }
 
         setLoading(true);
-        const auth = getAuth();
         try {
             await signInWithEmailAndPassword(auth, email, password);
             toast({
