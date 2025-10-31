@@ -15,7 +15,7 @@ import { useAuth } from '@/hooks/use-auth';
 const ownerNavItems: NavItem[] = [
     { href: "/owner/dashboard", icon: Home, label: "Dashboard" },
     { 
-      href: "/admin/payments", 
+      href: "/owner/payments", 
       icon: Landmark, 
       label: "Reportar Pago",
     },
