@@ -4,7 +4,8 @@ import {
     Home,
     Landmark,
     Settings,
-    History
+    History,
+    Calculator
 } from 'lucide-react';
 import { type ReactNode, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
@@ -17,7 +18,11 @@ const ownerNavItems: NavItem[] = [
     { 
       href: "/owner/payments", 
       icon: Landmark, 
-      label: "Reportar un Pago",
+      label: "Pagos",
+      items: [
+        { href: "/owner/payments", label: "Reportar Pago" },
+        { href: "/owner/payments/calculator", label: "Calculadora de Pagos" },
+      ]
     },
     { href: "/owner/history", icon: History, label: "Historial de Reportes"},
     { href: "/owner/settings", icon: Settings, label: "Configuración" },
