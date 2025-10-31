@@ -10,12 +10,14 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { collection, query, where, getDocs, writeBatch, doc, getDoc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { Loader2, AlertTriangle, ShieldCheck, Search } from 'lucide-react';
+import { Loader2, AlertTriangle, ShieldCheck, Search, ArrowLeft } from 'lucide-react';
 import { startOfMonth, isBefore, format } from 'date-fns';
 import { Progress } from '@/components/ui/progress';
+import { useRouter } from 'next/navigation';
 
 export default function ValidationPage() {
     const { toast } = useToast();
+    const router = useRouter();
     const [loading, setLoading] = useState<Record<string, boolean>>({});
     const [progress, setProgress] = useState(0);
 
@@ -212,6 +214,10 @@ export default function ValidationPage() {
 
     return (
         <div className="space-y-8">
+            <Button variant="outline" onClick={() => router.back()} className="mb-4">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Atrás
+            </Button>
             <div>
                 <h1 className="text-3xl font-bold font-headline">Validación de Datos</h1>
                 <p className="text-muted-foreground">Herramientas para el mantenimiento y corrección de la base de datos.</p>

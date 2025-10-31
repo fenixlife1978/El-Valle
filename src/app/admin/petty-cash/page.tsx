@@ -15,7 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, arrayUnion, arrayRemove, Timestamp, orderBy, query, getDoc } from 'firebase/firestore';
 import { db, storage } from '@/lib/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { PlusCircle, Trash2, Loader2, CalendarIcon, ChevronDown, ChevronRight, Wallet, TrendingDown, TrendingUp, BadgeEuro, FileText, Paperclip, Eye, Upload } from 'lucide-react';
+import { PlusCircle, Trash2, Loader2, CalendarIcon, ChevronDown, ChevronRight, Wallet, TrendingDown, TrendingUp, BadgeEuro, FileText, Paperclip, Eye, Upload, ArrowLeft } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -23,6 +23,7 @@ import { cn } from '@/lib/utils';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import QRCode from 'qrcode';
+import { useRouter } from 'next/navigation';
 
 
 type Expense = {
@@ -80,6 +81,7 @@ export default function PettyCashPage() {
     const [uploadingExpense, setUploadingExpense] = useState<{repId: string, expenseId: string} | null>(null);
 
     const { toast } = useToast();
+    const router = useRouter();
 
     useEffect(() => {
         const fetchSettings = async () => {
@@ -314,6 +316,10 @@ export default function PettyCashPage() {
 
     return (
         <div className="space-y-8">
+             <Button variant="outline" onClick={() => router.back()} className="mb-4">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Atrás
+            </Button>
             <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileChange} accept="image/*" />
             <div className="flex items-center justify-between gap-4 flex-wrap">
                 <div>

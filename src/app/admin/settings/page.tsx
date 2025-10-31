@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from '@/hooks/use-toast';
-import { Upload, Save, Calendar as CalendarIcon, PlusCircle, Loader2, AlertTriangle, Wand2, MoreHorizontal, Edit, FileCog, UserCircle, RefreshCw } from 'lucide-react';
+import { Upload, Save, Calendar as CalendarIcon, PlusCircle, Loader2, AlertTriangle, Wand2, MoreHorizontal, Edit, FileCog, UserCircle, RefreshCw, ArrowLeft } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
@@ -20,6 +20,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Progress } from '@/components/ui/progress';
+import { useRouter } from 'next/navigation';
 
 
 type AdminProfile = {
@@ -82,6 +83,7 @@ const emptyCompanyInfo: CompanyInfo = {
 
 export default function SettingsPage() {
     const { toast } = useToast();
+    const router = useRouter();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     
@@ -405,6 +407,10 @@ export default function SettingsPage() {
 
     return (
         <div className="space-y-8">
+            <Button variant="outline" onClick={() => router.back()} className="mb-4">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Atrás
+            </Button>
             <div>
                 <h1 className="text-3xl font-bold font-headline">Configuración General</h1>
                 <p className="text-muted-foreground">Gestiona la información de la comunidad y las reglas de negocio.</p>
@@ -641,5 +647,4 @@ export default function SettingsPage() {
         </div>
     );
 }
-
     

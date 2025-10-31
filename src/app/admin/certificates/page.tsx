@@ -13,7 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { collection, query, onSnapshot, addDoc, doc, getDoc, orderBy, serverTimestamp, Timestamp, deleteDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { PlusCircle, Trash2, Loader2, Search, XCircle, FileText, Award, User, Home, Info, Stamp, Edit, MoreHorizontal } from 'lucide-react';
+import { PlusCircle, Trash2, Loader2, Search, XCircle, FileText, Award, User, Home, Info, Stamp, Edit, MoreHorizontal, ArrowLeft } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -22,6 +22,7 @@ import 'jspdf-autotable';
 import QRCode from 'qrcode';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { useRouter } from 'next/navigation';
 
 
 type Owner = {
@@ -101,6 +102,7 @@ const templates: Template[] = [
 
 export default function CertificatesPage() {
     const { toast } = useToast();
+    const router = useRouter();
     const [owners, setOwners] = useState<Owner[]>([]);
     const [certificates, setCertificates] = useState<Certificate[]>([]);
     const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
@@ -327,6 +329,10 @@ export default function CertificatesPage() {
 
     return (
         <div className="space-y-8">
+             <Button variant="outline" onClick={() => router.back()} className="mb-4">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Atrás
+            </Button>
             <div className="flex items-center justify-between gap-4 flex-wrap">
                 <div>
                     <h1 className="text-3xl font-bold font-headline">Constancias y Permisos</h1>

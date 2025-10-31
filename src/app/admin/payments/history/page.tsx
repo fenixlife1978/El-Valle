@@ -12,10 +12,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { collection, query, onSnapshot, where, getDocs, addDoc, doc, updateDoc, deleteDoc, Timestamp, serverTimestamp, orderBy, writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { PlusCircle, MoreHorizontal, Edit, Trash2, Loader2, Search, XCircle, Info } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, Edit, Trash2, Loader2, Search, XCircle, Info, ArrowLeft } from 'lucide-react';
 import { format, differenceInCalendarMonths, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useRouter } from 'next/navigation';
 
 type Owner = {
     id: string;
@@ -71,6 +72,7 @@ export default function HistoricalPaymentsPage() {
     const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
 
     const { toast } = useToast();
+    const router = useRouter();
 
     useEffect(() => {
         const ownersQuery = query(collection(db, "owners"));
@@ -240,6 +242,10 @@ export default function HistoricalPaymentsPage() {
     
     return (
         <div className="space-y-8">
+             <Button variant="outline" onClick={() => router.back()} className="mb-4">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Atrás
+            </Button>
             <div className="flex items-center justify-between gap-4 flex-wrap">
                 <div>
                     <h1 className="text-3xl font-bold font-headline">Pagos Históricos</h1>
@@ -413,5 +419,4 @@ export default function HistoricalPaymentsPage() {
         </div>
     );
 }
-
     

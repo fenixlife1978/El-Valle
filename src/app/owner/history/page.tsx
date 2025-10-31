@@ -7,13 +7,14 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, FileText, Scale } from "lucide-react";
+import { Loader2, FileText, Scale, ArrowLeft } from "lucide-react";
 import { collection, getDocs, query, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 type PublishedReport = {
     id: string; // e.g., 'balance-2025-10'
@@ -28,6 +29,7 @@ const monthsLocale: { [key: number]: string } = {
 
 export default function OwnerHistoryPage() {
     const { toast } = useToast();
+    const router = useRouter();
     const [loading, setLoading] = useState(true);
     const [allReports, setAllReports] = useState<PublishedReport[]>([]);
     const [filterType, setFilterType] = useState('todos');
@@ -72,6 +74,10 @@ export default function OwnerHistoryPage() {
 
     return (
         <div className="space-y-8">
+            <Button variant="outline" onClick={() => router.back()} className="mb-4">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Atrás
+            </Button>
             <div>
                 <h1 className="text-3xl font-bold font-headline">Historial de Reportes</h1>
                 <p className="text-muted-foreground">Consulta todos los reportes y balances publicados por la administración.</p>

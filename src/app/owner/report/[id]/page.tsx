@@ -3,11 +3,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
-import { Loader2, FileText, Download } from 'lucide-react';
+import { Loader2, FileText, Download, ArrowLeft } from 'lucide-react';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
@@ -54,6 +54,7 @@ const months = Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), lab
 export default function ReportViewerPage() {
     const { toast } = useToast();
     const params = useParams();
+    const router = useRouter();
     const reportId = params.id as string;
 
     const [loading, setLoading] = useState(true);
@@ -170,7 +171,15 @@ export default function ReportViewerPage() {
     }
 
     if (!reportData) {
-         return <div className="text-center p-8">Reporte no encontrado.</div>;
+         return (
+            <div className="text-center p-8">
+                <p>Reporte no encontrado.</p>
+                <Button variant="outline" onClick={() => router.back()} className="mt-4">
+                    <ArrowLeft className="mr-2 h-4 w-4" />
+                    Atrás
+                </Button>
+            </div>
+         );
     }
 
     const { ingresos, egresos, notas } = reportData;
@@ -184,6 +193,10 @@ export default function ReportViewerPage() {
 
     return (
         <div className="space-y-8">
+            <Button variant="outline" onClick={() => router.back()} className="mb-4">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Atrás
+            </Button>
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-3xl font-bold font-headline">Balance Financiero: {period}</h1>
