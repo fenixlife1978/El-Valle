@@ -147,10 +147,10 @@ const formatToTwoDecimals = (num: number) => {
 
 const ADMIN_USER_ID = 'valle-admin-main-account';
 
-const getSortKeys = (propertiesString: string) => {
+const getSortKeys = (owner: { properties: string }) => {
     let street = 'N/A', house = 'N/A';
-    if (propertiesString) {
-        const firstProp = propertiesString.split(',')[0] || '';
+    if (owner.properties) {
+        const firstProp = owner.properties.split(',')[0] || '';
         [street, house] = firstProp.split('-').map(s => s.trim());
     }
 
@@ -300,16 +300,18 @@ export default function ReportsPage() {
             // --- Balance Report Data Calculation ---
             const ownersWithBalance = ownersData.filter(o => o.id !== ADMIN_USER_ID && o.balance > 0);
             
-            const balanceReportData = ownersWithBalance.map(owner => ({
-                id: owner.id,
-                name: owner.name,
-                properties: (owner.properties || []).map(p => `${p.street} - ${p.house}`).join(', '),
-                balance: owner.balance,
-            })).sort((a,b) => {
-                const aKeys = getSortKeys(a.properties);
-                const bKeys = getSortKeys(b.properties);
-                if (aKeys.streetNum !== bKeys.streetNum) return aKeys.streetNum - bKeys.streetNum;
-                return aKeys.houseNum - bKeys.houseNum;
+            const balanceReportData = ownersWithBalance.map(owner => {
+                const ownerData = {
+                    id: owner.id,
+                    name: owner.name,
+                    properties: (owner.properties || []).map(p => `${p.street} - ${p.house}`).join(', '),
+                    balance: owner.balance,
+                };
+                 const sortKeys = getSortKeys(ownerData);
+                 return {...ownerData, sortKeys}
+            }).sort((a,b) => {
+                if (a.sortKeys.streetNum !== b.sortKeys.streetNum) return a.sortKeys.streetNum - b.sortKeys.streetNum;
+                return a.sortKeys.houseNum - b.sortKeys.houseNum;
             });
 
             setBalanceOwners(balanceReportData);
@@ -332,7 +334,7 @@ export default function ReportsPage() {
             .filter(owner => owner.id !== ADMIN_USER_ID && owner.name)
             .map(owner => {
                 const propertiesString = (owner.properties || []).map(p => `${p.street}-${p.house}`).join(', ');
-                const sortKeys = getSortKeys(propertiesString);
+                const sortKeys = getSortKeys({properties: propertiesString});
                 return { ...owner, sortKeys };
             })
             .sort((a, b) => {
@@ -478,39 +480,37 @@ export default function ReportsPage() {
     
     // --- Delinquency Report Logic ---
     const filteredAndSortedDelinquents = useMemo(() => {
-        let owners = [...allDelinquentOwners];
+        let ownersCopy = [...allDelinquentOwners].map(owner => ({...owner, sortKeys: getSortKeys(owner)}));
+
         switch (delinquencyFilterType) {
-            case '2_or_more': owners = owners.filter(o => o.monthsOwed >= 2); break;
-            case '3_exact': owners = owners.filter(o => o.monthsOwed === 3); break;
+            case '2_or_more': ownersCopy = ownersCopy.filter(o => o.monthsOwed >= 2); break;
+            case '3_exact': ownersCopy = ownersCopy.filter(o => o.monthsOwed === 3); break;
             case 'custom':
                 const from = parseInt(customMonthRange.from) || 1;
                 const to = parseInt(customMonthRange.to) || 6;
-                owners = owners.filter(o => o.monthsOwed >= from && o.monthsOwed <= to);
+                ownersCopy = ownersCopy.filter(o => o.monthsOwed >= from && o.monthsOwed <= to);
                 break;
             default: break;
         }
 
         if (delinquencySearchTerm) {
             const lowerCaseSearch = delinquencySearchTerm.toLowerCase();
-            owners = owners.filter(o => o.name.toLowerCase().includes(lowerCaseSearch) || o.properties.toLowerCase().includes(lowerCaseSearch));
+            ownersCopy = ownersCopy.filter(o => o.name.toLowerCase().includes(lowerCaseSearch) || o.properties.toLowerCase().includes(lowerCaseSearch));
         }
 
-        owners.sort((a, b) => {
+        ownersCopy.sort((a, b) => {
             if (delinquencySortConfig.key !== 'name') {
                  if (a[delinquencySortConfig.key] < b[delinquencySortConfig.key]) return delinquencySortConfig.direction === 'asc' ? -1 : 1;
                 if (a[delinquencySortConfig.key] > b[delinquencySortConfig.key]) return delinquencySortConfig.direction === 'asc' ? 1 : -1;
             }
            
-            const aKeys = getSortKeys(a.properties);
-            const bKeys = getSortKeys(b.properties);
-
-            if (aKeys.streetNum !== bKeys.streetNum) return aKeys.streetNum - bKeys.streetNum;
-            if (aKeys.houseNum !== bKeys.houseNum) return aKeys.houseNum - bKeys.houseNum;
+            if (a.sortKeys.streetNum !== b.sortKeys.streetNum) return a.sortKeys.streetNum - b.sortKeys.streetNum;
+            if (a.sortKeys.houseNum !== b.sortKeys.houseNum) return a.sortKeys.houseNum - b.sortKeys.houseNum;
 
             return a.name.localeCompare(b.name);
         });
 
-        return owners;
+        return ownersCopy;
     }, [allDelinquentOwners, delinquencyFilterType, customMonthRange, delinquencySearchTerm, delinquencySortConfig]);
 
     useEffect(() => {
@@ -577,36 +577,40 @@ export default function ReportsPage() {
                 isDelinquent: owner.overallMonthsOwed >= 3
             };
         });
-        
+
+        return { headers, rows };
+    }, [collectionAnalysisRange, owners, allDebts, allHistoricalPayments]);
+
+    const collectionAnalysisFooters = useMemo(() => {
+        const { headers, rows } = collectionAnalysisData;
         const visibleRows = rows.filter(row => selectedAnalysisOwners.has(row.id));
 
         const footers: { [key: string]: { paidCount: number; pendingTotalUSD: number; naCount: number; } } = {};
-        monthsInRange.forEach((monthDate, index) => {
-            const header = headers[index];
+        if (visibleRows.length === 0) return footers;
+
+        headers.forEach((header, index) => {
             footers[header] = { paidCount: 0, pendingTotalUSD: 0, naCount: 0 };
+            const monthDate = addMonths(startOfMonth(new Date(collectionAnalysisRange.fromYear, collectionAnalysisRange.fromMonth - 1)), index);
             const year = getYear(monthDate);
             const month = getMonth(monthDate) + 1;
 
             visibleRows.forEach(row => {
-                const owner = ownersMap.get(row.id);
-                if (!owner) return;
-
-                const debt = allDebts.find(d => d.ownerId === owner.id && d.year === year && d.month === month && d.description.includes('Condominio'));
-                const historicalPayment = allHistoricalPayments.find(hp => hp.ownerId === owner.id && hp.referenceYear === year && hp.referenceMonth === month);
-
-                if (debt?.status === 'paid' || historicalPayment) {
+                const status = row.monthData[index];
+                if (status === 'Pagado') {
                     footers[header].paidCount += 1;
-                } else if (debt) { // Pending
-                    footers[header].pendingTotalUSD += debt.amountUSD;
+                } else if (status === 'Pendiente') {
+                    const debt = allDebts.find(d => d.ownerId === row.id && d.year === year && d.month === month && d.description.includes('Condominio'));
+                    if (debt) {
+                        footers[header].pendingTotalUSD += debt.amountUSD;
+                    }
                 } else { // N/A
                     footers[header].naCount += 1;
                 }
             });
         });
+        return footers;
 
-
-        return { headers, rows, footers };
-    }, [collectionAnalysisRange, owners, allDebts, allHistoricalPayments, condoFee, selectedAnalysisOwners]);
+    }, [collectionAnalysisData.headers, collectionAnalysisData.rows, selectedAnalysisOwners, allDebts, condoFee, collectionAnalysisRange]);
     
     // Effect to update selection when filters change
     useEffect(() => {
@@ -1099,7 +1103,8 @@ export default function ReportsPage() {
     };
     
     const handleExportCollectionAnalysis = (formatType: 'pdf' | 'excel') => {
-        const { headers, rows, footers } = collectionAnalysisData;
+        const { headers, rows } = collectionAnalysisData;
+        const { footers } = {footers: collectionAnalysisFooters};
         const visibleRows = rows.filter(row => selectedAnalysisOwners.has(row.id));
 
         if (visibleRows.length === 0) {
@@ -1111,9 +1116,9 @@ export default function ReportsPage() {
         const mainHeaders = [['Propietario', ...headers]];
         const body = visibleRows.map(row => [row.name, ...row.monthData]);
 
-        const footerPaid = ['Total Pagado ($)', ...headers.map(h => `$${(footers[h].paidCount * condoFee).toFixed(2)}`)];
-        const footerPending = ['Total Pendiente ($)', ...headers.map(h => `$${footers[h].pendingTotalUSD.toFixed(2)}`)];
-        const footerNA = ['Total por Generar ($)', ...headers.map(h => `$${(footers[h].naCount * condoFee).toFixed(2)}`)];
+        const footerPaid = ['Total Pagado ($)', ...headers.map(h => `$${(footers[h]?.paidCount * condoFee).toFixed(2)}`)];
+        const footerPending = ['Total Pendiente ($)', ...headers.map(h => `$${footers[h]?.pendingTotalUSD.toFixed(2)}`)];
+        const footerNA = ['Total por Generar ($)', ...headers.map(h => `$${(footers[h]?.naCount * condoFee).toFixed(2)}`)];
 
         if (formatType === 'pdf') {
             const doc = new jsPDF({ orientation: 'landscape' });
@@ -1846,7 +1851,7 @@ export default function ReportsPage() {
                                             <TableCell className="sticky left-0 bg-secondary/90 z-20 font-bold">Total Pagado ($)</TableCell>
                                             {collectionAnalysisData.headers.map(header => (
                                                 <TableCell key={`paid-${header}`} className="text-center font-bold">
-                                                    ${(collectionAnalysisData.footers[header]?.paidCount * condoFee).toFixed(2)}
+                                                    ${(collectionAnalysisFooters[header]?.paidCount * condoFee).toFixed(2)}
                                                 </TableCell>
                                             ))}
                                         </TableRow>
@@ -1854,7 +1859,7 @@ export default function ReportsPage() {
                                             <TableCell className="sticky left-0 bg-secondary/90 z-20 font-bold">Total Pendiente ($)</TableCell>
                                             {collectionAnalysisData.headers.map(header => (
                                                 <TableCell key={`pending-${header}`} className="text-center font-bold">
-                                                    ${collectionAnalysisData.footers[header]?.pendingTotalUSD.toFixed(2)}
+                                                    ${collectionAnalysisFooters[header]?.pendingTotalUSD.toFixed(2)}
                                                 </TableCell>
                                             ))}
                                         </TableRow>
@@ -1862,7 +1867,7 @@ export default function ReportsPage() {
                                             <TableCell className="sticky left-0 bg-secondary/90 z-20 font-bold">Total por Generar ($)</TableCell>
                                             {collectionAnalysisData.headers.map(header => (
                                                 <TableCell key={`na-${header}`} className="text-center font-bold">
-                                                    ${(collectionAnalysisData.footers[header]?.naCount * condoFee).toFixed(2)}
+                                                    ${(collectionAnalysisFooters[header]?.naCount * condoFee).toFixed(2)}
                                                 </TableCell>
                                             ))}
                                         </TableRow>
@@ -1883,4 +1888,5 @@ export default function ReportsPage() {
     
 
     
+
 
