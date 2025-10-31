@@ -2,7 +2,7 @@
 
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { PlusCircle, MinusCircle, Loader2, FileText, FileSpreadsheet, Eye, Save, Trash2, ArrowLeft, MoreHorizontal } from 'lucide-react';
+import { PlusCircle, MinusCircle, Loader2, FileText, FileSpreadsheet, Eye, Save, Trash2, ArrowLeft, MoreHorizontal, Megaphone } from 'lucide-react';
 import { collection, doc, getDoc, setDoc, onSnapshot, orderBy, query, deleteDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { format } from 'date-fns';
@@ -148,6 +148,24 @@ export default function FinancialBalancePage() {
         if (window.confirm('¿Está seguro de que desea eliminar este balance? Esta acción no se puede deshacer.')) {
             await deleteDoc(doc(db, "financial_statements", statementId));
             toast({ title: 'Balance Eliminado', description: 'El registro ha sido borrado.' });
+        }
+    };
+    
+    const handlePublishStatement = async (statement: FinancialStatement) => {
+        try {
+            const reportRef = doc(db, 'published_reports', `balance-${statement.id}`);
+            await setDoc(reportRef, {
+                type: 'balance',
+                createdAt: new Date().toISOString(),
+            });
+            toast({
+                title: 'Balance Publicado',
+                description: `El balance de ${months.find(m => m.value === statement.id.split('-')[1])?.label} ${statement.id.split('-')[0]} ahora es visible para los propietarios.`,
+                className: 'bg-blue-100 text-blue-800'
+            });
+        } catch (error) {
+            console.error('Error publishing statement:', error);
+            toast({ variant: 'destructive', title: 'Error de Publicación', description: 'No se pudo publicar el balance.' });
         }
     };
 
@@ -388,6 +406,7 @@ export default function FinancialBalancePage() {
                                                     <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                                                     <DropdownMenuContent>
                                                         <DropdownMenuItem onClick={() => handleViewStatement(s)}><Eye className="mr-2 h-4 w-4"/> Ver / Editar</DropdownMenuItem>
+                                                        <DropdownMenuItem onClick={() => handlePublishStatement(s)}><Megaphone className="mr-2 h-4 w-4"/> Publicar</DropdownMenuItem>
                                                         <DropdownMenuItem onClick={() => handleExport('pdf', s)}><FileText className="mr-2 h-4 w-4"/> Exportar PDF</DropdownMenuItem>
                                                         <DropdownMenuItem onClick={() => handleExport('excel', s)}><FileSpreadsheet className="mr-2 h-4 w-4"/> Exportar Excel</DropdownMenuItem>
                                                         <DropdownMenuItem onClick={() => handleDeleteStatement(s.id)} className="text-destructive"><Trash2 className="mr-2 h-4 w-4"/> Eliminar</DropdownMenuItem>
