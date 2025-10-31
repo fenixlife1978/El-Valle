@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from "@/lib/utils";
 import { es } from "date-fns/locale";
-import { Calendar as CalendarIcon, Download, Search, Loader2, FileText, FileSpreadsheet, ArrowUpDown, Building, BadgeInfo, BadgeCheck, BadgeX, History, ChevronDown, ChevronRight, TrendingUp, TrendingDown, DollarSign, Receipt, Wand2, Megaphone } from "lucide-react";
+import { Calendar as CalendarIcon, Download, Search, Loader2, FileText, FileSpreadsheet, ArrowUpDown, Building, BadgeInfo, BadgeCheck, BadgeX, History, ChevronDown, ChevronRight, TrendingUp, TrendingDown, DollarSign, Receipt, Wand2, Megaphone, ArrowLeft } from "lucide-react";
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import * as XLSX from 'xlsx';
@@ -27,6 +27,7 @@ import { format, addMonths, startOfMonth, parse, getYear, getMonth, isBefore, is
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { useRouter } from 'next/navigation';
 
 
 type Owner = {
@@ -168,6 +169,7 @@ const monthOptions = Object.entries(monthsLocale).map(([value, label]) => ({ val
 
 export default function ReportsPage() {
     const { toast } = useToast();
+    const router = useRouter();
     const [loading, setLoading] = useState(true);
     const [generatingReport, setGeneratingReport] = useState(false);
     
@@ -613,7 +615,7 @@ export default function ReportsPage() {
     // Effect to update selection when filters change
     useEffect(() => {
         setSelectedAnalysisOwners(new Set(collectionAnalysisData.rows.map(r => r.id)));
-    }, [collectionAnalysisRange]);
+    }, [collectionAnalysisData.rows]);
 
 
     // --- Handlers ---
@@ -1163,13 +1165,17 @@ export default function ReportsPage() {
 
     return (
         <div className="space-y-8">
+            <Button variant="outline" onClick={() => router.back()} className="mb-4">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Atrás
+            </Button>
             <div>
                 <h1 className="text-3xl font-bold font-headline">Módulo de Informes</h1>
                 <p className="text-muted-foreground">Genere y exporte reportes detallados sobre la gestión del condominio.</p>
             </div>
             
             <Tabs defaultValue="integral" className="w-full">
-                 <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 h-auto flex-wrap">
+                 <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-7 h-auto flex-wrap">
                     <TabsTrigger value="integral">Integral</TabsTrigger>
                     <TabsTrigger value="individual">Ficha Individual</TabsTrigger>
                     <TabsTrigger value="estado-de-cuenta">Estado de Cuenta</TabsTrigger>
@@ -1436,7 +1442,7 @@ export default function ReportsPage() {
                                             <div className="text-right">
                                                 <h2 className="text-2xl font-bold">ESTADO DE CUENTA</h2>
                                                 <p className="text-xs">Fecha: ${format(new Date(), "dd/MM/yyyy 'a las' HH:mm:ss")}</p>
-                                                <Button size="sm" variant="outline" className="mt-2" onClick={()={() => handleExportAccountStatement('pdf')}}><FileText className="mr-2 h-4 w-4" /> Exportar PDF</Button>
+                                                <Button size="sm" variant="outline" className="mt-2" onClick={() => handleExportAccountStatement('pdf')}><FileText className="mr-2 h-4 w-4" /> Exportar PDF</Button>
                                             </div>
                                         </div>
                                     </CardHeader>
@@ -1600,7 +1606,7 @@ export default function ReportsPage() {
                                                 <TableCell>
                                                     <Checkbox
                                                         checked={selectedDelinquentOwners.has(owner.id)}
-                                                        onCheckedChange={()={() => {
+                                                        onCheckedChange={()=>{
                                                             const newSelection = new Set(selectedDelinquentOwners);
                                                             if (newSelection.has(owner.id)) newSelection.delete(owner.id);
                                                             else newSelection.add(owner.id);
@@ -1638,8 +1644,8 @@ export default function ReportsPage() {
                                     <Input placeholder="Buscar por propietario..." className="pl-9" value={balanceSearchTerm} onChange={e => setBalanceSearchTerm(e.target.value)} />
                                 </div>
                                 <div className="flex gap-2">
-                                    <Button variant="outline" onClick={()={() => handleExportBalance('pdf')}}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
-                                    <Button variant="outline" onClick={()={() => handleExportBalance('excel')}}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
+                                    <Button variant="outline" onClick={()=>handleExportBalance('pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
+                                    <Button variant="outline" onClick={()=>handleExportBalance('excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
                                 </div>
                             </div>
                         </CardHeader>
@@ -1711,7 +1717,7 @@ export default function ReportsPage() {
                                 <Button variant="outline" onClick={() => handleExportIncomeReport('pdf')} disabled={generatingReport}>
                                     <FileText className="mr-2 h-4 w-4" /> Exportar a PDF
                                 </Button>
-                                <Button variant="outline" onClick={()={() => handleExportIncomeReport('excel')}} disabled={generatingReport}>
+                                <Button variant="outline" onClick={()=>handleExportIncomeReport('excel')} disabled={generatingReport}>
                                     <FileSpreadsheet className="mr-2 h-4 w-4" /> Exportar a Excel
                                 </Button>
                             </div>
@@ -1816,7 +1822,7 @@ export default function ReportsPage() {
                                                 <TableCell className="font-medium sticky left-0 bg-background z-20 flex items-center gap-2">
                                                     <Checkbox
                                                         checked={selectedAnalysisOwners.has(row.id)}
-                                                        onCheckedChange={()={() => {
+                                                        onCheckedChange={()=>{
                                                             const newSelection = new Set(selectedAnalysisOwners);
                                                             if (newSelection.has(row.id)) {
                                                                 newSelection.delete(row.id);
