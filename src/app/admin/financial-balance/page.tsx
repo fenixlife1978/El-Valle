@@ -280,29 +280,6 @@ export default function FinancialBalancePage() {
             doc.setFontSize(10).text('Notas:', margin, startY);
             doc.setFontSize(10).setFont('helvetica', 'normal').text(statement.notas, margin, startY + 5, { maxWidth: 180 });
             
-            const signatureBlockY = (doc.internal.pageSize.getHeight() > startY + 40) ? startY + 25 : doc.internal.pageSize.getHeight() - 40;
-
-            // Signature lines
-            const signatureWidth = 60;
-            const signatureSpacing = (pageWidth - margin * 2 - signatureWidth * 2) / 3;
-
-            const firstSignatureX = margin + signatureSpacing;
-            doc.setLineWidth(0.5);
-            doc.line(firstSignatureX, signatureBlockY, firstSignatureX + signatureWidth, signatureBlockY);
-
-            const secondSignatureX = firstSignatureX + signatureWidth + signatureSpacing;
-            doc.line(secondSignatureX, signatureBlockY, secondSignatureX + signatureWidth, signatureBlockY);
-
-            doc.setFontSize(8);
-            doc.text("Juan Garcia", firstSignatureX + signatureWidth / 2, signatureBlockY + 5, { align: 'center' });
-            doc.text("Presidente de Condominio", firstSignatureX + signatureWidth / 2, signatureBlockY + 9, { align: 'center' });
-
-            doc.text("Juana Khleif", secondSignatureX + signatureWidth / 2, signatureBlockY + 5, { align: 'center' });
-            doc.text("Tesorera", secondSignatureX + signatureWidth / 2, signatureBlockY + 9, { align: 'center' });
-
-            startY = signatureBlockY + 20;
-            doc.setFontSize(7).setFont('helvetica', 'italic').text('Este recibo se generó de manera automática y es válido sin firma manuscrita.', pageWidth / 2, startY, { align: 'center'});
-
             doc.save(`Balance_Financiero_${statement.id}.pdf`);
 
         } else { // Excel
