@@ -115,6 +115,7 @@ type BalanceOwner = {
     name: string;
     properties: string;
     balance: number;
+    sortKeys: { streetNum: number; houseNum: number; };
 };
 
 type PaymentWithDebts = Payment & {
@@ -128,6 +129,17 @@ type AccountStatementData = {
     totalDebtUSD: number;
     balance: number;
 };
+
+type MonthlyPaymentRow = {
+    paymentId: string;
+    ownerName: string;
+    properties: string;
+    paymentDate: string;
+    amount: number;
+    reference: string;
+    paidMonths: string;
+};
+
 
 const monthsLocale: { [key: number]: string } = {
     1: 'Ene', 2: 'Feb', 3: 'Mar', 4: 'Abr', 5: 'May', 6: 'Jun',
@@ -159,7 +171,7 @@ const getSortKeys = (owner: { properties: string }) => {
     return { streetNum, houseNum };
 };
 
-const years = Array.from({ length: 10 }, (_, i) => new Date().getFullYear() + 5 - i).map(String);
+const years = Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - i).map(String);
 const monthOptions = Object.entries(monthsLocale).map(([value, label]) => ({ value, label }));
 
 export default function ReportsPage() {
@@ -209,6 +221,11 @@ export default function ReportsPage() {
     // State for Balance Report
     const [balanceOwners, setBalanceOwners] = useState<BalanceOwner[]>([]);
     const [balanceSearchTerm, setBalanceSearchTerm] = useState('');
+    
+    // State for Monthly Report
+    const [selectedMonth, setSelectedMonth] = useState(String(new Date().getMonth() + 1));
+    const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
+
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -261,7 +278,6 @@ export default function ReportsPage() {
                     const firstOfCurrentMonth = startOfMonth(new Date());
                     const isOverdueOrCurrent = isBefore(debtDate, firstOfCurrentMonth) || isEqual(debtDate, firstOfCurrentMonth);
 
-                    // Count months owed for overdue main debts and overdue adjustment debts
                     if (isOverdueOrCurrent) {
                         ownerData.count += 1;
                     }
@@ -323,9 +339,9 @@ export default function ReportsPage() {
         const sortedOwners = [...owners]
             .filter(owner => owner.id !== ADMIN_USER_ID && owner.name)
             .map(owner => {
-                const propertiesString = (owner.properties || []).map(p => `${p.street}-${p.house}`).join(', ');
-                const sortKeys = getSortKeys({properties: propertiesString});
-                return { ...owner, sortKeys };
+                 const propertiesString = (owner.properties || []).map(p => `${p.street}-${p.house}`).join(', ');
+                 const sortKeys = getSortKeys({properties: propertiesString});
+                 return { ...owner, sortKeys };
             })
             .sort((a, b) => {
                 if (a.sortKeys.streetNum !== b.sortKeys.streetNum) return a.sortKeys.streetNum - b.sortKeys.streetNum;
@@ -471,8 +487,8 @@ export default function ReportsPage() {
     // --- Delinquency Report Logic ---
     const filteredAndSortedDelinquents = useMemo(() => {
         let ownersCopy = [...allDelinquentOwners].map(owner => {
-            const sortKeys = getSortKeys(owner);
-            return {...owner, sortKeys };
+             const sortKeys = getSortKeys(owner);
+             return {...owner, sortKeys };
         });
 
         switch (delinquencyFilterType) {
@@ -505,6 +521,51 @@ export default function ReportsPage() {
 
         return ownersCopy;
     }, [allDelinquentOwners, delinquencyFilterType, customMonthRange, delinquencySearchTerm, delinquencySortConfig]);
+
+    const monthlyReportData = useMemo<MonthlyPaymentRow[]>(() => {
+        if (!selectedMonth || !selectedYear) return [];
+
+        const month = parseInt(selectedMonth);
+        const year = parseInt(selectedYear);
+        const ownersMap = new Map(owners.map(o => [o.id, o]));
+
+        return allPayments
+            .filter(p => {
+                const paymentDate = p.paymentDate.toDate();
+                return p.status === 'aprobado' && paymentDate.getMonth() + 1 === month && paymentDate.getFullYear() === year;
+            })
+            .map(payment => {
+                const ownerId = payment.beneficiaries[0]?.ownerId;
+                const owner = ownersMap.get(ownerId);
+                const properties = (owner?.properties || []).map(p => `${p.street}-${p.house}`).join(', ');
+
+                const paidDebts = allDebts.filter(debt => debt.paymentId === payment.id && debt.ownerId === ownerId)
+                                          .sort((a,b) => a.year - b.year || a.month - b.month);
+                
+                let paidMonths = 'Abono a Saldo';
+                if (paidDebts.length > 0) {
+                    if (paidDebts.length <= 2) {
+                        paidMonths = paidDebts.map(d => `${monthsLocale[d.month]} ${String(d.year).slice(-2)}`).join(', ');
+                    } else {
+                        const first = paidDebts[0];
+                        const last = paidDebts[paidDebts.length - 1];
+                        paidMonths = `${monthsLocale[first.month]} ${String(first.year).slice(-2)} - ${monthsLocale[last.month]} ${String(last.year).slice(-2)}`;
+                    }
+                }
+
+                return {
+                    paymentId: payment.id,
+                    ownerName: owner?.name || 'Desconocido',
+                    properties: properties,
+                    paymentDate: format(payment.paymentDate.toDate(), 'dd/MM/yyyy'),
+                    amount: payment.totalAmount,
+                    reference: payment.reference || 'N/A',
+                    paidMonths: paidMonths
+                };
+            })
+            .sort((a,b) => new Date(a.paymentDate.split('/').reverse().join('-')).getTime() - new Date(b.paymentDate.split('/').reverse().join('-')).getTime());
+
+    }, [selectedMonth, selectedYear, allPayments, allDebts, owners]);
 
     useEffect(() => {
         setSelectedDelinquentOwners(new Set(filteredAndSortedDelinquents.map(o => o.id)));
@@ -600,8 +661,8 @@ export default function ReportsPage() {
         setAccountStatementData({
             debts: ownerDebts,
             payments: ownerPayments,
-            totalDebtUSD: totalDebtUSD,
             totalPaidBs: totalPaidBs,
+            totalDebtUSD: totalDebtUSD,
             balance: owner.balance,
         });
     };
@@ -1008,6 +1069,58 @@ export default function ReportsPage() {
             XLSX.writeFile(workbook, `${filename}.xlsx`);
         }
     };
+    
+    const handleExportMonthlyReport = (formatType: 'pdf' | 'excel') => {
+        const data = monthlyReportData;
+        if (data.length === 0) {
+            toast({ variant: "destructive", title: "Nada para exportar", description: "No hay pagos aprobados en el período seleccionado." });
+            return;
+        }
+
+        const filename = `reporte_mensual_${selectedYear}_${selectedMonth}`;
+        const head = [['Propietario', 'Propiedad', 'Fecha Pago', 'Monto (Bs.)', 'Referencia', 'Meses Pagados']];
+        const body = data.map(row => [row.ownerName, row.properties, row.paymentDate, formatToTwoDecimals(row.amount), row.reference, row.paidMonths]);
+        
+        const periodString = `Período: ${monthOptions.find(m => m.value === selectedMonth)?.label} ${selectedYear}`;
+
+        if (formatType === 'pdf') {
+            const doc = new jsPDF();
+            const pageWidth = doc.internal.pageSize.getWidth();
+            let startY = 15;
+            if (companyInfo?.logo) doc.addImage(companyInfo.logo, 'PNG', 15, startY, 20, 20);
+            if (companyInfo) doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, 40, startY + 5);
+
+            doc.setFontSize(16).setFont('helvetica', 'bold').text('Reporte de Pagos Mensual', pageWidth / 2, startY + 15, { align: 'center'});
+            startY += 25;
+            doc.setFontSize(9).setFont('helvetica', 'normal');
+            doc.text(periodString, 15, startY);
+            doc.text(`Fecha de Emisión: ${format(new Date(), "dd/MM/yyyy")}`, pageWidth - 15, startY, { align: 'right'});
+            startY += 10;
+            
+            (doc as any).autoTable({
+                head: head, body: body, startY: startY,
+                headStyles: { fillColor: [30, 80, 180] },
+                styles: { fontSize: 8, cellPadding: 2 },
+                 columnStyles: {
+                    5: { cellWidth: 50 }, // Give more space for "Paid Months"
+                }
+            });
+            doc.save(`${filename}.pdf`);
+        } else { // Excel
+            const worksheet = XLSX.utils.json_to_sheet(data.map(row => ({
+                'Propietario': row.ownerName,
+                'Propiedad': row.properties,
+                'Fecha Pago': row.paymentDate,
+                'Monto (Bs.)': row.amount,
+                'Referencia': row.reference,
+                'Meses Pagados': row.paidMonths
+            })));
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Pagos Mensuales");
+            XLSX.writeFile(workbook, `${filename}.xlsx`);
+        }
+    };
+
 
     const renderSortIcon = (key: SortKey) => {
         if (delinquencySortConfig.key !== key) return <ArrowUpDown className="h-4 w-4 opacity-50" />;
@@ -1030,13 +1143,14 @@ export default function ReportsPage() {
             </div>
             
             <Tabs defaultValue="integral" className="w-full">
-                 <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 h-auto flex-wrap">
+                 <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 h-auto flex-wrap">
                     <TabsTrigger value="integral">Integral</TabsTrigger>
                     <TabsTrigger value="individual">Ficha Individual</TabsTrigger>
                     <TabsTrigger value="estado-de-cuenta">Estado de Cuenta</TabsTrigger>
                     <TabsTrigger value="delinquency">Morosidad</TabsTrigger>
                     <TabsTrigger value="balance">Saldos a Favor</TabsTrigger>
                     <TabsTrigger value="income">Ingresos</TabsTrigger>
+                    <TabsTrigger value="monthly">Reporte Mensual</TabsTrigger>
                 </TabsList>
                 
                 <TabsContent value="integral">
@@ -1600,6 +1714,65 @@ export default function ReportsPage() {
                                         ))
                                     ) : (
                                         <TableRow><TableCell colSpan={6} className="h-24 text-center">No se encontraron ingresos para el período y filtro seleccionados.</TableCell></TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                <TabsContent value="monthly">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Reporte de Pagos Mensual</CardTitle>
+                            <CardDescription>Revisa todos los pagos aprobados en un mes específico y los meses que liquidaron.</CardDescription>
+                            <div className="flex gap-4 pt-4">
+                                <div className="space-y-2">
+                                    <Label>Mes</Label>
+                                    <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                                        <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+                                        <SelectContent>{monthOptions.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Año</Label>
+                                    <Select value={selectedYear} onValueChange={setSelectedYear}>
+                                        <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                                        <SelectContent>{years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="flex justify-end gap-2 mb-4">
+                                <Button variant="outline" onClick={() => handleExportMonthlyReport('pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
+                                <Button variant="outline" onClick={() => handleExportMonthlyReport('excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
+                            </div>
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Propietario</TableHead>
+                                        <TableHead>Propiedad</TableHead>
+                                        <TableHead>Fecha Pago</TableHead>
+                                        <TableHead className="text-right">Monto (Bs.)</TableHead>
+                                        <TableHead className="text-right">Referencia</TableHead>
+                                        <TableHead>Meses Pagados</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {monthlyReportData.length > 0 ? (
+                                        monthlyReportData.map(row => (
+                                            <TableRow key={row.paymentId}>
+                                                <TableCell>{row.ownerName}</TableCell>
+                                                <TableCell>{row.properties}</TableCell>
+                                                <TableCell>{row.paymentDate}</TableCell>
+                                                <TableCell className="text-right">{formatToTwoDecimals(row.amount)}</TableCell>
+                                                <TableCell className="text-right">{row.reference}</TableCell>
+                                                <TableCell>{row.paidMonths}</TableCell>
+                                            </TableRow>
+                                        ))
+                                    ) : (
+                                        <TableRow><TableCell colSpan={6} className="h-24 text-center">No hay pagos aprobados para el mes seleccionado.</TableCell></TableRow>
                                     )}
                                 </TableBody>
                             </Table>
