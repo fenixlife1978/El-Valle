@@ -205,16 +205,6 @@ export default function ReportsPage() {
     const [statementSearchTerm, setStatementSearchTerm] = useState('');
     const [selectedStatementOwner, setSelectedStatementOwner] = useState<Owner | null>(null);
     const [accountStatementData, setAccountStatementData] = useState<AccountStatementData | null>(null);
-    
-    // State for Collection Analysis Report
-    const [collectionAnalysisRange, setCollectionAnalysisRange] = useState<{fromMonth: number, fromYear: number, toMonth: number, toYear: number}>({
-        fromMonth: 1,
-        fromYear: new Date().getFullYear(),
-        toMonth: new Date().getMonth() + 1,
-        toYear: new Date().getFullYear()
-    });
-    const [selectedAnalysisOwners, setSelectedAnalysisOwners] = useState<Set<string>>(new Set());
-
 
     // State for Balance Report
     const [balanceOwners, setBalanceOwners] = useState<BalanceOwner[]>([]);
@@ -480,7 +470,10 @@ export default function ReportsPage() {
     
     // --- Delinquency Report Logic ---
     const filteredAndSortedDelinquents = useMemo(() => {
-        let ownersCopy = [...allDelinquentOwners].map(owner => ({...owner, sortKeys: getSortKeys(owner)}));
+        let ownersCopy = [...allDelinquentOwners].map(owner => {
+            const sortKeys = getSortKeys(owner);
+            return {...owner, sortKeys };
+        });
 
         switch (delinquencyFilterType) {
             case '2_or_more': ownersCopy = ownersCopy.filter(o => o.monthsOwed >= 2); break;
@@ -531,92 +524,6 @@ export default function ReportsPage() {
         if (!balanceSearchTerm) return balanceOwners;
         return balanceOwners.filter(o => o.name.toLowerCase().includes(balanceSearchTerm.toLowerCase()));
     }, [balanceSearchTerm, balanceOwners]);
-
-    // --- Collection Analysis Report Logic ---
-    const collectionAnalysisData = useMemo(() => {
-        const { fromMonth, fromYear, toMonth, toYear } = collectionAnalysisRange;
-        const startDate = startOfMonth(new Date(fromYear, fromMonth - 1));
-        const endDate = endOfMonth(new Date(toYear, toMonth - 1));
-        if (isBefore(endDate, startDate)) return { headers: [], rows: [], footers: {} };
-
-        const monthsInRange: Date[] = [];
-        let currentDate = startDate;
-        while(isBefore(currentDate, endDate) || isEqual(currentDate, endDate)) {
-            monthsInRange.push(currentDate);
-            currentDate = addMonths(currentDate, 1);
-        }
-
-        const headers = monthsInRange.map(d => format(d, 'MMM yyyy', { locale: es }));
-
-        const ownersMap = new Map(owners.filter(o => o.id !== ADMIN_USER_ID).map(o => [o.id, {
-            ...o,
-            overallMonthsOwed: allDebts.filter(d => d.ownerId === o.id && d.status === 'pending' && isBefore(startOfMonth(new Date(d.year, d.month -1)), startOfMonth(new Date()))).length
-        }]));
-
-        const rows = Array.from(ownersMap.values()).map(owner => {
-            const monthData = monthsInRange.map(monthDate => {
-                const year = getYear(monthDate);
-                const month = getMonth(monthDate) + 1;
-                
-                const debt = allDebts.find(d => d.ownerId === owner.id && d.year === year && d.month === month && d.description.includes('Condominio'));
-                const historicalPayment = allHistoricalPayments.find(hp => hp.ownerId === owner.id && hp.referenceYear === year && hp.referenceMonth === month);
-                
-                if (debt?.status === 'paid' || historicalPayment) {
-                    return 'Pagado';
-                }
-                if (debt) { // Exists but is not paid
-                    return 'Pendiente';
-                }
-                return 'N/A';
-            });
-            return {
-                id: owner.id,
-                name: owner.name,
-                properties: (owner.properties || []).map(p => `${p.street}-${p.house}`).join(', '),
-                monthData,
-                isDelinquent: owner.overallMonthsOwed >= 3
-            };
-        });
-
-        return { headers, rows };
-    }, [collectionAnalysisRange, owners, allDebts, allHistoricalPayments]);
-
-    const collectionAnalysisFooters = useMemo(() => {
-        const { headers, rows } = collectionAnalysisData;
-        const visibleRows = rows.filter(row => selectedAnalysisOwners.has(row.id));
-
-        const footers: { [key: string]: { paidCount: number; pendingTotalUSD: number; naCount: number; } } = {};
-        if (visibleRows.length === 0) return footers;
-
-        headers.forEach((header, index) => {
-            footers[header] = { paidCount: 0, pendingTotalUSD: 0, naCount: 0 };
-            const monthDate = addMonths(startOfMonth(new Date(collectionAnalysisRange.fromYear, collectionAnalysisRange.fromMonth - 1)), index);
-            const year = getYear(monthDate);
-            const month = getMonth(monthDate) + 1;
-
-            visibleRows.forEach(row => {
-                const status = row.monthData[index];
-                if (status === 'Pagado') {
-                    footers[header].paidCount += 1;
-                } else if (status === 'Pendiente') {
-                    const debt = allDebts.find(d => d.ownerId === row.id && d.year === year && d.month === month && d.description.includes('Condominio'));
-                    if (debt) {
-                        footers[header].pendingTotalUSD += debt.amountUSD;
-                    }
-                } else { // N/A
-                    footers[header].naCount += 1;
-                }
-            });
-        });
-        return footers;
-
-    }, [collectionAnalysisData.headers, collectionAnalysisData.rows, selectedAnalysisOwners, allDebts, condoFee, collectionAnalysisRange]);
-    
-    // Effect to update selection when filters change
-    useEffect(() => {
-        setSelectedAnalysisOwners(new Set(collectionAnalysisData.rows.map(r => r.id)));
-    }, [collectionAnalysisData.rows]);
-
 
     // --- Handlers ---
     const incomeReportRows = useMemo<IncomeReportRow[]>(() => {
@@ -1101,59 +1008,6 @@ export default function ReportsPage() {
             XLSX.writeFile(workbook, `${filename}.xlsx`);
         }
     };
-    
-    const handleExportCollectionAnalysis = (formatType: 'pdf' | 'excel') => {
-        const { headers, rows } = collectionAnalysisData;
-        const { footers } = {footers: collectionAnalysisFooters};
-        const visibleRows = rows.filter(row => selectedAnalysisOwners.has(row.id));
-
-        if (visibleRows.length === 0) {
-            toast({ variant: 'destructive', title: 'Sin datos', description: 'No hay datos para exportar en el rango seleccionado.' });
-            return;
-        }
-
-        const filename = `analisis_cobro_${collectionAnalysisRange.fromYear}-${collectionAnalysisRange.toYear}`;
-        const mainHeaders = [['Propietario', ...headers]];
-        const body = visibleRows.map(row => [row.name, ...row.monthData]);
-
-        const footerPaid = ['Total Pagado ($)', ...headers.map(h => `$${(footers[h]?.paidCount * condoFee).toFixed(2)}`)];
-        const footerPending = ['Total Pendiente ($)', ...headers.map(h => `$${footers[h]?.pendingTotalUSD.toFixed(2)}`)];
-        const footerNA = ['Total por Generar ($)', ...headers.map(h => `$${(footers[h]?.naCount * condoFee).toFixed(2)}`)];
-
-        if (formatType === 'pdf') {
-            const doc = new jsPDF({ orientation: 'landscape' });
-            if (companyInfo?.logo) doc.addImage(companyInfo.logo, 'PNG', 15, 15, 20, 20);
-            if (companyInfo) doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, 40, 20);
-
-            doc.setFontSize(16).setFont('helvetica', 'bold').text('Análisis de Cobranza', doc.internal.pageSize.getWidth() / 2, 25, { align: 'center'});
-
-            (doc as any).autoTable({
-                head: mainHeaders,
-                body: body,
-                foot: [footerPaid, footerPending, footerNA],
-                startY: 40,
-                theme: 'grid',
-                headStyles: { fillColor: [30, 80, 180] },
-                footStyles: { fillColor: [230, 230, 230], textColor: 0, fontStyle: 'bold' },
-                styles: { fontSize: 7, cellPadding: 1.5, halign: 'center' },
-                columnStyles: { 0: { halign: 'left' } },
-                didParseCell: (data: any) => {
-                    if (data.section === 'body') {
-                        if (data.cell.raw === 'Pagado') data.cell.styles.fillColor = '#d4edda'; // green
-                        if (data.cell.raw === 'Pendiente') data.cell.styles.fillColor = '#f8d7da'; // red
-                    }
-                }
-            });
-            doc.save(`${filename}.pdf`);
-        } else {
-            const sheetData = [...mainHeaders, ...body, footerPaid, footerPending, footerNA];
-            const worksheet = XLSX.utils.aoa_to_sheet(sheetData);
-            const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, worksheet, "Analisis de Cobro");
-            XLSX.writeFile(workbook, `${filename}.xlsx`);
-        }
-    };
-
 
     const renderSortIcon = (key: SortKey) => {
         if (delinquencySortConfig.key !== key) return <ArrowUpDown className="h-4 w-4 opacity-50" />;
@@ -1176,14 +1030,13 @@ export default function ReportsPage() {
             </div>
             
             <Tabs defaultValue="integral" className="w-full">
-                 <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-7 h-auto flex-wrap">
+                 <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 h-auto flex-wrap">
                     <TabsTrigger value="integral">Integral</TabsTrigger>
                     <TabsTrigger value="individual">Ficha Individual</TabsTrigger>
                     <TabsTrigger value="estado-de-cuenta">Estado de Cuenta</TabsTrigger>
                     <TabsTrigger value="delinquency">Morosidad</TabsTrigger>
                     <TabsTrigger value="balance">Saldos a Favor</TabsTrigger>
                     <TabsTrigger value="income">Ingresos</TabsTrigger>
-                    <TabsTrigger value="collection-analysis">Análisis de Cobro</TabsTrigger>
                 </TabsList>
                 
                 <TabsContent value="integral">
@@ -1753,140 +1606,7 @@ export default function ReportsPage() {
                         </CardContent>
                     </Card>
                 </TabsContent>
-
-                <TabsContent value="collection-analysis">
-                     <Card>
-                        <CardHeader>
-                            <CardTitle>Análisis de Cobranza por Período</CardTitle>
-                            <CardDescription>Visualice el estado de pago de la cuota de condominio para cada propietario a lo largo de varios meses.</CardDescription>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 items-end">
-                                <div className="space-y-2">
-                                    <Label>Desde Mes</Label>
-                                    <Select value={String(collectionAnalysisRange.fromMonth)} onValueChange={v => setCollectionAnalysisRange(c => ({...c, fromMonth: Number(v)}))}>
-                                        <SelectTrigger><SelectValue/></SelectTrigger>
-                                        <SelectContent>{monthOptions.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent>
-                                    </Select>
-                                </div>
-                                 <div className="space-y-2">
-                                    <Label>Desde Año</Label>
-                                    <Select value={String(collectionAnalysisRange.fromYear)} onValueChange={v => setCollectionAnalysisRange(c => ({...c, fromYear: Number(v)}))}>
-                                        <SelectTrigger><SelectValue/></SelectTrigger>
-                                        <SelectContent>{years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Hasta Mes</Label>
-                                    <Select value={String(collectionAnalysisRange.toMonth)} onValueChange={v => setCollectionAnalysisRange(c => ({...c, toMonth: Number(v)}))}>
-                                        <SelectTrigger><SelectValue/></SelectTrigger>
-                                        <SelectContent>{monthOptions.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Hasta Año</Label>
-                                    <Select value={String(collectionAnalysisRange.toYear)} onValueChange={v => setCollectionAnalysisRange(c => ({...c, toYear: Number(v)}))}>
-                                        <SelectTrigger><SelectValue/></SelectTrigger>
-                                        <SelectContent>{years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-                        </CardHeader>
-                        <CardContent>
-                             <div className="flex justify-between items-center mb-4">
-                                <p className="text-sm text-muted-foreground">
-                                    {selectedAnalysisOwners.size} de {collectionAnalysisData.rows.length} propietarios seleccionados.
-                                </p>
-                                <div className="flex gap-2">
-                                    <Button variant="outline" onClick={() => handleExportCollectionAnalysis('pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
-                                    <Button variant="outline" onClick={() => handleExportCollectionAnalysis('excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
-                                </div>
-                            </div>
-                            <ScrollArea className="w-full whitespace-nowrap rounded-md border" style={{ height: '600px' }}>
-                                <Table className="min-w-full">
-                                    <TableHeader className="sticky top-0 bg-background z-10">
-                                        <TableRow>
-                                            <TableHead className="min-w-[250px] sticky left-0 bg-background z-20 flex items-center gap-2">
-                                                <Checkbox
-                                                    checked={selectedAnalysisOwners.size > 0 && selectedAnalysisOwners.size === collectionAnalysisData.rows.length}
-                                                    onCheckedChange={(checked) => {
-                                                        const allIds = new Set(collectionAnalysisData.rows.map(r => r.id));
-                                                        setSelectedAnalysisOwners(checked ? allIds : new Set());
-                                                    }}
-                                                />
-                                                Propietario
-                                            </TableHead>
-                                            {collectionAnalysisData.headers.map(header => <TableHead key={header} className="text-center">{header}</TableHead>)}
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {collectionAnalysisData.rows.map(row => (
-                                            <TableRow key={row.id} className={cn(row.isDelinquent && "bg-destructive/10", !selectedAnalysisOwners.has(row.id) && "opacity-50")}>
-                                                <TableCell className="font-medium sticky left-0 bg-background z-20 flex items-center gap-2">
-                                                    <Checkbox
-                                                        checked={selectedAnalysisOwners.has(row.id)}
-                                                        onCheckedChange={()=>{
-                                                            const newSelection = new Set(selectedAnalysisOwners);
-                                                            if (newSelection.has(row.id)) {
-                                                                newSelection.delete(row.id);
-                                                            } else {
-                                                                newSelection.add(row.id);
-                                                            }
-                                                            setSelectedAnalysisOwners(newSelection);
-                                                        }}
-                                                    />
-                                                    {row.name}
-                                                </TableCell>
-                                                {row.monthData.map((status, index) => (
-                                                    <TableCell key={index} className={cn("text-center", 
-                                                        status === 'Pagado' && 'text-green-600',
-                                                        status === 'Pendiente' && 'text-destructive'
-                                                    )}>
-                                                        {status}
-                                                    </TableCell>
-                                                ))}
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                     <TableFooter className="sticky bottom-0 bg-secondary/90 z-10">
-                                        <TableRow>
-                                            <TableCell className="sticky left-0 bg-secondary/90 z-20 font-bold">Total Pagado ($)</TableCell>
-                                            {collectionAnalysisData.headers.map(header => (
-                                                <TableCell key={`paid-${header}`} className="text-center font-bold">
-                                                    ${(collectionAnalysisFooters[header]?.paidCount * condoFee).toFixed(2)}
-                                                </TableCell>
-                                            ))}
-                                        </TableRow>
-                                        <TableRow>
-                                            <TableCell className="sticky left-0 bg-secondary/90 z-20 font-bold">Total Pendiente ($)</TableCell>
-                                            {collectionAnalysisData.headers.map(header => (
-                                                <TableCell key={`pending-${header}`} className="text-center font-bold">
-                                                    ${collectionAnalysisFooters[header]?.pendingTotalUSD.toFixed(2)}
-                                                </TableCell>
-                                            ))}
-                                        </TableRow>
-                                        <TableRow>
-                                            <TableCell className="sticky left-0 bg-secondary/90 z-20 font-bold">Total por Generar ($)</TableCell>
-                                            {collectionAnalysisData.headers.map(header => (
-                                                <TableCell key={`na-${header}`} className="text-center font-bold">
-                                                    ${(collectionAnalysisFooters[header]?.naCount * condoFee).toFixed(2)}
-                                                </TableCell>
-                                            ))}
-                                        </TableRow>
-                                    </TableFooter>
-                                </Table>
-                            </ScrollArea>
-                        </CardContent>
-                     </Card>
-                </TabsContent>
-
             </Tabs>
         </div>
     );
 }
-
-
-
-    
-
-    
-
-
