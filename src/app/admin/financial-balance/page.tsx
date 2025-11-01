@@ -63,8 +63,9 @@ const years = Array.from({ length: 10 }, (_, i) => String(new Date().getFullYear
 
 const formatToTwoDecimals = (num: number) => {
     if (typeof num !== 'number' || isNaN(num)) return '0,00';
-    const truncated = Math.trunc(num * 100) / 100;
-    return truncated.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    // Use rounding to the nearest cent to fix floating point issues
+    const roundedNum = Math.round(num * 100) / 100;
+    return roundedNum.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
 
