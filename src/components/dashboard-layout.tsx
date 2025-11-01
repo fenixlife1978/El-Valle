@@ -66,7 +66,7 @@ type ExchangeRate = {
 };
 
 const BCVLogo = () => (
-    <svg width="24" height="24" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" className="shrink-0">
+    <svg width="24" height="24" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" className="shrink-0 text-primary">
         <circle cx="256" cy="256" r="246" stroke="currentColor" strokeWidth="20"/>
         <circle cx="256" cy="256" r="150" stroke="currentColor" strokeWidth="20"/>
         <path d="M208 208H304V304H208V208Z" fill="currentColor"/>
@@ -121,27 +121,28 @@ const CustomHeader = ({ ownerData, userRole }: { ownerData: any, userRole: strin
     const userName = ownerData?.name || 'Usuario';
 
     return (
-        <header className="sticky top-0 z-10 flex h-auto items-center justify-between gap-2 border-b bg-background/80 p-2 backdrop-blur-sm sm:h-16 sm:px-4">
-             <div className="flex items-center gap-2">
+        <header className="sticky top-0 z-10 flex h-auto items-center justify-between gap-2 border-b bg-background/80 p-2 backdrop-blur-sm sm:h-20 sm:px-4">
+             <div className="flex items-center gap-4">
                 <SidebarTrigger className="sm:hidden" />
-                <h1 className="text-md font-semibold text-foreground">Hola, {userName}</h1>
-            </div>
-
-            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-                {loadingRate ? (
-                    <Skeleton className="h-10 w-40 rounded-lg" />
+                <div className="flex flex-col">
+                    <h1 className="text-md font-semibold text-foreground">Hola, {userName}</h1>
+                    <p className="text-xs text-muted-foreground">Bienvenido a tu panel</p>
+                </div>
+                 {loadingRate ? (
+                    <Skeleton className="h-10 w-48 rounded-lg" />
                 ) : activeRate ? (
-                    <div className="flex flex-col items-center justify-center">
+                    <div className="hidden md:flex items-center gap-3 ml-6 rounded-lg bg-muted p-2">
                         <BCVLogo />
-                        <div className="text-center">
+                        <div className="text-left">
                             <p className="text-sm font-bold leading-none">Bs. {activeRate.rate.toLocaleString('es-VE', { minimumFractionDigits: 2 })}</p>
                             <p className="text-xs text-muted-foreground leading-none">
-                                {format(new Date(activeRate.date.replace(/-/g, '/')), 'dd MMM yyyy', { locale: es })}
+                                Tasa BCV - {format(new Date(activeRate.date.replace(/-/g, '/')), 'dd MMM', { locale: es })}
                             </p>
                         </div>
                     </div>
                 ) : null}
             </div>
+
 
             <div className="flex items-center gap-4">
                 <DropdownMenu>
