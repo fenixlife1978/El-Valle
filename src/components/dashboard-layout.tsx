@@ -66,9 +66,21 @@ type ExchangeRate = {
 };
 
 const BCVLogo = () => (
-    <svg width="24" height="24" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" className="shrink-0">
-        <path d="M49.619 19.468C32.769 19.468 19.23 33.007 19.23 49.857C19.23 66.707 32.769 80.246 49.619 80.246C66.469 80.246 80 66.707 80 49.857C80 33.007 66.469 19.468 49.619 19.468Z" fill="#D52B1E"></path>
-        <path d="M57.618 36.436H41.62V63.278H57.618V55.772H49.125V44.022H57.618V36.436Z" fill="white"></path>
+    <svg width="24" height="24" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" className="shrink-0">
+        <circle cx="256" cy="256" r="246" stroke="currentColor" strokeWidth="20"/>
+        <circle cx="256" cy="256" r="150" stroke="currentColor" strokeWidth="20"/>
+        <path d="M208 208H304V304H208V208Z" fill="currentColor"/>
+        <path d="M292.5 224.25H220.5V288.75H292.5V270H246V243H292.5V224.25Z" fill="white"/>
+        <g>
+            {[...Array(16)].map((_, i) => {
+                const angle = (i * 22.5) * (Math.PI / 180);
+                const x1 = 256 + 106 * Math.cos(angle);
+                const y1 = 256 + 106 * Math.sin(angle);
+                const x2 = 256 + 150 * Math.cos(angle);
+                const y2 = 256 + 150 * Math.sin(angle);
+                return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="currentColor" strokeWidth="6" />;
+            })}
+        </g>
     </svg>
 );
 
@@ -109,26 +121,29 @@ const CustomHeader = ({ ownerData, userRole }: { ownerData: any, userRole: strin
     const userName = ownerData?.name || 'Usuario';
 
     return (
-        <header className="sticky top-0 z-10 flex h-auto flex-col items-center gap-2 border-b bg-background/80 p-2 backdrop-blur-sm sm:flex-row sm:h-16 sm:px-4">
-             <div className="flex w-full items-center justify-between sm:w-auto">
+        <header className="sticky top-0 z-10 flex h-auto items-center justify-between gap-2 border-b bg-background/80 p-2 backdrop-blur-sm sm:h-16 sm:px-4">
+             <div className="flex items-center gap-2">
                 <SidebarTrigger className="sm:hidden" />
                 <h1 className="text-md font-semibold text-foreground">Hola, {userName}</h1>
             </div>
 
-            <div className="flex w-full items-center justify-between gap-4 sm:w-auto sm:ml-auto">
-                 {loadingRate ? (
-                    <Skeleton className="h-12 w-48 rounded-lg" />
-                 ) : activeRate && (
-                    <Card className="flex items-center gap-3 p-2 rounded-lg bg-card/50 flex-shrink-0">
-                       <BCVLogo />
-                       <div>
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+                {loadingRate ? (
+                    <Skeleton className="h-10 w-40 rounded-lg" />
+                ) : activeRate ? (
+                    <div className="flex flex-col items-center justify-center">
+                        <BCVLogo />
+                        <div className="text-center">
                             <p className="text-sm font-bold leading-none">Bs. {activeRate.rate.toLocaleString('es-VE', { minimumFractionDigits: 2 })}</p>
                             <p className="text-xs text-muted-foreground leading-none">
-                                Tasa BCV - {format(new Date(activeRate.date.replace(/-/g, '/')), 'dd MMM yyyy', { locale: es })}
+                                {format(new Date(activeRate.date.replace(/-/g, '/')), 'dd MMM yyyy', { locale: es })}
                             </p>
-                       </div>
-                    </Card>
-                )}
+                        </div>
+                    </div>
+                ) : null}
+            </div>
+
+            <div className="flex items-center gap-4">
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                     <Button variant="ghost" className="relative h-10 w-10 rounded-full">
