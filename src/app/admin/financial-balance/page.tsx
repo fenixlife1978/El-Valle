@@ -26,6 +26,7 @@ import { useRouter } from 'next/navigation';
 
 type FinancialItem = {
     id: string;
+    dia: string;
     concepto: string;
     monto: number;
 };
@@ -55,7 +56,7 @@ type CompanyInfo = {
     logo: string;
 };
 
-const initialItem = { id: Date.now().toString(), concepto: '', monto: 0 };
+const initialItem: FinancialItem = { id: Date.now().toString(), dia: '', concepto: '', monto: 0 };
 const initialFinancialState: FinancialState = {};
 
 const months = Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: format(new Date(2000, i), 'MMMM', { locale: es }) }));
@@ -121,8 +122,8 @@ export default function FinancialBalancePage() {
         setIsEditing(false);
         setSelectedMonth(String(new Date().getMonth() + 1));
         setSelectedYear(String(new Date().getFullYear()));
-        setIngresos([{ id: Date.now().toString(), concepto: '', monto: 0 }]);
-        setEgresos([{ id: Date.now().toString(), concepto: '', monto: 0 }]);
+        setIngresos([{ id: Date.now().toString(), dia: '', concepto: '', monto: 0 }]);
+        setEgresos([{ id: Date.now().toString(), dia: '', concepto: '', monto: 0 }]);
         setEstadoFinanciero(initialFinancialState);
         setNotas('');
     };
@@ -139,8 +140,8 @@ export default function FinancialBalancePage() {
 
         setSelectedYear(statement.id.split('-')[0]);
         setSelectedMonth(statement.id.split('-')[1]);
-        setIngresos(statement.ingresos.map(i => ({...i, id: Math.random().toString() })));
-        setEgresos(statement.egresos.map(e => ({...e, id: Math.random().toString() })));
+        setIngresos(statement.ingresos.map(i => ({...i, id: Math.random().toString(), dia: i.dia || '' })));
+        setEgresos(statement.egresos.map(e => ({...e, id: Math.random().toString(), dia: e.dia || '' })));
         setEstadoFinanciero({
             // No fields to set here anymore
         });
@@ -175,8 +176,9 @@ export default function FinancialBalancePage() {
     const handleSaveStatement = async () => {
         const statementId = `${selectedYear}-${selectedMonth}`;
         
-        const finalIngresos = ingresos.filter(i => i.concepto && Number(i.monto) > 0).map(i => ({...i, monto: Number(i.monto)}));
-        const finalEgresos = egresos.filter(e => e.concepto && Number(e.monto) > 0).map(e => ({...e, monto: Number(e.monto)}));
+        const finalIngresos = ingresos.filter(i => i.concepto && Number(i.monto) > 0).map(i => ({...i, monto: Number(i.monto), dia: i.dia || ''}));
+        const finalEgresos = egresos.filter(e => e.concepto && Number(e.monto) > 0).map(e => ({...e, monto: Number(e.monto), dia: e.dia || ''}));
+
 
         if (finalIngresos.length === 0 || finalEgresos.length === 0) {
             toast({ variant: 'destructive', title: 'Datos incompletos', description: 'Debe haber al menos un ingreso y un egreso.' });
@@ -243,18 +245,18 @@ export default function FinancialBalancePage() {
             
             // Ingresos
             (doc as any).autoTable({
-                head: [['INGRESOS', 'MONTO (Bs.)']],
-                body: statement.ingresos.map(i => [i.concepto, { content: formatToTwoDecimals(i.monto), styles: { halign: 'right' } }]),
-                foot: [[{ content: 'TOTAL INGRESOS', styles: { halign: 'right' } }, { content: formatToTwoDecimals(totalIngresos), styles: { halign: 'right' } }]],
+                head: [['DÍA', 'INGRESOS', 'MONTO (Bs.)']],
+                body: statement.ingresos.map(i => [i.dia || '', i.concepto, { content: formatToTwoDecimals(i.monto), styles: { halign: 'right' } }]),
+                foot: [[{ content: '', styles: { halign: 'right' } }, { content: 'TOTAL INGRESOS', styles: { halign: 'right' } }, { content: formatToTwoDecimals(totalIngresos), styles: { halign: 'right' } }]],
                 startY: startY, theme: 'striped', headStyles: { fillColor: [22, 163, 74], halign: 'center' }, footStyles: { fillColor: [22, 163, 74], textColor: 255, fontStyle: 'bold' },
             });
             startY = (doc as any).lastAutoTable.finalY + 10;
             
             // Egresos
             (doc as any).autoTable({
-                head: [['EGRESOS', 'MONTO (Bs.)']],
-                body: statement.egresos.map(e => [e.concepto, { content: formatToTwoDecimals(e.monto), styles: { halign: 'right' } }]),
-                foot: [[{ content: 'TOTAL EGRESOS', styles: { halign: 'right' } }, { content: formatToTwoDecimals(totalEgresos), styles: { halign: 'right' } }]],
+                head: [['DÍA', 'EGRESOS', 'MONTO (Bs.)']],
+                body: statement.egresos.map(e => [e.dia || '', e.concepto, { content: formatToTwoDecimals(e.monto), styles: { halign: 'right' } }]),
+                foot: [[{ content: '', styles: { halign: 'right' } }, { content: 'TOTAL EGRESOS', styles: { halign: 'right' } }, { content: formatToTwoDecimals(totalEgresos), styles: { halign: 'right' } }]],
                 startY: startY,
                 theme: 'striped',
                 showHead: 'firstPage',
@@ -287,15 +289,15 @@ export default function FinancialBalancePage() {
             const wsData = [
                 ['BALANCE FINANCIERO', period],
                 [],
-                ['INGRESOS', 'MONTO'],
-                ...statement.ingresos.map(i => [i.concepto, i.monto]),
-                ['TOTAL INGRESOS', totalIngresos],
+                ['DÍA', 'INGRESOS', 'MONTO'],
+                ...statement.ingresos.map(i => [i.dia || '', i.concepto, i.monto]),
+                ['', 'TOTAL INGRESOS', totalIngresos],
                 [],
-                ['EGRESOS', 'MONTO'],
-                ...statement.egresos.map(e => [e.concepto, e.monto]),
-                ['TOTAL EGRESOS', totalEgresos],
+                ['DÍA', 'EGRESOS', 'MONTO'],
+                ...statement.egresos.map(e => [e.dia || '', e.concepto, e.monto]),
+                ['', 'TOTAL EGRESOS', totalEgresos],
                 [],
-                ['SALDO NETO O SALDO FINAL DEL MES EN BANCO', saldoNeto],
+                ['', 'SALDO NETO O SALDO FINAL DEL MES EN BANCO', saldoNeto],
                 [],
                 ['Notas', statement.notas]
             ];
@@ -307,9 +309,9 @@ export default function FinancialBalancePage() {
 
 
     const createItemManager = (items: FinancialItem[], setItems: React.Dispatch<React.SetStateAction<FinancialItem[]>>) => ({
-        addItem: () => setItems([...items, { id: Date.now().toString(), concepto: '', monto: 0 }]),
+        addItem: () => setItems([...items, { id: Date.now().toString(), dia: '', concepto: '', monto: 0 }]),
         removeItem: (id: string) => { if (items.length > 1) setItems(items.filter(item => item.id !== id)) },
-        updateItem: (id: string, field: 'concepto' | 'monto', value: string) => {
+        updateItem: (id: string, field: 'dia' | 'concepto' | 'monto', value: string) => {
             const isMonto = field === 'monto';
             setItems(items.map(item => item.id === id ? { ...item, [field]: isMonto ? Number(value) : value } : item));
         }
@@ -325,6 +327,7 @@ export default function FinancialBalancePage() {
                 <Table>
                     <TableHeader>
                         <TableRow>
+                            <TableHead className="w-[80px]">Día</TableHead>
                             <TableHead>Concepto</TableHead>
                             <TableHead className="w-[150px] text-right">Monto (Bs.)</TableHead>
                             <TableHead className="w-[50px]"></TableHead>
@@ -333,6 +336,7 @@ export default function FinancialBalancePage() {
                     <TableBody>
                         {items.map((item) => (
                             <TableRow key={item.id}>
+                                <TableCell><Input value={item.dia} onChange={e => manager.updateItem(item.id, 'dia', e.target.value)} placeholder="Ej: 15" /></TableCell>
                                 <TableCell><Input value={item.concepto} onChange={e => manager.updateItem(item.id, 'concepto', e.target.value)} placeholder="Ej: Cuotas ordinarias" /></TableCell>
                                 <TableCell><Input type="number" value={item.monto === 0 ? '' : item.monto} onChange={e => manager.updateItem(item.id, 'monto', e.target.value)} placeholder="0.00" className="text-right" /></TableCell>
                                 <TableCell>
