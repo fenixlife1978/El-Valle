@@ -7,7 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardFooter, CardDescription }
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Landmark, AlertCircle, Building, Eye, Printer, Megaphone, Loader2, Wallet, FileText, CalendarClock, Scale, Calculator, Minus, Equal, ShieldCheck, BookOpen, Clock } from "lucide-react";
+import { Landmark, AlertCircle, Building, Eye, Printer, Megaphone, Loader2, Wallet, FileText, CalendarClock, Scale, Calculator, Minus, Equal, ShieldCheck, BookOpen, Clock, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { db } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
@@ -360,8 +360,8 @@ export default function OwnerDashboardPage() {
     }
   }
 
-   const handleDownloadPdf = () => {
-    if (!receiptData || !companyInfo) return;
+   const generatePdfBlob = async (): Promise<Blob | null> => {
+    if (!receiptData || !companyInfo) return null;
     const { payment, ownerName, ownerUnit, paidDebts } = receiptData;
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
@@ -468,9 +468,43 @@ export default function OwnerDashboardPage() {
     startY += 5;
     doc.setFontSize(8).setFont('helvetica', 'italic').text('Este recibo se generó de manera automática y es válido sin firma manuscrita.', pageWidth / 2, startY, { align: 'center'});
 
-    doc.save(`Recibo_de_Pago_${payment.id.substring(0,7)}.pdf`);
+    return doc.output('blob');
+  };
+
+  const handleSharePdf = async () => {
+    if (!receiptData) return;
+
+    const blob = await generatePdfBlob();
+    if (!blob) {
+      toast({ variant: 'destructive', title: 'Error', description: 'No se pudo generar el PDF para compartir.' });
+      return;
+    }
+
+    const fileName = `Recibo_de_Pago_${receiptData.payment.id.substring(0, 7)}.pdf`;
+    const file = new File([blob], fileName, { type: 'application/pdf' });
+
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({
+          files: [file],
+          title: `Recibo de Pago ${receiptData.payment.id.substring(0, 10)}`,
+          text: `Recibo de pago para ${receiptData.ownerName}.`,
+        });
+        toast({ title: 'Recibo Compartido', description: 'El recibo se ha compartido exitosamente.' });
+      } catch (error) {
+        if ((error as Error).name !== 'AbortError') {
+          console.error('Error sharing:', error);
+          toast({ variant: 'destructive', title: 'Error al Compartir', description: 'No se pudo compartir el archivo.' });
+        }
+      }
+    } else {
+      toast({ title: 'Navegador no compatible', description: 'Tu navegador no soporta la función de compartir archivos. Abriendo PDF en una nueva pestaña.' });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+    }
     setIsReceiptPreviewOpen(false);
   };
+
 
   const getBalancePeriodText = (report: PublishedReport) => {
     const [year, month] = report.id.split('-');
@@ -728,7 +762,7 @@ export default function OwnerDashboardPage() {
                 <DialogHeader>
                     <DialogTitle>Vista Previa del Recibo</DialogTitle>
                     <DialogDescription>
-                        Revise el recibo antes de descargarlo. El diseño se ajustará en el PDF final.
+                        Revise el recibo antes de compartirlo.
                     </DialogDescription>
                 </DialogHeader>
                 {receiptData && companyInfo && (
@@ -803,8 +837,8 @@ export default function OwnerDashboardPage() {
                 )}
                 <DialogFooter className="mt-auto pt-4 border-t">
                     <Button variant="outline" onClick={() => setIsReceiptPreviewOpen(false)}>Cerrar</Button>
-                    <Button onClick={handleDownloadPdf}>
-                        <Printer className="mr-2 h-4 w-4"/> Descargar PDF
+                    <Button onClick={handleSharePdf}>
+                        <Share2 className="mr-2 h-4 w-4"/> Compartir Recibo
                     </Button>
                 </DialogFooter>
             </DialogContent>
@@ -812,3 +846,4 @@ export default function OwnerDashboardPage() {
     </div>
   );
 }
+

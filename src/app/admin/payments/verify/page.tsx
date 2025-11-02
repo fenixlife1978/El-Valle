@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { CheckCircle2, XCircle, MoreHorizontal, Printer, Filter, Loader2, Trash2 } from 'lucide-react';
+import { CheckCircle2, XCircle, MoreHorizontal, Printer, Filter, Loader2, Trash2, Share2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -513,8 +513,8 @@ export default function VerifyPaymentsPage() {
   };
 
 
-  const handleDownloadPdf = async () => {
-    if (!receiptData || !companyInfo) return;
+  const generatePdfBlob = async (): Promise<Blob | null> => {
+    if (!receiptData || !companyInfo) return null;
     const { payment, beneficiary, paidDebts, qrCodeUrl, previousBalance, currentBalance } = receiptData;
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
@@ -657,8 +657,43 @@ export default function VerifyPaymentsPage() {
     noteY += 4;
     doc.setFontSize(7).setFont('helvetica', 'italic').text('Este recibo se generó de manera automática y es válido sin firma manuscrita.', pageWidth / 2, noteY, { align: 'center'});
 
+    return doc.output('blob');
+  }
 
-    doc.save(`Recibo_de_Pago_${receiptNumber}.pdf`);
+  const handleSharePdf = async () => {
+    if (!receiptData) return;
+
+    const blob = await generatePdfBlob();
+    if (!blob) {
+        toast({ variant: 'destructive', title: 'Error', description: 'No se pudo generar el PDF para compartir.' });
+        return;
+    }
+    
+    const receiptNumber = receiptData.payment.receiptNumbers?.[receiptData.beneficiary.ownerId] || receiptData.payment.id.substring(0, 10);
+    const fileName = `Recibo_de_Pago_${receiptNumber}.pdf`;
+    const file = new File([blob], fileName, { type: 'application/pdf' });
+
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+            await navigator.share({
+                files: [file],
+                title: `Recibo de Pago ${receiptNumber}`,
+                text: `Recibo de pago para ${receiptData.ownerName}.`,
+            });
+            toast({ title: 'Recibo Compartido', description: 'El recibo se ha compartido exitosamente.' });
+        } catch (error) {
+            // This error can happen if the user cancels the share dialog.
+            if ((error as Error).name !== 'AbortError') {
+                 console.error('Error sharing:', error);
+                 toast({ variant: 'destructive', title: 'Error al Compartir', description: 'No se pudo compartir el archivo.' });
+            }
+        }
+    } else {
+        // Fallback for browsers that don't support sharing files
+        toast({ title: 'Navegador no compatible', description: 'Tu navegador no soporta la función de compartir archivos. Abriendo PDF en una nueva pestaña.' });
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank');
+    }
     setIsReceiptPdfPreviewOpen(false);
   };
 
@@ -801,7 +836,7 @@ export default function VerifyPaymentsPage() {
                 <DialogHeader>
                     <DialogTitle>Vista Previa del Recibo</DialogTitle>
                     <DialogDescription>
-                        Revise el recibo antes de descargarlo. El diseño se ajustará en el PDF final.
+                        Revise el recibo antes de compartirlo.
                     </DialogDescription>
                 </DialogHeader>
                 <div className="flex-grow overflow-y-auto pr-4 -mr-4">
@@ -883,8 +918,8 @@ export default function VerifyPaymentsPage() {
                 </div>
                 <DialogFooter className="mt-auto pt-4 border-t">
                     <Button variant="outline" onClick={() => setIsReceiptPdfPreviewOpen(false)}>Cerrar</Button>
-                    <Button onClick={handleDownloadPdf}>
-                        <Printer className="mr-2 h-4 w-4"/> Descargar PDF
+                    <Button onClick={handleSharePdf}>
+                        <Share2 className="mr-2 h-4 w-4"/> Compartir Recibo
                     </Button>
                 </DialogFooter>
             </DialogContent>
@@ -921,6 +956,7 @@ export default function VerifyPaymentsPage() {
     
 
     
+
 
 
 
