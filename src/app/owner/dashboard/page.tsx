@@ -471,37 +471,17 @@ export default function OwnerDashboardPage() {
     return doc.output('blob');
   };
 
-  const handleSharePdf = async () => {
+  const handleOpenPdf = async () => {
     if (!receiptData) return;
 
     const blob = await generatePdfBlob();
     if (!blob) {
-      toast({ variant: 'destructive', title: 'Error', description: 'No se pudo generar el PDF para compartir.' });
-      return;
+        toast({ variant: 'destructive', title: 'Error', description: 'No se pudo generar el PDF.' });
+        return;
     }
-
-    const fileName = `Recibo_de_Pago_${receiptData.payment.id.substring(0, 7)}.pdf`;
-    const file = new File([blob], fileName, { type: 'application/pdf' });
-
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      try {
-        await navigator.share({
-          files: [file],
-          title: `Recibo de Pago ${receiptData.payment.id.substring(0, 10)}`,
-          text: `Recibo de pago para ${receiptData.ownerName}.`,
-        });
-        toast({ title: 'Recibo Compartido', description: 'El recibo se ha compartido exitosamente.' });
-      } catch (error) {
-        if ((error as Error).name !== 'AbortError') {
-          console.error('Error sharing:', error);
-          toast({ variant: 'destructive', title: 'Error al Compartir', description: 'No se pudo compartir el archivo.' });
-        }
-      }
-    } else {
-      toast({ title: 'Navegador no compatible', description: 'Tu navegador no soporta la función de compartir archivos. Abriendo PDF en una nueva pestaña.' });
-      const url = URL.createObjectURL(blob);
-      window.open(url, '_blank');
-    }
+    
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
     setIsReceiptPreviewOpen(false);
   };
 
@@ -762,7 +742,7 @@ export default function OwnerDashboardPage() {
                 <DialogHeader>
                     <DialogTitle>Vista Previa del Recibo</DialogTitle>
                     <DialogDescription>
-                        Revise el recibo antes de compartirlo.
+                        Revise el recibo antes de descargarlo.
                     </DialogDescription>
                 </DialogHeader>
                 {receiptData && companyInfo && (
@@ -837,8 +817,8 @@ export default function OwnerDashboardPage() {
                 )}
                 <DialogFooter className="mt-auto pt-4 border-t">
                     <Button variant="outline" onClick={() => setIsReceiptPreviewOpen(false)}>Cerrar</Button>
-                    <Button onClick={handleSharePdf}>
-                        <Share2 className="mr-2 h-4 w-4"/> Compartir Recibo
+                    <Button onClick={handleOpenPdf}>
+                        <FileText className="mr-2 h-4 w-4"/> Ver PDF
                     </Button>
                 </DialogFooter>
             </DialogContent>
@@ -846,4 +826,5 @@ export default function OwnerDashboardPage() {
     </div>
   );
 }
+
 

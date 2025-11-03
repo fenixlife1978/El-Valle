@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { CheckCircle2, XCircle, MoreHorizontal, Printer, Filter, Loader2, Trash2, Share2 } from 'lucide-react';
+import { CheckCircle2, XCircle, MoreHorizontal, Printer, Filter, Loader2, Trash2, Share2, FileText } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -660,7 +660,7 @@ export default function VerifyPaymentsPage() {
     return doc.output('blob');
   }
 
-  const handleSharePdf = async () => {
+  const handleOpenPdf = async () => {
     if (!receiptData) return;
 
     const blob = await generatePdfBlob();
@@ -669,31 +669,8 @@ export default function VerifyPaymentsPage() {
         return;
     }
     
-    const receiptNumber = receiptData.payment.receiptNumbers?.[receiptData.beneficiary.ownerId] || receiptData.payment.id.substring(0, 10);
-    const fileName = `Recibo_de_Pago_${receiptNumber}.pdf`;
-    const file = new File([blob], fileName, { type: 'application/pdf' });
-
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        try {
-            await navigator.share({
-                files: [file],
-                title: `Recibo de Pago ${receiptNumber}`,
-                text: `Recibo de pago para ${receiptData.ownerName}.`,
-            });
-            toast({ title: 'Recibo Compartido', description: 'El recibo se ha compartido exitosamente.' });
-        } catch (error) {
-            // This error can happen if the user cancels the share dialog.
-            if ((error as Error).name !== 'AbortError') {
-                 console.error('Error sharing:', error);
-                 toast({ variant: 'destructive', title: 'Error al Compartir', description: 'No se pudo compartir el archivo.' });
-            }
-        }
-    } else {
-        // Fallback for browsers that don't support sharing files
-        toast({ title: 'Navegador no compatible', description: 'Tu navegador no soporta la función de compartir archivos. Abriendo PDF en una nueva pestaña.' });
-        const url = URL.createObjectURL(blob);
-        window.open(url, '_blank');
-    }
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
     setIsReceiptPdfPreviewOpen(false);
   };
 
@@ -918,8 +895,8 @@ export default function VerifyPaymentsPage() {
                 </div>
                 <DialogFooter className="mt-auto pt-4 border-t">
                     <Button variant="outline" onClick={() => setIsReceiptPdfPreviewOpen(false)}>Cerrar</Button>
-                    <Button onClick={handleSharePdf}>
-                        <Share2 className="mr-2 h-4 w-4"/> Compartir Recibo
+                    <Button onClick={handleOpenPdf}>
+                        <FileText className="mr-2 h-4 w-4"/> Ver PDF
                     </Button>
                 </DialogFooter>
             </DialogContent>
@@ -956,8 +933,3 @@ export default function VerifyPaymentsPage() {
     
 
     
-
-
-
-
-
