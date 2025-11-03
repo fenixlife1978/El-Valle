@@ -123,8 +123,6 @@ export default function OwnerDashboardPage() {
     const [solvencyPeriod, setSolvencyPeriod] = useState('');
     const [selectedDebts, setSelectedDebts] = useState<string[]>([]);
     const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
-    const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
-    const [isReceiptPreviewOpen, setIsReceiptPreviewOpen] = useState(false);
     
     const [latestIntegralReport, setLatestIntegralReport] = useState<PublishedReport | null>(null);
     const [latestFinancialBalance, setLatestFinancialBalance] = useState<PublishedReport | null>(null);
@@ -324,8 +322,8 @@ export default function OwnerDashboardPage() {
         };
     }, [selectedDebts, pendingDebts, dashboardStats]);
 
-  const showReceiptPreview = async (payment: Payment) => {
-    if (!ownerData) return;
+    const generateReceiptPdf = async (payment: Payment) => {
+    if (!ownerData || !companyInfo) return;
 
     try {
         const ownerName = (payment.beneficiaries && payment.beneficiaries.length > 0 && payment.beneficiaries[0].ownerName) 
@@ -343,147 +341,87 @@ export default function OwnerDashboardPage() {
         const paidDebtsSnapshot = await getDocs(paidDebtsQuery);
         const paidDebts = paidDebtsSnapshot.docs
             .map(doc => ({id: doc.id, ...doc.data()}) as Debt)
-            .sort((a,b) => {
-                if (a.year !== b.year) return a.year - b.year;
-                return a.month - b.month;
-            });
+            .sort((a,b) => a.year - b.year || a.month - b.month);
         
-        setReceiptData({ 
-            payment, 
-            ownerName: ownerName,
-            ownerUnit: ownerUnit,
-            paidDebts 
+        const doc = new jsPDF();
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const margin = 14;
+
+        if (companyInfo.logo) {
+            try { doc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25); }
+            catch (e) { console.error("Error adding image to PDF: ", e)}
+        }
+        doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, margin + 30, margin + 8);
+        doc.setFontSize(9).setFont('helvetica', 'normal');
+        doc.text(companyInfo.rif, margin + 30, margin + 14);
+        doc.text(companyInfo.address, margin + 30, margin + 19);
+        doc.text(`Teléfono: ${companyInfo.phone}`, margin + 30, margin + 24);
+        doc.setFontSize(10).text(`Fecha de Emisión: ${format(new Date(), 'dd/MM/yyyy')}`, pageWidth - margin, margin + 8, { align: 'right' });
+        doc.setLineWidth(0.5).line(margin, margin + 32, pageWidth - margin, margin + 32);
+        doc.setFontSize(16).setFont('helvetica', 'bold').text("RECIBO DE PAGO", pageWidth / 2, margin + 45, { align: 'center' });
+        doc.setFontSize(10).setFont('helvetica', 'normal').text(`N° de recibo: ${payment.id.substring(0, 10)}`, pageWidth - margin, margin + 50, { align: 'right' });
+
+        let startY = margin + 60;
+        doc.setFontSize(10).text(`Nombre del Beneficiario: ${ownerName}`, margin, startY);
+        startY += 6;
+        doc.text(`Unidad: ${ownerUnit}`, margin, startY);
+        startY += 6;
+        doc.text(`Método de pago: ${payment.type}`, margin, startY);
+        startY += 6;
+        doc.text(`Banco Emisor: ${payment.bank}`, margin, startY);
+        startY += 6;
+        doc.text(`N° de Referencia Bancaria: ${payment.reference}`, margin, startY);
+        startY += 6;
+        doc.text(`Fecha del pago: ${format(payment.paymentDate.toDate(), 'dd/MM/yyyy')}`, margin, startY);
+        startY += 6;
+        doc.text(`Tasa de Cambio Aplicada: Bs. ${formatToTwoDecimals(payment.exchangeRate)} por USD`, margin, startY);
+        startY += 10;
+        
+        let totalPaidInConcepts = 0;
+        const tableBody = paidDebts.map(debt => {
+            const debtAmountBs = (debt.paidAmountUSD || debt.amountUSD) * payment.exchangeRate;
+            totalPaidInConcepts += debtAmountBs;
+            const propertyLabel = debt.property ? `${debt.property.street} - ${debt.property.house}` : 'N/A';
+            const periodLabel = `${monthsLocale[debt.month]} ${debt.year}`;
+            const concept = `${debt.description} (${propertyLabel})`;
+            return [ periodLabel, concept, `$${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}`, `Bs. ${formatToTwoDecimals(debtAmountBs)}` ];
         });
-        setIsReceiptPreviewOpen(true);
+
+        if (paidDebts.length > 0) {
+            (doc as any).autoTable({ startY: startY, head: [['Período', 'Concepto (Propiedad)', 'Monto ($)', 'Monto Pagado (Bs)']], body: tableBody, theme: 'striped', headStyles: { fillColor: [44, 62, 80], textColor: 255 }, styles: { fontSize: 9, cellPadding: 2.5 } });
+            startY = (doc as any).lastAutoTable.finalY + 8;
+        } else {
+            totalPaidInConcepts = payment.totalAmount;
+            (doc as any).autoTable({ startY: startY, head: [['Concepto', 'Monto Pagado (Bs)']], body: [['Abono a Saldo a Favor', `Bs. ${formatToTwoDecimals(payment.totalAmount)}`]], theme: 'striped', headStyles: { fillColor: [44, 62, 80], textColor: 255 }, styles: { fontSize: 9, cellPadding: 2.5 } });
+            startY = (doc as any).lastAutoTable.finalY + 8;
+        }
+        
+        const totalLabel = "TOTAL PAGADO:";
+        const totalValue = `Bs. ${formatToTwoDecimals(totalPaidInConcepts)}`;
+        doc.setFontSize(11).setFont('helvetica', 'bold');
+        const totalValueWidth = doc.getStringUnitWidth(totalValue) * 11 / doc.internal.scaleFactor;
+        doc.text(totalValue, pageWidth - margin, startY, { align: 'right' });
+        doc.text(totalLabel, pageWidth - margin - totalValueWidth - 2, startY, { align: 'right' });
+        startY += 10;
+
+        const legalNote = 'Todo propietario que requiera de firma y sello húmedo deberá imprimir éste recibo y hacerlo llegar al condominio para su respectiva estampa.';
+        const splitLegalNote = doc.splitTextToSize(legalNote, pageWidth - (margin * 2));
+        doc.setFontSize(8).setFont('helvetica', 'normal').text(splitLegalNote, margin, startY);
+        startY += (splitLegalNote.length * 4) + 4;
+        doc.setFontSize(9).text('Este recibo confirma que su pago ha sido validado conforme a los términos establecidos por la comunidad.', margin, startY);
+        startY += 8;
+        doc.setFont('helvetica', 'bold').text(`Firma electrónica: '${companyInfo.name} - Condominio'`, margin, startY);
+        startY += 10;
+        doc.setLineWidth(0.2).line(margin, startY, pageWidth - margin, startY);
+        startY += 5;
+        doc.setFontSize(8).setFont('helvetica', 'italic').text('Este recibo se generó de manera automática y es válido sin firma manuscrita.', pageWidth / 2, startY, { align: 'center'});
+
+        doc.save(`recibo_${payment.id.substring(0, 10)}.pdf`);
+
     } catch (error) {
-        console.error("Error generating receipt preview: ", error);
+        console.error("Error generating PDF: ", error);
     }
   }
-
-   const generatePdfBlob = async (): Promise<Blob | null> => {
-    if (!receiptData || !companyInfo) return null;
-    const { payment, ownerName, ownerUnit, paidDebts } = receiptData;
-    const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const margin = 14;
-
-    // --- Header ---
-    if (companyInfo.logo) {
-        try { doc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25); }
-        catch (e) { console.error("Error adding image to PDF: ", e)}
-    }
-    doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, margin + 30, margin + 8);
-    doc.setFontSize(9).setFont('helvetica', 'normal');
-    doc.text(companyInfo.rif, margin + 30, margin + 14);
-    doc.text(companyInfo.address, margin + 30, margin + 19);
-    doc.text(`Teléfono: ${companyInfo.phone}`, margin + 30, margin + 24);
-    
-    doc.setFontSize(10).text(`Fecha de Emisión: ${format(new Date(), 'dd/MM/yyyy')}`, pageWidth - margin, margin + 8, { align: 'right' });
-    
-    doc.setLineWidth(0.5).line(margin, margin + 32, pageWidth - margin, margin + 32);
-
-    // --- Title ---
-    doc.setFontSize(16).setFont('helvetica', 'bold').text("RECIBO DE PAGO", pageWidth / 2, margin + 45, { align: 'center' });
-    doc.setFontSize(10).setFont('helvetica', 'normal').text(`N° de recibo: ${payment.id.substring(0, 10)}`, pageWidth - margin, margin + 50, { align: 'right' });
-
-    // --- Payment Details ---
-    let startY = margin + 60;
-    doc.setFontSize(10).text(`Nombre del Beneficiario: ${ownerName}`, margin, startY);
-    startY += 6;
-    doc.text(`Unidad: ${ownerUnit}`, margin, startY);
-    startY += 6;
-    doc.text(`Método de pago: ${payment.type}`, margin, startY);
-    startY += 6;
-    doc.text(`Banco Emisor: ${payment.bank}`, margin, startY);
-    startY += 6;
-    doc.text(`N° de Referencia Bancaria: ${payment.reference}`, margin, startY);
-    startY += 6;
-    doc.text(`Fecha del pago: ${format(payment.paymentDate.toDate(), 'dd/MM/yyyy')}`, margin, startY);
-    startY += 6;
-    doc.text(`Tasa de Cambio Aplicada: Bs. ${formatToTwoDecimals(payment.exchangeRate)} por USD`, margin, startY);
-    startY += 10;
-    
-    let totalPaidInConcepts = 0;
-    const tableBody = paidDebts.map(debt => {
-        const debtAmountBs = (debt.paidAmountUSD || debt.amountUSD) * payment.exchangeRate;
-        totalPaidInConcepts += debtAmountBs;
-        const propertyLabel = debt.property ? `${debt.property.street} - ${debt.property.house}` : 'N/A';
-        const periodLabel = `${monthsLocale[debt.month]} ${debt.year}`;
-        const concept = `${debt.description} (${propertyLabel})`;
-        
-        return [
-            periodLabel,
-            concept,
-            `$${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}`,
-            `Bs. ${formatToTwoDecimals(debtAmountBs)}`
-        ];
-    });
-
-    if (paidDebts.length > 0) {
-        (doc as any).autoTable({
-            startY: startY,
-            head: [['Período', 'Concepto (Propiedad)', 'Monto ($)', 'Monto Pagado (Bs)']],
-            body: tableBody,
-            theme: 'striped',
-            headStyles: { fillColor: [44, 62, 80], textColor: 255 },
-            styles: { fontSize: 9, cellPadding: 2.5 },
-            didDrawPage: (data: any) => { startY = data.cursor.y; }
-        });
-        startY = (doc as any).lastAutoTable.finalY + 8;
-    } else {
-        totalPaidInConcepts = payment.totalAmount;
-        (doc as any).autoTable({
-            startY: startY,
-            head: [['Concepto', 'Monto Pagado (Bs)']],
-            body: [['Abono a Saldo a Favor', `Bs. ${formatToTwoDecimals(payment.totalAmount)}`]],
-            theme: 'striped',
-            headStyles: { fillColor: [44, 62, 80], textColor: 255 },
-            styles: { fontSize: 9, cellPadding: 2.5 },
-            didDrawPage: (data: any) => { startY = data.cursor.y; }
-        });
-        startY = (doc as any).lastAutoTable.finalY + 8;
-    }
-    
-    // Totals Section
-    const totalLabel = "TOTAL PAGADO:";
-    const totalValue = `Bs. ${formatToTwoDecimals(totalPaidInConcepts)}`;
-    doc.setFontSize(11).setFont('helvetica', 'bold');
-    const totalValueWidth = doc.getStringUnitWidth(totalValue) * 11 / doc.internal.scaleFactor;
-    doc.text(totalValue, pageWidth - margin, startY, { align: 'right' });
-    doc.text(totalLabel, pageWidth - margin - totalValueWidth - 2, startY, { align: 'right' });
-
-    startY += 10;
-
-    // --- Footer ---
-    const legalNote = 'Todo propietario que requiera de firma y sello húmedo deberá imprimir éste recibo y hacerlo llegar al condominio para su respectiva estampa.';
-    const splitLegalNote = doc.splitTextToSize(legalNote, pageWidth - (margin * 2));
-    doc.setFontSize(8).setFont('helvetica', 'normal').text(splitLegalNote, margin, startY);
-    startY += (splitLegalNote.length * 4) + 4;
-
-    doc.setFontSize(9).text('Este recibo confirma que su pago ha sido validado conforme a los términos establecidos por la comunidad.', margin, startY);
-    startY += 8;
-    doc.setFont('helvetica', 'bold').text(`Firma electrónica: '${companyInfo.name} - Condominio'`, margin, startY);
-    startY += 10;
-    doc.setLineWidth(0.2).line(margin, startY, pageWidth - margin, startY);
-    startY += 5;
-    doc.setFontSize(8).setFont('helvetica', 'italic').text('Este recibo se generó de manera automática y es válido sin firma manuscrita.', pageWidth / 2, startY, { align: 'center'});
-
-    return doc.output('blob');
-  };
-
-  const handleOpenPdf = async () => {
-    if (!receiptData) return;
-
-    const blob = await generatePdfBlob();
-    if (!blob) {
-        toast({ variant: 'destructive', title: 'Error', description: 'No se pudo generar el PDF.' });
-        return;
-    }
-    
-    const url = URL.createObjectURL(blob);
-    window.open(url, '_blank');
-    setIsReceiptPreviewOpen(false);
-  };
 
 
   const getBalancePeriodText = (report: PublishedReport) => {
@@ -717,13 +655,13 @@ export default function OwnerDashboardPage() {
                         </TableCell>
                          <TableCell className="text-right">
                             {payment.status === 'aprobado' ? (
-                                <Button variant="ghost" size="icon" onClick={() => showReceiptPreview(payment)}>
-                                    <FileText className="h-4 w-4"/>
+                                <Button variant="ghost" size="icon" onClick={() => generateReceiptPdf(payment)}>
+                                    <Printer className="h-4 w-4"/>
                                     <span className="sr-only">Ver Recibo</span>
                                 </Button>
                             ) : (
                                 <Button variant="ghost" size="icon" disabled>
-                                    <FileText className="h-4 w-4 text-muted-foreground/50"/>
+                                    <Printer className="h-4 w-4 text-muted-foreground/50"/>
                                     <span className="sr-only">Ver Recibo (No disponible)</span>
                                 </Button>
                             )}
@@ -735,96 +673,9 @@ export default function OwnerDashboardPage() {
             </Card>
         </div>
       </div>
-      
-       {/* Receipt Preview Dialog */}
-        <Dialog open={isReceiptPreviewOpen} onOpenChange={setIsReceiptPreviewOpen}>
-            <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col">
-                <DialogHeader>
-                    <DialogTitle>Vista Previa del Recibo</DialogTitle>
-                    <DialogDescription>
-                        Revise el recibo antes de descargarlo.
-                    </DialogDescription>
-                </DialogHeader>
-                {receiptData && companyInfo && (
-                     <div className="flex-grow overflow-y-auto pr-4 -mr-4 border rounded-md p-4 bg-white text-black font-sans text-xs space-y-4">
-                        {/* Header */}
-                        <div className="flex justify-between items-start">
-                            <div className="flex items-center gap-4">
-                                {companyInfo.logo && <img src={companyInfo.logo} alt="Logo" className="w-20 h-20 object-contain"/>}
-                                <div>
-                                    <p className="font-bold">{companyInfo.name}</p>
-                                    <p>{companyInfo.rif}</p>
-                                    <p>{companyInfo.address}</p>
-                                    <p>Teléfono: {companyInfo.phone}</p>
-                                </div>
-                            </div>
-                            <div className="text-right">
-                                <p className="font-bold text-lg">RECIBO DE PAGO</p>
-                                <p><strong>Fecha Emisión:</strong> {format(new Date(), 'dd/MM/yyyy')}</p>
-                                <p><strong>N° Recibo:</strong> {receiptData.payment.id.substring(0, 10)}</p>
-                            </div>
-                        </div>
-                        <hr className="my-2 border-gray-400"/>
-                        {/* Details */}
-                         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                             <p><strong>Beneficiario:</strong></p><p>{receiptData.ownerName}</p>
-                             <p><strong>Unidad:</strong></p><p>{receiptData.ownerUnit}</p>
-                             <p><strong>Método de pago:</strong></p><p>{receiptData.payment.type}</p>
-                             <p><strong>Banco Emisor:</strong></p><p>{receiptData.payment.bank}</p>
-                             <p><strong>N° de Referencia:</strong></p><p>{receiptData.payment.reference}</p>
-                             <p><strong>Fecha del pago:</strong></p><p>{format(receiptData.payment.paymentDate.toDate(), 'dd/MM/yyyy')}</p>
-                             <p><strong>Tasa de Cambio Aplicada:</strong></p><p>Bs. {formatToTwoDecimals(receiptData.payment.exchangeRate)} por USD</p>
-                        </div>
-                        {/* Concept Table */}
-                        <Table className="text-xs">
-                            <TableHeader>
-                                <TableRow className="bg-gray-700 text-white hover:bg-gray-800">
-                                    <TableHead className="text-white">Período</TableHead>
-                                    <TableHead className="text-white">Concepto (Propiedad)</TableHead>
-                                    <TableHead className="text-white text-right">Monto ($)</TableHead>
-                                    <TableHead className="text-white text-right">Monto Pagado (Bs)</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {receiptData.paidDebts.length > 0 ? (
-                                    receiptData.paidDebts.map((debt, index) => (
-                                        <TableRow key={index} className="even:bg-gray-100">
-                                            <TableCell>{monthsLocale[debt.month]} {debt.year}</TableCell>
-                                            <TableCell>{debt.description} ({debt.property ? `${debt.property.street} - ${debt.property.house}` : 'N/A'})</TableCell>
-                                            <TableCell className="text-right">${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}</TableCell>
-                                            <TableCell className="text-right">Bs. {formatToTwoDecimals((debt.paidAmountUSD || debt.amountUSD) * receiptData.payment.exchangeRate)}</TableCell>
-                                        </TableRow>
-                                    ))
-                                ) : (
-                                    <TableRow>
-                                        <TableCell colSpan={4} className="h-24 text-center">Abono a Saldo a Favor</TableCell>
-                                    </TableRow>
-                                )}
-                            </TableBody>
-                        </Table>
-                         <div className="text-right font-bold mt-2 pr-4">
-                            Total Pagado: Bs. {formatToTwoDecimals(receiptData.paidDebts.reduce((acc, debt) => acc + ((debt.paidAmountUSD || debt.amountUSD) * receiptData.payment.exchangeRate), 0) > 0 ? receiptData.paidDebts.reduce((acc, debt) => acc + ((debt.paidAmountUSD || debt.amountUSD) * receiptData.payment.exchangeRate), 0) : receiptData.payment.totalAmount)}
-                         </div>
-                        {/* Footer */}
-                        <div className="mt-6 text-gray-600 text-[10px] space-y-2">
-                             <p className="text-left text-[11px] font-semibold">Todo propietario que requiera de firma y sello húmedo deberá imprimir éste recibo y hacerlo llegar al condominio para su respectiva estampa.</p>
-                             <p className="text-left">Este recibo confirma que su pago ha sido validado conforme a los términos establecidos por la comunidad.</p>
-                             <p className="text-left font-bold mt-2">Firma electrónica: '{companyInfo.name} - Condominio'</p>
-                             <hr className="my-4 border-gray-400"/>
-                             <p className="italic text-center">Este recibo se generó de manera automática y es válido sin firma manuscrita.</p>
-                        </div>
-                    </div>
-                )}
-                <DialogFooter className="mt-auto pt-4 border-t">
-                    <Button variant="outline" onClick={() => setIsReceiptPreviewOpen(false)}>Cerrar</Button>
-                    <Button onClick={handleOpenPdf}>
-                        <FileText className="mr-2 h-4 w-4"/> Ver PDF
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
     </div>
   );
 }
+
 
 
