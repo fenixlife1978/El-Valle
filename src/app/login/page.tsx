@@ -7,7 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Shield, User } from 'lucide-react';
+import { Loader2, Shield, User, Eye, EyeOff } from 'lucide-react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '@/lib/firebase'; // Import auth from your firebase config
 import Link from 'next/link';
@@ -21,6 +21,7 @@ export default function LoginPage() {
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [role, setRole] = useState<'owner' | 'admin' | null>(null);
+    const [showPassword, setShowPassword] = useState(false);
 
     useEffect(() => {
         const roleParam = searchParams.get('role');
@@ -104,15 +105,26 @@ export default function LoginPage() {
                                 required
                             />
                         </div>
-                        <div className="space-y-2">
+                        <div className="space-y-2 relative">
                             <Label htmlFor="password">Contraseña</Label>
                             <Input
                                 id="password"
-                                type="password"
+                                type={showPassword ? "text" : "password"}
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 required
+                                className="pr-10"
                             />
+                             <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="absolute right-1 top-7 h-7 w-7 text-muted-foreground"
+                                onClick={() => setShowPassword((prev) => !prev)}
+                            >
+                                {showPassword ? <EyeOff className="h-4 w-4"/> : <Eye className="h-4 w-4"/>}
+                                <span className="sr-only">Toggle password visibility</span>
+                            </Button>
                         </div>
                          <div className="text-right">
                                 <Button variant="link" size="sm" asChild className="p-0 h-auto">
