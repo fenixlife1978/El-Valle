@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "chmod +x ./update-dev-origin.sh && ./update-dev-origin.sh && next dev",
+    "dev": "next dev & sleep 3 && ./update-dev-origin.sh",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
