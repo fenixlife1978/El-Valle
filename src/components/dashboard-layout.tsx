@@ -121,15 +121,18 @@ const CustomHeader = ({ ownerData, userRole }: { ownerData: any, userRole: strin
 
     return (
         <header className="sticky top-0 z-10 flex h-auto items-center justify-between gap-2 border-b bg-background/80 p-2 backdrop-blur-sm sm:h-20 sm:px-4">
-             <div className="flex items-center gap-4">
-                <SidebarTrigger className="sm:hidden" />
+             <div className="flex items-center gap-4 flex-1">
                 <div className="flex flex-col">
                     <h1 className="text-md font-semibold text-foreground">Hola, {userName}</h1>
                     <p className="text-xs text-muted-foreground">Bienvenido a tu panel</p>
                 </div>
             </div>
 
-            <div className="flex items-center gap-4">
+             <div className="flex-none justify-center">
+                <SidebarTrigger className="h-9 w-9" />
+            </div>
+
+            <div className="flex items-center gap-4 flex-1 justify-end">
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                     <Button variant="ghost" className="relative h-10 w-10 rounded-full">
