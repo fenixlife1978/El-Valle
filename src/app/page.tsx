@@ -1,31 +1,49 @@
 
+'use client';
+
+import { useState, useEffect } from 'react';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { RoleSelectionButtons } from './role-selection-buttons';
+import { Skeleton } from '@/components/ui/skeleton';
 
-export default async function RoleSelectionPage() {
-  let logoUrl: string | null = null;
-  try {
-    const settingsRef = doc(db, 'config', 'mainSettings');
-    const docSnap = await getDoc(settingsRef);
-    if (docSnap.exists()) {
-      const settings = docSnap.data();
-      if (settings.companyInfo && settings.companyInfo.logo) {
-        logoUrl = settings.companyInfo.logo;
+export default function RoleSelectionPage() {
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchLogo = async () => {
+      try {
+        const settingsRef = doc(db, 'config', 'mainSettings');
+        const docSnap = await getDoc(settingsRef);
+        if (docSnap.exists()) {
+          const settings = docSnap.data();
+          if (settings.companyInfo && settings.companyInfo.logo) {
+            setLogoUrl(settings.companyInfo.logo);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching company logo:", error);
+      } finally {
+        setLoading(false);
       }
-    }
-  } catch (error) {
-    console.error("Error fetching company logo:", error);
-  }
+    };
+    fetchLogo();
+  }, []);
+
 
   return (
     <main className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
       <div className="text-center mb-12">
-        <Avatar className="w-24 h-24 text-lg mx-auto mb-6">
-          <AvatarImage src={logoUrl || ''} alt="Company Logo" />
-          <AvatarFallback>VC</AvatarFallback>
-        </Avatar>
+        {loading ? (
+           <Skeleton className="w-24 h-24 rounded-full mx-auto mb-6" />
+        ) : (
+          <Avatar className="w-24 h-24 text-lg mx-auto mb-6">
+            <AvatarImage src={logoUrl || ''} alt="Company Logo" />
+            <AvatarFallback>VC</AvatarFallback>
+          </Avatar>
+        )}
         <h1 className="text-4xl font-bold font-headline text-primary">Bienvenid@ a VALLECONDO</h1>
         <p className="text-lg text-muted-foreground mt-2">Seleccione su rol para continuar</p>
       </div>
