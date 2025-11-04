@@ -2,16 +2,28 @@
 'use client';
 
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
-import { Landmark, AlertCircle, Building, Eye, Printer, Loader2, Users, Receipt, TrendingUp } from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Landmark, AlertCircle, Building, Eye, Printer, Loader2, Users, Receipt, TrendingUp, CheckCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { collection, query, where, onSnapshot, Timestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, Timestamp, orderBy, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
+import { Badge } from "@/components/ui/badge";
 
 const formatToTwoDecimals = (num: number) => {
     if (typeof num !== 'number' || isNaN(num)) return '0,00';
     const truncated = Math.trunc(num * 100) / 100;
     return truncated.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
+type Payment = {
+    id: string;
+    beneficiaries: { ownerName: string }[];
+    totalAmount: number;
+    paymentDate: Timestamp;
+    reference: string;
 };
 
 
@@ -23,6 +35,7 @@ export default function AdminDashboardPage() {
         pendingPayments: 0,
         totalOwners: 0
     });
+    const [recentPayments, setRecentPayments] = useState<Payment[]>([]);
 
     useEffect(() => {
         const startOfMonth = new Date();
@@ -39,6 +52,13 @@ export default function AdminDashboardPage() {
         const pendingPaymentsQuery = query(collection(db, 'payments'), where('status', '==', 'pendiente'));
         const ownersQuery = query(collection(db, 'owners'));
 
+        const recentPaymentsQuery = query(
+            collection(db, 'payments'), 
+            where('status', '==', 'aprobado'),
+            orderBy('paymentDate', 'desc'), 
+            limit(5)
+        );
+
         const unsubPayments = onSnapshot(paymentsQuery, (snapshot) => {
             const total = snapshot.docs.reduce((sum, doc) => sum + doc.data().totalAmount, 0);
             setStats(prev => ({ ...prev, monthlyIncome: total }));
@@ -49,7 +69,11 @@ export default function AdminDashboardPage() {
         });
 
         const unsubOwners = onSnapshot(ownersQuery, (snapshot) => {
-            setStats(prev => ({ ...prev, totalOwners: snapshot.size -1 })); // Exclude admin
+            setStats(prev => ({ ...prev, totalOwners: snapshot.size - 1 })); // Exclude admin
+        });
+
+        const unsubRecent = onSnapshot(recentPaymentsQuery, (snapshot) => {
+            setRecentPayments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Payment)));
         });
 
         setLoading(false);
@@ -58,6 +82,7 @@ export default function AdminDashboardPage() {
             unsubPayments();
             unsubPending();
             unsubOwners();
+            unsubRecent();
         }
 
     }, []);
@@ -106,6 +131,43 @@ export default function AdminDashboardPage() {
                 </CardContent>
             </Card>
         </div>
+
+        <Card>
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                    <CheckCircle className="text-green-500" />
+                    Últimos Pagos Aprobados
+                </CardTitle>
+            </CardHeader>
+            <CardContent>
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Propietario</TableHead>
+                            <TableHead>Monto (Bs.)</TableHead>
+                            <TableHead>Fecha de Pago</TableHead>
+                            <TableHead>Referencia</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {loading ? (
+                            <TableRow><TableCell colSpan={4} className="h-24 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto"/></TableCell></TableRow>
+                        ) : recentPayments.length === 0 ? (
+                            <TableRow><TableCell colSpan={4} className="h-24 text-center text-muted-foreground">No hay pagos aprobados recientemente.</TableCell></TableRow>
+                        ) : (
+                            recentPayments.map(payment => (
+                                <TableRow key={payment.id}>
+                                    <TableCell className="font-medium">{payment.beneficiaries[0]?.ownerName || 'N/A'}</TableCell>
+                                    <TableCell>Bs. {formatToTwoDecimals(payment.totalAmount)}</TableCell>
+                                    <TableCell>{format(payment.paymentDate.toDate(), 'dd MMMM, yyyy', { locale: es })}</TableCell>
+                                    <TableCell>{payment.reference}</TableCell>
+                                </TableRow>
+                            ))
+                        )}
+                    </TableBody>
+                </Table>
+            </CardContent>
+        </Card>
     </div>
   );
 }
