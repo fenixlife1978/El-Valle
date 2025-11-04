@@ -121,12 +121,13 @@ export default function OwnerDashboardPage() {
 
         const paymentsQuery = query(
             collection(db, "payments"), 
-            where("beneficiaryIds", "array-contains", user.uid),
-            orderBy('paymentDate', 'desc')
+            where("beneficiaryIds", "array-contains", user.uid)
         );
         const paymentsUnsubscribe = onSnapshot(paymentsQuery, (snapshot) => {
             const paymentsData: Payment[] = [];
             snapshot.forEach(doc => paymentsData.push({ id: doc.id, ...doc.data() } as Payment));
+            // Sort client-side
+            paymentsData.sort((a, b) => b.paymentDate.toMillis() - a.paymentDate.toMillis());
             setPayments(paymentsData);
         });
 
@@ -175,7 +176,7 @@ export default function OwnerDashboardPage() {
             return;
           }
           
-          const ownerUnitSummary = (beneficiary.street && beneficiary.house) ? `${beneficiary.street} - ${beneficiary.house}` : "Propiedad no especificada";
+          const ownerUnitSummary = (beneficiary.street && beneficiary.house) ? `${"beneficiary.street"} - ${"beneficiary.house"}` : "Propiedad no especificada";
     
           const paidDebtsQuery = query(collection(db, "debts"), where("paymentId", "==", payment.id), where("ownerId", "==", user?.uid));
           const paidDebtsSnapshot = await getDocs(paidDebtsQuery);
@@ -535,3 +536,5 @@ export default function OwnerDashboardPage() {
         </div>
     );
 }
+
+    
