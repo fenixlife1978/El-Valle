@@ -11,7 +11,9 @@ then
     exit 0
 fi
 
-PORT=$(lsof -i -P -n | grep LISTEN | grep node | awk '{print $9}' | cut -d':' -f2 | head -n 1)
+# Wait until Next.js starts and grab the highest port number used by Node
+PORT=$(lsof -i -P -n | grep LISTEN | grep node | awk '{print $9}' | cut -d':' -f2 | sort -n | tail -n 1)
+
 
 # Check if a port was found
 if [ -z "$PORT" ]; then
@@ -19,6 +21,7 @@ if [ -z "$PORT" ]; then
   exit 0
 fi
 
+# Build the full domain
 DOMAIN="${PORT}-firebase-studio-1755127519376.cluster-joak5ukfbnbyqspg4tewa33d24.cloudworkstations.dev"
 DEV_ORIGIN_URL="https://${DOMAIN}"
 
