@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from '@/hooks/use-toast';
-import { Upload, Save, Calendar as CalendarIcon, PlusCircle, Loader2, AlertTriangle, Wand2, MoreHorizontal, Edit, FileCog, UserCircle, RefreshCw, ArrowLeft } from 'lucide-react';
+import { Upload, Save, Calendar as CalendarIcon, PlusCircle, Loader2, AlertTriangle, Wand2, MoreHorizontal, Edit, FileCog, UserCircle, RefreshCw, ArrowLeft, Palette } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
@@ -45,12 +45,19 @@ type ExchangeRate = {
     active: boolean;
 };
 
+type ThemeColors = {
+    primary: string;
+    background: string;
+    accent: string;
+}
+
 type Settings = {
     adminProfile: AdminProfile;
     companyInfo: CompanyInfo;
     condoFee: number;
     exchangeRates: ExchangeRate[];
     lastCondoFee?: number; // To track the previous fee for adjustment logic
+    themeColors?: ThemeColors;
 };
 
 type Debt = {
@@ -81,6 +88,55 @@ const emptyCompanyInfo: CompanyInfo = {
     logo: '' 
 };
 
+const emptyThemeColors: ThemeColors = {
+    primary: '217.2 91.2% 59.8%',
+    background: '222.2 84% 4.9%',
+    accent: '217.2 32.6% 17.5%',
+};
+
+function hexToHsl(hex: string): string | null {
+    if (!hex) return null;
+    // Remove hash if present
+    const sanitizedHex = hex.startsWith('#') ? hex.slice(1) : hex;
+
+    // Handle short hex codes
+    let fullHex = sanitizedHex;
+    if (fullHex.length === 3) {
+        fullHex = fullHex.split('').map(char => char + char).join('');
+    }
+
+    if (fullHex.length !== 6) {
+        return null; // Invalid hex
+    }
+
+    const r = parseInt(fullHex.substring(0, 2), 16) / 255;
+    const g = parseInt(fullHex.substring(2, 4), 16) / 255;
+    const b = parseInt(fullHex.substring(4, 6), 16) / 255;
+
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+
+    let h = 0, s = 0, l = (max + min) / 2;
+
+    if (max !== min) {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        switch (max) {
+            case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+            case g: h = (b - r) / d + 2; break;
+            case b: h = (r - g) / d + 4; break;
+        }
+        h /= 6;
+    }
+    
+    h = Math.round(h * 360);
+    s = Math.round(s * 100);
+    l = Math.round(l * 100);
+    
+    return `${h} ${s}% ${l}%`;
+}
+
+
 export default function SettingsPage() {
     const { toast } = useToast();
     const router = useRouter();
@@ -110,6 +166,9 @@ export default function SettingsPage() {
     const [isFeeChanged, setIsFeeChanged] = useState(false);
     const [isAdjustmentRunning, setIsAdjustmentRunning] = useState(false);
     const [progress, setProgress] = useState(0);
+    
+    const [themeColors, setThemeColors] = useState<ThemeColors>(emptyThemeColors);
+
 
     useEffect(() => {
         const settingsRef = doc(db, 'config', 'mainSettings');
@@ -123,8 +182,8 @@ export default function SettingsPage() {
                 setCondoFee(settings.condoFee);
                 setLastCondoFee(settings.condoFee); // Set the last known fee from DB
                 setExchangeRates(settings.exchangeRates || []);
+                setThemeColors(settings.themeColors || emptyThemeColors);
             } else {
-                // Initialize with new rate if document doesn't exist
                 const initialRate: ExchangeRate = {
                     id: new Date().toISOString(),
                     date: format(new Date(), 'yyyy-MM-dd'),
@@ -136,7 +195,8 @@ export default function SettingsPage() {
                     companyInfo: emptyCompanyInfo,
                     condoFee: 25.00,
                     lastCondoFee: 25.00,
-                    exchangeRates: [initialRate]
+                    exchangeRates: [initialRate],
+                    themeColors: emptyThemeColors
                 });
             }
             setLoading(false);
@@ -221,7 +281,6 @@ export default function SettingsPage() {
     
     const openEditRateDialog = (rate: ExchangeRate) => {
         setRateToEdit(rate);
-        // Dates are stored as 'yyyy-MM-dd', parseISO handles this correctly without timezone shifts.
         setEditRateDate(parseISO(rate.date));
         setEditRateAmount(String(rate.rate));
         setIsRateDialogOpen(true);
@@ -271,7 +330,6 @@ export default function SettingsPage() {
     
             await new Promise(resolve => setTimeout(() => { setProgress(30); resolve(null); }, 300));
     
-            // Sanitize the data to prevent Firestore errors with `undefined`.
             const safeCompanyInfo: CompanyInfo = {
                 name: companyInfo?.name || '',
                 address: companyInfo?.address || '',
@@ -281,7 +339,7 @@ export default function SettingsPage() {
                 logo: companyInfo?.logo || '',
             };
     
-            const dataToSave = {
+            const dataToSave: Partial<Settings> = {
                 adminProfile: {
                     name: adminProfile.name || '',
                     email: adminProfile.email || '',
@@ -290,9 +348,16 @@ export default function SettingsPage() {
                 companyInfo: safeCompanyInfo,
                 condoFee: newCondoFee,
                 lastCondoFee: lastCondoFee,
+                themeColors: themeColors
             };
     
             await updateDoc(settingsRef, dataToSave);
+            
+            // This is a placeholder for dynamic CSS update
+            document.documentElement.style.setProperty('--primary', themeColors.primary);
+            document.documentElement.style.setProperty('--background', themeColors.background);
+            document.documentElement.style.setProperty('--accent', themeColors.accent);
+
     
             await new Promise(resolve => setTimeout(() => { setProgress(100); resolve(null); }, 500));
     
@@ -355,7 +420,6 @@ export default function SettingsPage() {
                 const debt = { id: doc.id, ...doc.data() } as Debt;
                 const paidAmount = debt.paidAmountUSD || debt.amountUSD;
                 
-                // Check if an adjustment is needed and if it doesn't already exist
                 const adjustmentKey = `${debt.ownerId}-${debt.year}-${debt.month}`;
                 if (paidAmount < newCondoFee && !existingAdjustments.has(adjustmentKey)) {
                     const difference = newCondoFee - paidAmount;
@@ -363,7 +427,7 @@ export default function SettingsPage() {
                     
                     batch.set(adjustmentDebtRef, {
                         ownerId: debt.ownerId,
-                        property: (doc.data() as any).property, // Firestore data is untyped here, so we cast
+                        property: (doc.data() as any).property,
                         year: debt.year,
                         month: debt.month,
                         amountUSD: difference,
@@ -392,7 +456,14 @@ export default function SettingsPage() {
             toast({ variant: 'destructive', title: 'Error en el Ajuste', description: errorMessage });
         } finally {
             setIsAdjustmentRunning(false);
-            setIsFeeChanged(false); // Reset fee change status after running adjustment
+            setIsFeeChanged(false);
+        }
+    };
+    
+    const handleColorChange = (colorName: keyof ThemeColors, hexValue: string) => {
+        const hslValue = hexToHsl(hexValue);
+        if (hslValue) {
+            setThemeColors(prev => ({...prev, [colorName]: hslValue}));
         }
     };
 
@@ -499,41 +570,70 @@ export default function SettingsPage() {
                             </div>
                         </CardContent>
                     </Card>
+
                     <Card>
                         <CardHeader>
-                            <CardTitle>Gestión de Cuota Condominial</CardTitle>
-                            <CardDescription>Define el monto de la cuota. Al guardar, todas las deudas pendientes se actualizarán a este nuevo monto.</CardDescription>
+                            <CardTitle className="flex items-center gap-2"><Palette/> Apariencia y Tema</CardTitle>
+                            <CardDescription>Personaliza los colores de la aplicación.</CardDescription>
                         </CardHeader>
-                        <CardContent>
-                           <div className="flex items-end gap-4">
-                                <div className="space-y-2 flex-grow">
-                                    <Label htmlFor="condoFee">Monto de la Cuota Mensual (USD)</Label>
-                                    <Input 
-                                        id="condoFee" 
-                                        type="number" 
-                                        value={condoFee} 
-                                        onChange={handleCondoFeeChange}
-                                        placeholder="0.00"
-                                    />
+                        <CardContent className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="space-y-2">
+                                    <Label>Color Primario</Label>
+                                    <div className="flex items-center gap-2">
+                                        <Input type="color" className="p-1 h-10 w-12" onChange={(e) => handleColorChange('primary', e.target.value)} />
+                                        <Input readOnly value={themeColors.primary} className="bg-muted"/>
+                                    </div>
                                 </div>
-                                 <Button onClick={handleFeeAdjustment} disabled={!isFeeChanged || isAdjustmentRunning} variant="outline">
-                                    {isAdjustmentRunning ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <RefreshCw className="mr-2 h-4 w-4"/>}
-                                    Ajustar Deudas por Aumento
-                                </Button>
+                                <div className="space-y-2">
+                                    <Label>Color de Fondo</Label>
+                                     <div className="flex items-center gap-2">
+                                        <Input type="color" className="p-1 h-10 w-12" onChange={(e) => handleColorChange('background', e.target.value)} />
+                                        <Input readOnly value={themeColors.background} className="bg-muted"/>
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Color de Acento</Label>
+                                     <div className="flex items-center gap-2">
+                                        <Input type="color" className="p-1 h-10 w-12" onChange={(e) => handleColorChange('accent', e.target.value)} />
+                                        <Input readOnly value={themeColors.accent} className="bg-muted"/>
+                                    </div>
+                                </div>
                             </div>
                         </CardContent>
-                        <CardFooter>
-                            <div className="p-4 bg-muted/50 rounded-lg flex items-start gap-3 text-sm text-muted-foreground w-full">
-                                <AlertTriangle className="h-5 w-5 mt-0.5 text-orange-500 shrink-0"/>
-                                <div>
-                                    <p><strong>Aviso Importante:</strong> Al guardar un cambio en la cuota, las deudas pendientes **no se actualizarán automáticamente**. Use el botón "Ajustar Deudas" para generar los cargos por diferencia a quienes pagaron por adelantado.</p>
-                                </div>
-                            </div>
-                        </CardFooter>
                     </Card>
+
                 </div>
 
                 <div className="lg:col-span-1 space-y-8">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Gestión de Cuota Condominial</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                           <div className="space-y-2 flex-grow">
+                                <Label htmlFor="condoFee">Monto de la Cuota Mensual (USD)</Label>
+                                <Input 
+                                    id="condoFee" 
+                                    type="number" 
+                                    value={condoFee} 
+                                    onChange={handleCondoFeeChange}
+                                    placeholder="0.00"
+                                />
+                            </div>
+                        </CardContent>
+                        <CardFooter className="flex-col items-stretch gap-2">
+                            <Button onClick={handleFeeAdjustment} disabled={!isFeeChanged || isAdjustmentRunning} variant="outline">
+                                {isAdjustmentRunning ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <RefreshCw className="mr-2 h-4 w-4"/>}
+                                Ajustar Deudas por Aumento
+                            </Button>
+                            <div className="p-3 bg-muted/50 rounded-lg flex items-start gap-2 text-xs text-muted-foreground">
+                                <AlertTriangle className="h-4 w-4 mt-0.5 text-orange-500 shrink-0"/>
+                                <p>Use "Ajustar Deudas" si cambia la cuota para generar cargos por diferencia a quienes pagaron por adelantado.</p>
+                            </div>
+                        </CardFooter>
+                    </Card>
+
                     <Card>
                         <CardHeader>
                             <CardTitle>Gestión Manual de Tasa</CardTitle>
