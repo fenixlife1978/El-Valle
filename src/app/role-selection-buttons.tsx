@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useRouter } from 'next/navigation';
@@ -5,7 +6,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Button } from '@/components/ui/button';
 import { Shield, User } from 'lucide-react';
 
-export function RoleSelectionButtons() {
+export default function RoleSelectionButtons() {
     const router = useRouter();
 
     return (
