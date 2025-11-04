@@ -10,7 +10,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PlusCircle, MoreHorizontal, Edit, Trash2, FileUp, FileDown, Loader2, MinusCircle, KeyRound, Search, RefreshCw, ArrowLeft } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, Edit, Trash2, FileUp, FileDown, Loader2, MinusCircle, KeyRound, Search, RefreshCw, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import * as XLSX from 'xlsx';
@@ -98,6 +98,7 @@ export default function PeopleManagementPage() {
     const importFileRef = useRef<HTMLInputElement>(null);
     const { toast } = useToast();
     const router = useRouter();
+    const [showPassword, setShowPassword] = useState(false);
 
     useEffect(() => {
         const q = query(collection(db, "owners"));
@@ -154,6 +155,7 @@ export default function PeopleManagementPage() {
 
     const handleAddOwner = () => {
         setCurrentOwner(emptyOwner);
+        setShowPassword(false);
         setIsDialogOpen(true);
     };
 
@@ -165,6 +167,7 @@ export default function PeopleManagementPage() {
                 : [{ street: '', house: '' }]
         };
         setCurrentOwner(editableOwner);
+        setShowPassword(false);
         setIsDialogOpen(true);
     };
 
@@ -562,9 +565,24 @@ export default function PeopleManagementPage() {
                             </div>
                             
                             {!currentOwner.id && (
-                                <div className="space-y-2">
+                                <div className="space-y-2 relative">
                                     <Label htmlFor="password">Contraseña Inicial</Label>
-                                    <Input id="password" type="password" value={currentOwner.password || ''} onChange={handleInputChange} />
+                                    <Input 
+                                      id="password" 
+                                      type={showPassword ? "text" : "password"}
+                                      value={currentOwner.password || ''} 
+                                      onChange={handleInputChange} 
+                                      className="pr-10"
+                                    />
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="absolute right-1 top-7 h-7 w-7 text-muted-foreground"
+                                        onClick={() => setShowPassword((prev) => !prev)}
+                                    >
+                                        {showPassword ? <EyeOff className="h-4 w-4"/> : <Eye className="h-4 w-4"/>}
+                                    </Button>
                                 </div>
                             )}
 

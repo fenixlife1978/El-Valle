@@ -7,7 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, KeyRound } from 'lucide-react';
+import { Loader2, KeyRound, Eye, EyeOff } from 'lucide-react';
 import { getAuth, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -22,6 +22,10 @@ export default function ChangePasswordPage() {
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [loading, setLoading] = useState(false);
+    const [showOldPassword, setShowOldPassword] = useState(false);
+    const [showNewPassword, setShowNewPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
 
     const handleChangePassword = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -102,35 +106,65 @@ export default function ChangePasswordPage() {
                 </CardHeader>
                 <form onSubmit={handleChangePassword}>
                     <CardContent className="space-y-4">
-                        <div className="space-y-2">
+                        <div className="space-y-2 relative">
                             <Label htmlFor="old-password">Contraseña Actual (temporal)</Label>
                             <Input
                                 id="old-password"
-                                type="password"
+                                type={showOldPassword ? "text" : "password"}
                                 value={oldPassword}
                                 onChange={(e) => setOldPassword(e.target.value)}
                                 required
+                                className="pr-10"
                             />
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="absolute right-1 top-7 h-7 w-7 text-muted-foreground"
+                                onClick={() => setShowOldPassword((prev) => !prev)}
+                            >
+                                {showOldPassword ? <EyeOff className="h-4 w-4"/> : <Eye className="h-4 w-4"/>}
+                            </Button>
                         </div>
-                         <div className="space-y-2">
+                         <div className="space-y-2 relative">
                             <Label htmlFor="new-password">Nueva Contraseña</Label>
                             <Input
                                 id="new-password"
-                                type="password"
+                                type={showNewPassword ? "text" : "password"}
                                 value={newPassword}
                                 onChange={(e) => setNewPassword(e.target.value)}
                                 required
+                                className="pr-10"
                             />
+                             <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="absolute right-1 top-7 h-7 w-7 text-muted-foreground"
+                                onClick={() => setShowNewPassword((prev) => !prev)}
+                            >
+                                {showNewPassword ? <EyeOff className="h-4 w-4"/> : <Eye className="h-4 w-4"/>}
+                            </Button>
                         </div>
-                        <div className="space-y-2">
+                        <div className="space-y-2 relative">
                             <Label htmlFor="confirm-password">Confirmar Nueva Contraseña</Label>
                             <Input
                                 id="confirm-password"
-                                type="password"
+                                type={showConfirmPassword ? "text" : "password"}
                                 value={confirmPassword}
                                 onChange={(e) => setConfirmPassword(e.target.value)}
                                 required
+                                className="pr-10"
                             />
+                             <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="absolute right-1 top-7 h-7 w-7 text-muted-foreground"
+                                onClick={() => setShowConfirmPassword((prev) => !prev)}
+                            >
+                                {showConfirmPassword ? <EyeOff className="h-4 w-4"/> : <Eye className="h-4 w-4"/>}
+                            </Button>
                         </div>
                     </CardContent>
                     <CardFooter>
