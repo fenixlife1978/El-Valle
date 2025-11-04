@@ -54,9 +54,7 @@ export default function AdminDashboardPage() {
 
         const recentPaymentsQuery = query(
             collection(db, 'payments'), 
-            where('status', '==', 'aprobado'),
-            orderBy('paymentDate', 'desc'), 
-            limit(5)
+            where('status', '==', 'aprobado')
         );
 
         const unsubPayments = onSnapshot(paymentsQuery, (snapshot) => {
@@ -73,7 +71,9 @@ export default function AdminDashboardPage() {
         });
 
         const unsubRecent = onSnapshot(recentPaymentsQuery, (snapshot) => {
-            setRecentPayments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Payment)));
+            const allApprovedPayments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Payment));
+            const sortedPayments = allApprovedPayments.sort((a, b) => b.paymentDate.toMillis() - a.paymentDate.toMillis());
+            setRecentPayments(sortedPayments.slice(0, 5));
         });
 
         setLoading(false);
