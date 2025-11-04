@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ArrowRight, Loader2, AlertCircle, CheckCircle, Receipt } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useState, useEffect, useMemo } from 'react';
-import { collection, query, where, onSnapshot, getDocs, doc, Timestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, getDocs, doc, Timestamp, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { format, isBefore, startOfMonth } from "date-fns";
 import { es } from 'date-fns/locale';
