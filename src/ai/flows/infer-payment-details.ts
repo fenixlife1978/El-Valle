@@ -13,8 +13,8 @@ import { format } from 'date-fns';
 
 const venezuelanBanks = [
     'banesco', 'mercantil', 'provincial', 'bdv', 'bnc', 'tesoro', 'otro'
-];
-const paymentMethods = ['movil', 'transferencia'];
+] as const;
+const paymentMethods = ['movil', 'transferencia'] as const;
 
 // We define a strict output schema. The AI will do its best to conform to this.
 const InferPaymentDetailsOutputSchema = z.object({
