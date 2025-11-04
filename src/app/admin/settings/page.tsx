@@ -49,6 +49,9 @@ type ThemeColors = {
     primary: string;
     background: string;
     accent: string;
+    card: string;
+    secondary: string;
+    foreground: string;
 }
 
 type Settings = {
@@ -90,23 +93,24 @@ const emptyCompanyInfo: CompanyInfo = {
 
 const emptyThemeColors: ThemeColors = {
     primary: '217.2 91.2% 59.8%',
-    background: '222.2 84% 4.9%',
+    secondary: '217.2 32.6% 17.5%',
+    background: '0 0% 9%',
+    foreground: '210 40% 98%',
     accent: '217.2 32.6% 17.5%',
+    card: '48 96% 58%'
 };
 
-function hexToHsl(hex: string): string | null {
-    if (!hex) return null;
-    // Remove hash if present
+function hexToHsl(hex: string): string {
+    if (!hex) return '';
     const sanitizedHex = hex.startsWith('#') ? hex.slice(1) : hex;
 
-    // Handle short hex codes
     let fullHex = sanitizedHex;
     if (fullHex.length === 3) {
         fullHex = fullHex.split('').map(char => char + char).join('');
     }
 
     if (fullHex.length !== 6) {
-        return null; // Invalid hex
+        return ''; // Invalid hex
     }
 
     const r = parseInt(fullHex.substring(0, 2), 16) / 255;
@@ -134,6 +138,43 @@ function hexToHsl(hex: string): string | null {
     l = Math.round(l * 100);
     
     return `${h} ${s}% ${l}%`;
+}
+
+
+function hslToHex(hsl: string): string {
+  if (!hsl) return '#000000';
+  const [h, s, l] = hsl.split(' ').map(val => parseFloat(val.replace('%', '')));
+
+  const sDecimal = s / 100;
+  const lDecimal = l / 100;
+
+  let c = (1 - Math.abs(2 * lDecimal - 1)) * sDecimal,
+      x = c * (1 - Math.abs((h / 60) % 2 - 1)),
+      m = lDecimal - c/2,
+      r = 0,
+      g = 0,
+      b = 0;
+
+  if (0 <= h && h < 60) {
+    r = c; g = x; b = 0;
+  } else if (60 <= h && h < 120) {
+    r = x; g = c; b = 0;
+  } else if (120 <= h && h < 180) {
+    r = 0; g = c; b = x;
+  } else if (180 <= h && h < 240) {
+    r = 0; g = x; b = c;
+  } else if (240 <= h && h < 300) {
+    r = x; g = 0; b = c;
+  } else if (300 <= h && h < 360) {
+    r = c; g = 0; b = x;
+  }
+  r = Math.round((r + m) * 255);
+  g = Math.round((g + m) * 255);
+  b = Math.round((b + m) * 255);
+
+  const toHex = (c: number) => ('0' + c.toString(16)).slice(-2);
+
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
 
@@ -355,8 +396,11 @@ export default function SettingsPage() {
             
             // This is a placeholder for dynamic CSS update
             document.documentElement.style.setProperty('--primary', themeColors.primary);
+            document.documentElement.style.setProperty('--secondary', themeColors.secondary);
             document.documentElement.style.setProperty('--background', themeColors.background);
+            document.documentElement.style.setProperty('--foreground', themeColors.foreground);
             document.documentElement.style.setProperty('--accent', themeColors.accent);
+            document.documentElement.style.setProperty('--card-background', themeColors.card);
 
     
             await new Promise(resolve => setTimeout(() => { setProgress(100); resolve(null); }, 500));
@@ -581,22 +625,43 @@ export default function SettingsPage() {
                                 <div className="space-y-2">
                                     <Label>Color Primario</Label>
                                     <div className="flex items-center gap-2">
-                                        <Input type="color" className="p-1 h-10 w-12" onChange={(e) => handleColorChange('primary', e.target.value)} />
+                                        <Input type="color" className="p-1 h-10 w-12" value={hslToHex(themeColors.primary)} onChange={(e) => handleColorChange('primary', e.target.value)} />
                                         <Input readOnly value={themeColors.primary} className="bg-muted"/>
+                                    </div>
+                                </div>
+                                 <div className="space-y-2">
+                                    <Label>Color Secundario</Label>
+                                    <div className="flex items-center gap-2">
+                                        <Input type="color" className="p-1 h-10 w-12" value={hslToHex(themeColors.secondary)} onChange={(e) => handleColorChange('secondary', e.target.value)} />
+                                        <Input readOnly value={themeColors.secondary} className="bg-muted"/>
                                     </div>
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Color de Fondo</Label>
                                      <div className="flex items-center gap-2">
-                                        <Input type="color" className="p-1 h-10 w-12" onChange={(e) => handleColorChange('background', e.target.value)} />
+                                        <Input type="color" className="p-1 h-10 w-12" value={hslToHex(themeColors.background)} onChange={(e) => handleColorChange('background', e.target.value)} />
                                         <Input readOnly value={themeColors.background} className="bg-muted"/>
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Color de Texto</Label>
+                                     <div className="flex items-center gap-2">
+                                        <Input type="color" className="p-1 h-10 w-12" value={hslToHex(themeColors.foreground)} onChange={(e) => handleColorChange('foreground', e.target.value)} />
+                                        <Input readOnly value={themeColors.foreground} className="bg-muted"/>
                                     </div>
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Color de Acento</Label>
                                      <div className="flex items-center gap-2">
-                                        <Input type="color" className="p-1 h-10 w-12" onChange={(e) => handleColorChange('accent', e.target.value)} />
+                                        <Input type="color" className="p-1 h-10 w-12" value={hslToHex(themeColors.accent)} onChange={(e) => handleColorChange('accent', e.target.value)} />
                                         <Input readOnly value={themeColors.accent} className="bg-muted"/>
+                                    </div>
+                                </div>
+                                 <div className="space-y-2">
+                                    <Label>Fondo de Tarjetas</Label>
+                                     <div className="flex items-center gap-2">
+                                        <Input type="color" className="p-1 h-10 w-12" value={hslToHex(themeColors.card)} onChange={(e) => handleColorChange('card', e.target.value)} />
+                                        <Input readOnly value={themeColors.card} className="bg-muted"/>
                                     </div>
                                 </div>
                             </div>
