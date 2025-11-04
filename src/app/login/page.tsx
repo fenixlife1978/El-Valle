@@ -114,6 +114,11 @@ export default function LoginPage() {
                                 required
                             />
                         </div>
+                         <div className="text-right">
+                                <Button variant="link" size="sm" asChild className="p-0 h-auto">
+                                    <Link href="/forgot-password">¿Olvidaste tu contraseña?</Link>
+                                </Button>
+                            </div>
                     </CardContent>
                     <CardFooter className="flex flex-col gap-4">
                         <Button type="submit" className="w-full" disabled={loading}>
