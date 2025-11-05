@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from '@/hooks/use-toast';
-import { Upload, Save, Calendar as CalendarIcon, PlusCircle, Loader2, AlertTriangle, Wand2, MoreHorizontal, Edit, FileCog, UserCircle, RefreshCw, ArrowLeft, Palette } from 'lucide-react';
+import { Upload, Save, Calendar as CalendarIcon, PlusCircle, Loader2, AlertTriangle, Wand2, MoreHorizontal, Edit, FileCog, UserCircle, RefreshCw, ArrowLeft } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
@@ -45,22 +45,12 @@ type ExchangeRate = {
     active: boolean;
 };
 
-type ThemeColors = {
-    primary: string;
-    background: string;
-    accent: string;
-    card: string;
-    secondary: string;
-    foreground: string;
-}
-
 type Settings = {
     adminProfile: AdminProfile;
     companyInfo: CompanyInfo;
     condoFee: number;
     exchangeRates: ExchangeRate[];
     lastCondoFee?: number; // To track the previous fee for adjustment logic
-    themeColors?: ThemeColors;
 };
 
 type Debt = {
@@ -90,92 +80,6 @@ const emptyCompanyInfo: CompanyInfo = {
     email: '',
     logo: '' 
 };
-
-const emptyThemeColors: ThemeColors = {
-    primary: '217.2 91.2% 59.8%',
-    secondary: '217.2 32.6% 17.5%',
-    background: '0 0% 9%',
-    foreground: '210 40% 98%',
-    accent: '217.2 32.6% 17.5%',
-    card: '48 96% 58%'
-};
-
-function hexToHsl(hex: string): string {
-    if (!hex) return '';
-    const sanitizedHex = hex.startsWith('#') ? hex.slice(1) : hex;
-
-    let fullHex = sanitizedHex;
-    if (fullHex.length === 3) {
-        fullHex = fullHex.split('').map(char => char + char).join('');
-    }
-
-    if (fullHex.length !== 6) {
-        return ''; // Invalid hex
-    }
-
-    const r = parseInt(fullHex.substring(0, 2), 16) / 255;
-    const g = parseInt(fullHex.substring(2, 4), 16) / 255;
-    const b = parseInt(fullHex.substring(4, 6), 16) / 255;
-
-    const max = Math.max(r, g, b);
-    const min = Math.min(r, g, b);
-
-    let h = 0, s = 0, l = (max + min) / 2;
-
-    if (max !== min) {
-        const d = max - min;
-        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-        switch (max) {
-            case r: h = (g - b) / d + (g < b ? 6 : 0); break;
-            case g: h = (b - r) / d + 2; break;
-            case b: h = (r - g) / d + 4; break;
-        }
-        h /= 6;
-    }
-    
-    h = Math.round(h * 360);
-    s = Math.round(s * 100);
-    l = Math.round(l * 100);
-    
-    return `${h} ${s}% ${l}%`;
-}
-
-
-function hslToHex(hsl: string): string {
-  if (!hsl) return '#000000';
-  const [h, s, l] = hsl.split(' ').map(val => parseFloat(val.replace('%', '')));
-
-  const sDecimal = s / 100;
-  const lDecimal = l / 100;
-
-  let c = (1 - Math.abs(2 * lDecimal - 1)) * sDecimal,
-      x = c * (1 - Math.abs((h / 60) % 2 - 1)),
-      m = lDecimal - c/2,
-      r = 0,
-      g = 0,
-      b = 0;
-
-  if (0 <= h && h < 60) {
-    r = c; g = x; b = 0;
-  } else if (60 <= h && h < 120) {
-    r = x; g = c; b = 0;
-  } else if (120 <= h && h < 180) {
-    r = 0; g = c; b = x;
-  } else if (180 <= h && h < 240) {
-    r = 0; g = x; b = c;
-  } else if (240 <= h && h < 300) {
-    r = x; g = 0; b = c;
-  } else if (300 <= h && h < 360) {
-    r = c; g = 0; b = x;
-  }
-  r = Math.round((r + m) * 255);
-  g = Math.round((g + m) * 255);
-  b = Math.round((b + m) * 255);
-
-  const toHex = (c: number) => ('0' + c.toString(16)).slice(-2);
-
-  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
-}
 
 
 export default function SettingsPage() {
@@ -207,8 +111,6 @@ export default function SettingsPage() {
     const [isFeeChanged, setIsFeeChanged] = useState(false);
     const [isAdjustmentRunning, setIsAdjustmentRunning] = useState(false);
     const [progress, setProgress] = useState(0);
-    
-    const [themeColors, setThemeColors] = useState<ThemeColors>(emptyThemeColors);
 
 
     useEffect(() => {
@@ -223,7 +125,6 @@ export default function SettingsPage() {
                 setCondoFee(settings.condoFee);
                 setLastCondoFee(settings.condoFee); // Set the last known fee from DB
                 setExchangeRates(settings.exchangeRates || []);
-                setThemeColors(settings.themeColors || emptyThemeColors);
             } else {
                 const initialRate: ExchangeRate = {
                     id: new Date().toISOString(),
@@ -236,8 +137,7 @@ export default function SettingsPage() {
                     companyInfo: emptyCompanyInfo,
                     condoFee: 25.00,
                     lastCondoFee: 25.00,
-                    exchangeRates: [initialRate],
-                    themeColors: emptyThemeColors
+                    exchangeRates: [initialRate]
                 });
             }
             setLoading(false);
@@ -389,19 +289,9 @@ export default function SettingsPage() {
                 companyInfo: safeCompanyInfo,
                 condoFee: newCondoFee,
                 lastCondoFee: lastCondoFee,
-                themeColors: themeColors
             };
     
             await updateDoc(settingsRef, dataToSave);
-            
-            // This is a placeholder for dynamic CSS update
-            document.documentElement.style.setProperty('--primary', themeColors.primary);
-            document.documentElement.style.setProperty('--secondary', themeColors.secondary);
-            document.documentElement.style.setProperty('--background', themeColors.background);
-            document.documentElement.style.setProperty('--foreground', themeColors.foreground);
-            document.documentElement.style.setProperty('--accent', themeColors.accent);
-            document.documentElement.style.setProperty('--card-background', themeColors.card);
-
     
             await new Promise(resolve => setTimeout(() => { setProgress(100); resolve(null); }, 500));
     
@@ -501,13 +391,6 @@ export default function SettingsPage() {
         } finally {
             setIsAdjustmentRunning(false);
             setIsFeeChanged(false);
-        }
-    };
-    
-    const handleColorChange = (colorName: keyof ThemeColors, hexValue: string) => {
-        const hslValue = hexToHsl(hexValue);
-        if (hslValue) {
-            setThemeColors(prev => ({...prev, [colorName]: hslValue}));
         }
     };
 
@@ -610,59 +493,6 @@ export default function SettingsPage() {
                                 <div className="space-y-2">
                                     <Label htmlFor="email">Correo Electrónico</Label>
                                     <Input id="email" name="email" type="email" value={companyInfo.email} onChange={(e) => handleInfoChange(e, 'company')} />
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2"><Palette/> Apariencia y Tema</CardTitle>
-                            <CardDescription>Personaliza los colores de la aplicación.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div className="space-y-2">
-                                    <Label>Color Primario</Label>
-                                    <div className="flex items-center gap-2">
-                                        <Input type="color" className="p-1 h-10 w-12" value={hslToHex(themeColors.primary)} onChange={(e) => handleColorChange('primary', e.target.value)} />
-                                        <Input readOnly value={themeColors.primary} className="bg-muted"/>
-                                    </div>
-                                </div>
-                                 <div className="space-y-2">
-                                    <Label>Color Secundario</Label>
-                                    <div className="flex items-center gap-2">
-                                        <Input type="color" className="p-1 h-10 w-12" value={hslToHex(themeColors.secondary)} onChange={(e) => handleColorChange('secondary', e.target.value)} />
-                                        <Input readOnly value={themeColors.secondary} className="bg-muted"/>
-                                    </div>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Color de Fondo</Label>
-                                     <div className="flex items-center gap-2">
-                                        <Input type="color" className="p-1 h-10 w-12" value={hslToHex(themeColors.background)} onChange={(e) => handleColorChange('background', e.target.value)} />
-                                        <Input readOnly value={themeColors.background} className="bg-muted"/>
-                                    </div>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Color de Texto</Label>
-                                     <div className="flex items-center gap-2">
-                                        <Input type="color" className="p-1 h-10 w-12" value={hslToHex(themeColors.foreground)} onChange={(e) => handleColorChange('foreground', e.target.value)} />
-                                        <Input readOnly value={themeColors.foreground} className="bg-muted"/>
-                                    </div>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Color de Acento</Label>
-                                     <div className="flex items-center gap-2">
-                                        <Input type="color" className="p-1 h-10 w-12" value={hslToHex(themeColors.accent)} onChange={(e) => handleColorChange('accent', e.target.value)} />
-                                        <Input readOnly value={themeColors.accent} className="bg-muted"/>
-                                    </div>
-                                </div>
-                                 <div className="space-y-2">
-                                    <Label>Fondo de Tarjetas</Label>
-                                     <div className="flex items-center gap-2">
-                                        <Input type="color" className="p-1 h-10 w-12" value={hslToHex(themeColors.card)} onChange={(e) => handleColorChange('card', e.target.value)} />
-                                        <Input readOnly value={themeColors.card} className="bg-muted"/>
-                                    </div>
                                 </div>
                             </div>
                         </CardContent>
