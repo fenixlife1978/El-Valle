@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
@@ -12,7 +12,7 @@ import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '@/lib/firebase'; // Import auth from your firebase config
 import Link from 'next/link';
 
-export default function LoginPage() {
+function LoginContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { toast } = useToast();
@@ -83,66 +83,74 @@ export default function LoginPage() {
     }
 
     return (
-        <main className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
-            <Card className="w-full max-w-sm">
-                <CardHeader className="text-center">
-                    <div className="flex justify-center mb-4">
-                        {role === 'admin' ? <Shield className="h-10 w-10 text-primary"/> : <User className="h-10 w-10 text-primary"/>}
+        <Card className="w-full max-w-sm">
+            <CardHeader className="text-center">
+                <div className="flex justify-center mb-4">
+                    {role === 'admin' ? <Shield className="h-10 w-10 text-primary"/> : <User className="h-10 w-10 text-primary"/>}
+                </div>
+                <CardTitle>Iniciar Sesión como {role === 'admin' ? 'Administrador' : 'Propietario'}</CardTitle>
+                <CardDescription>Ingrese sus credenciales para acceder al sistema.</CardDescription>
+            </CardHeader>
+            <form onSubmit={handleLogin}>
+                <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="email">Correo Electrónico</Label>
+                        <Input
+                            id="email"
+                            type="email"
+                            placeholder="su.correo@ejemplo.com"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            required
+                        />
                     </div>
-                    <CardTitle>Iniciar Sesión como {role === 'admin' ? 'Administrador' : 'Propietario'}</CardTitle>
-                    <CardDescription>Ingrese sus credenciales para acceder al sistema.</CardDescription>
-                </CardHeader>
-                <form onSubmit={handleLogin}>
-                    <CardContent className="space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="email">Correo Electrónico</Label>
-                            <Input
-                                id="email"
-                                type="email"
-                                placeholder="su.correo@ejemplo.com"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                required
-                            />
-                        </div>
-                        <div className="space-y-2 relative">
-                            <Label htmlFor="password">Contraseña</Label>
-                            <Input
-                                id="password"
-                                type={showPassword ? "text" : "password"}
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                required
-                                className="pr-10"
-                            />
-                             <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="absolute right-1 top-7 h-7 w-7 text-muted-foreground"
-                                onClick={() => setShowPassword((prev) => !prev)}
-                            >
-                                {showPassword ? <EyeOff className="h-4 w-4"/> : <Eye className="h-4 w-4"/>}
-                                <span className="sr-only">Toggle password visibility</span>
+                    <div className="space-y-2 relative">
+                        <Label htmlFor="password">Contraseña</Label>
+                        <Input
+                            id="password"
+                            type={showPassword ? "text" : "password"}
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            required
+                            className="pr-10"
+                        />
+                            <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="absolute right-1 top-7 h-7 w-7 text-muted-foreground"
+                            onClick={() => setShowPassword((prev) => !prev)}
+                        >
+                            {showPassword ? <EyeOff className="h-4 w-4"/> : <Eye className="h-4 w-4"/>}
+                            <span className="sr-only">Toggle password visibility</span>
+                        </Button>
+                    </div>
+                        <div className="text-right">
+                            <Button variant="link" size="sm" asChild className="p-0 h-auto">
+                                <Link href="/forgot-password">¿Olvidaste tu contraseña?</Link>
                             </Button>
                         </div>
-                         <div className="text-right">
-                                <Button variant="link" size="sm" asChild className="p-0 h-auto">
-                                    <Link href="/forgot-password">¿Olvidaste tu contraseña?</Link>
-                                </Button>
-                            </div>
-                    </CardContent>
-                    <CardFooter className="flex flex-col gap-4">
-                        <Button type="submit" className="w-full" disabled={loading}>
-                            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            {loading ? 'Ingresando...' : 'Ingresar'}
-                        </Button>
-                         <Button variant="link" size="sm" asChild>
-                            <Link href="/">Volver a selección de rol</Link>
-                        </Button>
-                    </CardFooter>
-                </form>
-            </Card>
+                </CardContent>
+                <CardFooter className="flex flex-col gap-4">
+                    <Button type="submit" className="w-full" disabled={loading}>
+                        {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        {loading ? 'Ingresando...' : 'Ingresar'}
+                    </Button>
+                        <Button variant="link" size="sm" asChild>
+                        <Link href="/">Volver a selección de rol</Link>
+                    </Button>
+                </CardFooter>
+            </form>
+        </Card>
+    );
+}
+
+export default function LoginPage() {
+    return (
+        <main className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
+            <Suspense fallback={<Loader2 className="h-8 w-8 animate-spin" />}>
+                <LoginContent />
+            </Suspense>
         </main>
     );
 }
