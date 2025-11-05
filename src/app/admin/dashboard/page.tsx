@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Landmark, AlertCircle, Building, Eye, Printer, Loader2, Users, Receipt, TrendingUp, CheckCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { collection, query, where, onSnapshot, Timestamp, orderBy, limit } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, Timestamp, orderBy, limit, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -30,8 +30,10 @@ type Payment = {
 export default function AdminDashboardPage() {
     const router = useRouter();
     const [loading, setLoading] = useState(true);
+    const [activeRate, setActiveRate] = useState(0);
     const [stats, setStats] = useState({
         monthlyIncome: 0,
+        monthlyIncomeUSD: 0,
         pendingPayments: 0,
         totalOwners: 0
     });
@@ -42,6 +44,23 @@ export default function AdminDashboardPage() {
         startOfMonth.setDate(1);
         startOfMonth.setHours(0, 0, 0, 0);
         const startOfMonthTimestamp = Timestamp.fromDate(startOfMonth);
+
+        const fetchSettings = async () => {
+             const settingsRef = doc(db, 'config', 'mainSettings');
+             const settingsSnap = await getDoc(settingsRef);
+             if (settingsSnap.exists()) {
+                 const settings = settingsSnap.data();
+                 const rates = (settings.exchangeRates || []);
+                 const activeRateObj = rates.find((r: any) => r.active);
+                 if (activeRateObj) {
+                     setActiveRate(activeRateObj.rate);
+                 } else if (rates.length > 0) {
+                     const sortedRates = [...rates].sort((a:any,b:any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                     setActiveRate(sortedRates[0].rate);
+                 }
+             }
+        };
+        fetchSettings();
 
         const paymentsQuery = query(
             collection(db, 'payments'),
@@ -58,8 +77,25 @@ export default function AdminDashboardPage() {
         );
 
         const unsubPayments = onSnapshot(paymentsQuery, (snapshot) => {
-            const total = snapshot.docs.reduce((sum, doc) => sum + doc.data().totalAmount, 0);
-            setStats(prev => ({ ...prev, monthlyIncome: total }));
+            let totalBs = 0;
+            let totalUsd = 0;
+            snapshot.docs.forEach(doc => {
+                const data = doc.data();
+                const amountBs = data.totalAmount || 0;
+                totalBs += amountBs;
+
+                // Handle USD conversion based on type
+                if (data.paymentMethod === 'adelanto') {
+                    totalUsd += amountBs; // For 'adelanto', totalAmount is in USD
+                } else {
+                    const rate = data.exchangeRate || activeRate || 1; // Fallback to active rate or 1
+                     if (rate > 0) {
+                        totalUsd += amountBs / rate;
+                    }
+                }
+            });
+
+            setStats(prev => ({ ...prev, monthlyIncome: totalBs, monthlyIncomeUSD: totalUsd }));
         });
 
         const unsubPending = onSnapshot(pendingPaymentsQuery, (snapshot) => {
@@ -85,7 +121,7 @@ export default function AdminDashboardPage() {
             unsubRecent();
         }
 
-    }, []);
+    }, [activeRate]);
 
   return (
     <div className="space-y-8">
@@ -101,7 +137,7 @@ export default function AdminDashboardPage() {
                     {loading ? <Loader2 className="h-6 w-6 animate-spin"/> :
                         <>
                             <div className="text-2xl font-bold">Bs. {formatToTwoDecimals(stats.monthlyIncome)}</div>
-                            <p className="text-xs text-muted-foreground">Total de pagos aprobados en el mes actual.</p>
+                            <p className="text-sm text-muted-foreground">~ ${formatToTwoDecimals(stats.monthlyIncomeUSD)}</p>
                         </>
                     }
                 </CardContent>
