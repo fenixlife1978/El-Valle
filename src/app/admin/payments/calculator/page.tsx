@@ -23,8 +23,6 @@ import { Badge } from '@/components/ui/badge';
 type Owner = {
     id: string;
     name: string;
-    house: string;
-    street: string;
     balance: number;
     properties: { street: string; house: string }[];
 };
@@ -154,7 +152,7 @@ export default function PaymentCalculatorPage() {
     }, [ownerDebts]);
     
     const handlePendingDebtSelection = (debtId: string) => {
-        setSelectedPendingDebts(prev => prev.includes(debtId) ? prev.filter(id => id !== debtId) : [...prev, debtId]);
+        setSelectedPendingDebts(prev => prev.includes(debtId) ? prev.filter(id => id !== id) : [...prev, debtId]);
     };
     
     const handleAdvanceMonthSelection = (monthValue: string) => {
@@ -247,9 +245,10 @@ export default function PaymentCalculatorPage() {
 
             // 3. Create payment document
             const paymentRef = doc(collection(db, 'payments'));
+            const propertyInfo = selectedOwner.properties?.[0] || {};
             const paymentData = {
                 reportedBy: selectedOwner.id, // Admin reporting for owner
-                beneficiaries: [{ ownerId: selectedOwner.id, ownerName: selectedOwner.name, ...selectedOwner.properties[0], amount: paymentCalculator.totalDebtBs }],
+                beneficiaries: [{ ownerId: selectedOwner.id, ownerName: selectedOwner.name, ...propertyInfo, amount: paymentCalculator.totalDebtBs }],
                 beneficiaryIds: [selectedOwner.id],
                 totalAmount: paymentCalculator.totalDebtBs,
                 exchangeRate: activeRate,
