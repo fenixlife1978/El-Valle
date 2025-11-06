@@ -274,7 +274,7 @@ export default function SurveysPage() {
                                     </div>
                                     <Separator />
                                     <div className="space-y-6">
-                                        {survey.questions.map(q => {
+                                        {survey.questions && survey.questions.map(q => {
                                             const questionResults = survey.results[q.id] || {};
                                             const questionTotalVotes = Object.values(questionResults).reduce((sum, count) => sum + count, 0);
 
