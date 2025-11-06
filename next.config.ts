@@ -1,4 +1,10 @@
 
-const fs = require('fs');
-const path = require('path');
-const { execSync } = require('child_process'); 
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  experimental: {
+    serverActions: {},
+    allowedDevOrigins: process.env.DEV_ORIGIN ? [process.env.DEV_ORIGIN] : [],
+  },
+};
+
+export default nextConfig;
