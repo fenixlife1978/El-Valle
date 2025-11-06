@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { collection, onSnapshot, addDoc, doc, deleteDoc, serverTimestamp, orderBy, query, Timestamp, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { PlusCircle, Trash2, Loader2, ListPlus, XCircle, BarChart3, Users, CheckSquare, CalendarIcon, Edit } from 'lucide-react';
+import { PlusCircle, Trash2, Loader2, ListPlus, XCircle, BarChart3, Users, CheckSquare, CalendarIcon, Edit, Play, Lock, Timer } from 'lucide-react';
 import { format, parse } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Progress } from '@/components/ui/progress';
@@ -115,7 +115,11 @@ export default function SurveysPage() {
         if (survey.questions && survey.questions.length > 0) {
             editableQuestions = survey.questions.map(q => ({
                 ...q,
-                options: q.options.map((opt, index) => typeof opt === 'string' ? { id: `opt-${q.id}-${index}`, text: opt } : opt)
+                options: q.options ? q.options.map((opt, index) => 
+                    typeof opt === 'string' 
+                    ? { id: `opt-${q.id}-${index}`, text: opt } 
+                    : { id: opt.id || `opt-${q.id}-${index}`, text: opt.text || '' }
+                ) : [{ id: `opt-${q.id}-0`, text: '' }, { id: `opt-${q.id}-1`, text: '' }]
             }));
         } else {
             // Provide a default question if none exist
@@ -220,7 +224,7 @@ export default function SurveysPage() {
                 const surveyRef = doc(db, 'surveys', editingSurveyId);
                 await updateDoc(surveyRef, {
                     title,
-                    questions: finalQuestions.map(q => ({...q, options: q.options.map(o => o.text) })), // Store as string array
+                    questions: finalQuestions.map(q => ({id: q.id, questionText: q.questionText, options: q.options.map(o => o.text) })), // Store as string array
                     startDate: Timestamp.fromDate(startDateTime),
                     endDate: Timestamp.fromDate(endDateTime),
                 });
@@ -236,7 +240,7 @@ export default function SurveysPage() {
 
                 await addDoc(collection(db, 'surveys'), {
                     title,
-                    questions: finalQuestions.map(q => ({...q, options: q.options.map(o => o.text) })),
+                    questions: finalQuestions.map(q => ({id: q.id, questionText: q.questionText, options: q.options.map(o => o.text) })),
                     createdAt: serverTimestamp(),
                     startDate: Timestamp.fromDate(startDateTime),
                     endDate: Timestamp.fromDate(endDateTime),
@@ -309,7 +313,7 @@ export default function SurveysPage() {
                                 </CardHeader>
                                 <CardContent className="flex-grow space-y-4">
                                      <div className="flex items-center gap-2 text-sm font-semibold">
-                                        <Users className="h-4 w-4"/> Participantes Totales: {survey.totalVotes}
+                                        <Users className="h-4 w-4"/> Participantes Totales: {survey.totalVotes || 0}
                                     </div>
                                     <Separator />
                                     <div className="space-y-6">
@@ -477,3 +481,4 @@ export default function SurveysPage() {
         </div>
     );
 }
+
