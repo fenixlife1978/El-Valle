@@ -10,10 +10,14 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { collection, onSnapshot, addDoc, doc, deleteDoc, serverTimestamp, orderBy, query, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { PlusCircle, Trash2, Loader2, ListPlus, XCircle, BarChart3, Users, CheckSquare } from 'lucide-react';
-import { format } from 'date-fns';
+import { PlusCircle, Trash2, Loader2, ListPlus, XCircle, BarChart3, Users, CheckSquare, CalendarIcon } from 'lucide-react';
+import { format, parse } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Progress } from '@/components/ui/progress';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
 
 type SurveyOption = {
     id: string;
@@ -25,9 +29,26 @@ type Survey = {
     question: string;
     options: SurveyOption[];
     createdAt: Timestamp;
+    startDate: Timestamp;
+    endDate: Timestamp;
     results: { [key: string]: number };
     totalVotes: number;
 };
+
+const getSurveyStatus = (survey: Survey): { status: 'Programada' | 'Activa' | 'Cerrada'; variant: 'warning' | 'success' | 'destructive' } => {
+    const now = new Date();
+    const startDate = survey.startDate.toDate();
+    const endDate = survey.endDate.toDate();
+
+    if (now < startDate) {
+        return { status: 'Programada', variant: 'warning' };
+    }
+    if (now > endDate) {
+        return { status: 'Cerrada', variant: 'destructive' };
+    }
+    return { status: 'Activa', variant: 'success' };
+};
+
 
 export default function SurveysPage() {
     const { toast } = useToast();
@@ -41,6 +62,11 @@ export default function SurveysPage() {
         { id: `opt-${Date.now()}-1`, text: '' },
         { id: `opt-${Date.now()}-2`, text: '' }
     ]);
+    const [startDate, setStartDate] = useState<Date | undefined>(new Date());
+    const [startTime, setStartTime] = useState(format(new Date(), 'HH:mm'));
+    const [endDate, setEndDate] = useState<Date | undefined>();
+    const [endTime, setEndTime] = useState('23:59');
+
     
     const [surveyToDelete, setSurveyToDelete] = useState<Survey | null>(null);
     const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
@@ -65,6 +91,10 @@ export default function SurveysPage() {
             { id: `opt-${Date.now()}-1`, text: '' },
             { id: `opt-${Date.now()}-2`, text: '' }
         ]);
+        setStartDate(new Date());
+        setStartTime(format(new Date(), 'HH:mm'));
+        setEndDate(undefined);
+        setEndTime('23:59');
     };
 
     const handleOptionChange = (id: string, text: string) => {
@@ -93,6 +123,18 @@ export default function SurveysPage() {
             toast({ variant: 'destructive', title: 'Opciones insuficientes', description: 'Debe proporcionar al menos dos opciones de respuesta.' });
             return;
         }
+        if (!startDate || !endDate || !startTime || !endTime) {
+            toast({ variant: 'destructive', title: 'Fechas requeridas', description: 'Debe definir una fecha y hora de inicio y fin.' });
+            return;
+        }
+
+        const startDateTime = parse(`${format(startDate, 'yyyy-MM-dd')} ${startTime}`, 'yyyy-MM-dd HH:mm', new Date());
+        const endDateTime = parse(`${format(endDate, 'yyyy-MM-dd')} ${endTime}`, 'yyyy-MM-dd HH:mm', new Date());
+
+        if (startDateTime >= endDateTime) {
+            toast({ variant: 'destructive', title: 'Fechas inválidas', description: 'La fecha de inicio debe ser anterior a la fecha de cierre.' });
+            return;
+        }
         
         setIsSubmitting(true);
         try {
@@ -105,6 +147,8 @@ export default function SurveysPage() {
                 question,
                 options: filledOptions.map(opt => opt.text),
                 createdAt: serverTimestamp(),
+                startDate: Timestamp.fromDate(startDateTime),
+                endDate: Timestamp.fromDate(endDateTime),
                 results: initialResults,
                 totalVotes: 0,
             });
@@ -123,8 +167,6 @@ export default function SurveysPage() {
         if (!surveyToDelete) return;
         try {
             await deleteDoc(doc(db, "surveys", surveyToDelete.id));
-            // Note: This doesn't delete the individual responses in 'survey_responses'.
-            // A cloud function would be better for cascading deletes.
             toast({ title: 'Encuesta Eliminada' });
         } catch (error) {
             console.error("Error deleting survey:", error);
@@ -159,67 +201,107 @@ export default function SurveysPage() {
                 </Card>
             ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                    {surveys.map(survey => (
-                        <Card key={survey.id} className="flex flex-col">
-                            <CardHeader>
-                                <CardTitle>{survey.question}</CardTitle>
-                                <CardDescription>
-                                    Creada el {survey.createdAt ? format(survey.createdAt.toDate(), "dd MMMM, yyyy", { locale: es }) : ''}
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent className="flex-grow space-y-4">
-                                <div>
-                                    {Object.entries(survey.results).sort(([, a], [, b]) => b - a).map(([option, votes]) => {
-                                        const percentage = survey.totalVotes > 0 ? (votes / survey.totalVotes) * 100 : 0;
-                                        return (
-                                            <div key={option} className="space-y-1 mb-3">
-                                                <div className="flex justify-between items-center text-sm">
-                                                    <span className="font-medium">{option}</span>
-                                                    <span className="text-muted-foreground">{votes} voto(s) ({percentage.toFixed(1)}%)</span>
+                    {surveys.map(survey => {
+                        const { status, variant } = getSurveyStatus(survey);
+                        return (
+                            <Card key={survey.id} className="flex flex-col">
+                                <CardHeader>
+                                    <div className="flex justify-between items-start">
+                                        <CardTitle>{survey.question}</CardTitle>
+                                        <Badge variant={variant}>{status}</Badge>
+                                    </div>
+                                    <CardDescription>
+                                        Inicia: {format(survey.startDate.toDate(), "dd/MM/yy HH:mm")}h <br />
+                                        Cierra: {format(survey.endDate.toDate(), "dd/MM/yy HH:mm")}h
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="flex-grow space-y-4">
+                                    <div>
+                                        {Object.entries(survey.results).sort(([, a], [, b]) => b - a).map(([option, votes]) => {
+                                            const percentage = survey.totalVotes > 0 ? (votes / survey.totalVotes) * 100 : 0;
+                                            return (
+                                                <div key={option} className="space-y-1 mb-3">
+                                                    <div className="flex justify-between items-center text-sm">
+                                                        <span className="font-medium">{option}</span>
+                                                        <span className="text-muted-foreground">{votes} voto(s) ({percentage.toFixed(1)}%)</span>
+                                                    </div>
+                                                    <Progress value={percentage} />
                                                 </div>
-                                                <Progress value={percentage} />
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </CardContent>
-                            <CardFooter className="flex-col items-start gap-4 border-t pt-4">
-                                <div className="w-full flex justify-between items-center text-sm font-semibold">
-                                    <div className="flex items-center gap-2"><Users className="h-4 w-4"/> Votos Totales</div>
-                                    <span>{survey.totalVotes}</span>
-                                </div>
-                                <Button
-                                    variant="destructive"
-                                    size="sm"
-                                    className="w-full"
-                                    onClick={() => {
-                                        setSurveyToDelete(survey);
-                                        setIsDeleteConfirmationOpen(true);
-                                    }}
-                                >
-                                    <Trash2 className="mr-2 h-4 w-4" />
-                                    Eliminar Encuesta
-                                </Button>
-                            </CardFooter>
-                        </Card>
-                    ))}
+                                            );
+                                        })}
+                                    </div>
+                                </CardContent>
+                                <CardFooter className="flex-col items-start gap-4 border-t pt-4">
+                                    <div className="w-full flex justify-between items-center text-sm font-semibold">
+                                        <div className="flex items-center gap-2"><Users className="h-4 w-4"/> Votos Totales</div>
+                                        <span>{survey.totalVotes}</span>
+                                    </div>
+                                    <Button
+                                        variant="destructive"
+                                        size="sm"
+                                        className="w-full"
+                                        onClick={() => {
+                                            setSurveyToDelete(survey);
+                                            setIsDeleteConfirmationOpen(true);
+                                        }}
+                                    >
+                                        <Trash2 className="mr-2 h-4 w-4" />
+                                        Eliminar Encuesta
+                                    </Button>
+                                </CardFooter>
+                            </Card>
+                        )
+                    })}
                 </div>
             )}
 
-            {/* Create/Edit Survey Dialog */}
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                 <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
                     <DialogHeader>
                         <DialogTitle>Crear Nueva Encuesta</DialogTitle>
                         <DialogDescription>
-                            Define la pregunta y las opciones de respuesta. Los propietarios solo podrán votar una vez.
+                            Define la pregunta, las opciones y el período de votación.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="flex-grow space-y-6 overflow-y-auto pr-6 -mr-6">
                         <div className="space-y-2">
                             <Label htmlFor="question">Pregunta de la Encuesta</Label>
-                            <Input id="question" value={question} onChange={e => setQuestion(e.target.value)} placeholder="Ej: ¿Está de acuerdo con la nueva normativa de estacionamiento?" />
+                            <Input id="question" value={question} onChange={e => setQuestion(e.target.value)} placeholder="Ej: ¿Está de acuerdo con...?" />
                         </div>
+
+                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label>Fecha de Inicio</Label>
+                                <div className="flex gap-2">
+                                    <Popover>
+                                        <PopoverTrigger asChild>
+                                            <Button variant={"outline"} className={cn("flex-grow justify-start", !startDate && "text-muted-foreground")}>
+                                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                                {startDate ? format(startDate, "dd/MM/yyyy") : <span>Seleccionar</span>}
+                                            </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={startDate} onSelect={setStartDate} initialFocus locale={es} /></PopoverContent>
+                                    </Popover>
+                                    <Input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className="w-[100px]" />
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Fecha de Cierre</Label>
+                                <div className="flex gap-2">
+                                    <Popover>
+                                        <PopoverTrigger asChild>
+                                            <Button variant={"outline"} className={cn("flex-grow justify-start", !endDate && "text-muted-foreground")}>
+                                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                                {endDate ? format(endDate, "dd/MM/yyyy") : <span>Seleccionar</span>}
+                                            </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={endDate} onSelect={setEndDate} initialFocus locale={es} /></PopoverContent>
+                                    </Popover>
+                                     <Input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} className="w-[100px]" />
+                                </div>
+                            </div>
+                        </div>
+
                         <div className="space-y-4">
                             <Label>Opciones de Respuesta</Label>
                             {options.map((option, index) => (
@@ -255,7 +337,6 @@ export default function SurveysPage() {
                 </DialogContent>
             </Dialog>
 
-            {/* Delete Confirmation Dialog */}
             <Dialog open={isDeleteConfirmationOpen} onOpenChange={setIsDeleteConfirmationOpen}>
                 <DialogContent>
                     <DialogHeader>

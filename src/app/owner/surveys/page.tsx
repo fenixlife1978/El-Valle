@@ -7,17 +7,23 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { collection, onSnapshot, doc, setDoc, runTransaction, query, orderBy, Timestamp } from 'firebase/firestore';
+import { collection, onSnapshot, doc, runTransaction, query, orderBy, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
-import { Loader2, CheckSquare, Vote, BarChart3, Users } from 'lucide-react';
+import { Loader2, CheckSquare, Vote, BarChart3, Users, Lock, Timer, Play, CalendarOff } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
+import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
+import { Badge } from '@/components/ui/badge';
+
 
 type Survey = {
     id: string;
     question: string;
     options: string[];
     createdAt: Timestamp;
+    startDate: Timestamp;
+    endDate: Timestamp;
     results: { [key: string]: number };
     totalVotes: number;
 };
@@ -27,6 +33,20 @@ type SurveyResponse = {
     userId: string;
     selectedOption: string;
     votedAt: Timestamp;
+};
+
+const getSurveyStatus = (survey: Survey): { status: 'Programada' | 'Activa' | 'Cerrada'; variant: 'warning' | 'success' | 'destructive', icon: React.ElementType } => {
+    const now = new Date();
+    const startDate = survey.startDate.toDate();
+    const endDate = survey.endDate.toDate();
+
+    if (now < startDate) {
+        return { status: 'Programada', variant: 'warning', icon: Timer };
+    }
+    if (now > endDate) {
+        return { status: 'Cerrada', variant: 'destructive', icon: Lock };
+    }
+    return { status: 'Activa', variant: 'success', icon: Play };
 };
 
 export default function OwnerSurveysPage() {
@@ -67,15 +87,21 @@ export default function OwnerSurveysPage() {
         };
     }, [user, authLoading]);
 
-    const handleVote = async (surveyId: string, option: string) => {
+    const handleVote = async (survey: Survey, option: string) => {
         if (!user) {
             toast({ variant: 'destructive', title: 'Error de autenticación' });
             return;
         }
 
+        const { status } = getSurveyStatus(survey);
+        if (status !== 'Activa') {
+            toast({ variant: 'destructive', title: 'Encuesta no activa', description: 'Esta encuesta no está disponible para votar en este momento.' });
+            return;
+        }
+
         try {
-            const surveyRef = doc(db, 'surveys', surveyId);
-            const responseRef = doc(db, 'survey_responses', `${user.uid}_${surveyId}`);
+            const surveyRef = doc(db, 'surveys', survey.id);
+            const responseRef = doc(db, 'survey_responses', `${user.uid}_${survey.id}`);
 
             await runTransaction(db, async (transaction) => {
                 const responseDoc = await transaction.get(responseRef);
@@ -84,7 +110,7 @@ export default function OwnerSurveysPage() {
                 }
 
                 transaction.set(responseRef, {
-                    surveyId,
+                    surveyId: survey.id,
                     userId: user.uid,
                     selectedOption: option,
                     votedAt: Timestamp.now(),
@@ -134,10 +160,17 @@ export default function OwnerSurveysPage() {
                 <div className="space-y-6">
                     {surveys.map(survey => {
                         const userVote = userVotes[survey.id];
+                        const { status, variant, icon: StatusIcon } = getSurveyStatus(survey);
                         return (
                             <Card key={survey.id}>
                                 <CardHeader>
-                                    <CardTitle>{survey.question}</CardTitle>
+                                    <div className="flex justify-between items-start">
+                                        <CardTitle>{survey.question}</CardTitle>
+                                        <Badge variant={variant}><StatusIcon className="mr-2 h-4 w-4"/>{status}</Badge>
+                                    </div>
+                                     <CardDescription>
+                                        Período de votación: {format(survey.startDate.toDate(), "dd/MM/yy HH:mm")}h - {format(survey.endDate.toDate(), "dd/MM/yy HH:mm")}h
+                                    </CardDescription>
                                 </CardHeader>
                                 <CardContent>
                                     {userVote ? (
@@ -163,7 +196,7 @@ export default function OwnerSurveysPage() {
                                             </div>
                                         </div>
                                     ) : (
-                                        <SurveyForm survey={survey} onVote={handleVote} />
+                                        <SurveyForm survey={survey} onVote={handleVote} status={status} />
                                     )}
                                 </CardContent>
                             </Card>
@@ -175,7 +208,7 @@ export default function OwnerSurveysPage() {
     );
 }
 
-function SurveyForm({ survey, onVote }: { survey: Survey, onVote: (surveyId: string, option: string) => void }) {
+function SurveyForm({ survey, onVote, status }: { survey: Survey, onVote: (survey: Survey, option: string) => void, status: 'Programada' | 'Activa' | 'Cerrada' }) {
     const [selectedOption, setSelectedOption] = useState<string | undefined>(undefined);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -185,21 +218,43 @@ function SurveyForm({ survey, onVote }: { survey: Survey, onVote: (surveyId: str
             return;
         }
         setIsSubmitting(true);
-        await onVote(survey.id, selectedOption);
+        await onVote(survey, selectedOption);
         setIsSubmitting(false);
     };
 
+    const isVotingDisabled = status !== 'Activa' || isSubmitting;
+
+    let StatusMessageIcon: React.ElementType | null = null;
+    let statusMessage = "";
+
+    if (status === 'Programada') {
+        StatusMessageIcon = Timer;
+        statusMessage = `La votación comenzará el ${format(survey.startDate.toDate(), "dd/MM/yyyy 'a las' HH:mm")}h.`;
+    } else if (status === 'Cerrada') {
+        StatusMessageIcon = CalendarOff;
+        statusMessage = "La votación para esta encuesta ha finalizado.";
+    }
+
+
     return (
         <form onSubmit={handleSubmit} className="space-y-6">
-            <RadioGroup value={selectedOption} onValueChange={setSelectedOption}>
+            <RadioGroup value={selectedOption} onValueChange={setSelectedOption} disabled={isVotingDisabled}>
                 {survey.options.map((option) => (
-                    <div key={option} className="flex items-center space-x-3 p-3 border rounded-md hover:bg-muted/50">
-                        <RadioGroupItem value={option} id={`${survey.id}-${option}`} />
+                    <div key={option} className="flex items-center space-x-3 p-3 border rounded-md has-[:disabled]:opacity-50 has-[:disabled]:cursor-not-allowed hover:bg-muted/50">
+                        <RadioGroupItem value={option} id={`${survey.id}-${option}`} disabled={isVotingDisabled} />
                         <Label htmlFor={`${survey.id}-${option}`} className="font-normal cursor-pointer flex-grow">{option}</Label>
                     </div>
                 ))}
             </RadioGroup>
-            <Button type="submit" disabled={!selectedOption || isSubmitting}>
+            
+            {status !== 'Activa' && StatusMessageIcon && (
+                 <div className="p-3 bg-muted/50 border rounded-md text-sm text-muted-foreground flex items-center justify-center gap-2">
+                    <StatusMessageIcon className="h-4 w-4"/>
+                    <span>{statusMessage}</span>
+                </div>
+            )}
+
+            <Button type="submit" disabled={!selectedOption || isVotingDisabled}>
                 {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Vote className="mr-2 h-4 w-4"/>}
                 Enviar Voto
             </Button>
