@@ -110,11 +110,17 @@ export default function SurveysPage() {
         setIsEditing(true);
         setEditingSurveyId(survey.id);
         setTitle(survey.title);
-        // Ensure options are objects with id and text
-        const editableQuestions = survey.questions.map(q => ({
-            ...q,
-            options: q.options.map((opt, index) => typeof opt === 'string' ? { id: `opt-${q.id}-${index}`, text: opt } : opt)
-        }));
+        
+        let editableQuestions: SurveyQuestion[];
+        if (survey.questions && survey.questions.length > 0) {
+            editableQuestions = survey.questions.map(q => ({
+                ...q,
+                options: q.options.map((opt, index) => typeof opt === 'string' ? { id: `opt-${q.id}-${index}`, text: opt } : opt)
+            }));
+        } else {
+            // Provide a default question if none exist
+            editableQuestions = [{ id: `q-${Date.now()}`, questionText: '', options: [{ id: `opt-${Date.now()}-1`, text: '' }, { id: `opt-${Date.now()}-2`, text: '' }] }];
+        }
 
         setQuestions(editableQuestions);
         setStartDate(survey.startDate.toDate());
@@ -470,4 +476,5 @@ export default function SurveysPage() {
             </Dialog>
         </div>
     );
-}
+
+    
