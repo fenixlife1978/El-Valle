@@ -276,7 +276,7 @@ export default function SurveysPage() {
                     <h1 className="text-3xl font-bold font-headline">Gestión de Encuestas</h1>
                     <p className="text-muted-foreground">Crea y gestiona encuestas para la comunidad.</p>
                 </div>
-                <Button onClick={() => { setIsEditing(false); setIsDialogOpen(true); }}>
+                <Button onClick={() => { resetDialog(); setIsDialogOpen(true); }}>
                     <PlusCircle className="mr-2 h-4 w-4" />
                     Crear Nueva Encuesta
                 </Button>
@@ -476,5 +476,4 @@ export default function SurveysPage() {
             </Dialog>
         </div>
     );
-
-    
+}
