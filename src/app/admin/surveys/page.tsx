@@ -8,9 +8,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { collection, onSnapshot, addDoc, doc, deleteDoc, serverTimestamp, orderBy, query, Timestamp } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, doc, deleteDoc, serverTimestamp, orderBy, query, Timestamp, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { PlusCircle, Trash2, Loader2, ListPlus, XCircle, BarChart3, Users, CheckSquare, CalendarIcon } from 'lucide-react';
+import { PlusCircle, Trash2, Loader2, ListPlus, XCircle, BarChart3, Users, CheckSquare, CalendarIcon, Edit } from 'lucide-react';
 import { format, parse } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Progress } from '@/components/ui/progress';
@@ -63,6 +63,9 @@ export default function SurveysPage() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     
     const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
+    const [editingSurveyId, setEditingSurveyId] = useState<string | null>(null);
+
     const [title, setTitle] = useState('');
     const [questions, setQuestions] = useState<SurveyQuestion[]>([
         { id: `q-${Date.now()}`, questionText: '', options: [{ id: `opt-${Date.now()}-1`, text: '' }, { id: `opt-${Date.now()}-2`, text: '' }] }
@@ -91,6 +94,8 @@ export default function SurveysPage() {
 
     const resetDialog = () => {
         setIsDialogOpen(false);
+        setIsEditing(false);
+        setEditingSurveyId(null);
         setTitle('');
         setQuestions([
             { id: `q-${Date.now()}`, questionText: '', options: [{ id: `opt-${Date.now()}-1`, text: '' }, { id: `opt-${Date.now()}-2`, text: '' }] }
@@ -99,6 +104,24 @@ export default function SurveysPage() {
         setStartTime(format(new Date(), 'HH:mm'));
         setEndDate(undefined);
         setEndTime('23:59');
+    };
+
+    const handleEditSurvey = (survey: Survey) => {
+        setIsEditing(true);
+        setEditingSurveyId(survey.id);
+        setTitle(survey.title);
+        // Ensure options are objects with id and text
+        const editableQuestions = survey.questions.map(q => ({
+            ...q,
+            options: q.options.map((opt, index) => typeof opt === 'string' ? { id: `opt-${q.id}-${index}`, text: opt } : opt)
+        }));
+
+        setQuestions(editableQuestions);
+        setStartDate(survey.startDate.toDate());
+        setStartTime(format(survey.startDate.toDate(), 'HH:mm'));
+        setEndDate(survey.endDate.toDate());
+        setEndTime(format(survey.endDate.toDate(), 'HH:mm'));
+        setIsDialogOpen(true);
     };
 
     const handleQuestionTextChange = (id: string, text: string) => {
@@ -184,33 +207,43 @@ export default function SurveysPage() {
             const finalQuestions = questions.map(q => ({
                 id: q.id,
                 questionText: q.questionText,
-                options: q.options.filter(opt => opt.text.trim() !== '').map(opt => opt.text)
+                options: q.options.filter(opt => opt.text.trim())
             }));
-            
-            const initialResults: Survey['results'] = {};
-            finalQuestions.forEach(q => {
-                initialResults[q.id] = q.options.reduce((acc, opt) => {
-                    acc[opt] = 0;
-                    return acc;
-                }, {} as { [key: string]: number });
-            });
 
+            if (isEditing && editingSurveyId) {
+                const surveyRef = doc(db, 'surveys', editingSurveyId);
+                await updateDoc(surveyRef, {
+                    title,
+                    questions: finalQuestions.map(q => ({...q, options: q.options.map(o => o.text) })), // Store as string array
+                    startDate: Timestamp.fromDate(startDateTime),
+                    endDate: Timestamp.fromDate(endDateTime),
+                });
+                toast({ title: 'Encuesta Actualizada', description: 'Los cambios han sido guardados.' });
+            } else {
+                const initialResults: Survey['results'] = {};
+                finalQuestions.forEach(q => {
+                    initialResults[q.id] = q.options.reduce((acc, opt) => {
+                        acc[opt.text] = 0;
+                        return acc;
+                    }, {} as { [key: string]: number });
+                });
 
-            await addDoc(collection(db, 'surveys'), {
-                title,
-                questions: finalQuestions,
-                createdAt: serverTimestamp(),
-                startDate: Timestamp.fromDate(startDateTime),
-                endDate: Timestamp.fromDate(endDateTime),
-                results: initialResults,
-                totalVotes: 0, // This is now total survey participants, not total votes cast
-            });
+                await addDoc(collection(db, 'surveys'), {
+                    title,
+                    questions: finalQuestions.map(q => ({...q, options: q.options.map(o => o.text) })),
+                    createdAt: serverTimestamp(),
+                    startDate: Timestamp.fromDate(startDateTime),
+                    endDate: Timestamp.fromDate(endDateTime),
+                    results: initialResults,
+                    totalVotes: 0,
+                });
+                toast({ title: 'Encuesta Creada', description: 'La nueva encuesta está disponible para los propietarios.' });
+            }
 
-            toast({ title: 'Encuesta Creada', description: 'La nueva encuesta está disponible para los propietarios.' });
             resetDialog();
         } catch (error) {
-            console.error('Error creating survey:', error);
-            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo crear la encuesta.' });
+            console.error('Error saving survey:', error);
+            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo guardar la encuesta.' });
         } finally {
             setIsSubmitting(false);
         }
@@ -237,7 +270,7 @@ export default function SurveysPage() {
                     <h1 className="text-3xl font-bold font-headline">Gestión de Encuestas</h1>
                     <p className="text-muted-foreground">Crea y gestiona encuestas para la comunidad.</p>
                 </div>
-                <Button onClick={() => setIsDialogOpen(true)}>
+                <Button onClick={() => { setIsEditing(false); setIsDialogOpen(true); }}>
                     <PlusCircle className="mr-2 h-4 w-4" />
                     Crear Nueva Encuesta
                 </Button>
@@ -300,18 +333,28 @@ export default function SurveysPage() {
                                         })}
                                     </div>
                                 </CardContent>
-                                <CardFooter className="border-t pt-4">
+                                <CardFooter className="border-t pt-4 flex gap-2">
+                                     <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="flex-1"
+                                        disabled={status === 'Cerrada'}
+                                        onClick={() => handleEditSurvey(survey)}
+                                    >
+                                        <Edit className="mr-2 h-4 w-4" />
+                                        Editar
+                                    </Button>
                                     <Button
                                         variant="destructive"
                                         size="sm"
-                                        className="w-full"
+                                        className="flex-1"
                                         onClick={() => {
                                             setSurveyToDelete(survey);
                                             setIsDeleteConfirmationOpen(true);
                                         }}
                                     >
                                         <Trash2 className="mr-2 h-4 w-4" />
-                                        Eliminar Encuesta
+                                        Eliminar
                                     </Button>
                                 </CardFooter>
                             </Card>
@@ -320,10 +363,10 @@ export default function SurveysPage() {
                 </div>
             )}
 
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <Dialog open={isDialogOpen} onOpenChange={(open) => !open && resetDialog()}>
                 <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col">
                     <DialogHeader>
-                        <DialogTitle>Crear Nueva Encuesta</DialogTitle>
+                        <DialogTitle>{isEditing ? 'Editar Encuesta' : 'Crear Nueva Encuesta'}</DialogTitle>
                         <DialogDescription>
                             Define el título, las preguntas, las opciones y el período de votación.
                         </DialogDescription>
@@ -340,14 +383,14 @@ export default function SurveysPage() {
                                 <div className="flex gap-2">
                                     <Popover>
                                         <PopoverTrigger asChild>
-                                            <Button variant={"outline"} className={cn("flex-grow justify-start", !startDate && "text-muted-foreground")}>
+                                            <Button variant={"outline"} className={cn("flex-grow justify-start", !startDate && "text-muted-foreground")} disabled={isEditing && getSurveyStatus(surveys.find(s => s.id === editingSurveyId)!)?.status !== 'Programada'}>
                                                 <CalendarIcon className="mr-2 h-4 w-4" />
                                                 {startDate ? format(startDate, "dd/MM/yyyy") : <span>Seleccionar</span>}
                                             </Button>
                                         </PopoverTrigger>
                                         <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={startDate} onSelect={setStartDate} initialFocus locale={es} /></PopoverContent>
                                     </Popover>
-                                    <Input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className="w-[100px]" />
+                                    <Input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className="w-[100px]" disabled={isEditing && getSurveyStatus(surveys.find(s => s.id === editingSurveyId)!)?.status !== 'Programada'}/>
                                 </div>
                             </div>
                             <div className="space-y-2">
@@ -405,7 +448,7 @@ export default function SurveysPage() {
                         <Button variant="outline" onClick={resetDialog}>Cancelar</Button>
                         <Button onClick={handleSaveSurvey} disabled={isSubmitting}>
                             {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            Guardar Encuesta
+                            {isEditing ? 'Guardar Cambios' : 'Guardar Encuesta'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
