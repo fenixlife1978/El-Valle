@@ -15,24 +15,37 @@ import { Progress } from '@/components/ui/progress';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 
+type SurveyQuestion = {
+    id: string;
+    questionText: string;
+    options: string[];
+};
 
 type Survey = {
     id: string;
-    question: string;
-    options: string[];
+    title: string;
+    questions: SurveyQuestion[];
     createdAt: Timestamp;
     startDate: Timestamp;
     endDate: Timestamp;
-    results: { [key: string]: number };
-    totalVotes: number;
+    results: {
+        [questionId: string]: {
+            [optionText: string]: number;
+        };
+    };
+    totalVotes: number; // Total number of users who have voted
 };
 
 type SurveyResponse = {
     surveyId: string;
     userId: string;
-    selectedOption: string;
     votedAt: Timestamp;
+    // selectedOption is now an object
+    responses: {
+        [questionId: string]: string; // questionId -> selectedOptionText
+    };
 };
 
 const getSurveyStatus = (survey: Survey): { status: 'Programada' | 'Activa' | 'Cerrada'; variant: 'warning' | 'success' | 'destructive', icon: React.ElementType } => {
@@ -54,7 +67,9 @@ export default function OwnerSurveysPage() {
     const { toast } = useToast();
 
     const [surveys, setSurveys] = useState<Survey[]>([]);
-    const [userVotes, setUserVotes] = useState<{ [key: string]: string }>({}); // surveyId -> selectedOption
+    const [userVotes, setUserVotes] = useState<{ [key: string]: SurveyResponse }>( // surveyId -> SurveyResponse
+        {}
+    );
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -73,10 +88,10 @@ export default function OwnerSurveysPage() {
 
         const responsesQuery = query(collection(db, "survey_responses"), where("userId", "==", user.uid));
         const responsesUnsubscribe = onSnapshot(responsesQuery, (snapshot) => {
-            const votes: { [key: string]: string } = {};
+            const votes: { [key: string]: SurveyResponse } = {};
             snapshot.forEach(doc => {
                 const data = doc.data() as SurveyResponse;
-                votes[data.surveyId] = data.selectedOption;
+                votes[data.surveyId] = data;
             });
             setUserVotes(votes);
         });
@@ -87,9 +102,14 @@ export default function OwnerSurveysPage() {
         };
     }, [user, authLoading]);
 
-    const handleVote = async (survey: Survey, option: string) => {
+    const handleVote = async (survey: Survey, responses: { [questionId: string]: string }) => {
         if (!user) {
             toast({ variant: 'destructive', title: 'Error de autenticación' });
+            return;
+        }
+
+        if (Object.keys(responses).length !== survey.questions.length) {
+            toast({ variant: 'destructive', title: 'Respuestas incompletas', description: 'Por favor, responde a todas las preguntas de la encuesta.' });
             return;
         }
 
@@ -112,7 +132,7 @@ export default function OwnerSurveysPage() {
                 transaction.set(responseRef, {
                     surveyId: survey.id,
                     userId: user.uid,
-                    selectedOption: option,
+                    responses,
                     votedAt: Timestamp.now(),
                 });
 
@@ -120,12 +140,19 @@ export default function OwnerSurveysPage() {
                 if (!surveyDoc.exists()) {
                     throw new Error("La encuesta ya no existe.");
                 }
-
-                const currentResults = surveyDoc.data().results || {};
-                const currentTotalVotes = surveyDoc.data().totalVotes || 0;
+                
+                const currentData = surveyDoc.data();
+                const currentResults = currentData.results || {};
+                const currentTotalVotes = currentData.totalVotes || 0;
+                
+                const newResults = { ...currentResults };
+                Object.entries(responses).forEach(([questionId, selectedOption]) => {
+                    if (!newResults[questionId]) newResults[questionId] = {};
+                    newResults[questionId][selectedOption] = (newResults[questionId][selectedOption] || 0) + 1;
+                });
 
                 transaction.update(surveyRef, {
-                    [`results.${option}`]: (currentResults[option] || 0) + 1,
+                    results: newResults,
                     totalVotes: currentTotalVotes + 1,
                 });
             });
@@ -159,13 +186,13 @@ export default function OwnerSurveysPage() {
             ) : (
                 <div className="space-y-6">
                     {surveys.map(survey => {
-                        const userVote = userVotes[survey.id];
+                        const userVoteResponse = userVotes[survey.id];
                         const { status, variant, icon: StatusIcon } = getSurveyStatus(survey);
                         return (
                             <Card key={survey.id}>
                                 <CardHeader>
                                     <div className="flex justify-between items-start">
-                                        <CardTitle>{survey.question}</CardTitle>
+                                        <CardTitle>{survey.title}</CardTitle>
                                         <Badge variant={variant}><StatusIcon className="mr-2 h-4 w-4"/>{status}</Badge>
                                     </div>
                                      <CardDescription>
@@ -173,27 +200,39 @@ export default function OwnerSurveysPage() {
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent>
-                                    {userVote ? (
-                                        <div className="space-y-4">
-                                            <h3 className="font-semibold flex items-center gap-2"><BarChart3 className="h-5 w-5"/>Resultados Actuales</h3>
-                                            <p className="text-sm text-green-600">✓ Votaste por: <span className="font-bold">{userVote}</span></p>
-                                            <div className="space-y-3">
-                                                 {Object.entries(survey.results).sort(([, a], [, b]) => b - a).map(([option, votes]) => {
-                                                    const percentage = survey.totalVotes > 0 ? (votes / survey.totalVotes) * 100 : 0;
-                                                    return (
-                                                        <div key={option} className="space-y-1">
-                                                            <div className="flex justify-between items-center text-sm">
-                                                                <span className="font-medium">{option}</span>
-                                                                <span className="text-muted-foreground">{votes} voto(s) ({percentage.toFixed(1)}%)</span>
-                                                            </div>
-                                                            <Progress value={percentage} />
+                                    {userVoteResponse ? (
+                                        <div className="space-y-6">
+                                            <div className="flex items-center gap-2 text-sm font-semibold pt-2">
+                                                <Users className="h-4 w-4"/> Participantes Totales: {survey.totalVotes}
+                                            </div>
+                                            {survey.questions.map(q => {
+                                                const questionResults = survey.results[q.id] || {};
+                                                const questionTotalVotes = Object.values(questionResults).reduce((sum, count) => sum + count, 0);
+                                                const userChoice = userVoteResponse.responses[q.id];
+
+                                                return (
+                                                    <div key={q.id}>
+                                                         <Separator className="my-4"/>
+                                                        <h3 className="font-semibold flex items-center gap-2 mb-3"><BarChart3 className="h-5 w-5"/> {q.questionText}</h3>
+                                                        <p className="text-sm text-green-600 mb-3">✓ Votaste por: <span className="font-bold">{userChoice}</span></p>
+                                                        <div className="space-y-3">
+                                                            {q.options.map(option => {
+                                                                const votes = questionResults[option] || 0;
+                                                                const percentage = questionTotalVotes > 0 ? (votes / questionTotalVotes) * 100 : 0;
+                                                                return (
+                                                                     <div key={option} className="space-y-1">
+                                                                        <div className="flex justify-between items-center text-sm">
+                                                                            <span className="font-medium">{option}</span>
+                                                                            <span className="text-muted-foreground">{votes} voto(s) ({percentage.toFixed(1)}%)</span>
+                                                                        </div>
+                                                                        <Progress value={percentage} />
+                                                                    </div>
+                                                                )
+                                                            })}
                                                         </div>
-                                                    );
-                                                })}
-                                            </div>
-                                            <div className="flex items-center gap-2 text-sm font-semibold pt-2 border-t mt-4">
-                                                <Users className="h-4 w-4"/> Votos Totales: {survey.totalVotes}
-                                            </div>
+                                                    </div>
+                                                )
+                                            })}
                                         </div>
                                     ) : (
                                         <SurveyForm survey={survey} onVote={handleVote} status={status} />
@@ -208,22 +247,26 @@ export default function OwnerSurveysPage() {
     );
 }
 
-function SurveyForm({ survey, onVote, status }: { survey: Survey, onVote: (survey: Survey, option: string) => void, status: 'Programada' | 'Activa' | 'Cerrada' }) {
-    const [selectedOption, setSelectedOption] = useState<string | undefined>(undefined);
+function SurveyForm({ survey, onVote, status }: { survey: Survey, onVote: (survey: Survey, responses: {[qId: string]: string}) => void, status: 'Programada' | 'Activa' | 'Cerrada' }) {
+    const [selectedOptions, setSelectedOptions] = useState<{ [key: string]: string }>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const handleOptionChange = (questionId: string, option: string) => {
+        setSelectedOptions(prev => ({ ...prev, [questionId]: option }));
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!selectedOption) {
+        if (Object.keys(selectedOptions).length !== survey.questions.length) {
             return;
         }
         setIsSubmitting(true);
-        await onVote(survey, selectedOption);
+        await onVote(survey, selectedOptions);
         setIsSubmitting(false);
     };
 
     const isVotingDisabled = status !== 'Activa' || isSubmitting;
-
+    
     let StatusMessageIcon: React.ElementType | null = null;
     let statusMessage = "";
 
@@ -238,14 +281,23 @@ function SurveyForm({ survey, onVote, status }: { survey: Survey, onVote: (surve
 
     return (
         <form onSubmit={handleSubmit} className="space-y-6">
-            <RadioGroup value={selectedOption} onValueChange={setSelectedOption} disabled={isVotingDisabled}>
-                {survey.options.map((option) => (
-                    <div key={option} className="flex items-center space-x-3 p-3 border rounded-md has-[:disabled]:opacity-50 has-[:disabled]:cursor-not-allowed hover:bg-muted/50">
-                        <RadioGroupItem value={option} id={`${survey.id}-${option}`} disabled={isVotingDisabled} />
-                        <Label htmlFor={`${survey.id}-${option}`} className="font-normal cursor-pointer flex-grow">{option}</Label>
-                    </div>
-                ))}
-            </RadioGroup>
+            {survey.questions.map(q => (
+                 <div key={q.id}>
+                    <h3 className="font-semibold mb-3">{q.questionText}</h3>
+                    <RadioGroup
+                        value={selectedOptions[q.id]}
+                        onValueChange={(value) => handleOptionChange(q.id, value)}
+                        disabled={isVotingDisabled}
+                    >
+                        {q.options.map((option) => (
+                            <div key={option} className="flex items-center space-x-3 p-3 border rounded-md has-[:disabled]:opacity-50 has-[:disabled]:cursor-not-allowed hover:bg-muted/50">
+                                <RadioGroupItem value={option} id={`${q.id}-${option}`} disabled={isVotingDisabled} />
+                                <Label htmlFor={`${q.id}-${option}`} className="font-normal cursor-pointer flex-grow">{option}</Label>
+                            </div>
+                        ))}
+                    </RadioGroup>
+                </div>
+            ))}
             
             {status !== 'Activa' && StatusMessageIcon && (
                  <div className="p-3 bg-muted/50 border rounded-md text-sm text-muted-foreground flex items-center justify-center gap-2">
@@ -254,9 +306,9 @@ function SurveyForm({ survey, onVote, status }: { survey: Survey, onVote: (surve
                 </div>
             )}
 
-            <Button type="submit" disabled={!selectedOption || isVotingDisabled}>
+            <Button type="submit" disabled={Object.keys(selectedOptions).length !== survey.questions.length || isVotingDisabled}>
                 {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Vote className="mr-2 h-4 w-4"/>}
-                Enviar Voto
+                Enviar Votos
             </Button>
         </form>
     );
