@@ -18,20 +18,26 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 
-type SurveyOption = {
+type SurveyQuestion = {
     id: string;
-    text: string;
+    questionText: string;
+    options: { id: string, text: string }[];
 };
 
 type Survey = {
     id: string;
-    question: string;
-    options: SurveyOption[];
+    title: string;
+    questions: SurveyQuestion[];
     createdAt: Timestamp;
     startDate: Timestamp;
     endDate: Timestamp;
-    results: { [key: string]: number };
+    results: {
+        [questionId: string]: {
+            [optionText: string]: number;
+        };
+    };
     totalVotes: number;
 };
 
@@ -57,10 +63,9 @@ export default function SurveysPage() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     
     const [isDialogOpen, setIsDialogOpen] = useState(false);
-    const [question, setQuestion] = useState('');
-    const [options, setOptions] = useState<SurveyOption[]>([
-        { id: `opt-${Date.now()}-1`, text: '' },
-        { id: `opt-${Date.now()}-2`, text: '' }
+    const [title, setTitle] = useState('');
+    const [questions, setQuestions] = useState<SurveyQuestion[]>([
+        { id: `q-${Date.now()}`, questionText: '', options: [{ id: `opt-${Date.now()}-1`, text: '' }, { id: `opt-${Date.now()}-2`, text: '' }] }
     ]);
     const [startDate, setStartDate] = useState<Date | undefined>(new Date());
     const [startTime, setStartTime] = useState(format(new Date(), 'HH:mm'));
@@ -86,10 +91,9 @@ export default function SurveysPage() {
 
     const resetDialog = () => {
         setIsDialogOpen(false);
-        setQuestion('');
-        setOptions([
-            { id: `opt-${Date.now()}-1`, text: '' },
-            { id: `opt-${Date.now()}-2`, text: '' }
+        setTitle('');
+        setQuestions([
+            { id: `q-${Date.now()}`, questionText: '', options: [{ id: `opt-${Date.now()}-1`, text: '' }, { id: `opt-${Date.now()}-2`, text: '' }] }
         ]);
         setStartDate(new Date());
         setStartTime(format(new Date(), 'HH:mm'));
@@ -97,30 +101,69 @@ export default function SurveysPage() {
         setEndTime('23:59');
     };
 
-    const handleOptionChange = (id: string, text: string) => {
-        setOptions(options.map(opt => opt.id === id ? { ...opt, text } : opt));
+    const handleQuestionTextChange = (id: string, text: string) => {
+        setQuestions(questions.map(q => q.id === id ? { ...q, questionText: text } : q));
+    };
+
+    const handleOptionChange = (questionId: string, optionId: string, text: string) => {
+        setQuestions(questions.map(q => {
+            if (q.id === questionId) {
+                const updatedOptions = q.options.map(opt => opt.id === optionId ? { ...opt, text } : opt);
+                return { ...q, options: updatedOptions };
+            }
+            return q;
+        }));
     };
     
-    const addOption = () => {
-        setOptions([...options, { id: `opt-${Date.now()}-${options.length + 1}`, text: '' }]);
+    const addOption = (questionId: string) => {
+        setQuestions(questions.map(q => {
+            if (q.id === questionId) {
+                return { ...q, options: [...q.options, { id: `opt-${Date.now()}`, text: '' }] };
+            }
+            return q;
+        }));
     };
-    
-    const removeOption = (id: string) => {
-        if (options.length > 2) {
-            setOptions(options.filter(opt => opt.id !== id));
+
+    const removeOption = (questionId: string, optionId: string) => {
+        setQuestions(questions.map(q => {
+            if (q.id === questionId) {
+                if (q.options.length > 2) {
+                    return { ...q, options: q.options.filter(opt => opt.id !== optionId) };
+                } else {
+                    toast({ variant: 'destructive', title: 'Mínimo de opciones', description: 'Una pregunta debe tener al menos dos opciones.' });
+                }
+            }
+            return q;
+        }));
+    };
+
+    const addQuestion = () => {
+        setQuestions([...questions, {
+            id: `q-${Date.now()}`,
+            questionText: '',
+            options: [{ id: `opt-${Date.now()}-1`, text: '' }, { id: `opt-${Date.now()}-2`, text: '' }]
+        }]);
+    };
+
+    const removeQuestion = (id: string) => {
+        if (questions.length > 1) {
+            setQuestions(questions.filter(q => q.id !== id));
         } else {
-            toast({ variant: 'destructive', title: 'Mínimo de opciones', description: 'Una encuesta debe tener al menos dos opciones.' });
+            toast({ variant: 'destructive', title: 'Mínimo de preguntas', description: 'Una encuesta debe tener al menos una pregunta.' });
         }
     };
     
     const handleSaveSurvey = async () => {
-        if (!question.trim()) {
-            toast({ variant: 'destructive', title: 'Pregunta requerida', description: 'Por favor, ingrese la pregunta de la encuesta.' });
+        if (!title.trim()) {
+            toast({ variant: 'destructive', title: 'Título requerido', description: 'Por favor, ingrese un título para la encuesta.' });
             return;
         }
-        const filledOptions = options.filter(opt => opt.text.trim() !== '');
-        if (filledOptions.length < 2) {
-            toast({ variant: 'destructive', title: 'Opciones insuficientes', description: 'Debe proporcionar al menos dos opciones de respuesta.' });
+        if (questions.some(q => !q.questionText.trim())) {
+             toast({ variant: 'destructive', title: 'Preguntas incompletas', description: 'Todas las preguntas deben tener texto.' });
+            return;
+        }
+        if (questions.some(q => q.options.filter(o => o.text.trim() !== '').length < 2)) {
+             toast({ variant: 'destructive', title: 'Opciones insuficientes', description: 'Cada pregunta debe tener al menos dos opciones con texto.' });
             return;
         }
         if (!startDate || !endDate || !startTime || !endTime) {
@@ -138,19 +181,29 @@ export default function SurveysPage() {
         
         setIsSubmitting(true);
         try {
-            const initialResults = filledOptions.reduce((acc, opt) => {
-                acc[opt.text] = 0;
-                return acc;
-            }, {} as { [key: string]: number });
+            const finalQuestions = questions.map(q => ({
+                id: q.id,
+                questionText: q.questionText,
+                options: q.options.filter(opt => opt.text.trim() !== '').map(opt => opt.text)
+            }));
+            
+            const initialResults: Survey['results'] = {};
+            finalQuestions.forEach(q => {
+                initialResults[q.id] = q.options.reduce((acc, opt) => {
+                    acc[opt] = 0;
+                    return acc;
+                }, {} as { [key: string]: number });
+            });
+
 
             await addDoc(collection(db, 'surveys'), {
-                question,
-                options: filledOptions.map(opt => opt.text),
+                title,
+                questions: finalQuestions,
                 createdAt: serverTimestamp(),
                 startDate: Timestamp.fromDate(startDateTime),
                 endDate: Timestamp.fromDate(endDateTime),
                 results: initialResults,
-                totalVotes: 0,
+                totalVotes: 0, // This is now total survey participants, not total votes cast
             });
 
             toast({ title: 'Encuesta Creada', description: 'La nueva encuesta está disponible para los propietarios.' });
@@ -207,7 +260,7 @@ export default function SurveysPage() {
                             <Card key={survey.id} className="flex flex-col">
                                 <CardHeader>
                                     <div className="flex justify-between items-start">
-                                        <CardTitle>{survey.question}</CardTitle>
+                                        <CardTitle>{survey.title}</CardTitle>
                                         <Badge variant={variant}>{status}</Badge>
                                     </div>
                                     <CardDescription>
@@ -216,26 +269,38 @@ export default function SurveysPage() {
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent className="flex-grow space-y-4">
-                                    <div>
-                                        {Object.entries(survey.results).sort(([, a], [, b]) => b - a).map(([option, votes]) => {
-                                            const percentage = survey.totalVotes > 0 ? (votes / survey.totalVotes) * 100 : 0;
+                                     <div className="flex items-center gap-2 text-sm font-semibold">
+                                        <Users className="h-4 w-4"/> Participantes Totales: {survey.totalVotes}
+                                    </div>
+                                    <Separator />
+                                    <div className="space-y-6">
+                                        {survey.questions.map(q => {
+                                            const questionResults = survey.results[q.id] || {};
+                                            const questionTotalVotes = Object.values(questionResults).reduce((sum, count) => sum + count, 0);
+
                                             return (
-                                                <div key={option} className="space-y-1 mb-3">
-                                                    <div className="flex justify-between items-center text-sm">
-                                                        <span className="font-medium">{option}</span>
-                                                        <span className="text-muted-foreground">{votes} voto(s) ({percentage.toFixed(1)}%)</span>
+                                                <div key={q.id}>
+                                                    <h4 className="font-semibold mb-3">{q.questionText}</h4>
+                                                    <div className="space-y-3">
+                                                        {Object.entries(questionResults).sort(([, a], [, b]) => b - a).map(([option, votes]) => {
+                                                            const percentage = questionTotalVotes > 0 ? (votes / questionTotalVotes) * 100 : 0;
+                                                            return (
+                                                                <div key={option} className="space-y-1">
+                                                                    <div className="flex justify-between items-center text-sm">
+                                                                        <span className="font-medium">{option}</span>
+                                                                        <span className="text-muted-foreground">{votes} voto(s) ({percentage.toFixed(1)}%)</span>
+                                                                    </div>
+                                                                    <Progress value={percentage} />
+                                                                </div>
+                                                            );
+                                                        })}
                                                     </div>
-                                                    <Progress value={percentage} />
                                                 </div>
-                                            );
+                                            )
                                         })}
                                     </div>
                                 </CardContent>
-                                <CardFooter className="flex-col items-start gap-4 border-t pt-4">
-                                    <div className="w-full flex justify-between items-center text-sm font-semibold">
-                                        <div className="flex items-center gap-2"><Users className="h-4 w-4"/> Votos Totales</div>
-                                        <span>{survey.totalVotes}</span>
-                                    </div>
+                                <CardFooter className="border-t pt-4">
                                     <Button
                                         variant="destructive"
                                         size="sm"
@@ -256,17 +321,17 @@ export default function SurveysPage() {
             )}
 
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
+                <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col">
                     <DialogHeader>
                         <DialogTitle>Crear Nueva Encuesta</DialogTitle>
                         <DialogDescription>
-                            Define la pregunta, las opciones y el período de votación.
+                            Define el título, las preguntas, las opciones y el período de votación.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="flex-grow space-y-6 overflow-y-auto pr-6 -mr-6">
                         <div className="space-y-2">
-                            <Label htmlFor="question">Pregunta de la Encuesta</Label>
-                            <Input id="question" value={question} onChange={e => setQuestion(e.target.value)} placeholder="Ej: ¿Está de acuerdo con...?" />
+                            <Label htmlFor="title">Título de la Encuesta</Label>
+                            <Input id="title" value={title} onChange={e => setTitle(e.target.value)} placeholder="Ej: Mejoras para el área de la piscina" />
                         </div>
 
                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -303,27 +368,36 @@ export default function SurveysPage() {
                         </div>
 
                         <div className="space-y-4">
-                            <Label>Opciones de Respuesta</Label>
-                            {options.map((option, index) => (
-                                <div key={option.id} className="flex items-center gap-2">
-                                    <Input
-                                        value={option.text}
-                                        onChange={e => handleOptionChange(option.id, e.target.value)}
-                                        placeholder={`Opción ${index + 1}`}
-                                    />
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => removeOption(option.id)}
-                                        disabled={options.length <= 2}
-                                    >
-                                        <XCircle className="h-5 w-5 text-destructive" />
-                                    </Button>
-                                </div>
+                            <Label className="text-lg font-semibold">Preguntas</Label>
+                            {questions.map((q, qIndex) => (
+                                <Card key={q.id} className="bg-muted/50 p-4">
+                                     <div className="flex justify-between items-center mb-4">
+                                        <h4 className="font-semibold">Pregunta {qIndex + 1}</h4>
+                                        <Button variant="ghost" size="icon" onClick={() => removeQuestion(q.id)} disabled={questions.length <= 1}>
+                                            <Trash2 className="h-5 w-5 text-destructive" />
+                                        </Button>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Input value={q.questionText} onChange={e => handleQuestionTextChange(q.id, e.target.value)} placeholder="Texto de la pregunta..." />
+                                    </div>
+                                    <div className="space-y-2 mt-4 pl-4 border-l-2">
+                                        <Label>Opciones</Label>
+                                         {q.options.map((option, optIndex) => (
+                                            <div key={option.id} className="flex items-center gap-2">
+                                                <Input value={option.text} onChange={e => handleOptionChange(q.id, option.id, e.target.value)} placeholder={`Opción ${optIndex + 1}`} />
+                                                <Button variant="ghost" size="icon" onClick={() => removeOption(q.id, option.id)} disabled={q.options.length <= 2}>
+                                                    <XCircle className="h-5 w-5 text-destructive/70" />
+                                                </Button>
+                                            </div>
+                                        ))}
+                                        <Button variant="outline" size="sm" onClick={() => addOption(q.id)}>
+                                            <ListPlus className="mr-2 h-4 w-4" /> Añadir Opción
+                                        </Button>
+                                    </div>
+                                </Card>
                             ))}
-                            <Button variant="outline" size="sm" onClick={addOption}>
-                                <ListPlus className="mr-2 h-4 w-4" />
-                                Añadir Opción
+                             <Button variant="secondary" onClick={addQuestion}>
+                                <PlusCircle className="mr-2 h-4 w-4" /> Añadir Pregunta
                             </Button>
                         </div>
                     </div>
