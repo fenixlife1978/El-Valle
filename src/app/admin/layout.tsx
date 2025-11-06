@@ -13,7 +13,8 @@ import {
     Wallet,
     Award,
     Palette,
-    ShieldCheck
+    ShieldCheck,
+    ClipboardList
 } from 'lucide-react';
 import { type ReactNode, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -39,6 +40,7 @@ const adminNavItems: NavItem[] = [
     { href: "/admin/financial-balance", icon: TrendingUp, label: "Balance Financiero" },
     { href: "/admin/petty-cash", icon: Wallet, label: "Caja Chica" },
     { href: "/admin/reports", icon: FileSearch, label: "Informes" },
+    { href: "/admin/surveys", icon: ClipboardList, label: "Encuestas" },
     { href: "/admin/certificates", icon: Award, label: "Constancias" },
     { href: "/admin/people", icon: Users, label: "Personas" },
     { 
