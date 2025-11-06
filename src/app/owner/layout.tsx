@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import {
@@ -6,7 +7,8 @@ import {
     Landmark,
     Settings,
     History,
-    Calculator
+    Calculator,
+    ClipboardList
 } from 'lucide-react';
 import { type ReactNode, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
@@ -25,6 +27,7 @@ const ownerNavItems: NavItem[] = [
         { href: "/owner/payments/calculator", label: "Calculadora de Pagos" },
       ]
     },
+    { href: "/owner/surveys", icon: ClipboardList, label: "Encuestas"},
     { href: "/owner/history", icon: History, label: "Historial de Reportes"},
     { href: "/owner/settings", icon: Settings, label: "Configuración" },
 ];
