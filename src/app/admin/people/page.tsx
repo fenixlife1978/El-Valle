@@ -18,7 +18,7 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc, setDoc, getDocs, writeBatch } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 
 
@@ -421,6 +421,25 @@ export default function PeopleManagementPage() {
         importFileRef.current?.click();
     };
 
+    const handleResetPassword = async (email: string) => {
+        if (!email) {
+            toast({ variant: 'destructive', title: 'Error', description: 'El propietario no tiene un correo electrónico registrado.' });
+            return;
+        }
+
+        try {
+            await sendPasswordResetEmail(auth, email);
+            toast({
+                title: 'Correo Enviado',
+                description: `Se ha enviado un correo para restablecer la contraseña a ${email}.`,
+                className: 'bg-green-100 border-green-400 text-green-800'
+            });
+        } catch (error: any) {
+            console.error("Password reset error:", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo enviar el correo de restablecimiento.' });
+        }
+    };
+
 
     return (
         <div className="space-y-8">
@@ -526,6 +545,10 @@ export default function PeopleManagementPage() {
                                                         <DropdownMenuItem onClick={() => handleEditOwner(owner)}>
                                                             <Edit className="mr-2 h-4 w-4" />
                                                             Editar
+                                                        </DropdownMenuItem>
+                                                         <DropdownMenuItem onClick={() => handleResetPassword(owner.email || '')}>
+                                                            <KeyRound className="mr-2 h-4 w-4" />
+                                                            Restablecer Contraseña
                                                         </DropdownMenuItem>
                                                         {owner.id !== ADMIN_USER_ID && (
                                                             <DropdownMenuItem onClick={() => handleDeleteOwner(owner)} className="text-destructive focus:text-destructive focus:bg-destructive/10">
