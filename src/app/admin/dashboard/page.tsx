@@ -3,7 +3,7 @@
 
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Landmark, AlertCircle, Building, Eye, Printer, Loader2, Users, Receipt, TrendingUp, CheckCircle } from "lucide-react";
+import { Landmark, AlertCircle, Building, Eye, Printer, Loader2, Users, Receipt, TrendingUp, CheckCircle, ThumbsUp, ThumbsDown, Smile } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { collection, query, where, onSnapshot, Timestamp, orderBy, limit, doc, getDoc } from 'firebase/firestore';
@@ -11,6 +11,7 @@ import { db } from '@/lib/firebase';
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 
 const formatToTwoDecimals = (num: number) => {
     if (typeof num !== 'number' || isNaN(num)) return '0,00';
@@ -26,6 +27,11 @@ type Payment = {
     reference: string;
 };
 
+type Feedback = {
+    id: string;
+    response: 'liked' | 'disliked';
+};
+
 
 export default function AdminDashboardPage() {
     const router = useRouter();
@@ -38,6 +44,7 @@ export default function AdminDashboardPage() {
         totalOwners: 0
     });
     const [recentPayments, setRecentPayments] = useState<Payment[]>([]);
+    const [feedbackData, setFeedbackData] = useState<Feedback[]>([]);
 
     useEffect(() => {
         const startOfMonth = new Date();
@@ -76,6 +83,8 @@ export default function AdminDashboardPage() {
             where('status', '==', 'aprobado')
         );
 
+        const feedbackQuery = query(collection(db, 'app_feedback'));
+
         const unsubPayments = onSnapshot(paymentsQuery, (snapshot) => {
             let totalBs = 0;
             let totalUsd = 0;
@@ -111,6 +120,11 @@ export default function AdminDashboardPage() {
             const sortedPayments = allApprovedPayments.sort((a, b) => b.paymentDate.toMillis() - a.paymentDate.toMillis());
             setRecentPayments(sortedPayments.slice(0, 5));
         });
+        
+        const unsubFeedback = onSnapshot(feedbackQuery, (snapshot) => {
+            const feedbackList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Feedback));
+            setFeedbackData(feedbackList);
+        });
 
         setLoading(false);
         
@@ -119,15 +133,21 @@ export default function AdminDashboardPage() {
             unsubPending();
             unsubOwners();
             unsubRecent();
+            unsubFeedback();
         }
 
     }, [activeRate]);
+    
+    const likes = feedbackData.filter(f => f.response === 'liked').length;
+    const dislikes = feedbackData.filter(f => f.response === 'disliked').length;
+    const totalFeedback = likes + dislikes;
+    const satisfactionRate = totalFeedback > 0 ? (likes / totalFeedback) * 100 : 0;
 
   return (
     <div className="space-y-8">
       <h1 className="text-3xl font-bold font-headline">Panel de Administrador</h1>
       
-       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">Pagos Recibidos este Mes</CardTitle>
@@ -164,6 +184,23 @@ export default function AdminDashboardPage() {
                         <div className="text-2xl font-bold">{stats.totalOwners}</div>
                     }
                     <p className="text-xs text-muted-foreground">Número de propietarios registrados.</p>
+                </CardContent>
+            </Card>
+             <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Recepción de la Aplicación</CardTitle>
+                    <Smile className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                    {loading ? <Loader2 className="h-6 w-6 animate-spin"/> :
+                        <>
+                            <div className="text-2xl font-bold">{satisfactionRate.toFixed(0)}% <span className="text-base font-normal text-muted-foreground">de satisfacción</span></div>
+                            <p className="text-xs text-muted-foreground">
+                                <span className="text-green-500 font-semibold">{likes} les gusta</span> vs <span className="text-red-500 font-semibold">{dislikes} no les gusta</span> de {totalFeedback} respuestas.
+                            </p>
+                            <Progress value={satisfactionRate} className="mt-2 h-2" />
+                        </>
+                    }
                 </CardContent>
             </Card>
         </div>
