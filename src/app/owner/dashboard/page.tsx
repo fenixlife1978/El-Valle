@@ -5,10 +5,10 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowRight, Loader2, AlertCircle, CheckCircle, Receipt } from "lucide-react";
+import { ArrowRight, Loader2, AlertCircle, CheckCircle, Receipt, ThumbsUp, ThumbsDown, X } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useState, useEffect, useMemo } from 'react';
-import { collection, query, where, onSnapshot, getDocs, doc, Timestamp, orderBy } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, getDocs, doc, Timestamp, orderBy, addDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { format, isBefore, startOfMonth } from "date-fns";
 import { es } from 'date-fns/locale';
@@ -19,6 +19,7 @@ import QRCode from 'qrcode';
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Share2, Download } from 'lucide-react';
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 
 type Debt = {
@@ -88,6 +89,7 @@ export default function OwnerDashboardPage() {
     const [activeRate, setActiveRate] = useState(0);
     const { toast } = useToast();
     const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
+    const [showFeedbackWidget, setShowFeedbackWidget] = useState(true);
 
     const [isReceiptPreviewOpen, setIsReceiptPreviewOpen] = useState(false);
     const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
@@ -162,6 +164,30 @@ export default function OwnerDashboardPage() {
 
 
     const balanceInFavor = ownerData?.balance || 0;
+
+    const handleFeedback = async (response: 'liked' | 'disliked') => {
+        if (!user) return;
+        try {
+            await addDoc(collection(db, 'app_feedback'), {
+                ownerId: user.uid,
+                response,
+                timestamp: Timestamp.now(),
+            });
+            setShowFeedbackWidget(false);
+            toast({
+                title: '¡Gracias por tu opinión!',
+                description: 'Valoramos tus comentarios para seguir mejorando.',
+            });
+        } catch (error) {
+            console.error("Error submitting feedback:", error);
+            toast({
+                variant: 'destructive',
+                title: 'Error',
+                description: 'No se pudo enviar tu opinión en este momento.'
+            });
+        }
+    };
+
 
     const openReceiptPreview = async (payment: Payment) => {
         if (!companyInfo || !ownerData) {
@@ -318,6 +344,28 @@ export default function OwnerDashboardPage() {
                 <h1 className="text-3xl font-bold font-headline">Bienvenido, {ownerData?.name || 'Propietario'}</h1>
                 <p className="text-muted-foreground">Aquí tienes un resumen de tu estado de cuenta y accesos rápidos.</p>
             </div>
+
+            {ownerData && ownerData.passwordChanged === false && showFeedbackWidget && (
+                <Alert variant="default" className="bg-blue-900/20 border-blue-500/50">
+                    <AlertDescription className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <div className="flex-grow">
+                            <h3 className="font-bold text-lg text-foreground">¡Hola de nuevo!</h3>
+                            <p className="text-muted-foreground">¿Te está gustando tu nueva experiencia en la aplicación?</p>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                            <Button size="sm" onClick={() => handleFeedback('liked')} className="bg-green-600 hover:bg-green-700">
+                                <ThumbsUp className="mr-2 h-4 w-4"/> Sí, me gusta
+                            </Button>
+                            <Button size="sm" variant="destructive" onClick={() => handleFeedback('disliked')}>
+                                <ThumbsDown className="mr-2 h-4 w-4"/> No, puede mejorar
+                            </Button>
+                        </div>
+                         <Button variant="ghost" size="icon" className="absolute top-2 right-2 h-6 w-6" onClick={() => setShowFeedbackWidget(false)}>
+                            <X className="h-4 w-4" />
+                         </Button>
+                    </AlertDescription>
+                </Alert>
+            )}
           
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                 <Card>
@@ -536,5 +584,3 @@ export default function OwnerDashboardPage() {
         </div>
     );
 }
-
-    
