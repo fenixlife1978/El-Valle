@@ -2,10 +2,125 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      // ATENCIÓN: Esto permite el acceso público total.
-      // Ideal para desarrollo, pero debe ser asegurado para producción.
-      allow read, write: if true;
+
+    // --- Helper Functions ---
+    // Is the user authenticated?
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Does the requesting user's UID match the document ID?
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Is the user an administrator? Reads the user's role from their profile.
+    function isAdmin() {
+      return isSignedIn() && get(/databases/$(database)/documents/owners/$(request.auth.uid)).data.role == 'administrador';
+    }
+    
+    // --- Collection Rules ---
+
+    // Owners collection: Contains user profiles and roles.
+    match /owners/{userId} {
+      // Admins can read/write any profile.
+      // Owners can read and update their own profile.
+      allow read, update: isAdmin() || isOwner(userId);
+      // Only admins can create or delete profiles.
+      allow create, delete: isAdmin();
+    }
+    
+    // Config collection: General app settings like company info and rates.
+    match /config/{docId} {
+      // Everyone can read it (needed for company logo, etc.).
+      allow read: if isSignedIn();
+      // Only admins can change settings.
+      allow write: if isAdmin();
+    }
+
+    // Payments collection: Where users report their payments.
+    match /payments/{paymentId} {
+      // Admins can manage all payments.
+      // Owners can read their own payments.
+      allow read: isAdmin() || (isSignedIn() && resource.data.reportedBy == request.auth.uid);
+      // Owners can create new payment reports for themselves.
+      allow create: isSignedIn();
+      // Only admins can update (approve/reject) or delete payments.
+      allow update, delete: isAdmin();
+    }
+    
+    // Debts collection: Tracks what each owner owes.
+    match /debts/{debtId} {
+        // Admins can manage all debts.
+        // Owners can only read their own debts.
+        allow read: isAdmin() || (isSignedIn() && resource.data.ownerId == request.auth.uid);
+        // Only admins can create, update or delete debts.
+        allow write: isAdmin();
+    }
+
+    // Certificates collection: Residence/solvency certificates.
+    match /certificates/{certId} {
+        // Only admins can manage certificates.
+        allow read, write: isAdmin();
+    }
+
+    // Financial Statements collection: Monthly financial reports.
+    match /financial_statements/{statementId} {
+        // Only admins can create/edit financial statements.
+        allow write: isAdmin();
+        // All authenticated users can read them (e.g., in published reports).
+        allow read: isSignedIn();
+    }
+    
+    // Published reports collection: Controls what reports are visible to owners.
+    match /published_reports/{reportId} {
+      // All authenticated users can see the list of published reports.
+      allow read: isSignedIn();
+      // Only admins can publish or unpublish reports.
+      allow write: isAdmin();
+    }
+
+    // Petty cash collection.
+    match /petty_cash_replenishments/{repId} {
+        // Only admins can manage petty cash.
+        allow read, write: isAdmin();
+    }
+
+    // Surveys collection.
+    match /surveys/{surveyId} {
+        // All signed-in users can read surveys to vote.
+        allow read: isSignedIn();
+        // Admins can create/delete surveys. They can update results/totalVotes via transaction.
+        // The results and totalVotes fields are updated when a user votes.
+        allow update: isSignedIn();
+        allow create, delete: isAdmin();
+    }
+
+    // Survey responses: Tracks who has voted on what.
+    match /survey_responses/{responseId} {
+      // Admins can read all responses for auditing.
+      // Owners can read their own response to see what they voted.
+      allow read: isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      // An owner can only create a response for themselves. They cannot update it.
+      allow create: isSignedIn() && request.resource.data.userId == request.auth.uid;
+      // Nobody can update a response once created. Only admins can delete.
+      allow update: if false;
+      allow delete: isAdmin();
+    }
+    
+    // App feedback collection
+    match /app_feedback/{feedbackId} {
+      // Any signed-in user can submit feedback.
+      allow create: isSignedIn();
+      // Only admins can read the feedback.
+      allow read, delete: isAdmin();
+      allow update: if false;
+    }
+    
+    // Historical payments collection.
+    match /historical_payments/{histId} {
+      // Only admins can manage historical payment records.
+      allow read, write: isAdmin();
     }
   }
 }
