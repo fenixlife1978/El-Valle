@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { collection, onSnapshot, doc, runTransaction, query, orderBy, Timestamp } from 'firebase/firestore';
+import { collection, onSnapshot, doc, runTransaction, query, orderBy, Timestamp, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { Loader2, CheckSquare, Vote, BarChart3, Users, Lock, Timer, Play, CalendarOff } from 'lucide-react';
