@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
@@ -202,7 +203,7 @@ export default function OwnerDashboardPage() {
             return;
           }
           
-          const ownerUnitSummary = (beneficiary.street && beneficiary.house) ? `${"beneficiary.street"} - ${"beneficiary.house"}` : "Propiedad no especificada";
+          const ownerUnitSummary = (beneficiary.street && beneficiary.house) ? `${beneficiary.street} - ${beneficiary.house}` : "Propiedad no especificada";
     
           const paidDebtsQuery = query(collection(db, "debts"), where("paymentId", "==", payment.id), where("ownerId", "==", user?.uid));
           const paidDebtsSnapshot = await getDocs(paidDebtsQuery);
@@ -267,7 +268,7 @@ export default function OwnerDashboardPage() {
         let startY = margin + 60;
         pdfDoc.setFontSize(10).text(`Beneficiario: ${beneficiary.ownerName} (${data.ownerUnit})`, margin, startY);
         startY += 6;
-        pdfDoc.text(`Método de pago: ${payment.type}`, margin, startY);
+        pdfDoc.text(`Método de pago: ${payment.type || 'No especificado'}`, margin, startY);
         startY += 6;
         pdfDoc.text(`Banco Emisor: ${payment.bank}`, margin, startY);
         startY += 6;
