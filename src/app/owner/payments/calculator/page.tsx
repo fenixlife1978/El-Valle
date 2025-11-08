@@ -279,7 +279,7 @@ export default function OwnerPaymentCalculatorPage() {
                             </CardHeader>
                             <CardContent className="space-y-3">
                                 {paymentCalculator.dueMonthsCount > 0 && <p className="text-sm text-muted-foreground">{paymentCalculator.dueMonthsCount} mes(es) adeudado(s) seleccionado(s).</p>}
-                                {paymentCalculator.advanceMonthsCount > 0 && <p className="text-sm text-muted-foreground">{paymentCalculator.advanceMonthsCount} mes(es) por adelanto seleccionado(s) x ${paymentCalculator.condoFee.toFixed(2)} c/u.</p>}
+                                {paymentCalculator.advanceMonthsCount > 0 && <p className="text-sm text-muted-foreground">{paymentCalculator.advanceMonthsCount} mes(es) por adelanto seleccionado(s) x ${(paymentCalculator.condoFee ?? 0).toFixed(2)} c/u.</p>}
                                 <hr className="my-2"/>
                                 <div className="flex justify-between items-center text-lg">
                                     <span className="text-muted-foreground">Sub-Total Deuda:</span>

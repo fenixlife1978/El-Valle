@@ -61,6 +61,7 @@ type Debt = {
     amountUSD: number;
     description: string;
     status: 'pending' | 'paid';
+    property: { street: string; house: string; }; // <-- Added this
     paidAmountUSD?: number; // Amount at which the debt was paid
     paymentDate?: Timestamp;
 };
@@ -346,12 +347,12 @@ export default function SettingsPage() {
                 setIsAdjustmentRunning(false);
                 return;
             }
-
+            
             const batch = writeBatch(db);
             let adjustmentsCreated = 0;
-
-            advanceDebtsSnapshot.forEach(doc => {
-                const debt = { id: doc.id, ...doc.data() } as Debt;
+            
+            advanceDebtsSnapshot.forEach(debtDoc => {
+                const debt = { id: debtDoc.id, ...debtDoc.data() } as Debt;
                 const paidAmount = debt.paidAmountUSD || debt.amountUSD;
                 
                 const adjustmentKey = `${debt.ownerId}-${debt.year}-${debt.month}`;
@@ -361,7 +362,7 @@ export default function SettingsPage() {
                     
                     batch.set(adjustmentDebtRef, {
                         ownerId: debt.ownerId,
-                        property: (doc.data() as any).property,
+                        property: debt.property,
                         year: debt.year,
                         month: debt.month,
                         amountUSD: difference,
