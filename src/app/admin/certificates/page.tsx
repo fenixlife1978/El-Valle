@@ -250,7 +250,7 @@ export default function CertificatesPage() {
                 createdAt: serverTimestamp() as Timestamp,
             };
             const docRef = await addDoc(collection(db, "certificates"), docData);
-            generatePDF({ ...docData, id: docRef.id, createdAt: Timestamp.now() });
+            generatePDF({ ...docData, id: docRef.id, createdAt: Timestamp.now() } as Certificate);
             toast({ title: "Constancia Generada", description: "El documento PDF ha sido creado y guardado en el historial." });
             resetDialog();
         } catch (error) {

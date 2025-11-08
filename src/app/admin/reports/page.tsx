@@ -74,6 +74,7 @@ type Debt = {
     amountUSD: number;
     description: string;
     status: 'pending' | 'paid';
+    paymentId?: string; // <-- ¡Esta es la línea clave que faltaba!
     paymentDate?: Timestamp;
     paidAmountUSD?: number;
     property: { street: string, house: string };
