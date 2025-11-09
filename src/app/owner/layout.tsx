@@ -45,7 +45,7 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
             router.push('/login?role=owner');
             return;
         }
-        if (ownerData && !ownerData.passwordChanged && pathname !== '/owner/change-password') {
+        if (ownerData && ownerData.passwordChanged === false && pathname !== '/owner/change-password') {
             router.push('/owner/change-password');
             return;
         }
@@ -61,7 +61,7 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
     }
     
     // This case covers the password change page which shouldn't have the main layout
-    if (ownerData && !ownerData.passwordChanged) {
+    if (ownerData && ownerData.passwordChanged === false) {
         if(pathname === '/owner/change-password') {
             return <>{children}</>;
         }
