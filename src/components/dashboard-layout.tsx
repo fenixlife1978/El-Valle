@@ -177,7 +177,7 @@ const CustomHeader = ({ ownerData, userRole }: { ownerData: any, userRole: strin
                     <DropdownMenuTrigger asChild>
                     <Button variant="ghost" className="relative h-10 w-10 rounded-full">
                         <Avatar className="h-10 w-10">
-                        <AvatarImage src={ownerData?.avatar || ''} alt={userName} data-ai-hint="profile picture"/>
+                        <AvatarImage src={ownerData?.avatar} alt={userName} data-ai-hint="profile picture"/>
                         <AvatarFallback>{userName.charAt(0)}</AvatarFallback>
                         </Avatar>
                     </Button>
