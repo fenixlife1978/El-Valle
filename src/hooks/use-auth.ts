@@ -74,34 +74,35 @@ export function useAuth() {
 
     useEffect(() => {
         if (loading) {
-            return; // No hacer nada mientras se carga la información
+            return; // Don't do anything while loading
         }
 
-        const isPublicPage = ['/login', '/welcome', '/forgot-password'].includes(pathname);
+        const publicPages = ['/login', '/welcome', '/forgot-password'];
+        const isPublicPage = publicPages.includes(pathname);
         const isAdminPage = pathname.startsWith('/admin');
         const isOwnerPage = pathname.startsWith('/owner');
 
         if (user && role) {
-            // Usuario autenticado
+            // User is logged in
             if (isPublicPage) {
-                // Si está en una página pública, redirigir al dashboard correspondiente
+                // If on a public page, redirect to the correct dashboard
                 router.push(role === 'admin' ? '/admin/dashboard' : '/owner/dashboard');
             } else if (isAdminPage && role !== 'admin') {
-                // Propietario tratando de acceder a página de admin
+                // Owner trying to access admin page
                 router.push('/owner/dashboard');
             } else if (isOwnerPage && role !== 'owner') {
-                // Admin tratando de acceder a página de propietario
+                // Admin trying to access owner page
                 router.push('/admin/dashboard');
             }
         } else {
-            // Usuario no autenticado
+            // User is not logged in
             if (isAdminPage || isOwnerPage) {
-                // Si intenta acceder a una página protegida, redirigir al login
-                router.push(`/login?role=${isAdminPage ? 'admin' : 'owner'}`);
+                // Trying to access a protected page
+                router.push('/login?role=' + (isAdminPage ? 'admin' : 'owner'));
             }
         }
-
     }, [user, role, loading, pathname, router]);
+
 
     return { user, ownerData, role, loading };
 }
