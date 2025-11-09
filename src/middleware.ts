@@ -8,68 +8,45 @@ export function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  const authPaths = ['/login', '/forgot-password'];
+  const authPaths = ['/login', '/forgot-password', '/welcome'];
 
-  // 1. Lógica para la ruta raíz
-  if (pathname === '/') {
-    // Si ambas cookies existen, redirigir al dashboard correspondiente.
-    if (authToken && userRole) {
-      const url = request.nextUrl.clone();
-      if (userRole === 'admin') {
-        url.pathname = '/admin/dashboard';
-      } else {
-        url.pathname = '/owner/dashboard';
-      }
-      return NextResponse.redirect(url);
-    }
-    
-    // Si no está autenticado, redirigir a welcome.
-    if (!authToken) {
-      const url = request.nextUrl.clone();
-      url.pathname = '/welcome';
-      return NextResponse.redirect(url);
-    }
-
-    // Si authToken existe pero userRole no, simplemente `next()`. 
-    // El hook useAuth en el cliente forzará la redirección correcta cuando el rol esté listo.
-    return NextResponse.next();
-  }
-
-  // 2. Si un usuario autenticado intenta acceder a las páginas de login/registro
+  // 1. If user is authenticated and tries to access a public page, redirect them to their dashboard
   if (authToken && userRole && authPaths.includes(pathname)) {
     const url = request.nextUrl.clone();
     url.pathname = userRole === 'admin' ? '/admin/dashboard' : '/owner/dashboard';
     return NextResponse.redirect(url);
   }
 
-  // 3. Proteger rutas de admin
+  // 2. If user is NOT authenticated and tries to access root, redirect to welcome
+  if (pathname === '/' && !authToken) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/welcome';
+      return NextResponse.redirect(url);
+  }
+  
+  // 3. If user is authenticated at root, redirect to correct dashboard
+  if (pathname === '/' && authToken && userRole) {
+      const url = request.nextUrl.clone();
+      url.pathname = userRole === 'admin' ? '/admin/dashboard' : '/owner/dashboard';
+      return NextResponse.redirect(url);
+  }
+
+  // 4. Protect admin routes
   if (pathname.startsWith('/admin')) {
-    if (!authToken) {
+    if (!authToken || userRole !== 'admin') {
         const url = request.nextUrl.clone();
         url.pathname = '/login';
         url.searchParams.set('role', 'admin');
         return NextResponse.redirect(url);
     }
-    // Si el rol ya está definido y no es admin, redirigir.
-    if (authToken && userRole && userRole !== 'admin') {
-        const url = request.nextUrl.clone();
-        url.pathname = '/owner/dashboard';
-        return NextResponse.redirect(url);
-    }
   }
 
-  // 4. Proteger rutas de owner
+  // 5. Protect owner routes
   if (pathname.startsWith('/owner')) {
-     if (!authToken) {
+     if (!authToken || userRole !== 'owner') {
         const url = request.nextUrl.clone();
         url.pathname = '/login';
         url.searchParams.set('role', 'owner');
-        return NextResponse.redirect(url);
-    }
-    // Si el rol ya está definido y no es owner, redirigir.
-    if (authToken && userRole && userRole !== 'owner') {
-        const url = request.nextUrl.clone();
-        url.pathname = '/admin/dashboard';
         return NextResponse.redirect(url);
     }
   }
