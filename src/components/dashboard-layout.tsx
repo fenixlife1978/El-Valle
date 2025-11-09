@@ -3,9 +3,9 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Building2, LogOut, type LucideIcon, ChevronDown, Bell, Check } from 'lucide-react';
+import { Building2, LogOut, type LucideIcon, ChevronDown, Bell, Check, PanelLeftClose } from 'lucide-react';
 import * as React from 'react';
-import { doc, onSnapshot, collection, query, where, updateDoc, writeBatch, orderBy } from 'firebase/firestore';
+import { doc, onSnapshot, collection, query, writeBatch, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { format, formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -159,16 +159,18 @@ const CustomHeader = ({ ownerData, userRole }: { ownerData: any, userRole: strin
     const userName = ownerData?.name || 'Usuario';
 
     return (
-        <header className="sticky top-0 z-10 flex h-auto items-center justify-between gap-2 border-b bg-background/80 p-2 backdrop-blur-sm sm:h-20 sm:px-4">
+        <header className="sticky top-0 z-10 flex h-20 items-center justify-between gap-2 border-b bg-background/80 px-4 backdrop-blur-sm sm:px-6">
              <div className="flex items-center gap-2 sm:gap-4 flex-1">
-                <SidebarTrigger className="h-9 w-9 hidden sm:flex" />
                 <div className="flex flex-col">
-                    <h1 className="text-md font-semibold text-foreground">Hola, {userName}</h1>
-                    <p className="text-xs text-muted-foreground">Bienvenido a tu panel</p>
+                    <h1 className="text-lg font-semibold text-foreground">Hola, {userName}</h1>
+                    <p className="text-sm text-muted-foreground">Bienvenido a tu panel</p>
                 </div>
             </div>
 
             <div className="flex items-center gap-2 flex-1 justify-end">
+                 <SidebarTrigger className="h-9 w-9 sm:flex">
+                    <PanelLeftClose />
+                 </SidebarTrigger>
                  <Button variant="ghost" size="icon" className="relative" onClick={() => setIsSheetOpen(true)}>
                     <Bell className="h-5 w-5" />
                     {hasUnread && <span className="absolute top-2 right-2.5 block h-2 w-2 rounded-full bg-destructive" />}
@@ -177,7 +179,7 @@ const CustomHeader = ({ ownerData, userRole }: { ownerData: any, userRole: strin
                     <DropdownMenuTrigger asChild>
                     <Button variant="ghost" className="relative h-10 w-10 rounded-full">
                         <Avatar className="h-10 w-10">
-                        <AvatarImage src={ownerData?.avatar} alt={userName} data-ai-hint="profile picture"/>
+                        <AvatarImage src={ownerData?.avatar} alt={userName} />
                         <AvatarFallback>{userName.charAt(0)}</AvatarFallback>
                         </Avatar>
                     </Button>
