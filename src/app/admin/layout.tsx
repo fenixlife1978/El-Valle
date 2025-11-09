@@ -13,12 +13,14 @@ import {
     Award,
     Palette,
     ShieldCheck,
-    ClipboardList
+    ClipboardList,
+    Plus,
 } from 'lucide-react';
 import { type ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
 import { useAuth } from '@/hooks/use-auth';
+import { BottomNavBar } from '@/components/bottom-nav-bar';
 
 const adminNavItems: NavItem[] = [
     { href: "/admin/dashboard", icon: Home, label: "Dashboard" },
@@ -53,15 +55,26 @@ const adminNavItems: NavItem[] = [
      { href: "/admin/validation", icon: ShieldCheck, label: "Validación" },
 ];
 
+const adminBottomNavItems = [
+  { href: '/admin/dashboard', icon: Home, label: 'Inicio' },
+  { href: '/admin/payments/verify', icon: Landmark, label: 'Verificar' },
+  { href: '/admin/payments', icon: Plus, label: 'Reportar', isCentral: true },
+  { href: '/admin/reports', icon: FileSearch, label: 'Informes' },
+  { href: '/admin/settings', icon: Settings, label: 'Ajustes' },
+];
+
+
 export default function AdminLayout({ children }: { children: ReactNode }) {
     const { ownerData, role } = useAuth();
+    const pathname = usePathname();
     
     // The AuthGuard in the root layout handles the main loading and redirection.
     // This component now just renders the layout for the admin section.
     
     return (
         <DashboardLayout ownerData={ownerData} userRole={role} navItems={adminNavItems}>
-            {children}
+            <div className="pb-20 sm:pb-0">{children}</div>
+            <BottomNavBar items={adminBottomNavItems} pathname={pathname} />
         </DashboardLayout>
     );
 }
