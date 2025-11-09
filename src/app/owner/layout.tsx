@@ -45,11 +45,7 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
             router.push('/login?role=owner');
             return;
         }
-        if (ownerData && ownerData.passwordChanged === false && pathname !== '/owner/change-password') {
-            router.push('/owner/change-password');
-            return;
-        }
-    }, [loading, user, ownerData, pathname, router]);
+    }, [loading, user, router]);
 
     if (loading || !user) {
         return (
@@ -60,20 +56,6 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
         );
     }
     
-    // This case covers the password change page which shouldn't have the main layout
-    if (ownerData && ownerData.passwordChanged === false) {
-        if(pathname === '/owner/change-password') {
-            return <>{children}</>;
-        }
-        // While redirecting, show a loader
-        return (
-             <div className="flex h-screen w-full items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin" />
-                 <p className="ml-2">Redirigiendo para cambiar contraseña...</p>
-            </div>
-        );
-    }
-
     return (
         <DashboardLayout ownerData={ownerData} userRole={role} navItems={ownerNavItems}>
             {children}
