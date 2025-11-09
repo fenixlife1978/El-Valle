@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -13,6 +14,7 @@ import { useRouter } from 'next/navigation';
 import { doc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { ThemeSwitcher } from '@/components/theme-switcher';
 
 
 type OwnerProfile = {
@@ -145,8 +147,20 @@ export default function OwnerSettingsPage() {
             </Button>
             <div>
                 <h1 className="text-3xl font-bold font-headline">Configuración de la Cuenta</h1>
-                <p className="text-muted-foreground">Gestiona tu información personal y seguridad.</p>
+                <p className="text-muted-foreground">Gestiona tu información personal, apariencia y seguridad.</p>
             </div>
+            
+            <Card>
+                <CardHeader>
+                    <CardTitle>Apariencia</CardTitle>
+                    <CardDescription>
+                        Elige tu paleta de colores preferida para la aplicación.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <ThemeSwitcher />
+                </CardContent>
+            </Card>
 
             <Card>
                 <CardHeader>

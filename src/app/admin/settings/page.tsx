@@ -22,6 +22,7 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuIte
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Progress } from '@/components/ui/progress';
 import { useRouter } from 'next/navigation';
+import { ThemeSwitcher } from '@/components/theme-switcher';
 
 
 type AdminProfile = {
@@ -417,7 +418,18 @@ export default function SettingsPage() {
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2 space-y-8">
-                    
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Apariencia</CardTitle>
+                            <CardDescription>
+                                Personaliza el aspecto de la aplicación para todos los usuarios.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <ThemeSwitcher />
+                        </CardContent>
+                    </Card>
+
                     <Card>
                         <CardHeader>
                             <CardTitle>Perfil de Administrador</CardTitle>
