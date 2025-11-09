@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Shield, User, Eye, EyeOff } from 'lucide-react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '@/lib/firebase'; // Import auth from your firebase config
+import { auth } from '@/lib/firebase';
 import Link from 'next/link';
 
 function LoginContent() {
@@ -53,9 +53,7 @@ function LoginContent() {
                 className: 'bg-green-100 border-green-400 text-green-800'
             });
             
-            // Force a full page reload to the root.
-            // The middleware will then correctly handle the redirection based on the now-set cookies.
-            window.location.href = '/';
+            // The redirection is now handled by the useAuth hook to prevent race conditions.
 
         } catch (error: any) {
             console.error("Login error:", error);
