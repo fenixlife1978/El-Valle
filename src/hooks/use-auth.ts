@@ -60,14 +60,12 @@ export function useAuth() {
         });
         
         const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
-            setAuthLoading(true);
             if (firebaseUser) {
                 setUser(firebaseUser);
                 const token = await firebaseUser.getIdToken();
                 Cookies.set('firebase-auth-token', token, { expires: 1, secure: true, sameSite: 'strict' });
 
                 try {
-                    // This function checks if the main admin profile exists, creating it if necessary.
                     await ensureAdminProfile(); 
                     
                     const adminDocRef = doc(db, "owners", ADMIN_USER_ID);
@@ -84,7 +82,7 @@ export function useAuth() {
                         const ownerSnap = await getDoc(ownerDocRef);
                         if (ownerSnap.exists()) {
                             userData = { id: ownerSnap.id, ...ownerSnap.data() } as { id: string; role?: string };
-                            userRole = userData.role || 'propietario'; // Default to 'propietario'
+                            userRole = userData.role || 'propietario';
                         }
                     }
 
@@ -101,6 +99,8 @@ export function useAuth() {
                     setOwnerData(null);
                     setRole(null);
                     Cookies.remove('user-role');
+                } finally {
+                    setAuthLoading(false);
                 }
             } else {
                 setUser(null);
@@ -108,8 +108,8 @@ export function useAuth() {
                 setRole(null);
                 Cookies.remove('firebase-auth-token');
                 Cookies.remove('user-role');
+                setAuthLoading(false); // This was the missing piece
             }
-            setAuthLoading(false);
         });
 
         return () => {
@@ -118,7 +118,6 @@ export function useAuth() {
         };
     }, []);
 
-    // The main loading flag is true if either auth or settings are still loading.
     const loading = authLoading || settingsLoading;
 
     return { 
