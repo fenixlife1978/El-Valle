@@ -68,7 +68,9 @@ export function useAuth() {
     }, []);
 
     useEffect(() => {
-        if (!loading && user && role && pathname === '/welcome') {
+        const publicRedirectPaths = ['/welcome', '/login', '/forgot-password'];
+
+        if (!loading && user && role && publicRedirectPaths.includes(pathname)) {
             if (role === 'admin') {
                 router.push('/admin/dashboard');
             } else {

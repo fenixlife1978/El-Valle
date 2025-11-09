@@ -8,7 +8,6 @@ export function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  // Rutas de autenticación que un usuario logueado no debería poder visitar
   const authPaths = ['/login', '/forgot-password'];
 
   // 1. Lógica para la ruta raíz
@@ -19,7 +18,6 @@ export function middleware(request: NextRequest) {
       if (userRole === 'admin') {
         url.pathname = '/admin/dashboard';
       } else {
-        // Por defecto, o si el rol es 'owner', va al dashboard del propietario
         url.pathname = '/owner/dashboard';
       }
       return NextResponse.redirect(url);
@@ -30,8 +28,8 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // 2. Si un usuario autenticado intenta acceder a las páginas de login/registro
-  if (authToken && authPaths.includes(pathname)) {
+  // 2. Si un usuario autenticado intenta acceder a las páginas de login/registro (YA NO INCLUYE WELCOME)
+  if (authToken && userRole && authPaths.includes(pathname)) {
     const url = request.nextUrl.clone();
     url.pathname = userRole === 'admin' ? '/admin/dashboard' : '/owner/dashboard';
     return NextResponse.redirect(url);
@@ -45,8 +43,7 @@ export function middleware(request: NextRequest) {
         url.searchParams.set('role', 'admin');
         return NextResponse.redirect(url);
     }
-    if (authToken && userRole !== 'admin') {
-        // Si un owner intenta acceder a /admin, redirigir a su propio dashboard
+    if (authToken && userRole && userRole !== 'admin') {
         const url = request.nextUrl.clone();
         url.pathname = '/owner/dashboard';
         return NextResponse.redirect(url);
@@ -61,14 +58,12 @@ export function middleware(request: NextRequest) {
         url.searchParams.set('role', 'owner');
         return NextResponse.redirect(url);
     }
-    if (authToken && userRole !== 'owner') {
-        // Si un admin intenta acceder a /owner, redirigir a su propio dashboard
+    if (authToken && userRole && userRole !== 'owner') {
         const url = request.nextUrl.clone();
         url.pathname = '/admin/dashboard';
         return NextResponse.redirect(url);
     }
   }
-
 
   return NextResponse.next();
 }
