@@ -17,7 +17,7 @@ import { Calendar as CalendarIcon, Download, Search, Loader2, FileText, FileSpre
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import * as XLSX from 'xlsx';
-import { collection, getDocs, query, where, doc, getDoc, orderBy, Timestamp, addDoc, setDoc } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, getDoc, orderBy, Timestamp, addDoc, setDoc, writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { Calendar } from "@/components/ui/calendar";
@@ -675,11 +675,27 @@ export default function ReportsPage() {
             const reportRef = doc(db, 'published_reports', reportId);
             await setDoc(reportRef, {
                 type: 'integral',
-                createdAt: new Date().toISOString(),
+                title: 'Reporte Integral de Propietarios',
+                createdAt: Timestamp.now(),
             });
+
+            const ownersSnapshot = await getDocs(query(collection(db, 'owners'), where('role', '==', 'propietario')));
+            const batch = writeBatch(db);
+            ownersSnapshot.forEach(ownerDoc => {
+                const notificationsRef = doc(collection(db, `owners/${ownerDoc.id}/notifications`));
+                batch.set(notificationsRef, {
+                    title: 'Nuevo Reporte Publicado',
+                    body: 'El reporte integral de propietarios ya está disponible para su consulta.',
+                    createdAt: Timestamp.now(),
+                    read: false,
+                    href: `/owner/report/${reportId}`
+                });
+            });
+            await batch.commit();
+
             toast({
                 title: 'Reporte Integral Publicado',
-                description: 'El reporte ahora es visible para los propietarios.',
+                description: 'El reporte ahora es visible para los propietarios y han sido notificados.',
                 className: 'bg-blue-100 text-blue-800'
             });
         } catch (error) {
@@ -870,7 +886,7 @@ export default function ReportsPage() {
                      (doc as any).autoTable({
                         head: [['Período', 'Concepto', 'Monto Pagado ($)']], 
                         body: payment.liquidatedDebts.map(d => [
-                           `${Object.values(monthsLocale)[d.month -1] || ''} ${d.year}`,
+                           `${Object.values(monthsLocale)[d.month - 1] || ''} ${d.year}`,
                             d.description,
                            `$${(d.paidAmountUSD || d.amountUSD).toFixed(2)}`
                         ]),

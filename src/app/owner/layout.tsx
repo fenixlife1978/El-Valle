@@ -7,13 +7,15 @@ import {
     Settings,
     History,
     Calculator,
-    ClipboardList
+    ClipboardList,
+    Plus,
 } from 'lucide-react';
 import { type ReactNode, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
+import { BottomNavBar } from '@/components/bottom-nav-bar';
 
 const ownerNavItems: NavItem[] = [
     { href: "/owner/dashboard", icon: Home, label: "Dashboard" },
@@ -31,6 +33,14 @@ const ownerNavItems: NavItem[] = [
     { href: "/owner/settings", icon: Settings, label: "Configuración" },
 ];
 
+const bottomNavItems = [
+  { href: '/owner/dashboard', icon: Home, label: 'Inicio' },
+  { href: '/owner/history', icon: History, label: 'Historial' },
+  { href: '/owner/payments', icon: Plus, label: 'Reportar', isCentral: true },
+  { href: '/owner/payments/calculator', icon: Calculator, label: 'Calcular' },
+  { href: '/owner/surveys', icon: ClipboardList, label: 'Encuestas' },
+];
+
 export default function OwnerLayout({ children }: { children: ReactNode }) {
     const { user, ownerData, loading, role } = useAuth();
     const router = useRouter();
@@ -38,16 +48,14 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
 
     useEffect(() => {
         if (loading) {
-            return; // Don't do anything while loading
+            return; 
         }
-        // First, check if the user is authenticated at all.
         if (!user) {
             router.push('/login?role=owner');
             return;
         }
-        // Only after confirming a user exists, check if the role is incorrect for this layout.
         if (role && role !== 'owner') {
-            router.push('/admin/dashboard'); // Or a generic access-denied page
+            router.push('/admin/dashboard'); 
             return;
         }
     }, [loading, user, role, router]);
@@ -63,7 +71,8 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
     
     return (
         <DashboardLayout ownerData={ownerData} userRole={role} navItems={ownerNavItems}>
-            {children}
+            <div className="pb-20 sm:pb-0">{children}</div>
+            <BottomNavBar items={bottomNavItems} pathname={pathname} />
         </DashboardLayout>
     );
 }

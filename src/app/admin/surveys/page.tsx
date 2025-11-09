@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { collection, onSnapshot, addDoc, doc, deleteDoc, serverTimestamp, orderBy, query, Timestamp, updateDoc } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, doc, deleteDoc, serverTimestamp, orderBy, query, Timestamp, updateDoc, writeBatch, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { PlusCircle, Trash2, Loader2, ListPlus, XCircle, BarChart3, Users, CheckSquare, CalendarIcon, Edit, Play, Lock, Timer } from 'lucide-react';
 import { format, parse } from 'date-fns';
@@ -238,7 +238,7 @@ export default function SurveysPage() {
                     }, {} as { [key: string]: number });
                 });
 
-                await addDoc(collection(db, 'surveys'), {
+                const surveyRef = await addDoc(collection(db, 'surveys'), {
                     title,
                     questions: finalQuestions.map(q => ({id: q.id, questionText: q.questionText, options: q.options.map(o => o.text) })),
                     createdAt: serverTimestamp(),
@@ -247,7 +247,22 @@ export default function SurveysPage() {
                     results: initialResults,
                     totalVotes: 0,
                 });
-                toast({ title: 'Encuesta Creada', description: 'La nueva encuesta está disponible para los propietarios.' });
+                 // Notify all owners
+                const ownersSnapshot = await getDocs(query(collection(db, 'owners'), where('role', '==', 'propietario')));
+                const batch = writeBatch(db);
+                ownersSnapshot.forEach(ownerDoc => {
+                    const notificationsRef = doc(collection(db, `owners/${ownerDoc.id}/notifications`));
+                    batch.set(notificationsRef, {
+                        title: 'Nueva Encuesta Disponible',
+                        body: `Participa en la encuesta: "${title}"`,
+                        createdAt: Timestamp.now(),
+                        read: false,
+                        href: `/owner/surveys`
+                    });
+                });
+                await batch.commit();
+
+                toast({ title: 'Encuesta Creada', description: 'La nueva encuesta está disponible y los propietarios han sido notificados.' });
             }
 
             resetDialog();
@@ -481,4 +496,3 @@ export default function SurveysPage() {
         </div>
     );
 }
-
