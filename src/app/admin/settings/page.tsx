@@ -53,6 +53,7 @@ type Settings = {
     condoFee: number;
     exchangeRates: ExchangeRate[];
     lastCondoFee?: number; // To track the previous fee for adjustment logic
+    bcvLogo?: string;
 };
 
 type Debt = {
@@ -96,6 +97,8 @@ export default function SettingsPage() {
 
     const [companyInfo, setCompanyInfo] = useState<CompanyInfo>(emptyCompanyInfo);
     const [logoPreview, setLogoPreview] = useState<string | null>(null);
+    const [bcvLogo, setBcvLogo] = useState<string>('');
+    const [bcvLogoPreview, setBcvLogoPreview] = useState<string | null>(null);
     
     const [condoFee, setCondoFee] = useState(0);
     const [lastCondoFee, setLastCondoFee] = useState(0); // This is the fee stored in the DB
@@ -125,6 +128,8 @@ export default function SettingsPage() {
                 setAdminAvatarPreview(settings.adminProfile?.avatar);
                 setCompanyInfo(settings.companyInfo || emptyCompanyInfo);
                 setLogoPreview(settings.companyInfo?.logo);
+                setBcvLogo(settings.bcvLogo || '');
+                setBcvLogoPreview(settings.bcvLogo);
                 setCondoFee(settings.condoFee);
                 setLastCondoFee(settings.condoFee); // Set the last known fee from DB
                 setExchangeRates(settings.exchangeRates || []);
@@ -161,7 +166,7 @@ export default function SettingsPage() {
         }
     };
 
-    const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>, target: 'avatar' | 'logo') => {
+    const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>, target: 'avatar' | 'logo' | 'bcvLogo') => {
         const file = e.target.files?.[0];
         if (file) {
             if (file.size > 1 * 1024 * 1024) { // 1MB limit
@@ -174,9 +179,12 @@ export default function SettingsPage() {
                 if (target === 'avatar') {
                     setAdminAvatarPreview(result);
                     setAdminProfile({ ...adminProfile, avatar: result });
-                } else {
+                } else if (target === 'logo') {
                     setLogoPreview(result);
                     setCompanyInfo({ ...companyInfo, logo: result });
+                } else {
+                    setBcvLogoPreview(result);
+                    setBcvLogo(result);
                 }
             };
             reader.readAsDataURL(file);
@@ -292,6 +300,7 @@ export default function SettingsPage() {
                 companyInfo: safeCompanyInfo,
                 condoFee: newCondoFee,
                 lastCondoFee: lastCondoFee,
+                bcvLogo: bcvLogo,
             };
     
             await updateDoc(settingsRef, dataToSave);
@@ -508,6 +517,30 @@ export default function SettingsPage() {
                                     <Input id="email" name="email" type="email" value={companyInfo.email} onChange={(e) => handleInfoChange(e, 'company')} />
                                 </div>
                             </div>
+                        </CardContent>
+                    </Card>
+                    
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Gestión de Logos</CardTitle>
+                            <CardDescription>Personaliza los logos que aparecen en la aplicación.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="flex items-center gap-6">
+                                <div className="w-24 h-24 rounded-full bg-muted flex items-center justify-center overflow-hidden border">
+                                    {bcvLogoPreview ? <img src={bcvLogoPreview} alt="BCV Logo Preview" className="w-full h-full object-cover" /> : <span className="text-sm text-muted-foreground">BCV Logo</span>}
+                                </div>
+                                <div className="space-y-2">
+                                     <Label htmlFor="bcv-logo-upload">Logo de Tasa BCV</Label>
+                                     <div className="flex items-center gap-2">
+                                        <Input id="bcv-logo-upload" type="file" className="hidden" onChange={(e) => handleImageChange(e, 'bcvLogo')} accept="image/png, image/jpeg" />
+                                        <Button type="button" variant="outline" onClick={() => document.getElementById('bcv-logo-upload')?.click()}>
+                                            <Upload className="mr-2 h-4 w-4"/> Cambiar Logo BCV
+                                        </Button>
+                                     </div>
+                                     <p className="text-xs text-muted-foreground">PNG o JPG. Recomendado 200x200px, max 1MB.</p>
+                                </div>
+                             </div>
                         </CardContent>
                     </Card>
 
