@@ -4,6 +4,7 @@ import { getAuth, onAuthStateChanged, User } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import Cookies from 'js-cookie';
+import { usePathname, useRouter } from 'next/navigation';
 
 const ADMIN_USER_ID = 'valle-admin-main-account';
 
@@ -12,18 +13,18 @@ export function useAuth() {
     const [ownerData, setOwnerData] = useState<any | null>(null);
     const [role, setRole] = useState<string | null>(Cookies.get('user-role') || null);
     const [loading, setLoading] = useState(true);
+    const router = useRouter();
+    const pathname = usePathname();
 
     useEffect(() => {
         const auth = getAuth();
         const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
             if (firebaseUser) {
                 setUser(firebaseUser);
-                // Set auth token cookie
                 const token = await firebaseUser.getIdToken();
                 Cookies.set('firebase-auth-token', token, { expires: 1, secure: true, sameSite: 'strict' });
 
                 try {
-                    // Check if the logged-in user is the special admin
                     const adminDocRef = doc(db, "owners", ADMIN_USER_ID);
                     const adminSnap = await getDoc(adminDocRef);
 
@@ -33,7 +34,6 @@ export function useAuth() {
                         setRole('administrador');
                         Cookies.set('user-role', 'administrador', { expires: 1, secure: true, sameSite: 'strict' });
                     } else {
-                        // This is a regular owner
                         const ownerDocRef = doc(db, "owners", firebaseUser.uid);
                         const ownerSnap = await getDoc(ownerDocRef);
                         if (ownerSnap.exists()) {
@@ -66,6 +66,16 @@ export function useAuth() {
 
         return () => unsubscribe();
     }, []);
+
+    useEffect(() => {
+        if (!loading && user && role && pathname === '/welcome') {
+            if (role === 'admin') {
+                router.push('/admin/dashboard');
+            } else {
+                router.push('/owner/dashboard');
+            }
+        }
+    }, [loading, user, role, pathname, router]);
 
     return { user, ownerData, role, loading };
 }
