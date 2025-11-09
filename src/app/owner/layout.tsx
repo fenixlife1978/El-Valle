@@ -10,10 +10,9 @@ import {
     ClipboardList,
     Plus,
 } from 'lucide-react';
-import { type ReactNode, useEffect } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { type ReactNode } from 'react';
+import { usePathname } from 'next/navigation';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
-import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { BottomNavBar } from '@/components/bottom-nav-bar';
 
@@ -42,29 +41,12 @@ const bottomNavItems = [
 ];
 
 export default function OwnerLayout({ children }: { children: ReactNode }) {
-    const { user, ownerData, loading, role } = useAuth();
-    const router = useRouter();
+    const { ownerData, role } = useAuth();
     const pathname = usePathname();
 
-    useEffect(() => {
-        if (!loading) {
-            if (!user) {
-                router.push('/login?role=owner');
-            } else if (role && role !== 'owner') {
-                router.push('/admin/dashboard');
-            }
-        }
-    }, [loading, user, role, router]);
+    // The AuthGuard in the root layout handles the main loading and redirection.
+    // This component now just renders the layout for the owner section.
 
-    if (loading || !user || !role) {
-        return (
-            <div className="flex h-screen w-full items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin" />
-                <p className="ml-2">Cargando sesión...</p>
-            </div>
-        );
-    }
-    
     return (
         <DashboardLayout ownerData={ownerData} userRole={role} navItems={ownerNavItems}>
             <div className="pb-20 sm:pb-0">{children}</div>

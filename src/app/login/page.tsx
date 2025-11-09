@@ -12,13 +12,11 @@ import { Loader2, Shield, User, Eye, EyeOff } from 'lucide-react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import Link from 'next/link';
-import { useAuth } from '@/hooks/use-auth';
 
 function LoginContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { toast } = useToast();
-    const { user, role: userRoleFromHook, loading: authLoading } = useAuth();
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -31,21 +29,9 @@ function LoginContent() {
         if (roleParam === 'admin' || roleParam === 'owner') {
             setRole(roleParam);
         } else {
-             // If no role, and not already logged in, go to welcome
-            if (!authLoading && !user) {
-                router.push('/welcome');
-            }
+            router.replace('/welcome');
         }
-    }, [searchParams, router, authLoading, user]);
-
-    useEffect(() => {
-        // This effect will run when auth state changes. If user is logged in, redirect them.
-        if (!authLoading && user && userRoleFromHook) {
-             const targetDashboard = userRoleFromHook === 'admin' ? '/admin/dashboard' : '/owner/dashboard';
-             router.push(targetDashboard);
-        }
-    }, [authLoading, user, userRoleFromHook, router]);
-
+    }, [searchParams, router]);
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -67,7 +53,7 @@ function LoginContent() {
                 description: 'Bienvenido de nuevo. Redirigiendo...',
                 className: 'bg-green-100 border-green-400 text-green-800'
             });
-            // La redirección ahora es manejada por el hook useAuth
+            // The redirection is now handled by the root AuthGuard
             
         } catch (error: any) {
             console.error("Login error:", error);
@@ -85,8 +71,7 @@ function LoginContent() {
         }
     };
     
-    // Show a loader while the role is being determined from the URL or auth state is loading
-    if (authLoading || !role) {
+    if (!role) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-background">
                 <Loader2 className="h-8 w-8 animate-spin" />
