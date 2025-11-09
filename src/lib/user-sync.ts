@@ -1,6 +1,7 @@
 
-import { doc, getDoc, setDoc, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, Timestamp, collection, query, where, getDocs, writeBatch, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { type User } from 'firebase/auth';
 
 const ADMIN_USER_ID = 'valle-admin-main-account';
 
@@ -40,3 +41,69 @@ export const ensureAdminProfile = async (showToast?: (options: any) => void): Pr
         return true; 
     }
 };
+
+
+export const ensureOwnerProfile = async (user: User, showToast?: (options: any) => void): Promise<'checked' | 'created' | 'linked'> => {
+    const ownerRef = doc(db, "owners", user.uid);
+
+    try {
+        const ownerSnap = await getDoc(ownerRef);
+
+        if (ownerSnap.exists()) {
+            return 'checked'; // Profile already exists and is correctly linked.
+        }
+
+        // If it doesn't exist with the UID, search by email.
+        const q = query(collection(db, "owners"), where("email", "==", user.email));
+        const querySnapshot = await getDocs(q);
+        
+        if (!querySnapshot.empty) {
+            // Profile exists but needs to be linked to the new Auth UID.
+            const existingDoc = querySnapshot.docs[0];
+            const batch = writeBatch(db);
+            
+            // 1. Update the existing document with the correct UID
+            batch.update(existingDoc.ref, { uid: user.uid });
+            
+            // 2. Create a new document with the correct UID and data, then delete the old one.
+            // This is safer to avoid ID collisions if the old doc ID was an auto-id.
+            const newOwnerRef = doc(db, "owners", user.uid);
+            batch.set(newOwnerRef, existingDoc.data());
+            batch.update(newOwnerRef, { uid: user.uid }); // Ensure UID is correct in new doc
+            
+            // If the old doc ID is not the email, delete it.
+            if (existingDoc.id !== user.uid) {
+               batch.delete(existingDoc.ref);
+            }
+
+            await batch.commit();
+
+            if (showToast) {
+                showToast({ title: "Perfil Vinculado", description: "Hemos vinculado tu cuenta de inicio de sesión a tu perfil de propietario." });
+            }
+            return 'linked';
+
+        } else {
+            // Profile doesn't exist at all, create a new one.
+            await setDoc(ownerRef, {
+                uid: user.uid,
+                name: user.displayName || 'Propietario sin nombre',
+                email: user.email,
+                role: 'propietario', // Default role
+                balance: 0,
+                properties: [],
+                createdAt: Timestamp.now(),
+            });
+            if (showToast) {
+                showToast({ title: "Perfil de Propietario Creado", description: `Se ha creado un perfil para ${user.email}.` });
+            }
+            return 'created';
+        }
+    } catch (error) {
+        console.error("Error ensuring owner profile:", error);
+         if (showToast) {
+            showToast({ variant: 'destructive', title: 'Error de Sincronización', description: 'No se pudo verificar o crear tu perfil.' });
+        }
+        throw error;
+    }
+}
