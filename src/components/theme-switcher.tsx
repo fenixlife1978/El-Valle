@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 const themes = [
-    { name: "Oscuro", value: "dark", colors: ["#454B1B", "#A8A878"] },
+    { name: "Oscuro", value: "dark", colors: ["#263238", "#81C784"] },
     { name: "Océano", value: "theme-ocean", colors: ["#0F2B4B", "#78DCE8"] },
     { name: "Bosque", value: "theme-forest", colors: ["#223D22", "#88C088"] },
     { name: "Atardecer", value: "theme-sunset", colors: ["#4B1F21", "#FF8C8C"] },
