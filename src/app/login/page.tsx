@@ -49,13 +49,13 @@ function LoginContent() {
             await signInWithEmailAndPassword(auth, email, password);
             toast({
                 title: 'Inicio de sesión exitoso',
-                description: 'Bienvenido de nuevo.',
+                description: 'Bienvenido de nuevo. Redirigiendo...',
                 className: 'bg-green-100 border-green-400 text-green-800'
             });
             
-            // The middleware will handle the redirection after the cookies are set.
-            // We can just push to the root and let the middleware do its job.
-            router.push('/');
+            // The redirection is now handled by the middleware and layouts.
+            // We just refresh the page to trigger the middleware check.
+            window.location.href = '/';
 
         } catch (error: any) {
             console.error("Login error:", error);
