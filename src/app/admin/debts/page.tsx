@@ -142,7 +142,7 @@ export default function DebtManagementPage() {
     const forceUpdateDebtState = useCallback(async (showToast = false) => {
         if(showToast) toast({ title: "Sincronizando...", description: "Recalculando todas las deudas pendientes." });
         
-        const debtsQuery = query(collection(db, "debts"), where("status", "==", "pending"));
+        const debtsQuery = query(collection(db(), "debts"), where("status", "==", "pending"));
         const snapshot = await getDocs(debtsQuery);
         
         setOwners(prevOwners => {
@@ -171,11 +171,12 @@ export default function DebtManagementPage() {
     // Fetch All Owners and initial data
     useEffect(() => {
         setLoading(true);
+        const firestore = db();
         const { toast: toastFn } = { toast };
 
         const fetchInitialSettings = async () => {
              try {
-                const settingsRef = doc(db, 'config', 'mainSettings');
+                const settingsRef = doc(firestore, 'config', 'mainSettings');
                 const settingsSnap = await getDoc(settingsRef);
                 if (settingsSnap.exists()) {
                     const settings = settingsSnap.data();
@@ -196,7 +197,7 @@ export default function DebtManagementPage() {
             }
         };
 
-        const ownersQuery = query(collection(db, "owners"));
+        const ownersQuery = query(collection(firestore, "owners"));
         const ownersUnsubscribe = onSnapshot(ownersQuery, async (snapshot) => {
             let ownersData: Owner[] = snapshot.docs.map(doc => {
                 const data = doc.data();
@@ -234,8 +235,9 @@ export default function DebtManagementPage() {
 
     // REAL-TIME DEBT LISTENER
     useEffect(() => {
+        const firestore = db();
         const { toast: toastFn } = { toast };
-        const debtsQuery = query(collection(db, "debts"), where("status", "==", "pending"));
+        const debtsQuery = query(collection(firestore, "debts"), where("status", "==", "pending"));
         
         const unsubscribe = onSnapshot(debtsQuery, (snapshot) => {
             setOwners(prevOwners => {
@@ -288,14 +290,15 @@ export default function DebtManagementPage() {
         let reconciledCount = 0;
         let processedOwners = 0;
         const condoFeeInBs = condoFee * activeRate;
+        const firestore = db();
 
         for (const owner of ownersWithBalance) {
             processedOwners++;
             try {
-                await runTransaction(db, async (transaction) => {
-                    const ownerRef = doc(db, 'owners', owner.id);
-                    const pendingDebtsQuery = query(collection(db, 'debts'), where('ownerId', '==', owner.id), where('status', '==', 'pending'));
-                    const allExistingDebtsQuery = query(collection(db, 'debts'), where('ownerId', '==', owner.id));
+                await runTransaction(firestore, async (transaction) => {
+                    const ownerRef = doc(firestore, 'owners', owner.id);
+                    const pendingDebtsQuery = query(collection(firestore, 'debts'), where('ownerId', '==', owner.id), where('status', '==', 'pending'));
+                    const allExistingDebtsQuery = query(collection(firestore, 'debts'), where('ownerId', '==', owner.id));
                     
                     // --- ALL READS FIRST ---
                     const ownerDoc = await transaction.get(ownerRef);
@@ -322,7 +325,7 @@ export default function DebtManagementPage() {
                                 availableBalance -= debtAmountBs;
                                 balanceChanged = true;
 
-                                const paymentRef = doc(collection(db, "payments"));
+                                const paymentRef = doc(collection(firestore, "payments"));
                                 transaction.set(paymentRef, {
                                     reportedBy: owner.id,
                                     beneficiaries: [{ ownerId: owner.id, ownerName: owner.name, ...debt.property, amount: debtAmountBs }],
@@ -372,7 +375,7 @@ export default function DebtManagementPage() {
                                 balanceChanged = true;
 
                                 const paymentDate = Timestamp.now();
-                                const paymentRef = doc(collection(db, 'payments'));
+                                const paymentRef = doc(collection(firestore, 'payments'));
                                 transaction.set(paymentRef, {
                                     reportedBy: owner.id, beneficiaries: [{ ownerId: owner.id, ownerName: owner.name, ...property, amount: condoFeeInBs }],
                                     totalAmount: condoFeeInBs, exchangeRate: activeRate, paymentDate: paymentDate, reportedAt: paymentDate,
@@ -380,7 +383,7 @@ export default function DebtManagementPage() {
                                     observations: `Cuota de ${months.find(m=>m.value === futureMonth)?.label} ${futureYear} para ${property.street} - ${property.house} pagada por adelanto automático.`
                                 });
 
-                                const debtRef = doc(collection(db, 'debts'));
+                                const debtRef = doc(collection(firestore, 'debts'));
                                 transaction.set(debtRef, {
                                     ownerId: owner.id, property: property, year: futureYear, month: futureMonth, amountUSD: condoFee,
                                     description: "Cuota de Condominio (Pagada por adelantado)", status: 'paid', paidAmountUSD: condoFee,
@@ -426,11 +429,12 @@ export default function DebtManagementPage() {
         }
 
         try {
+            const firestore = db();
             const today = new Date();
             const year = today.getFullYear();
             const month = today.getMonth() + 1;
 
-            const existingDebtsQuery = query(collection(db, 'debts'), where('year', '==', year), where('month', '==', month));
+            const existingDebtsQuery = query(collection(firestore, 'debts'), where('year', '==', year), where('month', '==', month));
             const existingDebtsSnapshot = await getDocs(existingDebtsQuery);
             const ownersWithDebtForProp = new Set(existingDebtsSnapshot.docs.map(doc => {
                 const data = doc.data();
@@ -440,7 +444,7 @@ export default function DebtManagementPage() {
                 return null;
             }).filter(Boolean));
 
-            const batch = writeBatch(db);
+            const batch = writeBatch(firestore);
             let newDebtsCount = 0;
 
             const ownersToProcess = owners.filter(owner => owner.id !== ADMIN_USER_ID);
@@ -451,7 +455,7 @@ export default function DebtManagementPage() {
                          if (property && property.street && property.house) {
                             const key = `${owner.id}-${property.street}-${property.house}`;
                             if (!ownersWithDebtForProp.has(key)) {
-                                const debtRef = doc(collection(db, 'debts'));
+                                const debtRef = doc(collection(firestore, 'debts'));
                                 batch.set(debtRef, {
                                     ownerId: owner.id,
                                     property: property,
@@ -514,7 +518,7 @@ export default function DebtManagementPage() {
         }
 
         setLoadingDebts(true);
-        const q = query(collection(db, "debts"), where("ownerId", "==", selectedOwner.id));
+        const q = query(collection(db(), "debts"), where("ownerId", "==", selectedOwner.id));
         const unsubscribe = onSnapshot(q, (querySnapshot) => {
             const debtsData: Debt[] = [];
             querySnapshot.forEach((doc) => {
@@ -621,12 +625,13 @@ export default function DebtManagementPage() {
     
     const confirmDelete = async () => {
         if (!debtToDelete || !selectedOwner) return;
+        const firestore = db();
     
         try {
-            const ownerRef = doc(db, "owners", selectedOwner.id);
-            const debtRef = doc(db, "debts", debtToDelete.id);
+            const ownerRef = doc(firestore, "owners", selectedOwner.id);
+            const debtRef = doc(firestore, "debts", debtToDelete.id);
     
-            await runTransaction(db, async (transaction) => {
+            await runTransaction(firestore, async (transaction) => {
                 // --- 1. All reads first ---
                 const ownerDoc = await transaction.get(ownerRef);
                 if (!ownerDoc.exists()) {
@@ -650,7 +655,7 @@ export default function DebtManagementPage() {
                 }
     
                 if (debtToDelete.paymentId && debtToDelete.status === 'paid') {
-                    const paymentRef = doc(db, "payments", debtToDelete.paymentId);
+                    const paymentRef = doc(firestore, "payments", debtToDelete.paymentId);
                     // Check if payment exists before attempting to delete
                     const paymentDoc = await getDoc(paymentRef); // This is a read outside the transaction, but acceptable for this logic
                     if (paymentDoc.exists()) {
@@ -690,21 +695,22 @@ export default function DebtManagementPage() {
         }
 
         const monthsToGenerate = differenceInCalendarMonths(endDate, startDate) + 1;
+        const firestore = db();
 
         try {
             if (activeRate <= 0) throw "No hay una tasa de cambio activa o registrada configurada.";
             
             // These reads happen outside the transaction, which is fine.
-            const existingDebtQuery = query(collection(db, 'debts'), where('ownerId', '==', selectedOwner.id), where('property.street', '==', propertyForMassDebt.street), where('property.house', '==', propertyForMassDebt.house));
-            const existingHistoricalPaymentQuery = query(collection(db, 'historical_payments'), where('ownerId', '==', selectedOwner.id), where('property.street', '==', propertyForMassDebt.street), where('property.house', '==', propertyForMassDebt.house));
+            const existingDebtQuery = query(collection(firestore, 'debts'), where('ownerId', '==', selectedOwner.id), where('property.street', '==', propertyForMassDebt.street), where('property.house', '==', propertyForMassDebt.house));
+            const existingHistoricalPaymentQuery = query(collection(firestore, 'historical_payments'), where('ownerId', '==', selectedOwner.id), where('property.street', '==', propertyForMassDebt.street), where('property.house', '==', propertyForMassDebt.house));
             const [existingDebtsSnapshot, existingHistoricalSnapshot] = await Promise.all([ getDocs(existingDebtQuery), getDocs(existingHistoricalPaymentQuery) ]);
             
             const existingDebtPeriods = new Set([...existingDebtsSnapshot.docs.map(d => `${d.data().year}-${d.data().month}`), ...existingHistoricalSnapshot.docs.map(d => `${d.data().referenceYear}-${d.data().referenceMonth}`)]);
             let newDebtsCreated = 0;
             
-            await runTransaction(db, async (transaction) => {
+            await runTransaction(firestore, async (transaction) => {
                 // --- 1. ALL READS FIRST ---
-                const ownerRef = doc(db, "owners", selectedOwner.id);
+                const ownerRef = doc(firestore, "owners", selectedOwner.id);
                 const ownerDoc = await transaction.get(ownerRef);
                 if (!ownerDoc.exists()) throw "El documento del propietario no existe.";
 
@@ -721,7 +727,7 @@ export default function DebtManagementPage() {
 
                     newDebtsCreated++;
                     const debtAmountBs = amountUSD * activeRate;
-                    const debtRef = doc(collection(db, "debts"));
+                    const debtRef = doc(collection(firestore, "debts"));
                     let debtData: any = { ownerId: selectedOwner.id, property: propertyForMassDebt, year: debtYear, month: debtMonth, amountUSD: amountUSD, description: description, status: 'pending' };
 
                     if (currentBalanceBs >= debtAmountBs) {
@@ -729,7 +735,7 @@ export default function DebtManagementPage() {
                         balanceUpdated = true;
                         const paymentDate = Timestamp.now();
 
-                        const paymentRef = doc(collection(db, "payments"));
+                        const paymentRef = doc(collection(firestore, "payments"));
                         transaction.set(paymentRef, {
                             reportedBy: selectedOwner.id,
                             beneficiaries: [{ ownerId: selectedOwner.id, ownerName: selectedOwner.name, ...propertyForMassDebt, amount: debtAmountBs }],
@@ -772,7 +778,7 @@ export default function DebtManagementPage() {
         }
 
         try {
-            const debtRef = doc(db, "debts", debtToEdit.id);
+            const debtRef = doc(db(), "debts", debtToEdit.id);
             await updateDoc(debtRef, {
                 description: currentDebtData.description,
                 amountUSD: Number(currentDebtData.amountUSD)

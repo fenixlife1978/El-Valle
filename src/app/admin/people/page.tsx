@@ -100,7 +100,8 @@ export default function PeopleManagementPage() {
     const router = useRouter();
 
     useEffect(() => {
-        const q = query(collection(db, "owners"));
+        const firestore = db();
+        const q = query(collection(firestore, "owners"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const ownersData: Owner[] = [];
             snapshot.forEach((doc) => {
@@ -128,7 +129,7 @@ export default function PeopleManagementPage() {
         });
 
         const fetchCompanyInfo = async () => {
-            const settingsRef = doc(db, 'config', 'mainSettings');
+            const settingsRef = doc(firestore, 'config', 'mainSettings');
             const docSnap = await getDoc(settingsRef);
             if (docSnap.exists()) {
                 setCompanyInfo(docSnap.data().companyInfo as CompanyInfo);
@@ -176,7 +177,7 @@ export default function PeopleManagementPage() {
     const confirmDelete = async () => {
         if (ownerToDelete) {
              try {
-                await deleteDoc(doc(db, "owners", ownerToDelete.id));
+                await deleteDoc(doc(db(), "owners", ownerToDelete.id));
                 toast({ title: 'Propietario Eliminado', description: `${ownerToDelete.name} ha sido eliminado de la base de datos.` });
             } catch (error) {
                 console.error("Error deleting document: ", error);
@@ -210,7 +211,7 @@ export default function PeopleManagementPage() {
         try {
             if (isNewUser) {
                 // Just create the Firestore document. The user will set their own password.
-                const docRef = await addDoc(collection(db, "owners"), dataToSave);
+                const docRef = await addDoc(collection(db(), "owners"), dataToSave);
                 // Set the uid to the document id for future linking
                 await updateDoc(docRef, { uid: docRef.id });
                 
@@ -219,7 +220,7 @@ export default function PeopleManagementPage() {
                     description: `Se ha creado el perfil para ${dataToSave.name}. El usuario deberá usar "Olvidé mi contraseña" para su primer acceso.`
                 });
             } else if (id) { // Editing existing owner
-                const ownerRef = doc(db, "owners", id);
+                const ownerRef = doc(db(), "owners", id);
                 await updateDoc(ownerRef, dataToSave);
                 toast({ title: 'Propietario Actualizado', description: 'Los datos han sido guardados exitosamente.' });
             } else {
@@ -370,13 +371,13 @@ export default function PeopleManagementPage() {
                 });
 
                 const newOwners = Object.values(ownersMap);
-                const batch = writeBatch(db);
+                const batch = writeBatch(db());
                 let successCount = 0;
                 
                 for (const ownerData of newOwners) {
                     if (ownerData.email === 'vallecondo@gmail.com') continue;
                     if (ownerData.properties && ownerData.properties.length > 0) {
-                        const ownerDocRef = doc(collection(db, "owners")); // Always generate new ID for imports
+                        const ownerDocRef = doc(collection(db(), "owners")); // Always generate new ID for imports
                          batch.set(ownerDocRef, { ...ownerData, passwordChanged: false });
                          successCount++;
                     }
@@ -416,7 +417,7 @@ export default function PeopleManagementPage() {
         }
 
         try {
-            await sendPasswordResetEmail(auth, email);
+            await sendPasswordResetEmail(auth(), email);
             toast({
                 title: 'Correo Enviado',
                 description: `Se ha enviado un correo para restablecer la contraseña a ${email}.`,

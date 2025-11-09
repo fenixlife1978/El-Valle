@@ -1,8 +1,8 @@
 
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage';
-import { getAuth } from 'firebase/auth';
+import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
+import { getFirestore, type Firestore } from 'firebase/firestore';
+import { getStorage, type FirebaseStorage } from 'firebase/storage';
+import { getAuth, type Auth } from 'firebase/auth';
 
 const firebaseConfig = {
   "projectId": "condominio-prueba",
@@ -14,10 +14,44 @@ const firebaseConfig = {
 };
 
 
-// Initialize Firebase
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-const auth = getAuth(app);
-const db = getFirestore(app);
-const storage = getStorage(app);
+// Singleton pattern to initialize and get Firebase services
+let app: FirebaseApp;
+let auth: Auth;
+let db: Firestore;
+let storage: FirebaseStorage;
 
-export { app, db, auth, storage };
+function getAppInstance(): FirebaseApp {
+    if (!app) {
+        app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+    }
+    return app;
+}
+
+function getAuthInstance(): Auth {
+    if (!auth) {
+        auth = getAuth(getAppInstance());
+    }
+    return auth;
+}
+
+function getDBInstance(): Firestore {
+    if (!db) {
+        db = getFirestore(getAppInstance());
+    }
+    return db;
+}
+
+function getStorageInstance(): FirebaseStorage {
+    if (!storage) {
+        storage = getStorage(getAppInstance());
+    }
+    return storage;
+}
+
+// Export the getter functions
+export { 
+    getAppInstance as app, 
+    getDBInstance as db, 
+    getAuthInstance as auth, 
+    getStorageInstance as storage 
+};
