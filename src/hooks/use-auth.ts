@@ -32,7 +32,7 @@ export function useAuth() {
                         const ownerDocRef = doc(db, "owners", firebaseUser.uid);
                         const ownerSnap = await getDoc(ownerDocRef);
                         if (ownerSnap.exists()) {
-                            const data = { id: ownerSnap.id, ...ownerSnap.data() };
+                            const data = { id: ownerSnap.id, ...ownerSnap.data() } as { id: string; role?: string };
                             setOwnerData(data);
                             setRole(data.role || 'propietario');
                         } else {
