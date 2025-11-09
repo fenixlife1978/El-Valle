@@ -53,14 +53,24 @@ import {
 import { cn } from '@/lib/utils';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from './ui/skeleton';
-import { Loader2 } from 'lucide-react';
-import { useAuth } from '@/hooks/use-auth';
 
 export type NavItem = {
   href: string;
   icon: LucideIcon;
   label: string;
   items?: Omit<NavItem, 'icon' | 'items'>[];
+};
+
+type CompanyInfo = {
+    name: string;
+    logo: string;
+};
+
+type ExchangeRate = {
+    id: string;
+    date: string; 
+    rate: number;
+    active: boolean;
 };
 
 type Notification = {
@@ -72,8 +82,20 @@ type Notification = {
     href?: string;
 };
 
+const BCVIcon = (props: React.SVGProps<SVGSVGElement> & {src?: string | null}) => {
+  // Convierte 'null' a 'undefined' para compatibilidad con <img> src.
+  const finalSrc = props.src ?? undefined; 
 
-const BCVRateCard = ({ rate, date, loading, logoUrl }: { rate: number | null, date: string | null, loading: boolean, logoUrl: string | null }) => {
+  if (finalSrc) {
+      return <img src={finalSrc} alt="BCV Logo" {...props} />;
+  }
+
+  return (
+      <img src="data:image/png;base64,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" alt="BCV Logo" {...props} />
+  );
+};
+
+const BCVRateCard = ({ rate, date, loading, logoUrl }: { rate: number, date: string, loading: boolean, logoUrl: string | null }) => {
     if (loading) {
         return <Skeleton className="h-24 w-full" />;
     }
@@ -87,7 +109,7 @@ const BCVRateCard = ({ rate, date, loading, logoUrl }: { rate: number | null, da
             <CardContent className="p-4 flex items-center justify-between">
                 <div className="flex items-center gap-4">
                     <div className="w-16 h-16 rounded-full bg-background flex items-center justify-center overflow-hidden border-2 border-border">
-                        <img src={logoUrl || 'data:image/png;base64,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'} alt="BCV Logo" className="w-full h-full object-cover"/>
+                        <BCVIcon src={logoUrl} className="w-full h-full object-cover"/>
                     </div>
                     <div>
                         <p className="text-sm text-muted-foreground">Tasa Oficial BCV</p>
@@ -225,14 +247,42 @@ const CustomHeader = ({ ownerData, userRole }: { ownerData: any, userRole: strin
 function DashboardLayoutContent({
   children,
   navItems,
+  ownerData,
+  userRole,
 }: {
   children: React.ReactNode;
   navItems: NavItem[];
+  ownerData: any;
+  userRole: string | null;
 }) {
+  const [companyInfo, setCompanyInfo] = React.useState<CompanyInfo | null>(null);
   const { isMobile, setOpenMobile } = useSidebar();
   const pathname = usePathname();
-  const { ownerData, userRole, companyInfo, activeRate, bcvLogoUrl, loading } = useAuth();
+  const [activeRate, setActiveRate] = React.useState<ExchangeRate | null>(null);
+  const [loadingRate, setLoadingRate] = React.useState(true);
+  const [bcvLogoUrl, setBcvLogoUrl] = React.useState<string | null>(null);
 
+  React.useEffect(() => {
+    const settingsRef = doc(db, 'config', 'mainSettings');
+    const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
+        if (docSnap.exists()) {
+            const settingsData = docSnap.data();
+            setCompanyInfo(settingsData.companyInfo as CompanyInfo);
+            setBcvLogoUrl(settingsData.bcvLogo || null);
+
+            const rates: ExchangeRate[] = settingsData.exchangeRates || [];
+            let currentActiveRate = rates.find(r => r.active) || null;
+            if (!currentActiveRate && rates.length > 0) {
+                currentActiveRate = [...rates].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+            }
+            setActiveRate(currentActiveRate);
+        }
+        setLoadingRate(false);
+    }, () => {
+        setLoadingRate(false);
+    });
+    return () => unsubscribe();
+  }, []);
 
   const handleLinkClick = () => {
     if (isMobile) {
@@ -245,25 +295,6 @@ function DashboardLayoutContent({
     return items?.some(item => pathname === item.href) ?? false;
   }
   
-  if (loading) {
-    return (
-        <div className="flex h-screen w-full items-center justify-center bg-background">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="ml-2">Cargando datos de usuario...</p>
-        </div>
-    );
-  }
-  
-  if (!ownerData || !userRole) {
-      // This case should theoretically be handled by the AuthGuard, but as a fallback:
-      return (
-          <div className="flex h-screen w-full items-center justify-center bg-background">
-              <Loader2 className="h-8 w-8 animate-spin text-destructive" />
-              <p className="ml-2 text-destructive">Error de autenticación. Redirigiendo...</p>
-          </div>
-      );
-  }
-
   return (
     <>
       <Sidebar className="hidden sm:block">
@@ -277,7 +308,7 @@ function DashboardLayoutContent({
           <SidebarMenu>
             {navItems.map((item) => 
                 item.items ? (
-                  <Collapsible key={item.href} defaultOpen={isSubItemActive(item.href, item.items)}>
+                  <Collapsible key={item.label} defaultOpen={isSubItemActive(item.href, item.items)}>
                     <SidebarMenuItem>
                       <CollapsibleTrigger asChild>
                           <SidebarMenuButton
@@ -329,7 +360,7 @@ function DashboardLayoutContent({
       <SidebarInset>
         <CustomHeader ownerData={ownerData} userRole={userRole} />
         <main className="flex-1 p-4 md:p-8 bg-background">
-            <BCVRateCard rate={activeRate?.rate || null} date={activeRate?.date || null} loading={loading} logoUrl={bcvLogoUrl} />
+            <BCVRateCard rate={activeRate?.rate || 0} date={activeRate?.date || new Date().toISOString()} loading={loadingRate} logoUrl={bcvLogoUrl} />
             {children}
         </main>
         <footer className="bg-secondary text-secondary-foreground p-4 text-center text-sm">
@@ -348,12 +379,9 @@ export function DashboardLayout(props: {
   params?: any;
 }) {
   const { children, ownerData, userRole, navItems } = props;
-  
-  // No necesitamos pasar ownerData y userRole dos veces.
-  // El DashboardLayoutContent los obtendrá del hook useAuth.
   return (
     <SidebarProvider>
-      <DashboardLayoutContent navItems={navItems}>
+      <DashboardLayoutContent navItems={navItems} ownerData={ownerData} userRole={userRole}>
         {children}
       </DashboardLayoutContent>
     </SidebarProvider>

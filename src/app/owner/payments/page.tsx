@@ -58,7 +58,7 @@ type BeneficiaryRow = {
 };
 
 
-const ADMIN_USER_ID = 'valle-admin-main-account';
+const OWNER_USER_ID = 'valle-admin-main-account';
 
 export default function UnifiedPaymentsPage() {
     const { toast } = useToast();
@@ -540,4 +540,3 @@ export default function UnifiedPaymentsPage() {
         </div>
     );
 }
-
