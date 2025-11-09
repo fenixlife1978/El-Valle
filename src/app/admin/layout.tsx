@@ -15,10 +15,9 @@ import {
     ShieldCheck,
     ClipboardList
 } from 'lucide-react';
-import { type ReactNode, useEffect } from 'react';
+import { type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
-import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 
 const adminNavItems: NavItem[] = [
@@ -55,28 +54,11 @@ const adminNavItems: NavItem[] = [
 ];
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
-    const { user, ownerData, loading, role } = useAuth();
-    const router = useRouter();
-
-    useEffect(() => {
-        if (!loading) {
-            if (!user) {
-                router.push('/login?role=admin');
-            } else if (role && role !== 'administrador') {
-                router.push('/owner/dashboard');
-            }
-        }
-    }, [loading, user, role, router]);
-
-    if (loading || !user || !role) {
-        return (
-            <div className="flex h-screen w-full items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin" />
-                <p className="ml-2">Verificando acceso...</p>
-            </div>
-        );
-    }
-
+    const { ownerData, role } = useAuth();
+    
+    // The AuthGuard in the root layout handles the main loading and redirection.
+    // This component now just renders the layout for the admin section.
+    
     return (
         <DashboardLayout ownerData={ownerData} userRole={role} navItems={adminNavItems}>
             {children}
