@@ -40,11 +40,17 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
         if (loading) {
             return; // Don't do anything while loading
         }
+        // First, check if the user is authenticated at all.
         if (!user) {
             router.push('/login?role=owner');
             return;
         }
-    }, [loading, user, router]);
+        // Only after confirming a user exists, check if the role is incorrect for this layout.
+        if (role && role !== 'owner') {
+            router.push('/admin/dashboard'); // Or a generic access-denied page
+            return;
+        }
+    }, [loading, user, role, router]);
 
     if (loading || !user) {
         return (

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
@@ -190,13 +189,13 @@ export default function OwnerDashboardPage() {
 
 
     const openReceiptPreview = async (payment: Payment) => {
-        if (!companyInfo || !ownerData) {
+        if (!companyInfo || !ownerData || !user) {
           toast({ variant: 'destructive', title: 'Error', description: 'No se ha cargado la información necesaria.' });
           return;
         }
     
         try {
-          const beneficiary = payment.beneficiaries.find(b => b.ownerId === user?.uid);
+          const beneficiary = payment.beneficiaries.find(b => b.ownerId === user.uid);
           if (!beneficiary) {
             toast({ variant: 'destructive', title: 'Error', description: 'No se encontró su información en este pago.' });
             return;
@@ -204,7 +203,7 @@ export default function OwnerDashboardPage() {
           
           const ownerUnitSummary = (beneficiary.street && beneficiary.house) ? `${beneficiary.street} - ${beneficiary.house}` : "Propiedad no especificada";
     
-          const paidDebtsQuery = query(collection(db, "debts"), where("paymentId", "==", payment.id), where("ownerId", "==", user?.uid));
+          const paidDebtsQuery = query(collection(db, "debts"), where("paymentId", "==", payment.id), where("ownerId", "==", user.uid));
           const paidDebtsSnapshot = await getDocs(paidDebtsQuery);
           const paidDebts = paidDebtsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as Debt).sort((a, b) => a.year - b.year || a.month - b.month);
     
@@ -583,6 +582,3 @@ export default function OwnerDashboardPage() {
         </div>
     );
 }
-
-    
-    
