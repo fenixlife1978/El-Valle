@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
@@ -28,7 +29,7 @@ function LoginContent() {
         if (roleParam === 'admin' || roleParam === 'owner') {
             setRole(roleParam);
         } else {
-            router.push('/'); // Redirect if role is invalid
+            router.push('/welcome'); // Redirect if role is invalid
         }
     }, [searchParams, router]);
 
@@ -52,11 +53,9 @@ function LoginContent() {
                 className: 'bg-green-100 border-green-400 text-green-800'
             });
             
-            if (role === 'admin') {
-                router.push('/admin/dashboard');
-            } else {
-                router.push('/owner/dashboard');
-            }
+            // The middleware will handle the redirection after the cookies are set.
+            // We can just push to the root and let the middleware do its job.
+            router.push('/');
 
         } catch (error: any) {
             console.error("Login error:", error);
@@ -137,7 +136,7 @@ function LoginContent() {
                         {loading ? 'Ingresando...' : 'Ingresar'}
                     </Button>
                         <Button variant="link" size="sm" asChild>
-                        <Link href="/">Volver a selección de rol</Link>
+                        <Link href="/welcome">Volver a selección de rol</Link>
                     </Button>
                 </CardFooter>
             </form>
