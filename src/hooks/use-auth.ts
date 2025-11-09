@@ -7,6 +7,7 @@ import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import Cookies from 'js-cookie';
 import { ensureAdminProfile } from '@/lib/user-sync';
+import { useToast } from './use-toast';
 
 const ADMIN_USER_ID = 'valle-admin-main-account';
 
@@ -35,6 +36,7 @@ export function useAuth() {
     const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
     const [activeRate, setActiveRate] = useState<ExchangeRate | null>(null);
     const [bcvLogoUrl, setBcvLogoUrl] = useState<string | null>(null);
+    const { toast } = useToast();
 
     useEffect(() => {
         const auth = getAuth();
@@ -56,16 +58,21 @@ export function useAuth() {
             setSettingsLoading(false);
         }, (error) => {
             console.error("Error fetching settings:", error);
-            setSettingsLoading(false); // Ensure loading completes even on error
+            toast({
+                variant: 'destructive',
+                title: 'Error de Configuración',
+                description: 'No se pudo cargar la configuración de la aplicación.'
+            });
+            setSettingsLoading(false);
         });
         
         const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
-            if (firebaseUser) {
-                setUser(firebaseUser);
-                const token = await firebaseUser.getIdToken();
-                Cookies.set('firebase-auth-token', token, { expires: 1, secure: true, sameSite: 'strict' });
+            try {
+                if (firebaseUser) {
+                    setUser(firebaseUser);
+                    const token = await firebaseUser.getIdToken();
+                    Cookies.set('firebase-auth-token', token, { expires: 1, secure: true, sameSite: 'strict' });
 
-                try {
                     await ensureAdminProfile(); 
                     
                     const adminDocRef = doc(db, "owners", ADMIN_USER_ID);
@@ -94,21 +101,25 @@ export function useAuth() {
                         Cookies.remove('user-role');
                     }
 
-                } catch (error) {
-                    console.error("Error fetching user data from Firestore:", error);
+                } else {
+                    setUser(null);
                     setOwnerData(null);
                     setRole(null);
+                    Cookies.remove('firebase-auth-token');
                     Cookies.remove('user-role');
-                } finally {
-                    setAuthLoading(false);
                 }
-            } else {
+            } catch (error) {
+                 console.error("Error during authentication process:", error);
+                 toast({
+                    variant: 'destructive',
+                    title: 'Error de Autenticación',
+                    description: 'No se pudo verificar la información del usuario.'
+                });
                 setUser(null);
                 setOwnerData(null);
                 setRole(null);
-                Cookies.remove('firebase-auth-token');
-                Cookies.remove('user-role');
-                setAuthLoading(false); // This was the missing piece
+            } finally {
+                setAuthLoading(false);
             }
         });
 
@@ -116,7 +127,7 @@ export function useAuth() {
             unsubscribeAuth();
             unsubscribeSettings();
         };
-    }, []);
+    }, [toast]);
 
     const loading = authLoading || settingsLoading;
 
