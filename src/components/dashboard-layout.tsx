@@ -3,11 +3,11 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Building2, LogOut, type LucideIcon, ChevronDown, TrendingUp } from 'lucide-react';
+import { Building2, LogOut, type LucideIcon, ChevronDown, Bell, Check } from 'lucide-react';
 import * as React from 'react';
-import { doc, onSnapshot, Timestamp } from 'firebase/firestore';
+import { doc, onSnapshot, collection, query, where, updateDoc, writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { format } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { getAuth, signOut } from 'firebase/auth';
 
@@ -42,6 +42,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetFooter,
+} from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from './ui/skeleton';
@@ -60,18 +67,27 @@ type CompanyInfo = {
 
 type ExchangeRate = {
     id: string;
-    date: string; // Stored as 'yyyy-MM-dd'
+    date: string; 
     rate: number;
     active: boolean;
 };
 
+type Notification = {
+    id: string;
+    title: string;
+    body: string;
+    createdAt: any;
+    read: boolean;
+    href?: string;
+};
+
 const BCVIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
-        <circle cx="50" cy="50" r="48" stroke="black" strokeWidth="2"/>
-        <circle cx="50" cy="50" r="28" fill="black"/>
-        <text x="50" y="59" fontFamily="serif" fontSize="24" fill="white" textAnchor="middle">BCV</text>
+        <circle cx="50" cy="50" r="48" stroke="currentColor" strokeWidth="2"/>
+        <circle cx="50" cy="50" r="28" fill="currentColor"/>
+        <text x="50" y="59" fontFamily="serif" fontSize="24" fill="var(--background)" textAnchor="middle">BCV</text>
         <path d="M50 10 a 40 40 0 0 1 0 80 a 40 40 0 0 1 0 -80" fill="none" id="circlePath"/>
-        <text fontSize="6" fill="black">
+        <text fontSize="6" fill="currentColor">
             <textPath href="#circlePath" startOffset="50%" textAnchor="middle">
                 BANCO CENTRAL DE VENEZUELA
             </textPath>
@@ -110,6 +126,29 @@ const BCVRateCard = ({ rate, date, loading }: { rate: number, date: string, load
 
 const CustomHeader = ({ ownerData, userRole }: { ownerData: any, userRole: string | null }) => {
     const router = useRouter();
+    const [notifications, setNotifications] = React.useState<Notification[]>([]);
+    const [isSheetOpen, setIsSheetOpen] = React.useState(false);
+
+    React.useEffect(() => {
+        if (!ownerData?.id) return;
+        const q = query(collection(db, `owners/${ownerData.id}/notifications`), orderBy('createdAt', 'desc'));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const notifs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Notification));
+            setNotifications(notifs);
+        });
+        return () => unsubscribe();
+    }, [ownerData?.id]);
+
+    const hasUnread = notifications.some(n => !n.read);
+
+    const handleMarkAllRead = async () => {
+        const batch = writeBatch(db);
+        notifications.filter(n => !n.read).forEach(n => {
+            const notifRef = doc(db, `owners/${ownerData.id}/notifications/${n.id}`);
+            batch.update(notifRef, { read: true });
+        });
+        await batch.commit();
+    };
 
     const handleLogout = async () => {
         const auth = getAuth();
@@ -121,18 +160,19 @@ const CustomHeader = ({ ownerData, userRole }: { ownerData: any, userRole: strin
 
     return (
         <header className="sticky top-0 z-10 flex h-auto items-center justify-between gap-2 border-b bg-background/80 p-2 backdrop-blur-sm sm:h-20 sm:px-4">
-             <div className="flex items-center gap-4 flex-1">
+             <div className="flex items-center gap-2 sm:gap-4 flex-1">
+                <SidebarTrigger className="h-9 w-9 hidden sm:flex" />
                 <div className="flex flex-col">
                     <h1 className="text-md font-semibold text-foreground">Hola, {userName}</h1>
                     <p className="text-xs text-muted-foreground">Bienvenido a tu panel</p>
                 </div>
             </div>
 
-             <div className="flex-none justify-center">
-                <SidebarTrigger className="h-9 w-9" />
-            </div>
-
-            <div className="flex items-center gap-4 flex-1 justify-end">
+            <div className="flex items-center gap-2 flex-1 justify-end">
+                 <Button variant="ghost" size="icon" className="relative" onClick={() => setIsSheetOpen(true)}>
+                    <Bell className="h-5 w-5" />
+                    {hasUnread && <span className="absolute top-2 right-2.5 block h-2 w-2 rounded-full bg-destructive" />}
+                </Button>
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                     <Button variant="ghost" className="relative h-10 w-10 rounded-full">
@@ -157,6 +197,44 @@ const CustomHeader = ({ ownerData, userRole }: { ownerData: any, userRole: strin
                     </DropdownMenuContent>
                 </DropdownMenu>
             </div>
+             <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
+                <SheetContent className="flex flex-col">
+                    <SheetHeader>
+                        <SheetTitle>Notificaciones</SheetTitle>
+                    </SheetHeader>
+                    <div className="flex-grow overflow-y-auto -mx-6 px-6">
+                        {notifications.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
+                                <Bell className="h-12 w-12 mb-4"/>
+                                <p>No tienes notificaciones nuevas.</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                {notifications.map(n => (
+                                    <div key={n.id} className={cn("p-3 rounded-lg border flex gap-4 items-start", n.read ? "bg-transparent border-border/50" : "bg-primary/10 border-primary/30")}>
+                                        {!n.read && <span className="mt-1.5 block h-2 w-2 shrink-0 rounded-full bg-primary" />}
+                                        <div className="flex-grow">
+                                            <p className="font-semibold">{n.title}</p>
+                                            <p className="text-sm text-muted-foreground">{n.body}</p>
+                                            <p className="text-xs text-muted-foreground/80 mt-1">
+                                                {formatDistanceToNow(n.createdAt.toDate(), { addSuffix: true, locale: es })}
+                                            </p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                    {hasUnread && (
+                        <SheetFooter>
+                            <Button variant="outline" onClick={handleMarkAllRead}>
+                                <Check className="mr-2 h-4 w-4"/>
+                                Marcar todas como leídas
+                            </Button>
+                        </SheetFooter>
+                    )}
+                </SheetContent>
+            </Sheet>
         </header>
     );
 };
@@ -210,7 +288,7 @@ function DashboardLayoutContent({
   
   return (
     <>
-      <Sidebar>
+      <Sidebar className="hidden sm:block">
         <SidebarHeader>
           <div className="flex items-center gap-2 p-2">
             {companyInfo?.logo ? <img src={companyInfo.logo} alt="Logo" className="w-8 h-8 rounded-md object-cover"/> : <Building2 className="w-6 h-6 text-primary" />}
@@ -289,7 +367,7 @@ export function DashboardLayout(props: {
   ownerData: any;
   userRole: string | null;
   navItems: NavItem[];
-  params?: any; // To catch the params prop
+  params?: any;
 }) {
   const { children, ownerData, userRole, navItems } = props;
   return (
