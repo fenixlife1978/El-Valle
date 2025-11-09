@@ -13,8 +13,6 @@ export function useAuth() {
     const [ownerData, setOwnerData] = useState<any | null>(null);
     const [role, setRole] = useState<string | null>(Cookies.get('user-role') || null);
     const [loading, setLoading] = useState(true);
-    const router = useRouter();
-    const pathname = usePathname();
 
     useEffect(() => {
         const auth = getAuth();
@@ -28,26 +26,29 @@ export function useAuth() {
                     const adminDocRef = doc(db, "owners", ADMIN_USER_ID);
                     const adminSnap = await getDoc(adminDocRef);
 
+                    let userRole: string | null = null;
+                    let userData: any | null = null;
+
                     if (adminSnap.exists() && adminSnap.data()?.email && adminSnap.data().email.toLowerCase() === firebaseUser.email?.toLowerCase()) {
-                        const data = { id: adminSnap.id, ...adminSnap.data() };
-                        setOwnerData(data);
-                        setRole('administrador');
-                        Cookies.set('user-role', 'administrador', { expires: 1, secure: true, sameSite: 'strict' });
+                        userData = { id: adminSnap.id, ...adminSnap.data() };
+                        userRole = 'administrador';
                     } else {
                         const ownerDocRef = doc(db, "owners", firebaseUser.uid);
                         const ownerSnap = await getDoc(ownerDocRef);
                         if (ownerSnap.exists()) {
-                            const data = { id: ownerSnap.id, ...ownerSnap.data() } as { id: string; role?: string };
-                            setOwnerData(data);
-                            const userRole = data.role || 'propietario';
-                            setRole(userRole);
-                            Cookies.set('user-role', userRole, { expires: 1, secure: true, sameSite: 'strict' });
-                        } else {
-                            setRole(null);
-                            setOwnerData(null);
-                            Cookies.remove('user-role');
+                            userData = { id: ownerSnap.id, ...ownerSnap.data() } as { id: string; role?: string };
+                            userRole = userData.role || 'propietario';
                         }
                     }
+
+                    setOwnerData(userData);
+                    setRole(userRole);
+                    if (userRole) {
+                        Cookies.set('user-role', userRole, { expires: 1, secure: true, sameSite: 'strict' });
+                    } else {
+                        Cookies.remove('user-role');
+                    }
+
                 } catch (error) {
                     console.error("Error fetching user data from Firestore:", error);
                     setOwnerData(null);
@@ -66,18 +67,6 @@ export function useAuth() {
 
         return () => unsubscribe();
     }, []);
-
-    useEffect(() => {
-        const publicRedirectPaths = ['/welcome', '/login', '/forgot-password'];
-
-        if (!loading && user && role && publicRedirectPaths.includes(pathname)) {
-            if (role === 'admin') {
-                router.push('/admin/dashboard');
-            } else {
-                router.push('/owner/dashboard');
-            }
-        }
-    }, [loading, user, role, pathname, router]);
 
     return { user, ownerData, role, loading };
 }

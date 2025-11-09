@@ -56,8 +56,8 @@ function LoginContent() {
                 className: 'bg-green-100 border-green-400 text-green-800'
             });
 
-            // La redirección ahora es manejada por el hook useAuth.
-            // No hacemos nada aquí.
+            // Redirect to root, middleware will handle the rest
+             router.push('/');
 
         } catch (error: any) {
             console.error("Login error:", error);
@@ -70,7 +70,6 @@ function LoginContent() {
                 title: 'Error al iniciar sesión',
                 description: description,
             });
-        } finally {
              setLoading(false);
         }
     };
