@@ -90,7 +90,7 @@ export default function FinancialBalancePage() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const q = query(collection(db, "financial_statements"), orderBy("createdAt", "desc"));
+        const q = query(collection(db(), "financial_statements"), orderBy("createdAt", "desc"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FinancialStatement));
             setStatements(data);
@@ -98,7 +98,7 @@ export default function FinancialBalancePage() {
         });
 
         const fetchCompanyInfo = async () => {
-            const settingsRef = doc(db, 'config', 'mainSettings');
+            const settingsRef = doc(db(), 'config', 'mainSettings');
             const docSnap = await getDoc(settingsRef);
             if (docSnap.exists()) {
                 setCompanyInfo(docSnap.data().companyInfo as CompanyInfo);
@@ -150,14 +150,14 @@ export default function FinancialBalancePage() {
 
     const handleDeleteStatement = async (statementId: string) => {
         if (window.confirm('¿Está seguro de que desea eliminar este balance? Esta acción no se puede deshacer.')) {
-            await deleteDoc(doc(db, "financial_statements", statementId));
+            await deleteDoc(doc(db(), "financial_statements", statementId));
             toast({ title: 'Balance Eliminado', description: 'El registro ha sido borrado.' });
         }
     };
     
     const handlePublishStatement = async (statement: FinancialStatement) => {
         try {
-            const reportRef = doc(db, 'published_reports', `balance-${statement.id}`);
+            const reportRef = doc(db(), 'published_reports', `balance-${statement.id}`);
             await setDoc(reportRef, {
                 type: 'balance',
                 createdAt: new Date().toISOString(),
@@ -196,7 +196,7 @@ export default function FinancialBalancePage() {
         };
 
         try {
-            await setDoc(doc(db, "financial_statements", statementId), data, { merge: true });
+            await setDoc(doc(db(), "financial_statements", statementId), data, { merge: true });
             toast({ title: 'Balance Guardado', description: 'El estado financiero ha sido guardado exitosamente.', className: "bg-green-100 border-green-400" });
             setView('list');
             resetForm();
