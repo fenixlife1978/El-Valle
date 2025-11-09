@@ -31,7 +31,6 @@ function LoginContent() {
         if (roleParam === 'admin' || roleParam === 'owner') {
             setRole(roleParam);
         } else {
-            // If no role, wait for auth to load, then decide.
             if (!authLoading && !user) {
                 router.push('/welcome');
             }
@@ -67,9 +66,8 @@ function LoginContent() {
                 description: 'Bienvenido de nuevo. Redirigiendo...',
                 className: 'bg-green-100 border-green-400 text-green-800'
             });
-            // The useEffect above will handle the redirection.
-            // No need for router.push or window.location here.
-
+            // The useEffect above will handle the redirection once the user and role are loaded.
+            
         } catch (error: any) {
             console.error("Login error:", error);
             let description = 'Ocurrió un error inesperado. Por favor, intente de nuevo.';
