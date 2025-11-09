@@ -46,7 +46,7 @@ export default function OwnerSettingsPage() {
 
 
     useEffect(() => {
-        const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+        const unsubscribeAuth = onAuthStateChanged(auth(), (user) => {
             if (user) {
                 setAuthUser(user);
             } else {
@@ -60,7 +60,7 @@ export default function OwnerSettingsPage() {
     useEffect(() => {
         if (authLoading || !authUser) return;
         
-        const userRef = doc(db, 'owners', authUser.uid);
+        const userRef = doc(db(), 'owners', authUser.uid);
         const unsubscribe = onSnapshot(userRef, (snapshot) => {
             if (snapshot.exists()) {
                 const data = snapshot.data();
@@ -108,7 +108,7 @@ export default function OwnerSettingsPage() {
         if (!profile.id) return;
         setSaving(true);
         try {
-            const userRef = doc(db, 'owners', profile.id);
+            const userRef = doc(db(), 'owners', profile.id);
             const { name, avatar } = profile;
             await updateDoc(userRef, { name, avatar });
             

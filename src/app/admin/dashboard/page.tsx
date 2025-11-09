@@ -48,13 +48,14 @@ export default function AdminDashboardPage() {
     const [feedbackData, setFeedbackData] = useState<Feedback[]>([]);
 
     useEffect(() => {
+        const firestore = db();
         const startOfMonth = new Date();
         startOfMonth.setDate(1);
         startOfMonth.setHours(0, 0, 0, 0);
         const startOfMonthTimestamp = Timestamp.fromDate(startOfMonth);
 
         const fetchSettings = async () => {
-             const settingsRef = doc(db, 'config', 'mainSettings');
+             const settingsRef = doc(firestore, 'config', 'mainSettings');
              const settingsSnap = await getDoc(settingsRef);
              if (settingsSnap.exists()) {
                  const settings = settingsSnap.data();
@@ -71,20 +72,20 @@ export default function AdminDashboardPage() {
         fetchSettings();
 
         const paymentsQuery = query(
-            collection(db, 'payments'),
+            collection(firestore, 'payments'),
             where('status', '==', 'aprobado'),
             where('paymentDate', '>=', startOfMonthTimestamp)
         );
 
-        const pendingPaymentsQuery = query(collection(db, 'payments'), where('status', '==', 'pendiente'));
-        const ownersQuery = query(collection(db, 'owners'));
+        const pendingPaymentsQuery = query(collection(firestore, 'payments'), where('status', '==', 'pendiente'));
+        const ownersQuery = query(collection(firestore, 'owners'));
 
         const recentPaymentsQuery = query(
-            collection(db, 'payments'), 
+            collection(firestore, 'payments'), 
             where('status', '==', 'aprobado')
         );
 
-        const feedbackQuery = query(collection(db, 'app_feedback'));
+        const feedbackQuery = query(collection(firestore, 'app_feedback'));
 
         const unsubPayments = onSnapshot(paymentsQuery, (snapshot) => {
             let totalBs = 0;

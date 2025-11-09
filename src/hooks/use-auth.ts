@@ -39,7 +39,7 @@ export function useAuth() {
     const { toast } = useToast();
 
     useEffect(() => {
-        const settingsRef = doc(db, 'config', 'mainSettings');
+        const settingsRef = doc(db(), 'config', 'mainSettings');
 
         const unsubscribeSettings = onSnapshot(settingsRef, (docSnap) => {
             if (docSnap.exists()) {
@@ -65,7 +65,7 @@ export function useAuth() {
             setSettingsLoading(false);
         });
         
-        const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
+        const unsubscribeAuth = onAuthStateChanged(auth(), async (firebaseUser) => {
             try {
                 if (firebaseUser) {
                     setUser(firebaseUser);
@@ -74,7 +74,7 @@ export function useAuth() {
 
                     await ensureAdminProfile(); 
                     
-                    const adminDocRef = doc(db, "owners", ADMIN_USER_ID);
+                    const adminDocRef = doc(db(), "owners", ADMIN_USER_ID);
                     const adminSnap = await getDoc(adminDocRef);
 
                     let userRole: string | null = null;
@@ -84,7 +84,7 @@ export function useAuth() {
                         userData = { id: adminSnap.id, ...adminSnap.data() };
                         userRole = 'administrador';
                     } else {
-                        const ownerDocRef = doc(db, "owners", firebaseUser.uid);
+                        const ownerDocRef = doc(db(), "owners", firebaseUser.uid);
                         const ownerSnap = await getDoc(ownerDocRef);
                         if (ownerSnap.exists()) {
                             userData = { id: ownerSnap.id, ...ownerSnap.data() } as { id: string; role?: string };

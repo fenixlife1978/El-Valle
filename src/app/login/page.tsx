@@ -46,7 +46,7 @@ function LoginContent() {
 
         setLoading(true);
         try {
-            await signInWithEmailAndPassword(auth, email, password);
+            await signInWithEmailAndPassword(auth(), email, password);
             
             toast({
                 title: 'Inicio de sesión exitoso',
