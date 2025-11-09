@@ -6,6 +6,7 @@ import { getAuth, onAuthStateChanged, User } from 'firebase/auth';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import Cookies from 'js-cookie';
+import { ensureAdminProfile } from '@/lib/user-sync';
 
 const ADMIN_USER_ID = 'valle-admin-main-account';
 
@@ -66,13 +67,16 @@ export function useAuth() {
                 Cookies.set('firebase-auth-token', token, { expires: 1, secure: true, sameSite: 'strict' });
 
                 try {
+                    // This function checks if the main admin profile exists, creating it if necessary.
+                    await ensureAdminProfile(); 
+                    
                     const adminDocRef = doc(db, "owners", ADMIN_USER_ID);
                     const adminSnap = await getDoc(adminDocRef);
 
                     let userRole: string | null = null;
                     let userData: any | null = null;
                     
-                    if (adminSnap.exists() && adminSnap.data()?.email && adminSnap.data().email.toLowerCase() === firebaseUser.email?.toLowerCase()) {
+                    if (adminSnap.exists() && adminSnap.data()?.email?.toLowerCase() === firebaseUser.email?.toLowerCase()) {
                         userData = { id: adminSnap.id, ...adminSnap.data() };
                         userRole = 'administrador';
                     } else {

@@ -171,6 +171,7 @@ export default function DebtManagementPage() {
     // Fetch All Owners and initial data
     useEffect(() => {
         setLoading(true);
+        const { toast: toastFn } = { toast };
 
         const fetchInitialSettings = async () => {
              try {
@@ -191,7 +192,7 @@ export default function DebtManagementPage() {
                 }
             } catch (error) {
                 console.error("Error fetching settings:", error);
-                toast({ variant: 'destructive', title: 'Error de Carga', description: 'No se pudieron cargar datos críticos.' });
+                toastFn({ variant: 'destructive', title: 'Error de Carga', description: 'No se pudieron cargar datos críticos.' });
             }
         };
 
@@ -221,7 +222,7 @@ export default function DebtManagementPage() {
             setLoading(false);
         }, (error) => {
             console.error("Error fetching owners:", error);
-            toast({ variant: 'destructive', title: 'Error de Carga', description: 'No se pudieron cargar los propietarios.' });
+            toastFn({ variant: 'destructive', title: 'Error de Carga', description: 'No se pudieron cargar los propietarios.' });
             setLoading(false);
         });
         
@@ -233,6 +234,7 @@ export default function DebtManagementPage() {
 
     // REAL-TIME DEBT LISTENER
     useEffect(() => {
+        const { toast: toastFn } = { toast };
         const debtsQuery = query(collection(db, "debts"), where("status", "==", "pending"));
         
         const unsubscribe = onSnapshot(debtsQuery, (snapshot) => {
@@ -260,7 +262,7 @@ export default function DebtManagementPage() {
 
         }, (error) => {
             console.error("Error listening to debts:", error);
-            toast({ variant: 'destructive', title: 'Error de Sincronización', description: 'No se pudo actualizar el estado de las deudas en tiempo real.' });
+            toastFn({ variant: 'destructive', title: 'Error de Sincronización', description: 'No se pudo actualizar el estado de las deudas en tiempo real.' });
         });
 
         return () => unsubscribe();
@@ -1252,12 +1254,3 @@ export default function DebtManagementPage() {
     // Fallback while loading or if view is invalid
     return null;
 }
-
-    
-
-    
-
-
-
-
-    

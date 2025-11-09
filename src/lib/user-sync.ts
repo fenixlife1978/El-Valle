@@ -30,7 +30,7 @@ export const ensureAdminProfile = async (showToast?: (options: any) => void): Pr
             return false; // Did not exist
         } else if (!adminSnap.data()?.uid) {
             // If admin exists but UID is missing, add it.
-            await setDoc(adminRef, { uid: ADMIN_USER_ID }, { merge: true });
+            await updateDoc(adminRef, { uid: ADMIN_USER_ID });
         }
         return true; // Existed
     } catch (error) {
@@ -50,36 +50,25 @@ export const ensureOwnerProfile = async (user: User, showToast?: (options: any) 
         const ownerSnap = await getDoc(ownerRef);
 
         if (ownerSnap.exists()) {
-            return 'checked'; // Profile already exists and is correctly linked.
+            // Profile exists and is correctly linked by UID.
+            // Let's ensure the `uid` field is also present inside the document for consistency in queries.
+            if (!ownerSnap.data().uid) {
+                await updateDoc(ownerRef, { uid: user.uid });
+            }
+            return 'checked'; 
         }
 
-        // If it doesn't exist with the UID, search by email.
+        // If it doesn't exist with the UID, search by email to link an existing profile.
         const q = query(collection(db, "owners"), where("email", "==", user.email));
         const querySnapshot = await getDocs(q);
         
         if (!querySnapshot.empty) {
-            // Profile exists but needs to be linked to the new Auth UID.
+            // Profile exists but has no UID or a different one. We'll update it.
             const existingDoc = querySnapshot.docs[0];
-            const batch = writeBatch(db);
-            
-            // 1. Update the existing document with the correct UID
-            batch.update(existingDoc.ref, { uid: user.uid });
-            
-            // 2. Create a new document with the correct UID and data, then delete the old one.
-            // This is safer to avoid ID collisions if the old doc ID was an auto-id.
-            const newOwnerRef = doc(db, "owners", user.uid);
-            batch.set(newOwnerRef, existingDoc.data());
-            batch.update(newOwnerRef, { uid: user.uid }); // Ensure UID is correct in new doc
-            
-            // If the old doc ID is not the email, delete it.
-            if (existingDoc.id !== user.uid) {
-               batch.delete(existingDoc.ref);
-            }
-
-            await batch.commit();
+            await updateDoc(existingDoc.ref, { uid: user.uid });
 
             if (showToast) {
-                showToast({ title: "Perfil Vinculado", description: "Hemos vinculado tu cuenta de inicio de sesión a tu perfil de propietario." });
+                showToast({ title: "Perfil Vinculado", description: "Hemos vinculado tu cuenta de inicio de sesión a tu perfil de propietario existente." });
             }
             return 'linked';
 
@@ -92,10 +81,11 @@ export const ensureOwnerProfile = async (user: User, showToast?: (options: any) 
                 role: 'propietario', // Default role
                 balance: 0,
                 properties: [],
+                passwordChanged: false,
                 createdAt: Timestamp.now(),
             });
             if (showToast) {
-                showToast({ title: "Perfil de Propietario Creado", description: `Se ha creado un perfil para ${user.email}.` });
+                showToast({ title: "Perfil de Propietario Creado", description: `Se ha creado un nuevo perfil para ${user.email}.` });
             }
             return 'created';
         }
