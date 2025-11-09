@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -11,6 +12,7 @@ const themes = [
     { name: "Océano", value: "theme-ocean", colors: ["#0F2B4B", "#78DCE8"] },
     { name: "Bosque", value: "theme-forest", colors: ["#223D22", "#88C088"] },
     { name: "Atardecer", value: "theme-sunset", colors: ["#4B1F21", "#FF8C8C"] },
+    { name: "Amanecer", value: "theme-sunrise", colors: ["#FFF8F0", "#FF6B6B"] },
 ]
 
 export function ThemeSwitcher() {

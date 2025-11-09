@@ -124,6 +124,27 @@
     --input: 330 30% 30%;
     --ring: 350 90% 65%;
   }
+
+  .theme-sunrise {
+    --background: 40 100% 97%; /* Light Cream */
+    --foreground: 30 20% 15%; /* Dark Brown */
+    --card: 40 100% 95%;
+    --card-foreground: 30 20% 15%;
+    --popover: 40 100% 97%;
+    --popover-foreground: 30 20% 15%;
+    --primary: 15 90% 60%; /* Vibrant Orange */
+    --primary-foreground: 20 50% 98%;
+    --secondary: 40 80% 85%; /* Muted Yellow */
+    --secondary-foreground: 30 20% 15%;
+    --muted: 40 80% 85%;
+    --muted-foreground: 30 20% 40%;
+    --accent: 40 80% 80%;
+    --accent-foreground: 30 20% 15%;
+    --destructive: 0 84% 60%;
+    --border: 40 80% 80%;
+    --input: 40 80% 80%;
+    --ring: 15 90% 60%;
+  }
 }
 
 @layer base {

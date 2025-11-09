@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import Link from 'next/link';
@@ -81,11 +82,16 @@ type Notification = {
     href?: string;
 };
 
-const BCVIcon = (props: React.SVGProps<SVGSVGElement>) => (
+const BCVIcon = (props: React.SVGProps<SVGSVGElement> & {src?: string | null}) => {
+    if (props.src) {
+        return <img src={props.src} alt="BCV Logo" {...props} />;
+    }
+    return (
     <img src="data:image/png;base64,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" alt="BCV Logo" {...props} />
-);
+    );
+};
 
-const BCVRateCard = ({ rate, date, loading }: { rate: number, date: string, loading: boolean }) => {
+const BCVRateCard = ({ rate, date, loading, logoUrl }: { rate: number, date: string, loading: boolean, logoUrl: string | null }) => {
     if (loading) {
         return <Skeleton className="h-24 w-full" />;
     }
@@ -98,7 +104,9 @@ const BCVRateCard = ({ rate, date, loading }: { rate: number, date: string, load
         <Card className="mb-6">
             <CardContent className="p-4 flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                    <BCVIcon className="w-16 h-16"/>
+                    <div className="w-16 h-16 rounded-full bg-background flex items-center justify-center overflow-hidden border-2 border-border">
+                        <BCVIcon src={logoUrl} className="w-full h-full object-cover"/>
+                    </div>
                     <div>
                         <p className="text-sm text-muted-foreground">Tasa Oficial BCV</p>
                         <p className="text-3xl font-bold">Bs. {rate.toLocaleString('es-VE', { minimumFractionDigits: 2 })}</p>
@@ -132,6 +140,7 @@ const CustomHeader = ({ ownerData, userRole }: { ownerData: any, userRole: strin
     const hasUnread = notifications.some(n => !n.read);
 
     const handleMarkAllRead = async () => {
+        if (!ownerData?.id) return;
         const batch = writeBatch(db);
         notifications.filter(n => !n.read).forEach(n => {
             const notifRef = doc(db, `owners/${ownerData.id}/notifications/${n.id}`);
@@ -158,13 +167,13 @@ const CustomHeader = ({ ownerData, userRole }: { ownerData: any, userRole: strin
             </div>
 
             <div className="flex items-center gap-2 flex-1 justify-end">
-                 <SidebarTrigger className="h-9 w-9 sm:flex">
-                    <PanelLeftClose />
-                 </SidebarTrigger>
-                 <Button variant="ghost" size="icon" className="relative" onClick={() => setIsSheetOpen(true)}>
+                <Button variant="ghost" size="icon" className="relative" onClick={() => setIsSheetOpen(true)}>
                     <Bell className="h-5 w-5" />
                     {hasUnread && <span className="absolute top-2 right-2.5 block h-2 w-2 rounded-full bg-destructive" />}
                 </Button>
+                <SidebarTrigger className="h-9 w-9 sm:flex">
+                    <PanelLeftClose />
+                 </SidebarTrigger>
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                     <Button variant="ghost" className="relative h-10 w-10 rounded-full">
@@ -247,13 +256,17 @@ function DashboardLayoutContent({
   const pathname = usePathname();
   const [activeRate, setActiveRate] = React.useState<ExchangeRate | null>(null);
   const [loadingRate, setLoadingRate] = React.useState(true);
+  const [bcvLogoUrl, setBcvLogoUrl] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     const settingsRef = doc(db, 'config', 'mainSettings');
     const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
         if (docSnap.exists()) {
-            setCompanyInfo(docSnap.data().companyInfo as CompanyInfo);
-            const rates: ExchangeRate[] = docSnap.data().exchangeRates || [];
+            const settingsData = docSnap.data();
+            setCompanyInfo(settingsData.companyInfo as CompanyInfo);
+            setBcvLogoUrl(settingsData.bcvLogo || null);
+
+            const rates: ExchangeRate[] = settingsData.exchangeRates || [];
             let currentActiveRate = rates.find(r => r.active) || null;
             if (!currentActiveRate && rates.length > 0) {
                 currentActiveRate = [...rates].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
@@ -343,7 +356,7 @@ function DashboardLayoutContent({
       <SidebarInset>
         <CustomHeader ownerData={ownerData} userRole={userRole} />
         <main className="flex-1 p-4 md:p-8 bg-background">
-            <BCVRateCard rate={activeRate?.rate || 0} date={activeRate?.date || new Date().toISOString()} loading={loadingRate} />
+            <BCVRateCard rate={activeRate?.rate || 0} date={activeRate?.date || new Date().toISOString()} loading={loadingRate} logoUrl={bcvLogoUrl} />
             {children}
         </main>
         <footer className="bg-secondary text-secondary-foreground p-4 text-center text-sm">
