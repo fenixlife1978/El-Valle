@@ -3,21 +3,63 @@
 
 import { useState, useEffect } from 'react';
 import { getAuth, onAuthStateChanged, User } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import Cookies from 'js-cookie';
 
 const ADMIN_USER_ID = 'valle-admin-main-account';
 
+type CompanyInfo = {
+    name: string;
+    logo: string;
+};
+
+type ExchangeRate = {
+    id: string;
+    date: string; 
+    rate: number;
+    active: boolean;
+};
+
 export function useAuth() {
     const [user, setUser] = useState<User | null>(null);
     const [ownerData, setOwnerData] = useState<any | null>(null);
     const [role, setRole] = useState<string | null>(null);
-    const [loading, setLoading] = useState(true);
+    
+    // Internal loading states
+    const [authLoading, setAuthLoading] = useState(true);
+    const [settingsLoading, setSettingsLoading] = useState(true);
+
+    // Global settings state
+    const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
+    const [activeRate, setActiveRate] = useState<ExchangeRate | null>(null);
+    const [bcvLogoUrl, setBcvLogoUrl] = useState<string | null>(null);
 
     useEffect(() => {
         const auth = getAuth();
-        const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+        const settingsRef = doc(db, 'config', 'mainSettings');
+
+        const unsubscribeSettings = onSnapshot(settingsRef, (docSnap) => {
+            if (docSnap.exists()) {
+                const settingsData = docSnap.data();
+                setCompanyInfo(settingsData.companyInfo as CompanyInfo);
+                setBcvLogoUrl(settingsData.bcvLogo || null);
+
+                const rates: ExchangeRate[] = settingsData.exchangeRates || [];
+                let currentActiveRate = rates.find(r => r.active) || null;
+                if (!currentActiveRate && rates.length > 0) {
+                    currentActiveRate = [...rates].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+                }
+                setActiveRate(currentActiveRate);
+            }
+            setSettingsLoading(false);
+        }, (error) => {
+            console.error("Error fetching settings:", error);
+            setSettingsLoading(false); // Ensure loading completes even on error
+        });
+        
+        const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
+            setAuthLoading(true);
             if (firebaseUser) {
                 setUser(firebaseUser);
                 const token = await firebaseUser.getIdToken();
@@ -38,7 +80,7 @@ export function useAuth() {
                         const ownerSnap = await getDoc(ownerDocRef);
                         if (ownerSnap.exists()) {
                             userData = { id: ownerSnap.id, ...ownerSnap.data() } as { id: string; role?: string };
-                            userRole = userData.role || 'owner';
+                            userRole = userData.role || 'propietario'; // Default to 'propietario'
                         }
                     }
 
@@ -63,11 +105,25 @@ export function useAuth() {
                 Cookies.remove('firebase-auth-token');
                 Cookies.remove('user-role');
             }
-            setLoading(false);
+            setAuthLoading(false);
         });
 
-        return () => unsubscribe();
+        return () => {
+            unsubscribeAuth();
+            unsubscribeSettings();
+        };
     }, []);
 
-    return { user, ownerData, role, loading };
+    // The main loading flag is true if either auth or settings are still loading.
+    const loading = authLoading || settingsLoading;
+
+    return { 
+        user, 
+        ownerData, 
+        role, 
+        loading,
+        companyInfo,
+        activeRate,
+        bcvLogoUrl
+    };
 }
