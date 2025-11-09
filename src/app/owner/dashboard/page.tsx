@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
@@ -283,7 +282,6 @@ export default function OwnerDashboardPage() {
         const tableBody = paidDebts.map(debt => {
             const debtAmountBs = (debt.paidAmountUSD || debt.amountUSD) * payment.exchangeRate;
             totalPaidInConcepts += debtAmountBs;
-            const propertyLabel = 'N/A'; // Property is not in debt object, simplification
             const periodLabel = `${monthsLocale[debt.month]} ${debt.year}`;
             const concept = `${debt.description}`;
             return [ periodLabel, concept, `$${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}`, `Bs. ${formatToTwoDecimals(debtAmountBs)}` ];
@@ -586,4 +584,5 @@ export default function OwnerDashboardPage() {
     );
 }
 
+    
     
