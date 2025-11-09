@@ -53,9 +53,9 @@ function LoginContent() {
                 className: 'bg-green-100 border-green-400 text-green-800'
             });
             
-            // The redirection is now handled by the layouts and middleware.
-            // We no longer force a redirect from here to prevent race conditions.
-            // window.location.href = '/';
+            // Force a full page reload to the root.
+            // The middleware will then correctly handle the redirection based on the now-set cookies.
+            window.location.href = '/';
 
         } catch (error: any) {
             console.error("Login error:", error);
