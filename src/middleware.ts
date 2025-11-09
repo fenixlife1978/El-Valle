@@ -12,7 +12,7 @@ export function middleware(request: NextRequest) {
 
   // 1. Lógica para la ruta raíz
   if (pathname === '/') {
-    // Solo redirigir si AMBOS, el token y el rol, existen.
+    // Si ambas cookies existen, redirigir al dashboard correspondiente.
     if (authToken && userRole) {
       const url = request.nextUrl.clone();
       if (userRole === 'admin') {
@@ -22,13 +22,21 @@ export function middleware(request: NextRequest) {
       }
       return NextResponse.redirect(url);
     }
-    // Si no está autenticado o el rol aún no está listo, va a welcome
-    const url = request.nextUrl.clone();
-    url.pathname = '/welcome';
-    return NextResponse.redirect(url);
+    
+    // Si solo el token existe pero el rol no, no hacer nada y dejar que el cliente resuelva.
+    // Si ninguna existe, redirigir a welcome.
+    if (!authToken) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/welcome';
+      return NextResponse.redirect(url);
+    }
+
+    // Si authToken existe pero userRole no, simplemente `next()`. 
+    // El hook useAuth en el cliente forzará la redirección correcta cuando el rol esté listo.
+    return NextResponse.next();
   }
 
-  // 2. Si un usuario autenticado intenta acceder a las páginas de login/registro (YA NO INCLUYE WELCOME)
+  // 2. Si un usuario autenticado intenta acceder a las páginas de login/registro
   if (authToken && userRole && authPaths.includes(pathname)) {
     const url = request.nextUrl.clone();
     url.pathname = userRole === 'admin' ? '/admin/dashboard' : '/owner/dashboard';
@@ -43,6 +51,7 @@ export function middleware(request: NextRequest) {
         url.searchParams.set('role', 'admin');
         return NextResponse.redirect(url);
     }
+    // Si el rol ya está definido y no es admin, redirigir.
     if (authToken && userRole && userRole !== 'admin') {
         const url = request.nextUrl.clone();
         url.pathname = '/owner/dashboard';
@@ -58,6 +67,7 @@ export function middleware(request: NextRequest) {
         url.searchParams.set('role', 'owner');
         return NextResponse.redirect(url);
     }
+    // Si el rol ya está definido y no es owner, redirigir.
     if (authToken && userRole && userRole !== 'owner') {
         const url = request.nextUrl.clone();
         url.pathname = '/admin/dashboard';

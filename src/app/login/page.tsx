@@ -12,11 +12,13 @@ import { Loader2, Shield, User, Eye, EyeOff } from 'lucide-react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import Link from 'next/link';
+import { useAuth } from '@/hooks/use-auth';
 
 function LoginContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { toast } = useToast();
+    const { user, role: userRoleFromHook } = useAuth();
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -29,7 +31,7 @@ function LoginContent() {
         if (roleParam === 'admin' || roleParam === 'owner') {
             setRole(roleParam);
         } else {
-            router.push('/welcome'); // Redirect if role is invalid
+            router.push('/welcome');
         }
     }, [searchParams, router]);
 
@@ -47,13 +49,16 @@ function LoginContent() {
         setLoading(true);
         try {
             await signInWithEmailAndPassword(auth, email, password);
+            
             toast({
                 title: 'Inicio de sesión exitoso',
                 description: 'Bienvenido de nuevo. Redirigiendo...',
                 className: 'bg-green-100 border-green-400 text-green-800'
             });
-            
-            // The redirection is now handled by the useAuth hook to prevent race conditions.
+
+            // Force a full page reload to the root.
+            // The middleware will then handle the redirection to the correct dashboard.
+            window.location.href = '/';
 
         } catch (error: any) {
             console.error("Login error:", error);
@@ -66,8 +71,7 @@ function LoginContent() {
                 title: 'Error al iniciar sesión',
                 description: description,
             });
-        } finally {
-            setLoading(false);
+             setLoading(false);
         }
     };
 
