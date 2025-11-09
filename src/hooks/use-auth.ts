@@ -32,16 +32,16 @@ export function useAuth() {
 
                     let userRole: string | null = null;
                     let userData: any | null = null;
-
+                    
                     if (adminSnap.exists() && adminSnap.data()?.email && adminSnap.data().email.toLowerCase() === firebaseUser.email?.toLowerCase()) {
                         userData = { id: adminSnap.id, ...adminSnap.data() };
-                        userRole = 'administrador';
+                        userRole = 'admin';
                     } else {
                         const ownerDocRef = doc(db, "owners", firebaseUser.uid);
                         const ownerSnap = await getDoc(ownerDocRef);
                         if (ownerSnap.exists()) {
                             userData = { id: ownerSnap.id, ...ownerSnap.data() } as { id: string; role?: string };
-                            userRole = userData.role || 'propietario';
+                            userRole = userData.role || 'owner';
                         }
                     }
 
@@ -71,6 +71,37 @@ export function useAuth() {
 
         return () => unsubscribe();
     }, []);
+
+    useEffect(() => {
+        if (loading) {
+            return; // No hacer nada mientras se carga la información
+        }
+
+        const isPublicPage = ['/login', '/welcome', '/forgot-password'].includes(pathname);
+        const isAdminPage = pathname.startsWith('/admin');
+        const isOwnerPage = pathname.startsWith('/owner');
+
+        if (user && role) {
+            // Usuario autenticado
+            if (isPublicPage) {
+                // Si está en una página pública, redirigir al dashboard correspondiente
+                router.push(role === 'admin' ? '/admin/dashboard' : '/owner/dashboard');
+            } else if (isAdminPage && role !== 'admin') {
+                // Propietario tratando de acceder a página de admin
+                router.push('/owner/dashboard');
+            } else if (isOwnerPage && role !== 'owner') {
+                // Admin tratando de acceder a página de propietario
+                router.push('/admin/dashboard');
+            }
+        } else {
+            // Usuario no autenticado
+            if (isAdminPage || isOwnerPage) {
+                // Si intenta acceder a una página protegida, redirigir al login
+                router.push(`/login?role=${isAdminPage ? 'admin' : 'owner'}`);
+            }
+        }
+
+    }, [user, role, loading, pathname, router]);
 
     return { user, ownerData, role, loading };
 }

@@ -67,7 +67,7 @@ function LoginContent() {
                 description: 'Bienvenido de nuevo. Redirigiendo...',
                 className: 'bg-green-100 border-green-400 text-green-800'
             });
-            // NO navigation here. The useEffect above will handle it when the auth state is confirmed.
+            // La redirección ahora es manejada por el hook useAuth
             
         } catch (error: any) {
             console.error("Login error:", error);
