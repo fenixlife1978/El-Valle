@@ -2,9 +2,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getAuth, onAuthStateChanged, User } from 'firebase/auth';
+import { onAuthStateChanged, User } from 'firebase/auth';
+import { auth, db } from '@/lib/firebase';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
 import Cookies from 'js-cookie';
 import { ensureAdminProfile } from '@/lib/user-sync';
 import { useToast } from './use-toast';
@@ -39,7 +39,6 @@ export function useAuth() {
     const { toast } = useToast();
 
     useEffect(() => {
-        const auth = getAuth();
         const settingsRef = doc(db, 'config', 'mainSettings');
 
         const unsubscribeSettings = onSnapshot(settingsRef, (docSnap) => {
