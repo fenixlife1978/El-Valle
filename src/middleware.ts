@@ -23,8 +23,7 @@ export function middleware(request: NextRequest) {
       return NextResponse.redirect(url);
     }
     
-    // Si solo el token existe pero el rol no, no hacer nada y dejar que el cliente resuelva.
-    // Si ninguna existe, redirigir a welcome.
+    // Si no está autenticado, redirigir a welcome.
     if (!authToken) {
       const url = request.nextUrl.clone();
       url.pathname = '/welcome';

@@ -56,9 +56,8 @@ function LoginContent() {
                 className: 'bg-green-100 border-green-400 text-green-800'
             });
 
-            // Force a full page reload to the root.
-            // The middleware will then handle the redirection to the correct dashboard.
-            window.location.href = '/';
+            // La redirección ahora es manejada por el hook useAuth.
+            // No hacemos nada aquí.
 
         } catch (error: any) {
             console.error("Login error:", error);
@@ -71,6 +70,7 @@ function LoginContent() {
                 title: 'Error al iniciar sesión',
                 description: description,
             });
+        } finally {
              setLoading(false);
         }
     };
