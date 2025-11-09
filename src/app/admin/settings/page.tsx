@@ -129,7 +129,7 @@ export default function SettingsPage() {
                 setCompanyInfo(settings.companyInfo || emptyCompanyInfo);
                 setLogoPreview(settings.companyInfo?.logo);
                 setBcvLogo(settings.bcvLogo || '');
-                setBcvLogoPreview(settings.bcvLogo);
+                setBcvLogoPreview(settings.bcvLogo ?? null);
                 setCondoFee(settings.condoFee);
                 setLastCondoFee(settings.condoFee); // Set the last known fee from DB
                 setExchangeRates(settings.exchangeRates || []);
