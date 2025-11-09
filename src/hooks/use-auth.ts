@@ -22,7 +22,7 @@ export function useAuth() {
                     const adminDocRef = doc(db, "owners", ADMIN_USER_ID);
                     const adminSnap = await getDoc(adminDocRef);
 
-                    if (adminSnap.exists() && adminSnap.data().email.toLowerCase() === firebaseUser.email?.toLowerCase()) {
+                    if (adminSnap.exists() && adminSnap.data()?.email && adminSnap.data().email.toLowerCase() === firebaseUser.email?.toLowerCase()) {
                         // This is the admin user
                         const data = { id: adminSnap.id, ...adminSnap.data() };
                         setOwnerData(data);

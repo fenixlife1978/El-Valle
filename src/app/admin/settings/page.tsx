@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -61,9 +62,9 @@ type Debt = {
     amountUSD: number;
     description: string;
     status: 'pending' | 'paid';
-    property: { street: string; house: string; }; // <-- Added this
     paidAmountUSD?: number; // Amount at which the debt was paid
     paymentDate?: Timestamp;
+    property: { street: string; house: string; };
 };
 
 
@@ -347,14 +348,13 @@ export default function SettingsPage() {
                 setIsAdjustmentRunning(false);
                 return;
             }
-            
+                       
             const batch = writeBatch(db);
             let adjustmentsCreated = 0;
             
-            advanceDebtsSnapshot.forEach(debtDoc => {
+            for (const debtDoc of advanceDebtsSnapshot.docs) {
                 const debt = { id: debtDoc.id, ...debtDoc.data() } as Debt;
                 const paidAmount = debt.paidAmountUSD || debt.amountUSD;
-                
                 const adjustmentKey = `${debt.ownerId}-${debt.year}-${debt.month}`;
                 if (paidAmount < newCondoFee && !existingAdjustments.has(adjustmentKey)) {
                     const difference = newCondoFee - paidAmount;
@@ -372,7 +372,7 @@ export default function SettingsPage() {
                     });
                     adjustmentsCreated++;
                 }
-            });
+            }
 
             if (adjustmentsCreated > 0) {
                 await batch.commit();
@@ -643,4 +643,6 @@ export default function SettingsPage() {
         </div>
     );
 }
+    
+
     
