@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, Info, Calculator, Minus, Equal, Check, Receipt } from 'lucide-react';
+import { Loader2, Info, Calculator, Minus, Equal, Check, Receipt, ArrowLeft } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { collection, query, onSnapshot, where, doc, getDoc, writeBatch, Timestamp, addDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -217,6 +217,10 @@ export default function OwnerPaymentCalculatorPage() {
     
     return (
         <div className="space-y-6">
+            <Button variant="outline" onClick={() => router.back()} className="mb-4">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Atrás
+            </Button>
             <div>
                 <h1 className="text-3xl font-bold font-headline">Calculadora de Pagos</h1>
                 <p className="text-muted-foreground">Seleccione las deudas que desea pagar para calcular el monto total.</p>
