@@ -10,12 +10,13 @@ import { useToast } from '@/hooks/use-toast';
 import { collection, onSnapshot, doc, runTransaction, query, orderBy, Timestamp, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
-import { Loader2, CheckSquare, Vote, BarChart3, Users, Lock, Timer, Play, CalendarOff } from 'lucide-react';
+import { Loader2, CheckSquare, Vote, BarChart3, Users, Lock, Timer, Play, CalendarOff, ArrowLeft } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { useRouter } from 'next/navigation';
 
 type SurveyQuestion = {
     id: string;
@@ -65,6 +66,7 @@ const getSurveyStatus = (survey: Survey): { status: 'Programada' | 'Activa' | 'C
 export default function OwnerSurveysPage() {
     const { user, loading: authLoading } = useAuth();
     const { toast } = useToast();
+    const router = useRouter();
 
     const [surveys, setSurveys] = useState<Survey[]>([]);
     const [userVotes, setUserVotes] = useState<{ [key: string]: SurveyResponse }>( // surveyId -> SurveyResponse
@@ -171,6 +173,10 @@ export default function OwnerSurveysPage() {
 
     return (
         <div className="space-y-8">
+            <Button variant="outline" onClick={() => router.back()} className="mb-4">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Atrás
+            </Button>
             <div>
                 <h1 className="text-3xl font-bold font-headline">Encuestas y Votaciones</h1>
                 <p className="text-muted-foreground">Participa en las decisiones de la comunidad.</p>

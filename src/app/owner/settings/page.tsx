@@ -170,7 +170,7 @@ export default function OwnerSettingsPage() {
                 <CardContent className="space-y-6">
                     <div className="flex items-center gap-6">
                         <Avatar className="w-24 h-24 text-lg">
-                            <AvatarImage src={avatarPreview || ''} alt="User Avatar" />
+                            <AvatarImage src={avatarPreview || undefined} alt="User Avatar" />
                             <AvatarFallback><UserCircle className="h-12 w-12"/></AvatarFallback>
                         </Avatar>
                         <div className="space-y-2">

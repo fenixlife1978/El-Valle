@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
-import { Loader2, Search, Info, Calculator, Minus, Equal, Check, Receipt } from 'lucide-react';
+import { Loader2, Search, Info, Calculator, Minus, Equal, Check, Receipt, ArrowLeft } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { collection, query, onSnapshot, where, doc, getDoc, getDocs, writeBatch, Timestamp, orderBy, addDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -18,6 +18,7 @@ import { Label } from '@/components/ui/label';
 import { format, addMonths, isBefore, startOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Badge } from '@/components/ui/badge';
+import { useRouter } from 'next/navigation';
 
 
 type Owner = {
@@ -75,6 +76,7 @@ export default function PaymentCalculatorPage() {
     const [paymentDetails, setPaymentDetails] = useState<PaymentDetails>({ paymentMethod: '', bank: '', otherBank: '', reference: '' });
 
     const { toast } = useToast();
+    const router = useRouter();
 
     useEffect(() => {
         const fetchPrerequisites = async () => {
@@ -291,6 +293,10 @@ export default function PaymentCalculatorPage() {
     
     return (
         <div className="space-y-4">
+            <Button variant="outline" onClick={() => router.back()} className="mb-4">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Atrás
+            </Button>
             <div>
                 <h1 className="text-3xl font-bold font-headline">Calculadora de Pagos</h1>
                 <p className="text-muted-foreground">Calcule y registre pagos de deudas pendientes y adelantos de cuotas.</p>
