@@ -18,7 +18,7 @@ function LoginContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { toast } = useToast();
-    const { user, role: userRoleFromHook } = useAuth();
+    const { user, role: userRoleFromHook, loading: authLoading } = useAuth();
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -31,9 +31,21 @@ function LoginContent() {
         if (roleParam === 'admin' || roleParam === 'owner') {
             setRole(roleParam);
         } else {
-            router.push('/welcome');
+            // If no role, wait for auth to load, then decide.
+            if (!authLoading && !user) {
+                router.push('/welcome');
+            }
         }
-    }, [searchParams, router]);
+    }, [searchParams, router, authLoading, user]);
+
+    // This effect handles redirection AFTER a successful login
+    useEffect(() => {
+        if (!authLoading && user && userRoleFromHook) {
+             const targetDashboard = userRoleFromHook === 'admin' ? '/admin/dashboard' : '/owner/dashboard';
+             router.push(targetDashboard);
+        }
+    }, [authLoading, user, userRoleFromHook, router]);
+
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -55,9 +67,8 @@ function LoginContent() {
                 description: 'Bienvenido de nuevo. Redirigiendo...',
                 className: 'bg-green-100 border-green-400 text-green-800'
             });
-
-            // Redirect to root, middleware will handle the rest
-             router.push('/');
+            // The useEffect above will handle the redirection.
+            // No need for router.push or window.location here.
 
         } catch (error: any) {
             console.error("Login error:", error);
@@ -70,16 +81,28 @@ function LoginContent() {
                 title: 'Error al iniciar sesión',
                 description: description,
             });
-             setLoading(false);
+        } finally {
+            setLoading(false);
         }
     };
-
-    if (!role) {
+    
+    // While determining role from URL, show a loader
+    if (!role && !user) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-background">
                 <Loader2 className="h-8 w-8 animate-spin" />
             </div>
         );
+    }
+    
+    // If auth is loading, or user is logged in but role isn't determined yet, show loader.
+    if (authLoading || (user && !userRoleFromHook)) {
+        return (
+             <div className="min-h-screen flex items-center justify-center bg-background">
+                <Loader2 className="h-8 w-8 animate-spin" />
+                <p className="ml-2">Verificando sesión...</p>
+            </div>
+        )
     }
 
     return (

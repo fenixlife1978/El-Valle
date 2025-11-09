@@ -59,12 +59,16 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     const router = useRouter();
 
     useEffect(() => {
-        if (!loading && (!user || role !== 'administrador')) {
-            router.push('/login?role=admin');
+        if (!loading) {
+            if (!user) {
+                router.push('/login?role=admin');
+            } else if (role && role !== 'administrador') {
+                router.push('/owner/dashboard');
+            }
         }
     }, [loading, user, role, router]);
 
-    if (loading || !user || role !== 'administrador') {
+    if (loading || !user || !role) {
         return (
             <div className="flex h-screen w-full items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin" />

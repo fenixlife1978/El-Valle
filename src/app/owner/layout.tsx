@@ -47,20 +47,16 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
     const pathname = usePathname();
 
     useEffect(() => {
-        if (loading) {
-            return; 
-        }
-        if (!user) {
-            router.push('/login?role=owner');
-            return;
-        }
-        if (role && role !== 'owner') {
-            router.push('/admin/dashboard'); 
-            return;
+        if (!loading) {
+            if (!user) {
+                router.push('/login?role=owner');
+            } else if (role && role !== 'owner') {
+                router.push('/admin/dashboard');
+            }
         }
     }, [loading, user, role, router]);
 
-    if (loading || !user) {
+    if (loading || !user || !role) {
         return (
             <div className="flex h-screen w-full items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin" />
