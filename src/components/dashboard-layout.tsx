@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Building2, LogOut, type LucideIcon, ChevronDown, Bell, Check } from 'lucide-react';
 import * as React from 'react';
-import { doc, onSnapshot, collection, query, where, updateDoc, writeBatch } from 'firebase/firestore';
+import { doc, onSnapshot, collection, query, where, updateDoc, writeBatch, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { format, formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
