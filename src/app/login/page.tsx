@@ -31,14 +31,15 @@ function LoginContent() {
         if (roleParam === 'admin' || roleParam === 'owner') {
             setRole(roleParam);
         } else {
+             // If no role, and not already logged in, go to welcome
             if (!authLoading && !user) {
                 router.push('/welcome');
             }
         }
     }, [searchParams, router, authLoading, user]);
 
-    // This effect handles redirection AFTER a successful login
     useEffect(() => {
+        // This effect will run when auth state changes. If user is logged in, redirect them.
         if (!authLoading && user && userRoleFromHook) {
              const targetDashboard = userRoleFromHook === 'admin' ? '/admin/dashboard' : '/owner/dashboard';
              router.push(targetDashboard);
@@ -66,7 +67,7 @@ function LoginContent() {
                 description: 'Bienvenido de nuevo. Redirigiendo...',
                 className: 'bg-green-100 border-green-400 text-green-800'
             });
-            // The useEffect above will handle the redirection once the user and role are loaded.
+            // NO navigation here. The useEffect above will handle it when the auth state is confirmed.
             
         } catch (error: any) {
             console.error("Login error:", error);
@@ -84,23 +85,13 @@ function LoginContent() {
         }
     };
     
-    // While determining role from URL, show a loader
-    if (!role && !user) {
+    // Show a loader while the role is being determined from the URL or auth state is loading
+    if (authLoading || !role) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-background">
                 <Loader2 className="h-8 w-8 animate-spin" />
             </div>
         );
-    }
-    
-    // If auth is loading, or user is logged in but role isn't determined yet, show loader.
-    if (authLoading || (user && !userRoleFromHook)) {
-        return (
-             <div className="min-h-screen flex items-center justify-center bg-background">
-                <Loader2 className="h-8 w-8 animate-spin" />
-                <p className="ml-2">Verificando sesión...</p>
-            </div>
-        )
     }
 
     return (

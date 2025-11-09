@@ -1,4 +1,6 @@
 
+'use client';
+
 import { useState, useEffect } from 'react';
 import { getAuth, onAuthStateChanged, User } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
@@ -11,8 +13,10 @@ const ADMIN_USER_ID = 'valle-admin-main-account';
 export function useAuth() {
     const [user, setUser] = useState<User | null>(null);
     const [ownerData, setOwnerData] = useState<any | null>(null);
-    const [role, setRole] = useState<string | null>(Cookies.get('user-role') || null);
+    const [role, setRole] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
+    const router = useRouter();
+    const pathname = usePathname();
 
     useEffect(() => {
         const auth = getAuth();
