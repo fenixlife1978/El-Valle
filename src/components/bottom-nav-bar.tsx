@@ -23,6 +23,7 @@ export function BottomNavBar({ items, pathname }: { items: BottomNavItem[], path
             <Link
               href={item.href}
               key={item.href}
+              prefetch={true}
               className="-mt-8 flex h-16 w-16 flex-col items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg"
             >
               <item.icon className="h-8 w-8" />
@@ -34,6 +35,7 @@ export function BottomNavBar({ items, pathname }: { items: BottomNavItem[], path
           <Link
             href={item.href}
             key={item.href}
+            prefetch={true}
             className={cn(
               'flex flex-col items-center justify-center gap-1 rounded-md p-2 text-sm font-medium',
               isActive ? 'text-primary' : 'text-muted-foreground'
