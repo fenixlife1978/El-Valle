@@ -3,7 +3,7 @@
 
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, onSnapshot, getDoc } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { useToast } from './use-toast';
 import { db, auth } from '@/lib/firebase';
 import { ensureOwnerProfile } from '@/lib/user-sync';
@@ -70,8 +70,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 setLoading(false);
             }
             
-            // This is the cleanup function that will be called when the user logs out
-            // or the component unmounts. It correctly unsubscribes from the Firestore listener.
             return () => {
                 if (ownerUnsubscribe) {
                     ownerUnsubscribe();
