@@ -171,12 +171,10 @@ export default function DebtManagementPage() {
     // Fetch All Owners and initial data
     useEffect(() => {
         setLoading(true);
-        const firestore = db();
-        const { toast: toastFn } = { toast };
 
         const fetchInitialSettings = async () => {
              try {
-                const settingsRef = doc(firestore, 'config', 'mainSettings');
+                const settingsRef = doc(db(), 'config', 'mainSettings');
                 const settingsSnap = await getDoc(settingsRef);
                 if (settingsSnap.exists()) {
                     const settings = settingsSnap.data();
@@ -193,11 +191,11 @@ export default function DebtManagementPage() {
                 }
             } catch (error) {
                 console.error("Error fetching settings:", error);
-                toastFn({ variant: 'destructive', title: 'Error de Carga', description: 'No se pudieron cargar datos críticos.' });
+                toast({ variant: 'destructive', title: 'Error de Carga', description: 'No se pudieron cargar datos críticos.' });
             }
         };
 
-        const ownersQuery = query(collection(firestore, "owners"));
+        const ownersQuery = query(collection(db(), "owners"));
         const ownersUnsubscribe = onSnapshot(ownersQuery, async (snapshot) => {
             let ownersData: Owner[] = snapshot.docs.map(doc => {
                 const data = doc.data();
@@ -223,7 +221,7 @@ export default function DebtManagementPage() {
             setLoading(false);
         }, (error) => {
             console.error("Error fetching owners:", error);
-            toastFn({ variant: 'destructive', title: 'Error de Carga', description: 'No se pudieron cargar los propietarios.' });
+            toast({ variant: 'destructive', title: 'Error de Carga', description: 'No se pudieron cargar los propietarios.' });
             setLoading(false);
         });
         
@@ -236,7 +234,6 @@ export default function DebtManagementPage() {
     // REAL-TIME DEBT LISTENER
     useEffect(() => {
         const firestore = db();
-        const { toast: toastFn } = { toast };
         const debtsQuery = query(collection(firestore, "debts"), where("status", "==", "pending"));
         
         const unsubscribe = onSnapshot(debtsQuery, (snapshot) => {
@@ -264,7 +261,7 @@ export default function DebtManagementPage() {
 
         }, (error) => {
             console.error("Error listening to debts:", error);
-            toastFn({ variant: 'destructive', title: 'Error de Sincronización', description: 'No se pudo actualizar el estado de las deudas en tiempo real.' });
+            toast({ variant: 'destructive', title: 'Error de Sincronización', description: 'No se pudo actualizar el estado de las deudas en tiempo real.' });
         });
 
         return () => unsubscribe();
@@ -628,11 +625,11 @@ export default function DebtManagementPage() {
         const firestore = db();
     
         try {
-            const ownerRef = doc(firestore, "owners", selectedOwner.id);
-            const debtRef = doc(firestore, "debts", debtToDelete.id);
-    
             await runTransaction(firestore, async (transaction) => {
                 // --- 1. All reads first ---
+                const ownerRef = doc(firestore, "owners", selectedOwner.id);
+                const debtRef = doc(firestore, "debts", debtToDelete.id);
+
                 const ownerDoc = await transaction.get(ownerRef);
                 if (!ownerDoc.exists()) {
                     throw "El documento del propietario no existe.";
