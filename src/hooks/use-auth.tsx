@@ -5,9 +5,8 @@ import { useState, useEffect, createContext, useContext, ReactNode } from 'react
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '@/lib/firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
-import { ensureOwnerProfile } from '@/lib/user-sync';
 import { useToast } from './use-toast';
-import { User } from 'firebase/auth';
+import { User, onAuthStateChanged } from 'firebase/auth';
 
 type CompanyInfo = {
     name: string;
@@ -34,7 +33,7 @@ type AuthContextType = {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-    const [firebaseUser, authLoading] = useAuthState(auth);
+    const [user, setUser] = useState<User | null>(null);
     const [ownerData, setOwnerData] = useState<any | null>(null);
     const [role, setRole] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
@@ -46,36 +45,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { toast } = useToast();
 
     useEffect(() => {
-        const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                try {
-                    await ensureOwnerProfile(user, toast);
-                    const ownerRef = doc(db, 'owners', user.uid);
-                    
-                    const unsubscribeProfile = onSnapshot(ownerRef, (snapshot) => {
-                        if (snapshot.exists()) {
-                            const data = snapshot.data();
-                            setOwnerData({ id: snapshot.id, ...data });
-                            setRole(data.role || 'propietario');
-                        } else {
-                            setOwnerData(null);
-                            setRole(null);
-                        }
-                         setLoading(false);
-                    }, (error) => {
-                        console.error("Error listening to owner profile:", error);
+        const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
+            setUser(firebaseUser);
+            if (firebaseUser) {
+                const ownerRef = doc(db, 'owners', firebaseUser.uid);
+                const unsubscribeProfile = onSnapshot(ownerRef, (snapshot) => {
+                    if (snapshot.exists()) {
+                        const data = snapshot.data();
+                        setOwnerData({ id: snapshot.id, ...data });
+                        setRole(data.role || 'propietario');
+                    } else {
                         setOwnerData(null);
                         setRole(null);
-                        setLoading(false);
-                    });
-                     // We don't return unsubscribeProfile here because onAuthStateChanged listener is the main one.
-                } catch (error) {
-                    console.error("Error ensuring owner profile:", error);
-                    toast({ variant: 'destructive', title: 'Error de Sincronización', description: 'No se pudo sincronizar tu perfil.' });
-                    setOwnerData(null);
-                    setRole(null);
+                    }
                     setLoading(false);
-                }
+                }, (error) => {
+                    console.error("Error listening to owner profile:", error);
+                    setLoading(false);
+                });
+                // Note: We are not returning unsubscribeProfile here as it's managed by the component lifecycle
             } else {
                 setOwnerData(null);
                 setRole(null);
@@ -108,11 +96,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             unsubscribeAuth();
             unsubscribeSettings();
         };
-    }, [toast]);
+    }, []);
 
 
     const value = {
-        user: firebaseUser,
+        user,
         ownerData,
         role,
         loading,

@@ -8,6 +8,9 @@ import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from '@/components/theme-provider';
 import { AuthProvider, useAuth } from '@/hooks/use-auth';
 import { Loader2 } from 'lucide-react';
+import { ensureOwnerProfile } from '@/lib/user-sync';
+import { useToast } from '@/hooks/use-toast';
+
 
 const publicPaths = ['/welcome', '/login', '/forgot-password'];
 
@@ -15,18 +18,23 @@ function AuthGuard({ children }: { children: ReactNode }) {
   const { user, role, loading } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
+  const { toast } = useToast();
 
   useEffect(() => {
     if (loading) return; // Wait until loading is finished
 
     const isPublic = publicPaths.some(path => pathname.startsWith(path));
     
-    if (user && role) {
-      // User is logged in
-      if (isPublic) {
-        // If on a public page, redirect to the correct dashboard
-        router.replace(role === 'administrador' ? '/admin/dashboard' : '/owner/dashboard');
-      }
+    if (user) {
+      // User is logged in, ensure profile exists
+      ensureOwnerProfile(user, toast).then(() => {
+          if (role) {
+            if (isPublic) {
+              // If on a public page, redirect to the correct dashboard
+              router.replace(role === 'administrador' ? '/admin/dashboard' : '/owner/dashboard');
+            }
+          }
+      });
     } else {
       // User is not logged in
       if (!isPublic) {
@@ -35,7 +43,7 @@ function AuthGuard({ children }: { children: ReactNode }) {
       }
     }
 
-  }, [user, role, loading, pathname, router]);
+  }, [user, role, loading, pathname, router, toast]);
 
   if (loading) {
     return (
