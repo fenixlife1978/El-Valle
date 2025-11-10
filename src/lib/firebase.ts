@@ -1,4 +1,3 @@
-
 import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
 import { getFirestore, type Firestore } from 'firebase/firestore';
 import { getStorage, type FirebaseStorage } from 'firebase/storage';
@@ -13,51 +12,42 @@ const firebaseConfig = {
   "messagingSenderId": "630518792088"
 };
 
+// Singleton pattern to ensure only one instance is created
 let app: FirebaseApp;
-let auth: Auth;
-let db: Firestore;
-let storage: FirebaseStorage;
+let authInstance: Auth;
+let dbInstance: Firestore;
+let storageInstance: FirebaseStorage;
 
-if (typeof window !== 'undefined' && !getApps().length) {
-    app = initializeApp(firebaseConfig);
-    auth = getAuth(app);
-    db = getFirestore(app);
-    storage = getStorage(app);
-} else if (getApps().length > 0) {
-    app = getApp();
-    auth = getAuth(app);
-    db = getFirestore(app);
-    storage = getStorage(app);
+function initializeFirebase() {
+    if (!getApps().length) {
+        app = initializeApp(firebaseConfig);
+    } else {
+        app = getApp();
+    }
+    authInstance = getAuth(app);
+    dbInstance = getFirestore(app);
+    storageInstance = getStorage(app);
 }
 
-// Functions to get instances, ensuring they are initialized
-const getAppInstance = (): FirebaseApp => {
-    if (!app) {
-        app = getApps().length ? getApp() : initializeApp(firebaseConfig);
-    }
-    return app;
+// Ensure Firebase is initialized
+if (typeof window !== 'undefined') {
+    initializeFirebase();
+}
+
+// Export functions that return the instances
+export const db = (): Firestore => {
+    if (!dbInstance) initializeFirebase();
+    return dbInstance;
 };
 
-const getAuthInstance = (): Auth => {
-    if (!auth) {
-        auth = getAuth(getAppInstance());
-    }
-    return auth;
+export const auth = (): Auth => {
+    if (!authInstance) initializeFirebase();
+    return authInstance;
 };
 
-const getDb = (): Firestore => {
-    if (!db) {
-        db = getFirestore(getAppInstance());
-    }
-    return db;
+export const storage = (): FirebaseStorage => {
+    if (!storageInstance) initializeFirebase();
+    return storageInstance;
 };
 
-const getStorageInstance = (): FirebaseStorage => {
-    if (!storage) {
-        storage = getStorage(getAppInstance());
-    }
-    return storage;
-};
-
-
-export { getAppInstance as app, getAuthInstance as auth, getDb as db, getStorageInstance as storage };
+    

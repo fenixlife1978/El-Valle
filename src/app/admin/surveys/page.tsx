@@ -216,6 +216,7 @@ export default function SurveysPage() {
         }
         
         setIsSubmitting(true);
+        const firestore = db();
         try {
             const finalQuestions = questions.map(q => ({
                 id: q.id,
@@ -224,7 +225,7 @@ export default function SurveysPage() {
             }));
 
             if (isEditing && editingSurveyId) {
-                const surveyRef = doc(db(), 'surveys', editingSurveyId);
+                const surveyRef = doc(firestore, 'surveys', editingSurveyId);
                 await updateDoc(surveyRef, {
                     title,
                     questions: finalQuestions.map(q => ({id: q.id, questionText: q.questionText, options: q.options.map(o => o.text) })), // Store as string array
@@ -241,7 +242,7 @@ export default function SurveysPage() {
                     }, {} as { [key: string]: number });
                 });
 
-                const surveyRef = await addDoc(collection(db(), 'surveys'), {
+                const surveyRef = await addDoc(collection(firestore, 'surveys'), {
                     title,
                     questions: finalQuestions.map(q => ({id: q.id, questionText: q.questionText, options: q.options.map(o => o.text) })),
                     createdAt: serverTimestamp(),
@@ -251,10 +252,10 @@ export default function SurveysPage() {
                     totalVotes: 0,
                 });
                  // Notify all owners
-                const ownersSnapshot = await getDocs(query(collection(db(), 'owners'), where('role', '==', 'propietario')));
-                const batch = writeBatch(db());
+                const ownersSnapshot = await getDocs(query(collection(firestore, 'owners'), where('role', '==', 'propietario')));
+                const batch = writeBatch(firestore);
                 ownersSnapshot.forEach(ownerDoc => {
-                    const notificationsRef = doc(collection(db(), `owners/${ownerDoc.id}/notifications`));
+                    const notificationsRef = doc(collection(firestore, `owners/${ownerDoc.id}/notifications`));
                     batch.set(notificationsRef, {
                         title: 'Nueva Encuesta Disponible',
                         body: `Participa en la encuesta: "${title}"`,
@@ -503,3 +504,5 @@ export default function SurveysPage() {
         </div>
     );
 }
+
+    

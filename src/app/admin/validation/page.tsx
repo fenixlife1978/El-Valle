@@ -48,12 +48,13 @@ export default function ValidationPage() {
     };
 
     const markOverdue = async () => {
-        const debtsRef = collection(db(), "debts");
+        const firestore = db();
+        const debtsRef = collection(firestore, "debts");
         const q = query(debtsRef, where("status", "==", "pending"));
         const querySnapshot = await getDocs(q);
         if (querySnapshot.empty) return "No hay cuotas pendientes para revisar.";
         
-        const batch = writeBatch(db());
+        const batch = writeBatch(firestore);
         let updatedCount = 0;
         const firstOfCurrentMonth = startOfMonth(new Date());
 
@@ -81,16 +82,16 @@ export default function ValidationPage() {
 
     const revertPayment = async () => {
         if (!revertPaymentId) throw new Error("Debe proporcionar un ID de pago.");
-        
-        const paymentRef = doc(db(), "payments", revertPaymentId);
+        const firestore = db();
+        const paymentRef = doc(firestore, "payments", revertPaymentId);
         const paymentSnap = await getDoc(paymentRef);
         if (!paymentSnap.exists()) throw new Error("El documento de pago no fue encontrado.");
 
         const paymentData = paymentSnap.data();
-        const batch = writeBatch(db());
+        const batch = writeBatch(firestore);
 
         // Find associated debts and revert them
-        const debtsQuery = query(collection(db(), "debts"), where("paymentId", "==", revertPaymentId));
+        const debtsQuery = query(collection(firestore, "debts"), where("paymentId", "==", revertPaymentId));
         const debtsSnapshot = await getDocs(debtsQuery);
         debtsSnapshot.forEach(debtDoc => {
             batch.update(debtDoc.ref, { status: 'pending', paymentId: null, paidAmountUSD: null, paymentDate: null });
@@ -99,7 +100,7 @@ export default function ValidationPage() {
         // Revert owner's balance
         const ownerId = paymentData.beneficiaries[0]?.ownerId;
         if(ownerId) {
-            const ownerRef = doc(db(), "owners", ownerId);
+            const ownerRef = doc(firestore, "owners", ownerId);
             const ownerSnap = await getDoc(ownerRef);
             if(ownerSnap.exists()) {
                 const ownerData = ownerSnap.data();
@@ -124,11 +125,12 @@ export default function ValidationPage() {
         const { paymentId, debtId } = correctDateIds;
         if (!paymentId || !debtId || !newPaymentDate) throw new Error("Complete todos los campos de ID y fecha.");
 
-        const paymentRef = doc(db(), "payments", paymentId);
-        const debtRef = doc(db(), "debts", debtId);
+        const firestore = db();
+        const paymentRef = doc(firestore, "payments", paymentId);
+        const debtRef = doc(firestore, "debts", debtId);
         const newTimestamp = Timestamp.fromDate(newPaymentDate);
 
-        const batch = writeBatch(db());
+        const batch = writeBatch(firestore);
         batch.update(paymentRef, { paymentDate: newTimestamp });
         batch.update(debtRef, { paymentDate: newTimestamp });
         
@@ -308,3 +310,5 @@ export default function ValidationPage() {
         </div>
     );
 }
+
+    
