@@ -15,7 +15,7 @@ function WelcomePageContent() {
   useEffect(() => {
     async function fetchLogo() {
       try {
-        const settingsRef = doc(db, 'config', 'mainSettings');
+        const settingsRef = doc(db(), 'config', 'mainSettings');
         const docSnap = await getDoc(settingsRef);
         if (docSnap.exists()) {
           const settings = docSnap.data();
