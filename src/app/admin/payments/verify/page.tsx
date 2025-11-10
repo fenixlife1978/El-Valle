@@ -526,24 +526,22 @@ export default function VerifyPaymentsPage() {
 
     if (action === 'download') {
       pdfDoc.save(`recibo_${receiptNumber}.pdf`);
-    } else if (action === 'share' && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
-      try {
-        await navigator.share({
-          title: `Recibo de Pago ${receiptNumber}`,
-          text: `Adjunto el recibo de pago para ${data.ownerName}.`,
-          files: [pdfFile],
-        });
-      } catch (error) {
-        console.error('Error al compartir:', error);
-        // Fallback for when sharing fails
+    } else if (navigator.share && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+        try {
+          await navigator.share({
+            title: `Recibo de Pago ${receiptNumber}`,
+            text: `Adjunto el recibo de pago para ${data.ownerName}.`,
+            files: [pdfFile],
+          });
+        } catch (error) {
+          console.error('Error al compartir:', error);
+          const url = URL.createObjectURL(pdfFile);
+          window.open(url, '_blank');
+        }
+      } else {
         const url = URL.createObjectURL(pdfFile);
         window.open(url, '_blank');
       }
-    } else {
-      // Fallback for desktop or non-compatible browsers
-      const url = URL.createObjectURL(pdfFile);
-      window.open(url, '_blank');
-    }
   }
 
 
@@ -850,4 +848,5 @@ export default function VerifyPaymentsPage() {
     
 
     
+
 
