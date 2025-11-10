@@ -3,7 +3,7 @@
 
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot, getDoc } from 'firebase/firestore';
 import { useToast } from './use-toast';
 import { db, auth } from '@/lib/firebase';
 import { ensureOwnerProfile } from '@/lib/user-sync';
@@ -46,42 +46,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     useEffect(() => {
         const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
-            try {
-                if (firebaseUser) {
-                    setUser(firebaseUser);
-                    await ensureOwnerProfile(firebaseUser, toast); // Ensure profile exists or is linked
+            let ownerUnsubscribe: (() => void) | undefined;
+            if (firebaseUser) {
+                setUser(firebaseUser);
+                await ensureOwnerProfile(firebaseUser, toast);
 
-                    const ownerRef = doc(db, 'owners', firebaseUser.uid);
-                    const ownerUnsubscribe = onSnapshot(ownerRef, (snapshot) => {
-                        if (snapshot.exists()) {
-                            const data = snapshot.data();
-                            setOwnerData({ id: snapshot.id, ...data });
-                            setRole(data.role || 'propietario');
-                        } else {
-                            // This might happen briefly during profile linking
-                            setOwnerData(null);
-                            setRole(null);
-                        }
-                    });
-                    
-                    // Do not set loading to false here, wait for settings
-                    return () => ownerUnsubscribe(); // Cleanup owner listener
-                } else {
-                    setUser(null);
-                    setOwnerData(null);
-                    setRole(null);
-                    // If no user, we still need to load settings before we stop loading
-                }
-            } catch (error) {
-                console.error("Auth process error:", error);
-                toast({ variant: 'destructive', title: 'Error de Autenticación', description: 'No se pudo procesar la sesión.' });
+                const ownerRef = doc(db, 'owners', firebaseUser.uid);
+                ownerUnsubscribe = onSnapshot(ownerRef, (snapshot) => {
+                    if (snapshot.exists()) {
+                        const data = snapshot.data();
+                        setOwnerData({ id: snapshot.id, ...data });
+                        setRole(data.role || 'propietario');
+                    } else {
+                        setOwnerData(null);
+                        setRole(null);
+                    }
+                    setLoading(false); 
+                });
+            } else {
                 setUser(null);
                 setOwnerData(null);
                 setRole(null);
+                setLoading(false);
             }
+            
+            // This is the cleanup function that will be called when the user logs out
+            // or the component unmounts. It correctly unsubscribes from the Firestore listener.
+            return () => {
+                if (ownerUnsubscribe) {
+                    ownerUnsubscribe();
+                }
+            };
         });
 
-        // Settings listener
         const settingsRef = doc(db, 'config', 'mainSettings');
         const settingsUnsubscribe = onSnapshot(settingsRef, 
             (docSnap) => {
@@ -97,11 +94,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     }
                     setActiveRate(currentActiveRate);
                 }
-                setLoading(false); // FINALLY, set loading to false after auth check AND settings load
             },
             (error) => {
                 console.error("Error fetching settings:", error);
-                setLoading(false); // Also stop loading on error
             }
         );
 
