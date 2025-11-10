@@ -10,7 +10,6 @@ import { ThemeProvider } from '@/components/theme-provider';
 import { AuthProvider, useAuth } from '@/hooks/use-auth';
 import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { ensureOwnerProfile } from '@/lib/user-sync';
 
 
 const publicPaths = ['/welcome', '/login', '/forgot-password'];
