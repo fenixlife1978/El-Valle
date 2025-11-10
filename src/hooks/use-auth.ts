@@ -37,36 +37,6 @@ export function useAuth() {
     useEffect(() => {
         let settingsUnsubscribe: (() => void) | undefined;
     
-        try {
-            const settingsRef = doc(db, 'config', 'mainSettings');
-            settingsUnsubscribe = onSnapshot(settingsRef, 
-                (docSnap) => {
-                    if (docSnap.exists()) {
-                        const settingsData = docSnap.data();
-                        setCompanyInfo(settingsData.companyInfo as CompanyInfo);
-                        setBcvLogoUrl(settingsData.bcvLogo || null);
-    
-                        const rates: ExchangeRate[] = settingsData.exchangeRates || [];
-                        let currentActiveRate = rates.find(r => r.active) || null;
-                        if (!currentActiveRate && rates.length > 0) {
-                            currentActiveRate = [...rates].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
-                        }
-                        setActiveRate(currentActiveRate);
-                    }
-                },
-                (error) => {
-                    console.error("Error fetching settings:", error);
-                    toast({
-                        variant: 'destructive',
-                        title: 'Error de Configuración',
-                        description: 'No se pudo cargar la configuración de la aplicación.'
-                    });
-                }
-            );
-        } catch (error) {
-            console.error("Error setting up settings listener:", error);
-        }
-
         const authUnsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
             try {
                 if (firebaseUser) {
@@ -122,6 +92,31 @@ export function useAuth() {
                 setLoading(false);
             }
         });
+        
+        try {
+            const settingsRef = doc(db, 'config', 'mainSettings');
+            settingsUnsubscribe = onSnapshot(settingsRef, 
+                (docSnap) => {
+                    if (docSnap.exists()) {
+                        const settingsData = docSnap.data();
+                        setCompanyInfo(settingsData.companyInfo as CompanyInfo);
+                        setBcvLogoUrl(settingsData.bcvLogo || null);
+    
+                        const rates: ExchangeRate[] = settingsData.exchangeRates || [];
+                        let currentActiveRate = rates.find(r => r.active) || null;
+                        if (!currentActiveRate && rates.length > 0) {
+                            currentActiveRate = [...rates].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+                        }
+                        setActiveRate(currentActiveRate);
+                    }
+                },
+                (error) => {
+                    console.error("Error fetching settings:", error);
+                }
+            );
+        } catch (error) {
+            console.error("Error setting up settings listener:", error);
+        }
 
         return () => {
             authUnsubscribe();

@@ -13,16 +13,27 @@ const firebaseConfig = {
   "messagingSenderId": "630518792088"
 };
 
+let app: FirebaseApp;
+let auth: Auth;
+let db: Firestore;
+let storage: FirebaseStorage;
 
-// Correct Singleton pattern for Firebase initialization in Next.js
-const getFirebaseApp = (): FirebaseApp => {
-    return !getApps().length ? initializeApp(firebaseConfig) : getApp();
-};
+function initializeFirebase() {
+    if (!getApps().length) {
+        app = initializeApp(firebaseConfig);
+    } else {
+        app = getApp();
+    }
+    auth = getAuth(app);
+    db = getFirestore(app);
+    storage = getStorage(app);
+}
 
-const app = getFirebaseApp();
-const auth = getAuth(app);
-const db = getFirestore(app);
-const storage = getStorage(app);
+// Call initialization
+initializeFirebase();
 
-// Export the initialized instances
-export { app, db, auth, storage };
+const getDB = () => db;
+const getAuthInstance = () => auth;
+const getStorageInstance = () => storage;
+
+export { app, getDB, getAuthInstance, getStorageInstance, auth, db, storage };
