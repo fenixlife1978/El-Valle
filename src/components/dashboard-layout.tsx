@@ -70,7 +70,7 @@ const BCVIcon = (props: React.ImgHTMLAttributes<HTMLImageElement> & {src?: strin
     }
 
     return (
-        <img src="data:image/png;base64,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" alt="Default BCV Logo" {...props} />
+        <img src="data:image/png;base64,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" alt="Default BCV Logo" {...props} />
     );
 };
 
@@ -131,7 +131,7 @@ const CustomHeader = ({ ownerData, userRole }: { ownerData: any, userRole: strin
 
     React.useEffect(() => {
         if (!ownerData?.id) return;
-        const q = query(collection(db, `owners/${ownerData.id}/notifications`), orderBy('createdAt', 'desc'));
+        const q = query(collection(db(), `owners/${ownerData.id}/notifications`), orderBy('createdAt', 'desc'));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const notifs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Notification));
             setNotifications(notifs);
@@ -143,16 +143,16 @@ const CustomHeader = ({ ownerData, userRole }: { ownerData: any, userRole: strin
 
     const handleMarkAllRead = async () => {
         if (!ownerData?.id) return;
-        const batch = writeBatch(db);
+        const batch = writeBatch(db());
         notifications.filter(n => !n.read).forEach(n => {
-            const notifRef = doc(db, `owners/${ownerData.id}/notifications/${n.id}`);
+            const notifRef = doc(db(), `owners/${ownerData.id}/notifications/${n.id}`);
             batch.update(notifRef, { read: true });
         });
         await batch.commit();
     };
 
     const handleLogout = async () => {
-        await signOut(auth);
+        await signOut(auth());
         router.push('/');
     };
 

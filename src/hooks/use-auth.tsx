@@ -5,7 +5,7 @@ import { useState, useEffect, createContext, useContext, ReactNode } from 'react
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { useToast } from './use-toast';
-import { auth, db } from '@/lib/firebase';
+import { db, auth } from '@/lib/firebase';
 import { ensureOwnerProfile } from '@/lib/user-sync';
 
 type CompanyInfo = {
@@ -46,38 +46,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     useEffect(() => {
         const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
-            if (firebaseUser) {
-                setUser(firebaseUser);
-                await ensureOwnerProfile(firebaseUser, toast);
+            try {
+                if (firebaseUser) {
+                    setUser(firebaseUser);
+                    await ensureOwnerProfile(firebaseUser, toast); // Ensure profile exists or is linked
 
-                const ownerRef = doc(db, 'owners', firebaseUser.uid);
-                const unsubscribeProfile = onSnapshot(ownerRef, (snapshot) => {
-                    if (snapshot.exists()) {
-                        const data = snapshot.data();
-                        setOwnerData({ id: snapshot.id, ...data });
-                        setRole(data.role || 'propietario');
-                    } else {
-                        // This case might happen briefly if profile creation is slow
-                        setOwnerData(null);
-                        setRole(null);
-                    }
-                    setLoading(false); // Finished loading after profile is checked
-                }, (error) => {
-                    console.error("Error listening to owner profile:", error);
-                    setLoading(false);
-                });
-                // This is a bit complex, but we need to manage this inner subscription
-                // For now, we'll let it detach when the auth state changes
-            } else {
+                    const ownerRef = doc(db, 'owners', firebaseUser.uid);
+                    const ownerUnsubscribe = onSnapshot(ownerRef, (snapshot) => {
+                        if (snapshot.exists()) {
+                            const data = snapshot.data();
+                            setOwnerData({ id: snapshot.id, ...data });
+                            setRole(data.role || 'propietario');
+                        } else {
+                            // This might happen briefly during profile linking
+                            setOwnerData(null);
+                            setRole(null);
+                        }
+                    });
+                    
+                    // Do not set loading to false here, wait for settings
+                    return () => ownerUnsubscribe(); // Cleanup owner listener
+                } else {
+                    setUser(null);
+                    setOwnerData(null);
+                    setRole(null);
+                    // If no user, we still need to load settings before we stop loading
+                }
+            } catch (error) {
+                console.error("Auth process error:", error);
+                toast({ variant: 'destructive', title: 'Error de Autenticación', description: 'No se pudo procesar la sesión.' });
                 setUser(null);
                 setOwnerData(null);
                 setRole(null);
-                setLoading(false);
             }
         });
 
+        // Settings listener
         const settingsRef = doc(db, 'config', 'mainSettings');
-        const unsubscribeSettings = onSnapshot(settingsRef, 
+        const settingsUnsubscribe = onSnapshot(settingsRef, 
             (docSnap) => {
                 if (docSnap.exists()) {
                     const settingsData = docSnap.data();
@@ -91,17 +97,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     }
                     setActiveRate(currentActiveRate);
                 }
+                setLoading(false); // FINALLY, set loading to false after auth check AND settings load
             },
             (error) => {
                 console.error("Error fetching settings:", error);
+                setLoading(false); // Also stop loading on error
             }
         );
 
         return () => {
             unsubscribeAuth();
-            unsubscribeSettings();
+            settingsUnsubscribe();
         };
-    }, [toast]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
 
     const value = {
