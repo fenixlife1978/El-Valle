@@ -14,29 +14,15 @@ const firebaseConfig = {
 };
 
 
-// Singleton pattern to initialize and get Firebase services
-let app: FirebaseApp;
-let auth: Auth;
-let db: Firestore;
-let storage: FirebaseStorage;
+// Correct Singleton pattern for Firebase initialization in Next.js
+const getFirebaseApp = (): FirebaseApp => {
+    return !getApps().length ? initializeApp(firebaseConfig) : getApp();
+};
 
+const app = getFirebaseApp();
+const auth = getAuth(app);
+const db = getFirestore(app);
+const storage = getStorage(app);
 
-function initializeFirebase() {
-    if (!getApps().length) {
-        app = initializeApp(firebaseConfig);
-        auth = getAuth(app);
-        db = getFirestore(app);
-        storage = getStorage(app);
-    } else {
-        app = getApp();
-        auth = getAuth(app);
-        db = getFirestore(app);
-        storage = getStorage(app);
-    }
-}
-
-// Initialize on module load
-initializeFirebase();
-
-// Export the instances
+// Export the initialized instances
 export { app, db, auth, storage };

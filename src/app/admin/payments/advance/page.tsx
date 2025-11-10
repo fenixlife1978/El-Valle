@@ -59,7 +59,7 @@ export default function AdvancePaymentPage() {
     }, [propertySplits, selectedMonths]);
 
     useEffect(() => {
-        const ownersQuery = query(collection(db(), "owners"));
+        const ownersQuery = query(collection(db, "owners"));
         const ownersUnsubscribe = onSnapshot(ownersQuery, (snapshot) => {
             const ownersData: Owner[] = snapshot.docs.map(doc => {
                 const data = doc.data();
@@ -141,13 +141,13 @@ export default function AdvancePaymentPage() {
         setLoading(true);
 
         try {
-            const batch = writeBatch(db());
+            const batch = writeBatch(db);
             const paymentDate = Timestamp.now();
             
             // Check for duplicates
              for (const split of propertySplits) {
                 const existingDebtsQuery = query(
-                    collection(db(), "debts"),
+                    collection(db, "debts"),
                     where("ownerId", "==", selectedOwner.id),
                     where("property.street", "==", split.property.street),
                     where("property.house", "==", split.property.house),
@@ -176,7 +176,7 @@ export default function AdvancePaymentPage() {
                 const [year, month] = monthStr.split('-').map(Number);
                 for (const split of propertySplits) {
                     const monthlyAmountNum = parseFloat(split.amount);
-                    const debtRef = doc(collection(db(), "debts"));
+                    const debtRef = doc(collection(db, "debts"));
                     batch.set(debtRef, {
                         ownerId: selectedOwner.id,
                         property: split.property,
@@ -192,7 +192,7 @@ export default function AdvancePaymentPage() {
             }
             
             // Create the main payment document with the total amount and beneficiaries
-            const paymentRef = doc(collection(db(), "payments"));
+            const paymentRef = doc(collection(db, "payments"));
             batch.set(paymentRef, {
                 reportedBy: selectedOwner.id, 
                 beneficiaries: propertySplits.map(split => ({
