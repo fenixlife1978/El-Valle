@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -82,7 +83,7 @@ export default function SurveysPage() {
     const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
     
     useEffect(() => {
-        const q = query(collection(db, "surveys"), orderBy("createdAt", "desc"));
+        const q = query(collection(db(), "surveys"), orderBy("createdAt", "desc"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const surveysData = snapshot.docs.map(doc => ({
                 id: doc.id,
@@ -223,7 +224,7 @@ export default function SurveysPage() {
             }));
 
             if (isEditing && editingSurveyId) {
-                const surveyRef = doc(db, 'surveys', editingSurveyId);
+                const surveyRef = doc(db(), 'surveys', editingSurveyId);
                 await updateDoc(surveyRef, {
                     title,
                     questions: finalQuestions.map(q => ({id: q.id, questionText: q.questionText, options: q.options.map(o => o.text) })), // Store as string array
@@ -240,7 +241,7 @@ export default function SurveysPage() {
                     }, {} as { [key: string]: number });
                 });
 
-                const surveyRef = await addDoc(collection(db, 'surveys'), {
+                const surveyRef = await addDoc(collection(db(), 'surveys'), {
                     title,
                     questions: finalQuestions.map(q => ({id: q.id, questionText: q.questionText, options: q.options.map(o => o.text) })),
                     createdAt: serverTimestamp(),
@@ -250,10 +251,10 @@ export default function SurveysPage() {
                     totalVotes: 0,
                 });
                  // Notify all owners
-                const ownersSnapshot = await getDocs(query(collection(db, 'owners'), where('role', '==', 'propietario')));
-                const batch = writeBatch(db);
+                const ownersSnapshot = await getDocs(query(collection(db(), 'owners'), where('role', '==', 'propietario')));
+                const batch = writeBatch(db());
                 ownersSnapshot.forEach(ownerDoc => {
-                    const notificationsRef = doc(collection(db, `owners/${ownerDoc.id}/notifications`));
+                    const notificationsRef = doc(collection(db(), `owners/${ownerDoc.id}/notifications`));
                     batch.set(notificationsRef, {
                         title: 'Nueva Encuesta Disponible',
                         body: `Participa en la encuesta: "${title}"`,
@@ -279,7 +280,7 @@ export default function SurveysPage() {
     const handleDeleteSurvey = async () => {
         if (!surveyToDelete) return;
         try {
-            await deleteDoc(doc(db, "surveys", surveyToDelete.id));
+            await deleteDoc(doc(db(), "surveys", surveyToDelete.id));
             toast({ title: 'Encuesta Eliminada' });
         } catch (error) {
             console.error("Error deleting survey:", error);

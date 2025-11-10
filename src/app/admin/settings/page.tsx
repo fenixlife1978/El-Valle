@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -120,7 +119,7 @@ export default function SettingsPage() {
 
 
     useEffect(() => {
-        const settingsRef = doc(db, 'config', 'mainSettings');
+        const settingsRef = doc(db(), 'config', 'mainSettings');
         const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
             if (docSnap.exists()) {
                 const settings = docSnap.data() as Settings;
@@ -205,7 +204,7 @@ export default function SettingsPage() {
         };
         
         try {
-            const settingsRef = doc(db, 'config', 'mainSettings');
+            const settingsRef = doc(db(), 'config', 'mainSettings');
             await updateDoc(settingsRef, {
                 exchangeRates: arrayUnion(newRate)
             });
@@ -222,7 +221,7 @@ export default function SettingsPage() {
         const updatedRates = exchangeRates.map(r => ({...r, active: r.id === rateToActivate.id }));
         
         try {
-            const settingsRef = doc(db, 'config', 'mainSettings');
+            const settingsRef = doc(db(), 'config', 'mainSettings');
             await updateDoc(settingsRef, { exchangeRates: updatedRates });
             toast({ title: 'Tasa Activada', description: `La tasa de ${rateToActivate.rate.toFixed(2)} ahora es la activa.` });
         } catch (error) {
@@ -250,7 +249,7 @@ export default function SettingsPage() {
         );
         
         try {
-            const settingsRef = doc(db, 'config', 'mainSettings');
+            const settingsRef = doc(db(), 'config', 'mainSettings');
             await updateDoc(settingsRef, { exchangeRates: updatedRates });
             toast({ title: 'Tasa Actualizada', description: 'La tasa de cambio ha sido modificada.' });
         } catch (error) {
@@ -278,7 +277,7 @@ export default function SettingsPage() {
         const newCondoFee = Number(condoFee);
     
         try {
-            const settingsRef = doc(db, 'config', 'mainSettings');
+            const settingsRef = doc(db(), 'config', 'mainSettings');
     
             await new Promise(resolve => setTimeout(() => { setProgress(30); resolve(null); }, 300));
     
@@ -338,14 +337,14 @@ export default function SettingsPage() {
 
         try {
             const paidAdvanceQuery = query(
-                collection(db, "debts"),
+                collection(db(), "debts"),
                 where("status", "==", "paid"),
                 where("description", "==", "Cuota de Condominio (Pagada por adelantado)")
             );
             const advanceDebtsSnapshot = await getDocs(paidAdvanceQuery);
             
             const adjustmentQuery = query(
-                collection(db, "debts"),
+                collection(db(), "debts"),
                 where("description", "==", "Ajuste por aumento de cuota")
             );
             const adjustmentDebtsSnapshot = await getDocs(adjustmentQuery);
@@ -359,7 +358,7 @@ export default function SettingsPage() {
                 return;
             }
                        
-            const batch = writeBatch(db);
+            const batch = writeBatch(db());
             let adjustmentsCreated = 0;
             
             for (const debtDoc of advanceDebtsSnapshot.docs) {
@@ -368,7 +367,7 @@ export default function SettingsPage() {
                 const adjustmentKey = `${debt.ownerId}-${debt.year}-${debt.month}`;
                 if (paidAmount < newCondoFee && !existingAdjustments.has(adjustmentKey)) {
                     const difference = newCondoFee - paidAmount;
-                    const adjustmentDebtRef = doc(collection(db, "debts"));
+                    const adjustmentDebtRef = doc(collection(db(), "debts"));
                     
                     batch.set(adjustmentDebtRef, {
                         ownerId: debt.ownerId,
