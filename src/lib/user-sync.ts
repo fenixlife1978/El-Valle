@@ -1,5 +1,5 @@
 
-import { doc, getDoc, setDoc, Timestamp, collection, query, where, getDocs, writeBatch, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, Timestamp, collection, query, where, getDocs, writeBatch, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { type User } from 'firebase/auth';
 
@@ -63,9 +63,18 @@ export const ensureOwnerProfile = async (user: User, showToast?: (options: any) 
         const querySnapshot = await getDocs(q);
         
         if (!querySnapshot.empty) {
-            // Profile exists but has no UID or a different one. We'll update it.
-            const existingDoc = querySnapshot.docs[0];
-            await updateDoc(existingDoc.ref, { uid: user.uid });
+            // Profile exists but has no UID or a different one. We'll move the data and delete the old doc.
+            const oldDoc = querySnapshot.docs[0];
+            const oldData = oldDoc.data();
+            
+            // Create the new document with the correct UID
+            await setDoc(ownerRef, {
+                ...oldData,
+                uid: user.uid, // Explicitly set the new UID
+            });
+
+            // Delete the old document
+            await deleteDoc(oldDoc.ref);
 
             if (showToast) {
                 showToast({ title: "Perfil Vinculado", description: "Hemos vinculado tu cuenta de inicio de sesión a tu perfil de propietario existente." });

@@ -6,7 +6,7 @@ import { type ReactNode, useEffect } from 'react';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from '@/components/theme-provider';
-import { useAuth } from '@/hooks/use-auth';
+import { AuthProvider, useAuth } from '@/hooks/use-auth';
 import { Loader2 } from 'lucide-react';
 
 const publicPaths = ['/welcome', '/login', '/forgot-password'];
@@ -68,6 +68,7 @@ export default function RootLayout({
         <meta name="description" content="Condominium Management App" />
       </head>
       <body className="font-body antialiased bg-background text-foreground">
+        <AuthProvider>
           <ThemeProvider
             attribute="class"
             defaultTheme="dark"
@@ -79,6 +80,7 @@ export default function RootLayout({
             </AuthGuard>
             <Toaster />
           </ThemeProvider>
+        </AuthProvider>
       </body>
     </html>
   );
