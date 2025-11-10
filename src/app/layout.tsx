@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
@@ -9,6 +10,7 @@ import { ThemeProvider } from '@/components/theme-provider';
 import { AuthProvider, useAuth } from '@/hooks/use-auth';
 import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { ensureOwnerProfile } from '@/lib/user-sync';
 
 
 const publicPaths = ['/welcome', '/login', '/forgot-password'];
@@ -17,6 +19,7 @@ function AuthGuard({ children }: { children: ReactNode }) {
   const { user, role, loading } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
+  const { toast } = useToast();
 
   useEffect(() => {
     if (loading) return; 
@@ -31,7 +34,7 @@ function AuthGuard({ children }: { children: ReactNode }) {
         router.replace('/welcome');
     }
 
-  }, [user, role, loading, pathname, router]);
+  }, [user, role, loading, pathname, router, toast]);
 
   if (loading) {
     return (
@@ -42,19 +45,7 @@ function AuthGuard({ children }: { children: ReactNode }) {
     );
   }
 
-  // Only render children if not loading and conditions are met (or on public paths)
-  const isPublic = publicPaths.some(path => pathname.startsWith(path));
-  if ((user && role && !isPublic) || isPublic) {
-    return <>{children}</>;
-  }
-
-  // Fallback loading while redirecting
-  return (
-    <div className="flex h-screen w-full items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="ml-2">Redirigiendo...</p>
-    </div>
-  );
+  return <>{children}</>;
 }
 
 
