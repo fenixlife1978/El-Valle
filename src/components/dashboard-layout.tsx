@@ -63,6 +63,14 @@ export type NavItem = {
   items?: Omit<NavItem, 'icon' | 'items'>[];
 };
 
+type Notification = {
+    id: string;
+    title: string;
+    body: string;
+    createdAt: any; // Firestore Timestamp
+    read: boolean;
+};
+
 const BCVIcon = (props: React.ImgHTMLAttributes<HTMLImageElement> & {src?: string | null}) => {
     const finalSrc = props.src ?? undefined; 
 

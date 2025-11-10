@@ -2,12 +2,11 @@
 'use client';
 
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
-import { useAuthState } from 'react-firebase-hooks/auth';
+import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { useToast } from './use-toast';
 import { db, auth } from '@/lib/firebase';
 import { ensureOwnerProfile } from '@/lib/user-sync';
-import { User } from 'firebase/auth';
 
 type CompanyInfo = {
     name: string;
@@ -34,10 +33,10 @@ type AuthContextType = {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-    const [user, authLoading, authError] = useAuthState(auth);
+    const [user, setUser] = useState<User | null>(null);
     const [ownerData, setOwnerData] = useState<any | null>(null);
     const [role, setRole] = useState<string | null>(null);
-    const [profileLoading, setProfileLoading] = useState(true);
+    const [loading, setLoading] = useState(true);
     
     const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
     const [activeRate, setActiveRate] = useState<ExchangeRate | null>(null);
@@ -46,46 +45,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { toast } = useToast();
 
     useEffect(() => {
-        if (authLoading) return; // Wait until auth state is determined
-
-        let ownerUnsubscribe: (() => void) | undefined;
-
-        if (user) {
-            // Ensure profile exists and then set up listener
-            ensureOwnerProfile(user, toast).then(() => {
-                const ownerRef = doc(db, 'owners', user.uid);
-                ownerUnsubscribe = onSnapshot(ownerRef, (snapshot) => {
-                    if (snapshot.exists()) {
-                        const data = snapshot.data();
-                        setOwnerData({ id: snapshot.id, ...data });
-                        setRole(data.role || 'propietario');
-                    } else {
-                        // This case should be rare after ensureOwnerProfile
-                        setOwnerData(null);
-                        setRole(null);
-                    }
-                    setProfileLoading(false);
-                });
-            }).catch(error => {
-                console.error("Failed to ensure owner profile:", error);
-                setProfileLoading(false);
-            });
-        } else {
-            // No user, clear all data
-            setOwnerData(null);
-            setRole(null);
-            setProfileLoading(false);
-        }
-        
-        return () => {
-            if (ownerUnsubscribe) {
-                ownerUnsubscribe();
+        const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
+            let ownerUnsubscribe: (() => void) | undefined;
+            if (firebaseUser) {
+                setUser(firebaseUser);
+                try {
+                    await ensureOwnerProfile(firebaseUser, toast);
+                    const ownerRef = doc(db, 'owners', firebaseUser.uid);
+                    ownerUnsubscribe = onSnapshot(ownerRef, (snapshot) => {
+                        if (snapshot.exists()) {
+                            const data = snapshot.data();
+                            setOwnerData({ id: snapshot.id, ...data });
+                            setRole(data.role || 'propietario');
+                        } else {
+                            setOwnerData(null);
+                            setRole(null);
+                        }
+                        setLoading(false);
+                    });
+                } catch (error) {
+                    console.error("Failed to process owner profile:", error);
+                    setLoading(false);
+                }
+            } else {
+                setUser(null);
+                setOwnerData(null);
+                setRole(null);
+                setLoading(false);
             }
-        };
-    }, [user, authLoading, toast]);
 
+            return () => {
+                if (ownerUnsubscribe) {
+                    ownerUnsubscribe();
+                }
+            };
+        });
 
-    useEffect(() => {
         const settingsRef = doc(db, 'config', 'mainSettings');
         const settingsUnsubscribe = onSnapshot(settingsRef, 
             (docSnap) => {
@@ -108,11 +103,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         );
 
         return () => {
+            unsubscribeAuth();
             settingsUnsubscribe();
         };
-    }, []);
-
-    const loading = authLoading || profileLoading;
+    }, [toast]);
 
     const value = {
         user,
