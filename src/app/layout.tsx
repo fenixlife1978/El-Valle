@@ -21,26 +21,16 @@ function AuthGuard({ children }: { children: ReactNode }) {
   const { toast } = useToast();
 
   useEffect(() => {
-    if (loading) return; // Wait until loading is finished
+    if (loading) return; 
 
     const isPublic = publicPaths.some(path => pathname.startsWith(path));
     
-    if (user) {
-      // User is logged in, ensure profile exists
-      ensureOwnerProfile(user, toast).then(() => {
-          if (role) {
-            if (isPublic) {
-              // If on a public page, redirect to the correct dashboard
-              router.replace(role === 'administrador' ? '/admin/dashboard' : '/owner/dashboard');
-            }
-          }
-      });
-    } else {
-      // User is not logged in
-      if (!isPublic) {
-        // If on a protected page, redirect to login
+    if (user && role) {
+        if (isPublic) {
+          router.replace(role === 'administrador' ? '/admin/dashboard' : '/owner/dashboard');
+        }
+    } else if (!user && !isPublic) {
         router.replace('/welcome');
-      }
     }
 
   }, [user, role, loading, pathname, router, toast]);
@@ -54,9 +44,6 @@ function AuthGuard({ children }: { children: ReactNode }) {
     );
   }
 
-  // If we are on a public path and not logged in, show the page.
-  // If we are logged in and on a protected path, show the page.
-  // The useEffect handles the redirection for mismatched states.
   return <>{children}</>;
 }
 
