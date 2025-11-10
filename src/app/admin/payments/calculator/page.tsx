@@ -81,8 +81,9 @@ export default function PaymentCalculatorPage() {
     useEffect(() => {
         const fetchPrerequisites = async () => {
             setLoading(true);
+            const firestore = db();
             try {
-                const settingsRef = doc(db, 'config', 'mainSettings');
+                const settingsRef = doc(firestore, 'config', 'mainSettings');
                 const settingsSnap = await getDoc(settingsRef);
                 if (settingsSnap.exists()) {
                     const settings = settingsSnap.data();
@@ -96,7 +97,7 @@ export default function PaymentCalculatorPage() {
                     }
                 }
 
-                const ownersQuery = query(collection(db, "owners"));
+                const ownersQuery = query(collection(firestore, "owners"));
                 const ownersSnapshot = await getDocs(ownersQuery);
                 const ownersData: Owner[] = ownersSnapshot.docs.map(doc => {
                     const data = doc.data();
@@ -135,7 +136,7 @@ export default function PaymentCalculatorPage() {
         setSelectedAdvanceMonths([]);
 
         try {
-            const q = query(collection(db, "debts"), where("ownerId", "==", owner.id));
+            const q = query(collection(db(), "debts"), where("ownerId", "==", owner.id));
             const querySnapshot = await getDocs(q);
             const debtsData: Debt[] = [];
             querySnapshot.forEach((doc) => debtsData.push({ id: doc.id, ...doc.data() } as Debt));
@@ -214,15 +215,16 @@ export default function PaymentCalculatorPage() {
         if (!selectedOwner) return;
 
         try {
-            const batch = writeBatch(db);
+            const firestore = db();
+            const batch = writeBatch(firestore);
             const paymentDate = Timestamp.now();
             let totalPaidUSD = 0;
-            const ownerRef = doc(db, 'owners', selectedOwner.id);
+            const ownerRef = doc(firestore, 'owners', selectedOwner.id);
 
             // 1. Update pending debts
             const debtsToUpdate = ownerDebts.filter(d => selectedPendingDebts.includes(d.id));
             debtsToUpdate.forEach(debt => {
-                const debtRef = doc(db, 'debts', debt.id);
+                const debtRef = doc(firestore, 'debts', debt.id);
                 batch.update(debtRef, { status: 'paid', paymentDate, paidAmountUSD: debt.amountUSD });
                 totalPaidUSD += debt.amountUSD;
             });
@@ -230,7 +232,7 @@ export default function PaymentCalculatorPage() {
             // 2. Create new debts for advance months
             selectedAdvanceMonths.forEach(monthStr => {
                 const [year, month] = monthStr.split('-').map(Number);
-                const debtRef = doc(collection(db, "debts"));
+                const debtRef = doc(collection(firestore, "debts"));
                 batch.set(debtRef, {
                     ownerId: selectedOwner.id, 
                     property: selectedOwner.properties?.[0] || {}, // Fallback for property
@@ -246,7 +248,7 @@ export default function PaymentCalculatorPage() {
             });
 
             // 3. Create payment document
-            const paymentRef = doc(collection(db, 'payments'));
+            const paymentRef = doc(collection(firestore, 'payments'));
             const propertyInfo = selectedOwner.properties?.[0] || {};
             const paymentData = {
                 reportedBy: selectedOwner.id, // Admin reporting for owner
@@ -466,5 +468,7 @@ export default function PaymentCalculatorPage() {
         </div>
     );
 }
+
+    
 
     

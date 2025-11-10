@@ -75,12 +75,13 @@ export default function HistoricalPaymentsPage() {
     const router = useRouter();
 
     useEffect(() => {
-        const ownersQuery = query(collection(db(), "owners"));
+        const firestore = db();
+        const ownersQuery = query(collection(firestore, "owners"));
         const ownersUnsubscribe = onSnapshot(ownersQuery, (snapshot) => {
             setOwners(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner)));
         });
 
-        const paymentsQuery = query(collection(db(), "historical_payments"), orderBy("createdAt", "desc"));
+        const paymentsQuery = query(collection(firestore, "historical_payments"), orderBy("createdAt", "desc"));
         const paymentsUnsubscribe = onSnapshot(paymentsQuery, (snapshot) => {
             setHistoricalPayments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as HistoricalPayment)));
             setLoading(false);
@@ -156,18 +157,18 @@ export default function HistoricalPaymentsPage() {
         }
 
         setIsSubmitting(true);
-
+        const firestore = db();
         try {
-            const batch = writeBatch(db());
+            const batch = writeBatch(firestore);
             const monthsToGenerate = differenceInCalendarMonths(endDate, startDate) + 1;
             let paymentsCreated = 0;
 
-            const existingDebtsQuery = query(collection(db(), 'debts'), 
+            const existingDebtsQuery = query(collection(firestore, 'debts'), 
                 where('ownerId', '==', selectedOwner.id),
                 where('property.street', '==', selectedProperty.street),
                 where('property.house', '==', selectedProperty.house)
             );
-            const existingHistoricalPaymentsQuery = query(collection(db(), 'historical_payments'),
+            const existingHistoricalPaymentsQuery = query(collection(firestore, 'historical_payments'),
                 where('ownerId', '==', selectedOwner.id),
                 where('property.street', '==', selectedProperty.street),
                 where('property.house', '==', selectedProperty.house)
@@ -192,7 +193,7 @@ export default function HistoricalPaymentsPage() {
                     continue; // Skip if a debt or historical payment already exists
                 }
 
-                const paymentRef = doc(collection(db(), "historical_payments"));
+                const paymentRef = doc(collection(firestore, "historical_payments"));
                 batch.set(paymentRef, {
                     ownerId: selectedOwner.id,
                     ownerName: selectedOwner.name,
@@ -419,4 +420,5 @@ export default function HistoricalPaymentsPage() {
         </div>
     );
 }
+    
     

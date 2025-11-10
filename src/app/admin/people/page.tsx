@@ -342,6 +342,7 @@ export default function PeopleManagementPage() {
 
         const reader = new FileReader();
         reader.onload = async (event) => {
+            const firestore = db();
             try {
                 const data = event.target?.result;
                 if (!data) throw new Error("File data is empty.");
@@ -371,13 +372,13 @@ export default function PeopleManagementPage() {
                 });
 
                 const newOwners = Object.values(ownersMap);
-                const batch = writeBatch(db());
+                const batch = writeBatch(firestore);
                 let successCount = 0;
                 
                 for (const ownerData of newOwners) {
                     if (ownerData.email === 'vallecondo@gmail.com') continue;
                     if (ownerData.properties && ownerData.properties.length > 0) {
-                        const ownerDocRef = doc(collection(db(), "owners")); // Always generate new ID for imports
+                        const ownerDocRef = doc(collection(firestore, "owners")); // Always generate new ID for imports
                          batch.set(ownerDocRef, { ...ownerData, passwordChanged: false });
                          successCount++;
                     }
@@ -660,4 +661,5 @@ export default function PeopleManagementPage() {
         </div>
     );
 }
+    
     
