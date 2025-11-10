@@ -69,7 +69,7 @@ export default function OwnerPaymentCalculatorPage() {
     useEffect(() => {
         if (authLoading || !user || !ownerData) return;
 
-        const settingsRef = doc(db(), 'config', 'mainSettings');
+        const settingsRef = doc(db, 'config', 'mainSettings');
         const settingsUnsubscribe = onSnapshot(settingsRef, (settingsSnap) => {
             if (settingsSnap.exists()) {
                 const settings = settingsSnap.data();
@@ -84,7 +84,7 @@ export default function OwnerPaymentCalculatorPage() {
             }
         });
         
-        const debtsQuery = query(collection(db(), "debts"), where("ownerId", "==", user.uid));
+        const debtsQuery = query(collection(db, "debts"), where("ownerId", "==", user.uid));
         const debtsUnsubscribe = onSnapshot(debtsQuery, (snapshot) => {
             const debtsData: Debt[] = [];
             snapshot.forEach(d => debtsData.push({ id: d.id, ...d.data() } as Debt));
@@ -194,7 +194,7 @@ export default function OwnerPaymentCalculatorPage() {
                 observations: `Pago desde calculadora para ${paymentCalculator.dueMonthsCount} deuda(s) y ${paymentCalculator.advanceMonthsCount} adelanto(s).`
             };
 
-            await addDoc(collection(db(), 'payments'), paymentData);
+            await addDoc(collection(db, 'payments'), paymentData);
 
             toast({ title: 'Pago Reportado Exitosamente', description: 'Tu pago ha sido enviado para verificación.', className: 'bg-green-100 border-green-400 text-green-800' });
             setIsPaymentDialogOpen(false);

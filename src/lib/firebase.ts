@@ -13,27 +13,10 @@ const firebaseConfig = {
   "messagingSenderId": "630518792088"
 };
 
-let app: FirebaseApp;
-let auth: Auth;
-let db: Firestore;
-let storage: FirebaseStorage;
+const app: FirebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
+const auth: Auth = getAuth(app);
+const db: Firestore = getFirestore(app);
+const storage: FirebaseStorage = getStorage(app);
 
-function initializeFirebase() {
-    if (!getApps().length) {
-        app = initializeApp(firebaseConfig);
-    } else {
-        app = getApp();
-    }
-    auth = getAuth(app);
-    db = getFirestore(app);
-    storage = getStorage(app);
-}
 
-// Call initialization
-initializeFirebase();
-
-const getDB = () => db;
-const getAuthInstance = () => auth;
-const getStorageInstance = () => storage;
-
-export { app, getDB, getAuthInstance, getStorageInstance, auth, db, storage };
+export { app, auth, db, storage };

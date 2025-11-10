@@ -83,9 +83,8 @@ export default function PettyCashPage() {
     const router = useRouter();
 
     useEffect(() => {
-        const firestore = db;
         const fetchSettings = async () => {
-             const settingsRef = doc(firestore, 'config', 'mainSettings');
+             const settingsRef = doc(db, 'config', 'mainSettings');
              const docSnap = await getDoc(settingsRef);
              if (docSnap.exists()) {
                  setCompanyInfo(docSnap.data().companyInfo as CompanyInfo);
@@ -93,7 +92,7 @@ export default function PettyCashPage() {
         };
         fetchSettings();
 
-        const q = query(collection(firestore, "petty_cash_replenishments"), orderBy("date", "desc"));
+        const q = query(collection(db, "petty_cash_replenishments"), orderBy("date", "desc"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Replenishment));
             setReplenishments(data);
@@ -206,8 +205,7 @@ export default function PettyCashPage() {
         toast({ title: 'Subiendo soporte...', description: 'Por favor espere.' });
 
         try {
-            const storageInstance = storage;
-            const storageRef = ref(storageInstance, `petty_cash_receipts/${repId}/${expenseId}-${file.name}`);
+            const storageRef = ref(storage, `petty_cash_receipts/${repId}/${expenseId}-${file.name}`);
             const snapshot = await uploadBytes(storageRef, file);
             const downloadURL = await getDownloadURL(snapshot.ref);
 

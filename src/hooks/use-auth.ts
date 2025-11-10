@@ -35,9 +35,7 @@ export function useAuth() {
     const { toast } = useToast();
 
     useEffect(() => {
-        let settingsUnsubscribe: (() => void) | undefined;
-    
-        const authUnsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+        const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
             try {
                 if (firebaseUser) {
                     setUser(firebaseUser);
@@ -71,6 +69,7 @@ export function useAuth() {
                     } else {
                         Cookies.remove('user-role');
                     }
+
                 } else {
                     setUser(null);
                     setOwnerData(null);
@@ -93,6 +92,7 @@ export function useAuth() {
             }
         });
         
+        let settingsUnsubscribe: (() => void) | undefined;
         try {
             const settingsRef = doc(db, 'config', 'mainSettings');
             settingsUnsubscribe = onSnapshot(settingsRef, 
@@ -119,7 +119,7 @@ export function useAuth() {
         }
 
         return () => {
-            authUnsubscribe();
+            unsubscribe();
             if (settingsUnsubscribe) {
                 settingsUnsubscribe();
             }
