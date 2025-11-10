@@ -131,18 +131,18 @@ export default function CertificatesPage() {
     const [certificateToDelete, setCertificateToDelete] = useState<Certificate | null>(null);
 
     useEffect(() => {
-        const ownersQuery = query(collection(db, "owners"));
+        const ownersQuery = query(collection(db(), "owners"));
         const ownersUnsubscribe = onSnapshot(ownersQuery, (snapshot) => {
             setOwners(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner)));
         });
 
-        const certsQuery = query(collection(db, "certificates"), orderBy("createdAt", "desc"));
+        const certsQuery = query(collection(db(), "certificates"), orderBy("createdAt", "desc"));
         const certsUnsubscribe = onSnapshot(certsQuery, (snapshot) => {
             setCertificates(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Certificate)));
         });
         
         const fetchSettings = async () => {
-             const settingsRef = doc(db, 'config', 'mainSettings');
+             const settingsRef = doc(db(), 'config', 'mainSettings');
              const docSnap = await getDoc(settingsRef);
              if (docSnap.exists()) setCompanyInfo(docSnap.data().companyInfo as CompanyInfo);
         };
@@ -249,7 +249,7 @@ export default function CertificatesPage() {
                 body: certificateBody,
                 createdAt: serverTimestamp() as Timestamp,
             };
-            const docRef = await addDoc(collection(db, "certificates"), docData);
+            const docRef = await addDoc(collection(db(), "certificates"), docData);
             generatePDF({ ...docData, id: docRef.id, createdAt: Timestamp.now() } as Certificate);
             toast({ title: "Constancia Generada", description: "El documento PDF ha sido creado y guardado en el historial." });
             resetDialog();
@@ -316,7 +316,7 @@ export default function CertificatesPage() {
     const handleDeleteCertificate = async () => {
         if (!certificateToDelete) return;
         try {
-            await deleteDoc(doc(db, "certificates", certificateToDelete.id));
+            await deleteDoc(doc(db(), "certificates", certificateToDelete.id));
             toast({ title: "Constancia Eliminada", description: "El registro ha sido eliminado exitosamente." });
         } catch (error) {
             console.error("Error deleting certificate: ", error);

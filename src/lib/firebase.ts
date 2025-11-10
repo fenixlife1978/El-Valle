@@ -13,10 +13,51 @@ const firebaseConfig = {
   "messagingSenderId": "630518792088"
 };
 
-const app: FirebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
-const auth: Auth = getAuth(app);
-const db: Firestore = getFirestore(app);
-const storage: FirebaseStorage = getStorage(app);
+let app: FirebaseApp;
+let auth: Auth;
+let db: Firestore;
+let storage: FirebaseStorage;
+
+if (typeof window !== 'undefined' && !getApps().length) {
+    app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    db = getFirestore(app);
+    storage = getStorage(app);
+} else if (getApps().length > 0) {
+    app = getApp();
+    auth = getAuth(app);
+    db = getFirestore(app);
+    storage = getStorage(app);
+}
+
+// Functions to get instances, ensuring they are initialized
+const getAppInstance = (): FirebaseApp => {
+    if (!app) {
+        app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+    }
+    return app;
+};
+
+const getAuthInstance = (): Auth => {
+    if (!auth) {
+        auth = getAuth(getAppInstance());
+    }
+    return auth;
+};
+
+const getDb = (): Firestore => {
+    if (!db) {
+        db = getFirestore(getAppInstance());
+    }
+    return db;
+};
+
+const getStorageInstance = (): FirebaseStorage => {
+    if (!storage) {
+        storage = getStorage(getAppInstance());
+    }
+    return storage;
+};
 
 
-export { app, auth, db, storage };
+export { getAppInstance as app, getAuthInstance as auth, getDb as db, getStorageInstance as storage };
