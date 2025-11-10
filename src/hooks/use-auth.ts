@@ -27,10 +27,8 @@ export function useAuth() {
     const [user, setUser] = useState<User | null>(null);
     const [ownerData, setOwnerData] = useState<any | null>(null);
     const [role, setRole] = useState<string | null>(null);
-    
     const [loading, setLoading] = useState(true);
 
-    // Global settings state
     const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
     const [activeRate, setActiveRate] = useState<ExchangeRate | null>(null);
     const [bcvLogoUrl, setBcvLogoUrl] = useState<string | null>(null);
@@ -63,7 +61,7 @@ export function useAuth() {
             }
         );
 
-        const authUnsubscribe = onAuthStateChanged(auth(), async (firebaseUser) => {
+        const authUnsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
             try {
                 if (firebaseUser) {
                     setUser(firebaseUser);
