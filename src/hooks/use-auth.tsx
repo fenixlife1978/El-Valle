@@ -2,11 +2,12 @@
 'use client';
 
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
-import { onAuthStateChanged, User } from 'firebase/auth';
+import { useAuthState } from 'react-firebase-hooks/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { useToast } from './use-toast';
 import { db, auth } from '@/lib/firebase';
 import { ensureOwnerProfile } from '@/lib/user-sync';
+import { User } from 'firebase/auth';
 
 type CompanyInfo = {
     name: string;
@@ -21,7 +22,7 @@ type ExchangeRate = {
 };
 
 type AuthContextType = {
-    user: User | null;
+    user: User | null | undefined;
     ownerData: any | null;
     role: string | null;
     loading: boolean;
@@ -33,10 +34,10 @@ type AuthContextType = {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-    const [user, setUser] = useState<User | null>(null);
+    const [user, authLoading, authError] = useAuthState(auth);
     const [ownerData, setOwnerData] = useState<any | null>(null);
     const [role, setRole] = useState<string | null>(null);
-    const [loading, setLoading] = useState(true);
+    const [profileLoading, setProfileLoading] = useState(true);
     
     const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
     const [activeRate, setActiveRate] = useState<ExchangeRate | null>(null);
@@ -45,38 +46,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { toast } = useToast();
 
     useEffect(() => {
-        const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
-            let ownerUnsubscribe: (() => void) | undefined;
-            if (firebaseUser) {
-                setUser(firebaseUser);
-                await ensureOwnerProfile(firebaseUser, toast);
+        if (authLoading) return; // Wait until auth state is determined
 
-                const ownerRef = doc(db, 'owners', firebaseUser.uid);
+        let ownerUnsubscribe: (() => void) | undefined;
+
+        if (user) {
+            // Ensure profile exists and then set up listener
+            ensureOwnerProfile(user, toast).then(() => {
+                const ownerRef = doc(db, 'owners', user.uid);
                 ownerUnsubscribe = onSnapshot(ownerRef, (snapshot) => {
                     if (snapshot.exists()) {
                         const data = snapshot.data();
                         setOwnerData({ id: snapshot.id, ...data });
                         setRole(data.role || 'propietario');
                     } else {
+                        // This case should be rare after ensureOwnerProfile
                         setOwnerData(null);
                         setRole(null);
                     }
-                    setLoading(false); 
+                    setProfileLoading(false);
                 });
-            } else {
-                setUser(null);
-                setOwnerData(null);
-                setRole(null);
-                setLoading(false);
+            }).catch(error => {
+                console.error("Failed to ensure owner profile:", error);
+                setProfileLoading(false);
+            });
+        } else {
+            // No user, clear all data
+            setOwnerData(null);
+            setRole(null);
+            setProfileLoading(false);
+        }
+        
+        return () => {
+            if (ownerUnsubscribe) {
+                ownerUnsubscribe();
             }
-            
-            return () => {
-                if (ownerUnsubscribe) {
-                    ownerUnsubscribe();
-                }
-            };
-        });
+        };
+    }, [user, authLoading, toast]);
 
+
+    useEffect(() => {
         const settingsRef = doc(db, 'config', 'mainSettings');
         const settingsUnsubscribe = onSnapshot(settingsRef, 
             (docSnap) => {
@@ -99,12 +108,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         );
 
         return () => {
-            unsubscribeAuth();
             settingsUnsubscribe();
         };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    const loading = authLoading || profileLoading;
 
     const value = {
         user,
