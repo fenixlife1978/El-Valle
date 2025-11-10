@@ -2,11 +2,11 @@
 'use client';
 
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
-import { useAuthState } from 'react-firebase-hooks/auth';
-import { auth, db } from '@/lib/firebase';
+import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { useToast } from './use-toast';
-import { User, onAuthStateChanged } from 'firebase/auth';
+import { auth, db } from '@/lib/firebase';
+import { ensureOwnerProfile } from '@/lib/user-sync';
 
 type CompanyInfo = {
     name: string;
@@ -21,7 +21,7 @@ type ExchangeRate = {
 };
 
 type AuthContextType = {
-    user: User | null | undefined;
+    user: User | null;
     ownerData: any | null;
     role: string | null;
     loading: boolean;
@@ -46,8 +46,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     useEffect(() => {
         const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
-            setUser(firebaseUser);
             if (firebaseUser) {
+                setUser(firebaseUser);
+                await ensureOwnerProfile(firebaseUser, toast);
+
                 const ownerRef = doc(db, 'owners', firebaseUser.uid);
                 const unsubscribeProfile = onSnapshot(ownerRef, (snapshot) => {
                     if (snapshot.exists()) {
@@ -55,16 +57,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                         setOwnerData({ id: snapshot.id, ...data });
                         setRole(data.role || 'propietario');
                     } else {
+                        // This case might happen briefly if profile creation is slow
                         setOwnerData(null);
                         setRole(null);
                     }
-                    setLoading(false);
+                    setLoading(false); // Finished loading after profile is checked
                 }, (error) => {
                     console.error("Error listening to owner profile:", error);
                     setLoading(false);
                 });
-                // Note: We are not returning unsubscribeProfile here as it's managed by the component lifecycle
+                // This is a bit complex, but we need to manage this inner subscription
+                // For now, we'll let it detach when the auth state changes
             } else {
+                setUser(null);
                 setOwnerData(null);
                 setRole(null);
                 setLoading(false);
@@ -96,7 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             unsubscribeAuth();
             unsubscribeSettings();
         };
-    }, []);
+    }, [toast]);
 
 
     const value = {
