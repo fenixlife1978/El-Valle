@@ -417,7 +417,7 @@ export default function PeopleManagementPage() {
         }
 
         try {
-            await sendPasswordResetEmail(auth(), email);
+            await sendPasswordResetEmail(auth, email);
             toast({
                 title: 'Correo Enviado',
                 description: `Se ha enviado un correo para restablecer la contraseña a ${email}.`,

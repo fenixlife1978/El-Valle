@@ -35,31 +35,37 @@ export function useAuth() {
     const { toast } = useToast();
 
     useEffect(() => {
-        const settingsRef = doc(db(), 'config', 'mainSettings');
-        const settingsUnsubscribe = onSnapshot(settingsRef, 
-            (docSnap) => {
-                if (docSnap.exists()) {
-                    const settingsData = docSnap.data();
-                    setCompanyInfo(settingsData.companyInfo as CompanyInfo);
-                    setBcvLogoUrl(settingsData.bcvLogo || null);
-
-                    const rates: ExchangeRate[] = settingsData.exchangeRates || [];
-                    let currentActiveRate = rates.find(r => r.active) || null;
-                    if (!currentActiveRate && rates.length > 0) {
-                        currentActiveRate = [...rates].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+        let settingsUnsubscribe: (() => void) | undefined;
+    
+        try {
+            const settingsRef = doc(db, 'config', 'mainSettings');
+            settingsUnsubscribe = onSnapshot(settingsRef, 
+                (docSnap) => {
+                    if (docSnap.exists()) {
+                        const settingsData = docSnap.data();
+                        setCompanyInfo(settingsData.companyInfo as CompanyInfo);
+                        setBcvLogoUrl(settingsData.bcvLogo || null);
+    
+                        const rates: ExchangeRate[] = settingsData.exchangeRates || [];
+                        let currentActiveRate = rates.find(r => r.active) || null;
+                        if (!currentActiveRate && rates.length > 0) {
+                            currentActiveRate = [...rates].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+                        }
+                        setActiveRate(currentActiveRate);
                     }
-                    setActiveRate(currentActiveRate);
+                },
+                (error) => {
+                    console.error("Error fetching settings:", error);
+                    toast({
+                        variant: 'destructive',
+                        title: 'Error de Configuración',
+                        description: 'No se pudo cargar la configuración de la aplicación.'
+                    });
                 }
-            },
-            (error) => {
-                console.error("Error fetching settings:", error);
-                toast({
-                    variant: 'destructive',
-                    title: 'Error de Configuración',
-                    description: 'No se pudo cargar la configuración de la aplicación.'
-                });
-            }
-        );
+            );
+        } catch (error) {
+            console.error("Error setting up settings listener:", error);
+        }
 
         const authUnsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
             try {
@@ -70,7 +76,7 @@ export function useAuth() {
 
                     await ensureAdminProfile(); 
                     
-                    const adminDocRef = doc(db(), "owners", ADMIN_USER_ID);
+                    const adminDocRef = doc(db, "owners", ADMIN_USER_ID);
                     const adminSnap = await getDoc(adminDocRef);
 
                     let userRole: string | null = null;
@@ -80,7 +86,7 @@ export function useAuth() {
                         userData = { id: adminSnap.id, ...adminSnap.data() };
                         userRole = 'administrador';
                     } else {
-                        const ownerDocRef = doc(db(), "owners", firebaseUser.uid);
+                        const ownerDocRef = doc(db, "owners", firebaseUser.uid);
                         const ownerSnap = await getDoc(ownerDocRef);
                         if (ownerSnap.exists()) {
                             userData = { id: ownerSnap.id, ...ownerSnap.data() } as { id: string; role?: string };
@@ -119,7 +125,9 @@ export function useAuth() {
 
         return () => {
             authUnsubscribe();
-            settingsUnsubscribe();
+            if (settingsUnsubscribe) {
+                settingsUnsubscribe();
+            }
         };
     }, [toast]);
 

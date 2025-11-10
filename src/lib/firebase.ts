@@ -20,38 +20,23 @@ let auth: Auth;
 let db: Firestore;
 let storage: FirebaseStorage;
 
-function getAppInstance(): FirebaseApp {
-    if (!app) {
-        app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+
+function initializeFirebase() {
+    if (!getApps().length) {
+        app = initializeApp(firebaseConfig);
+        auth = getAuth(app);
+        db = getFirestore(app);
+        storage = getStorage(app);
+    } else {
+        app = getApp();
+        auth = getAuth(app);
+        db = getFirestore(app);
+        storage = getStorage(app);
     }
-    return app;
 }
 
-function getAuthInstance(): Auth {
-    if (!auth) {
-        auth = getAuth(getAppInstance());
-    }
-    return auth;
-}
+// Initialize on module load
+initializeFirebase();
 
-function getDBInstance(): Firestore {
-    if (!db) {
-        db = getFirestore(getAppInstance());
-    }
-    return db;
-}
-
-function getStorageInstance(): FirebaseStorage {
-    if (!storage) {
-        storage = getStorage(getAppInstance());
-    }
-    return storage;
-}
-
-// Export the getter functions
-export { 
-    getAppInstance as app, 
-    getDBInstance as db, 
-    getAuthInstance as auth, 
-    getStorageInstance as storage 
-};
+// Export the instances
+export { app, db, auth, storage };
