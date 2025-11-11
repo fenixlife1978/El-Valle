@@ -16,7 +16,7 @@ export const ensureAdminProfile = async (showToast?: (options: any) => void): Pr
 
         if (!adminSnap.exists()) {
             await setDoc(adminRef, {
-                uid: ADMIN_USER_ID, // Ensure admin has a UID
+                uid: ADMIN_USER_ID, // Ensure admin has a UID field that matches its doc ID
                 name: 'Valle Admin',
                 email: ADMIN_EMAIL,
                 role: 'administrador',
@@ -30,9 +30,15 @@ export const ensureAdminProfile = async (showToast?: (options: any) => void): Pr
                 showToast({ title: "Perfil de Administrador Creado", description: "El perfil principal de administrador fue creado exitosamente." });
             }
             return false; // Did not exist
-        } else if (!adminSnap.data()?.uid || adminSnap.data()?.email !== ADMIN_EMAIL) {
-            // If admin exists but UID or email is wrong, fix it.
-            await updateDoc(adminRef, { uid: ADMIN_USER_ID, email: ADMIN_EMAIL, role: 'administrador' });
+        } else {
+             // If admin exists, ensure critical fields are correct.
+            const data = adminSnap.data();
+            if (data.uid !== ADMIN_USER_ID || data.email !== ADMIN_EMAIL || data.role !== 'administrador') {
+                 await updateDoc(adminRef, { uid: ADMIN_USER_ID, email: ADMIN_EMAIL, role: 'administrador' });
+                 if (showToast) {
+                    showToast({ title: "Perfil de Administrador Corregido", description: "Se detectó una inconsistencia y se ha corregido el perfil del administrador." });
+                }
+            }
         }
         return true; // Existed
     } catch (error) {
@@ -46,8 +52,8 @@ export const ensureAdminProfile = async (showToast?: (options: any) => void): Pr
 
 
 export const ensureOwnerProfile = async (user: User, showToast?: (options: any) => void): Promise<'checked' | 'created' | 'linked'> => {
-    // CRITICAL FIX: Do not process the special admin account with this function.
-    if (user.uid === ADMIN_USER_ID || user.email === ADMIN_EMAIL) {
+    // CRITICAL: Do not process the special admin account with this function.
+    if (user.email === ADMIN_EMAIL) {
         return 'checked';
     }
 
@@ -59,7 +65,7 @@ export const ensureOwnerProfile = async (user: User, showToast?: (options: any) 
 
         if (ownerSnap.exists()) {
             // Profile exists and is correctly linked by UID.
-            // Let's ensure the `uid` field is also present inside the document for consistency in queries.
+            // Ensure the `uid` field is also present inside the document for consistency.
             if (!ownerSnap.data().uid) {
                 await updateDoc(ownerRef, { uid: user.uid });
             }
@@ -71,11 +77,11 @@ export const ensureOwnerProfile = async (user: User, showToast?: (options: any) 
         const querySnapshot = await getDocs(q);
         
         if (!querySnapshot.empty) {
-            // Profile exists but has no UID or a different one. We'll move the data and delete the old doc.
+            // Profile exists but has no UID or a different one. We'll move the data to the correct doc ID.
             const oldDoc = querySnapshot.docs[0];
             const oldData = oldDoc.data();
             
-            // Create the new document with the correct UID
+            // Create the new document with the correct UID as the document ID
             await setDoc(ownerRef, {
                 ...oldData,
                 uid: user.uid, // Explicitly set the new UID
@@ -92,7 +98,7 @@ export const ensureOwnerProfile = async (user: User, showToast?: (options: any) 
             return 'linked';
 
         } else {
-            // Profile doesn't exist at all, create a new one.
+            // Profile doesn't exist at all, create a new one with the correct UID as doc ID.
             await setDoc(ownerRef, {
                 uid: user.uid,
                 name: user.displayName || 'Propietario sin nombre',
