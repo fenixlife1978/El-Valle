@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
@@ -5,7 +6,7 @@ import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { useToast } from './use-toast';
 import { db, auth } from '@/lib/firebase';
-import { ensureOwnerProfile } from '@/lib/user-sync';
+import { ensureOwnerProfile, ensureAdminProfile } from '@/lib/user-sync';
 
 type CompanyInfo = {
     name: string;
@@ -30,6 +31,9 @@ export type AuthContextType = {
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const ADMIN_EMAIL = 'vallecondo@gmail.com';
+const ADMIN_USER_ID = 'valle-admin-main-account';
+
 
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
@@ -44,17 +48,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { toast } = useToast();
 
     useEffect(() => {
-        const unsubscribeAuth = onAuthStateChanged(auth(), (firebaseUser) => {
+        const unsubscribeAuth = onAuthStateChanged(auth(), async (firebaseUser) => {
+            let ownerUnsubscribe: (() => void) | undefined;
             if (firebaseUser) {
                 setUser(firebaseUser);
-                ensureOwnerProfile(firebaseUser, toast).then(() => {
-                    const ownerRef = doc(db(), 'owners', firebaseUser.uid);
-                    const ownerUnsubscribe = onSnapshot(ownerRef, (snapshot) => {
+                const isAdministrator = firebaseUser.email === ADMIN_EMAIL;
+                const docId = isAdministrator ? ADMIN_USER_ID : firebaseUser.uid;
+                
+                try {
+                    if (isAdministrator) {
+                        await ensureAdminProfile(toast);
+                    } else {
+                        await ensureOwnerProfile(firebaseUser, toast);
+                    }
+
+                    const ownerRef = doc(db(), 'owners', docId);
+                    ownerUnsubscribe = onSnapshot(ownerRef, (snapshot) => {
                         if (snapshot.exists()) {
                             const data = snapshot.data();
                             setOwnerData({ id: snapshot.id, ...data });
-                            // Ensure role is handled consistently and defaults to 'propietario'
-                            const userRole = data.role ? String(data.role).toLowerCase() : 'propietario';
+                            const userRole = String(data.role || 'propietario').toLowerCase();
                             setRole(userRole);
                         } else {
                             setOwnerData(null);
@@ -62,22 +75,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                         }
                         setLoading(false);
                     }, (error) => {
-                        console.error("Error fetching owner profile:", error);
+                        console.error("Error fetching user profile:", error);
+                        toast({variant: 'destructive', title: 'Error de Perfil', description: 'No se pudo cargar tu perfil.'});
                         setLoading(false);
                     });
-
-                    // Return the cleanup function for the owner snapshot
-                    return () => ownerUnsubscribe();
-                }).catch(error => {
-                    console.error("Failed to ensure owner profile:", error);
+                } catch (error) {
+                    console.error("Failed to ensure user profile:", error);
+                    toast({variant: 'destructive', title: 'Error de Sincronización', description: 'No se pudo verificar tu perfil de usuario.'});
                     setLoading(false);
-                });
+                }
+
             } else {
                 setUser(null);
                 setOwnerData(null);
                 setRole(null);
                 setLoading(false);
             }
+
+            return () => {
+                if (ownerUnsubscribe) {
+                    ownerUnsubscribe();
+                }
+            };
         });
 
         const settingsRef = doc(db(), 'config', 'mainSettings');
