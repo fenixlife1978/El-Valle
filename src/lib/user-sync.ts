@@ -45,6 +45,11 @@ export const ensureAdminProfile = async (showToast?: (options: any) => void): Pr
 
 
 export const ensureOwnerProfile = async (user: User, showToast?: (options: any) => void): Promise<'checked' | 'created' | 'linked'> => {
+    // CRITICAL FIX: Do not process the special admin account with this function.
+    if (user.uid === ADMIN_USER_ID || user.email === 'edwinfaguiars@gmail.com') {
+        return 'checked';
+    }
+
     const firestore = db();
     const ownerRef = doc(firestore, "owners", user.uid);
 
@@ -75,8 +80,10 @@ export const ensureOwnerProfile = async (user: User, showToast?: (options: any) 
                 uid: user.uid, // Explicitly set the new UID
             });
 
-            // Delete the old document
-            await deleteDoc(oldDoc.ref);
+            // Delete the old document if its ID is different from the new UID
+            if (oldDoc.id !== user.uid) {
+                await deleteDoc(oldDoc.ref);
+            }
 
             if (showToast) {
                 showToast({ title: "Perfil Vinculado", description: "Hemos vinculado tu cuenta de inicio de sesión a tu perfil de propietario existente." });
@@ -108,5 +115,3 @@ export const ensureOwnerProfile = async (user: User, showToast?: (options: any) 
         throw error;
     }
 }
-
-    
