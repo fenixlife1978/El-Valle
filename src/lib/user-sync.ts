@@ -4,6 +4,7 @@ import { db } from '@/lib/firebase';
 import { type User } from 'firebase/auth';
 
 const ADMIN_USER_ID = 'valle-admin-main-account';
+const ADMIN_EMAIL = 'vallecondo@gmail.com';
 
 // This function now returns a boolean indicating if the profile existed before the check.
 export const ensureAdminProfile = async (showToast?: (options: any) => void): Promise<boolean> => {
@@ -17,7 +18,7 @@ export const ensureAdminProfile = async (showToast?: (options: any) => void): Pr
             await setDoc(adminRef, {
                 uid: ADMIN_USER_ID, // Ensure admin has a UID
                 name: 'Valle Admin',
-                email: 'edwinfaguiars@gmail.com',
+                email: ADMIN_EMAIL,
                 role: 'administrador',
                 balance: 0,
                 properties: [{ street: 'N/A', house: 'N/A' }],
@@ -29,9 +30,9 @@ export const ensureAdminProfile = async (showToast?: (options: any) => void): Pr
                 showToast({ title: "Perfil de Administrador Creado", description: "El perfil principal de administrador fue creado exitosamente." });
             }
             return false; // Did not exist
-        } else if (!adminSnap.data()?.uid) {
-            // If admin exists but UID is missing, add it.
-            await updateDoc(adminRef, { uid: ADMIN_USER_ID });
+        } else if (!adminSnap.data()?.uid || adminSnap.data()?.email !== ADMIN_EMAIL) {
+            // If admin exists but UID or email is wrong, fix it.
+            await updateDoc(adminRef, { uid: ADMIN_USER_ID, email: ADMIN_EMAIL, role: 'administrador' });
         }
         return true; // Existed
     } catch (error) {
@@ -46,7 +47,7 @@ export const ensureAdminProfile = async (showToast?: (options: any) => void): Pr
 
 export const ensureOwnerProfile = async (user: User, showToast?: (options: any) => void): Promise<'checked' | 'created' | 'linked'> => {
     // CRITICAL FIX: Do not process the special admin account with this function.
-    if (user.uid === ADMIN_USER_ID || user.email === 'edwinfaguiars@gmail.com') {
+    if (user.uid === ADMIN_USER_ID || user.email === ADMIN_EMAIL) {
         return 'checked';
     }
 
