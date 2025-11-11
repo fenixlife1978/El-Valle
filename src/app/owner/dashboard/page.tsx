@@ -100,7 +100,7 @@ export default function OwnerDashboardPage() {
     useEffect(() => {
         if (loading || !user) return;
         
-        const settingsRef = doc(db, 'config', 'mainSettings');
+        const settingsRef = doc(db(), 'config', 'mainSettings');
         const settingsUnsubscribe = onSnapshot(settingsRef, (settingsSnap) => {
             if (settingsSnap.exists()) {
                 const settings = settingsSnap.data();
@@ -116,7 +116,7 @@ export default function OwnerDashboardPage() {
             }
         });
         
-        const debtsQuery = query(collection(db, "debts"), where("ownerId", "==", user.uid));
+        const debtsQuery = query(collection(db(), "debts"), where("ownerId", "==", user.uid));
         const debtsUnsubscribe = onSnapshot(debtsQuery, (snapshot) => {
             const debtsData: Debt[] = [];
             snapshot.forEach(doc => debtsData.push({ id: doc.id, ...doc.data() } as Debt));
@@ -125,7 +125,7 @@ export default function OwnerDashboardPage() {
         });
 
         const paymentsQuery = query(
-            collection(db, "payments"), 
+            collection(db(), "payments"), 
             where("beneficiaryIds", "array-contains", user.uid)
         );
         const paymentsUnsubscribe = onSnapshot(paymentsQuery, (snapshot) => {
@@ -171,7 +171,7 @@ export default function OwnerDashboardPage() {
     const handleFeedback = async (response: 'liked' | 'disliked') => {
         if (!user) return;
         try {
-            await addDoc(collection(db, 'app_feedback'), {
+            await addDoc(collection(db(), 'app_feedback'), {
                 ownerId: user.uid,
                 response,
                 timestamp: Timestamp.now(),
@@ -207,7 +207,7 @@ export default function OwnerDashboardPage() {
           
           const ownerUnitSummary = (beneficiary.street && beneficiary.house) ? `${beneficiary.street} - ${beneficiary.house}` : "Propiedad no especificada";
     
-          const paidDebtsQuery = query(collection(db, "debts"), where("paymentId", "==", payment.id), where("ownerId", "==", user.uid));
+          const paidDebtsQuery = query(collection(db(), "debts"), where("paymentId", "==", payment.id), where("ownerId", "==", user.uid));
           const paidDebtsSnapshot = await getDocs(paidDebtsQuery);
           const paidDebts = paidDebtsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as Debt).sort((a, b) => a.year - b.year || a.month - b.month);
     

@@ -470,5 +470,3 @@ export default function FinancialBalancePage() {
         </div>
     );
 }
-
-    

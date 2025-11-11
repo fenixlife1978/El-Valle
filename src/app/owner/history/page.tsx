@@ -37,7 +37,7 @@ export default function OwnerHistoryPage() {
         const fetchReports = async () => {
             setLoading(true);
             try {
-                const reportsQuery = query(collection(db, "published_reports"), orderBy('createdAt', 'desc'));
+                const reportsQuery = query(collection(db(), "published_reports"), orderBy('createdAt', 'desc'));
                 const snapshot = await getDocs(reportsQuery);
                 const reportsData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as PublishedReport));
                 setAllReports(reportsData);

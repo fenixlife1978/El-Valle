@@ -231,11 +231,11 @@ export default function ReportsPage() {
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
-            const settingsRef = doc(db, 'config', 'mainSettings');
-            const ownersQuery = query(collection(db, 'owners'));
-            const paymentsQuery = query(collection(db, 'payments'));
-            const debtsQuery = query(collection(db, 'debts'));
-            const historicalPaymentsQuery = query(collection(db, 'historical_payments'));
+            const settingsRef = doc(db(), 'config', 'mainSettings');
+            const ownersQuery = query(collection(db(), 'owners'));
+            const paymentsQuery = query(collection(db(), 'payments'));
+            const debtsQuery = query(collection(db(), 'debts'));
+            const historicalPaymentsQuery = query(collection(db(), 'historical_payments'));
             
             const [settingsSnap, ownersSnapshot, paymentsSnapshot, debtsSnapshot, historicalPaymentsSnapshot] = await Promise.all([
                 getDoc(settingsRef),
@@ -268,7 +268,7 @@ export default function ReportsPage() {
 
              // --- Delinquency Data Calculation ---
             const debtsByOwner = new Map<string, { totalUSD: number, count: number }>();
-            const delinquencyDebtsQuery = query(collection(db, 'debts'), where('ownerId', '!=', ADMIN_USER_ID));
+            const delinquencyDebtsQuery = query(collection(db(), 'debts'), where('ownerId', '!=', ADMIN_USER_ID));
             const delinquencyDebtsSnapshot = await getDocs(delinquencyDebtsQuery);
 
             delinquencyDebtsSnapshot.docs.forEach(doc => {
@@ -672,17 +672,17 @@ export default function ReportsPage() {
         setGeneratingReport(true);
         try {
             const reportId = `integral-${format(new Date(), 'yyyy-MM-dd-HH-mm')}`;
-            const reportRef = doc(db, 'published_reports', reportId);
+            const reportRef = doc(db(), 'published_reports', reportId);
             await setDoc(reportRef, {
                 type: 'integral',
                 title: 'Reporte Integral de Propietarios',
                 createdAt: Timestamp.now(),
             });
 
-            const ownersSnapshot = await getDocs(query(collection(db, 'owners'), where('role', '==', 'propietario')));
-            const batch = writeBatch(db);
+            const ownersSnapshot = await getDocs(query(collection(db(), 'owners'), where('role', '==', 'propietario')));
+            const batch = writeBatch(db());
             ownersSnapshot.forEach(ownerDoc => {
-                const notificationsRef = doc(collection(db, `owners/${ownerDoc.id}/notifications`));
+                const notificationsRef = doc(collection(db(), `owners/${ownerDoc.id}/notifications`));
                 batch.set(notificationsRef, {
                     title: 'Nuevo Reporte Publicado',
                     body: 'El reporte integral de propietarios ya está disponible para su consulta.',
