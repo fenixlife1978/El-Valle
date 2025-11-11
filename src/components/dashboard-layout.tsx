@@ -107,7 +107,7 @@ const BCVRateCard = ({
       <CardContent className="p-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="w-16 h-16 rounded-full bg-background flex items-center justify-center overflow-hidden border-2 border-border">
-          <BCVIcon src={logoUrl} className="w-full h-full object-cover" />
+          <BCVIcon src={logoUrl ?? undefined} className="w-full h-full object-cover" />
           </div>
           <div>
             <p className="text-sm text-muted-foreground">Tasa Oficial BCV</p>
@@ -140,7 +140,7 @@ const CustomHeader = ({ ownerData, userRole }: { ownerData: any, userRole: strin
 
     React.useEffect(() => {
         if (!ownerData?.id) return;
-        const q = query(collection(db, `owners/${ownerData.id}/notifications`), orderBy('createdAt', 'desc'));
+        const q = query(collection(db(), `owners/${ownerData.id}/notifications`), orderBy('createdAt', 'desc'));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const notifs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Notification));
             setNotifications(notifs);
@@ -152,16 +152,16 @@ const CustomHeader = ({ ownerData, userRole }: { ownerData: any, userRole: strin
 
     const handleMarkAllRead = async () => {
         if (!ownerData?.id) return;
-        const batch = writeBatch(db);
+        const batch = writeBatch(db());
         notifications.filter(n => !n.read).forEach(n => {
-            const notifRef = doc(db, `owners/${ownerData.id}/notifications/${n.id}`);
+            const notifRef = doc(db(), `owners/${ownerData.id}/notifications/${n.id}`);
             batch.update(notifRef, { read: true });
         });
         await batch.commit();
     };
 
     const handleLogout = async () => {
-        await signOut(auth);
+        await signOut(auth());
         router.push('/');
     };
 
@@ -258,7 +258,7 @@ function DashboardLayoutContent({
   navItems: NavItem[];
 }) {
   const { isMobile, setOpenMobile } = useSidebar();
-  const { ownerData, userRole, companyInfo, activeRate, bcvLogoUrl, loading } = useAuth();
+  const { ownerData, role: userRole, companyInfo, activeRate, bcvLogoUrl, loading } = useAuth();
   const pathname = usePathname();
 
   const handleLinkClick = () => {

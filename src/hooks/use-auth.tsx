@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
@@ -20,7 +19,7 @@ type ExchangeRate = {
     active: boolean;
 };
 
-type AuthContextType = {
+export type AuthContextType = {
     user: User | null | undefined;
     ownerData: any | null;
     role: string | null;
@@ -36,7 +35,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [ownerData, setOwnerData] = useState<any | null>(null);
     const [role, setRole] = useState<string | null>(null);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(true); 
     
     const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
     const [activeRate, setActiveRate] = useState<ExchangeRate | null>(null);
@@ -45,62 +44,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { toast } = useToast();
 
     useEffect(() => {
-        const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
-            let ownerUnsubscribe: (() => void) | undefined;
+        const unsubscribeAuth = onAuthStateChanged(auth(), (firebaseUser) => {
             if (firebaseUser) {
                 setUser(firebaseUser);
-                try {
-                    await ensureOwnerProfile(firebaseUser, toast);
-                    const ownerRef = doc(db, 'owners', firebaseUser.uid);
-                    ownerUnsubscribe = onSnapshot(ownerRef, (snapshot) => {
+                ensureOwnerProfile(firebaseUser, toast).then(() => {
+                    const ownerRef = doc(db(), 'owners', firebaseUser.uid);
+                    const ownerUnsubscribe = onSnapshot(ownerRef, (snapshot) => {
                         if (snapshot.exists()) {
                             const data = snapshot.data();
                             setOwnerData({ id: snapshot.id, ...data });
-                            setRole(data.role || 'propietario');
+                            // Ensure role is handled consistently and defaults to 'propietario'
+                            const userRole = data.role ? String(data.role).toLowerCase() : 'propietario';
+                            setRole(userRole);
                         } else {
                             setOwnerData(null);
                             setRole(null);
                         }
                         setLoading(false);
+                    }, (error) => {
+                        console.error("Error fetching owner profile:", error);
+                        setLoading(false);
                     });
-                } catch (error) {
-                    console.error("Failed to process owner profile:", error);
+
+                    // Return the cleanup function for the owner snapshot
+                    return () => ownerUnsubscribe();
+                }).catch(error => {
+                    console.error("Failed to ensure owner profile:", error);
                     setLoading(false);
-                }
+                });
             } else {
                 setUser(null);
                 setOwnerData(null);
                 setRole(null);
                 setLoading(false);
             }
-
-            return () => {
-                if (ownerUnsubscribe) {
-                    ownerUnsubscribe();
-                }
-            };
         });
 
-        const settingsRef = doc(db, 'config', 'mainSettings');
-        const settingsUnsubscribe = onSnapshot(settingsRef, 
-            (docSnap) => {
-                if (docSnap.exists()) {
-                    const settingsData = docSnap.data();
-                    setCompanyInfo(settingsData.companyInfo as CompanyInfo);
-                    setBcvLogoUrl(settingsData.bcvLogo || null);
+        const settingsRef = doc(db(), 'config', 'mainSettings');
+        const settingsUnsubscribe = onSnapshot(settingsRef, (docSnap) => {
+            if (docSnap.exists()) {
+                const settingsData = docSnap.data();
+                setCompanyInfo(settingsData.companyInfo as CompanyInfo);
+                setBcvLogoUrl(settingsData.bcvLogo ?? null);
 
-                    const rates: ExchangeRate[] = settingsData.exchangeRates || [];
-                    let currentActiveRate = rates.find(r => r.active) || null;
-                    if (!currentActiveRate && rates.length > 0) {
-                        currentActiveRate = [...rates].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
-                    }
-                    setActiveRate(currentActiveRate);
+                const rates: ExchangeRate[] = settingsData.exchangeRates || [];
+                let currentActiveRate = rates.find(r => r.active) || null;
+                if (!currentActiveRate && rates.length > 0) {
+                    currentActiveRate = [...rates].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
                 }
-            },
-            (error) => {
-                console.error("Error fetching settings:", error);
+                setActiveRate(currentActiveRate);
             }
-        );
+        });
 
         return () => {
             unsubscribeAuth();
