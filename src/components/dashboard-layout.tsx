@@ -345,7 +345,7 @@ function DashboardLayoutContent({
       </Sidebar>
       <SidebarInset>
         <CustomHeader ownerData={ownerData} userRole={userRole} />
-        <main className="flex-1 p-4 md:p-8 bg-background">
+        <main className="flex-1 p-4 md:p-8 bg-muted">
             <BCVRateCard rate={activeRate?.rate || 0} date={activeRate?.date || new Date().toISOString()} loading={loading} logoUrl={bcvLogoUrl} />
             {children}
         </main>
