@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils"
 
 const themes = [
     { name: "Oscuro", value: "dark", colors: ["#263238", "#81C784"] },
+    { name: "Noche Oscura", value: "theme-dark-night", colors: ["#09091A", "#A78BFA"] },
     { name: "Océano", value: "theme-ocean", colors: ["#0F2B4B", "#78DCE8"] },
     { name: "Bosque", value: "theme-forest", colors: ["#223D22", "#88C088"] },
     { name: "Atardecer", value: "theme-sunset", colors: ["#4B1F21", "#FF8C8C"] },

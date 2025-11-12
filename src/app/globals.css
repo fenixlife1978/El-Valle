@@ -28,7 +28,6 @@
     --border: 216 30% 25%;
     --input: 216 30% 25%;
     --ring: 217.2 91.2% 59.8%;
-    --radius: 0.5rem;
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 340 55% 55%;
@@ -60,6 +59,27 @@
     --border: 45 15% 28%;
     --input: 45 15% 28%;
     --ring: 217.2 91.2% 59.8%;
+  }
+
+  .theme-dark-night {
+    --background: 240 10% 4%; /* Very dark blue, almost black */
+    --foreground: 240 10% 95%; /* Off-white */
+    --card: 240 10% 8%; /* Slightly lighter dark blue */
+    --card-foreground: 240 10% 95%;
+    --popover: 240 10% 3%;
+    --popover-foreground: 240 10% 95%;
+    --primary: 260 80% 65%; /* Vibrant purple */
+    --primary-foreground: 260 80% 10%;
+    --secondary: 250 30% 30%; /* Muted purple */
+    --secondary-foreground: 240 10% 95%;
+    --muted: 250 30% 20%;
+    --muted-foreground: 240 10% 70%;
+    --accent: 250 30% 35%;
+    --accent-foreground: 240 10% 95%;
+    --destructive: 0 70% 55%; /* Fiery Red */
+    --border: 250 30% 25%;
+    --input: 250 30% 25%;
+    --ring: 260 80% 65%;
   }
 
   .theme-ocean {
