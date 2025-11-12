@@ -3,7 +3,7 @@
 
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot, getDoc } from 'firebase/firestore';
 import { useToast } from './use-toast';
 import { db, auth } from '@/lib/firebase';
 import { ensureOwnerProfile, ensureAdminProfile } from '@/lib/user-sync';
@@ -31,7 +31,7 @@ export type AuthContextType = {
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-const ADMIN_EMAIL = 'vallecondo@gmail.com';
+const ADMIN_EMAIL = 'Vallecondo@gmail.com';
 const ADMIN_USER_ID = 'valle-admin-main-account';
 
 
@@ -48,37 +48,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { toast } = useToast();
 
     useEffect(() => {
+        let ownerUnsubscribe: (() => void) | undefined;
+
         const unsubscribeAuth = onAuthStateChanged(auth(), async (firebaseUser) => {
-            let ownerUnsubscribe: (() => void) | undefined;
+            
+            // If there's an existing owner listener, unsubscribe from it first.
+            if (ownerUnsubscribe) {
+                ownerUnsubscribe();
+            }
+
             if (firebaseUser) {
                 setUser(firebaseUser);
                 const isAdministrator = firebaseUser.email === ADMIN_EMAIL;
-                const docId = isAdministrator ? ADMIN_USER_ID : firebaseUser.uid;
                 
                 try {
                     if (isAdministrator) {
                         await ensureAdminProfile(toast);
-                    } else {
+                        const adminRef = doc(db(), 'owners', ADMIN_USER_ID);
+                        ownerUnsubscribe = onSnapshot(adminRef, (snapshot) => {
+                            if (snapshot.exists()) {
+                                const data = snapshot.data();
+                                setOwnerData({ id: snapshot.id, ...data });
+                                setRole(String(data.role || 'propietario').toLowerCase());
+                            } else {
+                                setOwnerData(null); setRole(null);
+                            }
+                            setLoading(false);
+                        });
+                    } else { // It's a regular owner
                         await ensureOwnerProfile(firebaseUser, toast);
+                        const ownerRef = doc(db(), 'owners', firebaseUser.uid);
+                        ownerUnsubscribe = onSnapshot(ownerRef, (snapshot) => {
+                            if (snapshot.exists()) {
+                                const data = snapshot.data();
+                                setOwnerData({ id: snapshot.id, ...data });
+                                setRole(String(data.role || 'propietario').toLowerCase());
+                            } else {
+                                setOwnerData(null); setRole(null);
+                            }
+                            setLoading(false);
+                        });
                     }
-
-                    const ownerRef = doc(db(), 'owners', docId);
-                    ownerUnsubscribe = onSnapshot(ownerRef, (snapshot) => {
-                        if (snapshot.exists()) {
-                            const data = snapshot.data();
-                            setOwnerData({ id: snapshot.id, ...data });
-                            const userRole = String(data.role || 'propietario').toLowerCase();
-                            setRole(userRole);
-                        } else {
-                            setOwnerData(null);
-                            setRole(null);
-                        }
-                        setLoading(false);
-                    }, (error) => {
-                        console.error("Error fetching user profile:", error);
-                        toast({variant: 'destructive', title: 'Error de Perfil', description: 'No se pudo cargar tu perfil.'});
-                        setLoading(false);
-                    });
                 } catch (error) {
                     console.error("Failed to ensure user profile:", error);
                     toast({variant: 'destructive', title: 'Error de Sincronización', description: 'No se pudo verificar tu perfil de usuario.'});
@@ -91,12 +101,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 setRole(null);
                 setLoading(false);
             }
-
-            return () => {
-                if (ownerUnsubscribe) {
-                    ownerUnsubscribe();
-                }
-            };
         });
 
         const settingsRef = doc(db(), 'config', 'mainSettings');
@@ -118,6 +122,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return () => {
             unsubscribeAuth();
             settingsUnsubscribe();
+            if (ownerUnsubscribe) {
+                ownerUnsubscribe();
+            }
         };
     }, [toast]);
 

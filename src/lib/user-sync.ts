@@ -4,7 +4,7 @@ import { db } from '@/lib/firebase';
 import { type User } from 'firebase/auth';
 
 const ADMIN_USER_ID = 'valle-admin-main-account';
-const ADMIN_EMAIL = 'vallecondo@gmail.com';
+const ADMIN_EMAIL = 'Vallecondo@gmail.com';
 
 // This function now returns a boolean indicating if the profile existed before the check.
 export const ensureAdminProfile = async (showToast?: (options: any) => void): Promise<boolean> => {
