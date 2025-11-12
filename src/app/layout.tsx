@@ -18,7 +18,6 @@ function AuthGuard({ children }: { children: ReactNode }) {
   const { user, role, loading } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
-  const { toast } = useToast();
 
   useEffect(() => {
     if (loading) return; 
@@ -33,7 +32,7 @@ function AuthGuard({ children }: { children: ReactNode }) {
         router.replace('/welcome');
     }
 
-  }, [user, role, loading, pathname, router, toast]);
+  }, [user, role, loading, pathname, router]);
 
   if (loading) {
     return (
@@ -66,7 +65,7 @@ export default function RootLayout({
         <AuthProvider>
           <ThemeProvider
             attribute="class"
-            defaultTheme="dark"
+            defaultTheme="theme-dark-night"
             enableSystem
             disableTransitionOnChange
           >
