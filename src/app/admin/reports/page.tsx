@@ -338,7 +338,7 @@ export default function ReportsPage() {
 
     const integralReportData = useMemo<IntegralReportRow[]>(() => {
         const sortedOwners = [...owners]
-            .filter(owner => owner.id !== ADMIN_USER_ID && owner.name)
+            .filter(owner => owner.id !== ADMIN_USER_ID && owner.name && owner.name !== 'Valle Admin')
             .map(owner => {
                  const propertiesString = (owner.properties || []).map(p => `${p.street}-${p.house}`).join(', ');
                  const sortKeys = getSortKeys({properties: propertiesString});
