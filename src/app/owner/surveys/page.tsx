@@ -174,10 +174,7 @@ export default function OwnerSurveysPage() {
 
     return (
         <div className="space-y-8">
-            <Button variant="outline" onClick={() => router.back()} className="mb-4">
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Atrás
-            </Button>
+            
             <div>
                 <h1 className="text-3xl font-bold font-headline">Encuestas y Votaciones</h1>
                 <p className="text-muted-foreground">Participa en las decisiones de la comunidad.</p>
@@ -320,3 +317,5 @@ function SurveyForm({ survey, onVote, status }: { survey: Survey, onVote: (surve
         </form>
     );
 }
+
+    

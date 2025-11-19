@@ -318,10 +318,7 @@ export default function PettyCashPage() {
 
     return (
         <div className="space-y-8">
-             <Button variant="outline" onClick={() => router.back()} className="mb-4">
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Atrás
-            </Button>
+             
             <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileChange} accept="image/*" />
             <div className="flex items-center justify-between gap-4 flex-wrap">
                 <div>
@@ -500,5 +497,7 @@ export default function PettyCashPage() {
         </div>
     );
 }
+
+    
 
     

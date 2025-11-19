@@ -215,10 +215,7 @@ export default function ValidationPage() {
 
     return (
         <div className="space-y-8">
-            <Button variant="outline" onClick={() => router.back()} className="mb-4">
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Atrás
-            </Button>
+            
             <div>
                 <h1 className="text-3xl font-bold font-headline">Validación de Datos</h1>
                 <p className="text-muted-foreground">Herramientas para el mantenimiento y corrección de la base de datos.</p>
@@ -310,5 +307,7 @@ export default function ValidationPage() {
         </div>
     );
 }
+
+    
 
     

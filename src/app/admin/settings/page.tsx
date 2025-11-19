@@ -415,10 +415,7 @@ export default function SettingsPage() {
 
     return (
         <div className="space-y-8">
-            <Button variant="outline" onClick={() => router.back()} className="mb-4">
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Atrás
-            </Button>
+            
             <div>
                 <h1 className="text-3xl font-bold font-headline">Configuración General</h1>
                 <p className="text-muted-foreground">Gestiona la información de la comunidad y las reglas de negocio.</p>
@@ -687,5 +684,7 @@ export default function SettingsPage() {
         </div>
     );
 }
+
+    
 
     

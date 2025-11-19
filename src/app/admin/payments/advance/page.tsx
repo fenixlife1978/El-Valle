@@ -240,10 +240,7 @@ export default function AdvancePaymentPage() {
 
     return (
         <div className="space-y-8">
-            <Button variant="outline" onClick={() => router.back()} className="mb-4">
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Atrás
-            </Button>
+            
             <div>
                 <h1 className="text-3xl font-bold font-headline">Registrar Pago por Adelantado</h1>
                 <p className="text-muted-foreground">Seleccione un propietario y los meses futuros que desea cancelar para una o más propiedades.</p>
@@ -388,4 +385,6 @@ export default function AdvancePaymentPage() {
     );
 }
     
+    
+
     
