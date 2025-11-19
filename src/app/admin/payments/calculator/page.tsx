@@ -295,10 +295,7 @@ export default function PaymentCalculatorPage() {
     
     return (
         <div className="space-y-4">
-            <Button variant="outline" onClick={() => router.back()} className="mb-4">
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Atrás
-            </Button>
+            
             <div>
                 <h1 className="text-3xl font-bold font-headline">Calculadora de Pagos</h1>
                 <p className="text-muted-foreground">Calcule y registre pagos de deudas pendientes y adelantos de cuotas.</p>
@@ -468,6 +465,8 @@ export default function PaymentCalculatorPage() {
         </div>
     );
 }
+
+    
 
     
 

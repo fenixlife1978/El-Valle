@@ -73,10 +73,7 @@ export default function OwnerHistoryPage() {
 
     return (
         <div className="space-y-8">
-            <Button variant="outline" onClick={() => router.back()} className="mb-4">
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Atrás
-            </Button>
+            
             <div>
                 <h1 className="text-3xl font-bold font-headline">Historial de Reportes</h1>
                 <p className="text-muted-foreground">Consulta todos los reportes y balances publicados por la administración.</p>
@@ -147,3 +144,5 @@ export default function OwnerHistoryPage() {
         </div>
     );
 }
+
+    

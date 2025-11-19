@@ -192,10 +192,7 @@ export default function ReportViewerPage() {
 
     return (
         <div className="space-y-8">
-            <Button variant="outline" onClick={() => router.back()} className="mb-4">
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Atrás
-            </Button>
+            
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-3xl font-bold font-headline">Balance Financiero: {period}</h1>
@@ -281,3 +278,5 @@ export default function ReportViewerPage() {
         </div>
     );
 }
+
+    

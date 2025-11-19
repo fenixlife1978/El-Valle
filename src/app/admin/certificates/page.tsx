@@ -329,10 +329,7 @@ export default function CertificatesPage() {
 
     return (
         <div className="space-y-8">
-             <Button variant="outline" onClick={() => router.back()} className="mb-4">
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Atrás
-            </Button>
+            
             <div className="flex items-center justify-between gap-4 flex-wrap">
                 <div>
                     <h1 className="text-3xl font-bold font-headline">Constancias y Permisos</h1>
@@ -568,5 +565,7 @@ export default function CertificatesPage() {
         </div>
     );
 }
+
+    
 
     
