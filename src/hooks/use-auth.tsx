@@ -3,7 +3,7 @@
 
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, onSnapshot, getDoc } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { useToast } from './use-toast';
 import { db, auth } from '@/lib/firebase';
 import { ensureOwnerProfile, ensureAdminProfile } from '@/lib/user-sync';
@@ -52,7 +52,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const unsubscribeAuth = onAuthStateChanged(auth(), async (firebaseUser) => {
             
-            // If there's an existing owner listener, unsubscribe from it first.
             if (ownerUnsubscribe) {
                 ownerUnsubscribe();
             }
@@ -62,33 +61,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 const isAdministrator = firebaseUser.email === ADMIN_EMAIL;
                 
                 try {
+                    let userDocRef;
                     if (isAdministrator) {
+                        setRole('administrador');
                         await ensureAdminProfile(toast);
-                        const adminRef = doc(db(), 'owners', ADMIN_USER_ID);
-                        ownerUnsubscribe = onSnapshot(adminRef, (snapshot) => {
-                            if (snapshot.exists()) {
-                                const data = snapshot.data();
-                                setOwnerData({ id: snapshot.id, ...data });
-                                setRole(String(data.role || 'propietario').toLowerCase());
-                            } else {
-                                setOwnerData(null); setRole(null);
-                            }
-                            setLoading(false);
-                        });
-                    } else { // It's a regular owner
+                        userDocRef = doc(db(), 'owners', ADMIN_USER_ID);
+                    } else {
+                        setRole('propietario');
                         await ensureOwnerProfile(firebaseUser, toast);
-                        const ownerRef = doc(db(), 'owners', firebaseUser.uid);
-                        ownerUnsubscribe = onSnapshot(ownerRef, (snapshot) => {
-                            if (snapshot.exists()) {
-                                const data = snapshot.data();
-                                setOwnerData({ id: snapshot.id, ...data });
-                                setRole(String(data.role || 'propietario').toLowerCase());
-                            } else {
-                                setOwnerData(null); setRole(null);
-                            }
-                            setLoading(false);
-                        });
+                        userDocRef = doc(db(), 'owners', firebaseUser.uid);
                     }
+
+                    ownerUnsubscribe = onSnapshot(userDocRef, (snapshot) => {
+                        if (snapshot.exists()) {
+                            setOwnerData({ id: snapshot.id, ...snapshot.data() });
+                        } else {
+                            setOwnerData(null);
+                        }
+                        setLoading(false);
+                    });
+
                 } catch (error) {
                     console.error("Failed to ensure user profile:", error);
                     toast({variant: 'destructive', title: 'Error de Sincronización', description: 'No se pudo verificar tu perfil de usuario.'});

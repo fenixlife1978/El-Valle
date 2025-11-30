@@ -40,22 +40,20 @@ service cloud.firestore {
 
     // Payments collection: Where users report their payments.
     match /payments/{paymentId} {
-      // Admins can manage all payments.
-      // Owners can read their own payments.
-      allow read: isAdmin() || (isSignedIn() && resource.data.reportedBy == request.auth.uid);
-      // Owners can create new payment reports for themselves.
-      allow create: isSignedIn();
-      // Only admins can update (approve/reject) or delete payments.
-      allow update, delete: isAdmin();
+        // Admins can manage all payments.
+        allow read, write: if isAdmin();
+        // Owners can create a payment report for themselves ONLY.
+        allow create: if isSignedIn() && request.resource.data.reportedBy == request.auth.uid;
+        // Owners can read payments where they are a beneficiary.
+        allow read: if isSignedIn() && request.auth.uid in resource.data.beneficiaryIds;
     }
     
     // Debts collection: Tracks what each owner owes.
     match /debts/{debtId} {
         // Admins can manage all debts.
-        // Owners can only read their own debts.
-        allow read: isAdmin() || (isSignedIn() && resource.data.ownerId == request.auth.uid);
-        // Only admins can create, update or delete debts.
         allow write: isAdmin();
+        // Owners can only read their own debts.
+        allow read: isSignedIn() && resource.data.ownerId == request.auth.uid;
     }
 
     // Certificates collection: Residence/solvency certificates.
