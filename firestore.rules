@@ -25,9 +25,9 @@ service cloud.firestore {
     match /owners/{userId} {
       // Admins can read/write any profile.
       // Owners can read and update their own profile.
-      allow read, update: isAdmin() || isOwner(userId);
+      allow read, update: if isAdmin() || isOwner(userId);
       // Only admins can create or delete profiles.
-      allow create, delete: isAdmin();
+      allow create, delete: if isAdmin();
     }
     
     // Config collection: General app settings like company info and rates.
@@ -42,8 +42,8 @@ service cloud.firestore {
     match /payments/{paymentId} {
         // Admins can manage all payments.
         allow read, write: if isAdmin();
-        // Owners can create a payment report for themselves ONLY.
-        allow create: if isSignedIn() && request.resource.data.reportedBy == request.auth.uid;
+        // Any signed-in user can create a payment report.
+        allow create: if isSignedIn();
         // Owners can read payments where they are a beneficiary.
         allow read: if isSignedIn() && request.auth.uid in resource.data.beneficiaryIds;
     }
