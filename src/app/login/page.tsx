@@ -137,39 +137,47 @@ function LoginContent() {
                             required
                         />
                     </div>
-                    <div className="space-y-2 relative">
-                        <Label htmlFor="password">Contraseña</Label>
-                        <Input
-                            id="password"
-                            type={showPassword ? "text" : "password"}
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            required
-                            className="pr-10"
-                        />
-                            <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="absolute right-1 top-7 h-7 w-7 text-muted-foreground"
-                            onClick={() => setShowPassword((prev) => !prev)}
-                        >
-                            {showPassword ? <EyeOff className="h-4 w-4"/> : <Eye className="h-4 w-4"/>}
-                            <span className="sr-only">Toggle password visibility</span>
-                        </Button>
-                    </div>
-                        <div className="text-right">
-                            <Button variant="link" size="sm" asChild className="p-0 h-auto">
+                    <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                            <Label htmlFor="password">Contraseña</Label>
+                            <Button variant="link" size="sm" asChild className="p-0 h-auto text-xs">
                                 <Link href="/forgot-password">¿Olvidaste tu contraseña?</Link>
                             </Button>
                         </div>
+                        <div className="relative">
+                            <Input
+                                id="password"
+                                type={showPassword ? "text" : "password"}
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                required
+                                className="pr-10"
+                            />
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground"
+                                onClick={() => setShowPassword((prev) => !prev)}
+                            >
+                                {showPassword ? <EyeOff className="h-4 w-4"/> : <Eye className="h-4 w-4"/>}
+                                <span className="sr-only">Toggle password visibility</span>
+                            </Button>
+                        </div>
+                    </div>
                 </CardContent>
                 <CardFooter className="flex flex-col gap-4">
                     <Button type="submit" className="w-full" disabled={loading}>
                         {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         {loading ? 'Verificando...' : 'Ingresar'}
                     </Button>
-                        <Button variant="link" size="sm" asChild>
+                    <div className="text-sm">
+                        ¿No tienes cuenta?{' '}
+                        <Button variant="link" asChild className="p-0 h-auto">
+                            <Link href="/register">Regístrate</Link>
+                        </Button>
+                    </div>
+                    <Button variant="link" size="sm" asChild className="text-xs">
                         <Link href="/welcome">Volver a selección de rol</Link>
                     </Button>
                 </CardFooter>
