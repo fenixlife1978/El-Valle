@@ -10,8 +10,11 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Shield, User, Eye, EyeOff } from 'lucide-react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import Link from 'next/link';
+import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
+
+const ADMIN_USER_ID = 'valle-admin-main-account';
 
 function LoginContent() {
     const router = useRouter();
@@ -46,6 +49,36 @@ function LoginContent() {
 
         setLoading(true);
         try {
+            // Step 1: Verify role from Firestore before attempting to sign in.
+            let userRoleFromDB: string | null = null;
+            if (role === 'admin') {
+                const adminRef = doc(db(), "owners", ADMIN_USER_ID);
+                const adminSnap = await getDoc(adminRef);
+                if (adminSnap.exists() && adminSnap.data().email?.toLowerCase() === email.toLowerCase()) {
+                    userRoleFromDB = 'administrador';
+                }
+            } else {
+                const q = query(collection(db(), "owners"), where("email", "==", email));
+                const querySnapshot = await getDocs(q);
+                if (!querySnapshot.empty) {
+                    const userData = querySnapshot.docs[0].data();
+                    userRoleFromDB = userData.role;
+                }
+            }
+            
+            const expectedRole = role === 'admin' ? 'administrador' : 'propietario';
+
+            if (userRoleFromDB !== expectedRole) {
+                toast({
+                    variant: 'destructive',
+                    title: 'Acceso Denegado',
+                    description: `No tienes los permisos para iniciar sesión como ${role === 'admin' ? 'Administrador' : 'Propietario'}.`,
+                });
+                setLoading(false);
+                return;
+            }
+
+            // Step 2: If role is correct, proceed with Firebase Auth sign-in.
             await signInWithEmailAndPassword(auth(), email, password);
             
             toast({
@@ -53,7 +86,7 @@ function LoginContent() {
                 description: 'Bienvenido de nuevo. Redirigiendo...',
                 className: 'bg-green-100 border-green-400 text-green-800'
             });
-            // The redirection is now handled by the root AuthGuard
+            // Redirection is handled by the root AuthGuard
             
         } catch (error: any) {
             console.error("Login error:", error);
@@ -131,7 +164,7 @@ function LoginContent() {
                 <CardFooter className="flex flex-col gap-4">
                     <Button type="submit" className="w-full" disabled={loading}>
                         {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        {loading ? 'Ingresando...' : 'Ingresar'}
+                        {loading ? 'Verificando...' : 'Ingresar'}
                     </Button>
                         <Button variant="link" size="sm" asChild>
                         <Link href="/welcome">Volver a selección de rol</Link>
@@ -151,5 +184,3 @@ export default function LoginPage() {
         </main>
     );
 }
-
-    
