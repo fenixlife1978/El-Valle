@@ -19,7 +19,6 @@ import 'jspdf-autotable';
 import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc, setDoc, getDocs, writeBatch } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
 import { createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
-import { useRouter } from 'next/navigation';
 
 
 type Role = 'propietario' | 'administrador';
@@ -98,7 +97,6 @@ export default function PeopleManagementPage() {
     const [searchTerm, setSearchTerm] = useState('');
     const importFileRef = useRef<HTMLInputElement>(null);
     const { toast } = useToast();
-    const router = useRouter();
 
     useEffect(() => {
         const firestore = db();
@@ -212,32 +210,9 @@ export default function PeopleManagementPage() {
         try {
             if (isEditing) {
                 const ownerRef = doc(firestore, "owners", currentOwner.id!);
-                const ownerSnap = await getDoc(ownerRef);
-                const existingData = ownerSnap.data();
-    
-                if (existingData && existingData.email.toLowerCase() !== currentOwner.email.toLowerCase()) {
-                    // Email has changed, perform migration
-                    toast({ title: "Actualizando correo...", description: "Creando nueva cuenta y migrando datos." });
-    
-                    // 1. Create new Auth user
-                    const newUserCredential = await createUserWithEmailAndPassword(auth(), currentOwner.email, 'Condominio2025.');
-                    const newUserId = newUserCredential.user.uid;
-    
-                    // 2. Create new Firestore document with all data
-                    const newOwnerRef = doc(firestore, "owners", newUserId);
-                    await setDoc(newOwnerRef, { ...dataToSave, uid: newUserId });
-    
-                    // 3. Delete old Firestore document
-                    await deleteDoc(ownerRef);
-                    // The old Auth account remains but is now disassociated from any data.
-    
-                    toast({ title: "Propietario Migrado Exitosamente", description: `La cuenta ha sido migrada a ${currentOwner.email}. La contraseña es 'Condominio2025.'` });
-    
-                } else {
-                    // Just a regular update, no email change
-                    await updateDoc(ownerRef, dataToSave);
-                    toast({ title: 'Propietario Actualizado', description: 'Los datos han sido guardados exitosamente.' });
-                }
+                await updateDoc(ownerRef, dataToSave);
+                toast({ title: 'Propietario Actualizado', description: 'Los datos han sido guardados exitosamente.' });
+
             } else { // Creating a new user
                 const userCredential = await createUserWithEmailAndPassword(auth(), currentOwner.email, 'Condominio2025.');
                 const newUserId = userCredential.user.uid;
@@ -259,7 +234,7 @@ export default function PeopleManagementPage() {
             if (error.code) {
                 switch (error.code) {
                     case 'auth/email-already-in-use':
-                        errorMessage = 'El nuevo correo electrónico ya está en uso por otra cuenta.';
+                        errorMessage = 'El correo electrónico ya está en uso por otra cuenta.';
                         break;
                     case 'auth/invalid-email':
                         errorMessage = 'El formato del correo electrónico no es válido.';
@@ -609,7 +584,8 @@ export default function PeopleManagementPage() {
                             </div>
                              <div className="space-y-2">
                                 <Label htmlFor="email">Email</Label>
-                                <Input id="email" type="email" value={currentOwner.email || ''} onChange={handleInputChange} />
+                                <Input id="email" type="email" value={currentOwner.email || ''} onChange={handleInputChange} disabled={!!currentOwner.id} />
+                                {currentOwner.id && <p className="text-xs text-muted-foreground">El correo no puede ser modificado después de la creación. Utilice la página de Sincronización para cambios.</p>}
                             </div>
 
                             <div className="space-y-2">

@@ -17,7 +17,7 @@ export const ensureAdminProfile = async (showToast?: (options: any) => void): Pr
 
         if (!adminSnap.exists()) {
             await setDoc(adminRef, {
-                uid: ADMIN_USER_ID, // Ensure admin has a UID field that matches its doc ID
+                uid: ADMIN_USER_ID,
                 name: 'Valle Admin',
                 email: ADMIN_EMAIL,
                 role: 'administrador',
@@ -53,58 +53,56 @@ export const ensureAdminProfile = async (showToast?: (options: any) => void): Pr
 
 
 export const ensureOwnerProfile = async (user: User, showToast?: (options: any) => void): Promise<'checked' | 'created' | 'linked'> => {
-    // CRITICAL: Do not process the special admin account with this function.
     if (user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
         return 'checked';
     }
 
     const firestore = db();
-    const ownerRef = doc(firestore, "owners", user.uid);
+    const ownerRefByUID = doc(firestore, "owners", user.uid);
 
     try {
-        const ownerSnap = await getDoc(ownerRef);
+        const ownerSnapByUID = await getDoc(ownerRefByUID);
 
-        if (ownerSnap.exists()) {
-            // Profile exists and is correctly linked by UID.
-            // Ensure the `uid` field is also present inside the document for consistency.
-            if (!ownerSnap.data().uid) {
-                await updateDoc(ownerRef, { uid: user.uid });
-            }
-            return 'checked'; 
+        if (ownerSnapByUID.exists()) {
+            // UID-based document exists. This is the correct state.
+            return 'checked';
         }
 
-        // If it doesn't exist with the UID, search by email to link an existing profile.
+        // If no document with UID exists, search by email.
         const q = query(collection(firestore, "owners"), where("email", "==", user.email));
         const querySnapshot = await getDocs(q);
-        
+
         if (!querySnapshot.empty) {
-            // Profile exists but has no UID or a different one. We'll move the data to the correct doc ID.
+            // An old document exists with this email but a different (or missing) ID.
+            // This happens if an admin changed the email in the database.
+            // We need to link this auth account to that data.
             const oldDoc = querySnapshot.docs[0];
             const oldData = oldDoc.data();
-            
+            const batch = writeBatch(firestore);
+
             // Create the new document with the correct UID as the document ID
-            await setDoc(ownerRef, {
+            batch.set(ownerRefByUID, {
                 ...oldData,
-                uid: user.uid, // Explicitly set the new UID
+                uid: user.uid, // Ensure the UID is correctly set in the new document
             });
 
-            // Delete the old document if its ID is different from the new UID
-            if (oldDoc.id !== user.uid) {
-                await deleteDoc(oldDoc.ref);
-            }
+            // Delete the old, incorrectly-ID'd document
+            batch.delete(oldDoc.ref);
+
+            await batch.commit();
 
             if (showToast) {
-                showToast({ title: "Perfil Vinculado", description: "Hemos vinculado tu cuenta de inicio de sesión a tu perfil de propietario existente." });
+                showToast({ title: "Perfil Vinculado", description: "Tu cuenta de inicio de sesión ha sido vinculada a tu perfil de propietario existente." });
             }
             return 'linked';
 
         } else {
-            // Profile doesn't exist at all, create a new one with the correct UID as doc ID.
-            await setDoc(ownerRef, {
+            // No profile exists for this UID or email, so create a new one.
+            await setDoc(ownerRefByUID, {
                 uid: user.uid,
-                name: user.displayName || 'Propietario sin nombre',
+                name: user.displayName || user.email || 'Propietario sin nombre',
                 email: user.email,
-                role: 'propietario', // Default role
+                role: 'propietario',
                 balance: 0,
                 properties: [],
                 passwordChanged: false,
