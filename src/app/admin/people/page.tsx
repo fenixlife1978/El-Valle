@@ -10,7 +10,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PlusCircle, MoreHorizontal, Edit, Trash2, FileUp, FileDown, Loader2, MinusCircle, KeyRound, Search, RefreshCw, ArrowLeft, Eye, EyeOff } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, Edit, Trash2, FileUp, FileDown, Loader2, MinusCircle, KeyRound, Search, RefreshCw, Eye, EyeOff } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import * as XLSX from 'xlsx';
@@ -443,10 +443,6 @@ export default function PeopleManagementPage() {
 
     return (
         <div className="space-y-8">
-             <Button variant="outline" onClick={() => router.back()} className="mb-4">
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Atrás
-            </Button>
             <div className="flex items-center justify-between gap-4 flex-wrap">
                 <div>
                     <h1 className="text-3xl font-bold font-headline">Gestión de Personas</h1>
@@ -669,4 +665,6 @@ export default function PeopleManagementPage() {
     );
 }
     
+    
+
     
