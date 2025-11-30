@@ -196,7 +196,7 @@ export default function PeopleManagementPage() {
             return;
         }
 
-        if (currentOwner.email === ADMIN_EMAIL && currentOwner.role !== 'administrador') {
+        if (currentOwner.email.toLowerCase() === ADMIN_EMAIL.toLowerCase() && currentOwner.role !== 'administrador') {
              toast({ variant: 'destructive', title: 'Error de Permisos', description: `La cuenta ${ADMIN_EMAIL} debe tener el rol de administrador.` });
             return;
         }
@@ -387,7 +387,7 @@ export default function PeopleManagementPage() {
                 let successCount = 0;
                 
                 for (const ownerData of newOwners) {
-                    if (ownerData.email === ADMIN_EMAIL) continue;
+                    if (ownerData.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) continue;
                     if (ownerData.properties && ownerData.properties.length > 0) {
                         const ownerDocRef = doc(collection(firestore, "owners")); // Always generate new ID for imports
                          batch.set(ownerDocRef, { ...ownerData, passwordChanged: false });
@@ -585,8 +585,7 @@ export default function PeopleManagementPage() {
                             </div>
                              <div className="space-y-2">
                                 <Label htmlFor="email">Email</Label>
-                                <Input id="email" type="email" value={currentOwner.email || ''} onChange={handleInputChange} disabled={!!currentOwner.id}/>
-                                {currentOwner.id && <p className="text-xs text-muted-foreground">El correo no puede ser modificado después de la creación.</p>}
+                                <Input id="email" type="email" value={currentOwner.email || ''} onChange={handleInputChange} />
                             </div>
 
                             <div className="space-y-2">
