@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Loader2, FileText, Scale, ArrowLeft } from "lucide-react";
-import { collection, getDocs, query, orderBy } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -18,7 +18,7 @@ import { useRouter } from 'next/navigation';
 type PublishedReport = {
     id: string; // e.g., 'balance-2025-10'
     type: 'balance' | 'integral';
-    createdAt: string;
+    createdAt: Date; // Changed to Date object for consistency
 };
 
 const monthsLocale: { [key: number]: string } = {
@@ -39,7 +39,19 @@ export default function OwnerHistoryPage() {
             try {
                 const reportsQuery = query(collection(db(), "published_reports"), orderBy('createdAt', 'desc'));
                 const snapshot = await getDocs(reportsQuery);
-                const reportsData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as PublishedReport));
+                const reportsData = snapshot.docs.map(doc => {
+                    const data = doc.data();
+                    let createdAtDate: Date;
+                    // Safely convert Firestore Timestamp or string to Date
+                    if (data.createdAt instanceof Timestamp) {
+                        createdAtDate = data.createdAt.toDate();
+                    } else if (typeof data.createdAt === 'string') {
+                        createdAtDate = new Date(data.createdAt);
+                    } else {
+                        createdAtDate = new Date(); // Fallback
+                    }
+                    return { ...data, id: doc.id, createdAt: createdAtDate } as PublishedReport;
+                });
                 setAllReports(reportsData);
             } catch (error) {
                 console.error("Error fetching published reports:", error);
@@ -59,7 +71,7 @@ export default function OwnerHistoryPage() {
 
     const getReportNameAndPeriod = (report: PublishedReport) => {
         const parts = report.id.split('-');
-        if (report.type === 'balance' && parts.length === 3) {
+        if (report.type === 'balance' && parts.length >= 3) {
             const year = parts[1];
             const month = parseInt(parts[2], 10);
             const monthName = monthsLocale[month] || 'Mes Desconocido';
@@ -127,7 +139,7 @@ export default function OwnerHistoryPage() {
                                             {getReportNameAndPeriod(report)}
                                         </TableCell>
                                         <TableCell>
-                                            {format(new Date(report.createdAt), 'dd MMMM, yyyy - hh:mm a', {locale: es})}
+                                            {format(report.createdAt, 'dd MMMM, yyyy - hh:mm a', {locale: es})}
                                         </TableCell>
                                         <TableCell className="text-right">
                                             <Button variant="outline" size="sm" asChild>
@@ -144,5 +156,3 @@ export default function OwnerHistoryPage() {
         </div>
     );
 }
-
-    
