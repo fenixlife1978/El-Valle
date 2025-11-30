@@ -58,7 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
             if (firebaseUser) {
                 setUser(firebaseUser);
-                const isAdministrator = firebaseUser.email === ADMIN_EMAIL;
+                const isAdministrator = firebaseUser.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
                 
                 try {
                     let userDocRef;

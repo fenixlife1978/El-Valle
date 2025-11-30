@@ -53,7 +53,7 @@ export const ensureAdminProfile = async (showToast?: (options: any) => void): Pr
 
 export const ensureOwnerProfile = async (user: User, showToast?: (options: any) => void): Promise<'checked' | 'created' | 'linked'> => {
     // CRITICAL: Do not process the special admin account with this function.
-    if (user.email === ADMIN_EMAIL) {
+    if (user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
         return 'checked';
     }
 
