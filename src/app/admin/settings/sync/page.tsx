@@ -47,10 +47,14 @@ export default function SyncProfilesPage() {
         if (!ownerSearchTerm) return;
         setLoadingAction(prev => ({ ...prev, changeEmail: true }));
         try {
-            const q = query(collection(db(), "owners"), where("name", "==", ownerSearchTerm));
+            const q = query(
+                collection(db(), "owners"), 
+                where("name", ">=", ownerSearchTerm),
+                where("name", "<=", ownerSearchTerm + '\uf8ff')
+            );
             const querySnapshot = await getDocs(q);
             if (querySnapshot.empty) {
-                toast({ variant: 'destructive', title: 'No encontrado', description: 'No se encontró ningún propietario con ese nombre exacto.' });
+                toast({ variant: 'destructive', title: 'No encontrado', description: 'No se encontró ningún propietario con ese nombre.' });
                 setFoundOwner(null);
             } else {
                 const ownerDoc = querySnapshot.docs[0];
@@ -134,8 +138,8 @@ export default function SyncProfilesPage() {
                 <CardContent className="space-y-4">
                      <div className="flex items-end gap-2">
                          <div className="flex-grow space-y-2">
-                            <Label htmlFor="ownerSearch">Buscar Propietario por Nombre Exacto</Label>
-                            <Input id="ownerSearch" value={ownerSearchTerm} onChange={e => setOwnerSearchTerm(e.target.value)} placeholder="Escriba el nombre completo..." />
+                            <Label htmlFor="ownerSearch">Buscar Propietario por Nombre</Label>
+                            <Input id="ownerSearch" value={ownerSearchTerm} onChange={e => setOwnerSearchTerm(e.target.value)} placeholder="Escriba el nombre..." />
                         </div>
                         <Button variant="outline" onClick={searchOwner} disabled={loadingAction['changeEmail']}>
                             {loadingAction['changeEmail'] ? <Loader2 className="h-4 w-4 animate-spin"/> : <Search className="h-4 w-4"/>}
