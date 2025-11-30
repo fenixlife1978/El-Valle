@@ -1,10 +1,11 @@
 
+
 import { doc, getDoc, setDoc, Timestamp, collection, query, where, getDocs, writeBatch, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { type User } from 'firebase/auth';
 
 const ADMIN_USER_ID = 'valle-admin-main-account';
-const ADMIN_EMAIL = 'Vallecondo@gmail.com';
+const ADMIN_EMAIL = 'vallecondo@gmail.com';
 
 // This function now returns a boolean indicating if the profile existed before the check.
 export const ensureAdminProfile = async (showToast?: (options: any) => void): Promise<boolean> => {
@@ -33,7 +34,7 @@ export const ensureAdminProfile = async (showToast?: (options: any) => void): Pr
         } else {
              // If admin exists, ensure critical fields are correct.
             const data = adminSnap.data();
-            if (data.uid !== ADMIN_USER_ID || data.email !== ADMIN_EMAIL || data.role !== 'administrador') {
+            if (data.uid !== ADMIN_USER_ID || data.email.toLowerCase() !== ADMIN_EMAIL.toLowerCase() || data.role !== 'administrador') {
                  await updateDoc(adminRef, { uid: ADMIN_USER_ID, email: ADMIN_EMAIL, role: 'administrador' });
                  if (showToast) {
                     showToast({ title: "Perfil de Administrador Corregido", description: "Se detectó una inconsistencia y se ha corregido el perfil del administrador." });
