@@ -12,7 +12,7 @@ import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 
-const publicPaths = ['/welcome', '/login', '/forgot-password'];
+const publicPaths = ['/welcome', '/login', '/forgot-password', '/register'];
 
 function AuthGuard({ children }: { children: ReactNode }) {
   const { user, role, loading } = useAuth();
