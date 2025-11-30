@@ -14,6 +14,7 @@ const themes = [
     { name: "Bosque", value: "theme-forest", colors: ["#223D22", "#88C088"] },
     { name: "Atardecer", value: "theme-sunset", colors: ["#4B1F21", "#FF8C8C"] },
     { name: "Amanecer", value: "theme-sunrise", colors: ["#FFF8F0", "#FF6B6B"] },
+    { name: "Abeja", value: "theme-bumblebee", colors: ["#0A0A0A", "#E0B310"] },
 ]
 
 export function ThemeSwitcher() {

@@ -165,6 +165,26 @@
     --input: 40 80% 80%;
     --ring: 15 90% 60%;
   }
+  .theme-bumblebee {
+    --background: 0 0% 4%; /* Near Black */
+    --foreground: 60 10% 95%; /* Off-white */
+    --card: 0 0% 8%; /* Dark Grey */
+    --card-foreground: 60 10% 95%;
+    --popover: 0 0% 2%;
+    --popover-foreground: 60 10% 95%;
+    --primary: 45 95% 55%; /* Vibrant Yellow */
+    --primary-foreground: 50 100% 5%; /* Dark color for text on yellow */
+    --secondary: 0 0% 15%; /* Mid Grey */
+    --secondary-foreground: 60 10% 95%;
+    --muted: 0 0% 15%;
+    --muted-foreground: 60 10% 70%;
+    --accent: 0 0% 22%;
+    --accent-foreground: 60 10% 95%;
+    --destructive: 0 70% 55%; /* Fiery Red */
+    --border: 0 0% 22%;
+    --input: 0 0% 22%;
+    --ring: 45 95% 55%;
+  }
 }
 
 @layer base {
