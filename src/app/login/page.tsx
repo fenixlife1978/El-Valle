@@ -15,6 +15,7 @@ import Link from 'next/link';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 
 const ADMIN_USER_ID = 'valle-admin-main-account';
+const ADMIN_EMAIL = 'vallecondo@gmail.com';
 
 function LoginContent() {
     const router = useRouter();
@@ -52,12 +53,14 @@ function LoginContent() {
             // Step 1: Verify role from Firestore before attempting to sign in.
             let userRoleFromDB: string | null = null;
             if (role === 'admin') {
+                // For admin, we explicitly check the admin document by its known ID.
                 const adminRef = doc(db(), "owners", ADMIN_USER_ID);
                 const adminSnap = await getDoc(adminRef);
                 if (adminSnap.exists() && adminSnap.data().email?.toLowerCase() === email.toLowerCase()) {
                     userRoleFromDB = 'administrador';
                 }
             } else {
+                // For owners, we query by email.
                 const q = query(collection(db(), "owners"), where("email", "==", email));
                 const querySnapshot = await getDocs(q);
                 if (!querySnapshot.empty) {
