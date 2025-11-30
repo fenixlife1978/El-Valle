@@ -195,57 +195,81 @@ export default function PeopleManagementPage() {
             toast({ variant: 'destructive', title: 'Error de Validación', description: 'Nombre, Email, calle y casa son obligatorios.' });
             return;
         }
-
-        if (currentOwner.email.toLowerCase() === ADMIN_EMAIL.toLowerCase() && currentOwner.role !== 'administrador') {
-             toast({ variant: 'destructive', title: 'Error de Permisos', description: `La cuenta ${ADMIN_EMAIL} debe tener el rol de administrador.` });
-            return;
-        }
-
-        const isNewUser = !currentOwner.id;
     
-        const { id, ...ownerData } = currentOwner;
-        const balanceValue = parseFloat(String(ownerData.balance).replace(',', '.') || '0');
-        const dataToSave: any = {
-            name: ownerData.name,
-            email: ownerData.email,
-            properties: ownerData.properties,
-            role: ownerData.role,
+        const isEditing = !!currentOwner.id;
+        const firestore = db();
+    
+        const balanceValue = parseFloat(String(currentOwner.balance).replace(',', '.') || '0');
+        const dataToSave = {
+            name: currentOwner.name,
+            email: currentOwner.email,
+            properties: currentOwner.properties,
+            role: currentOwner.role,
             balance: isNaN(balanceValue) ? 0 : balanceValue,
-            passwordChanged: ownerData.passwordChanged || false,
+            passwordChanged: currentOwner.passwordChanged || false,
         };
     
         try {
-            if (isNewUser) {
-                // Step 1: Create Firebase Auth user
-                const userCredential = await createUserWithEmailAndPassword(auth(), dataToSave.email, 'Condominio2025.');
+            if (isEditing) {
+                const ownerRef = doc(firestore, "owners", currentOwner.id!);
+                const ownerSnap = await getDoc(ownerRef);
+                const existingData = ownerSnap.data();
+    
+                if (existingData && existingData.email.toLowerCase() !== currentOwner.email.toLowerCase()) {
+                    // Email has changed, perform migration
+                    toast({ title: "Actualizando correo...", description: "Creando nueva cuenta y migrando datos." });
+    
+                    // 1. Create new Auth user
+                    const newUserCredential = await createUserWithEmailAndPassword(auth(), currentOwner.email, 'Condominio2025.');
+                    const newUserId = newUserCredential.user.uid;
+    
+                    // 2. Create new Firestore document with all data
+                    const newOwnerRef = doc(firestore, "owners", newUserId);
+                    await setDoc(newOwnerRef, { ...dataToSave, uid: newUserId });
+    
+                    // 3. Delete old Firestore document
+                    await deleteDoc(ownerRef);
+                    // The old Auth account remains but is now disassociated from any data.
+    
+                    toast({ title: "Propietario Migrado Exitosamente", description: `La cuenta ha sido migrada a ${currentOwner.email}. La contraseña es 'Condominio2025.'` });
+    
+                } else {
+                    // Just a regular update, no email change
+                    await updateDoc(ownerRef, dataToSave);
+                    toast({ title: 'Propietario Actualizado', description: 'Los datos han sido guardados exitosamente.' });
+                }
+            } else { // Creating a new user
+                const userCredential = await createUserWithEmailAndPassword(auth(), currentOwner.email, 'Condominio2025.');
                 const newUserId = userCredential.user.uid;
-
-                // Step 2: Create Firestore document with the new UID as the document ID
-                const ownerDocRef = doc(db(), "owners", newUserId);
+    
+                const ownerDocRef = doc(firestore, "owners", newUserId);
                 await setDoc(ownerDocRef, { ...dataToSave, uid: newUserId });
-                
-                toast({ 
-                    title: 'Propietario Creado Exitosamente', 
+    
+                toast({
+                    title: 'Propietario Creado Exitosamente',
                     description: `${dataToSave.name} ha sido creado. La contraseña inicial es 'Condominio2025.'`
                 });
-            } else if (id) { // Editing existing owner
-                const ownerRef = doc(db(), "owners", id);
-                await updateDoc(ownerRef, dataToSave);
-                toast({ title: 'Propietario Actualizado', description: 'Los datos han sido guardados exitosamente.' });
-            } else {
-                 toast({ variant: 'destructive', title: 'Error', description: 'No se pudo determinar la acción a realizar.' });
             }
+    
             setIsDialogOpen(false);
             setCurrentOwner(emptyOwner);
         } catch (error: any) {
             console.error("Error saving owner: ", error);
             let errorMessage = 'No se pudieron guardar los cambios.';
-            if (error.code === 'auth/email-already-in-use') {
-                errorMessage = 'El correo electrónico ya está en uso por otra cuenta de autenticación.';
-            } else if (error.code === 'auth/invalid-email') {
-                errorMessage = 'El formato del correo electrónico no es válido.';
-            } else if (error.code === 'auth/weak-password') {
-                errorMessage = 'La contraseña es demasiado débil.';
+            if (error.code) {
+                switch (error.code) {
+                    case 'auth/email-already-in-use':
+                        errorMessage = 'El nuevo correo electrónico ya está en uso por otra cuenta.';
+                        break;
+                    case 'auth/invalid-email':
+                        errorMessage = 'El formato del correo electrónico no es válido.';
+                        break;
+                    case 'auth/weak-password':
+                        errorMessage = 'La contraseña es demasiado débil (esto es un error interno, contacte soporte).';
+                        break;
+                    default:
+                        errorMessage = `Error de autenticación: ${error.message}`;
+                }
             }
             toast({ variant: 'destructive', title: 'Error', description: errorMessage });
         }
@@ -439,7 +463,7 @@ export default function PeopleManagementPage() {
             console.error("Password reset error:", error);
             let description = 'No se pudo enviar el correo de restablecimiento.';
             if (error.code === 'auth/user-not-found') {
-                description = 'Este usuario no tiene una cuenta de autenticación creada. Debe usar "Olvidé mi contraseña" en la página de login para crearla.'
+                description = 'No existe una cuenta de autenticación para este correo. El usuario debe usar "Olvidé mi contraseña" para crearla o puede actualizar su correo aquí.'
             }
             toast({ variant: 'destructive', title: 'Error', description });
         }
