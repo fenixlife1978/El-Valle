@@ -216,14 +216,17 @@ export default function PeopleManagementPage() {
     
         try {
             if (isNewUser) {
-                // Just create the Firestore document. The user will set their own password.
-                const docRef = await addDoc(collection(db(), "owners"), dataToSave);
-                // Set the uid to the document id for future linking
-                await updateDoc(docRef, { uid: docRef.id });
+                // Step 1: Create Firebase Auth user
+                const userCredential = await createUserWithEmailAndPassword(auth(), dataToSave.email, 'Condominio2025.');
+                const newUserId = userCredential.user.uid;
+
+                // Step 2: Create Firestore document with the new UID as the document ID
+                const ownerDocRef = doc(db(), "owners", newUserId);
+                await setDoc(ownerDocRef, { ...dataToSave, uid: newUserId });
                 
                 toast({ 
-                    title: 'Perfil de Propietario Creado', 
-                    description: `Se ha creado el perfil para ${dataToSave.name}. El usuario deberá usar "Olvidé mi contraseña" para su primer acceso.`
+                    title: 'Propietario Creado Exitosamente', 
+                    description: `${dataToSave.name} ha sido creado. La contraseña inicial es 'Condominio2025.'`
                 });
             } else if (id) { // Editing existing owner
                 const ownerRef = doc(db(), "owners", id);
@@ -241,6 +244,8 @@ export default function PeopleManagementPage() {
                 errorMessage = 'El correo electrónico ya está en uso por otra cuenta de autenticación.';
             } else if (error.code === 'auth/invalid-email') {
                 errorMessage = 'El formato del correo electrónico no es válido.';
+            } else if (error.code === 'auth/weak-password') {
+                errorMessage = 'La contraseña es demasiado débil.';
             }
             toast({ variant: 'destructive', title: 'Error', description: errorMessage });
         }
@@ -569,7 +574,7 @@ export default function PeopleManagementPage() {
                     <DialogHeader>
                         <DialogTitle>{currentOwner.id ? 'Editar Persona' : 'Agregar Nueva Persona'}</DialogTitle>
                         <DialogDescription>
-                           {currentOwner.id ? 'Modifique la información y haga clic en guardar.' : 'Complete el perfil del propietario. El usuario deberá usar "Olvidé mi contraseña" para establecer su clave por primera vez.'}
+                           {currentOwner.id ? 'Modifique la información y haga clic en guardar.' : "Complete el perfil. La contraseña inicial para el primer acceso será 'Condominio2025.'"}
                         </DialogDescription>
                     </DialogHeader>
                     <div className="flex-grow overflow-y-auto pr-6 -mr-6">
