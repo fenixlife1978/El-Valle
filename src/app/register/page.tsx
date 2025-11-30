@@ -47,7 +47,7 @@ export default function RegisterPage() {
             console.error("Registration error:", error);
             let description = 'Ocurrió un error inesperado.';
             if (error.code === 'auth/email-already-in-use') {
-                description = 'Este correo electrónico ya está registrado. Intenta iniciar sesión.';
+                description = 'Este correo electrónico ya está registrado. Por favor, intenta iniciar sesión.';
             } else if (error.code === 'auth/weak-password') {
                 description = 'La contraseña es demasiado débil. Debe tener al menos 6 caracteres.';
             } else if (error.code === 'auth/invalid-email') {
