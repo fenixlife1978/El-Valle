@@ -17,7 +17,7 @@ import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firesto
 const ADMIN_USER_ID = 'valle-admin-main-account';
 const ADMIN_EMAIL = 'vallecondo@gmail.com';
 
-function LoginContent() {
+function LoginPage() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { toast } = useToast();
@@ -61,7 +61,7 @@ function LoginContent() {
                 }
             } else {
                 // For owners, we query by email.
-                const q = query(collection(db(), "owners"), where("email", "==", email));
+                const q = query(collection(db(), "owners"), where("email", "==", email.toLowerCase()));
                 const querySnapshot = await getDocs(q);
                 if (!querySnapshot.empty) {
                     const userData = querySnapshot.docs[0].data();
@@ -116,82 +116,84 @@ function LoginContent() {
     }
 
     return (
-        <Card className="w-full max-w-sm">
-            <CardHeader className="text-center">
-                <div className="flex justify-center mb-4">
-                    {role === 'admin' ? <Shield className="h-10 w-10 text-primary"/> : <User className="h-10 w-10 text-primary"/>}
-                </div>
-                <CardTitle>Iniciar Sesión como {role === 'admin' ? 'Administrador' : 'Propietario'}</CardTitle>
-                <CardDescription>Ingrese sus credenciales para acceder al sistema.</CardDescription>
-            </CardHeader>
-            <form onSubmit={handleLogin}>
-                <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                        <Label htmlFor="email">Correo Electrónico</Label>
-                        <Input
-                            id="email"
-                            type="email"
-                            placeholder="su.correo@ejemplo.com"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            required
-                        />
+        <main className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
+            <Card className="w-full max-w-sm">
+                <CardHeader className="text-center">
+                    <div className="flex justify-center mb-4">
+                        {role === 'admin' ? <Shield className="h-10 w-10 text-primary"/> : <User className="h-10 w-10 text-primary"/>}
                     </div>
-                    <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                            <Label htmlFor="password">Contraseña</Label>
-                            <Button variant="link" size="sm" asChild className="p-0 h-auto text-xs">
-                                <Link href="/forgot-password">¿Olvidaste tu contraseña?</Link>
-                            </Button>
-                        </div>
-                        <div className="relative">
+                    <CardTitle>Iniciar Sesión como {role === 'admin' ? 'Administrador' : 'Propietario'}</CardTitle>
+                    <CardDescription>Ingrese sus credenciales para acceder al sistema.</CardDescription>
+                </CardHeader>
+                <form onSubmit={handleLogin}>
+                    <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="email">Correo Electrónico</Label>
                             <Input
-                                id="password"
-                                type={showPassword ? "text" : "password"}
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
+                                id="email"
+                                type="email"
+                                placeholder="su.correo@ejemplo.com"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
                                 required
-                                className="pr-10"
                             />
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground"
-                                onClick={() => setShowPassword((prev) => !prev)}
-                            >
-                                {showPassword ? <EyeOff className="h-4 w-4"/> : <Eye className="h-4 w-4"/>}
-                                <span className="sr-only">Toggle password visibility</span>
+                        </div>
+                        <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                                <Label htmlFor="password">Contraseña</Label>
+                                <Button variant="link" size="sm" asChild className="p-0 h-auto text-xs">
+                                    <Link href="/forgot-password">¿Olvidaste tu contraseña?</Link>
+                                </Button>
+                            </div>
+                            <div className="relative">
+                                <Input
+                                    id="password"
+                                    type={showPassword ? "text" : "password"}
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    required
+                                    className="pr-10"
+                                />
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground"
+                                    onClick={() => setShowPassword((prev) => !prev)}
+                                >
+                                    {showPassword ? <EyeOff className="h-4 w-4"/> : <Eye className="h-4 w-4"/>}
+                                    <span className="sr-only">Toggle password visibility</span>
+                                </Button>
+                            </div>
+                        </div>
+                    </CardContent>
+                    <CardFooter className="flex flex-col gap-4">
+                        <Button type="submit" className="w-full" disabled={loading}>
+                            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            {loading ? 'Verificando...' : 'Ingresar'}
+                        </Button>
+                        <div className="text-sm">
+                            ¿No tienes cuenta?{' '}
+                            <Button variant="link" asChild className="p-0 h-auto">
+                                <Link href="/register">Regístrate</Link>
                             </Button>
                         </div>
-                    </div>
-                </CardContent>
-                <CardFooter className="flex flex-col gap-4">
-                    <Button type="submit" className="w-full" disabled={loading}>
-                        {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        {loading ? 'Verificando...' : 'Ingresar'}
-                    </Button>
-                    <div className="text-sm">
-                        ¿No tienes cuenta?{' '}
-                        <Button variant="link" asChild className="p-0 h-auto">
-                            <Link href="/register">Regístrate</Link>
+                        <Button variant="link" size="sm" asChild className="text-xs">
+                            <Link href="/welcome">Volver a selección de rol</Link>
                         </Button>
-                    </div>
-                    <Button variant="link" size="sm" asChild className="text-xs">
-                        <Link href="/welcome">Volver a selección de rol</Link>
-                    </Button>
-                </CardFooter>
-            </form>
-        </Card>
+                    </CardFooter>
+                </form>
+            </Card>
+        </main>
     );
 }
 
-export default function LoginPage() {
+
+// Wrap the main component in Suspense for useSearchParams
+export default function LoginPageWithSuspense() {
     return (
-        <main className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
-            <Suspense fallback={<Loader2 className="h-8 w-8 animate-spin" />}>
-                <LoginContent />
-            </Suspense>
-        </main>
-    );
+        <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><Loader2 className="h-8 w-8 animate-spin" /></div>}>
+            <LoginPage />
+        </Suspense>
+    )
 }
