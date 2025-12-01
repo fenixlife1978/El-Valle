@@ -173,6 +173,19 @@ export default function FinancialBalancePage() {
         }
     };
 
+    const handleDeletePublication = async (statementId: string) => {
+        if (window.confirm('¿Está seguro de que desea ELIMINAR LA PUBLICACIÓN de este balance? Los propietarios ya no podrán verlo, pero el balance guardado no se eliminará.')) {
+            try {
+                const reportRef = doc(db(), 'published_reports', `balance-${statementId}`);
+                await deleteDoc(reportRef);
+                toast({ title: 'Publicación Eliminada', description: 'El balance ya no es visible para los propietarios.' });
+            } catch (error) {
+                console.error('Error deleting publication:', error);
+                toast({ variant: 'destructive', title: 'Error', description: 'No se pudo eliminar la publicación del balance.' });
+            }
+        }
+    };
+
     const handleSaveStatement = async () => {
         const statementId = `${selectedYear}-${selectedMonth}`;
         
@@ -395,6 +408,7 @@ export default function FinancialBalancePage() {
                                                         <DropdownMenuItem onClick={() => handleExport('pdf', s)}><FileText className="mr-2 h-4 w-4"/> Exportar PDF</DropdownMenuItem>
                                                         <DropdownMenuItem onClick={() => handleExport('excel', s)}><FileSpreadsheet className="mr-2 h-4 w-4"/> Exportar Excel</DropdownMenuItem>
                                                         <DropdownMenuItem onClick={() => handleDeleteStatement(s.id)} className="text-destructive"><Trash2 className="mr-2 h-4 w-4"/> Eliminar</DropdownMenuItem>
+                                                        <DropdownMenuItem onClick={() => handleDeletePublication(s.id)} className="text-destructive"><Trash2 className="mr-2 h-4 w-4"/> Eliminar Publicación</DropdownMenuItem>
                                                     </DropdownMenuContent>
                                                 </DropdownMenu>
                                             </TableCell>
@@ -467,5 +481,3 @@ export default function FinancialBalancePage() {
         </div>
     );
 }
-
-    
