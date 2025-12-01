@@ -7,15 +7,17 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { collection, query, where, getDocs, doc, updateDoc, deleteDoc, Timestamp, addDoc } from 'firebase/firestore';
+import { db, auth } from '@/lib/firebase';
 import { Loader2, AlertTriangle, ShieldCheck, Search } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { ensureAdminProfile } from '@/lib/user-sync';
 import { cn } from "@/lib/utils";
+import { useAuth } from '@/hooks/use-auth';
 
 export default function SyncProfilesPage() {
     const { toast } = useToast();
+    const { user: adminUser } = useAuth();
     
     const [loadingAdmin, setLoadingAdmin] = useState(true);
     const [adminProfileExists, setAdminProfileExists] = useState(false);
@@ -73,15 +75,23 @@ export default function SyncProfilesPage() {
             toast({ variant: 'destructive', title: 'Datos incompletos', description: 'Debe buscar un propietario y proporcionar un nuevo correo.' });
             return;
         }
+        if (!adminUser?.uid) {
+            toast({ variant: 'destructive', title: 'Error de Autenticación', description: 'No se pudo identificar al administrador.' });
+            return;
+        }
 
         setLoadingAction(prev => ({ ...prev, changeEmail: true }));
         try {
-            const ownerRef = doc(db(), "owners", foundOwner.id);
-            await updateDoc(ownerRef, { email: newEmail });
+            await addDoc(collection(db(), "admin_tasks"), {
+                targetUID: foundOwner.id,
+                newEmail: newEmail,
+                status: "pending",
+                adminUID: adminUser.uid,
+            });
 
             toast({
-                title: 'Correo Actualizado',
-                description: `El correo de ${foundOwner.name} ha sido actualizado. El propietario debe usar "Olvidé mi contraseña" para acceder con el nuevo correo.`,
+                title: 'Solicitud de Cambio Enviada',
+                description: `La tarea para cambiar el correo de ${foundOwner.name} ha sido creada y está pendiente de procesamiento.`,
                 className: 'bg-green-100 border-green-400 text-green-800'
             });
 
@@ -90,8 +100,8 @@ export default function SyncProfilesPage() {
             setOwnerSearchTerm('');
 
         } catch (error) {
-            console.error("Error updating email:", error);
-            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo actualizar el correo.' });
+            console.error("Error creating admin task:", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo crear la tarea de cambio de correo.' });
         } finally {
              setLoadingAction(prev => ({ ...prev, changeEmail: false }));
         }
@@ -117,7 +127,7 @@ export default function SyncProfilesPage() {
                             <Loader2 className="h-8 w-8 animate-spin text-primary"/>
                         </div>
                     ) : (
-                         <div className={cn("p-4 rounded-lg flex items-start gap-3", adminProfileExists ? "bg-success/10 border border-success/30" : "bg-warning/10 border border-warning/30")}>
+                         <div className={cn("p-4 rounded-lg flex items-start gap-3", adminProfileExists ? "bg-success/10 border-success/30" : "bg-warning/10 border-warning/30")}>
                             <ShieldCheck className={cn("h-5 w-5 mt-0.5 shrink-0", adminProfileExists ? "text-success" : "text-warning")} />
                             <div>
                                 <h3 className="font-semibold">{adminProfileExists ? 'Perfil Verificado' : 'Perfil Creado'}</h3>
@@ -133,7 +143,7 @@ export default function SyncProfilesPage() {
             <Card>
                 <CardHeader>
                     <CardTitle>Cambiar Correo de Propietario</CardTitle>
-                    <CardDescription>Busque a un propietario para actualizar su dirección de correo electrónico.</CardDescription>
+                    <CardDescription>Busque a un propietario para solicitar la actualización de su dirección de correo electrónico.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                      <div className="flex items-end gap-2">
@@ -159,11 +169,11 @@ export default function SyncProfilesPage() {
                 <CardFooter className="flex-col items-start gap-4">
                      <Button onClick={changeEmail} disabled={loadingAction['changeEmail'] || !foundOwner}>
                         {loadingAction['changeEmail'] ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
-                        Actualizar Correo
+                        Solicitar Cambio de Correo
                     </Button>
                     <div className="p-3 bg-muted/50 rounded-lg flex items-start gap-2 text-xs text-muted-foreground">
                         <AlertTriangle className="h-4 w-4 mt-0.5 text-orange-500 shrink-0"/>
-                        <p><strong>Importante:</strong> Después de actualizar, el propietario debe usar la opción "¿Olvidaste tu contraseña?" en la pantalla de inicio de sesión con su nuevo correo para restablecer su acceso.</p>
+                        <p><strong>Importante:</strong> Al hacer clic, se creará una tarea para que el sistema procese el cambio. Una vez completado, el propietario deberá usar la opción "¿Olvidaste tu contraseña?" en la pantalla de inicio de sesión con su nuevo correo para restablecer su acceso.</p>
                     </div>
                 </CardFooter>
             </Card>
