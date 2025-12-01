@@ -247,18 +247,24 @@ export default function VerifyPaymentsPage() {
                 const paymentData = { id: paymentDoc.id, ...paymentDoc.data() } as FullPayment;
 
                 const settingsRef = doc(db(), 'config', 'mainSettings');
-                const settingsSnap = await transaction.get(settingsRef); // Read inside transaction
+                const settingsSnap = await transaction.get(settingsRef);
                 if (!settingsSnap.exists()) throw new Error('No se encontró el documento de configuración.');
-                const settingsData = settingsSnap.data();
                 
+                const settingsData = settingsSnap.data();
                 const allRates = (settingsData.exchangeRates || []) as {date: string, rate: number}[];
                 const currentCondoFee = settingsData.condoFee || 0;
-                if (currentCondoFee <= 0 && paymentData.type !== 'adelanto') throw new Error('La cuota de condominio no está configurada.');
+                
+                if (currentCondoFee <= 0 && paymentData.type !== 'adelanto') {
+                    throw new Error('La cuota de condominio debe ser mayor a cero. Por favor, configúrela.');
+                }
 
                 const paymentDateString = format(paymentData.paymentDate.toDate(), 'yyyy-MM-dd');
                 const applicableRates = allRates.filter(r => r.date <= paymentDateString).sort((a, b) => b.date.localeCompare(a.date));
                 const exchangeRate = applicableRates.length > 0 ? applicableRates[0].rate : 0;
-                if (!exchangeRate || exchangeRate <= 0) throw new Error('La tasa de cambio para este pago es inválida o no está definida.');
+                
+                if (!exchangeRate || exchangeRate <= 0) {
+                    throw new Error(`No se encontró una tasa de cambio válida para la fecha del pago (${paymentDateString}).`);
+                }
                 paymentData.exchangeRate = exchangeRate;
 
                 const allBeneficiaryIds = Array.from(new Set(paymentData.beneficiaries.map(b => b.ownerId)));
@@ -848,5 +854,7 @@ export default function VerifyPaymentsPage() {
 
 
 
+
+    
 
     
