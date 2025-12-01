@@ -75,19 +75,19 @@ service cloud.firestore {
       // All authenticated users can see the list of published reports.
       allow read: isSignedIn();
       // Only admins can publish or unpublish reports.
-      allow write: isAdmin();
+      allow write: if isAdmin();
     }
 
     // Petty cash collection.
     match /petty_cash_replenishments/{repId} {
         // Only admins can manage petty cash.
-        allow read, write: isAdmin();
+        allow read, write: if isAdmin();
     }
 
     // Surveys collection.
     match /surveys/{surveyId} {
         // All signed-in users can read surveys to vote.
-        allow read: isSignedIn();
+        allow read: if isSignedIn();
         // Admins can create/delete surveys. They can update results/totalVotes via transaction.
         // The results and totalVotes fields are updated when a user votes.
         allow update: isSignedIn();
@@ -109,7 +109,7 @@ service cloud.firestore {
     // App feedback collection
     match /app_feedback/{feedbackId} {
       // Any signed-in user can submit feedback.
-      allow create: isSignedIn();
+      allow create: if isSignedIn();
       // Only admins can read the feedback.
       allow read, delete: isAdmin();
       allow update: if false;
@@ -118,7 +118,13 @@ service cloud.firestore {
     // Historical payments collection.
     match /historical_payments/{histId} {
       // Only admins can manage historical payment records.
-      allow read, write: isAdmin();
+      allow read, write: if isAdmin();
+    }
+
+    // Admin tasks collection.
+    match /admin_tasks/{taskId} {
+      // Only admins can create, read, and update tasks.
+      allow read, write: if isAdmin();
     }
   }
 }
