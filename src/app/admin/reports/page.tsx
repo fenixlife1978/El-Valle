@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import * as React from 'react';
@@ -73,7 +74,7 @@ type Debt = {
     amountUSD: number;
     description: string;
     status: 'pending' | 'paid';
-    paymentId?: string; // &lt;-- ¡Esta es la línea clave que faltaba!
+    paymentId?: string; // <-- ¡Esta es la línea clave que faltaba!
     paymentDate?: Timestamp;
     paidAmountUSD?: number;
     property: { street: string, house: string };
@@ -509,8 +510,8 @@ export default function ReportsPage() {
 
         ownersCopy.sort((a, b) => {
             if (delinquencySortConfig.key !== 'name') {
-                 if (a[delinquencySortConfig.key] &lt; b[delinquencySortConfig.key]) return delinquencySortConfig.direction === 'asc' ? -1 : 1;
-                if (a[delinquencySortConfig.key] &gt; b[delinquencySortConfig.key]) return delinquencySortConfig.direction === 'asc' ? 1 : -1;
+                 if (a[delinquencySortConfig.key] < b[delinquencySortConfig.key]) return delinquencySortConfig.direction === 'asc' ? -1 : 1;
+                if (a[delinquencySortConfig.key] > b[delinquencySortConfig.key]) return delinquencySortConfig.direction === 'asc' ? 1 : -1;
             }
            
             if (a.sortKeys.streetNum !== b.sortKeys.streetNum) return a.sortKeys.streetNum - b.sortKeys.streetNum;
@@ -593,8 +594,8 @@ export default function ReportsPage() {
         const filtered = allPayments.filter(payment => {
             if (payment.status !== 'aprobado') return false;
             const paymentDate = payment.paymentDate.toDate();
-            if (incomeDateRange.from && paymentDate &lt; incomeDateRange.from) return false;
-            if (incomeDateRange.to && paymentDate &gt; incomeDateRange.to) return false;
+            if (incomeDateRange.from && paymentDate < incomeDateRange.from) return false;
+            if (incomeDateRange.to && paymentDate > incomeDateRange.to) return false;
             return true;
         }).flatMap(payment => 
             payment.beneficiaries.map(b => ({
@@ -740,13 +741,13 @@ export default function ReportsPage() {
         const headers = [["Propietario", "Propiedad", "Fecha Últ. Pago", "Monto Pagado (Bs)", "Tasa BCV", "Saldo a Favor (Bs)", "Estado", "Periodo", "Meses Adeudados", "Deuda por Ajuste ($)"]];
         const body = data.map(row => [
             row.name, row.properties, row.lastPaymentDate,
-            row.paidAmount &gt; 0 ? formatToTwoDecimals(row.paidAmount) : '',
-            row.avgRate &gt; 0 ? formatToTwoDecimals(row.avgRate) : '',
-            row.balance &gt; 0 ? formatToTwoDecimals(row.balance) : '',
+            row.paidAmount > 0 ? formatToTwoDecimals(row.paidAmount) : '',
+            row.avgRate > 0 ? formatToTwoDecimals(row.avgRate) : '',
+            row.balance > 0 ? formatToTwoDecimals(row.balance) : '',
             row.status,
             row.solvencyPeriod,
-            row.monthsOwed &gt; 0 ? row.monthsOwed : '',
-            row.adjustmentDebtUSD &gt; 0 ? `$${row.adjustmentDebtUSD.toFixed(2)}` : ''
+            row.monthsOwed > 0 ? row.monthsOwed : '',
+            row.adjustmentDebtUSD > 0 ? `$${row.adjustmentDebtUSD.toFixed(2)}` : ''
         ]);
 
         const filename = `reporte_integral_${new Date().toISOString().split('T')[0]}`;
@@ -1169,456 +1170,456 @@ export default function ReportsPage() {
 
     const renderSortIcon = (key: SortKey) => {
         if (delinquencySortConfig.key !== key) {
-            return &lt;ArrowUpDown className="h-4 w-4 opacity-50" />;
+            return <ArrowUpDown className="h-4 w-4 opacity-50" />;
         }
-        return &lt;span&gt;{delinquencySortConfig.direction === 'asc' ? '▲' : '▼'}&lt;/span&gt;;
+        return <span>{delinquencySortConfig.direction === 'asc' ? '▲' : '▼'}</span>;
     };
 
     if (loading) {
-        return &lt;div className="flex justify-center items-center h-full"&gt;&lt;Loader2 className="h-10 w-10 animate-spin text-primary" />&lt;/div&gt;;
+        return <div className="flex justify-center items-center h-full"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>;
     }
 
     return (
-        &lt;div className="space-y-8"&gt;
-            &lt;div&gt;
-                &lt;h1 className="text-3xl font-bold font-headline"&gt;Módulo de Informes&lt;/h1&gt;
-                &lt;p className="text-muted-foreground"&gt;Genere y exporte reportes detallados sobre la gestión del condominio.&lt;/p&gt;
-            &lt;/div&gt;
+        <div className="space-y-8">
+            <div>
+                <h1 className="text-3xl font-bold font-headline">Módulo de Informes</h1>
+                <p className="text-muted-foreground">Genere y exporte reportes detallados sobre la gestión del condominio.</p>
+            </div>
             
-            &lt;Tabs defaultValue="integral" className="w-full"&gt;
-                 &lt;TabsList className="grid w-full grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 h-auto flex-wrap"&gt;
-                    &lt;TabsTrigger value="integral"&gt;Integral&lt;/TabsTrigger&gt;
-                    &lt;TabsTrigger value="individual"&gt;Ficha Individual&lt;/TabsTrigger&gt;
-                    &lt;TabsTrigger value="estado-de-cuenta"&gt;Estado de Cuenta&lt;/TabsTrigger&gt;
-                    &lt;TabsTrigger value="delinquency"&gt;Morosidad&lt;/TabsTrigger&gt;
-                    &lt;TabsTrigger value="balance"&gt;Saldos a Favor&lt;/TabsTrigger&gt;
-                    &lt;TabsTrigger value="income"&gt;Ingresos&lt;/TabsTrigger&gt;
-                    &lt;TabsTrigger value="monthly"&gt;Reporte Mensual&lt;/TabsTrigger&gt;
-                &lt;/TabsList&gt;
+            <Tabs defaultValue="integral" className="w-full">
+                 <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 h-auto flex-wrap">
+                    <TabsTrigger value="integral">Integral</TabsTrigger>
+                    <TabsTrigger value="individual">Ficha Individual</TabsTrigger>
+                    <TabsTrigger value="estado-de-cuenta">Estado de Cuenta</TabsTrigger>
+                    <TabsTrigger value="delinquency">Morosidad</TabsTrigger>
+                    <TabsTrigger value="balance">Saldos a Favor</TabsTrigger>
+                    <TabsTrigger value="income">Ingresos</TabsTrigger>
+                    <TabsTrigger value="monthly">Reporte Mensual</TabsTrigger>
+                </TabsList>
                 
-                &lt;TabsContent value="integral"&gt;
-                    &lt;Card&gt;
-                        &lt;CardHeader&gt;
-                            &lt;CardTitle&gt;Reporte Integral de Propietarios&lt;/CardTitle&gt;
-                            &lt;CardDescription&gt;Una vista consolidada del estado financiero de todos los propietarios.&lt;/CardDescription&gt;
-                             &lt;div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-4"&gt;
-                                &lt;div className="space-y-2"&gt;
-                                    &lt;Label&gt;Buscar Propietario&lt;/Label&gt;
-                                    &lt;Input placeholder="Nombre..." value={integralOwnerFilter} onChange={e => setIntegralOwnerFilter(e.target.value)} />
-                                &lt;/div&gt;
-                                &lt;div className="space-y-2"&gt;
-                                    &lt;Label&gt;Estado&lt;/Label&gt;
-                                    &lt;Select value={integralStatusFilter} onValueChange={setIntegralStatusFilter}&gt;
-                                        &lt;SelectTrigger&gt;&lt;SelectValue />&lt;/SelectTrigger&gt;
-                                        &lt;SelectContent&gt;
-                                            &lt;SelectItem value="todos"&gt;Todos&lt;/SelectItem&gt;
-                                            &lt;SelectItem value="solvente"&gt;Solvente&lt;/SelectItem&gt;
-                                            &lt;SelectItem value="nosolvente"&gt;No Solvente&lt;/SelectItem&gt;
-                                        &lt;/SelectContent&gt;
-                                    &lt;/Select&gt;
-                                &lt;/div&gt;
-                                &lt;div className="space-y-2"&gt;
-                                    &lt;Label&gt;Pagos Desde&lt;/Label&gt;
-                                    &lt;Popover&gt;
-                                        &lt;PopoverTrigger asChild&gt;
-                                            &lt;Button variant="outline" className={cn("w-full justify-start", !integralDateRange.from && "text-muted-foreground")}&gt;
-                                                &lt;CalendarIcon className="mr-2 h-4 w-4" />
+                <TabsContent value="integral">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Reporte Integral de Propietarios</CardTitle>
+                            <CardDescription>Una vista consolidada del estado financiero de todos los propietarios.</CardDescription>
+                             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-4">
+                                <div className="space-y-2">
+                                    <Label>Buscar Propietario</Label>
+                                    <Input placeholder="Nombre..." value={integralOwnerFilter} onChange={e => setIntegralOwnerFilter(e.target.value)} />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Estado</Label>
+                                    <Select value={integralStatusFilter} onValueChange={setIntegralStatusFilter}>
+                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="todos">Todos</SelectItem>
+                                            <SelectItem value="solvente">Solvente</SelectItem>
+                                            <SelectItem value="nosolvente">No Solvente</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Pagos Desde</Label>
+                                    <Popover>
+                                        <PopoverTrigger asChild>
+                                            <Button variant="outline" className={cn("w-full justify-start", !integralDateRange.from && "text-muted-foreground")}>
+                                                <CalendarIcon className="mr-2 h-4 w-4" />
                                                 {integralDateRange.from ? format(integralDateRange.from, 'P', { locale: es }) : "Fecha"}
-                                            &lt;/Button&gt;
-                                        &lt;/PopoverTrigger&gt;
-                                        &lt;PopoverContent&gt;&lt;Calendar mode="single" selected={integralDateRange.from} onSelect={d => setIntegralDateRange(prev => ({...prev, from: d}))} />&lt;/PopoverContent&gt;
-                                    &lt;/Popover&gt;
-                                &lt;/div&gt;
-                                &lt;div className="space-y-2"&gt;
-                                    &lt;Label&gt;Pagos Hasta&lt;/Label&gt;
-                                     &lt;Popover&gt;
-                                        &lt;PopoverTrigger asChild&gt;
-                                            &lt;Button variant="outline" className={cn("w-full justify-start", !integralDateRange.to && "text-muted-foreground")}&gt;
-                                                &lt;CalendarIcon className="mr-2 h-4 w-4" />
+                                            </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent><Calendar mode="single" selected={integralDateRange.from} onSelect={d => setIntegralDateRange(prev => ({...prev, from: d}))} /></PopoverContent>
+                                    </Popover>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Pagos Hasta</Label>
+                                     <Popover>
+                                        <PopoverTrigger asChild>
+                                            <Button variant="outline" className={cn("w-full justify-start", !integralDateRange.to && "text-muted-foreground")}>
+                                                <CalendarIcon className="mr-2 h-4 w-4" />
                                                 {integralDateRange.to ? format(integralDateRange.to, 'P', { locale: es }) : "Fecha"}
-                                            &lt;/Button&gt;
-                                        &lt;/PopoverTrigger&gt;
-                                        &lt;PopoverContent&gt;&lt;Calendar mode="single" selected={integralDateRange.to} onSelect={d => setIntegralDateRange(prev => ({...prev, to: d}))} />&lt;/PopoverContent&gt;
-                                    &lt;/Popover&gt;
-                                &lt;/div&gt;
-                            &lt;/div&gt;
-                        &lt;/CardHeader&gt;
-                        &lt;CardContent&gt;
-                             &lt;div className="flex justify-end gap-2 mb-4"&gt;
-                                &lt;Button variant="outline" onClick={handlePublishIntegralReport} disabled={generatingReport}&gt;
-                                    &lt;Megaphone className="mr-2 h-4 w-4" /> Publicar Reporte
-                                &lt;/Button&gt;
-                                &lt;Button variant="destructive" onClick={handleDeleteIntegralPublication} disabled={generatingReport}&gt;
-                                    &lt;Trash2 className="mr-2 h-4 w-4" /> Eliminar Publicación
-                                &lt;/Button&gt;
-                                &lt;Button variant="outline" onClick={() => handleExportIntegral('pdf')} disabled={generatingReport}&gt;
-                                    &lt;FileText className="mr-2 h-4 w-4" /> Exportar a PDF
-                                &lt;/Button&gt;
-                                &lt;Button variant="outline" onClick={() => handleExportIntegral('excel')} disabled={generatingReport}&gt;
-                                    &lt;FileSpreadsheet className="mr-2 h-4 w-4" /> Exportar a Excel
-                                &lt;/Button&gt;
-                            &lt;/div&gt;
-                            &lt;Table&gt;
-                                &lt;TableHeader&gt;
-                                    &lt;TableRow&gt;
-                                        &lt;TableHead&gt;Propietario&lt;/TableHead&gt;
-                                        &lt;TableHead&gt;Propiedad&lt;/TableHead&gt;
-                                        &lt;TableHead&gt;Fecha Últ. Pago&lt;/TableHead&gt;
-                                        &lt;TableHead className="text-right"&gt;Monto Pagado&lt;/TableHead&gt;
-                                        &lt;TableHead className="text-right"&gt;Tasa BCV&lt;/TableHead&gt;
-                                        &lt;TableHead className="text-right"&gt;Saldo a Favor&lt;/TableHead&gt;
-                                        &lt;TableHead&gt;Estado&lt;/TableHead&gt;
-                                        &lt;TableHead&gt;Periodo&lt;/TableHead&gt;
-                                        &lt;TableHead className="text-center"&gt;Meses Adeudados&lt;/TableHead&gt;
-                                        &lt;TableHead className="text-right"&gt;Deuda por Ajuste ($)&lt;/TableHead&gt;
-                                    &lt;/TableRow&gt;
-                                &lt;/TableHeader&gt;
-                                &lt;TableBody&gt;
+                                            </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent><Calendar mode="single" selected={integralDateRange.to} onSelect={d => setIntegralDateRange(prev => ({...prev, to: d}))} /></PopoverContent>
+                                    </Popover>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                             <div className="flex justify-end gap-2 mb-4">
+                                <Button variant="outline" onClick={handlePublishIntegralReport} disabled={generatingReport}>
+                                    <Megaphone className="mr-2 h-4 w-4" /> Publicar Reporte
+                                </Button>
+                                <Button variant="destructive" onClick={handleDeleteIntegralPublication} disabled={generatingReport}>
+                                    <Trash2 className="mr-2 h-4 w-4" /> Eliminar Publicación
+                                </Button>
+                                <Button variant="outline" onClick={() => handleExportIntegral('pdf')} disabled={generatingReport}>
+                                    <FileText className="mr-2 h-4 w-4" /> Exportar a PDF
+                                </Button>
+                                <Button variant="outline" onClick={() => handleExportIntegral('excel')} disabled={generatingReport}>
+                                    <FileSpreadsheet className="mr-2 h-4 w-4" /> Exportar a Excel
+                                </Button>
+                            </div>
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Propietario</TableHead>
+                                        <TableHead>Propiedad</TableHead>
+                                        <TableHead>Fecha Últ. Pago</TableHead>
+                                        <TableHead className="text-right">Monto Pagado</TableHead>
+                                        <TableHead className="text-right">Tasa BCV</TableHead>
+                                        <TableHead className="text-right">Saldo a Favor</TableHead>
+                                        <TableHead>Estado</TableHead>
+                                        <TableHead>Periodo</TableHead>
+                                        <TableHead className="text-center">Meses Adeudados</TableHead>
+                                        <TableHead className="text-right">Deuda por Ajuste ($)</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
                                     {integralReportData.map(row => (
-                                        &lt;TableRow key={row.ownerId}&gt;
-                                            &lt;TableCell className="font-medium"&gt;{row.name}&lt;/TableCell&gt;
-                                            &lt;TableCell&gt;{row.properties}&lt;/TableCell&gt;
-                                            &lt;TableCell&gt;{row.lastPaymentDate}&lt;/TableCell&gt;
-                                            &lt;TableCell className="text-right"&gt;{row.paidAmount &gt; 0 ? `Bs. ${formatToTwoDecimals(row.paidAmount)}`: ''}&lt;/TableCell&gt;
-                                            &lt;TableCell className="text-right"&gt;{row.avgRate &gt; 0 ? `Bs. ${formatToTwoDecimals(row.avgRate)}`: ''}&lt;/TableCell&gt;
-                                            &lt;TableCell className="text-right"&gt;{row.balance &gt; 0 ? `Bs. ${formatToTwoDecimals(row.balance)}`: ''}&lt;/TableCell&gt;
-                                            &lt;TableCell&gt;
-                                                &lt;span className={cn('font-semibold', row.status === 'No Solvente' ? 'text-destructive' : 'text-green-600')}&gt;{row.status}&lt;/span&gt;
-                                            &lt;/TableCell&gt;
-                                            &lt;TableCell className="capitalize"&gt;{row.solvencyPeriod}&lt;/TableCell&gt;
-                                            &lt;TableCell className="text-center"&gt;{row.monthsOwed &gt; 0 ? row.monthsOwed : ''}&lt;/TableCell&gt;
-                                            &lt;TableCell className="text-right"&gt;{row.adjustmentDebtUSD &gt; 0 ? `$${row.adjustmentDebtUSD.toFixed(2)}`: ''}&lt;/TableCell&gt;
-                                        &lt;/TableRow&gt;
+                                        <TableRow key={row.ownerId}>
+                                            <TableCell className="font-medium">{row.name}</TableCell>
+                                            <TableCell>{row.properties}</TableCell>
+                                            <TableCell>{row.lastPaymentDate}</TableCell>
+                                            <TableCell className="text-right">{row.paidAmount > 0 ? `Bs. ${formatToTwoDecimals(row.paidAmount)}`: ''}</TableCell>
+                                            <TableCell className="text-right">{row.avgRate > 0 ? `Bs. ${formatToTwoDecimals(row.avgRate)}`: ''}</TableCell>
+                                            <TableCell className="text-right">{row.balance > 0 ? `Bs. ${formatToTwoDecimals(row.balance)}`: ''}</TableCell>
+                                            <TableCell>
+                                                <span className={cn('font-semibold', row.status === 'No Solvente' ? 'text-destructive' : 'text-green-600')}>{row.status}</span>
+                                            </TableCell>
+                                            <TableCell className="capitalize">{row.solvencyPeriod}</TableCell>
+                                            <TableCell className="text-center">{row.monthsOwed > 0 ? row.monthsOwed : ''}</TableCell>
+                                            <TableCell className="text-right">{row.adjustmentDebtUSD > 0 ? `$${row.adjustmentDebtUSD.toFixed(2)}`: ''}</TableCell>
+                                        </TableRow>
                                     ))}
-                                &lt;/TableBody&gt;
-                            &lt;/Table&gt;
-                        &lt;/CardContent&gt;
-                    &lt;/Card&gt;
-                &lt;/TabsContent&gt;
+                                </TableBody>
+                            </Table>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
 
-                 &lt;TabsContent value="individual"&gt;
-                     &lt;Card&gt;
-                        &lt;CardHeader&gt;
-                            &lt;CardTitle&gt;Ficha Individual de Pagos&lt;/CardTitle&gt;
-                            &lt;CardDescription&gt;Busque un propietario para ver su historial detallado de pagos y los meses que liquida cada uno.&lt;/CardDescription&gt;
-                        &lt;/CardHeader&gt;
-                        &lt;CardContent className="space-y-4"&gt;
-                            &lt;div className="relative max-w-sm"&gt;
-                                &lt;Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                &lt;Input placeholder="Buscar por nombre..." className="pl-9" value={individualSearchTerm} onChange={e => setIndividualSearchTerm(e.target.value)} />
-                            &lt;/div&gt;
-                            {individualSearchTerm && filteredIndividualOwners.length &gt; 0 && (
-                                &lt;Card className="border rounded-md"&gt;
-                                    &lt;ScrollArea className="h-48"&gt;
+                 <TabsContent value="individual">
+                     <Card>
+                        <CardHeader>
+                            <CardTitle>Ficha Individual de Pagos</CardTitle>
+                            <CardDescription>Busque un propietario para ver su historial detallado de pagos y los meses que liquida cada uno.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="relative max-w-sm">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <Input placeholder="Buscar por nombre..." className="pl-9" value={individualSearchTerm} onChange={e => setIndividualSearchTerm(e.target.value)} />
+                            </div>
+                            {individualSearchTerm && filteredIndividualOwners.length > 0 && (
+                                <Card className="border rounded-md">
+                                    <ScrollArea className="h-48">
                                         {filteredIndividualOwners.map(owner => (
-                                            &lt;div key={owner.id} onClick={() => handleSelectIndividual(owner)} className="p-3 hover:bg-muted cursor-pointer border-b last:border-b-0"&gt;
-                                                &lt;p className="font-medium"&gt;{owner.name}&lt;/p&gt;
-                                                &lt;p className="text-sm text-muted-foreground"&gt;{(owner.properties || []).map(p => `${p.street} - ${p.house}`).join(', ')}&lt;/p&gt;
-                                            &lt;/div&gt;
+                                            <div key={owner.id} onClick={() => handleSelectIndividual(owner)} className="p-3 hover:bg-muted cursor-pointer border-b last:border-b-0">
+                                                <p className="font-medium">{owner.name}</p>
+                                                <p className="text-sm text-muted-foreground">{(owner.properties || []).map(p => `${p.street} - ${p.house}`).join(', ')}</p>
+                                            </div>
                                         ))}
-                                    &lt;/ScrollArea&gt;
-                                &lt;/Card&gt;
+                                    </ScrollArea>
+                                </Card>
                             )}
 
                             {selectedIndividual && (
-                                &lt;Card className="mt-4 bg-card-foreground/5 dark:bg-card-foreground/5"&gt;
-                                    &lt;CardHeader&gt;
-                                        &lt;div className="flex justify-between items-start"&gt;
-                                            &lt;div&gt;
-                                                &lt;CardTitle&gt;{selectedIndividual.name}&lt;/CardTitle&gt;
-                                                &lt;CardDescription&gt;{(selectedIndividual.properties || []).map(p => `${p.street} - ${p.house}`).join(', ')}&lt;/CardDescription&gt;
-                                            &lt;/div&gt;
-                                            &lt;div className="flex gap-2"&gt;
-                                                &lt;Button variant="outline" onClick={() => handleExportIndividual('pdf')}&gt;&lt;FileText className="mr-2 h-4 w-4" /> Exportar PDF&lt;/Button&gt;
-                                            &lt;/div&gt;
-                                        &lt;/div&gt;
-                                    &lt;/CardHeader&gt;
-                                    &lt;CardContent className="space-y-6"&gt;
-                                        &lt;div className="grid grid-cols-1 md:grid-cols-2 gap-4"&gt;
-                                            &lt;Card&gt;
-                                                &lt;CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"&gt;
-                                                    &lt;CardTitle className="text-sm font-medium"&gt;Deuda Total (USD)&lt;/CardTitle&gt;
-                                                    &lt;BadgeX className="h-4 w-4 text-destructive" />
-                                                &lt;/CardHeader&gt;
-                                                &lt;CardContent&gt;
-                                                    &lt;div className="text-2xl font-bold text-destructive"&gt;${individualDebtUSD.toFixed(2)}&lt;/div&gt;
-                                                &lt;/CardContent&gt;
-                                            &lt;/Card&gt;
-                                             &lt;Card&gt;
-                                                &lt;CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"&gt;
-                                                    &lt;CardTitle className="text-sm font-medium"&gt;Saldo a Favor (Bs)&lt;/CardTitle&gt;
-                                                    &lt;BadgeCheck className="h-4 w-4 text-green-500" />
-                                                &lt;/CardHeader&gt;
-                                                &lt;CardContent&gt;
-                                                    &lt;div className="text-2xl font-bold text-green-500"&gt;Bs. {formatToTwoDecimals(selectedIndividual.balance)}&lt;/div&gt;
-                                                &lt;/CardContent&gt;
-                                            &lt;/Card&gt;
-                                        &lt;/div&gt;
-                                        &lt;div&gt;
-                                            &lt;h3 className="text-lg font-semibold mb-2 flex items-center"&gt;&lt;History className="mr-2 h-5 w-5"/> Historial de Pagos Aprobados&lt;/h3&gt;
-                                            &lt;ScrollArea className="h-[28rem] border rounded-md"&gt;
-                                                 {individualPayments.length &gt; 0 ? (
-                                                    &lt;div className="p-2 space-y-2"&gt;
+                                <Card className="mt-4 bg-card-foreground/5 dark:bg-card-foreground/5">
+                                    <CardHeader>
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <CardTitle>{selectedIndividual.name}</CardTitle>
+                                                <CardDescription>{(selectedIndividual.properties || []).map(p => `${p.street} - ${p.house}`).join(', ')}</CardDescription>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <Button variant="outline" onClick={() => handleExportIndividual('pdf')}><FileText className="mr-2 h-4 w-4" /> Exportar PDF</Button>
+                                            </div>
+                                        </div>
+                                    </CardHeader>
+                                    <CardContent className="space-y-6">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <Card>
+                                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                                    <CardTitle className="text-sm font-medium">Deuda Total (USD)</CardTitle>
+                                                    <BadgeX className="h-4 w-4 text-destructive" />
+                                                </CardHeader>
+                                                <CardContent>
+                                                    <div className="text-2xl font-bold text-destructive">${individualDebtUSD.toFixed(2)}</div>
+                                                </CardContent>
+                                            </Card>
+                                             <Card>
+                                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                                    <CardTitle className="text-sm font-medium">Saldo a Favor (Bs)</CardTitle>
+                                                    <BadgeCheck className="h-4 w-4 text-green-500" />
+                                                </CardHeader>
+                                                <CardContent>
+                                                    <div className="text-2xl font-bold text-green-500">Bs. {formatToTwoDecimals(selectedIndividual.balance)}</div>
+                                                </CardContent>
+                                            </Card>
+                                        </div>
+                                        <div>
+                                            <h3 className="text-lg font-semibold mb-2 flex items-center"><History className="mr-2 h-5 w-5"/> Historial de Pagos Aprobados</h3>
+                                            <ScrollArea className="h-[28rem] border rounded-md">
+                                                 {individualPayments.length > 0 ? (
+                                                    <div className="p-2 space-y-2">
                                                         {individualPayments.map((payment) => (
-                                                            &lt;Collapsible key={payment.id} className="border rounded-md"&gt;
-                                                                &lt;CollapsibleTrigger className="w-full p-3 hover:bg-muted/50 rounded-t-md"&gt;
-                                                                    &lt;div className="flex items-center justify-between"&gt;
-                                                                        &lt;div className="flex items-center gap-2"&gt;
-                                                                            &lt;ChevronRight className="h-4 w-4 transition-transform duration-200 group-data-[state=open]:rotate-90" />
-                                                                            &lt;div className="text-left"&gt;
-                                                                                &lt;p className="font-semibold text-primary"&gt;{format(payment.paymentDate.toDate(), 'dd/MM/yyyy')}&lt;/p&gt;
-                                                                                &lt;p className="text-xs text-muted-foreground"&gt;Ref: {payment.reference}&lt;/p&gt;
-                                                                            &lt;/div&gt;
-                                                                        &lt;/div&gt;
-                                                                        &lt;div className="text-right"&gt;
-                                                                             &lt;p className="font-bold text-lg"&gt;Bs. {formatToTwoDecimals(payment.totalAmount)}&lt;/p&gt;
-                                                                             &lt;p className="text-xs text-muted-foreground"&gt;Tasa: Bs. {formatToTwoDecimals(payment.exchangeRate || activeRate)}&lt;/p&gt;
-                                                                        &lt;/div&gt;
-                                                                    &lt;/div&gt;
-                                                                &lt;/CollapsibleTrigger&gt;
-                                                                &lt;CollapsibleContent&gt;
-                                                                    &lt;div className="p-2 border-t bg-background"&gt;
-                                                                        {payment.liquidatedDebts.length &gt; 0 ? (
-                                                                            &lt;Table&gt;
-                                                                                &lt;TableHeader&gt;
-                                                                                    &lt;TableRow&gt;
-                                                                                        &lt;TableHead&gt;Mes Liquidado&lt;/TableHead&gt;
-                                                                                        &lt;TableHead&gt;Concepto&lt;/TableHead&gt;
-                                                                                        &lt;TableHead className="text-right"&gt;Monto Pagado ($)&lt;/TableHead&gt;
-                                                                                    &lt;/TableRow&gt;
-                                                                                &lt;/TableHeader&gt;
-                                                                                &lt;TableBody&gt;
+                                                            <Collapsible key={payment.id} className="border rounded-md">
+                                                                <CollapsibleTrigger className="w-full p-3 hover:bg-muted/50 rounded-t-md">
+                                                                    <div className="flex items-center justify-between">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <ChevronRight className="h-4 w-4 transition-transform duration-200 group-data-[state=open]:rotate-90" />
+                                                                            <div className="text-left">
+                                                                                <p className="font-semibold text-primary">{format(payment.paymentDate.toDate(), 'dd/MM/yyyy')}</p>
+                                                                                <p className="text-xs text-muted-foreground">Ref: {payment.reference}</p>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="text-right">
+                                                                             <p className="font-bold text-lg">Bs. {formatToTwoDecimals(payment.totalAmount)}</p>
+                                                                             <p className="text-xs text-muted-foreground">Tasa: Bs. {formatToTwoDecimals(payment.exchangeRate || activeRate)}</p>
+                                                                        </div>
+                                                                    </div>
+                                                                </CollapsibleTrigger>
+                                                                <CollapsibleContent>
+                                                                    <div className="p-2 border-t bg-background">
+                                                                        {payment.liquidatedDebts.length > 0 ? (
+                                                                            <Table>
+                                                                                <TableHeader>
+                                                                                    <TableRow>
+                                                                                        <TableHead>Mes Liquidado</TableHead>
+                                                                                        <TableHead>Concepto</TableHead>
+                                                                                        <TableHead className="text-right">Monto Pagado ($)</TableHead>
+                                                                                    </TableRow>
+                                                                                </TableHeader>
+                                                                                <TableBody>
                                                                                     {payment.liquidatedDebts.map(debt => (
-                                                                                        &lt;TableRow key={debt.id}&gt;
-                                                                                            &lt;TableCell&gt;{monthsLocale[debt.month]} {debt.year}&lt;/TableCell&gt;
-                                                                                            &lt;TableCell&gt;{debt.description}&lt;/TableCell&gt;
-                                                                                            &lt;TableCell className="text-right"&gt;$${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}&lt;/TableCell&gt;
-                                                                                        &lt;/TableRow&gt;
+                                                                                        <TableRow key={debt.id}>
+                                                                                            <TableCell>{monthsLocale[debt.month]} {debt.year}</TableCell>
+                                                                                            <TableCell>{debt.description}</TableCell>
+                                                                                            <TableCell className="text-right">$${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}</TableCell>
+                                                                                        </TableRow>
                                                                                     ))}
-                                                                                &lt;/TableBody&gt;
-                                                                            &lt;/Table&gt;
+                                                                                </TableBody>
+                                                                            </Table>
                                                                         ) : (
-                                                                            &lt;p className="text-sm text-muted-foreground px-4 py-2"&gt;Este pago fue acreditado a saldo a favor.&lt;/p&gt;
+                                                                            <p className="text-sm text-muted-foreground px-4 py-2">Este pago fue acreditado a saldo a favor.</p>
                                                                         )}
-                                                                    &lt;/div&gt;
-                                                                &lt;/CollapsibleContent&gt;
-                                                            &lt;/Collapsible&gt;
+                                                                    </div>
+                                                                </CollapsibleContent>
+                                                            </Collapsible>
                                                         ))}
-                                                    &lt;/div&gt;
+                                                    </div>
                                                 ) : (
-                                                    &lt;div className="flex items-center justify-center h-full text-muted-foreground"&gt;No se encontraron pagos aprobados.&lt;/div&gt;
+                                                    <div className="flex items-center justify-center h-full text-muted-foreground">No se encontraron pagos aprobados.</div>
                                                 )}
-                                            &lt;/ScrollArea&gt;
-                                        &lt;/div&gt;
-                                    &lt;/CardContent&gt;
-                                &lt;/Card&gt;
+                                            </ScrollArea>
+                                        </div>
+                                    </CardContent>
+                                </Card>
                             )}
-                        &lt;/CardContent&gt;
-                     &lt;/Card&gt;
-                 &lt;/TabsContent&gt;
+                        </CardContent>
+                     </Card>
+                 </TabsContent>
 
-                &lt;TabsContent value="estado-de-cuenta"&gt;
-                     &lt;Card&gt;
-                        &lt;CardHeader&gt;
-                            &lt;CardTitle&gt;Estado de Cuenta&lt;/CardTitle&gt;
-                            &lt;CardDescription&gt;Busque un propietario para ver su estado de cuenta.&lt;/CardDescription&gt;
-                        &lt;/CardHeader&gt;
-                        &lt;CardContent className="space-y-4"&gt;
-                            &lt;div className="relative max-w-sm"&gt;
-                                &lt;Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                &lt;Input placeholder="Buscar por nombre..." className="pl-9" value={statementSearchTerm} onChange={e => setStatementSearchTerm(e.target.value)} />
-                            &lt;/div&gt;
-                            {statementSearchTerm && filteredStatementOwners.length &gt; 0 && (
-                                &lt;Card className="border rounded-md"&gt;
-                                    &lt;ScrollArea className="h-48"&gt;
+                <TabsContent value="estado-de-cuenta">
+                     <Card>
+                        <CardHeader>
+                            <CardTitle>Estado de Cuenta</CardTitle>
+                            <CardDescription>Busque un propietario para ver su estado de cuenta.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="relative max-w-sm">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <Input placeholder="Buscar por nombre..." className="pl-9" value={statementSearchTerm} onChange={e => setStatementSearchTerm(e.target.value)} />
+                            </div>
+                            {statementSearchTerm && filteredStatementOwners.length > 0 && (
+                                <Card className="border rounded-md">
+                                    <ScrollArea className="h-48">
                                         {filteredStatementOwners.map(owner => (
-                                            &lt;div key={owner.id} onClick={() => handleSelectStatementOwner(owner)} className="p-3 hover:bg-muted cursor-pointer border-b last:border-b-0"&gt;
-                                                &lt;p className="font-medium"&gt;{owner.name}&lt;/p&gt;
-                                                &lt;p className="text-sm text-muted-foreground"&gt;{(owner.properties || []).map(p => `${p.street} - ${p.house}`).join(', ')}&lt;/p&gt;
-                                            &lt;/div&gt;
+                                            <div key={owner.id} onClick={() => handleSelectStatementOwner(owner)} className="p-3 hover:bg-muted cursor-pointer border-b last:border-b-0">
+                                                <p className="font-medium">{owner.name}</p>
+                                                <p className="text-sm text-muted-foreground">{(owner.properties || []).map(p => `${p.street} - ${p.house}`).join(', ')}</p>
+                                            </div>
                                         ))}
-                                    &lt;/ScrollArea&gt;
-                                &lt;/Card&gt;
+                                    </ScrollArea>
+                                </Card>
                             )}
 
                             {selectedStatementOwner && accountStatementData && (
-                                &lt;Card className="mt-4 bg-card-foreground/5 dark:bg-card-foreground/5"&gt;
-                                    &lt;CardHeader&gt;
-                                        &lt;div className="flex justify-between items-center"&gt;
-                                            &lt;div className="flex items-center gap-4"&gt;
-                                                {companyInfo?.logo && &lt;img src={companyInfo.logo} alt="Logo" className="w-16 h-16 rounded-md"/>}
-                                                &lt;div&gt;
-                                                    &lt;p className="font-bold"&gt;{companyInfo?.name} | {companyInfo?.rif}&lt;/p&gt;
-                                                    &lt;p className="text-sm"&gt;Propietario: {selectedStatementOwner.name}&lt;/p&gt;
-                                                    &lt;p className="text-sm"&gt;Propiedad(es): {(selectedStatementOwner.properties || []).map(p => `${p.street}-${p.house}`).join(', ')}&lt;/p&gt;
-                                                &lt;/div&gt;
-                                            &lt;/div&gt;
-                                            &lt;div className="text-right"&gt;
-                                                &lt;h2 className="text-2xl font-bold"&gt;ESTADO DE CUENTA&lt;/h2&gt;
-                                                &lt;p className="text-xs"&gt;Fecha: {format(new Date(), "dd/MM/yyyy 'a las' HH:mm:ss")}&lt;/p&gt;
-                                                &lt;Button size="sm" variant="outline" className="mt-2" onClick={() => handleExportAccountStatement('pdf')}&gt;&lt;FileText className="mr-2 h-4 w-4" /> Exportar PDF&lt;/Button&gt;
-                                            &lt;/div&gt;
-                                        &lt;/div&gt;
-                                    &lt;/CardHeader&gt;
-                                    &lt;CardContent className="space-y-6"&gt;
-                                        &lt;div&gt;
-                                            &lt;h3 className="font-bold mb-2"&gt;Resumen de Pagos&lt;/h3&gt;
-                                            &lt;Table&gt;
-                                                &lt;TableHeader&gt;
-                                                    &lt;TableRow className="bg-[#004D40] hover:bg-[#00382e] text-white"&gt;
-                                                        &lt;TableHead className="text-white"&gt;Fecha&lt;/TableHead&gt;
-                                                        &lt;TableHead className="text-white"&gt;Concepto&lt;/TableHead&gt;
-                                                        &lt;TableHead className="text-white"&gt;Pagado por&lt;/TableHead&gt;
-                                                        &lt;TableHead className="text-white text-right"&gt;Monto (Bs)&lt;/TableHead&gt;
-                                                    &lt;/TableRow&gt;
-                                                &lt;/TableHeader&gt;
-                                                &lt;TableBody&gt;
+                                <Card className="mt-4 bg-card-foreground/5 dark:bg-card-foreground/5">
+                                    <CardHeader>
+                                        <div className="flex justify-between items-center">
+                                            <div className="flex items-center gap-4">
+                                                {companyInfo?.logo && <img src={companyInfo.logo} alt="Logo" className="w-16 h-16 rounded-md"/>}
+                                                <div>
+                                                    <p className="font-bold">{companyInfo?.name} | {companyInfo?.rif}</p>
+                                                    <p className="text-sm">Propietario: {selectedStatementOwner.name}</p>
+                                                    <p className="text-sm">Propiedad(es): {(selectedStatementOwner.properties || []).map(p => `${p.street}-${p.house}`).join(', ')}</p>
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <h2 className="text-2xl font-bold">ESTADO DE CUENTA</h2>
+                                                <p className="text-xs">Fecha: {format(new Date(), "dd/MM/yyyy 'a las' HH:mm:ss")}</p>
+                                                <Button size="sm" variant="outline" className="mt-2" onClick={() => handleExportAccountStatement('pdf')}><FileText className="mr-2 h-4 w-4" /> Exportar PDF</Button>
+                                            </div>
+                                        </div>
+                                    </CardHeader>
+                                    <CardContent className="space-y-6">
+                                        <div>
+                                            <h3 className="font-bold mb-2">Resumen de Pagos</h3>
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow className="bg-[#004D40] hover:bg-[#00382e] text-white">
+                                                        <TableHead className="text-white">Fecha</TableHead>
+                                                        <TableHead className="text-white">Concepto</TableHead>
+                                                        <TableHead className="text-white">Pagado por</TableHead>
+                                                        <TableHead className="text-white text-right">Monto (Bs)</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
                                                     {accountStatementData.payments.map(p => (
-                                                        &lt;TableRow key={p.id}&gt;
-                                                            &lt;TableCell&gt;{format(p.paymentDate.toDate(), 'dd-MM-yyyy')}&lt;/TableCell&gt;
-                                                            &lt;TableCell&gt;Pago Cuota(s)&lt;/TableCell&gt;
-                                                            &lt;TableCell&gt;Administrador&lt;/TableCell&gt;
-                                                            &lt;TableCell className="text-right"&gt;{formatToTwoDecimals(p.totalAmount)}&lt;/TableCell&gt;
-                                                        &lt;/TableRow&gt;
+                                                        <TableRow key={p.id}>
+                                                            <TableCell>{format(p.paymentDate.toDate(), 'dd-MM-yyyy')}</TableCell>
+                                                            <TableCell>Pago Cuota(s)</TableCell>
+                                                            <TableCell>Administrador</TableCell>
+                                                            <TableCell className="text-right">{formatToTwoDecimals(p.totalAmount)}</TableCell>
+                                                        </TableRow>
                                                     ))}
-                                                &lt;/TableBody&gt;
-                                                &lt;TableFooter&gt;
-                                                     &lt;TableRow className="bg-[#004D40] hover:bg-[#00382e] text-white font-bold"&gt;
-                                                        &lt;TableCell colSpan={3}&gt;Total Pagado&lt;/TableCell&gt;
-                                                        &lt;TableCell className="text-right"&gt;Bs. {formatToTwoDecimals(accountStatementData.totalPaidBs)}&lt;/TableCell&gt;
-                                                    &lt;/TableRow&gt;
-                                                &lt;/TableFooter&gt;
-                                            &lt;/Table&gt;
-                                        &lt;/div&gt;
-                                        &lt;div&gt;
-                                            &lt;h3 className="font-bold mb-2"&gt;Resumen de Deudas&lt;/h3&gt;
-                                            &lt;Table&gt;
-                                                &lt;TableHeader&gt;
-                                                    &lt;TableRow className="bg-[#004D40] hover:bg-[#00382e] text-white"&gt;
-                                                        &lt;TableHead className="text-white"&gt;Periodo&lt;/TableHead&gt;
-                                                        &lt;TableHead className="text-white"&gt;Concepto&lt;/TableHead&gt;
-                                                        &lt;TableHead className="text-white text-right"&gt;Monto ($)&lt;/TableHead&gt;
-                                                        &lt;TableHead className="text-white text-right"&gt;Estado&lt;/TableHead&gt;
-                                                    &lt;/TableRow&gt;
-                                                &lt;/TableHeader&gt;
-                                                &lt;TableBody&gt;
+                                                </TableBody>
+                                                <TableFooter>
+                                                     <TableRow className="bg-[#004D40] hover:bg-[#00382e] text-white font-bold">
+                                                        <TableCell colSpan={3}>Total Pagado</TableCell>
+                                                        <TableCell className="text-right">Bs. {formatToTwoDecimals(accountStatementData.totalPaidBs)}</TableCell>
+                                                    </TableRow>
+                                                </TableFooter>
+                                            </Table>
+                                        </div>
+                                        <div>
+                                            <h3 className="font-bold mb-2">Resumen de Deudas</h3>
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow className="bg-[#004D40] hover:bg-[#00382e] text-white">
+                                                        <TableHead className="text-white">Periodo</TableHead>
+                                                        <TableHead className="text-white">Concepto</TableHead>
+                                                        <TableHead className="text-white text-right">Monto ($)</TableHead>
+                                                        <TableHead className="text-white text-right">Estado</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
                                                      {accountStatementData.debts.map(d => (
-                                                        &lt;TableRow key={d.id}&gt;
-                                                            &lt;TableCell&gt;{monthsLocale[d.month]} {d.year}&lt;/TableCell&gt;
-                                                            &lt;TableCell&gt;{d.description}&lt;/TableCell&gt;
-                                                            &lt;TableCell className="text-right"&gt;$${d.amountUSD.toFixed(2)}&lt;/TableCell&gt;
-                                                            &lt;TableCell className="text-right"&gt;{d.status === 'paid' ? 'Pagada' : 'Pendiente'}&lt;/TableCell&gt;
-                                                        &lt;/TableRow&gt;
+                                                        <TableRow key={d.id}>
+                                                            <TableCell>{monthsLocale[d.month]} {d.year}</TableCell>
+                                                            <TableCell>{d.description}</TableCell>
+                                                            <TableCell className="text-right">$${d.amountUSD.toFixed(2)}</TableCell>
+                                                            <TableCell className="text-right">{d.status === 'paid' ? 'Pagada' : 'Pendiente'}</TableCell>
+                                                        </TableRow>
                                                      ))}
-                                                &lt;/TableBody&gt;
-                                                &lt;TableFooter&gt;
-                                                    &lt;TableRow className="bg-[#004D40] hover:bg-[#00382e] text-white font-bold"&gt;
-                                                        &lt;TableCell colSpan={2}&gt;Total Adeudado&lt;/TableCell&gt;
-                                                        &lt;TableCell className="text-right"&gt;$${accountStatementData.totalDebtUSD.toFixed(2)}&lt;/TableCell&gt;
-                                                        &lt;TableCell&gt;&lt;/TableCell&gt;
-                                                    &lt;/TableRow&gt;
-                                                &lt;/TableFooter&gt;
-                                            &lt;/Table&gt;
-                                        &lt;/div&gt;
-                                        &lt;div className="text-right font-bold text-lg pt-4"&gt;
+                                                </TableBody>
+                                                <TableFooter>
+                                                    <TableRow className="bg-[#004D40] hover:bg-[#00382e] text-white font-bold">
+                                                        <TableCell colSpan={2}>Total Adeudado</TableCell>
+                                                        <TableCell className="text-right">$${accountStatementData.totalDebtUSD.toFixed(2)}</TableCell>
+                                                        <TableCell></TableCell>
+                                                    </TableRow>
+                                                </TableFooter>
+                                            </Table>
+                                        </div>
+                                        <div className="text-right font-bold text-lg pt-4">
                                             Saldo a Favor Actual: Bs. {formatToTwoDecimals(accountStatementData.balance)}
-                                        &lt;/div&gt;
-                                    &lt;/CardContent&gt;
-                                &lt;/Card&gt;
+                                        </div>
+                                    </CardContent>
+                                </Card>
                             )}
-                        &lt;/CardContent&gt;
-                     &lt;/Card&gt;
-                &lt;/TabsContent&gt;
+                        </CardContent>
+                     </Card>
+                </TabsContent>
 
-                 &lt;TabsContent value="delinquency"&gt;
-                     &lt;Card&gt;
-                        &lt;CardHeader&gt;
-                            &lt;CardTitle&gt;Reporte Interactivo de Morosidad&lt;/CardTitle&gt;
-                            &lt;CardDescription&gt;Filtre, seleccione y exporte la lista de propietarios con deudas pendientes.&lt;/CardDescription&gt;
-                             &lt;div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-4 items-end"&gt;
-                                &lt;div className="space-y-2"&gt;
-                                    &lt;Label&gt;Antigüedad de Deuda&lt;/Label&gt;
-                                    &lt;Select value={delinquencyFilterType} onValueChange={setDelinquencyFilterType}&gt;
-                                        &lt;SelectTrigger&gt;&lt;SelectValue />&lt;/SelectTrigger&gt;
-                                        &lt;SelectContent&gt;
-                                            &lt;SelectItem value="all"&gt;Todos los morosos&lt;/SelectItem&gt;
-                                            &lt;SelectItem value="2_or_more"&gt;2 meses o más&lt;/SelectItem&gt;
-                                            &lt;SelectItem value="3_exact"&gt;Exactamente 3 meses&lt;/SelectItem&gt;
-                                            &lt;SelectItem value="custom"&gt;Rango personalizado&lt;/SelectItem&gt;
-                                        &lt;/SelectContent&gt;
-                                    &lt;/Select&gt;
-                                &lt;/div&gt;
+                 <TabsContent value="delinquency">
+                     <Card>
+                        <CardHeader>
+                            <CardTitle>Reporte Interactivo de Morosidad</CardTitle>
+                            <CardDescription>Filtre, seleccione y exporte la lista de propietarios con deudas pendientes.</CardDescription>
+                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-4 items-end">
+                                <div className="space-y-2">
+                                    <Label>Antigüedad de Deuda</Label>
+                                    <Select value={delinquencyFilterType} onValueChange={setDelinquencyFilterType}>
+                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">Todos los morosos</SelectItem>
+                                            <SelectItem value="2_or_more">2 meses o más</SelectItem>
+                                            <SelectItem value="3_exact">Exactamente 3 meses</SelectItem>
+                                            <SelectItem value="custom">Rango personalizado</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
                                 {delinquencyFilterType === 'custom' && (
-                                    &lt;div className="md:col-span-2 lg:col-span-1 grid grid-cols-2 gap-2 items-end"&gt;
-                                        &lt;div className="space-y-2"&gt;
-                                            &lt;Label&gt;Desde (meses)&lt;/Label&gt;
-                                            &lt;Input type="number" value={customMonthRange.from} onChange={e => setCustomMonthRange(c => ({...c, from: e.target.value}))} />
-                                        &lt;/div&gt;
-                                        &lt;div className="space-y-2"&gt;
-                                            &lt;Label&gt;Hasta (meses)&lt;/Label&gt;
-                                            &lt;Input type="number" value={customMonthRange.to} onChange={e => setCustomMonthRange(c => ({...c, to: e.target.value}))} />
-                                        &lt;/div&gt;
-                                    &lt;/div&gt;
+                                    <div className="md:col-span-2 lg:col-span-1 grid grid-cols-2 gap-2 items-end">
+                                        <div className="space-y-2">
+                                            <Label>Desde (meses)</Label>
+                                            <Input type="number" value={customMonthRange.from} onChange={e => setCustomMonthRange(c => ({...c, from: e.target.value}))} />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Hasta (meses)</Label>
+                                            <Input type="number" value={customMonthRange.to} onChange={e => setCustomMonthRange(c => ({...c, to: e.target.value}))} />
+                                        </div>
+                                    </div>
                                 )}
-                                 &lt;div className="space-y-2 md:col-start-1 lg:col-start-auto"&gt;
-                                    &lt;Label&gt;Buscar Propietario&lt;/Label&gt;
-                                     &lt;div className="relative"&gt;
-                                        &lt;Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                        &lt;Input placeholder="Buscar por nombre o propiedad..." className="pl-9" value={delinquencySearchTerm} onChange={e => setDelinquencySearchTerm(e.target.value)} />
-                                    &lt;/div&gt;
-                                &lt;/div&gt;
-                                 &lt;div className="flex items-center space-x-2"&gt;
-                                    &lt;Checkbox id="include-amounts" checked={includeDelinquencyAmounts} onCheckedChange={(checked) => setIncludeDelinquencyAmounts(Boolean(checked))} />
-                                    &lt;Label htmlFor="include-amounts" className="cursor-pointer"&gt;
+                                 <div className="space-y-2 md:col-start-1 lg:col-start-auto">
+                                    <Label>Buscar Propietario</Label>
+                                     <div className="relative">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                        <Input placeholder="Buscar por nombre o propiedad..." className="pl-9" value={delinquencySearchTerm} onChange={e => setDelinquencySearchTerm(e.target.value)} />
+                                    </div>
+                                </div>
+                                 <div className="flex items-center space-x-2">
+                                    <Checkbox id="include-amounts" checked={includeDelinquencyAmounts} onCheckedChange={(checked) => setIncludeDelinquencyAmounts(Boolean(checked))} />
+                                    <Label htmlFor="include-amounts" className="cursor-pointer">
                                         Incluir montos en el reporte
-                                    &lt;/Label&gt;
-                                &lt;/div&gt;
-                            &lt;/div&gt;
-                        &lt;/CardHeader&gt;
-                        &lt;CardContent&gt;
-                            &lt;div className="flex items-center justify-between mb-4"&gt;
-                                &lt;p className="text-sm text-muted-foreground"&gt;
+                                    </Label>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="flex items-center justify-between mb-4">
+                                <p className="text-sm text-muted-foreground">
                                     Mostrando {filteredAndSortedDelinquents.length} de {allDelinquentOwners.length} propietarios morosos. 
                                     Seleccionados: {selectedDelinquentOwners.size}
-                                &lt;/p&gt;
-                                &lt;div className="flex gap-2"&gt;
-                                    &lt;Button variant="outline" onClick={() => handleExportDelinquency('pdf')}&gt;&lt;FileText className="mr-2 h-4 w-4" /> Exportar a PDF&lt;/Button&gt;
-                                    &lt;Button variant="outline" onClick={() => handleExportDelinquency('excel')}&gt;&lt;FileSpreadsheet className="mr-2 h-4 w-4" /> Exportar a Excel&lt;/Button&gt;
-                                &lt;/div&gt;
-                            &lt;/div&gt;
-                            &lt;Table&gt;
-                                &lt;TableHeader&gt;
-                                    &lt;TableRow&gt;
-                                        &lt;TableHead className="w-[50px]"&gt;
-                                             &lt;Checkbox 
-                                                checked={selectedDelinquentOwners.size === filteredAndSortedDelinquents.length && filteredAndSortedDelinquents.length &gt; 0}
+                                </p>
+                                <div className="flex gap-2">
+                                    <Button variant="outline" onClick={() => handleExportDelinquency('pdf')}><FileText className="mr-2 h-4 w-4" /> Exportar a PDF</Button>
+                                    <Button variant="outline" onClick={() => handleExportDelinquency('excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Exportar a Excel</Button>
+                                </div>
+                            </div>
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead className="w-[50px]">
+                                             <Checkbox 
+                                                checked={selectedDelinquentOwners.size === filteredAndSortedDelinquents.length && filteredAndSortedDelinquents.length > 0}
                                                 onCheckedChange={(checked) => setSelectedDelinquentOwners(new Set(Boolean(checked) ? filteredAndSortedDelinquents.map(o => o.id) : []))}
                                             />
-                                        &lt;/TableHead&gt;
-                                        &lt;TableHead&gt;
-                                            &lt;Button variant="ghost" onClick={() => handleSortDelinquency('name')}&gt;
+                                        </TableHead>
+                                        <TableHead>
+                                            <Button variant="ghost" onClick={() => handleSortDelinquency('name')}>
                                                 Propietario {renderSortIcon('name')}
-                                            &lt;/Button&gt;
-                                        &lt;/TableHead&gt;
-                                        &lt;TableHead&gt;Propiedades&lt;/TableHead&gt;
-                                        &lt;TableHead&gt;
-                                             &lt;Button variant="ghost" onClick={() => handleSortDelinquency('monthsOwed')}&gt;
+                                            </Button>
+                                        </TableHead>
+                                        <TableHead>Propiedades</TableHead>
+                                        <TableHead>
+                                             <Button variant="ghost" onClick={() => handleSortDelinquency('monthsOwed')}>
                                                 Meses {renderSortIcon('monthsOwed')}
-                                            &lt;/Button&gt;
-                                        &lt;/TableHead&gt;
-                                        &lt;TableHead className="text-right"&gt;
-                                             &lt;Button variant="ghost" onClick={() => handleSortDelinquency('debtAmountUSD')}&gt;
+                                            </Button>
+                                        </TableHead>
+                                        <TableHead className="text-right">
+                                             <Button variant="ghost" onClick={() => handleSortDelinquency('debtAmountUSD')}>
                                                 Deuda (USD) {renderSortIcon('debtAmountUSD')}
-                                            &lt;/Button&gt;
-                                        &lt;/TableHead&gt;
-                                    &lt;/TableRow&gt;
-                                &lt;/TableHeader&gt;
-                                &lt;TableBody&gt;
-                                    {filteredAndSortedDelinquents.length &gt; 0 ? (
+                                            </Button>
+                                        </TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {filteredAndSortedDelinquents.length > 0 ? (
                                         filteredAndSortedDelinquents.map(owner => (
-                                            &lt;TableRow key={owner.id} data-state={selectedDelinquentOwners.has(owner.id) ? 'selected' : undefined}&gt;
-                                                &lt;TableCell&gt;
-                                                    &lt;Checkbox
+                                            <TableRow key={owner.id} data-state={selectedDelinquentOwners.has(owner.id) ? 'selected' : undefined}>
+                                                <TableCell>
+                                                    <Checkbox
                                                         checked={selectedDelinquentOwners.has(owner.id)}
                                                         onCheckedChange={()=>{
                                                             const newSelection = new Set(selectedDelinquentOwners);
@@ -1627,205 +1628,205 @@ export default function ReportsPage() {
                                                             setSelectedDelinquentOwners(newSelection);
                                                         }}
                                                     />
-                                                &lt;/TableCell&gt;
-                                                &lt;TableCell className="font-medium"&gt;{owner.name}&lt;/TableCell&gt;
-                                                &lt;TableCell&gt;{owner.properties}&lt;/TableCell&gt;
-                                                &lt;TableCell&gt;{owner.monthsOwed}&lt;/TableCell&gt;
-                                                &lt;TableCell className="text-right font-semibold"&gt;${owner.debtAmountUSD.toFixed(2)}&lt;/TableCell&gt;
-                                            &lt;/TableRow&gt;
+                                                </TableCell>
+                                                <TableCell className="font-medium">{owner.name}</TableCell>
+                                                <TableCell>{owner.properties}</TableCell>
+                                                <TableCell>{owner.monthsOwed}</TableCell>
+                                                <TableCell className="text-right font-semibold">${owner.debtAmountUSD.toFixed(2)}</TableCell>
+                                            </TableRow>
                                         ))
                                     ) : (
-                                        &lt;TableRow&gt;
-                                            &lt;TableCell colSpan={5} className="h-24 text-center"&gt;
+                                        <TableRow>
+                                            <TableCell colSpan={5} className="h-24 text-center">
                                                 No se encontraron propietarios con los filtros seleccionados.
-                                            &lt;/TableCell&gt;
-                                        &lt;/TableRow&gt;
+                                            </TableCell>
+                                        </TableRow>
                                     )}
-                                &lt;/TableBody&gt;
-                            &lt;/Table&gt;
-                        &lt;/CardContent&gt;
-                     &lt;/Card&gt;
-                 &lt;/TabsContent&gt;
+                                </TableBody>
+                            </Table>
+                        </CardContent>
+                     </Card>
+                 </TabsContent>
 
-                 &lt;TabsContent value="balance"&gt;
-                     &lt;Card&gt;
-                        &lt;CardHeader&gt;
-                            &lt;CardTitle&gt;Consulta de Saldos a Favor&lt;/CardTitle&gt;
-                            &lt;CardDescription&gt;Lista de todos los propietarios con saldo positivo en sus cuentas.&lt;/CardDescription&gt;
-                             &lt;div className="flex items-center justify-between mt-4"&gt;
-                                &lt;div className="relative max-w-sm"&gt;
-                                    &lt;Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                    &lt;Input placeholder="Buscar por propietario..." className="pl-9" value={balanceSearchTerm} onChange={e => setBalanceSearchTerm(e.target.value)} />
-                                &lt;/div&gt;
-                                &lt;div className="flex gap-2"&gt;
-                                    &lt;Button variant="outline" onClick={()=>handleExportBalance('pdf')}&gt;&lt;FileText className="mr-2 h-4 w-4" /> PDF&lt;/Button&gt;
-                                    &lt;Button variant="outline" onClick={()=>handleExportBalance('excel')}&gt;&lt;FileSpreadsheet className="mr-2 h-4 w-4" /> Excel&lt;/Button&gt;
-                                &lt;/div&gt;
-                            &lt;/div&gt;
-                        &lt;/CardHeader&gt;
-                        &lt;CardContent&gt;
-                            &lt;Table&gt;
-                                &lt;TableHeader&gt;
-                                    &lt;TableRow&gt;
-                                        &lt;TableHead&gt;Propietario&lt;/TableHead&gt;
-                                        &lt;TableHead&gt;Propiedades&lt;/TableHead&gt;
-                                        &lt;TableHead className="text-right"&gt;Saldo (Bs.)&lt;/TableHead&gt;
-                                    &lt;/TableRow&gt;
-                                &lt;/TableHeader&gt;
-                                &lt;TableBody&gt;
-                                    {filteredBalanceOwners.length &gt; 0 ? (
+                 <TabsContent value="balance">
+                     <Card>
+                        <CardHeader>
+                            <CardTitle>Consulta de Saldos a Favor</CardTitle>
+                            <CardDescription>Lista de todos los propietarios con saldo positivo en sus cuentas.</CardDescription>
+                             <div className="flex items-center justify-between mt-4">
+                                <div className="relative max-w-sm">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                    <Input placeholder="Buscar por propietario..." className="pl-9" value={balanceSearchTerm} onChange={e => setBalanceSearchTerm(e.target.value)} />
+                                </div>
+                                <div className="flex gap-2">
+                                    <Button variant="outline" onClick={()=>handleExportBalance('pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
+                                    <Button variant="outline" onClick={()=>handleExportBalance('excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Propietario</TableHead>
+                                        <TableHead>Propiedades</TableHead>
+                                        <TableHead className="text-right">Saldo (Bs.)</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {filteredBalanceOwners.length > 0 ? (
                                         filteredBalanceOwners.map(owner => (
-                                            &lt;TableRow key={owner.id}&gt;
-                                                &lt;TableCell className="font-medium"&gt;{owner.name}&lt;/TableCell&gt;
-                                                &lt;TableCell&gt;{owner.properties}&lt;/TableCell&gt;
-                                                &lt;TableCell className="text-right font-bold text-green-500"&gt;Bs. {formatToTwoDecimals(owner.balance)}&lt;/TableCell&gt;
-                                            &lt;/TableRow&gt;
+                                            <TableRow key={owner.id}>
+                                                <TableCell className="font-medium">{owner.name}</TableCell>
+                                                <TableCell>{owner.properties}</TableCell>
+                                                <TableCell className="text-right font-bold text-green-500">Bs. {formatToTwoDecimals(owner.balance)}</TableCell>
+                                            </TableRow>
                                         ))
                                     ) : (
-                                        &lt;TableRow&gt;&lt;TableCell colSpan={3} className="h-24 text-center"&gt;No hay propietarios con saldo a favor.&lt;/TableCell&gt;&lt;/TableRow&gt;
+                                        <TableRow><TableCell colSpan={3} className="h-24 text-center">No hay propietarios con saldo a favor.</TableCell></TableRow>
                                     )}
-                                &lt;/TableBody&gt;
-                            &lt;/Table&gt;
-                        &lt;/CardContent&gt;
-                     &lt;/Card&gt;
-                 &lt;/TabsContent&gt;
+                                </TableBody>
+                            </Table>
+                        </CardContent>
+                     </Card>
+                 </TabsContent>
                  
-                &lt;TabsContent value="income"&gt;
-                     &lt;Card&gt;
-                        &lt;CardHeader&gt;
-                            &lt;CardTitle&gt;Informe de Ingresos&lt;/CardTitle&gt;
-                            &lt;CardDescription&gt;Consulta los pagos aprobados en un período específico.&lt;/CardDescription&gt;
-                             &lt;div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 items-end"&gt;
-                                &lt;div className="space-y-2"&gt;
-                                    &lt;Label&gt;Buscar Propietario/Propiedad&lt;/Label&gt;
-                                    &lt;Input placeholder="Nombre, calle o casa..." value={incomeSearchTerm} onChange={e => setIncomeSearchTerm(e.target.value)} />
-                                &lt;/div&gt;
-                                &lt;div className="space-y-2"&gt;
-                                    &lt;Label&gt;Pagos Desde&lt;/Label&gt;
-                                    &lt;Popover&gt;
-                                        &lt;PopoverTrigger asChild&gt;
-                                            &lt;Button variant="outline" className={cn("w-full justify-start", !incomeDateRange.from && "text-muted-foreground")}&gt;
-                                                &lt;CalendarIcon className="mr-2 h-4 w-4" />
+                <TabsContent value="income">
+                     <Card>
+                        <CardHeader>
+                            <CardTitle>Informe de Ingresos</CardTitle>
+                            <CardDescription>Consulta los pagos aprobados en un período específico.</CardDescription>
+                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 items-end">
+                                <div className="space-y-2">
+                                    <Label>Buscar Propietario/Propiedad</Label>
+                                    <Input placeholder="Nombre, calle o casa..." value={incomeSearchTerm} onChange={e => setIncomeSearchTerm(e.target.value)} />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Pagos Desde</Label>
+                                    <Popover>
+                                        <PopoverTrigger asChild>
+                                            <Button variant="outline" className={cn("w-full justify-start", !incomeDateRange.from && "text-muted-foreground")}>
+                                                <CalendarIcon className="mr-2 h-4 w-4" />
                                                 {incomeDateRange.from ? format(incomeDateRange.from, 'P', { locale: es }) : "Fecha"}
-                                            &lt;/Button&gt;
-                                        &lt;/PopoverTrigger&gt;
-                                        &lt;PopoverContent&gt;&lt;Calendar mode="single" selected={incomeDateRange.from} onSelect={d => setIncomeDateRange(prev => ({...prev, from: d}))} />&lt;/PopoverContent&gt;
-                                    &lt;/Popover&gt;
-                                &lt;/div&gt;
-                                &lt;div className="space-y-2"&gt;
-                                    &lt;Label&gt;Pagos Hasta&lt;/Label&gt;
-                                     &lt;Popover&gt;
-                                        &lt;PopoverTrigger asChild&gt;
-                                            &lt;Button variant="outline" className={cn("w-full justify-start", !incomeDateRange.to && "text-muted-foreground")}&gt;
-                                                &lt;CalendarIcon className="mr-2 h-4 w-4" />
+                                            </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent><Calendar mode="single" selected={incomeDateRange.from} onSelect={d => setIncomeDateRange(prev => ({...prev, from: d}))} /></PopoverContent>
+                                    </Popover>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Pagos Hasta</Label>
+                                     <Popover>
+                                        <PopoverTrigger asChild>
+                                            <Button variant="outline" className={cn("w-full justify-start", !incomeDateRange.to && "text-muted-foreground")}>
+                                                <CalendarIcon className="mr-2 h-4 w-4" />
                                                 {incomeDateRange.to ? format(incomeDateRange.to, 'P', { locale: es }) : "Fecha"}
-                                            &lt;/Button&gt;
-                                        &lt;/PopoverTrigger&gt;
-                                        &lt;PopoverContent&gt;&lt;Calendar mode="single" selected={incomeDateRange.to} onSelect={d => setIncomeDateRange(prev => ({...prev, to: d}))} />&lt;/PopoverContent&gt;
-                                    &lt;/Popover&gt;
-                                &lt;/div&gt;
-                            &lt;/div&gt;
-                        &lt;/CardHeader&gt;
-                        &lt;CardContent&gt;
-                             &lt;div className="flex justify-end gap-2 mb-4"&gt;
-                                &lt;Button variant="outline" onClick={() => handleExportIncomeReport('pdf')} disabled={generatingReport}&gt;
-                                    &lt;FileText className="mr-2 h-4 w-4" /> Exportar a PDF
-                                &lt;/Button&gt;
-                                &lt;Button variant="outline" onClick={()=>handleExportIncomeReport('excel')} disabled={generatingReport}&gt;
-                                    &lt;FileSpreadsheet className="mr-2 h-4 w-4" /> Exportar a Excel
-                                &lt;/Button&gt;
-                            &lt;/div&gt;
-                            &lt;Table&gt;
-                                &lt;TableHeader&gt;
-                                    &lt;TableRow&gt;
-                                        &lt;TableHead&gt;Propietario&lt;/TableHead&gt;
-                                        &lt;TableHead&gt;Calle&lt;/TableHead&gt;
-                                        &lt;TableHead&gt;Casa&lt;/TableHead&gt;
-                                        &lt;TableHead&gt;Fecha&lt;/TableHead&gt;
-                                        &lt;TableHead className="text-right"&gt;Monto (Bs.)&lt;/TableHead&gt;
-                                        &lt;TableHead className="text-right"&gt;Referencia&lt;/TableHead&gt;
-                                    &lt;/TableRow&gt;
-                                &lt;/TableHeader&gt;
-                                &lt;TableBody&gt;
-                                    {incomeReportRows.length &gt; 0 ? (
+                                            </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent><Calendar mode="single" selected={incomeDateRange.to} onSelect={d => setIncomeDateRange(prev => ({...prev, to: d}))} /></PopoverContent>
+                                    </Popover>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                             <div className="flex justify-end gap-2 mb-4">
+                                <Button variant="outline" onClick={() => handleExportIncomeReport('pdf')} disabled={generatingReport}>
+                                    <FileText className="mr-2 h-4 w-4" /> Exportar a PDF
+                                </Button>
+                                <Button variant="outline" onClick={()=>handleExportIncomeReport('excel')} disabled={generatingReport}>
+                                    <FileSpreadsheet className="mr-2 h-4 w-4" /> Exportar a Excel
+                                </Button>
+                            </div>
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Propietario</TableHead>
+                                        <TableHead>Calle</TableHead>
+                                        <TableHead>Casa</TableHead>
+                                        <TableHead>Fecha</TableHead>
+                                        <TableHead className="text-right">Monto (Bs.)</TableHead>
+                                        <TableHead className="text-right">Referencia</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {incomeReportRows.length > 0 ? (
                                         incomeReportRows.map((row, index) => (
-                                            &lt;TableRow key={index}&gt;
-                                                &lt;TableCell&gt;{row.ownerName}&lt;/TableCell&gt;
-                                                &lt;TableCell&gt;{row.street}&lt;/TableCell&gt;
-                                                &lt;TableCell&gt;{row.house}&lt;/TableCell&gt;
-                                                &lt;TableCell&gt;{row.date}&lt;/TableCell&gt;
-                                                &lt;TableCell className="text-right"&gt;{formatToTwoDecimals(row.amount)}&lt;/TableCell&gt;
-                                                &lt;TableCell className="text-right"&gt;{row.reference}&lt;/TableCell&gt;
-                                            &lt;/TableRow&gt;
+                                            <TableRow key={index}>
+                                                <TableCell>{row.ownerName}</TableCell>
+                                                <TableCell>{row.street}</TableCell>
+                                                <TableCell>{row.house}</TableCell>
+                                                <TableCell>{row.date}</TableCell>
+                                                <TableCell className="text-right">{formatToTwoDecimals(row.amount)}</TableCell>
+                                                <TableCell className="text-right">{row.reference}</TableCell>
+                                            </TableRow>
                                         ))
                                     ) : (
-                                        &lt;TableRow&gt;&lt;TableCell colSpan={6} className="h-24 text-center"&gt;No se encontraron ingresos para el período y filtro seleccionados.&lt;/TableCell&gt;&lt;/TableRow&gt;
+                                        <TableRow><TableCell colSpan={6} className="h-24 text-center">No se encontraron ingresos para el período y filtro seleccionados.</TableCell></TableRow>
                                     )}
-                                &lt;/TableBody&gt;
-                            &lt;/Table&gt;
-                        &lt;/CardContent&gt;
-                    &lt;/Card&gt;
-                &lt;/TabsContent&gt;
+                                </TableBody>
+                            </Table>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
 
-                &lt;TabsContent value="monthly"&gt;
-                    &lt;Card&gt;
-                        &lt;CardHeader&gt;
-                            &lt;CardTitle&gt;Reporte de Pagos Mensual&lt;/CardTitle&gt;
-                            &lt;CardDescription&gt;Revisa todos los pagos aprobados en un mes específico y los meses que liquidaron.&lt;/CardDescription&gt;
-                            &lt;div className="flex gap-4 pt-4"&gt;
-                                &lt;div className="space-y-2"&gt;
-                                    &lt;Label&gt;Mes&lt;/Label&gt;
-                                    &lt;Select value={selectedMonth} onValueChange={setSelectedMonth}&gt;
-                                        &lt;SelectTrigger className="w-40"&gt;&lt;SelectValue />&lt;/SelectTrigger&gt;
-                                        &lt;SelectContent&gt;{monthOptions.map(m => &lt;SelectItem key={m.value} value={m.value}&gt;{m.label}&lt;/SelectItem&gt;)}&lt;/SelectContent&gt;
-                                    &lt;/Select&gt;
-                                &lt;/div&gt;
-                                &lt;div className="space-y-2"&gt;
-                                    &lt;Label&gt;Año&lt;/Label&gt;
-                                    &lt;Select value={selectedYear} onValueChange={setSelectedYear}&gt;
-                                        &lt;SelectTrigger className="w-32"&gt;&lt;SelectValue />&lt;/SelectTrigger&gt;
-                                        &lt;SelectContent&gt;{years.map(y => &lt;SelectItem key={y} value={y}&gt;{y}&lt;/SelectItem&gt;)}&lt;/SelectContent&gt;
-                                    &lt;/Select&gt;
-                                &lt;/div&gt;
-                            &lt;/div&gt;
-                        &lt;/CardHeader&gt;
-                        &lt;CardContent&gt;
-                            &lt;div className="flex justify-end gap-2 mb-4"&gt;
-                                &lt;Button variant="outline" onClick={() => handleExportMonthlyReport('pdf')}&gt;&lt;FileText className="mr-2 h-4 w-4" /> PDF&lt;/Button&gt;
-                                &lt;Button variant="outline" onClick={() => handleExportMonthlyReport('excel')}&gt;&lt;FileSpreadsheet className="mr-2 h-4 w-4" /> Excel&lt;/Button&gt;
-                            &lt;/div&gt;
-                            &lt;Table&gt;
-                                &lt;TableHeader&gt;
-                                    &lt;TableRow&gt;
-                                        &lt;TableHead&gt;Propietario&lt;/TableHead&gt;
-                                        &lt;TableHead&gt;Propiedad&lt;/TableHead&gt;
-                                        &lt;TableHead&gt;Fecha Pago&lt;/TableHead&gt;
-                                        &lt;TableHead className="text-right"&gt;Monto (Bs.)&lt;/TableHead&gt;
-                                        &lt;TableHead className="text-right"&gt;Referencia&lt;/TableHead&gt;
-                                        &lt;TableHead&gt;Meses Pagados&lt;/TableHead&gt;
-                                    &lt;/TableRow&gt;
-                                &lt;/TableHeader&gt;
-                                &lt;TableBody&gt;
-                                    {monthlyReportData.length &gt; 0 ? (
+                <TabsContent value="monthly">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Reporte de Pagos Mensual</CardTitle>
+                            <CardDescription>Revisa todos los pagos aprobados en un mes específico y los meses que liquidaron.</CardDescription>
+                            <div className="flex gap-4 pt-4">
+                                <div className="space-y-2">
+                                    <Label>Mes</Label>
+                                    <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                                        <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+                                        <SelectContent>{monthOptions.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Año</Label>
+                                    <Select value={selectedYear} onValueChange={setSelectedYear}>
+                                        <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                                        <SelectContent>{years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="flex justify-end gap-2 mb-4">
+                                <Button variant="outline" onClick={() => handleExportMonthlyReport('pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
+                                <Button variant="outline" onClick={() => handleExportMonthlyReport('excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
+                            </div>
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Propietario</TableHead>
+                                        <TableHead>Propiedad</TableHead>
+                                        <TableHead>Fecha Pago</TableHead>
+                                        <TableHead className="text-right">Monto (Bs.)</TableHead>
+                                        <TableHead className="text-right">Referencia</TableHead>
+                                        <TableHead>Meses Pagados</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {monthlyReportData.length > 0 ? (
                                         monthlyReportData.map(row => (
-                                            &lt;TableRow key={row.paymentId}&gt;
-                                                &lt;TableCell&gt;{row.ownerName}&lt;/TableCell&gt;
-                                                &lt;TableCell&gt;{row.properties}&lt;/TableCell&gt;
-                                                &lt;TableCell&gt;{row.paymentDate}&lt;/TableCell&gt;
-                                                &lt;TableCell className="text-right"&gt;{formatToTwoDecimals(row.amount)}&lt;/TableCell&gt;
-                                                &lt;TableCell className="text-right"&gt;{row.reference}&lt;/TableCell&gt;
-                                                &lt;TableCell&gt;{row.paidMonths}&lt;/TableCell&gt;
-                                            &lt;/TableRow&gt;
+                                            <TableRow key={row.paymentId}>
+                                                <TableCell>{row.ownerName}</TableCell>
+                                                <TableCell>{row.properties}</TableCell>
+                                                <TableCell>{row.paymentDate}</TableCell>
+                                                <TableCell className="text-right">{formatToTwoDecimals(row.amount)}</TableCell>
+                                                <TableCell className="text-right">{row.reference}</TableCell>
+                                                <TableCell>{row.paidMonths}</TableCell>
+                                            </TableRow>
                                         ))
                                     ) : (
-                                        &lt;TableRow&gt;&lt;TableCell colSpan={6} className="h-24 text-center"&gt;No hay pagos aprobados para el mes seleccionado.&lt;/TableCell&gt;&lt;/TableRow&gt;
+                                        <TableRow><TableCell colSpan={6} className="h-24 text-center">No hay pagos aprobados para el mes seleccionado.</TableCell></TableRow>
                                     )}
-                                &lt;/TableBody&gt;
-                            &lt;/Table&gt;
-                        &lt;/CardContent&gt;
-                    &lt;/Card&gt;
-                &lt;/TabsContent&gt;
-            &lt;/Tabs&gt;
-        &lt;/div&gt;
+                                </TableBody>
+                            </Table>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+            </Tabs>
+        </div>
     );
 }
