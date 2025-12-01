@@ -431,8 +431,15 @@ export default function DebtManagementPage() {
             const year = today.getFullYear();
             const month = today.getMonth() + 1;
 
-            const existingDebtsQuery = query(collection(firestore, 'debts'), where('year', '==', year), where('month', '==', month));
+            // Query for all debts (pending or paid) for the current month and year.
+            const existingDebtsQuery = query(
+                collection(firestore, 'debts'), 
+                where('year', '==', year), 
+                where('month', '==', month)
+            );
             const existingDebtsSnapshot = await getDocs(existingDebtsQuery);
+            
+            // Create a Set of unique keys for properties that already have a debt record for the period.
             const ownersWithDebtForProp = new Set(existingDebtsSnapshot.docs.map(doc => {
                 const data = doc.data();
                 if (data.property && data.property.street && data.property.house) {
@@ -451,6 +458,7 @@ export default function DebtManagementPage() {
                     for (const property of owner.properties) {
                          if (property && property.street && property.house) {
                             const key = `${owner.id}-${property.street}-${property.house}`;
+                            // If the key is not in the set, it means no debt exists for this property this month.
                             if (!ownersWithDebtForProp.has(key)) {
                                 const debtRef = doc(collection(firestore, 'debts'));
                                 batch.set(debtRef, {
