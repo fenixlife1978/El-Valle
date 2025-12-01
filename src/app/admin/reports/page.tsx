@@ -13,11 +13,11 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from "@/lib/utils";
 import { es } from "date-fns/locale";
-import { Calendar as CalendarIcon, Download, Search, Loader2, FileText, FileSpreadsheet, ArrowUpDown, Building, BadgeInfo, BadgeCheck, BadgeX, History, ChevronDown, ChevronRight, TrendingUp, TrendingDown, DollarSign, Receipt, Wand2, Megaphone, ArrowLeft } from "lucide-react";
+import { Calendar as CalendarIcon, Download, Search, Loader2, FileText, FileSpreadsheet, ArrowUpDown, Building, BadgeInfo, BadgeCheck, BadgeX, History, ChevronDown, ChevronRight, TrendingUp, TrendingDown, DollarSign, Receipt, Wand2, Megaphone, ArrowLeft, Trash2 } from "lucide-react";
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import * as XLSX from 'xlsx';
-import { collection, getDocs, query, where, doc, getDoc, orderBy, Timestamp, addDoc, setDoc, writeBatch } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, getDoc, orderBy, Timestamp, addDoc, setDoc, writeBatch, deleteDoc, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { Calendar } from "@/components/ui/calendar";
@@ -706,6 +706,35 @@ export default function ReportsPage() {
         }
     };
 
+    const handleDeleteIntegralPublication = async () => {
+        if (!window.confirm('¿Está seguro de que desea ELIMINAR LA PUBLICACIÓN del último reporte integral?')) {
+            return;
+        }
+        setGeneratingReport(true);
+        try {
+            const q = query(
+                collection(db(), 'published_reports'), 
+                where('type', '==', 'integral'), 
+                orderBy('createdAt', 'desc'), 
+                limit(1)
+            );
+            const snapshot = await getDocs(q);
+            if (snapshot.empty) {
+                toast({ title: 'No encontrado', description: 'No se encontró ningún reporte integral publicado para eliminar.' });
+                setGeneratingReport(false);
+                return;
+            }
+            const reportToDelete = snapshot.docs[0];
+            await deleteDoc(reportToDelete.ref);
+            toast({ title: 'Publicación Eliminada', description: 'El último reporte integral publicado ha sido eliminado.' });
+        } catch (error) {
+            console.error("Error deleting integral report publication:", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo eliminar la publicación.' });
+        } finally {
+            setGeneratingReport(false);
+        }
+    };
+
 
     const handleExportIntegral = (formatType: 'pdf' | 'excel') => {
         const data = integralReportData;
@@ -1216,7 +1245,10 @@ export default function ReportsPage() {
                         <CardContent>
                              <div className="flex justify-end gap-2 mb-4">
                                 <Button variant="outline" onClick={handlePublishIntegralReport} disabled={generatingReport}>
-                                    <Megaphone className="mr-2 h-4 w-4" /> Publicar Reporte Integral
+                                    <Megaphone className="mr-2 h-4 w-4" /> Publicar Reporte
+                                </Button>
+                                <Button variant="destructive" onClick={handleDeleteIntegralPublication} disabled={generatingReport}>
+                                    <Trash2 className="mr-2 h-4 w-4" /> Eliminar Publicación
                                 </Button>
                                 <Button variant="outline" onClick={() => handleExportIntegral('pdf')} disabled={generatingReport}>
                                     <FileText className="mr-2 h-4 w-4" /> Exportar a PDF
