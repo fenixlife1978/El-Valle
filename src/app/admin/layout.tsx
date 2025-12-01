@@ -30,7 +30,7 @@ const adminNavItems: NavItem[] = [
       icon: Landmark, 
       label: "Pagos",
       items: [
-        { href: "/admin/payments", label: "Reportar Pago" },
+        { href: "/admin/payments/report", label: "Reportar Pago" },
         { href: "/admin/payments/advance", label: "Registrar Adelanto" },
         { href: "/admin/payments/verify", label: "Verificar Pagos" },
         { href: "/admin/payments/calculator", label: "Calculadora de Pagos" },
@@ -59,7 +59,7 @@ const adminNavItems: NavItem[] = [
 const adminBottomNavItems = [
   { href: '/admin/dashboard', icon: Home, label: 'Inicio' },
   { href: '/admin/payments/verify', icon: Landmark, label: 'Verificar' },
-  { href: '/admin/payments', icon: Plus, label: 'Reportar', isCentral: true },
+  { href: '/admin/payments/report', icon: Plus, label: 'Reportar', isCentral: true },
   { href: '/admin/reports', icon: FileSearch, label: 'Informes' },
   { href: '/admin/settings', icon: Settings, label: 'Ajustes' },
 ];
