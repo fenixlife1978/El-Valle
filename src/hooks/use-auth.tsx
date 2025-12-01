@@ -55,6 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (ownerUnsubscribe) {
                 ownerUnsubscribe();
             }
+            setLoading(true);
 
             if (firebaseUser) {
                 setUser(firebaseUser);
