@@ -217,10 +217,6 @@ export default function OwnerPaymentCalculatorPage() {
     
     return (
         <div className="space-y-6">
-            <Button variant="outline" onClick={() => router.back()} className="mb-4">
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Atrás
-            </Button>
             <div>
                 <h1 className="text-3xl font-bold font-headline">Calculadora de Pagos</h1>
                 <p className="text-muted-foreground">Seleccione las deudas que desea pagar para calcular el monto total.</p>
