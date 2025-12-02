@@ -189,18 +189,20 @@ export default function PeopleManagementPage() {
     }
 
     const handleSaveOwner = async () => {
-        if (!currentOwner.name || !currentOwner.email || currentOwner.properties.some(p => !p.street || !p.house)) {
-            toast({ variant: 'destructive', title: 'Error de Validación', description: 'Nombre, Email, calle y casa son obligatorios.' });
+        const isEditing = !!currentOwner.id;
+    
+        // Validation: Stricter for new users, more lenient for edits.
+        if (!isEditing && (!currentOwner.name || !currentOwner.email)) {
+            toast({ variant: 'destructive', title: 'Error de Validación', description: 'Nombre y Email son obligatorios para crear un nuevo propietario.' });
             return;
         }
     
-        const isEditing = !!currentOwner.id;
         const firestore = db();
-    
         const balanceValue = parseFloat(String(currentOwner.balance).replace(',', '.') || '0');
-        const dataToSave = {
+        
+        // Base data object, excludes email initially
+        const dataToSave: any = {
             name: currentOwner.name,
-            email: currentOwner.email,
             properties: currentOwner.properties,
             role: currentOwner.role,
             balance: isNaN(balanceValue) ? 0 : balanceValue,
@@ -210,11 +212,14 @@ export default function PeopleManagementPage() {
         try {
             if (isEditing) {
                 const ownerRef = doc(firestore, "owners", currentOwner.id!);
+                // Only update data, email is not included here to avoid changing it.
                 await updateDoc(ownerRef, dataToSave);
                 toast({ title: 'Propietario Actualizado', description: 'Los datos han sido guardados exitosamente.' });
-
-            } else { // Creating a new user
-                const userCredential = await createUserWithEmailAndPassword(auth(), currentOwner.email, 'Condominio2025.');
+            } else { 
+                // Creating a new user, email is required and added to the data object
+                dataToSave.email = currentOwner.email;
+    
+                const userCredential = await createUserWithEmailAndPassword(auth(), currentOwner.email!, 'Condominio2025.');
                 const newUserId = userCredential.user.uid;
     
                 const ownerDocRef = doc(firestore, "owners", newUserId);
@@ -672,3 +677,4 @@ export default function PeopleManagementPage() {
     
 
     
+
