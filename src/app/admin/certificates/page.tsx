@@ -271,6 +271,7 @@ export default function CertificatesPage() {
         const margin = 20;
         const logoSize = 30;
         const logoY = 15;
+        const infoX = margin + logoSize + 5;
 
         // Header
         if (companyInfo.logo) {
@@ -281,13 +282,14 @@ export default function CertificatesPage() {
         }
         
         doc.setFontSize(10).setFont('helvetica', 'normal');
-        // Position company info under the logo
-        const companyInfoY = logoY + logoSize + 5;
-        doc.text(companyInfo.name, margin, companyInfoY);
-        doc.text(companyInfo.rif, margin, companyInfoY + 5);
-        // Ensure address wraps within a reasonable width
-        const addressLines = doc.splitTextToSize(companyInfo.address, pageWidth - (margin * 2) - logoSize - 10);
-        doc.text(addressLines, margin, companyInfoY + 10);
+        // Position company info to the right of the logo
+        let currentY = logoY + 5;
+        doc.text(companyInfo.name, infoX, currentY);
+        currentY += 5;
+        doc.text(companyInfo.rif, infoX, currentY);
+        currentY += 5;
+        const addressLines = doc.splitTextToSize(companyInfo.address, pageWidth - infoX - margin);
+        doc.text(addressLines, infoX, currentY);
         
         doc.text(`Fecha: ${format(new Date(), 'dd/MM/yyyy')}`, pageWidth - margin, 20, { align: 'right' });
 
@@ -298,7 +300,7 @@ export default function CertificatesPage() {
 
         doc.setFontSize(12).setFont('helvetica', 'normal');
         const splitBody = doc.splitTextToSize(certificate.body, pageWidth - (margin * 2));
-        doc.text(splitBody, margin, 100); // Removed align: 'justify'
+        doc.text(splitBody, margin, 100, { align: 'justify' });
 
         const qrContent = `ID:${certificate.id}\nFecha:${format(certificate.createdAt.toDate(), 'yyyy-MM-dd')}\nPropietario:${certificate.ownerName}`;
         const qrCodeUrl = await QRCode.toDataURL(qrContent, { errorCorrectionLevel: 'M' });
