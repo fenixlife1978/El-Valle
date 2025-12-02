@@ -300,7 +300,7 @@ export default function CertificatesPage() {
 
         doc.setFontSize(12).setFont('helvetica', 'normal');
         const splitBody = doc.splitTextToSize(certificate.body, pageWidth - (margin * 2));
-        doc.text(splitBody, margin, 100, { align: 'justify' });
+        doc.text(splitBody, margin, 100);
 
         const qrContent = `ID:${certificate.id}\nFecha:${format(certificate.createdAt.toDate(), 'yyyy-MM-dd')}\nPropietario:${certificate.ownerName}`;
         const qrCodeUrl = await QRCode.toDataURL(qrContent, { errorCorrectionLevel: 'M' });
@@ -567,6 +567,8 @@ export default function CertificatesPage() {
         </div>
     );
 }
+
+    
 
     
 
