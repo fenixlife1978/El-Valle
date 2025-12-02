@@ -172,12 +172,6 @@ function LoginPage() {
                             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             {loading ? 'Verificando...' : 'Ingresar'}
                         </Button>
-                        <div className="text-sm">
-                            ¿No tienes cuenta?{' '}
-                            <Button variant="link" asChild className="p-0 h-auto">
-                                <Link href="/register">Regístrate</Link>
-                            </Button>
-                        </div>
                         <Button variant="link" size="sm" asChild className="text-xs">
                             <Link href="/welcome">Volver a selección de rol</Link>
                         </Button>
