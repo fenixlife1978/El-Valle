@@ -7,7 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Upload, Save, Loader2, UserCircle, KeyRound, ArrowLeft } from 'lucide-react';
+import { Upload, Save, Loader2, UserCircle, KeyRound, ArrowLeft, Info } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
 import { doc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
@@ -108,12 +108,13 @@ export default function OwnerSettingsPage() {
         setSaving(true);
         try {
             const userRef = doc(db(), 'owners', profile.id);
-            const { name, avatar } = profile;
-            await updateDoc(userRef, { name, avatar });
+            // Only avatar can be updated by the owner
+            const { avatar } = profile;
+            await updateDoc(userRef, { avatar });
             
             toast({
                 title: 'Perfil Actualizado',
-                description: 'Tus cambios han sido guardados.',
+                description: 'Tu foto de perfil ha sido guardada.',
                 className: 'bg-green-100 border-green-400 text-green-800'
             });
 
@@ -161,7 +162,7 @@ export default function OwnerSettingsPage() {
             <Card>
                 <CardHeader>
                     <CardTitle>Mi Perfil</CardTitle>
-                    <CardDescription>Edita tu nombre y foto de perfil.</CardDescription>
+                    <CardDescription>Edita tu foto de perfil.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
                     <div className="flex items-center gap-6">
@@ -183,24 +184,25 @@ export default function OwnerSettingsPage() {
                     <div className="grid md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <Label htmlFor="name">Nombre</Label>
-                            <Input id="name" name="name" value={profile.name} onChange={handleProfileChange} />
+                            <Input id="name" name="name" value={profile.name} disabled />
                         </div>
                          <div className="space-y-2">
                             <Label htmlFor="email">Email</Label>
                             <Input id="email" name="email" type="email" value={profile.email} disabled />
-                             <p className="text-xs text-muted-foreground">El email no puede ser modificado.</p>
                         </div>
+                    </div>
+                     <div className="p-3 bg-muted/50 border rounded-md text-sm text-muted-foreground flex items-start gap-2">
+                        <Info className="h-4 w-4 mt-0.5 shrink-0"/>
+                        <span>Para corregir su nombre o correo, por favor comuníquese con la administración del condominio.</span>
                     </div>
                 </CardContent>
                 <CardFooter>
                      <Button onClick={handleSaveChanges} disabled={saving}>
                         {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4"/>}
-                        Guardar Cambios de Perfil
+                        Guardar Cambios
                     </Button>
                 </CardFooter>
             </Card>
         </div>
     );
 }
-
-    
