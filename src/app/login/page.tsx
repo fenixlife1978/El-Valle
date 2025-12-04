@@ -13,9 +13,10 @@ import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
 import Link from 'next/link';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const ADMIN_USER_ID = 'valle-admin-main-account';
-const ADMIN_EMAIL = 'vallecondo@gmail.com';
 
 function LoginPage() {
     const router = useRouter();
@@ -28,6 +29,9 @@ function LoginPage() {
     const [role, setRole] = useState<'owner' | 'admin' | null>(null);
     const [showPassword, setShowPassword] = useState(false);
 
+    const [logoUrl, setLogoUrl] = useState<string | null>(null);
+    const [loadingLogo, setLoadingLogo] = useState(true);
+
     useEffect(() => {
         const roleParam = searchParams.get('role');
         if (roleParam === 'admin' || roleParam === 'owner') {
@@ -35,6 +39,24 @@ function LoginPage() {
         } else {
             router.replace('/welcome');
         }
+
+        async function fetchLogo() {
+          try {
+            const settingsRef = doc(db(), 'config', 'mainSettings');
+            const docSnap = await getDoc(settingsRef);
+            if (docSnap.exists()) {
+              const settings = docSnap.data();
+              if (settings.companyInfo && settings.companyInfo.logo) {
+                setLogoUrl(settings.companyInfo.logo);
+              }
+            }
+          } catch (error) {
+            console.error("Error fetching company logo:", error);
+          } finally {
+            setLoadingLogo(false);
+          }
+        }
+        fetchLogo();
     }, [searchParams, router]);
 
     const handleLogin = async (e: React.FormEvent) => {
@@ -50,17 +72,14 @@ function LoginPage() {
 
         setLoading(true);
         try {
-            // Step 1: Verify role from Firestore before attempting to sign in.
             let userRoleFromDB: string | null = null;
             if (role === 'admin') {
-                // For admin, we explicitly check the admin document by its known ID.
                 const adminRef = doc(db(), "owners", ADMIN_USER_ID);
                 const adminSnap = await getDoc(adminRef);
                 if (adminSnap.exists() && adminSnap.data().email?.toLowerCase() === email.toLowerCase()) {
                     userRoleFromDB = 'administrador';
                 }
             } else {
-                // For owners, we query by email.
                 const q = query(collection(db(), "owners"), where("email", "==", email.toLowerCase()));
                 const querySnapshot = await getDocs(q);
                 if (!querySnapshot.empty) {
@@ -81,7 +100,6 @@ function LoginPage() {
                 return;
             }
 
-            // Step 2: If role is correct, proceed with Firebase Auth sign-in.
             await signInWithEmailAndPassword(auth(), email, password);
             
             toast({
@@ -89,7 +107,6 @@ function LoginPage() {
                 description: 'Bienvenido de nuevo. Redirigiendo...',
                 className: 'bg-green-100 border-green-400 text-green-800'
             });
-            // Redirection is handled by the root AuthGuard
             
         } catch (error: any) {
             console.error("Login error:", error);
@@ -117,11 +134,18 @@ function LoginPage() {
 
     return (
         <main className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
+            <div className="text-center mb-6">
+                {loadingLogo ? (
+                  <Skeleton className="w-20 h-20 rounded-full mx-auto" />
+                ) : (
+                  <Avatar className="w-20 h-20 text-lg mx-auto">
+                    <AvatarImage src={logoUrl || ''} alt="Company Logo" className="object-cover"/>
+                    <AvatarFallback>VC</AvatarFallback>
+                  </Avatar>
+                )}
+            </div>
             <Card className="w-full max-w-sm">
                 <CardHeader className="text-center">
-                    <div className="flex justify-center mb-4">
-                        {role === 'admin' ? <Shield className="h-10 w-10 text-primary"/> : <User className="h-10 w-10 text-primary"/>}
-                    </div>
                     <CardTitle>Iniciar Sesión como {role === 'admin' ? 'Administrador' : 'Propietario'}</CardTitle>
                     <CardDescription>Ingrese sus credenciales para acceder al sistema.</CardDescription>
                 </CardHeader>

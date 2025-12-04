@@ -39,7 +39,7 @@ function WelcomePageContent() {
           <Skeleton className="w-24 h-24 rounded-full mx-auto mb-6" />
         ) : (
           <Avatar className="w-24 h-24 text-lg mx-auto mb-6">
-            <AvatarImage src={logoUrl || ''} alt="Company Logo" />
+            <AvatarImage src={logoUrl || ''} alt="Company Logo" className="object-cover" />
             <AvatarFallback>VC</AvatarFallback>
           </Avatar>
         )}
@@ -56,5 +56,3 @@ function WelcomePageContent() {
 export default function WelcomePage() {
     return <WelcomePageContent />;
 }
-
-    

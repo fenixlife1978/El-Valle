@@ -31,7 +31,7 @@ export type AuthContextType = {
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-const ADMIN_EMAIL = 'Vallecondo@gmail.com';
+const ADMIN_EMAIL = 'vallecondo@gmail.com';
 const ADMIN_USER_ID = 'valle-admin-main-account';
 
 
@@ -100,8 +100,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const settingsUnsubscribe = onSnapshot(settingsRef, (docSnap) => {
             if (docSnap.exists()) {
                 const settingsData = docSnap.data();
-                setCompanyInfo(settingsData.companyInfo as CompanyInfo);
-                setBcvLogoUrl(settingsData.bcvLogo ?? null);
+                setCompanyInfo(settingsData.companyInfo || null);
+                setBcvLogoUrl(settingsData.bcvLogo || null);
 
                 const rates: ExchangeRate[] = settingsData.exchangeRates || [];
                 let currentActiveRate = rates.find(r => r.active) || null;
@@ -109,6 +109,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     currentActiveRate = [...rates].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
                 }
                 setActiveRate(currentActiveRate);
+            } else {
+                // If settings don't exist, set to null/empty state
+                setCompanyInfo(null);
+                setBcvLogoUrl(null);
+                setActiveRate(null);
             }
         });
 
