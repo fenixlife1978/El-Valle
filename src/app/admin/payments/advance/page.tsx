@@ -59,7 +59,7 @@ export default function AdvancePaymentPage() {
     }, [propertySplits, selectedMonths]);
 
     useEffect(() => {
-        const ownersQuery = query(collection(db(), "owners"));
+        const ownersQuery = query(collection(db, "owners"));
         const ownersUnsubscribe = onSnapshot(ownersQuery, (snapshot) => {
             const ownersData: Owner[] = snapshot.docs.map(doc => {
                 const data = doc.data();
@@ -141,7 +141,7 @@ export default function AdvancePaymentPage() {
         setLoading(true);
 
         try {
-            const firestore = db();
+            const firestore = db;
             const batch = writeBatch(firestore);
             const paymentDate = Timestamp.now();
             
@@ -385,6 +385,8 @@ export default function AdvancePaymentPage() {
     );
 }
     
+    
+
     
 
     

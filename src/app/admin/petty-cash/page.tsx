@@ -83,8 +83,8 @@ export default function PettyCashPage() {
     const router = useRouter();
 
     useEffect(() => {
-        const firestore = db();
-        const storageInstance = storage();
+        const firestore = db;
+        const storageInstance = storage;
         const fetchSettings = async () => {
              const settingsRef = doc(firestore, 'config', 'mainSettings');
              const docSnap = await getDoc(settingsRef);
@@ -130,7 +130,7 @@ export default function PettyCashPage() {
         }
         setIsSubmitting(true);
         try {
-            await addDoc(collection(db(), "petty_cash_replenishments"), {
+            await addDoc(collection(db, "petty_cash_replenishments"), {
                 date: Timestamp.fromDate(repDate),
                 amount: parseFloat(repAmount),
                 description: repDescription,
@@ -153,7 +153,7 @@ export default function PettyCashPage() {
         }
         setIsSubmitting(true);
         try {
-            const repRef = doc(db(), 'petty_cash_replenishments', currentRepId);
+            const repRef = doc(db, 'petty_cash_replenishments', currentRepId);
             const newExpense: Omit<Expense, 'id'> & { id: string } = {
                 id: `${Date.now()}-${Math.random()}`, // Unique ID for array element
                 date: Timestamp.fromDate(expenseDate),
@@ -174,7 +174,7 @@ export default function PettyCashPage() {
     const handleDeleteExpense = async (repId: string, expense: Expense) => {
         if (!window.confirm('¿Está seguro de que desea eliminar este gasto?')) return;
         try {
-            const repRef = doc(db(), 'petty_cash_replenishments', repId);
+            const repRef = doc(db, 'petty_cash_replenishments', repId);
             await updateDoc(repRef, { expenses: arrayRemove(expense) });
             toast({ title: 'Gasto Eliminado' });
         } catch (error) {
@@ -186,7 +186,7 @@ export default function PettyCashPage() {
     const handleDeleteReplenishment = async (repId: string) => {
         if (!window.confirm('¿Está seguro de que desea eliminar esta reposición y todos sus gastos asociados? Esta acción no se puede deshacer.')) return;
         try {
-            await deleteDoc(doc(db(), 'petty_cash_replenishments', repId));
+            await deleteDoc(doc(db, 'petty_cash_replenishments', repId));
             toast({ title: 'Reposición Eliminada' });
         } catch (error) {
             console.error(error);
@@ -207,12 +207,12 @@ export default function PettyCashPage() {
         toast({ title: 'Subiendo soporte...', description: 'Por favor espere.' });
 
         try {
-            const storageInstance = storage();
+            const storageInstance = storage;
             const storageRef = ref(storageInstance, `petty_cash_receipts/${repId}/${expenseId}-${file.name}`);
             const snapshot = await uploadBytes(storageRef, file);
             const downloadURL = await getDownloadURL(snapshot.ref);
 
-            const repDocRef = doc(db(), 'petty_cash_replenishments', repId);
+            const repDocRef = doc(db, 'petty_cash_replenishments', repId);
             const repDoc = await getDoc(repDocRef);
 
             if (repDoc.exists()) {
@@ -497,6 +497,8 @@ export default function PettyCashPage() {
         </div>
     );
 }
+
+    
 
     
 

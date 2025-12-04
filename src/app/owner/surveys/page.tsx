@@ -82,14 +82,14 @@ export default function OwnerSurveysPage() {
             return;
         }
 
-        const surveysQuery = query(collection(db(), "surveys"), orderBy("createdAt", "desc"));
+        const surveysQuery = query(collection(db, "surveys"), orderBy("createdAt", "desc"));
         const surveysUnsubscribe = onSnapshot(surveysQuery, (snapshot) => {
             const surveysData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Survey));
             setSurveys(surveysData);
             setLoading(false);
         });
 
-        const responsesQuery = query(collection(db(), "survey_responses"), where("userId", "==", user.uid));
+        const responsesQuery = query(collection(db, "survey_responses"), where("userId", "==", user.uid));
         const responsesUnsubscribe = onSnapshot(responsesQuery, (snapshot) => {
             const votes: { [key: string]: SurveyResponse } = {};
             snapshot.forEach(doc => {
@@ -123,9 +123,9 @@ export default function OwnerSurveysPage() {
         }
 
         try {
-            await runTransaction(db(), async (transaction) => {
-                const surveyRef = doc(db(), 'surveys', survey.id);
-                const responseRef = doc(db(), 'survey_responses', `${user.uid}_${survey.id}`);
+            await runTransaction(db, async (transaction) => {
+                const surveyRef = doc(db, 'surveys', survey.id);
+                const responseRef = doc(db, 'survey_responses', `${user.uid}_${survey.id}`);
 
                 const responseDoc = await transaction.get(responseRef);
                 if (responseDoc.exists()) {
@@ -317,5 +317,7 @@ function SurveyForm({ survey, onVote, status }: { survey: Survey, onVote: (surve
         </form>
     );
 }
+
+    
 
     

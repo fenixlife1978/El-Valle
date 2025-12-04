@@ -142,7 +142,7 @@ export default function DebtManagementPage() {
     const forceUpdateDebtState = useCallback(async (showToast = false) => {
         if(showToast) toast({ title: "Sincronizando...", description: "Recalculando todas las deudas pendientes." });
         
-        const debtsQuery = query(collection(db(), "debts"), where("status", "==", "pending"));
+        const debtsQuery = query(collection(db, "debts"), where("status", "==", "pending"));
         const snapshot = await getDocs(debtsQuery);
         
         setOwners(prevOwners => {
@@ -174,7 +174,7 @@ export default function DebtManagementPage() {
 
         const fetchInitialSettings = async () => {
              try {
-                const settingsRef = doc(db(), 'config', 'mainSettings');
+                const settingsRef = doc(db, 'config', 'mainSettings');
                 const settingsSnap = await getDoc(settingsRef);
                 if (settingsSnap.exists()) {
                     const settings = settingsSnap.data();
@@ -195,7 +195,7 @@ export default function DebtManagementPage() {
             }
         };
 
-        const ownersQuery = query(collection(db(), "owners"));
+        const ownersQuery = query(collection(db, "owners"));
         const ownersUnsubscribe = onSnapshot(ownersQuery, async (snapshot) => {
             let ownersData: Owner[] = snapshot.docs.map(doc => {
                 const data = doc.data();
@@ -233,7 +233,7 @@ export default function DebtManagementPage() {
 
     // REAL-TIME DEBT LISTENER
     useEffect(() => {
-        const firestore = db();
+        const firestore = db;
         const debtsQuery = query(collection(firestore, "debts"), where("status", "==", "pending"));
         
         const unsubscribe = onSnapshot(debtsQuery, (snapshot) => {
@@ -287,7 +287,7 @@ export default function DebtManagementPage() {
         let reconciledCount = 0;
         let processedOwners = 0;
         const condoFeeInBs = condoFee * activeRate;
-        const firestore = db();
+        const firestore = db;
 
         for (const owner of ownersWithBalance) {
             processedOwners++;
@@ -426,7 +426,7 @@ export default function DebtManagementPage() {
         }
 
         try {
-            const firestore = db();
+            const firestore = db;
             const today = new Date();
             const year = today.getFullYear();
             const month = today.getMonth() + 1;
@@ -523,7 +523,7 @@ export default function DebtManagementPage() {
         }
 
         setLoadingDebts(true);
-        const q = query(collection(db(), "debts"), where("ownerId", "==", selectedOwner.id));
+        const q = query(collection(db, "debts"), where("ownerId", "==", selectedOwner.id));
         const unsubscribe = onSnapshot(q, (querySnapshot) => {
             const debtsData: Debt[] = [];
             querySnapshot.forEach((doc) => {
@@ -630,7 +630,7 @@ export default function DebtManagementPage() {
     
     const confirmDelete = async () => {
         if (!debtToDelete || !selectedOwner) return;
-        const firestore = db();
+        const firestore = db;
     
         try {
             await runTransaction(firestore, async (transaction) => {
@@ -700,7 +700,7 @@ export default function DebtManagementPage() {
         }
 
         const monthsToGenerate = differenceInCalendarMonths(endDate, startDate) + 1;
-        const firestore = db();
+        const firestore = db;
 
         try {
             if (activeRate <= 0) throw "No hay una tasa de cambio activa o registrada configurada.";
@@ -783,7 +783,7 @@ export default function DebtManagementPage() {
         }
 
         try {
-            const debtRef = doc(db(), "debts", debtToEdit.id);
+            const debtRef = doc(db, "debts", debtToEdit.id);
             await updateDoc(debtRef, {
                 description: currentDebtData.description,
                 amountUSD: Number(currentDebtData.amountUSD)
@@ -1265,5 +1265,7 @@ export default function DebtManagementPage() {
     // Fallback while loading or if view is invalid
     return null;
 }
+
+    
 
     

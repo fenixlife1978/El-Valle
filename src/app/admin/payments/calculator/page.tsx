@@ -81,7 +81,7 @@ export default function PaymentCalculatorPage() {
     useEffect(() => {
         const fetchPrerequisites = async () => {
             setLoading(true);
-            const firestore = db();
+            const firestore = db;
             try {
                 const settingsRef = doc(firestore, 'config', 'mainSettings');
                 const settingsSnap = await getDoc(settingsRef);
@@ -136,7 +136,7 @@ export default function PaymentCalculatorPage() {
         setSelectedAdvanceMonths([]);
 
         try {
-            const q = query(collection(db(), "debts"), where("ownerId", "==", owner.id));
+            const q = query(collection(db, "debts"), where("ownerId", "==", owner.id));
             const querySnapshot = await getDocs(q);
             const debtsData: Debt[] = [];
             querySnapshot.forEach((doc) => debtsData.push({ id: doc.id, ...doc.data() } as Debt));
@@ -215,7 +215,7 @@ export default function PaymentCalculatorPage() {
         if (!selectedOwner) return;
 
         try {
-            const firestore = db();
+            const firestore = db;
             const batch = writeBatch(firestore);
             const paymentDate = Timestamp.now();
             let totalPaidUSD = 0;
@@ -465,6 +465,8 @@ export default function PaymentCalculatorPage() {
         </div>
     );
 }
+
+    
 
     
 

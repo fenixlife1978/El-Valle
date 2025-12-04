@@ -67,7 +67,7 @@ export default function ReportViewerPage() {
             setLoading(true);
             try {
                 // Determine the correct collection and document ID from the passed ID
-                const docRef = doc(db(), "financial_statements", reportId.replace('balance-', ''));
+                const docRef = doc(db, "financial_statements", reportId.replace('balance-', ''));
                 const reportSnap = await getDoc(docRef);
 
                 if (reportSnap.exists()) {
@@ -76,7 +76,7 @@ export default function ReportViewerPage() {
                     toast({ variant: 'destructive', title: 'Error', description: 'No se encontró el reporte solicitado.' });
                 }
 
-                const settingsRef = doc(db(), 'config', 'mainSettings');
+                const settingsRef = doc(db, 'config', 'mainSettings');
                 const settingsSnap = await getDoc(settingsRef);
                 if (settingsSnap.exists()) {
                     setCompanyInfo(settingsSnap.data().companyInfo as CompanyInfo);
@@ -278,5 +278,7 @@ export default function ReportViewerPage() {
         </div>
     );
 }
+
+    
 
     
