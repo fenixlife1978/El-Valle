@@ -38,8 +38,8 @@ function WelcomePageContent() {
         {loading ? (
           <Skeleton className="w-24 h-24 rounded-full mx-auto mb-6" />
         ) : (
-          <Avatar className="w-24 h-24 mx-auto mb-6 bg-white p-1">
-             <AvatarImage src={logoUrl || ''} alt="Company Logo" className="object-contain" />
+          <Avatar className="w-24 h-24 mx-auto mb-6">
+             <AvatarImage src={logoUrl || ''} alt="Company Logo" />
              <AvatarFallback>VC</AvatarFallback>
           </Avatar>
         )}
