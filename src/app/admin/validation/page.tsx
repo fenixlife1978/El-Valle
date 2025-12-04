@@ -1,7 +1,8 @@
 
+
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -48,7 +49,7 @@ export default function ValidationPage() {
     };
 
     const markOverdue = async () => {
-        const firestore = db();
+        const firestore = db;
         const debtsRef = collection(firestore, "debts");
         const q = query(debtsRef, where("status", "==", "pending"));
         const querySnapshot = await getDocs(q);
@@ -82,7 +83,7 @@ export default function ValidationPage() {
 
     const revertPayment = async () => {
         if (!revertPaymentId) throw new Error("Debe proporcionar un ID de pago.");
-        const firestore = db();
+        const firestore = db;
         const paymentRef = doc(firestore, "payments", revertPaymentId);
         const paymentSnap = await getDoc(paymentRef);
         if (!paymentSnap.exists()) throw new Error("El documento de pago no fue encontrado.");
@@ -125,7 +126,7 @@ export default function ValidationPage() {
         const { paymentId, debtId } = correctDateIds;
         if (!paymentId || !debtId || !newPaymentDate) throw new Error("Complete todos los campos de ID y fecha.");
 
-        const firestore = db();
+        const firestore = db;
         const paymentRef = doc(firestore, "payments", paymentId);
         const debtRef = doc(firestore, "debts", debtId);
         const newTimestamp = Timestamp.fromDate(newPaymentDate);
@@ -143,7 +144,7 @@ export default function ValidationPage() {
     const syncProfiles = async () => {
         // This functionality is now largely handled automatically on login.
         // This button serves as a manual trigger for a full system check.
-        const ownersQuery = query(collection(db(), "owners"));
+        const ownersQuery = query(collection(db, "owners"));
         const ownersSnapshot = await getDocs(ownersQuery);
         let profilesChecked = 0;
         
@@ -166,7 +167,7 @@ export default function ValidationPage() {
     const searchOwner = async () => {
         if (!ownerSearchTerm) return;
         setLoading(prev => ({ ...prev, changeEmail: true }));
-        const q = query(collection(db(), "owners"), where("name", ">=", ownerSearchTerm), where("name", "<=", ownerSearchTerm + '\uf8ff'));
+        const q = query(collection(db, "owners"), where("name", ">=", ownerSearchTerm), where("name", "<=", ownerSearchTerm + '\uf8ff'));
         const querySnapshot = await getDocs(q);
         if (querySnapshot.empty) {
             toast({ variant: 'destructive', title: 'No encontrado', description: 'No se encontró ningún propietario con ese nombre.' });
@@ -185,7 +186,7 @@ export default function ValidationPage() {
         // This is a simulation. The real process would involve Firebase Admin SDK
         // to update the user's email in Firebase Auth, then update Firestore.
         
-        const ownerRef = doc(db(), "owners", foundOwner.id);
+        const ownerRef = doc(db, "owners", foundOwner.id);
         await updateDoc(ownerRef, { email: newEmail });
 
         setFoundOwner(null);

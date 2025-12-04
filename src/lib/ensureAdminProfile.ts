@@ -6,7 +6,7 @@ const ADMIN_USER_ID = 'valle-admin-main-account';
 
 // This function now returns a boolean indicating if the profile existed before the check.
 export const ensureAdminProfile = async (showToast?: (options: any) => void): Promise<boolean> => {
-    const adminRef = doc(db(), "owners", ADMIN_USER_ID);
+    const adminRef = doc(db, "owners", ADMIN_USER_ID);
     
     try {
         const adminSnap = await getDoc(adminRef);
@@ -41,7 +41,7 @@ export const ensureAdminProfile = async (showToast?: (options: any) => void): Pr
 
 
 export const ensureOwnerProfile = async (user: User, showToast?: (options: any) => void): Promise<'checked' | 'created'> => {
-    const ownerRef = doc(db(), "owners", user.uid);
+    const ownerRef = doc(db, "owners", user.uid);
 
     try {
         const ownerSnap = await getDoc(ownerRef);
