@@ -48,11 +48,12 @@ type CompanyInfo = {
     logo: string;
 };
 
-const emptyOwner: Omit<Owner, 'id' | 'balance' | 'uid'> & { id?: string; balance: number | string; } = { 
-    name: '', 
-    properties: [{ street: '', house: '' }], 
-    email: '', 
-    balance: 0, 
+const emptyOwner: Omit<Owner, 'id' | 'balance' | 'uid'> & { id?: string; balance: number | string; password?: string; } = {
+    name: '',
+    properties: [{ street: '', house: '' }],
+    email: '',
+    password: '',
+    balance: 0,
     role: 'propietario',
     passwordChanged: false,
 };
@@ -91,12 +92,13 @@ export default function PeopleManagementPage() {
     const [loading, setLoading] = useState(true);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
-    const [currentOwner, setCurrentOwner] = useState<Omit<Owner, 'id' | 'balance' | 'uid'> & { id?: string; balance: number | string; }>(emptyOwner);
+    const [currentOwner, setCurrentOwner] = useState<Omit<Owner, 'id' | 'balance' | 'uid'> & { id?: string; balance: number | string; password?: string; }>(emptyOwner);
     const [ownerToDelete, setOwnerToDelete] = useState<Owner | null>(null);
     const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const importFileRef = useRef<HTMLInputElement>(null);
     const { toast } = useToast();
+    const [showPassword, setShowPassword] = useState(false);
 
     useEffect(() => {
         const firestore = db;
@@ -191,16 +193,19 @@ export default function PeopleManagementPage() {
     const handleSaveOwner = async () => {
         const isEditing = !!currentOwner.id;
     
-        // Validation: Stricter for new users, more lenient for edits.
-        if (!isEditing && (!currentOwner.name || !currentOwner.email)) {
-            toast({ variant: 'destructive', title: 'Error de Validación', description: 'Nombre y Email son obligatorios para crear un nuevo propietario.' });
+        if (!currentOwner.name || !currentOwner.email) {
+            toast({ variant: 'destructive', title: 'Error de Validación', description: 'Nombre y Email son obligatorios.' });
+            return;
+        }
+
+        if (!isEditing && (!currentOwner.password || currentOwner.password.length < 6)) {
+             toast({ variant: 'destructive', title: 'Contraseña Inválida', description: 'La contraseña es obligatoria y debe tener al menos 6 caracteres.' });
             return;
         }
     
         const firestore = db;
         const balanceValue = parseFloat(String(currentOwner.balance).replace(',', '.') || '0');
         
-        // Base data object, excludes email initially
         const dataToSave: any = {
             name: currentOwner.name,
             properties: currentOwner.properties,
@@ -212,14 +217,12 @@ export default function PeopleManagementPage() {
         try {
             if (isEditing) {
                 const ownerRef = doc(firestore, "owners", currentOwner.id!);
-                // Only update data, email is not included here to avoid changing it.
                 await updateDoc(ownerRef, dataToSave);
                 toast({ title: 'Propietario Actualizado', description: 'Los datos han sido guardados exitosamente.' });
             } else { 
-                // Creating a new user, email is required and added to the data object
                 dataToSave.email = currentOwner.email;
     
-                const userCredential = await createUserWithEmailAndPassword(auth, currentOwner.email!, 'Condominio2025.');
+                const userCredential = await createUserWithEmailAndPassword(auth, currentOwner.email!, currentOwner.password!);
                 const newUserId = userCredential.user.uid;
     
                 const ownerDocRef = doc(firestore, "owners", newUserId);
@@ -227,7 +230,7 @@ export default function PeopleManagementPage() {
     
                 toast({
                     title: 'Propietario Creado Exitosamente',
-                    description: `${dataToSave.name} ha sido creado. La contraseña inicial es 'Condominio2025.'`
+                    description: `${dataToSave.name} ha sido creado con la contraseña proporcionada.`
                 });
             }
     
@@ -245,7 +248,7 @@ export default function PeopleManagementPage() {
                         errorMessage = 'El formato del correo electrónico no es válido.';
                         break;
                     case 'auth/weak-password':
-                        errorMessage = 'La contraseña es demasiado débil (esto es un error interno, contacte soporte).';
+                        errorMessage = 'La contraseña es demasiado débil (mínimo 6 caracteres).';
                         break;
                     default:
                         errorMessage = `Error de autenticación: ${error.message}`;
@@ -578,7 +581,7 @@ export default function PeopleManagementPage() {
                     <DialogHeader>
                         <DialogTitle>{currentOwner.id ? 'Editar Persona' : 'Agregar Nueva Persona'}</DialogTitle>
                         <DialogDescription>
-                           {currentOwner.id ? 'Modifique la información y haga clic en guardar.' : "Complete el perfil. La contraseña inicial para el primer acceso será 'Condominio2025.'"}
+                           {currentOwner.id ? 'Modifique la información y haga clic en guardar.' : "Complete el perfil para crear la cuenta de usuario."}
                         </DialogDescription>
                     </DialogHeader>
                     <div className="flex-grow overflow-y-auto pr-6 -mr-6">
@@ -592,6 +595,32 @@ export default function PeopleManagementPage() {
                                 <Input id="email" type="email" value={currentOwner.email || ''} onChange={handleInputChange} disabled={!!currentOwner.id} />
                                 {currentOwner.id && <p className="text-xs text-muted-foreground">El correo no puede ser modificado después de la creación. Utilice la página de Sincronización para cambios.</p>}
                             </div>
+
+                            {!currentOwner.id && (
+                                <div className="space-y-2">
+                                    <Label htmlFor="password">Contraseña</Label>
+                                     <div className="relative">
+                                        <Input
+                                            id="password"
+                                            type={showPassword ? "text" : "password"}
+                                            value={currentOwner.password || ''}
+                                            onChange={handleInputChange}
+                                            className="pr-10"
+                                        />
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground"
+                                            onClick={() => setShowPassword((prev) => !prev)}
+                                        >
+                                            {showPassword ? <EyeOff className="h-4 w-4"/> : <Eye className="h-4 w-4"/>}
+                                            <span className="sr-only">Toggle password visibility</span>
+                                        </Button>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">Mínimo 6 caracteres.</p>
+                                </div>
+                            )}
 
                             <div className="space-y-2">
                                 <Label htmlFor="role">Rol</Label>
