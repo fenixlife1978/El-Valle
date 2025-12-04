@@ -34,8 +34,8 @@ export const ensureAdminProfile = async (showToast?: (options: any) => void): Pr
         } else {
              // If admin exists, ensure critical fields are correct.
             const data = adminSnap.data();
-            if (data.uid !== ADMIN_USER_ID || data.email.toLowerCase() !== ADMIN_EMAIL || data.role !== 'administrador') {
-                 await updateDoc(adminRef, { uid: ADMIN_USER_ID, email: ADMIN_EMAIL, role: 'administrador' });
+            if (!data.uid || data.email.toLowerCase() !== ADMIN_EMAIL.toLowerCase() || data.role !== 'administrador') {
+                 await updateDoc(adminRef, { uid: ADMIN_USER_ID, email: ADMIN_EMAIL.toLowerCase(), role: 'administrador' });
                  if (showToast) {
                     showToast({ title: "Perfil de Administrador Corregido", description: "Se detectó una inconsistencia y se ha corregido el perfil del administrador." });
                 }
@@ -53,7 +53,7 @@ export const ensureAdminProfile = async (showToast?: (options: any) => void): Pr
 
 
 export const ensureOwnerProfile = async (user: User, showToast?: (options: any) => void): Promise<'checked' | 'created' | 'linked'> => {
-    if (user.email?.toLowerCase() === ADMIN_EMAIL) {
+    if (user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
         return 'checked';
     }
 
@@ -64,29 +64,22 @@ export const ensureOwnerProfile = async (user: User, showToast?: (options: any) 
         const ownerSnapByUID = await getDoc(ownerRefByUID);
 
         if (ownerSnapByUID.exists()) {
-            // UID-based document exists. This is the correct state.
             return 'checked';
         }
 
-        // If no document with UID exists, search by email.
         const q = query(collection(firestore, "owners"), where("email", "==", user.email));
         const querySnapshot = await getDocs(q);
 
         if (!querySnapshot.empty) {
-            // An old document exists with this email but a different (or missing) ID.
-            // This happens if an admin changed the email in the database.
-            // We need to link this auth account to that data.
             const oldDoc = querySnapshot.docs[0];
             const oldData = oldDoc.data();
             const batch = writeBatch(firestore);
 
-            // Create the new document with the correct UID as the document ID
             batch.set(ownerRefByUID, {
                 ...oldData,
-                uid: user.uid, // Ensure the UID is correctly set in the new document
+                uid: user.uid,
             });
 
-            // Delete the old, incorrectly-ID'd document
             batch.delete(oldDoc.ref);
 
             await batch.commit();
@@ -97,7 +90,6 @@ export const ensureOwnerProfile = async (user: User, showToast?: (options: any) 
             return 'linked';
 
         } else {
-            // No profile exists for this UID or email, so create a new one.
             await setDoc(ownerRefByUID, {
                 uid: user.uid,
                 name: user.displayName || user.email || 'Propietario sin nombre',

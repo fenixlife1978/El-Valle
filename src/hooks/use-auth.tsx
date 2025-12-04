@@ -51,17 +51,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         let ownerUnsubscribe: (() => void) | undefined;
 
         const unsubscribeAuth = onAuthStateChanged(auth(), async (firebaseUser) => {
-            
             if (ownerUnsubscribe) {
                 ownerUnsubscribe();
             }
-            
-            setLoading(true);
 
             if (firebaseUser) {
                 setUser(firebaseUser);
-                const isAdministrator = firebaseUser.email?.toLowerCase() === ADMIN_EMAIL;
-                
+                const isAdministrator = firebaseUser.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+
                 try {
                     let userDocId: string;
                     if (isAdministrator) {
@@ -79,21 +76,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                         if (snapshot.exists()) {
                             setOwnerData({ id: snapshot.id, ...snapshot.data() });
                         } else {
+                            // This can happen briefly during profile creation/linking
                             setOwnerData(null);
                         }
+                        setLoading(false); // Stop loading once we have a definitive answer for ownerData
                     });
 
                 } catch (error) {
                     console.error("Failed to ensure user profile:", error);
                     toast({variant: 'destructive', title: 'Error de Sincronización', description: 'No se pudo verificar tu perfil de usuario.'});
+                    setLoading(false);
                 }
 
             } else {
                 setUser(null);
                 setOwnerData(null);
                 setRole(null);
+                setLoading(false);
             }
-            setLoading(false);
         });
 
         const settingsRef = doc(db(), 'config', 'mainSettings');
@@ -110,7 +110,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 }
                 setActiveRate(currentActiveRate);
             } else {
-                // If settings don't exist, set to null/empty state
                 setCompanyInfo(null);
                 setBcvLogoUrl(null);
                 setActiveRate(null);
