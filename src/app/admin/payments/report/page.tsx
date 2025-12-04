@@ -85,7 +85,7 @@ export default function UnifiedPaymentsPage() {
 
     // --- Data Fetching ---
     useEffect(() => {
-        const q = query(collection(db(), "owners"));
+        const q = query(collection(db, "owners"));
         const unsubscribe = onSnapshot(q, (querySnapshot) => {
             const ownersData: Owner[] = [];
             querySnapshot.forEach((doc) => {
@@ -103,7 +103,7 @@ export default function UnifiedPaymentsPage() {
     useEffect(() => {
         const fetchRateAndFee = async () => {
              try {
-                const settingsRef = doc(db(), 'config', 'mainSettings');
+                const settingsRef = doc(db, 'config', 'mainSettings');
                 const docSnap = await getDoc(settingsRef);
                 if (docSnap.exists()) {
                     const settings = docSnap.data();
@@ -244,7 +244,7 @@ export default function UnifiedPaymentsPage() {
         }
         
         try {
-            const q = query(collection(db(), "payments"), 
+            const q = query(collection(db, "payments"), 
                 where("reference", "==", reference),
                 where("totalAmount", "==", Number(totalAmount)),
                 where("paymentDate", "==", Timestamp.fromDate(paymentDate))
@@ -299,7 +299,7 @@ export default function UnifiedPaymentsPage() {
                 reportedBy: ADMIN_USER_ID,
             };
             
-            await addDoc(collection(db(), "payments"), paymentData);
+            await addDoc(collection(db, "payments"), paymentData);
             
             toast({ 
                 title: 'Reporte Enviado Exitosamente', 
@@ -520,4 +520,3 @@ export default function UnifiedPaymentsPage() {
     );
 }
 
-    
