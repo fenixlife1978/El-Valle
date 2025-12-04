@@ -38,9 +38,10 @@ function WelcomePageContent() {
         {loading ? (
           <Skeleton className="w-24 h-24 rounded-full mx-auto mb-6" />
         ) : (
-          <div className="w-24 h-24 mx-auto mb-6 rounded-full flex items-center justify-center overflow-hidden bg-white p-1">
+          <Avatar className="w-24 h-24 mx-auto mb-6 bg-white p-1">
              <AvatarImage src={logoUrl || ''} alt="Company Logo" className="object-contain" />
-          </div>
+             <AvatarFallback>VC</AvatarFallback>
+          </Avatar>
         )}
         <h1 className="text-4xl font-bold font-headline text-primary">Bienvenid@ a VALLECONDO</h1>
         <p className="text-lg text-muted-foreground mt-2">Seleccione su rol para continuar</p>
