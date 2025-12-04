@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from '@/hooks/use-toast';
-import { Upload, Save, Calendar as CalendarIcon, PlusCircle, Loader2, AlertTriangle, Wand2, MoreHorizontal, Edit, FileCog, UserCircle, RefreshCw, ArrowLeft } from 'lucide-react';
+import { Upload, Save, Calendar as CalendarIcon, PlusCircle, Loader2, AlertTriangle, Wand2, MoreHorizontal, Edit, FileCog, UserCircle, RefreshCw } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
@@ -20,7 +20,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Progress } from '@/components/ui/progress';
-import { useRouter } from 'next/navigation';
 import { ThemeSwitcher } from '@/components/theme-switcher';
 
 
@@ -87,7 +86,6 @@ const emptyCompanyInfo: CompanyInfo = {
 
 export default function SettingsPage() {
     const { toast } = useToast();
-    const router = useRouter();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     
@@ -119,7 +117,7 @@ export default function SettingsPage() {
 
 
     useEffect(() => {
-        const settingsRef = doc(db(), 'config', 'mainSettings');
+        const settingsRef = doc(db, 'config', 'mainSettings');
         const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
             if (docSnap.exists()) {
                 const settings = docSnap.data() as Settings;
@@ -204,7 +202,7 @@ export default function SettingsPage() {
         };
         
         try {
-            const settingsRef = doc(db(), 'config', 'mainSettings');
+            const settingsRef = doc(db, 'config', 'mainSettings');
             await updateDoc(settingsRef, {
                 exchangeRates: arrayUnion(newRate)
             });
@@ -221,7 +219,7 @@ export default function SettingsPage() {
         const updatedRates = exchangeRates.map(r => ({...r, active: r.id === rateToActivate.id }));
         
         try {
-            const settingsRef = doc(db(), 'config', 'mainSettings');
+            const settingsRef = doc(db, 'config', 'mainSettings');
             await updateDoc(settingsRef, { exchangeRates: updatedRates });
             toast({ title: 'Tasa Activada', description: `La tasa de ${rateToActivate.rate.toFixed(2)} ahora es la activa.` });
         } catch (error) {
@@ -249,7 +247,7 @@ export default function SettingsPage() {
         );
         
         try {
-            const settingsRef = doc(db(), 'config', 'mainSettings');
+            const settingsRef = doc(db, 'config', 'mainSettings');
             await updateDoc(settingsRef, { exchangeRates: updatedRates });
             toast({ title: 'Tasa Actualizada', description: 'La tasa de cambio ha sido modificada.' });
         } catch (error) {
@@ -277,7 +275,7 @@ export default function SettingsPage() {
         const newCondoFee = Number(condoFee);
     
         try {
-            const settingsRef = doc(db(), 'config', 'mainSettings');
+            const settingsRef = doc(db, 'config', 'mainSettings');
     
             await new Promise(resolve => setTimeout(() => { setProgress(30); resolve(null); }, 300));
     
@@ -334,7 +332,7 @@ export default function SettingsPage() {
         toast({ title: 'Iniciando ajuste...', description: 'Buscando pagos adelantados para ajustar.' });
 
         const newCondoFee = Number(condoFee);
-        const firestore = db();
+        const firestore = db;
         try {
             const paidAdvanceQuery = query(
                 collection(firestore, "debts"),
@@ -478,7 +476,7 @@ export default function SettingsPage() {
                         <CardContent className="space-y-4">
                              <div className="flex items-center gap-6">
                                 <div className="w-24 h-24 rounded-full bg-muted flex items-center justify-center overflow-hidden border">
-                                   {logoPreview ? <img src={logoPreview} alt="Logo" className="w-full h-full object-cover" /> : <span className="text-sm text-muted-foreground">Logo</span>}
+                                   {logoPreview ? <img src={logoPreview} alt="Logo" className="w-full h-full object-contain" /> : <span className="text-sm text-muted-foreground">Logo</span>}
                                 </div>
                                 <div className="space-y-2">
                                      <Label htmlFor="logo-upload">Logo de la Empresa</Label>
@@ -524,7 +522,7 @@ export default function SettingsPage() {
                         <CardContent>
                             <div className="flex items-center gap-6">
                                 <div className="w-24 h-24 rounded-full bg-muted flex items-center justify-center overflow-hidden border">
-                                    {bcvLogoPreview ? <img src={bcvLogoPreview} alt="BCV Logo Preview" className="w-full h-full object-cover" /> : <span className="text-sm text-muted-foreground">BCV Logo</span>}
+                                    {bcvLogoPreview ? <img src={bcvLogoPreview} alt="BCV Logo Preview" className="w-full h-full object-contain" /> : <span className="text-sm text-muted-foreground">BCV Logo</span>}
                                 </div>
                                 <div className="space-y-2">
                                      <Label htmlFor="bcv-logo-upload">Logo de Tasa BCV</Label>
@@ -684,7 +682,3 @@ export default function SettingsPage() {
         </div>
     );
 }
-
-    
-
-    
