@@ -138,8 +138,8 @@ function LoginPage() {
                 {loadingLogo ? (
                   <Skeleton className="w-20 h-20 rounded-full mx-auto" />
                 ) : (
-                  <Avatar className="w-20 h-20 text-lg mx-auto">
-                    <AvatarImage src={logoUrl || ''} alt="Company Logo" className="object-cover"/>
+                  <Avatar className="w-20 h-20 text-lg mx-auto bg-white p-1">
+                    <AvatarImage src={logoUrl || ''} alt="Company Logo" className="object-contain"/>
                     <AvatarFallback>VC</AvatarFallback>
                   </Avatar>
                 )}
