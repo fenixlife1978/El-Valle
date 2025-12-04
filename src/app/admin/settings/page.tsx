@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from '@/hooks/use-toast';
-import { Upload, Save, Calendar as CalendarIcon, PlusCircle, Loader2, AlertTriangle, Wand2, MoreHorizontal, Edit, FileCog, UserCircle, RefreshCw } from 'lucide-react';
+import { Upload, Save, Calendar as CalendarIcon, PlusCircle, Loader2, AlertTriangle, Wand2, MoreHorizontal, Edit, FileCog, UserCircle, RefreshCw, Trash2 } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
@@ -80,9 +80,8 @@ const emptyCompanyInfo: CompanyInfo = {
     rif: '',
     phone: '',
     email: '',
-    logo: ''
+    logo: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAFdElEQVR4nO2ZeYxV1RnHf2vL8TqD6QqQoSKtDssyY1U2y8yEoxREyWlqWMyqKJNqWjVnVmZJzYx5bZl2VqZpWlqSxZSkkUTUiGjQ1qWVDmXRtD4H+p7Lvef+517u3h8e13fPueeee/7P+Z//+Z/vWzBwzPjAHrA3DCSCBJIIEkgiiSCBJIIEkgiiSCBJIIEkgkR5IOA3rF+lTf0qB1v+xJb8hS0+Y0v0aNn247L3X6Oq6kpiEolsbm4O/36+vr7l5eWFSqVSrVbX19d7PB70J2q1mouLi9lsNpvNZp/PF4lE09PTe3t7S0tLW1hYyGazsVgsFxcXNzc3p6am9vb2dnZ23t7eWltbiUQisrKyunp4eHh5eQ0NDd/f3xUKhY2NjWazeXh4eH193d/f7+7uHo/HE4lEamrq4ODg9PS0p6enp6c3NzfDweWwsLCwsLCgoKC4uPjixYvd3d39/f3FxcXt7e1tbW2RSCQymYyLi8vlcnl5eQUCgWQyqaur6+/v9/f3FxUVFRYWJpPJVqv18vJyc3Ozubn5+/tLJBJZLJaPjw/0n+l0uri4eHh4ODo6CgQCTU1Nvb29WVlZVVVVpaWlDQ0N5XJ5aWlpQUEBAMvlcrlcEom0t7c3Nzc3NjaWl5d3d3dXVVUVFRXV0NBwcnKyubk5OTl5YWEhEongwIEDAHD48OFpaWkBAQGZmZkNDQ1tbW0FBQV5eXnd3d2VlZXR0dHFxcWVlZUNDQ2ZmZlZWVkNDQ2lp6dTUFB4eHplMZmdnZ25uztraGgA2Njaurq76+voJCQmZmZkJBAIul8vlcnl4eLS1teXl5TU0NNh/CwoKKioqOjo6rq6usrKyxWJxcXGxubkZ+PPx48cXL14EgHfeeQcAjz/+eGFhIQDcfffdAGDevHkAkJKS8tFHH73//vvnzp3z9/cPDQ2tq6uTSCQikcjY2FgrAUBKSkpubm4sFkskEsnlcrtcLiqVmpqaunfvHgDce++9a9asAYD4+HhmZmbm5uampqaWlpZz584BwJdfftm5c+eoqKiQkJA4cOAAALz88suLi4sNDQ3nzp0DgFgsDofDrq6uGzduAICQkBAAOHfunEgk6uvrCwsLu3TpEgDcdNNN4XCYQqGYmZnp6uoKCwvb2tqmpqbq6uoAICQkBAAmJiYeHh4yMjI6OjpFRUVxcXFtbW1xcbGlpSVxcbFUKsnIyNjZ2ZmZmbS2tmZlZTU0NKyurmZlZbW3tycSiYcPH56fn0d+H4lEbm5udnd3j46OVlZW9vb2lpaW3t7evr6+xcXFBQIBGo2mpaVlZGSoqan5+/v7+/vHx8drNBqZTK6qqvLz87u7u8vlcnFxsby8fHR0VFFRkZGRkZOT09LSWllZJSYmZmZmxsbGZmZmWlpaIpHI5/OpVKqjo6OgoCCVSn18fBwdHSUSifx+f3V1dXNzE/h9XVVVpaSkDAwMNDQ0lJaW3t7e4+PjtbW1TU1NdXV1zWbz27dvHzt2rL+/f2VlxcXF5e/vLy0tbWxsDPoWCoXl5eUlJSXV1dUZGRmZnp6enJzM/p9tbW3l5eWlpaV3d3dVVVUzMzMymdzW1laJRPLx8bHZ7AIDAwsLCycnp+LiYiaT+eGHH0JDQwFAeXl5aWlpQUEBsVgMANLT00+ePNnX11dQUDA+Pv78+fOYmJiUlJRer1epVFqtVqPRqFQqrVYrEAiwWCwqlUqlUo1Gq9VqNBqVSiUWi0UgEMhkMplMValURKNRrVYrEAgEAgGVSiUWi0WgUKvVarVatVQqjUajVCqRSCQWi4VCodFoNBqNWq2WSCQCgQBVqVQoFKo/CgQCgUAqlUqlUovFQiKRSCQSiVQqlUgkUavVarVarcFgMJlMFgqFhYWFIZPJzWYzGAwqFAqFQqFQKBQKhUKhUChU/0gmk8FgcDgcDocDAcPhcDiVSsVgMJlMJofDYDAYDAaDweFwOJ1Go1Gr1QqFArFYLBaLRqORSCSSSCQSiUaj0Wg0Gg0Gg8FkMhUKhYWFhSQSCePxuEwmE4vFIpGIZDKRSCRCoRD4//j4eHt7u729PTY2Ni4uLigoKCgoKCsrq6mp6e3t7e7uvry8XFhYaGlpuXr16vj4+O3t7b+/Pzo6Oj8/f3h4uLW1NTQ0NDU1JSYmJiUlJSQkREREJBKJRCKRSCQSiUQikUikP4xEIq2trYODg/Pz80tLSwsLCyUlJTk5OWJiYklJSVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV-A'
 };
-
 
 export default function SettingsPage() {
     const { toast } = useToast();
@@ -114,6 +113,9 @@ export default function SettingsPage() {
     const [isFeeChanged, setIsFeeChanged] = useState(false);
     const [isAdjustmentRunning, setIsAdjustmentRunning] = useState(false);
     const [progress, setProgress] = useState(0);
+
+    const [isDeleteRateDialogOpen, setIsDeleteRateDialogOpen] = useState(false);
+    const [rateToDelete, setRateToDelete] = useState<ExchangeRate | null>(null);
 
 
     useEffect(() => {
@@ -256,6 +258,30 @@ export default function SettingsPage() {
         } finally {
             setIsRateDialogOpen(false);
             setRateToEdit(null);
+        }
+    };
+    
+    const handleDeleteRate = async () => {
+        if (!rateToDelete) return;
+
+        if (rateToDelete.active) {
+            toast({ variant: 'destructive', title: 'Acción no permitida', description: 'No se puede eliminar la tasa activa. Active otra tasa primero.' });
+            setIsDeleteRateDialogOpen(false);
+            return;
+        }
+
+        const updatedRates = exchangeRates.filter(r => r.id !== rateToDelete.id);
+
+        try {
+            const settingsRef = doc(db, 'config', 'mainSettings');
+            await updateDoc(settingsRef, { exchangeRates: updatedRates });
+            toast({ title: 'Tasa Eliminada', description: 'La tasa ha sido eliminada del historial.' });
+        } catch (error) {
+            console.error("Error deleting rate:", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo eliminar la tasa.' });
+        } finally {
+            setIsDeleteRateDialogOpen(false);
+            setRateToDelete(null);
         }
     };
     
@@ -475,9 +501,9 @@ export default function SettingsPage() {
                         </CardHeader>
                         <CardContent className="space-y-4">
                              <div className="flex items-center gap-6">
-                                 <div className="w-24 h-24 rounded-full bg-white flex items-center justify-center overflow-hidden border p-1">
+                                <div className="w-24 h-24 rounded-full bg-white flex items-center justify-center overflow-hidden border p-1">
                                     {logoPreview && <img src={logoPreview} alt="Company Logo Preview" className="w-full h-full object-contain" />}
-                                 </div>
+                                </div>
                                 <div className="space-y-2">
                                      <Label htmlFor="logo-upload">Logo de la Empresa</Label>
                                      <div className="flex items-center gap-2">
@@ -622,6 +648,10 @@ export default function SettingsPage() {
                                                                 <Edit className="mr-2 h-4 w-4" />
                                                                 Editar
                                                             </DropdownMenuItem>
+                                                            <DropdownMenuItem className="text-destructive" onClick={() => { setRateToDelete(rate); setIsDeleteRateDialogOpen(true); }}>
+                                                                <Trash2 className="mr-2 h-4 w-4" />
+                                                                Eliminar
+                                                            </DropdownMenuItem>
                                                         </DropdownMenuContent>
                                                     </DropdownMenu>
                                                 </TableCell>
@@ -673,6 +703,22 @@ export default function SettingsPage() {
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setIsRateDialogOpen(false)}>Cancelar</Button>
                         <Button onClick={handleEditRate}>Guardar Cambios</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Delete Rate Confirmation Dialog */}
+            <Dialog open={isDeleteRateDialogOpen} onOpenChange={setIsDeleteRateDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Confirmar Eliminación</DialogTitle>
+                        <DialogDescription>
+                            ¿Está seguro de que desea eliminar esta tasa? No se puede eliminar una tasa activa.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsDeleteRateDialogOpen(false)}>Cancelar</Button>
+                        <Button variant="destructive" onClick={handleDeleteRate}>Eliminar</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
