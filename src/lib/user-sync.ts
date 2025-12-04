@@ -34,7 +34,7 @@ export const ensureAdminProfile = async (showToast?: (options: any) => void): Pr
         } else {
              // If admin exists, ensure critical fields are correct.
             const data = adminSnap.data();
-            if (data.uid !== ADMIN_USER_ID || data.email.toLowerCase() !== ADMIN_EMAIL.toLowerCase() || data.role !== 'administrador') {
+            if (data.uid !== ADMIN_USER_ID || data.email.toLowerCase() !== ADMIN_EMAIL || data.role !== 'administrador') {
                  await updateDoc(adminRef, { uid: ADMIN_USER_ID, email: ADMIN_EMAIL, role: 'administrador' });
                  if (showToast) {
                     showToast({ title: "Perfil de Administrador Corregido", description: "Se detectó una inconsistencia y se ha corregido el perfil del administrador." });
@@ -53,7 +53,7 @@ export const ensureAdminProfile = async (showToast?: (options: any) => void): Pr
 
 
 export const ensureOwnerProfile = async (user: User, showToast?: (options: any) => void): Promise<'checked' | 'created' | 'linked'> => {
-    if (user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+    if (user.email?.toLowerCase() === ADMIN_EMAIL) {
         return 'checked';
     }
 

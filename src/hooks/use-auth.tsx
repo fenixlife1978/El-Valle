@@ -55,45 +55,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (ownerUnsubscribe) {
                 ownerUnsubscribe();
             }
+            
             setLoading(true);
 
             if (firebaseUser) {
                 setUser(firebaseUser);
-                const isAdministrator = firebaseUser.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+                const isAdministrator = firebaseUser.email?.toLowerCase() === ADMIN_EMAIL;
                 
                 try {
-                    let userDocRef;
+                    let userDocId: string;
                     if (isAdministrator) {
                         setRole('administrador');
-                        await ensureAdminProfile(toast);
-                        userDocRef = doc(db(), 'owners', ADMIN_USER_ID);
+                        await ensureAdminProfile(toast); // Ensure profile exists
+                        userDocId = ADMIN_USER_ID;
                     } else {
                         setRole('propietario');
-                        await ensureOwnerProfile(firebaseUser, toast);
-                        userDocRef = doc(db(), 'owners', firebaseUser.uid);
+                        await ensureOwnerProfile(firebaseUser, toast); // Ensure profile exists
+                        userDocId = firebaseUser.uid;
                     }
 
+                    const userDocRef = doc(db(), 'owners', userDocId);
                     ownerUnsubscribe = onSnapshot(userDocRef, (snapshot) => {
                         if (snapshot.exists()) {
                             setOwnerData({ id: snapshot.id, ...snapshot.data() });
                         } else {
                             setOwnerData(null);
                         }
-                        setLoading(false);
                     });
 
                 } catch (error) {
                     console.error("Failed to ensure user profile:", error);
                     toast({variant: 'destructive', title: 'Error de Sincronización', description: 'No se pudo verificar tu perfil de usuario.'});
-                    setLoading(false);
                 }
 
             } else {
                 setUser(null);
                 setOwnerData(null);
                 setRole(null);
-                setLoading(false);
             }
+            setLoading(false);
         });
 
         const settingsRef = doc(db(), 'config', 'mainSettings');
