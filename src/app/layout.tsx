@@ -8,8 +8,6 @@ import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from '@/components/theme-provider';
 import { AuthProvider, useAuth } from '@/hooks/use-auth';
 import { Loader2 } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
-
 
 const publicPaths = ['/welcome', '/login', '/forgot-password', '/register'];
 
@@ -19,21 +17,28 @@ function AuthGuard({ children }: { children: ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    if (loading) return; 
+    if (loading) {
+      return; // Wait until loading is false
+    }
 
     const isPublic = publicPaths.some(path => pathname.startsWith(path));
-    
-    if (user && role) {
-        if (isPublic) {
-          router.replace(role === 'administrador' ? '/admin/dashboard' : '/owner/dashboard');
-        }
-    } else if (!user && !isPublic) {
-        router.replace('/welcome');
+
+    // If user is logged in
+    if (user) {
+      // If they are on a public page, redirect them to their dashboard
+      if (isPublic) {
+        router.replace(role === 'administrador' ? '/admin/dashboard' : '/owner/dashboard');
+      }
+    } 
+    // If user is not logged in and not on a public page
+    else if (!isPublic) {
+      router.replace('/welcome');
     }
 
   }, [user, role, loading, pathname, router]);
 
-  if (loading) {
+  // While loading, or if redirecting, show a loader to prevent flicker
+  if (loading || (!user && !publicPaths.some(path => pathname.startsWith(path)))) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -42,6 +47,16 @@ function AuthGuard({ children }: { children: ReactNode }) {
     );
   }
 
+  // If user is logged in, but on a public page, we show loader while redirecting
+  if (user && publicPaths.some(path => pathname.startsWith(path))) {
+     return (
+      <div className="flex h-screen w-full items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="ml-2">Redirigiendo...</p>
+      </div>
+    );
+  }
+  
   return <>{children}</>;
 }
 
