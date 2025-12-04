@@ -74,13 +74,15 @@ const emptyAdminProfile: AdminProfile = {
     avatar: ''
 };
 
+const defaultLogo = "data:image/png;base64,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"
+
 const emptyCompanyInfo: CompanyInfo = {
     name: 'Nombre de la Empresa',
     address: '',
     rif: '',
     phone: '',
     email: '',
-    logo: '' 
+    logo: defaultLogo,
 };
 
 
@@ -124,7 +126,7 @@ export default function SettingsPage() {
                 setAdminProfile(settings.adminProfile || emptyAdminProfile);
                 setAdminAvatarPreview(settings.adminProfile?.avatar);
                 setCompanyInfo(settings.companyInfo || emptyCompanyInfo);
-                setLogoPreview(settings.companyInfo?.logo);
+                setLogoPreview(settings.companyInfo?.logo || defaultLogo);
                 setBcvLogo(settings.bcvLogo || '');
                 setBcvLogoPreview(settings.bcvLogo ?? null);
                 setCondoFee(settings.condoFee);
@@ -476,7 +478,7 @@ export default function SettingsPage() {
                         <CardContent className="space-y-4">
                              <div className="flex items-center gap-6">
                                 <div className="w-24 h-24 rounded-full bg-white flex items-center justify-center overflow-hidden border p-1">
-                                   {logoPreview ? <img src={logoPreview} alt="Logo" className="w-full h-full object-contain p-1" /> : <span className="text-sm text-muted-foreground">Logo</span>}
+                                   <img src={logoPreview || ''} alt="Logo" className="w-full h-full object-contain" />
                                 </div>
                                 <div className="space-y-2">
                                      <Label htmlFor="logo-upload">Logo de la Empresa</Label>
@@ -522,7 +524,7 @@ export default function SettingsPage() {
                         <CardContent>
                             <div className="flex items-center gap-6">
                                 <div className="w-24 h-24 rounded-full bg-white flex items-center justify-center overflow-hidden border p-1">
-                                    {bcvLogoPreview ? <img src={bcvLogoPreview} alt="BCV Logo Preview" className="w-full h-full object-contain" /> : <span className="text-sm text-muted-foreground">BCV Logo</span>}
+                                    <img src={bcvLogoPreview || ''} alt="BCV Logo Preview" className="w-full h-full object-contain" />
                                 </div>
                                 <div className="space-y-2">
                                      <Label htmlFor="bcv-logo-upload">Logo de Tasa BCV</Label>
