@@ -132,7 +132,7 @@ export default function VerifyPaymentsPage() {
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
 
   useEffect(() => {
-    const ownersQuery = query(collection(db(), "owners"));
+    const ownersQuery = query(collection(db, "owners"));
     const ownersUnsubscribe = onSnapshot(ownersQuery, (snapshot) => {
         const newOwnersMap = new Map<string, Owner>();
         snapshot.forEach(doc => {
@@ -149,7 +149,7 @@ export default function VerifyPaymentsPage() {
 
     setLoading(true);
 
-    const q = query(collection(db(), "payments"), orderBy('reportedAt', 'desc'));
+    const q = query(collection(db, "payments"), orderBy('reportedAt', 'desc'));
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
         const paymentsData: FullPayment[] = [];
@@ -208,7 +208,7 @@ export default function VerifyPaymentsPage() {
     });
     
     const fetchSettings = async () => {
-        const settingsRef = doc(db(), 'config', 'mainSettings');
+        const settingsRef = doc(db, 'config', 'mainSettings');
         const docSnap = await getDoc(settingsRef);
         if (docSnap.exists()) {
             const settings = docSnap.data();
@@ -223,7 +223,7 @@ export default function VerifyPaymentsPage() {
 
 
   const handleStatusChange = async (id: string, newStatus: PaymentStatus) => {
-    const paymentRef = doc(db(), 'payments', id);
+    const paymentRef = doc(db, 'payments', id);
   
     if (newStatus === 'rechazado') {
       try {
@@ -238,7 +238,7 @@ export default function VerifyPaymentsPage() {
   
     if (newStatus === 'aprobado') {
         try {
-            await runTransaction(db(), async (transaction) => {
+            await runTransaction(db, async (transaction) => {
                 // --- 1. READS ---
                 const paymentDoc = await transaction.get(paymentRef);
                 if (!paymentDoc.exists() || paymentDoc.data().status === 'aprobado') {
@@ -246,7 +246,7 @@ export default function VerifyPaymentsPage() {
                 }
                 const paymentData = { id: paymentDoc.id, ...paymentDoc.data() } as FullPayment;
 
-                const settingsRef = doc(db(), 'config', 'mainSettings');
+                const settingsRef = doc(db, 'config', 'mainSettings');
                 const settingsSnap = await transaction.get(settingsRef);
                 if (!settingsSnap.exists()) throw new Error('No se encontró el documento de configuración.');
                 
@@ -270,7 +270,7 @@ export default function VerifyPaymentsPage() {
                 const allBeneficiaryIds = Array.from(new Set(paymentData.beneficiaries.map(b => b.ownerId)));
                 if (allBeneficiaryIds.length === 0) throw new Error("El pago no tiene beneficiarios definidos.");
 
-                const ownerDocs = await Promise.all(allBeneficiaryIds.map(ownerId => transaction.get(doc(db(), 'owners', ownerId))));
+                const ownerDocs = await Promise.all(allBeneficiaryIds.map(ownerId => transaction.get(doc(db, 'owners', ownerId))));
                 const ownerDataMap = new Map<string, any>();
                 ownerDocs.forEach((ownerDoc) => {
                     if (!ownerDoc.exists()) throw new Error(`El propietario ${ownerDoc.id} no fue encontrado.`);
@@ -285,7 +285,7 @@ export default function VerifyPaymentsPage() {
                     const ownerData = ownerDataMap.get(ownerId);
                     if (!ownerData) continue;
 
-                    const ownerRef = doc(db(), 'owners', ownerId);
+                    const ownerRef = doc(db, 'owners', ownerId);
                     const receiptCounter = ownerData.receiptCounter || 0;
                     const newReceiptCounter = receiptCounter + 1;
                     const receiptNumber = `REC-${ownerId.substring(0, 4).toUpperCase()}-${String(newReceiptCounter).padStart(5, '0')}`;
@@ -296,7 +296,7 @@ export default function VerifyPaymentsPage() {
 
                     let availableFundsInCents = Math.round(paymentAmountForOwner * 100) + Math.round(initialBalance * 100);
                     
-                    const debtsQuery = query(collection(db(), 'debts'), where('ownerId', '==', ownerId), where('status', '==', 'pending'));
+                    const debtsQuery = query(collection(db, 'debts'), where('ownerId', '==', ownerId), where('status', '==', 'pending'));
                     const debtsSnapshot = await getDocs(debtsQuery); // This read is outside transaction but fine as it is before writes.
                     
                     const sortedDebts = debtsSnapshot.docs
@@ -305,7 +305,7 @@ export default function VerifyPaymentsPage() {
                     
                     if (sortedDebts.length > 0) {
                         for (const debt of sortedDebts) {
-                            const debtRef = doc(db(), 'debts', debt.id);
+                            const debtRef = doc(db, 'debts', debt.id);
                             const debtAmountInCents = Math.round(debt.amountUSD * exchangeRate * 100);
                             
                             if (availableFundsInCents >= debtAmountInCents) {
@@ -322,7 +322,7 @@ export default function VerifyPaymentsPage() {
                     
                     const condoFeeInCents = Math.round(currentCondoFee * exchangeRate * 100);
                     if (paymentData.type !== 'adelanto' && availableFundsInCents >= condoFeeInCents) {
-                        const allExistingDebtsQuery = query(collection(db(), 'debts'), where('ownerId', '==', ownerId));
+                        const allExistingDebtsQuery = query(collection(db, 'debts'), where('ownerId', '==', ownerId));
                         const allExistingDebtsSnap = await getDocs(allExistingDebtsQuery); // Outside transaction read
                         const existingDebtPeriods = new Set(allExistingDebtsSnap.docs.map(d => `${d.data().year}-${d.data().month}`));
 
@@ -342,7 +342,7 @@ export default function VerifyPaymentsPage() {
 
                                     availableFundsInCents -= condoFeeInCents;
                                     
-                                    const debtRef = doc(collection(db(), 'debts'));
+                                    const debtRef = doc(collection(db, 'debts'));
                                     transaction.set(debtRef, {
                                         ownerId: ownerId,
                                         property: property,
@@ -387,7 +387,7 @@ export default function VerifyPaymentsPage() {
     }
 
     try {
-      const ownerDoc = await getDoc(doc(db(), "owners", beneficiary.ownerId));
+      const ownerDoc = await getDoc(doc(db, "owners", beneficiary.ownerId));
       if (!ownerDoc.exists()) {
         toast({ variant: 'destructive', title: 'Error', description: 'No se encontró al propietario.' });
         return;
@@ -397,7 +397,7 @@ export default function VerifyPaymentsPage() {
 
       const ownerUnitSummary = (beneficiary.street && beneficiary.house) ? `${beneficiary.street} - ${beneficiary.house}` : "Propiedad no especificada";
 
-      const paidDebtsQuery = query(collection(db(), "debts"), where("paymentId", "==", payment.id), where("ownerId", "==", beneficiary.ownerId));
+      const paidDebtsQuery = query(collection(db, "debts"), where("paymentId", "==", payment.id), where("ownerId", "==", beneficiary.ownerId));
       const paidDebtsSnapshot = await getDocs(paidDebtsQuery);
       const paidDebts = paidDebtsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as Debt).sort((a, b) => a.year - b.year || a.month - b.month);
 
@@ -558,15 +558,15 @@ export default function VerifyPaymentsPage() {
 
   const confirmDelete = async () => {
     if (!paymentToDelete) return;
-    const paymentRef = doc(db(), "payments", paymentToDelete.id);
+    const paymentRef = doc(db, "payments", paymentToDelete.id);
 
     try {
         if (paymentToDelete.status === 'aprobado') {
-             const batch = writeBatch(db());
+             const batch = writeBatch(db);
 
             // Revert owner balances
             for (const beneficiary of paymentToDelete.beneficiaries) {
-                const ownerRef = doc(db(), 'owners', beneficiary.ownerId);
+                const ownerRef = doc(db, 'owners', beneficiary.ownerId);
                 const ownerDoc = await getDoc(ownerRef);
                 if (ownerDoc.exists()) {
                     const currentBalance = ownerDoc.data().balance || 0;
@@ -578,7 +578,7 @@ export default function VerifyPaymentsPage() {
             }
 
             // Un-pay associated debts
-            const debtsToRevertQuery = query(collection(db(), 'debts'), where('paymentId', '==', paymentToDelete.id));
+            const debtsToRevertQuery = query(collection(db, 'debts'), where('paymentId', '==', paymentToDelete.id));
             const debtsToRevertSnapshot = await getDocs(debtsToRevertQuery);
             debtsToRevertSnapshot.forEach(debtDoc => {
                 if (debtDoc.data().description.includes('Pagada por adelantado')) {

@@ -1,5 +1,6 @@
 
 'use client';
+
 import { useState, useEffect, useMemo } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
@@ -19,6 +20,7 @@ import { db } from '@/lib/firebase';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { inferPaymentDetails } from '@/ai/flows/infer-payment-details';
 import { Textarea } from '@/components/ui/textarea';
+import { useAuth } from '@/hooks/use-auth';
 
 
 // --- Static Data ---
@@ -57,10 +59,11 @@ type BeneficiaryRow = {
 };
 
 
-const ADMIN_USER_ID = 'valle-admin-main-account';
+const OWNER_USER_ID = 'valle-admin-main-account';
 
 export default function UnifiedPaymentsPage() {
     const { toast } = useToast();
+    const { user: authUser, ownerData: authOwnerData } = useAuth();
     const [allOwners, setAllOwners] = useState<Owner[]>([]);
     const [loading, setLoading] = useState(false);
 
@@ -142,14 +145,24 @@ export default function UnifiedPaymentsPage() {
     
     // Reset beneficiaries when type changes
     useEffect(() => {
-        setBeneficiaryRows([{
-            id: Date.now().toString(),
-            owner: null,
-            searchTerm: '',
-            amount: '',
-            selectedProperty: null
-        }]);
-    }, [beneficiaryType]);
+        if(beneficiaryType === 'propio' && authOwnerData) {
+            setBeneficiaryRows([{
+                id: Date.now().toString(),
+                owner: authOwnerData,
+                searchTerm: '',
+                amount: '',
+                selectedProperty: authOwnerData.properties?.[0] || null
+            }]);
+        } else {
+            setBeneficiaryRows([{
+                id: Date.now().toString(),
+                owner: null,
+                searchTerm: '',
+                amount: '',
+                selectedProperty: null
+            }]);
+        }
+    }, [beneficiaryType, authOwnerData]);
 
     // --- Derived State & Calculations ---
     const assignedTotal = useMemo(() => {
@@ -173,7 +186,17 @@ export default function UnifiedPaymentsPage() {
         setBeneficiaryType('propio');
         setTotalAmount('');
         setAiPrompt('');
-        setBeneficiaryRows([{ id: Date.now().toString(), owner: null, searchTerm: '', amount: '', selectedProperty: null }]);
+        if (beneficiaryType === 'propio' && authOwnerData) {
+            setBeneficiaryRows([{
+                id: Date.now().toString(),
+                owner: authOwnerData,
+                searchTerm: '',
+                amount: '',
+                selectedProperty: authOwnerData.properties?.[0] || null
+            }]);
+        } else {
+             setBeneficiaryRows([{ id: Date.now().toString(), owner: null, searchTerm: '', amount: '', selectedProperty: null }]);
+        }
     }
     
     // --- Beneficiary Row Management ---
@@ -296,7 +319,7 @@ export default function UnifiedPaymentsPage() {
                 beneficiaryIds: Array.from(new Set(beneficiaries.map(b => b.ownerId))),
                 status: 'pendiente' as 'pendiente',
                 reportedAt: serverTimestamp(),
-                reportedBy: ADMIN_USER_ID,
+                reportedBy: authUser?.uid || 'unknown',
             };
             
             await addDoc(collection(db, "payments"), paymentData);
@@ -328,8 +351,8 @@ export default function UnifiedPaymentsPage() {
     return (
         <div className="space-y-8">
             <div>
-                <h1 className="text-3xl font-bold font-headline">Reporte de Pagos</h1>
-                <p className="text-muted-foreground">Formulario único para registrar pagos propios o a terceros.</p>
+                <h1 className="text-3xl font-bold font-headline">Reportar un Pago</h1>
+                <p className="text-muted-foreground">Formulario para registrar pagos propios o a terceros.</p>
             </div>
             
              <Card>
@@ -519,4 +542,5 @@ export default function UnifiedPaymentsPage() {
         </div>
     );
 }
+
 
