@@ -476,7 +476,7 @@ export default function SettingsPage() {
                         <CardContent className="space-y-4">
                              <div className="flex items-center gap-6">
                                 <div className="w-24 h-24 rounded-full bg-white flex items-center justify-center overflow-hidden border p-1">
-                                   {logoPreview ? <img src={logoPreview} alt="Logo" className="w-full h-full object-contain" /> : <span className="text-sm text-muted-foreground">Logo</span>}
+                                   {logoPreview ? <img src={logoPreview} alt="Logo" className="w-full h-full object-contain p-1" /> : <span className="text-sm text-muted-foreground">Logo</span>}
                                 </div>
                                 <div className="space-y-2">
                                      <Label htmlFor="logo-upload">Logo de la Empresa</Label>
