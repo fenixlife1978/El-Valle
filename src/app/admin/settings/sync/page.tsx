@@ -50,7 +50,7 @@ export default function SyncProfilesPage() {
         setLoadingAction(prev => ({ ...prev, changeEmail: true }));
         try {
             const q = query(
-                collection(db(), "owners"), 
+                collection(db, "owners"), 
                 where("name", ">=", ownerSearchTerm),
                 where("name", "<=", ownerSearchTerm + '\uf8ff')
             );
@@ -82,7 +82,7 @@ export default function SyncProfilesPage() {
 
         setLoadingAction(prev => ({ ...prev, changeEmail: true }));
         try {
-            await addDoc(collection(db(), "admin_tasks"), {
+            await addDoc(collection(db, "admin_tasks"), {
                 targetUID: foundOwner.id,
                 newEmail: newEmail,
                 status: "pending",

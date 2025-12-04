@@ -36,7 +36,7 @@ export default function RegisterPage() {
 
         setLoading(true);
         try {
-            await createUserWithEmailAndPassword(auth(), email, password);
+            await createUserWithEmailAndPassword(auth, email, password);
             toast({
                 title: '¡Registro exitoso!',
                 description: 'Tu cuenta ha sido creada. Serás redirigido.',

@@ -12,42 +12,22 @@ const firebaseConfig = {
   "messagingSenderId": "630518792088"
 };
 
-// Singleton pattern to ensure only one instance is created
 let app: FirebaseApp;
-let authInstance: Auth;
-let dbInstance: Firestore;
-let storageInstance: FirebaseStorage;
+let auth: Auth;
+let db: Firestore;
+let storage: FirebaseStorage;
 
-function initializeFirebase() {
-    if (!getApps().length) {
-        app = initializeApp(firebaseConfig);
-    } else {
-        app = getApp();
-    }
-    authInstance = getAuth(app);
-    dbInstance = getFirestore(app);
-    storageInstance = getStorage(app);
+if (typeof window !== 'undefined' && !getApps().length) {
+    app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    db = getFirestore(app);
+    storage = getStorage(app);
+} else if (typeof window !== 'undefined') {
+    app = getApp();
+    auth = getAuth(app);
+    db = getFirestore(app);
+    storage = getStorage(app);
 }
 
-// Ensure Firebase is initialized
-if (typeof window !== 'undefined') {
-    initializeFirebase();
-}
-
-// Export functions that return the instances
-export const db = (): Firestore => {
-    if (!dbInstance) initializeFirebase();
-    return dbInstance;
-};
-
-export const auth = (): Auth => {
-    if (!authInstance) initializeFirebase();
-    return authInstance;
-};
-
-export const storage = (): FirebaseStorage => {
-    if (!storageInstance) initializeFirebase();
-    return storageInstance;
-};
-
-    
+// Export the initialized instances directly
+export { db, auth, storage, app };

@@ -42,7 +42,7 @@ function LoginPage() {
 
         async function fetchLogo() {
           try {
-            const settingsRef = doc(db(), 'config', 'mainSettings');
+            const settingsRef = doc(db, 'config', 'mainSettings');
             const docSnap = await getDoc(settingsRef);
             if (docSnap.exists()) {
               const settings = docSnap.data();
@@ -74,13 +74,13 @@ function LoginPage() {
         try {
             let userRoleFromDB: string | null = null;
             if (role === 'admin') {
-                const adminRef = doc(db(), "owners", ADMIN_USER_ID);
+                const adminRef = doc(db, "owners", ADMIN_USER_ID);
                 const adminSnap = await getDoc(adminRef);
                 if (adminSnap.exists() && adminSnap.data().email?.toLowerCase() === email.toLowerCase()) {
                     userRoleFromDB = 'administrador';
                 }
             } else {
-                const q = query(collection(db(), "owners"), where("email", "==", email.toLowerCase()));
+                const q = query(collection(db, "owners"), where("email", "==", email.toLowerCase()));
                 const querySnapshot = await getDocs(q);
                 if (!querySnapshot.empty) {
                     const userData = querySnapshot.docs[0].data();
@@ -100,7 +100,7 @@ function LoginPage() {
                 return;
             }
 
-            await signInWithEmailAndPassword(auth(), email, password);
+            await signInWithEmailAndPassword(auth, email, password);
             
             toast({
                 title: 'Inicio de sesión exitoso',
@@ -139,7 +139,7 @@ function LoginPage() {
                     <Skeleton className="w-20 h-20 rounded-full mx-auto" />
                 ) : (
                     <div className="w-20 h-20 mx-auto rounded-full flex items-center justify-center overflow-hidden">
-                        <Avatar className="w-full h-full">
+                        <Avatar className="w-full h-full bg-white p-1">
                             <AvatarImage src={logoUrl || ''} alt="Company Logo" className="object-contain" />
                             <AvatarFallback>VC</AvatarFallback>
                         </Avatar>

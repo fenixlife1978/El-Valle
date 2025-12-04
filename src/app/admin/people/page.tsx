@@ -99,7 +99,7 @@ export default function PeopleManagementPage() {
     const { toast } = useToast();
 
     useEffect(() => {
-        const firestore = db();
+        const firestore = db;
         const q = query(collection(firestore, "owners"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const ownersData: Owner[] = [];
@@ -176,7 +176,7 @@ export default function PeopleManagementPage() {
     const confirmDelete = async () => {
         if (ownerToDelete) {
              try {
-                await deleteDoc(doc(db(), "owners", ownerToDelete.id));
+                await deleteDoc(doc(db, "owners", ownerToDelete.id));
                 toast({ title: 'Propietario Eliminado', description: `${ownerToDelete.name} ha sido eliminado de la base de datos.` });
             } catch (error) {
                 console.error("Error deleting document: ", error);
@@ -197,7 +197,7 @@ export default function PeopleManagementPage() {
             return;
         }
     
-        const firestore = db();
+        const firestore = db;
         const balanceValue = parseFloat(String(currentOwner.balance).replace(',', '.') || '0');
         
         // Base data object, excludes email initially
@@ -219,7 +219,7 @@ export default function PeopleManagementPage() {
                 // Creating a new user, email is required and added to the data object
                 dataToSave.email = currentOwner.email;
     
-                const userCredential = await createUserWithEmailAndPassword(auth(), currentOwner.email!, 'Condominio2025.');
+                const userCredential = await createUserWithEmailAndPassword(auth, currentOwner.email!, 'Condominio2025.');
                 const newUserId = userCredential.user.uid;
     
                 const ownerDocRef = doc(firestore, "owners", newUserId);
@@ -357,7 +357,7 @@ export default function PeopleManagementPage() {
 
         const reader = new FileReader();
         reader.onload = async (event) => {
-            const firestore = db();
+            const firestore = db;
             try {
                 const data = event.target?.result;
                 if (!data) throw new Error("File data is empty.");
@@ -433,7 +433,7 @@ export default function PeopleManagementPage() {
         }
 
         try {
-            await sendPasswordResetEmail(auth(), email);
+            await sendPasswordResetEmail(auth, email);
             toast({
                 title: 'Correo Enviado',
                 description: `Se ha enviado un correo para restablecer la contraseña a ${email}.`,
@@ -677,4 +677,3 @@ export default function PeopleManagementPage() {
     
 
     
-
