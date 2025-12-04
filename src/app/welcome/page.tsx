@@ -15,7 +15,7 @@ function WelcomePageContent() {
   useEffect(() => {
     async function fetchLogo() {
       try {
-        const settingsRef = doc(db(), 'config', 'mainSettings');
+        const settingsRef = doc(db, 'config', 'mainSettings');
         const docSnap = await getDoc(settingsRef);
         if (docSnap.exists()) {
           const settings = docSnap.data();
@@ -38,7 +38,7 @@ function WelcomePageContent() {
         {loading ? (
           <Skeleton className="w-24 h-24 rounded-full mx-auto mb-6" />
         ) : (
-          <div className="w-24 h-24 mx-auto mb-6 rounded-full flex items-center justify-center overflow-hidden">
+          <div className="w-24 h-24 mx-auto mb-6 rounded-full flex items-center justify-center overflow-hidden bg-white p-1">
             <Avatar className="w-full h-full">
               <AvatarImage src={logoUrl || ''} alt="Company Logo" className="object-contain" />
               <AvatarFallback>VC</AvatarFallback>
@@ -58,3 +58,5 @@ function WelcomePageContent() {
 export default function WelcomePage() {
     return <WelcomePageContent />;
 }
+
+    

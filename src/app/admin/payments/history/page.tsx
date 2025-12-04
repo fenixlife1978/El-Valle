@@ -75,7 +75,7 @@ export default function HistoricalPaymentsPage() {
     const router = useRouter();
 
     useEffect(() => {
-        const firestore = db();
+        const firestore = db;
         const ownersQuery = query(collection(firestore, "owners"));
         const ownersUnsubscribe = onSnapshot(ownersQuery, (snapshot) => {
             setOwners(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner)));
@@ -131,7 +131,7 @@ export default function HistoricalPaymentsPage() {
     const confirmDelete = async () => {
         if (!paymentToDelete?.id) return;
         try {
-            await deleteDoc(doc(db(), "historical_payments", paymentToDelete.id));
+            await deleteDoc(doc(db, "historical_payments", paymentToDelete.id));
             toast({ title: "Pago eliminado", description: "El registro del pago histórico ha sido eliminado." });
         } catch (error) {
             console.error(error);
@@ -157,7 +157,7 @@ export default function HistoricalPaymentsPage() {
         }
 
         setIsSubmitting(true);
-        const firestore = db();
+        const firestore = db;
         try {
             const batch = writeBatch(firestore);
             const monthsToGenerate = differenceInCalendarMonths(endDate, startDate) + 1;
@@ -418,6 +418,8 @@ export default function HistoricalPaymentsPage() {
     );
 }
     
+    
+
     
 
     
