@@ -424,8 +424,9 @@ export default function UnifiedPaymentsPage() {
                             </div>
                         )}
                         <div className="space-y-2 md:col-span-2">
-                             <Label htmlFor="reference">Referencia (Últimos 6 dígitos o más)</Label>
+                             <Label htmlFor="reference">Referencia</Label>
                              <Input id="reference" value={reference} onChange={(e) => setReference(e.target.value.replace(/\D/g, ''))} disabled={loading}/>
+                             <p className="text-xs text-muted-foreground">Últimos 6 dígitos, incluso si comienzan con cero.</p>
                         </div>
                     </CardContent>
                 </Card>
@@ -540,3 +541,5 @@ export default function UnifiedPaymentsPage() {
         </div>
     );
 }
+
+    
