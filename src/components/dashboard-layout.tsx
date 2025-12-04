@@ -161,7 +161,7 @@ const CustomHeader = ({ ownerData, userRole }: { ownerData: any, userRole: strin
     };
 
     const handleLogout = async () => {
-        await signOut(auth());
+        await signOut(auth);
         router.push('/');
     };
 
@@ -357,13 +357,17 @@ function DashboardLayoutContent({
   );
 }
 
-export function DashboardLayout(props: {
+export function DashboardLayout({
+  children,
+  ownerData,
+  userRole,
+  navItems,
+}: {
   children: React.ReactNode;
   ownerData: any;
   userRole: string | null;
   navItems: NavItem[];
 }) {
-  const { children, navItems } = props;
   return (
     <SidebarProvider>
       <DashboardLayoutContent navItems={navItems}>
