@@ -38,7 +38,7 @@ function WelcomePageContent() {
         {loading ? (
           <Skeleton className="w-24 h-24 rounded-full mx-auto mb-6" />
         ) : (
-          <div className="w-24 h-24 mx-auto mb-6 bg-white rounded-full flex items-center justify-center overflow-hidden p-1">
+          <div className="w-24 h-24 mx-auto mb-6 rounded-full flex items-center justify-center overflow-hidden">
             <Avatar className="w-full h-full">
               <AvatarImage src={logoUrl || ''} alt="Company Logo" className="object-contain" />
               <AvatarFallback>VC</AvatarFallback>
