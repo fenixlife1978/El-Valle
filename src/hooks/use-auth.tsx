@@ -45,31 +45,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [activeRate, setActiveRate] = useState<ExchangeRate | null>(null);
     const [bcvLogoUrl, setBcvLogoUrl] = useState<string | null>(null);
 
-    const { toast } = useToast();
-
     useEffect(() => {
         let ownerUnsubscribe: (() => void) | undefined;
 
-        const unsubscribeAuth = onAuthStateChanged(auth(), async (firebaseUser) => {
+        const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
             if (ownerUnsubscribe) {
                 ownerUnsubscribe();
             }
 
             if (firebaseUser) {
-                setUser(firebaseUser);
                 const isAdministrator = firebaseUser.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
                 const userRole = isAdministrator ? 'administrador' : 'propietario';
                 const userDocId = isAdministrator ? ADMIN_USER_ID : firebaseUser.uid;
+
+                setUser(firebaseUser);
                 setRole(userRole);
 
-                // Start listening to the user document
-                const userDocRef = doc(db(), 'owners', userDocId);
+                if (isAdministrator) {
+                    await ensureAdminProfile();
+                } else {
+                    await ensureOwnerProfile(firebaseUser);
+                }
+
+                const userDocRef = doc(db, 'owners', userDocId);
                 ownerUnsubscribe = onSnapshot(userDocRef, (snapshot) => {
                     if (snapshot.exists()) {
                         setOwnerData({ id: snapshot.id, ...snapshot.data() });
                     } else {
-                        // The profile might not exist yet, especially on first login.
-                        // The login/sync logic should handle creation.
                         setOwnerData(null);
                     }
                     setLoading(false);
@@ -87,7 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
         });
 
-        const settingsRef = doc(db(), 'config', 'mainSettings');
+        const settingsRef = doc(db, 'config', 'mainSettings');
         const settingsUnsubscribe = onSnapshot(settingsRef, (docSnap) => {
             if (docSnap.exists()) {
                 const settingsData = docSnap.data();
@@ -114,7 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 ownerUnsubscribe();
             }
         };
-    }, [toast]);
+    }, []);
 
     const value = {
         user,

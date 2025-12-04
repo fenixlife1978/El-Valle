@@ -33,7 +33,7 @@ export default function ForgotPasswordPage() {
 
         setLoading(true);
         try {
-            await sendPasswordResetEmail(auth(), email);
+            await sendPasswordResetEmail(auth, email);
             toast({
                 title: 'Correo Enviado',
                 description: 'Se ha enviado un enlace para restablecer su contraseña a su correo electrónico.',
@@ -94,5 +94,3 @@ export default function ForgotPasswordPage() {
         </main>
     );
 }
-
-    

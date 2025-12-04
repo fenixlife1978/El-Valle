@@ -9,7 +9,7 @@ const ADMIN_EMAIL = 'vallecondo@gmail.com';
 
 // This function now returns a boolean indicating if the profile existed before the check.
 export const ensureAdminProfile = async (showToast?: (options: any) => void): Promise<boolean> => {
-    const firestore = db();
+    const firestore = db;
     const adminRef = doc(firestore, "owners", ADMIN_USER_ID);
     
     try {
@@ -57,7 +57,7 @@ export const ensureOwnerProfile = async (user: User, showToast?: (options: any) 
         return 'checked';
     }
 
-    const firestore = db();
+    const firestore = db;
     const ownerRefByUID = doc(firestore, "owners", user.uid);
 
     try {

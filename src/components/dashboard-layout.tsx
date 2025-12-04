@@ -140,7 +140,7 @@ const CustomHeader = ({ ownerData, userRole }: { ownerData: any, userRole: strin
 
     React.useEffect(() => {
         if (!ownerData?.id) return;
-        const q = query(collection(db(), `owners/${ownerData.id}/notifications`), orderBy('createdAt', 'desc'));
+        const q = query(collection(db, `owners/${ownerData.id}/notifications`), orderBy('createdAt', 'desc'));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const notifs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Notification));
             setNotifications(notifs);
@@ -152,9 +152,9 @@ const CustomHeader = ({ ownerData, userRole }: { ownerData: any, userRole: strin
 
     const handleMarkAllRead = async () => {
         if (!ownerData?.id) return;
-        const batch = writeBatch(db());
+        const batch = writeBatch(db);
         notifications.filter(n => !n.read).forEach(n => {
-            const notifRef = doc(db(), `owners/${ownerData.id}/notifications/${n.id}`);
+            const notifRef = doc(db, `owners/${ownerData.id}/notifications/${n.id}`);
             batch.update(notifRef, { read: true });
         });
         await batch.commit();
