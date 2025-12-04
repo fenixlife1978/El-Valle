@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -10,7 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { collection, onSnapshot, addDoc, doc, deleteDoc, serverTimestamp, orderBy, query, Timestamp, updateDoc, writeBatch, where, getDocs } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+// Asumo que db es la instancia de Firestore, por lo que la importación no tiene cambios.
+import { db } from '@/lib/firebase'; 
 import { PlusCircle, Trash2, Loader2, ListPlus, XCircle, BarChart3, Users, CheckSquare, CalendarIcon, Edit, Play, Lock, Timer, ArrowLeft } from 'lucide-react';
 import { format, parse } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -83,7 +82,8 @@ export default function SurveysPage() {
     const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
     
     useEffect(() => {
-        const q = query(collection(db(), "surveys"), orderBy("createdAt", "desc"));
+        // CORRECCIÓN 1: Se usa 'db' en lugar de 'db()'
+        const q = query(collection(db, "surveys"), orderBy("createdAt", "desc"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const surveysData = snapshot.docs.map(doc => ({
                 id: doc.id,
@@ -216,7 +216,8 @@ export default function SurveysPage() {
         }
         
         setIsSubmitting(true);
-        const firestore = db();
+        // La importación de 'db' ya apunta a la instancia, no necesita ser llamada.
+        const firestore = db; 
         try {
             const finalQuestions = questions.map(q => ({
                 id: q.id,
@@ -281,7 +282,8 @@ export default function SurveysPage() {
     const handleDeleteSurvey = async () => {
         if (!surveyToDelete) return;
         try {
-            await deleteDoc(doc(db(), "surveys", surveyToDelete.id));
+            // CORRECCIÓN 2: Se usa 'db' en lugar de 'db()'
+            await deleteDoc(doc(db, "surveys", surveyToDelete.id)); 
             toast({ title: 'Encuesta Eliminada' });
         } catch (error) {
             console.error("Error deleting survey:", error);
@@ -332,8 +334,8 @@ export default function SurveysPage() {
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent className="flex-grow space-y-4">
-                                     <div className="flex items-center gap-2 text-sm font-semibold">
-                                        <Users className="h-4 w-4"/> Participantes Totales: {survey.totalVotes || 0}
+                                       <div className="flex items-center gap-2 text-sm font-semibold">
+                                         <Users className="h-4 w-4"/> Participantes Totales: {survey.totalVotes || 0}
                                     </div>
                                     <Separator />
                                     <div className="space-y-6">
@@ -365,27 +367,27 @@ export default function SurveysPage() {
                                 </CardContent>
                                 <CardFooter className="border-t pt-4 flex gap-2">
                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="flex-1"
-                                        disabled={status === 'Cerrada'}
-                                        onClick={() => handleEditSurvey(survey)}
+                                         variant="outline"
+                                         size="sm"
+                                         className="flex-1"
+                                         disabled={status === 'Cerrada'}
+                                         onClick={() => handleEditSurvey(survey)}
                                     >
-                                        <Edit className="mr-2 h-4 w-4" />
-                                        Editar
-                                    </Button>
-                                    <Button
-                                        variant="destructive"
-                                        size="sm"
-                                        className="flex-1"
-                                        onClick={() => {
-                                            setSurveyToDelete(survey);
-                                            setIsDeleteConfirmationOpen(true);
-                                        }}
+                                         <Edit className="mr-2 h-4 w-4" />
+                                         Editar
+                                     </Button>
+                                     <Button
+                                         variant="destructive"
+                                         size="sm"
+                                         className="flex-1"
+                                         onClick={() => {
+                                             setSurveyToDelete(survey);
+                                             setIsDeleteConfirmationOpen(true);
+                                         }}
                                     >
-                                        <Trash2 className="mr-2 h-4 w-4" />
-                                        Eliminar
-                                    </Button>
+                                         <Trash2 className="mr-2 h-4 w-4" />
+                                         Eliminar
+                                     </Button>
                                 </CardFooter>
                             </Card>
                         )
@@ -444,29 +446,29 @@ export default function SurveysPage() {
                             <Label className="text-lg font-semibold">Preguntas</Label>
                             {questions.map((q, qIndex) => (
                                 <Card key={q.id} className="bg-muted/50 p-4">
-                                     <div className="flex justify-between items-center mb-4">
-                                        <h4 className="font-semibold">Pregunta {qIndex + 1}</h4>
-                                        <Button variant="ghost" size="icon" onClick={() => removeQuestion(q.id)} disabled={questions.length <= 1}>
-                                            <Trash2 className="h-5 w-5 text-destructive" />
-                                        </Button>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Input value={q.questionText} onChange={e => handleQuestionTextChange(q.id, e.target.value)} placeholder="Texto de la pregunta..." />
-                                    </div>
-                                    <div className="space-y-2 mt-4 pl-4 border-l-2">
-                                        <Label>Opciones</Label>
-                                         {q.options.map((option, optIndex) => (
-                                            <div key={option.id} className="flex items-center gap-2">
-                                                <Input value={option.text} onChange={e => handleOptionChange(q.id, option.id, e.target.value)} placeholder={`Opción ${optIndex + 1}`} />
-                                                <Button variant="ghost" size="icon" onClick={() => removeOption(q.id, option.id)} disabled={q.options.length <= 2}>
-                                                    <XCircle className="h-5 w-5 text-destructive/70" />
-                                                </Button>
-                                            </div>
-                                        ))}
-                                        <Button variant="outline" size="sm" onClick={() => addOption(q.id)}>
-                                            <ListPlus className="mr-2 h-4 w-4" /> Añadir Opción
-                                        </Button>
-                                    </div>
+                                       <div className="flex justify-between items-center mb-4">
+                                            <h4 className="font-semibold">Pregunta {qIndex + 1}</h4>
+                                            <Button variant="ghost" size="icon" onClick={() => removeQuestion(q.id)} disabled={questions.length <= 1}>
+                                                <Trash2 className="h-5 w-5 text-destructive" />
+                                            </Button>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Input value={q.questionText} onChange={e => handleQuestionTextChange(q.id, e.target.value)} placeholder="Texto de la pregunta..." />
+                                        </div>
+                                        <div className="space-y-2 mt-4 pl-4 border-l-2">
+                                            <Label>Opciones</Label>
+                                             {q.options.map((option, optIndex) => (
+                                                <div key={option.id} className="flex items-center gap-2">
+                                                    <Input value={option.text} onChange={e => handleOptionChange(q.id, option.id, e.target.value)} placeholder={`Opción ${optIndex + 1}`} />
+                                                    <Button variant="ghost" size="icon" onClick={() => removeOption(q.id, option.id)} disabled={q.options.length <= 2}>
+                                                        <XCircle className="h-5 w-5 text-destructive/70" />
+                                                    </Button>
+                                                </div>
+                                            ))}
+                                            <Button variant="outline" size="sm" onClick={() => addOption(q.id)}>
+                                                <ListPlus className="mr-2 h-4 w-4" /> Añadir Opción
+                                            </Button>
+                                        </div>
                                 </Card>
                             ))}
                              <Button variant="secondary" onClick={addQuestion}>
@@ -501,7 +503,3 @@ export default function SurveysPage() {
         </div>
     );
 }
-
-    
-
-    
