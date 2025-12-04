@@ -475,10 +475,9 @@ export default function SettingsPage() {
                         </CardHeader>
                         <CardContent className="space-y-4">
                              <div className="flex items-center gap-6">
-                                <Avatar className="w-24 h-24">
-                                   <AvatarImage src={logoPreview || ''} alt="Logo" />
-                                   <AvatarFallback>Logo</AvatarFallback>
-                                </Avatar>
+                                 <div className="w-24 h-24 rounded-full bg-white flex items-center justify-center overflow-hidden border p-1">
+                                    {logoPreview && <img src={logoPreview} alt="Company Logo Preview" className="w-full h-full object-contain" />}
+                                 </div>
                                 <div className="space-y-2">
                                      <Label htmlFor="logo-upload">Logo de la Empresa</Label>
                                      <div className="flex items-center gap-2">
@@ -522,10 +521,9 @@ export default function SettingsPage() {
                         </CardHeader>
                         <CardContent>
                             <div className="flex items-center gap-6">
-                                <Avatar className="w-24 h-24">
-                                    <AvatarImage src={bcvLogoPreview || ''} alt="BCV Logo Preview" />
-                                    <AvatarFallback>BCV</AvatarFallback>
-                                </Avatar>
+                                <div className="w-24 h-24 rounded-full bg-white flex items-center justify-center overflow-hidden border p-1">
+                                    {bcvLogoPreview && <img src={bcvLogoPreview} alt="BCV Logo Preview" className="w-full h-full object-contain" />}
+                                </div>
                                 <div className="space-y-2">
                                      <Label htmlFor="bcv-logo-upload">Logo de Tasa BCV</Label>
                                      <div className="flex items-center gap-2">
@@ -595,44 +593,42 @@ export default function SettingsPage() {
                             </div>
                             <div className="space-y-2">
                                 <Label>Historial de Tasas</Label>
-                                <div className="border rounded-md max-h-64 overflow-y-auto">
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead>Fecha</TableHead>
-                                                <TableHead>Tasa (Bs.)</TableHead>
-                                                <TableHead className="text-right">Acciones</TableHead>
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Fecha</TableHead>
+                                            <TableHead>Tasa (Bs.)</TableHead>
+                                            <TableHead className="text-right">Acciones</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {exchangeRates.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(rate => (
+                                            <TableRow key={rate.id} data-state={rate.active ? 'selected' : 'unselected'}>
+                                                <TableCell>{format(parseISO(rate.date), "dd/MM/yyyy")}</TableCell>
+                                                <TableCell className={cn(rate.active && "font-bold text-primary")}>{rate.rate.toFixed(2)}</TableCell>
+                                                <TableCell className="text-right">
+                                                    <DropdownMenu>
+                                                        <DropdownMenuTrigger asChild>
+                                                            <Button variant="ghost" className="h-8 w-8 p-0">
+                                                                <span className="sr-only">Abrir menú</span>
+                                                                <MoreHorizontal className="h-4 w-4" />
+                                                            </Button>
+                                                        </DropdownMenuTrigger>
+                                                        <DropdownMenuContent align="end">
+                                                            <DropdownMenuItem onClick={() => handleActivateRate(rate)} disabled={rate.active}>
+                                                                {rate.active ? 'Activa' : 'Activar'}
+                                                            </DropdownMenuItem>
+                                                            <DropdownMenuItem onClick={() => openEditRateDialog(rate)}>
+                                                                <Edit className="mr-2 h-4 w-4" />
+                                                                Editar
+                                                            </DropdownMenuItem>
+                                                        </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                                </TableCell>
                                             </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {exchangeRates.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(rate => (
-                                                <TableRow key={rate.id} data-state={rate.active ? 'selected' : 'unselected'}>
-                                                    <TableCell>{format(parseISO(rate.date), "dd/MM/yyyy")}</TableCell>
-                                                    <TableCell className={cn(rate.active && "font-bold text-primary")}>{rate.rate.toFixed(2)}</TableCell>
-                                                    <TableCell className="text-right">
-                                                        <DropdownMenu>
-                                                            <DropdownMenuTrigger asChild>
-                                                                <Button variant="ghost" className="h-8 w-8 p-0">
-                                                                    <span className="sr-only">Abrir menú</span>
-                                                                    <MoreHorizontal className="h-4 w-4" />
-                                                                </Button>
-                                                            </DropdownMenuTrigger>
-                                                            <DropdownMenuContent align="end">
-                                                                <DropdownMenuItem onClick={() => handleActivateRate(rate)} disabled={rate.active}>
-                                                                    {rate.active ? 'Activa' : 'Activar'}
-                                                                </DropdownMenuItem>
-                                                                <DropdownMenuItem onClick={() => openEditRateDialog(rate)}>
-                                                                    <Edit className="mr-2 h-4 w-4" />
-                                                                    Editar
-                                                                </DropdownMenuItem>
-                                                            </DropdownMenuContent>
-                                                        </DropdownMenu>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                </div>
+                                        ))}
+                                    </TableBody>
+                                </Table>
                             </div>
                         </CardContent>
                     </Card>
