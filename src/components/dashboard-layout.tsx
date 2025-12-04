@@ -362,7 +362,6 @@ export function DashboardLayout(props: {
   ownerData: any;
   userRole: string | null;
   navItems: NavItem[];
-  params?: any;
 }) {
   const { children, navItems } = props;
   return (
