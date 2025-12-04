@@ -39,10 +39,7 @@ function WelcomePageContent() {
           <Skeleton className="w-24 h-24 rounded-full mx-auto mb-6" />
         ) : (
           <div className="w-24 h-24 mx-auto mb-6 rounded-full flex items-center justify-center overflow-hidden bg-white p-1">
-            <Avatar className="w-full h-full">
-              <AvatarImage src={logoUrl || ''} alt="Company Logo" className="object-contain" />
-              <AvatarFallback>VC</AvatarFallback>
-            </Avatar>
+             <AvatarImage src={logoUrl || ''} alt="Company Logo" className="object-contain" />
           </div>
         )}
         <h1 className="text-4xl font-bold font-headline text-primary">Bienvenid@ a VALLECONDO</h1>
@@ -58,5 +55,3 @@ function WelcomePageContent() {
 export default function WelcomePage() {
     return <WelcomePageContent />;
 }
-
-    
