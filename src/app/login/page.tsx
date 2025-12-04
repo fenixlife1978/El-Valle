@@ -138,9 +138,10 @@ function LoginPage() {
                 {loadingLogo ? (
                     <Skeleton className="w-20 h-20 rounded-full mx-auto" />
                 ) : (
-                    <div className="w-20 h-20 mx-auto rounded-full flex items-center justify-center overflow-hidden bg-white p-1">
+                    <Avatar className="w-20 h-20 mx-auto bg-white p-1">
                         <AvatarImage src={logoUrl || ''} alt="Company Logo" className="object-contain" />
-                    </div>
+                        <AvatarFallback>VC</AvatarFallback>
+                    </Avatar>
                 )}
             </div>
             <Card className="w-full max-w-sm">
