@@ -21,7 +21,7 @@ type ExchangeRate = {
 };
 
 export type AuthContextType = {
-    user: User | null | undefined;
+    user: User | null;
     ownerData: any | null;
     role: string | null;
     loading: boolean;
@@ -58,35 +58,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (firebaseUser) {
                 setUser(firebaseUser);
                 const isAdministrator = firebaseUser.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+                const userRole = isAdministrator ? 'administrador' : 'propietario';
+                const userDocId = isAdministrator ? ADMIN_USER_ID : firebaseUser.uid;
+                setRole(userRole);
 
-                try {
-                    let userDocId: string;
-                    if (isAdministrator) {
-                        setRole('administrador');
-                        await ensureAdminProfile(toast); // Ensure profile exists
-                        userDocId = ADMIN_USER_ID;
+                // Start listening to the user document
+                const userDocRef = doc(db(), 'owners', userDocId);
+                ownerUnsubscribe = onSnapshot(userDocRef, (snapshot) => {
+                    if (snapshot.exists()) {
+                        setOwnerData({ id: snapshot.id, ...snapshot.data() });
                     } else {
-                        setRole('propietario');
-                        await ensureOwnerProfile(firebaseUser, toast); // Ensure profile exists
-                        userDocId = firebaseUser.uid;
+                        // The profile might not exist yet, especially on first login.
+                        // The login/sync logic should handle creation.
+                        setOwnerData(null);
                     }
-
-                    const userDocRef = doc(db(), 'owners', userDocId);
-                    ownerUnsubscribe = onSnapshot(userDocRef, (snapshot) => {
-                        if (snapshot.exists()) {
-                            setOwnerData({ id: snapshot.id, ...snapshot.data() });
-                        } else {
-                            // This can happen briefly during profile creation/linking
-                            setOwnerData(null);
-                        }
-                        setLoading(false); // Stop loading once we have a definitive answer for ownerData
-                    });
-
-                } catch (error) {
-                    console.error("Failed to ensure user profile:", error);
-                    toast({variant: 'destructive', title: 'Error de Sincronización', description: 'No se pudo verificar tu perfil de usuario.'});
                     setLoading(false);
-                }
+                }, (error) => {
+                    console.error("Error listening to owner document:", error);
+                    setOwnerData(null);
+                    setLoading(false);
+                });
 
             } else {
                 setUser(null);
