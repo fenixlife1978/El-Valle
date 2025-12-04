@@ -475,7 +475,7 @@ export default function SettingsPage() {
                         </CardHeader>
                         <CardContent className="space-y-4">
                              <div className="flex items-center gap-6">
-                                <div className="w-24 h-24 rounded-full bg-muted flex items-center justify-center overflow-hidden border">
+                                <div className="w-24 h-24 rounded-full bg-white flex items-center justify-center overflow-hidden border p-1">
                                    {logoPreview ? <img src={logoPreview} alt="Logo" className="w-full h-full object-contain" /> : <span className="text-sm text-muted-foreground">Logo</span>}
                                 </div>
                                 <div className="space-y-2">
@@ -521,7 +521,7 @@ export default function SettingsPage() {
                         </CardHeader>
                         <CardContent>
                             <div className="flex items-center gap-6">
-                                <div className="w-24 h-24 rounded-full bg-muted flex items-center justify-center overflow-hidden border">
+                                <div className="w-24 h-24 rounded-full bg-white flex items-center justify-center overflow-hidden border p-1">
                                     {bcvLogoPreview ? <img src={bcvLogoPreview} alt="BCV Logo Preview" className="w-full h-full object-contain" /> : <span className="text-sm text-muted-foreground">BCV Logo</span>}
                                 </div>
                                 <div className="space-y-2">

@@ -106,8 +106,8 @@ const BCVRateCard = ({
     <Card className="mb-6">
       <CardContent className="p-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-full bg-background flex items-center justify-center overflow-hidden border-2 border-border">
-          <BCVIcon src={logoUrl ?? undefined} className="w-full h-full object-cover" />
+          <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center overflow-hidden border p-1">
+            <BCVIcon src={logoUrl ?? undefined} className="w-full h-full object-contain" />
           </div>
           <div>
             <p className="text-sm text-muted-foreground">Tasa Oficial BCV</p>
@@ -286,8 +286,8 @@ function DashboardLayoutContent({
       <Sidebar className="hidden sm:block">
         <SidebarHeader>
           <div className="flex items-center gap-2 p-2">
-            <div className="w-8 h-8 rounded-md bg-white overflow-hidden flex items-center justify-center">
-                {companyInfo?.logo ? <img src={companyInfo.logo} alt="Logo" className="w-full h-full object-contain"/> : <Building2 className="w-6 h-6 text-primary" />}
+            <div className="w-8 h-8 rounded-full bg-white overflow-hidden flex items-center justify-center p-1">
+                {companyInfo?.logo ? <img src={companyInfo.logo} alt="Logo" className="w-full h-full object-contain"/> : <Building2 className="w-5 h-5 text-primary" />}
             </div>
             <span className="font-semibold text-lg font-headline truncate">{companyInfo?.name || 'Cargando...'}</span>
           </div>
