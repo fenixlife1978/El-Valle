@@ -100,7 +100,6 @@ export default function OwnerDashboardPage() {
     useEffect(() => {
         if (loading || !user) return;
         
-        // CORRECCIÓN: Se eliminan los paréntesis de 'db'
         const settingsRef = doc(db, 'config', 'mainSettings');
         const settingsUnsubscribe = onSnapshot(settingsRef, (settingsSnap) => {
             if (settingsSnap.exists()) {
@@ -117,7 +116,6 @@ export default function OwnerDashboardPage() {
             }
         });
         
-        // CORRECCIÓN: Se eliminan los paréntesis de 'db'
         const debtsQuery = query(collection(db, "debts"), where("ownerId", "==", user.uid));
         const debtsUnsubscribe = onSnapshot(debtsQuery, (snapshot) => {
             const debtsData: Debt[] = [];
@@ -126,7 +124,6 @@ export default function OwnerDashboardPage() {
             setLoadingData(false);
         });
 
-        // CORRECCIÓN: Se eliminan los paréntesis de 'db'
         const paymentsQuery = query(
             collection(db, "payments"), 
             where("beneficiaryIds", "array-contains", user.uid)
@@ -174,7 +171,6 @@ export default function OwnerDashboardPage() {
     const handleFeedback = async (response: 'liked' | 'disliked') => {
         if (!user) return;
         try {
-            // CORRECCIÓN: Se eliminan los paréntesis de 'db'
             await addDoc(collection(db, 'app_feedback'), {
                 ownerId: user.uid,
                 response,
@@ -211,7 +207,6 @@ export default function OwnerDashboardPage() {
           
           const ownerUnitSummary = (beneficiary.street && beneficiary.house) ? `${beneficiary.street} - ${beneficiary.house}` : "Propiedad no especificada";
     
-          // CORRECCIÓN: Se eliminan los paréntesis de 'db'
           const paidDebtsQuery = query(collection(db, "debts"), where("paymentId", "==", payment.id), where("ownerId", "==", user.uid));
           const paidDebtsSnapshot = await getDocs(paidDebtsQuery);
           const paidDebts = paidDebtsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as Debt).sort((a, b) => a.year - b.year || a.month - b.month);
@@ -251,7 +246,6 @@ export default function OwnerDashboardPage() {
         const { payment, beneficiary, paidDebts, previousBalance, currentBalance, qrCodeUrl, receiptNumber } = data;
         
         const pdfDoc = new jsPDF();
-        autoTable(pdfDoc); // Apply autoTable plugin
         const pageWidth = pdfDoc.internal.pageSize.getWidth();
         const margin = 14;
     
@@ -297,11 +291,11 @@ export default function OwnerDashboardPage() {
         });
     
         if (paidDebts.length > 0) {
-            (pdfDoc as any).autoTable({ startY: startY, head: [['Período', 'Concepto', 'Monto ($)', 'Monto Pagado (Bs)']], body: tableBody, theme: 'striped', headStyles: { fillColor: [44, 62, 80], textColor: 255 }, styles: { fontSize: 9, cellPadding: 2.5 } });
+            autoTable(pdfDoc, { startY: startY, head: [['Período', 'Concepto', 'Monto ($)', 'Monto Pagado (Bs)']], body: tableBody, theme: 'striped', headStyles: { fillColor: [44, 62, 80], textColor: 255 }, styles: { fontSize: 9, cellPadding: 2.5 } });
             startY = (pdfDoc as any).lastAutoTable.finalY;
         } else {
             totalPaidInConcepts = beneficiary.amount;
-            (pdfDoc as any).autoTable({ startY: startY, head: [['Concepto', 'Monto Pagado (Bs)']], body: [['Abono a Saldo a Favor', `Bs. ${formatToTwoDecimals(beneficiary.amount)}`]], theme: 'striped', headStyles: { fillColor: [44, 62, 80], textColor: 255 }, styles: { fontSize: 9, cellPadding: 2.5 } });
+            autoTable(pdfDoc, { startY: startY, head: [['Concepto', 'Monto Pagado (Bs)']], body: [['Abono a Saldo a Favor', `Bs. ${formatToTwoDecimals(beneficiary.amount)}`]], theme: 'striped', headStyles: { fillColor: [44, 62, 80], textColor: 255 }, styles: { fontSize: 9, cellPadding: 2.5 } });
             startY = (pdfDoc as any).lastAutoTable.finalY;
         }
         startY += 8;
@@ -312,7 +306,7 @@ export default function OwnerDashboardPage() {
             ['Total Abonado en Deudas:', `Bs. ${formatToTwoDecimals(totalPaidInConcepts)}`],
             ['Saldo a Favor Actual:', `Bs. ${formatToTwoDecimals(currentBalance)}`],
         ];
-        (pdfDoc as any).autoTable({ startY: startY, body: summaryData, theme: 'plain', styles: { fontSize: 9, fontStyle: 'bold' }, columnStyles: { 0: { halign: 'right' }, 1: { halign: 'right'} } });
+        autoTable(pdfDoc, { startY: startY, body: summaryData, theme: 'plain', styles: { fontSize: 9, fontStyle: 'bold' }, columnStyles: { 0: { halign: 'right' }, 1: { halign: 'right'} } });
         startY = (pdfDoc as any).lastAutoTable.finalY + 10;
         
         const totalLabel = "TOTAL PAGADO:";

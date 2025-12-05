@@ -825,7 +825,6 @@ export default function DebtManagementPage() {
 
     const handleExportPDF = () => {
         const doc = new jsPDF();
-        autoTable(doc); // Apply autoTable plugin
         const pageHeight = doc.internal.pageSize.getHeight();
         const pageWidth = doc.internal.pageSize.getWidth();
         const margin = 14;
@@ -851,7 +850,7 @@ export default function DebtManagementPage() {
         doc.setFont('helvetica', 'bold');
         doc.text("Lista de Deudas de Propietarios", pageWidth / 2, margin + 45, { align: 'center' });
 
-        (doc as any).autoTable({
+        autoTable(doc, {
             head: [['Propietario', 'Ubicación', 'Deuda Pendiente (Bs.)', 'Saldo a Favor (Bs.)']],
             body: filteredOwners.map(o => {
                 const ownerProperty = (o.properties && o.properties.length > 0) ? o.properties.map(p => `${p.street} - ${p.house}`).join(', ') : 'N/A';
@@ -1266,7 +1265,3 @@ export default function DebtManagementPage() {
     // Fallback while loading or if view is invalid
     return null;
 }
-
-    
-
-    
