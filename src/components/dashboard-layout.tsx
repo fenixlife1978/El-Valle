@@ -82,13 +82,11 @@ const BCVRateCard = ({
   date,
   loading,
   logoUrl,
-  frame,
 }: {
   rate: number;
   date: string;
   loading: boolean;
   logoUrl: string | null;
-  frame: keyof typeof frameStyles;
 }) => {
   if (loading) {
     return <Skeleton className="h-24 w-full" />;
@@ -102,7 +100,7 @@ const BCVRateCard = ({
     <Card className="mb-6">
       <CardContent className="p-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
-            <div className={cn("w-16 h-16 bg-white flex items-center justify-center overflow-hidden border p-1", frameStyles[frame])}>
+            <div className={cn("w-16 h-16 bg-white flex items-center justify-center overflow-hidden border p-1", "rounded-full")}>
                 {logoUrl && <img src={logoUrl} alt="BCV Logo" className="w-full h-full object-contain" />}
             </div>
           <div>
@@ -254,7 +252,7 @@ function DashboardLayoutContent({
   navItems: NavItem[];
 }) {
   const { isMobile, setOpenMobile } = useSidebar();
-  const { ownerData, role: userRole, companyInfo, activeRate, bcvLogoUrl, companyLogoFrame, bcvLogoFrame, loading } = useAuth();
+  const { ownerData, role: userRole, companyInfo, activeRate, bcvLogoUrl, companyLogoFrame, loading } = useAuth();
   const pathname = usePathname();
 
   const handleLinkClick = () => {
@@ -344,7 +342,7 @@ function DashboardLayoutContent({
       <SidebarInset>
         <CustomHeader ownerData={ownerData} userRole={userRole} />
         <main className="flex-1 p-4 md:p-8 bg-muted">
-            <BCVRateCard rate={activeRate?.rate || 0} date={activeRate?.date || new Date().toISOString()} loading={loading} logoUrl={bcvLogoUrl} frame={bcvLogoFrame as keyof typeof frameStyles || 'circle'} />
+            <BCVRateCard rate={activeRate?.rate || 0} date={activeRate?.date || new Date().toISOString()} loading={loading} logoUrl={bcvLogoUrl} />
             {children}
         </main>
         <footer className="bg-secondary text-secondary-foreground p-4 text-center text-sm">

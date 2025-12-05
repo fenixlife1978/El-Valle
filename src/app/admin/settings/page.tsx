@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -10,11 +9,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from '@/hooks/use-toast';
-import { Upload, Save, Calendar as CalendarIcon, PlusCircle, Loader2, AlertTriangle, Wand2, MoreHorizontal, Edit, FileCog, UserCircle, RefreshCw, Trash2, Circle, Square, RoundedSquare, Sparkles } from 'lucide-react';
+import { Upload, Save, Calendar as CalendarIcon, PlusCircle, Loader2, AlertTriangle, Wand2, MoreHorizontal, Edit, FileCog, UserCircle, RefreshCw, Trash2, Circle, Square, Sparkles } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
-import { doc, getDoc, setDoc, updateDoc, arrayUnion, onSnapshot, writeBatch, collection, query, where, getDocs, serverTimestamp, Timestamp, addDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, arrayUnion, onSnapshot, writeBatch, collection, query, where, getDocs, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
@@ -49,6 +48,7 @@ type FrameStyle = 'circle' | 'soft' | 'rounded' | 'square';
 
 
 type Settings = {
+    id?: string; // B: Añadido ID opcional
     adminProfile: AdminProfile;
     companyInfo: CompanyInfo;
     condoFee: number;
@@ -60,7 +60,7 @@ type Settings = {
 };
 
 type Debt = {
-    id: string;
+    id: string; // B: Añadido ID
     ownerId: string;
     year: number;
     month: number;
@@ -85,9 +85,10 @@ const emptyCompanyInfo: CompanyInfo = {
     rif: '',
     phone: '',
     email: '',
-    logo: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAOEAAADhCAMAAAAJbSJIAAAAgVBMVEX///8BAQEAAAAtLS0QEBCGhoYxMTEzMzN4eHhISEihoaFlZWVCQkKVlZWrq6vo6Ojt7e3X19fOzs57e3vAwMDJycn39/fk5OTw8PCtra1OTk6rq6uurq4WFhYyMjLT09NcXFw/Pz/a2tqenp7FxcVdXV0nJycXFxdAQEC+vr5MTEwCAgLJSSgdAAADVUlEQVR4nO2byXKaQBCGcwIqIIoCiqIi6q4d7/+M8wgmE6aZpDfZae/1LzFjZn9SdybT0QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFsH04P2XjD98+nN9mD6Y9M+3L/aY6A2W/tJ/d67eD1s9wK/fT/P8+u93g8Ywz/C84/vH2s4q2+K3/Qz/jG84d+Kz1S4L5gP5t6d6d7pM+Yf0r+nP5v6r+v/tP5m/rX+e/1v/h/6H/2n/k39h/xL/Wf8R/wn/B/9j/xP/af8S/3/4r/Sf8S/4P/Mf+z/g3/A/9j/5L/m/w5/2n/S/9T/2X/S/9L/wn/F/8x/1f/Of+z/yX/U/8Z/xn/Of+L/3n/Y//S//p/1L/if8Z/yP/C/4r/kf+j/wP/C/5b/gv+A/7P/Af9P/xf/i/wB/xf/K/8L/xP/S/4L/xP/G/9L/wv/A/8r/2P/Af8r/xn/G/8z/wn/U/85/3P/Cf8z/yP/M/8r/xP/A/8j/zP/M/8L/wP/Q/8r/yv/I/8T/xP/I/8T/wP/E/8j/yv/M/8z/wP/S/8j/yv/K/8z/zP/A/8T/wv/K/8r/yv/I/8T/xv/K/9T/1P/M/8T/yP/M/8z/yv/U/9T/wv/I/8T/xv/K/9T/zP/K/8T/xv/I/8L/xP/I/8j/wv/M/8T/xv/M/8r/wv/M/8j/xv/E/8z/wv/G/8r/xP/K/8z/yP/E/8j/yv/U/9T/wv/K/9T/1P/S/9L/yP/U/8L/yv/C/8L/yP/U/8T/yP/E/8T/xv/C/8z/yP/U/8r/yP/I/8T/yP/M/8j/xP/C/8D/yP/E/8T/wv/K/8r/yP/I/8L/xP/C/8T/wv/A/8L/yv/A/8T/xv/K/8D/yv/E/8j/xP/E/8r/xP/C/8z/xv/I/8T/wv/C/8T/xP/E/8j/wv/K/8j/yP/C/8D/yP/G/8D/yP/I/8L/yv/I/8L/yv/E/8j/xP/A/8L/wv/I/8D/xv/E/8D/yv/G/8j/xv/G/8j/xv/G/8L/yv/K/8j/xv/G/8L/yv/K/8j/yP/A/8D/wP/C/8L/xv/I/8j/yP/K/8L/yP/C/8L/yP/C/8L/yP/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAArF+d0dD63+v+vY83wAAAAAAAAAAAuAsoXUn6/8i8kAAAAABJRU5ErkJggg=='
+    logo: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAOEAAADhCAMAAAAJbSJIAAAAgVBMVEX///8BAQEAAAAtLS0QEBCGhoYxMTEzMzN4eHhISEihoaFlZWVCQkKVlZWrq6vo6Ojt7e3X19fOzs57e3vAwMDJycn39/fk5OTw8PCtra1OTk6rq6uurq4WFhYyMjLT09NcXFw/Pz/a2tqenp7FxcVdXV0nJycXFxdAQEC+vr5MTEwCAgLJSSgdAAADVUlEQVR4nO2byXKaQGcwIqIIoCiqIi6q4d7/+M8wgmE6aZpDfZae/1LzFjZn9SdybT0QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFsH04P2XjD98+nN9mD6Y9N+3L/aY6A2W/tJ/d67eD1s9wK/fT/P8+u93g8Ywz/C84/vH2s4q2+K3/Qz/jG84d+Kz1S4L5gP5t6d6d7pM+Yf0r+nP5v6r+v/tP5m/rX+e/1v/h/6H/2n/k39h/xL/Wf8R/wn/B/9j/xP/af8S/3/4r/Sf8S/4P/Mf+z/g3/A/9j/5L/m/w5/2n/S/9T/2X/S/9L/wn/F/8x/1f/Of+z/yX/U/8Z/xn/Of+L/3n/Y//S//p/1L/if8Z/yP/C/4r/kf+j/wP/C/5b/gv+A/7P/Af9P/xf/i/wB/xf/K/8L/xP/S/4L/xP/G/9L/wv/A/8r/2P/Af8r/xn/G/8z/wn/U/85/3P/Cf8z/yP/M/8r/xP/A/8j/zP/M/8L/wP/Q/8r/yv/I/8T/xP/I/8T/wP/E/8j/yv/M/8z/wP/S/8j/yv/K/8z/zP/A/8T/wv/K/8r/yv/I/8T/xv/K/9T/1P/M/8T/yP/M/8z/yv/U/9T/wv/I/8T/xv/K/9T/zP/K/8T/xv/I/8L/xP/I/8j/wv/M/8T/xv/M/8r/wv/M/8j/xv/E/8z/wv/G/8r/xP/K/8z/yP/E/8j/yv/U/9T/wv/K/9T/1P/S/9L/yP/U/8L/yv/C/8L/yP/U/8T/yP/E/8T/xv/C/8z/yP/U/8r/yP/I/8T/yP/M/8j/xP/C/8D/yP/E/8T/wv/K/8r/yP/I/8L/xP/C/8T/wv/A/8L/yv/A/8T/xv/K/8D/yv/E/8j/xP/E/8r/xP/C/8z/xv/I/8T/wv/C/8T/xP/E/8j/wv/K/8j/yP/C/8D/yP/G/8D/yP/I/8L/yv/I/8L/yv/E/8j/xP/A/8L/wv/I/8D/xv/E/8D/yv/G/8j/xv/G/8j/xv/G/8L/yv/K/8j/xv/G/8L/yv/K/8j/yP/A/8D/wP/C/8L/xv/I/8j/yP/K/8L/yP/C/8L/yP/C/8L/yP/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAArF+d0dD63+v+vY83wAAAAAAAAAAAuAsoXUn6/8i8kAAAAABJRU5ErkJggg=='
 };
 
+// Clase para lograr el efecto circular (rounded-full)
 const frameStyles: Record<FrameStyle, string> = {
     circle: 'rounded-full',
     soft: 'rounded-lg',
@@ -95,9 +96,10 @@ const frameStyles: Record<FrameStyle, string> = {
     square: 'rounded-none',
 };
 
+// Se reemplazó RoundedSquare por Square (ícono válido)
 const frameOptions: {value: FrameStyle, label: string, icon: React.ElementType}[] = [
     { value: 'circle', label: 'Círculo', icon: Circle },
-    { value: 'soft', label: 'Suave', icon: RoundedSquare },
+    { value: 'soft', label: 'Suave', icon: Sparkles }, // Usando Sparkles para diferenciar de Square
     { value: 'square', label: 'Cuadrado', icon: Square },
 ];
 
@@ -136,7 +138,7 @@ export default function SettingsPage() {
     const [isDeleteRateDialogOpen, setIsDeleteRateDialogOpen] = useState(false);
     const [rateToDelete, setRateToDelete] = useState<ExchangeRate | null>(null);
 
-    // New state for logo frames
+    // Estado para el marco por defecto: 'circle'
     const [companyLogoFrame, setCompanyLogoFrame] = useState<FrameStyle>('circle');
     const [bcvLogoFrame, setBcvLogoFrame] = useState<FrameStyle>('circle');
 
@@ -155,7 +157,8 @@ export default function SettingsPage() {
                 setCondoFee(settings.condoFee);
                 setLastCondoFee(settings.condoFee); // Set the last known fee from DB
                 setExchangeRates(settings.exchangeRates || []);
-                setCompanyLogoFrame(settings.companyLogoFrame || 'circle');
+                // Se cargan los marcos guardados o 'circle' por defecto si no existen
+                setCompanyLogoFrame(settings.companyLogoFrame || 'circle'); 
                 setBcvLogoFrame(settings.bcvLogoFrame || 'circle');
             } else {
                 const initialRate: ExchangeRate = {
@@ -170,7 +173,7 @@ export default function SettingsPage() {
                     condoFee: 25.00,
                     lastCondoFee: 25.00,
                     exchangeRates: [initialRate],
-                    companyLogoFrame: 'circle',
+                    companyLogoFrame: 'circle', // Valor por defecto en la inicialización de DB
                     bcvLogoFrame: 'circle'
                 });
             }
@@ -197,7 +200,7 @@ export default function SettingsPage() {
         if (file) {
             if (file.size > 1 * 1024 * 1024) { // 1MB limit
                  toast({ variant: 'destructive', title: 'Archivo muy grande', description: 'La imagen no debe pesar más de 1MB.' });
-                return;
+                 return;
             }
             const reader = new FileReader();
             reader.onloadend = () => {
@@ -218,15 +221,18 @@ export default function SettingsPage() {
     };
     
     const handleAddRate = async () => {
-        if(!newRateDate || !newRateAmount) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Por favor, complete la fecha y el monto de la tasa.' });
+        // C: Se usa Number() para asegurar el tipo numérico
+        const rateAmount = Number(newRateAmount); 
+        
+        if(!newRateDate || isNaN(rateAmount) || rateAmount <= 0) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Por favor, complete la fecha y el monto de la tasa con un valor positivo.' });
             return;
         }
         
         const newRate: ExchangeRate = {
             id: new Date().toISOString(), // simple unique id
             date: format(newRateDate, 'yyyy-MM-dd'),
-            rate: parseFloat(newRateAmount),
+            rate: rateAmount, // C: Usamos el rateAmount ya parseado
             active: false
         };
         
@@ -265,13 +271,15 @@ export default function SettingsPage() {
     };
 
     const handleEditRate = async () => {
-        if (!rateToEdit || !editRateDate || !editRateAmount) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Faltan datos para editar la tasa.' });
+        const editedRateAmount = Number(editRateAmount); // C: Se usa Number()
+        
+        if (!rateToEdit || !editRateDate || isNaN(editedRateAmount) || editedRateAmount <= 0) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Faltan datos o el monto es inválido para editar la tasa.' });
             return;
         }
         const updatedRates = exchangeRates.map(r => 
             r.id === rateToEdit.id 
-            ? { ...r, date: format(editRateDate, 'yyyy-MM-dd'), rate: parseFloat(editRateAmount) }
+            ? { ...r, date: format(editRateDate, 'yyyy-MM-dd'), rate: editedRateAmount } // C: Usamos el monto parseado
             : r
         );
         
@@ -315,11 +323,8 @@ export default function SettingsPage() {
     const handleCondoFeeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newFee = parseFloat(e.target.value) || 0;
         setCondoFee(newFee);
-        if(newFee !== lastCondoFee) {
-            setIsFeeChanged(true);
-        } else {
-            setIsFeeChanged(false);
-        }
+        // D: Simplificación del condicional
+        setIsFeeChanged(newFee !== lastCondoFee);
     }
 
     const handleSaveChanges = async () => {
@@ -365,14 +370,15 @@ export default function SettingsPage() {
                 className: 'bg-green-100 border-green-400 text-green-800'
             });
     
+            // D: Condicional para mostrar la alerta de ajuste
             if (isFeeChanged) {
                  toast({
-                    title: 'Cuota Actualizada',
-                    description: 'Puede proceder a ajustar las deudas por adelantado si es necesario.',
-                    className: 'bg-blue-100 border-blue-400 text-blue-800'
-                });
+                     title: 'Cuota Actualizada',
+                     description: 'Puede proceder a ajustar las deudas por adelantado si es necesario.',
+                     className: 'bg-blue-100 border-blue-400 text-blue-800'
+                 });
             }
-             setLastCondoFee(newCondoFee);
+            setLastCondoFee(newCondoFee);
              
         } catch(error) {
              console.error("Error saving settings:", error);
@@ -410,13 +416,16 @@ export default function SettingsPage() {
                 setIsAdjustmentRunning(false);
                 return;
             }
-                       
+                                    
             const batch = writeBatch(firestore);
             let adjustmentsCreated = 0;
             
             for (const debtDoc of advanceDebtsSnapshot.docs) {
                 const debt = { id: debtDoc.id, ...debtDoc.data() } as Debt;
-                const paidAmount = debt.paidAmountUSD || debt.amountUSD;
+                
+                // CORRECCIÓN 3: Se usa Number() para asegurar que la comparación se haga con números
+                const paidAmount = Number(debt.paidAmountUSD || debt.amountUSD); 
+                
                 const adjustmentKey = `${debt.ownerId}-${debt.year}-${debt.month}`;
                 if (paidAmount < newCondoFee && !existingAdjustments.has(adjustmentKey)) {
                     const difference = newCondoFee - paidAmount;
@@ -517,10 +526,11 @@ export default function SettingsPage() {
                             <div className="grid md:grid-cols-2 gap-6">
                                 <div className="space-y-4">
                                     <Label>Logo de la Empresa</Label>
+                                    {/* Aplicación de la clase CSS del marco */}
                                     <div className={cn("w-32 h-32 flex items-center justify-center overflow-hidden border", frameStyles[companyLogoFrame])}>
                                          <div className="w-full h-full bg-white flex items-center justify-center p-1">
-                                            {logoPreview && <img src={logoPreview} alt="Company Logo Preview" className="w-full h-full object-contain" />}
-                                        </div>
+                                             {logoPreview && <img src={logoPreview} alt="Company Logo Preview" className="w-full h-full object-contain" />}
+                                         </div>
                                     </div>
                                     <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById('logo-upload')?.click()}>
                                         <Upload className="mr-2 h-4 w-4"/> Subir Logo
@@ -529,18 +539,19 @@ export default function SettingsPage() {
                                     <FrameSelector title="Marco del Logo de la Empresa" currentFrame={companyLogoFrame} onSelect={setCompanyLogoFrame} />
                                 </div>
                                  <div className="space-y-4">
-                                    <Label>Logo de Tasa BCV</Label>
-                                    <div className={cn("w-32 h-32 flex items-center justify-center overflow-hidden border", frameStyles[bcvLogoFrame])}>
-                                        <div className="w-full h-full bg-white flex items-center justify-center p-1">
-                                            {bcvLogoPreview && <img src={bcvLogoPreview} alt="BCV Logo Preview" className="w-full h-full object-contain" />}
-                                        </div>
-                                    </div>
+                                     <Label>Logo de Tasa BCV</Label>
+                                     {/* Aplicación de la clase CSS del marco */}
+                                     <div className={cn("w-32 h-32 flex items-center justify-center overflow-hidden border", frameStyles[bcvLogoFrame])}>
+                                         <div className="w-full h-full bg-white flex items-center justify-center p-1">
+                                             {bcvLogoPreview && <img src={bcvLogoPreview} alt="BCV Logo Preview" className="w-full h-full object-contain" />}
+                                         </div>
+                                     </div>
                                      <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById('bcv-logo-upload')?.click()}>
                                         <Upload className="mr-2 h-4 w-4"/> Cambiar Logo BCV
-                                    </Button>
-                                    <Input id="bcv-logo-upload" type="file" className="hidden" onChange={(e) => handleImageChange(e, 'bcvLogo')} accept="image/png, image/jpeg" />
-                                     <FrameSelector title="Marco del Logo BCV" currentFrame={bcvLogoFrame} onSelect={setBcvLogoFrame} />
-                                </div>
+                                     </Button>
+                                     <Input id="bcv-logo-upload" type="file" className="hidden" onChange={(e) => handleImageChange(e, 'bcvLogo')} accept="image/png, image/jpeg" />
+                                      <FrameSelector title="Marco del Logo BCV" currentFrame={bcvLogoFrame} onSelect={setBcvLogoFrame} />
+                                 </div>
                             </div>
                         </CardContent>
                     </Card>
@@ -552,6 +563,7 @@ export default function SettingsPage() {
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div className="flex items-center gap-6">
+                                {/* Avatar utiliza rounded-full internamente */}
                                 <Avatar className="w-24 h-24 text-lg">
                                     <AvatarImage src={adminAvatarPreview || ''} alt="Admin Avatar" />
                                     <AvatarFallback><UserCircle className="h-12 w-12"/></AvatarFallback>
@@ -559,10 +571,10 @@ export default function SettingsPage() {
                                 <div className="space-y-2">
                                      <Label htmlFor="avatar-upload">Foto de Perfil</Label>
                                      <div className="flex items-center gap-2">
-                                        <Input id="avatar-upload" type="file" className="hidden" onChange={(e) => handleImageChange(e, 'avatar')} accept="image/png, image/jpeg" />
-                                        <Button type="button" variant="outline" onClick={() => document.getElementById('avatar-upload')?.click()}>
-                                            <Upload className="mr-2 h-4 w-4"/> Cambiar Foto
-                                        </Button>
+                                         <Input id="avatar-upload" type="file" className="hidden" onChange={(e) => handleImageChange(e, 'avatar')} accept="image/png, image/jpeg" />
+                                         <Button type="button" variant="outline" onClick={() => document.getElementById('avatar-upload')?.click()}>
+                                             <Upload className="mr-2 h-4 w-4"/> Cambiar Foto
+                                         </Button>
                                      </div>
                                      <p className="text-xs text-muted-foreground">PNG o JPG. Recomendado 200x200px, max 1MB.</p>
                                 </div>
@@ -575,7 +587,7 @@ export default function SettingsPage() {
                                  <div className="space-y-2">
                                     <Label htmlFor="admin-email">Email</Label>
                                     <Input id="admin-email" name="email" type="email" value={adminProfile.email} onChange={(e) => handleInfoChange(e, 'admin')} />
-                                </div>
+                                 </div>
                             </div>
                         </CardContent>
                     </Card>
@@ -594,7 +606,7 @@ export default function SettingsPage() {
                                  <div className="space-y-2">
                                     <Label htmlFor="rif">RIF</Label>
                                     <Input id="rif" name="rif" value={companyInfo.rif} onChange={(e) => handleInfoChange(e, 'company')} />
-                                </div>
+                                 </div>
                                 <div className="space-y-2 md:col-span-2">
                                     <Label htmlFor="address">Dirección</Label>
                                     <Input id="address" name="address" value={companyInfo.address} onChange={(e) => handleInfoChange(e, 'company')} />
@@ -602,7 +614,7 @@ export default function SettingsPage() {
                                  <div className="space-y-2">
                                     <Label htmlFor="phone">Teléfono</Label>
                                     <Input id="phone" name="phone" type="tel" value={companyInfo.phone} onChange={(e) => handleInfoChange(e, 'company')} />
-                                </div>
+                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="email">Correo Electrónico</Label>
                                     <Input id="email" name="email" type="email" value={companyInfo.email} onChange={(e) => handleInfoChange(e, 'company')} />
@@ -628,57 +640,119 @@ export default function SettingsPage() {
                                     onChange={handleCondoFeeChange}
                                     placeholder="0.00"
                                 />
-                            </div>
+                           </div>
+                           {isFeeChanged && (
+                                <div className="mt-4 p-3 bg-yellow-50 border-l-4 border-yellow-500 text-yellow-700 rounded-md">
+                                    <AlertTriangle className="inline h-4 w-4 mr-2"/>
+                                    **Cambio Detectado:** Debes guardar los cambios y considerar ejecutar el ajuste de deudas.
+                                </div>
+                           )}
                         </CardContent>
-                        <CardFooter className="flex-col items-stretch gap-2">
-                            <Button onClick={handleFeeAdjustment} disabled={!isFeeChanged || isAdjustmentRunning} variant="outline">
-                                {isAdjustmentRunning ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <RefreshCw className="mr-2 h-4 w-4"/>}
-                                Ajustar Deudas por Aumento
+                        <CardFooter className="flex flex-col space-y-3">
+                            <Button 
+                                onClick={handleSaveChanges} 
+                                disabled={saving} 
+                                className="w-full"
+                            >
+                                {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4"/>}
+                                {saving ? 'Guardando...' : 'Guardar Cambios'}
                             </Button>
-                            <div className="p-3 bg-muted/50 rounded-lg flex items-start gap-2 text-xs text-muted-foreground">
-                                <AlertTriangle className="h-4 w-4 mt-0.5 text-orange-500 shrink-0"/>
-                                <p>Use "Ajustar Deudas" si cambia la cuota para generar cargos por diferencia a quienes pagaron por adelantado.</p>
-                            </div>
+                             {condoFee > lastCondoFee && isFeeChanged && !isAdjustmentRunning && (
+                                <Button 
+                                    onClick={handleFeeAdjustment} 
+                                    disabled={isAdjustmentRunning}
+                                    variant="outline"
+                                    className="w-full text-blue-600 border-blue-600 hover:bg-blue-50"
+                                >
+                                    <Wand2 className="mr-2 h-4 w-4"/> 
+                                    Ajustar Deudas Adelantadas
+                                </Button>
+                            )}
+                            {isAdjustmentRunning && (
+                                <div className="w-full space-y-2">
+                                    <Label className="text-sm text-muted-foreground">Procesando ajuste...</Label>
+                                    <Progress value={progress} className="w-full"/>
+                                </div>
+                            )}
                         </CardFooter>
                     </Card>
-
+                    
                     <Card>
-                        <CardHeader>
-                            <CardTitle>Gestión Manual de Tasa</CardTitle>
-                            <CardDescription>Historial de tasas y activación para los cálculos.</CardDescription>
+                         <CardHeader>
+                            <CardTitle>Historial de Tasa de Cambio (BCV)</CardTitle>
+                            <CardDescription>Establece y gestiona las tasas de cambio históricas.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            <div className="space-y-2">
-                                <Label>Agregar Nueva Tasa</Label>
-                                <div className="flex items-center gap-2">
+                            <div className="flex space-x-2">
+                                <div className="space-y-2 flex-1">
+                                    <Label htmlFor="newRateAmount">Monto (BsD/USD)</Label>
+                                    <Input 
+                                        id="newRateAmount" 
+                                        type="number" 
+                                        value={newRateAmount} 
+                                        onChange={(e) => setNewRateAmount(e.target.value)} 
+                                        placeholder="0.00"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Fecha</Label>
                                     <Popover>
                                         <PopoverTrigger asChild>
-                                            <Button variant={"outline"} className={cn("w-[140px] justify-start text-left font-normal", !newRateDate && "text-muted-foreground")}>
+                                            <Button
+                                                variant={"outline"}
+                                                className={cn(
+                                                    "w-full justify-start text-left font-normal",
+                                                    !newRateDate && "text-muted-foreground"
+                                                )}
+                                            >
                                                 <CalendarIcon className="mr-2 h-4 w-4" />
-                                                {newRateDate ? format(newRateDate, "dd/MM/yy") : <span>Fecha</span>}
+                                                {newRateDate ? format(newRateDate, "PPP", { locale: es }) : <span>Seleccionar fecha</span>}
                                             </Button>
                                         </PopoverTrigger>
-                                        <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={newRateDate} onSelect={setNewRateDate} initialFocus locale={es} /></PopoverContent>
+                                        <PopoverContent className="w-auto p-0" align="start">
+                                            <Calendar
+                                                mode="single"
+                                                selected={newRateDate}
+                                                onSelect={setNewRateDate}
+                                                initialFocus
+                                                locale={es}
+                                            />
+                                        </PopoverContent>
                                     </Popover>
-                                    <Input type="number" placeholder="Monto" value={newRateAmount} onChange={(e) => setNewRateAmount(e.target.value)} />
-                                    <Button size="icon" onClick={handleAddRate}><PlusCircle className="h-4 w-4"/></Button>
                                 </div>
                             </div>
-                             <div className="space-y-2">
-                                <Label>Historial de Tasas</Label>
+                            <Button onClick={handleAddRate} className="w-full">
+                                <PlusCircle className="mr-2 h-4 w-4"/> Agregar Tasa
+                            </Button>
+                            
+                            <h3 className="text-lg font-semibold mt-6 border-b pb-1">Tasas Registradas</h3>
+                            
+                            <div className="max-h-60 overflow-y-auto">
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
-                                            <TableHead>Fecha</TableHead>
-                                            <TableHead>Tasa (Bs.)</TableHead>
+                                            <TableHead className="w-[100px]">Fecha</TableHead>
+                                            <TableHead>Tasa (BsD)</TableHead>
+                                            <TableHead>Estado</TableHead>
                                             <TableHead className="text-right">Acciones</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {exchangeRates.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(rate => (
-                                            <TableRow key={rate.id} data-state={rate.active ? 'selected' : 'unselected'}>
-                                                <TableCell>{format(parseISO(rate.date), "dd/MM/yyyy")}</TableCell>
-                                                <TableCell className={cn(rate.active && "font-bold text-primary")}>{rate.rate.toFixed(2)}</TableCell>
+                                        {exchangeRates
+                                            .slice()
+                                            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                                            .map((rate) => (
+                                            <TableRow key={rate.id} className={rate.active ? 'bg-green-50/50 hover:bg-green-50' : ''}>
+                                                <TableCell>{format(parseISO(rate.date), 'dd/MM/yyyy')}</TableCell>
+                                                <TableCell className="font-medium">{rate.rate.toFixed(2)}</TableCell>
+                                                <TableCell>
+                                                    <span className={cn(
+                                                        'px-2 py-1 text-xs rounded-full font-semibold',
+                                                        rate.active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                                                    )}>
+                                                        {rate.active ? 'Activa' : 'Inactiva'}
+                                                    </span>
+                                                </TableCell>
                                                 <TableCell className="text-right">
                                                     <DropdownMenu>
                                                         <DropdownMenuTrigger asChild>
@@ -688,22 +762,30 @@ export default function SettingsPage() {
                                                             </Button>
                                                         </DropdownMenuTrigger>
                                                         <DropdownMenuContent align="end">
-                                                            <DropdownMenuItem onClick={() => handleActivateRate(rate)} disabled={rate.active}>
-                                                                {rate.active ? 'Activa' : 'Activar'}
-                                                            </DropdownMenuItem>
+                                                            {!rate.active && (
+                                                                <DropdownMenuItem onClick={() => handleActivateRate(rate)}>
+                                                                    <RefreshCw className="mr-2 h-4 w-4" /> Activar
+                                                                </DropdownMenuItem>
+                                                            )}
                                                             <DropdownMenuItem onClick={() => openEditRateDialog(rate)}>
-                                                                <Edit className="mr-2 h-4 w-4" />
-                                                                Editar
+                                                                <Edit className="mr-2 h-4 w-4" /> Editar
                                                             </DropdownMenuItem>
-                                                            <DropdownMenuItem className="text-destructive" onClick={() => { setRateToDelete(rate); setIsDeleteRateDialogOpen(true); }}>
-                                                                <Trash2 className="mr-2 h-4 w-4" />
-                                                                Eliminar
+                                                            <DropdownMenuItem 
+                                                                className="text-red-600 focus:text-red-600"
+                                                                onClick={() => { setRateToDelete(rate); setIsDeleteRateDialogOpen(true); }}
+                                                            >
+                                                                <Trash2 className="mr-2 h-4 w-4" /> Eliminar
                                                             </DropdownMenuItem>
                                                         </DropdownMenuContent>
                                                     </DropdownMenu>
                                                 </TableCell>
                                             </TableRow>
                                         ))}
+                                        {exchangeRates.length === 0 && (
+                                            <TableRow>
+                                                <TableCell colSpan={4} className="text-center text-muted-foreground">No hay tasas registradas.</TableCell>
+                                            </TableRow>
+                                        )}
                                     </TableBody>
                                 </Table>
                             </div>
@@ -712,39 +794,48 @@ export default function SettingsPage() {
                 </div>
             </div>
             
-            <div className="flex flex-col items-end gap-2">
-                <Button onClick={handleSaveChanges} disabled={saving}>
-                    {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4"/>}
-                    Guardar Cambios y Aplicar a la App
-                </Button>
-                {saving && <Progress value={progress} className="w-full max-w-xs" />}
-            </div>
-
-            {/* Edit Rate Dialog */}
+            {/* Diálogo de Edición de Tasa */}
             <Dialog open={isRateDialogOpen} onOpenChange={setIsRateDialogOpen}>
-                <DialogContent className="sm:max-w-[425px]">
+                <DialogContent>
                     <DialogHeader>
                         <DialogTitle>Editar Tasa de Cambio</DialogTitle>
-                        <DialogDescription>
-                            Modifique la fecha o el monto de la tasa seleccionada.
-                        </DialogDescription>
+                        <DialogDescription>Modifica la fecha y el monto de la tasa seleccionada.</DialogDescription>
                     </DialogHeader>
-                    <div className="grid gap-4 py-4">
+                    <div className="space-y-4">
                         <div className="space-y-2">
-                             <Label htmlFor="edit-rate-date">Fecha</Label>
-                             <Popover>
-                                <PopoverTrigger asChild>
-                                    <Button id="edit-rate-date" variant={"outline"} className={cn("w-full justify-start text-left font-normal", !editRateDate && "text-muted-foreground")}>
-                                        <CalendarIcon className="mr-2 h-4 w-4" />
-                                        {editRateDate ? format(editRateDate, "PPP", { locale: es }) : <span>Seleccione una fecha</span>}
-                                    </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={editRateDate} onSelect={setEditRateDate} initialFocus locale={es} /></PopoverContent>
-                            </Popover>
+                            <Label htmlFor="editRateAmount">Monto (BsD/USD)</Label>
+                            <Input 
+                                id="editRateAmount" 
+                                type="number" 
+                                value={editRateAmount} 
+                                onChange={(e) => setEditRateAmount(e.target.value)} 
+                            />
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="edit-rate-amount">Monto de la Tasa (Bs.)</Label>
-                            <Input id="edit-rate-amount" type="number" value={editRateAmount} onChange={(e) => setEditRateAmount(e.target.value)} placeholder="0.00" />
+                            <Label>Fecha</Label>
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button
+                                        variant={"outline"}
+                                        className={cn(
+                                            "w-full justify-start text-left font-normal",
+                                            !editRateDate && "text-muted-foreground"
+                                        )}
+                                    >
+                                        <CalendarIcon className="mr-2 h-4 w-4" />
+                                        {editRateDate ? format(editRateDate, "PPP", { locale: es }) : <span>Seleccionar fecha</span>}
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0" align="start">
+                                    <Calendar
+                                        mode="single"
+                                        selected={editRateDate}
+                                        onSelect={setEditRateDate}
+                                        initialFocus
+                                        locale={es}
+                                    />
+                                </PopoverContent>
+                            </Popover>
                         </div>
                     </div>
                     <DialogFooter>
@@ -754,13 +845,14 @@ export default function SettingsPage() {
                 </DialogContent>
             </Dialog>
 
-            {/* Delete Rate Confirmation Dialog */}
+            {/* Diálogo de Confirmación de Eliminación */}
             <Dialog open={isDeleteRateDialogOpen} onOpenChange={setIsDeleteRateDialogOpen}>
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>Confirmar Eliminación</DialogTitle>
                         <DialogDescription>
-                            ¿Está seguro de que desea eliminar esta tasa? No se puede eliminar una tasa activa.
+                            ¿Estás seguro de que deseas eliminar la tasa de {rateToDelete?.rate.toFixed(2)} del {rateToDelete?.date}?<br/>
+                            **Esta acción no se puede deshacer.**
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>
@@ -769,9 +861,6 @@ export default function SettingsPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-
         </div>
     );
 }
-
-    
