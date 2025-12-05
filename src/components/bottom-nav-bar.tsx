@@ -24,10 +24,15 @@ export function BottomNavBar({ items, pathname }: { items: BottomNavItem[], path
               href={item.href}
               key={item.href}
               prefetch={true}
-              className="-mt-8 flex h-16 w-16 flex-col items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg"
+              className="-mt-12"
             >
-              <item.icon className="h-8 w-8" />
-              <span className="sr-only">{item.label}</span>
+               <Button
+                variant="default"
+                className="h-16 w-16 rounded-full shadow-lg"
+              >
+                <item.icon className="h-8 w-8" />
+                <span className="sr-only">{item.label}</span>
+              </Button>
             </Link>
           );
         }
