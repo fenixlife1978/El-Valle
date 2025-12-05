@@ -70,13 +70,6 @@ type Notification = {
     read: boolean;
 };
 
-const frameStyles = {
-  circle: 'rounded-full',
-  soft: 'rounded-lg',
-  rounded: 'rounded-2xl',
-  square: 'rounded-none',
-};
-
 const BCVRateCard = ({
   rate,
   date,
@@ -252,7 +245,7 @@ function DashboardLayoutContent({
   navItems: NavItem[];
 }) {
   const { isMobile, setOpenMobile } = useSidebar();
-  const { ownerData, role: userRole, companyInfo, activeRate, bcvLogoUrl, companyLogoFrame, loading } = useAuth();
+  const { ownerData, role: userRole, companyInfo, activeRate, bcvLogoUrl, loading } = useAuth();
   const pathname = usePathname();
 
   const handleLinkClick = () => {
@@ -280,7 +273,7 @@ function DashboardLayoutContent({
       <Sidebar className="hidden sm:block">
         <SidebarHeader>
           <div className="flex items-center gap-2 p-2">
-            <div className={cn("w-8 h-8 bg-white flex items-center justify-center overflow-hidden border p-0.5", frameStyles[companyLogoFrame as keyof typeof frameStyles || 'circle'])}>
+            <div className={cn("w-8 h-8 bg-white flex items-center justify-center overflow-hidden border p-0.5 rounded-md")}>
                 {companyInfo?.logo ? <img src={companyInfo.logo} alt="Logo" className="w-full h-full object-contain" /> : <Building2 className="w-5 h-5 text-primary" />}
             </div>
             <span className="font-semibold text-lg font-headline truncate">{companyInfo?.name || 'Cargando...'}</span>
