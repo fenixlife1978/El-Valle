@@ -763,22 +763,20 @@ export default function ReportsPage() {
 
         if (formatType === 'pdf') {
             const doc = new jsPDF({ orientation: 'landscape' });
-            autoTable(doc); // Apply autoTable plugin
-            const pageWidth = doc.internal.pageSize.getWidth();
             let startY = 15;
             if (companyInfo?.logo) doc.addImage(companyInfo.logo, 'PNG', 15, startY, 20, 20);
             if (companyInfo) doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, 40, startY + 5);
 
-            doc.setFontSize(16).setFont('helvetica', 'bold').text('Reporte Integral de Propietarios', pageWidth / 2, startY + 15, { align: 'center'});
+            doc.setFontSize(16).setFont('helvetica', 'bold').text('Reporte Integral de Propietarios', doc.internal.pageSize.getWidth() / 2, startY + 15, { align: 'center'});
             
             startY += 25;
             doc.setFontSize(9).setFont('helvetica', 'normal');
             doc.text(periodString, 15, startY);
-            doc.text(`Fecha de Emisión: ${emissionDate}`, pageWidth - 15, startY, { align: 'right'});
+            doc.text(`Fecha de Emisión: ${emissionDate}`, doc.internal.pageSize.getWidth() - 15, startY, { align: 'right'});
             
             startY += 10;
             
-            (doc as any).autoTable({
+            autoTable(doc, {
                 head: headers, body: body, startY: startY,
                 headStyles: { fillColor: [30, 80, 180] }, 
                 styles: { fontSize: 7, cellPadding: 1.5, overflow: 'linebreak' },
@@ -819,7 +817,6 @@ export default function ReportsPage() {
         }
 
         const doc = new jsPDF();
-        autoTable(doc); // Apply autoTable plugin
         const pageWidth = doc.internal.pageSize.getWidth();
         const margin = 14;
 
@@ -843,7 +840,7 @@ export default function ReportsPage() {
         });
 
         if (formatType === 'pdf') {
-            (doc as any).autoTable({
+            autoTable(doc, {
                 head: head, body: body, startY: margin + 55, headStyles: { fillColor: [220, 53, 69] },
                 styles: { cellPadding: 2, fontSize: 8 },
             });
@@ -874,7 +871,6 @@ export default function ReportsPage() {
     
         const filename = `reporte_pagos_${selectedIndividual.name.replace(/\s/g, '_')}`;
         const doc = new jsPDF();
-        autoTable(doc); // Apply autoTable plugin
         const pageWidth = doc.internal.pageSize.getWidth();
         const margin = 14;
 
@@ -915,7 +911,7 @@ export default function ReportsPage() {
                 startY += 8;
 
                 if (payment.liquidatedDebts.length > 0) {
-                     (doc as any).autoTable({
+                     autoTable(doc, {
                         head: [['Período', 'Concepto', 'Monto Pagado ($)']], 
                         body: payment.liquidatedDebts.map(d => [
                            `${Object.values(monthsLocale)[d.month - 1] || ''} ${d.year}`,
@@ -956,7 +952,6 @@ export default function ReportsPage() {
 
         const filename = `estado_de_cuenta_${selectedStatementOwner.name.replace(/\s/g, '_')}`;
         const doc = new jsPDF();
-        autoTable(doc); // Apply autoTable plugin
         const pageWidth = doc.internal.pageSize.getWidth();
         const margin = 14;
 
@@ -977,7 +972,7 @@ export default function ReportsPage() {
         // --- Payments Summary ---
         doc.setFontSize(11).setFont('helvetica', 'bold').text('Resumen de Pagos', margin, startY);
         startY += 6;
-        (doc as any).autoTable({
+        autoTable(doc, {
             head: [['Fecha', 'Concepto', 'Pagado por', 'Monto (Bs)']],
             body: accountStatementData.payments.map(p => [
                 format(p.paymentDate.toDate(), 'dd-MM-yyyy'),
@@ -997,7 +992,7 @@ export default function ReportsPage() {
         // --- Debts Summary ---
         doc.setFontSize(11).setFont('helvetica', 'bold').text('Resumen de Deudas', margin, startY);
         startY += 6;
-        (doc as any).autoTable({
+        autoTable(doc, {
             head: [['Periodo', 'Concepto', 'Monto ($)', 'Estado']],
             body: accountStatementData.debts.map(d => [
                 `${monthsLocale[d.month]} ${d.year}`,
@@ -1035,7 +1030,7 @@ export default function ReportsPage() {
     
         if (formatType === 'pdf') {
             const doc = new jsPDF();
-            autoTable(doc); // Apply autoTable plugin
+    
             const pageWidth = doc.internal.pageSize.getWidth();
             const margin = 14;
     
@@ -1051,7 +1046,7 @@ export default function ReportsPage() {
     
             doc.setFontSize(16).setFont('helvetica', 'bold').text("Reporte de Saldos a Favor", pageWidth / 2, margin + 30, { align: 'center' });
             
-            (doc as any).autoTable({
+            autoTable(doc, {
                 head: head,
                 body: body,
                 startY: margin + 40,
@@ -1088,20 +1083,18 @@ export default function ReportsPage() {
 
         if (formatType === 'pdf') {
             const doc = new jsPDF();
-            autoTable(doc); // Apply autoTable plugin
-            const pageWidth = doc.internal.pageSize.getWidth();
             let startY = 15;
             if (companyInfo?.logo) doc.addImage(companyInfo.logo, 'PNG', 15, startY, 20, 20);
             if (companyInfo) doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, 40, startY + 5);
 
-            doc.setFontSize(16).setFont('helvetica', 'bold').text('Reporte de Ingresos', pageWidth / 2, startY + 15, { align: 'center'});
+            doc.setFontSize(16).setFont('helvetica', 'bold').text('Reporte de Ingresos', doc.internal.pageSize.getWidth() / 2, startY + 15, { align: 'center'});
             startY += 25;
             doc.setFontSize(9).setFont('helvetica', 'normal');
             doc.text(periodString, 15, startY);
-            doc.text(`Fecha de Emisión: ${format(new Date(), "dd/MM/yyyy")}`, pageWidth - 15, startY, { align: 'right'});
+            doc.text(`Fecha de Emisión: ${format(new Date(), "dd/MM/yyyy")}`, doc.internal.pageSize.getWidth() - 15, startY, { align: 'right'});
             startY += 10;
             
-            (doc as any).autoTable({
+            autoTable(doc, {
                 head: head, body: body, startY: startY,
                 headStyles: { fillColor: [30, 80, 180] },
                 styles: { fontSize: 8, cellPadding: 2 }
@@ -1137,20 +1130,18 @@ export default function ReportsPage() {
 
         if (formatType === 'pdf') {
             const doc = new jsPDF();
-            autoTable(doc); // Apply autoTable plugin
-            const pageWidth = doc.internal.pageSize.getWidth();
             let startY = 15;
             if (companyInfo?.logo) doc.addImage(companyInfo.logo, 'PNG', 15, startY, 20, 20);
             if (companyInfo) doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, 40, startY + 5);
 
-            doc.setFontSize(16).setFont('helvetica', 'bold').text('Reporte de Pagos Mensual', pageWidth / 2, startY + 15, { align: 'center'});
+            doc.setFontSize(16).setFont('helvetica', 'bold').text('Reporte de Pagos Mensual', doc.internal.pageSize.getWidth() / 2, startY + 15, { align: 'center'});
             startY += 25;
             doc.setFontSize(9).setFont('helvetica', 'normal');
             doc.text(periodString, 15, startY);
-            doc.text(`Fecha de Emisión: ${format(new Date(), "dd/MM/yyyy")}`, pageWidth - 15, startY, { align: 'right'});
+            doc.text(`Fecha de Emisión: ${format(new Date(), "dd/MM/yyyy")}`, doc.internal.pageSize.getWidth() - 15, startY, { align: 'right'});
             startY += 10;
             
-            (doc as any).autoTable({
+            autoTable(doc, {
                 head: head, body: body, startY: startY,
                 headStyles: { fillColor: [30, 80, 180] },
                 styles: { fontSize: 8, cellPadding: 2 },
