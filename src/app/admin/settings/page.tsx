@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from '@/hooks/use-toast';
-import { Upload, Save, Calendar as CalendarIcon, PlusCircle, Loader2, AlertTriangle, Wand2, MoreHorizontal, Edit, FileCog, UserCircle, RefreshCw, Trash2, Circle, Square, RoundedSquare, Sparkles, Church, CandyCane } from 'lucide-react';
+import { Upload, Save, Calendar as CalendarIcon, PlusCircle, Loader2, AlertTriangle, Wand2, MoreHorizontal, Edit, FileCog, UserCircle, RefreshCw, Trash2, Circle, Square, RoundedSquare, Sparkles } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
@@ -45,7 +45,7 @@ type ExchangeRate = {
     active: boolean;
 };
 
-type FrameStyle = 'circle' | 'soft' | 'rounded' | 'square' | 'carnaval' | 'semana-santa' | 'navidad';
+type FrameStyle = 'circle' | 'soft' | 'rounded' | 'square' | 'carnaval';
 
 
 type Settings = {
@@ -94,8 +94,6 @@ const frameStyles: Record<FrameStyle, string> = {
     rounded: 'rounded-2xl',
     square: 'rounded-none',
     carnaval: 'p-1 bg-gradient-to-br from-purple-500 via-green-500 to-yellow-500 rounded-lg',
-    'semana-santa': 'p-1 bg-gradient-to-br from-purple-800 to-yellow-600 rounded-lg',
-    navidad: 'p-1 bg-gradient-to-r from-red-600 via-white to-green-600 rounded-lg',
 };
 
 const frameOptions: {value: FrameStyle, label: string, icon: React.ElementType}[] = [
@@ -103,8 +101,6 @@ const frameOptions: {value: FrameStyle, label: string, icon: React.ElementType}[
     { value: 'soft', label: 'Suave', icon: RoundedSquare },
     { value: 'square', label: 'Cuadrado', icon: Square },
     { value: 'carnaval', label: 'Carnaval', icon: Sparkles },
-    { value: 'semana-santa', label: 'Semana Santa', icon: Church },
-    { value: 'navidad', label: 'Navidad', icon: CandyCane },
 ];
 
 
