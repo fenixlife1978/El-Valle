@@ -309,7 +309,6 @@ export default function PeopleManagementPage() {
 
     const handleExportPDF = () => {
         const doc = new jsPDF();
-        autoTable(doc); // Apply autoTable plugin
         const pageHeight = doc.internal.pageSize.getHeight();
         const pageWidth = doc.internal.pageSize.getWidth();
         const margin = 14;
@@ -335,7 +334,7 @@ export default function PeopleManagementPage() {
         doc.setFont('helvetica', 'bold');
         doc.text("Lista de Propietarios", pageWidth / 2, margin + 45, { align: 'center' });
 
-        (doc as any).autoTable({
+        autoTable(doc, {
             head: [['Nombre', 'Propiedades', 'Email', 'Rol', 'Saldo a Favor (Bs.)']],
             body: owners.filter(o => o.id !== ADMIN_USER_ID).map(o => {
                 const properties = (o.properties && o.properties.length > 0) 
@@ -703,9 +702,3 @@ export default function PeopleManagementPage() {
         </div>
     );
 }
-    
-    
-
-    
-
-    

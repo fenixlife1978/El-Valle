@@ -241,7 +241,6 @@ export default function PettyCashPage() {
         }
     
         const doc = new jsPDF();
-        autoTable(doc); // Apply autoTable plugin
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
         const margin = 14;
@@ -277,7 +276,7 @@ export default function PettyCashPage() {
         const totalExpenses = rep.expenses.reduce((sum, exp) => sum + exp.amount, 0);
         const balance = rep.amount - totalExpenses;
         
-        (doc as any).autoTable({
+        autoTable(doc, {
             startY: startY,
             head: [['Concepto', 'Fecha', 'Monto (Bs.)']],
             body: rep.expenses.map(exp => [exp.description, format(exp.date.toDate(), 'dd/MM/yyyy'), formatToTwoDecimals(exp.amount)]),
@@ -294,7 +293,7 @@ export default function PettyCashPage() {
             ['Saldo Restante:', `Bs. ${formatToTwoDecimals(balance)}`]
         ];
         
-        (doc as any).autoTable({
+        autoTable(doc, {
             startY: startY,
             body: summary,
             theme: 'plain',
@@ -499,9 +498,3 @@ export default function PettyCashPage() {
         </div>
     );
 }
-
-    
-
-    
-
-    

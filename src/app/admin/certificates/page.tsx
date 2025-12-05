@@ -268,7 +268,6 @@ export default function CertificatesPage() {
             return;
         }
         const doc = new jsPDF();
-        autoTable(doc); // Apply autoTable plugin
         const pageWidth = doc.internal.pageSize.getWidth();
         const margin = 20;
         const logoSize = 30;
@@ -569,11 +568,3 @@ export default function CertificatesPage() {
         </div>
     );
 }
-
-    
-
-    
-
-    
-
-    

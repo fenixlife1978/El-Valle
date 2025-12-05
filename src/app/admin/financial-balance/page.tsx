@@ -233,7 +233,6 @@ export default function FinancialBalancePage() {
 
         if (formatType === 'pdf') {
             const doc = new jsPDF();
-            autoTable(doc); // Apply autoTable plugin
             const pageWidth = doc.internal.pageSize.getWidth();
             const margin = 14;
             
@@ -258,7 +257,7 @@ export default function FinancialBalancePage() {
             let startY = margin + 70;
             
             // Ingresos
-            (doc as any).autoTable({
+            autoTable(doc, {
                 head: [['DÍA', 'INGRESOS', 'MONTO (Bs.)']],
                 body: statement.ingresos.map(i => [i.dia || '', i.concepto, { content: formatToTwoDecimals(i.monto), styles: { halign: 'right' } }]),
                 foot: [[{ content: '', styles: { halign: 'right' } }, { content: 'TOTAL INGRESOS', styles: { halign: 'right' } }, { content: formatToTwoDecimals(totalIngresos), styles: { halign: 'right' } }]],
@@ -267,7 +266,7 @@ export default function FinancialBalancePage() {
             startY = (doc as any).lastAutoTable.finalY + 10;
             
             // Egresos
-            (doc as any).autoTable({
+            autoTable(doc, {
                 head: [['DÍA', 'EGRESOS', 'MONTO (Bs.)']],
                 body: statement.egresos.map(e => [e.dia || '', e.concepto, { content: formatToTwoDecimals(e.monto), styles: { halign: 'right' } }]),
                 foot: [[{ content: '', styles: { halign: 'right' } }, { content: 'TOTAL EGRESOS', styles: { halign: 'right' } }, { content: formatToTwoDecimals(totalEgresos), styles: { halign: 'right' } }]],
@@ -482,5 +481,3 @@ export default function FinancialBalancePage() {
         </div>
     );
 }
-
-    

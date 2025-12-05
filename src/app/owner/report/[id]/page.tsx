@@ -110,7 +110,6 @@ export default function ReportViewerPage() {
         const period = `${monthLabel} ${yearLabel}`;
 
         const doc = new jsPDF();
-        autoTable(doc); // Apply autoTable plugin
         const pageWidth = doc.internal.pageSize.getWidth();
         const margin = 14;
         
@@ -133,7 +132,7 @@ export default function ReportViewerPage() {
         let startY = margin + 70;
         
         // Ingresos
-        (doc as any).autoTable({
+        autoTable(doc, {
             head: [['INGRESOS', 'MONTO (Bs.)']],
             body: statement.ingresos.map(i => [i.concepto, { content: formatToTwoDecimals(i.monto), styles: { halign: 'right' } }]),
             foot: [[{ content: 'TOTAL INGRESOS', styles: { halign: 'right' } }, { content: formatToTwoDecimals(totalIngresos), styles: { halign: 'right' } }]],
@@ -142,7 +141,7 @@ export default function ReportViewerPage() {
         startY = (doc as any).lastAutoTable.finalY + 10;
         
         // Egresos
-        (doc as any).autoTable({
+        autoTable(doc, {
             head: [['EGRESOS', 'MONTO (Bs.)']],
             body: statement.egresos.map(e => [e.concepto, { content: formatToTwoDecimals(e.monto), styles: { halign: 'right' } }]),
             foot: [[{ content: 'TOTAL EGRESOS', styles: { halign: 'right' } }, { content: formatToTwoDecimals(totalEgresos), styles: { halign: 'right' } }]],
@@ -280,7 +279,3 @@ export default function ReportViewerPage() {
         </div>
     );
 }
-
-    
-
-    
