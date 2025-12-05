@@ -1,3 +1,5 @@
+
+
 'use client';
 
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
@@ -13,7 +15,7 @@ import { format, isBefore, startOfMonth } from "date-fns";
 import { es } from 'date-fns/locale';
 import Link from "next/link";
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 import QRCode from 'qrcode';
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -249,6 +251,7 @@ export default function OwnerDashboardPage() {
         const { payment, beneficiary, paidDebts, previousBalance, currentBalance, qrCodeUrl, receiptNumber } = data;
         
         const pdfDoc = new jsPDF();
+        autoTable(pdfDoc); // Apply autoTable plugin
         const pageWidth = pdfDoc.internal.pageSize.getWidth();
         const margin = 14;
     
