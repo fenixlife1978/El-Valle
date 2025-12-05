@@ -74,7 +74,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         if (!loading && role !== 'administrador') {
             router.replace('/welcome');
         }
-    }, [role, loading, router]);
+    }, [role, loading]);
 
     if (loading || role !== 'administrador') {
          return (
