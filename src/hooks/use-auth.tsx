@@ -12,6 +12,7 @@ import { ensureOwnerProfile, ensureAdminProfile } from '@/lib/user-sync';
 type CompanyInfo = {
     name: string;
     logo: string;
+    logoFrame?: 'circle' | 'square' | 'rounded';
 };
 
 type ExchangeRate = {
@@ -29,6 +30,8 @@ export type AuthContextType = {
     companyInfo: CompanyInfo | null;
     activeRate: ExchangeRate | null;
     bcvLogoUrl: string | null;
+    companyLogoFrame: string | null;
+    bcvLogoFrame: string | null;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -45,6 +48,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
     const [activeRate, setActiveRate] = useState<ExchangeRate | null>(null);
     const [bcvLogoUrl, setBcvLogoUrl] = useState<string | null>(null);
+    const [companyLogoFrame, setCompanyLogoFrame] = useState<string | null>(null);
+    const [bcvLogoFrame, setBcvLogoFrame] = useState<string | null>(null);
 
     useEffect(() => {
         let ownerUnsubscribe: (() => void) | undefined;
@@ -96,6 +101,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 const settingsData = docSnap.data();
                 setCompanyInfo(settingsData.companyInfo || null);
                 setBcvLogoUrl(settingsData.bcvLogo || null);
+                setCompanyLogoFrame(settingsData.companyLogoFrame || 'circle');
+                setBcvLogoFrame(settingsData.bcvLogoFrame || 'circle');
+
 
                 const rates: ExchangeRate[] = settingsData.exchangeRates || [];
                 let currentActiveRate = rates.find(r => r.active) || null;
@@ -107,6 +115,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 setCompanyInfo(null);
                 setBcvLogoUrl(null);
                 setActiveRate(null);
+                setCompanyLogoFrame(null);
+                setBcvLogoFrame(null);
             }
         });
 
@@ -127,6 +137,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         companyInfo,
         activeRate,
         bcvLogoUrl,
+        companyLogoFrame,
+        bcvLogoFrame,
     };
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from '@/hooks/use-toast';
-import { Upload, Save, Calendar as CalendarIcon, PlusCircle, Loader2, AlertTriangle, Wand2, MoreHorizontal, Edit, FileCog, UserCircle, RefreshCw, Trash2 } from 'lucide-react';
+import { Upload, Save, Calendar as CalendarIcon, PlusCircle, Loader2, AlertTriangle, Wand2, MoreHorizontal, Edit, FileCog, UserCircle, RefreshCw, Trash2, Circle, Square, RoundedSquare } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
@@ -45,6 +45,8 @@ type ExchangeRate = {
     active: boolean;
 };
 
+type FrameStyle = 'circle' | 'soft' | 'rounded' | 'square';
+
 type Settings = {
     adminProfile: AdminProfile;
     companyInfo: CompanyInfo;
@@ -52,6 +54,8 @@ type Settings = {
     exchangeRates: ExchangeRate[];
     lastCondoFee?: number; // To track the previous fee for adjustment logic
     bcvLogo?: string;
+    companyLogoFrame?: FrameStyle;
+    bcvLogoFrame?: FrameStyle;
 };
 
 type Debt = {
@@ -81,6 +85,13 @@ const emptyCompanyInfo: CompanyInfo = {
     phone: '',
     email: '',
     logo: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAOEAAADhCAMAAAAJbSJIAAAAgVBMVEX///8BAQEAAAAtLS0QEBCGhoYxMTEzMzN4eHhISEihoaFlZWVCQkKVlZWrq6vo6Ojt7e3X19fOzs57e3vAwMDJycn39/fk5OTw8PCtra1OTk6rq6uurq4WFhYyMjLT09NcXFw/Pz/a2tqenp7FxcVdXV0nJycXFxdAQEC+vr5MTEwCAgLJSSgdAAADVUlEQVR4nO2byXKaQBCGcwIqIIoCiqIi6q4d7/+M8wgmE6aZpDfZae/1LzFjZn9SdybT0QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFsH04P2XjD98+nN9mD6Y9M+3L/aY6A2W/tJ/d67eD1s9wK/fT/P8+u93g8Ywz/C84/vH2s4q2+K3/Qz/jG84d+Kz1S4L5gP5t6d6d7pM+Yf0r+nP5v6r+v/tP5m/rX+e/1v/h/6H/2n/k39h/xL/Wf8R/wn/B/9j/xP/af8S/3/4r/Sf8S/4P/Mf+z/g3/A/9j/5L/m/w5/2n/S/9T/2X/S/9L/wn/F/8x/1f/Of+z/yX/U/8Z/xn/Of+L/3n/Y//S//p/1L/if8Z/yP/C/4r/kf+j/wP/C/5b/gv+A/7P/Af9P/xf/i/wB/xf/K/8L/xP/S/4L/xP/G/9L/wv/A/8r/2P/Af8r/xn/G/8z/wn/U/85/3P/Cf8z/yP/M/8r/xP/A/8j/zP/M/8L/wP/Q/8r/yv/I/8T/xP/I/8T/wP/E/8j/yv/M/8z/wP/S/8j/yv/K/8z/zP/A/8T/wv/K/8r/yv/I/8T/xv/K/9T/1P/M/8T/yP/M/8z/yv/U/9T/wv/I/8T/xv/K/9T/zP/K/8T/xv/I/8L/xP/I/8j/wv/M/8T/xv/M/8r/wv/M/8j/xv/E/8z/wv/G/8r/xP/K/8z/yP/E/8j/yv/U/9T/wv/K/9T/1P/S/9L/yP/U/8L/yv/C/8L/yP/U/8T/yP/E/8T/xv/C/8z/yP/U/8r/yP/I/8T/yP/M/8j/xP/C/8D/yP/E/8T/wv/K/8r/yP/I/8L/xP/C/8T/wv/A/8L/yv/A/8T/xv/K/8D/yv/E/8j/xP/E/8r/xP/C/8z/xv/I/8T/wv/C/8T/xP/E/8j/wv/K/8j/yP/C/8D/yP/G/8D/yP/I/8L/yv/I/8L/yv/E/8j/xP/A/8L/wv/I/8D/xv/E/8D/yv/G/8j/xv/G/8j/xv/G/8L/yv/K/8j/xv/G/8L/yv/K/8j/yP/A/8D/wP/C/8L/xv/I/8j/yP/K/8L/yP/C/8L/yP/C/8L/yP/C/8L/yP/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAArF+d0dD63+v+vY83wAAAAAAAAAAAuAsoXUn6/8i8kAAAAABJRU5ErkJggg=='
+};
+
+const frameStyles = {
+  circle: 'rounded-full',
+  soft: 'rounded-lg',
+  rounded: 'rounded-2xl',
+  square: 'rounded-none',
 };
 
 export default function SettingsPage() {
@@ -117,6 +128,10 @@ export default function SettingsPage() {
     const [isDeleteRateDialogOpen, setIsDeleteRateDialogOpen] = useState(false);
     const [rateToDelete, setRateToDelete] = useState<ExchangeRate | null>(null);
 
+    // New state for logo frames
+    const [companyLogoFrame, setCompanyLogoFrame] = useState<FrameStyle>('circle');
+    const [bcvLogoFrame, setBcvLogoFrame] = useState<FrameStyle>('circle');
+
 
     useEffect(() => {
         const settingsRef = doc(db, 'config', 'mainSettings');
@@ -132,6 +147,8 @@ export default function SettingsPage() {
                 setCondoFee(settings.condoFee);
                 setLastCondoFee(settings.condoFee); // Set the last known fee from DB
                 setExchangeRates(settings.exchangeRates || []);
+                setCompanyLogoFrame(settings.companyLogoFrame || 'circle');
+                setBcvLogoFrame(settings.bcvLogoFrame || 'circle');
             } else {
                 const initialRate: ExchangeRate = {
                     id: new Date().toISOString(),
@@ -144,7 +161,9 @@ export default function SettingsPage() {
                     companyInfo: emptyCompanyInfo,
                     condoFee: 25.00,
                     lastCondoFee: 25.00,
-                    exchangeRates: [initialRate]
+                    exchangeRates: [initialRate],
+                    companyLogoFrame: 'circle',
+                    bcvLogoFrame: 'circle'
                 });
             }
             setLoading(false);
@@ -324,6 +343,8 @@ export default function SettingsPage() {
                 condoFee: newCondoFee,
                 lastCondoFee: lastCondoFee,
                 bcvLogo: bcvLogo,
+                companyLogoFrame: companyLogoFrame,
+                bcvLogoFrame: bcvLogoFrame,
             };
     
             await updateDoc(settingsRef, dataToSave);
@@ -436,6 +457,28 @@ export default function SettingsPage() {
             </div>
         );
     }
+    
+    const FrameSelector = ({ title, onSelect, currentFrame }: { title: string, onSelect: (frame: FrameStyle) => void, currentFrame: FrameStyle }) => (
+        <div>
+            <Label className="font-semibold">{title}</Label>
+            <div className="flex gap-2 mt-2">
+                {(Object.keys(frameStyles) as FrameStyle[]).map(frame => (
+                    <Button
+                        key={frame}
+                        variant={currentFrame === frame ? 'default' : 'outline'}
+                        size="icon"
+                        onClick={() => onSelect(frame)}
+                        className="capitalize"
+                    >
+                        {frame === 'circle' && <Circle className="h-5 w-5" />}
+                        {frame === 'soft' && <RoundedSquare className="h-5 w-5" />}
+                        {frame === 'rounded' && <RoundedSquare className="h-5 w-5" />}
+                        {frame === 'square' && <Square className="h-5 w-5" />}
+                    </Button>
+                ))}
+            </div>
+        </div>
+    );
 
     return (
         <div className="space-y-8">
@@ -456,6 +499,39 @@ export default function SettingsPage() {
                         </CardHeader>
                         <CardContent>
                             <ThemeSwitcher />
+                        </CardContent>
+                    </Card>
+
+                     <Card>
+                        <CardHeader>
+                            <CardTitle>Gestión de Logos</CardTitle>
+                            <CardDescription>Personaliza los logos y sus marcos en la aplicación.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                            <div className="grid md:grid-cols-2 gap-6">
+                                <div className="space-y-4">
+                                    <Label>Logo de la Empresa</Label>
+                                    <div className={cn("w-24 h-24 bg-white flex items-center justify-center overflow-hidden border p-1", frameStyles[companyLogoFrame])}>
+                                        {logoPreview && <img src={logoPreview} alt="Company Logo Preview" className="w-full h-full object-contain" />}
+                                    </div>
+                                    <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById('logo-upload')?.click()}>
+                                        <Upload className="mr-2 h-4 w-4"/> Subir Logo
+                                    </Button>
+                                    <Input id="logo-upload" type="file" className="hidden" onChange={(e) => handleImageChange(e, 'logo')} accept="image/png, image/jpeg" />
+                                    <FrameSelector title="Marco del Logo de la Empresa" currentFrame={companyLogoFrame} onSelect={setCompanyLogoFrame} />
+                                </div>
+                                 <div className="space-y-4">
+                                    <Label>Logo de Tasa BCV</Label>
+                                    <div className={cn("w-24 h-24 bg-white flex items-center justify-center overflow-hidden border p-1", frameStyles[bcvLogoFrame])}>
+                                        {bcvLogoPreview && <img src={bcvLogoPreview} alt="BCV Logo Preview" className="w-full h-full object-contain" />}
+                                    </div>
+                                     <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById('bcv-logo-upload')?.click()}>
+                                        <Upload className="mr-2 h-4 w-4"/> Cambiar Logo BCV
+                                    </Button>
+                                    <Input id="bcv-logo-upload" type="file" className="hidden" onChange={(e) => handleImageChange(e, 'bcvLogo')} accept="image/png, image/jpeg" />
+                                     <FrameSelector title="Marco del Logo BCV" currentFrame={bcvLogoFrame} onSelect={setBcvLogoFrame} />
+                                </div>
+                            </div>
                         </CardContent>
                     </Card>
 
@@ -500,21 +576,6 @@ export default function SettingsPage() {
                             <CardDescription>Edita los datos principales de la comunidad o empresa gestora.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                             <div className="flex items-center gap-6">
-                                <div className="w-24 h-24 rounded-full bg-white flex items-center justify-center overflow-hidden border p-1">
-                                    {logoPreview && <img src={logoPreview} alt="Company Logo Preview" className="w-full h-full object-contain" />}
-                                </div>
-                                <div className="space-y-2">
-                                     <Label htmlFor="logo-upload">Logo de la Empresa</Label>
-                                     <div className="flex items-center gap-2">
-                                        <Input id="logo-upload" type="file" className="hidden" onChange={(e) => handleImageChange(e, 'logo')} accept="image/png, image/jpeg" />
-                                        <Button type="button" variant="outline" onClick={() => document.getElementById('logo-upload')?.click()}>
-                                            <Upload className="mr-2 h-4 w-4"/> Subir Logo
-                                        </Button>
-                                     </div>
-                                     <p className="text-xs text-muted-foreground">PNG o JPG. Recomendado 200x200px, max 1MB.</p>
-                                </div>
-                             </div>
                             <div className="grid md:grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <Label htmlFor="name">Nombre</Label>
@@ -537,30 +598,6 @@ export default function SettingsPage() {
                                     <Input id="email" name="email" type="email" value={companyInfo.email} onChange={(e) => handleInfoChange(e, 'company')} />
                                 </div>
                             </div>
-                        </CardContent>
-                    </Card>
-                    
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Gestión de Logos</CardTitle>
-                            <CardDescription>Personaliza los logos que aparecen en la aplicación.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="flex items-center gap-6">
-                                <div className="w-24 h-24 rounded-full bg-white flex items-center justify-center overflow-hidden border p-1">
-                                    {bcvLogoPreview && <img src={bcvLogoPreview} alt="BCV Logo Preview" className="w-full h-full object-contain" />}
-                                </div>
-                                <div className="space-y-2">
-                                     <Label htmlFor="bcv-logo-upload">Logo de Tasa BCV</Label>
-                                     <div className="flex items-center gap-2">
-                                        <Input id="bcv-logo-upload" type="file" className="hidden" onChange={(e) => handleImageChange(e, 'bcvLogo')} accept="image/png, image/jpeg" />
-                                        <Button type="button" variant="outline" onClick={() => document.getElementById('bcv-logo-upload')?.click()}>
-                                            <Upload className="mr-2 h-4 w-4"/> Cambiar Logo BCV
-                                        </Button>
-                                     </div>
-                                     <p className="text-xs text-muted-foreground">PNG o JPG. Recomendado 200x200px, max 1MB.</p>
-                                </div>
-                             </div>
                         </CardContent>
                     </Card>
 
@@ -668,7 +705,7 @@ export default function SettingsPage() {
             <div className="flex flex-col items-end gap-2">
                 <Button onClick={handleSaveChanges} disabled={saving}>
                     {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4"/>}
-                    Guardar Cambios
+                    Guardar Cambios y Aplicar a la App
                 </Button>
                 {saving && <Progress value={progress} className="w-full max-w-xs" />}
             </div>
@@ -726,3 +763,4 @@ export default function SettingsPage() {
         </div>
     );
 }
+

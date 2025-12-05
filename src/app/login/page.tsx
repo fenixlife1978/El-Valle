@@ -15,8 +15,19 @@ import Link from 'next/link';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
+
 
 const ADMIN_USER_ID = 'valle-admin-main-account';
+
+const frameStyles = {
+  circle: 'rounded-full',
+  soft: 'rounded-lg',
+  rounded: 'rounded-2xl',
+  square: 'rounded-none',
+};
+
+type FrameStyle = keyof typeof frameStyles;
 
 function LoginPage() {
     const router = useRouter();
@@ -30,6 +41,7 @@ function LoginPage() {
     const [showPassword, setShowPassword] = useState(false);
 
     const [logoUrl, setLogoUrl] = useState<string | null>(null);
+    const [logoFrame, setLogoFrame] = useState<FrameStyle>('circle');
     const [loadingLogo, setLoadingLogo] = useState(true);
 
     useEffect(() => {
@@ -48,6 +60,9 @@ function LoginPage() {
               const settings = docSnap.data();
               if (settings.companyInfo && settings.companyInfo.logo) {
                 setLogoUrl(settings.companyInfo.logo);
+              }
+               if (settings.companyLogoFrame) {
+                setLogoFrame(settings.companyLogoFrame);
               }
             }
           } catch (error) {
@@ -138,7 +153,7 @@ function LoginPage() {
                 {loadingLogo ? (
                     <Skeleton className="w-24 h-24 rounded-full mx-auto" />
                 ) : (
-                    <div className="w-24 h-24 rounded-full bg-white flex items-center justify-center overflow-hidden border p-1 mx-auto">
+                    <div className={cn("w-24 h-24 bg-white flex items-center justify-center overflow-hidden border p-1 mx-auto", frameStyles[logoFrame])}>
                         {logoUrl && <img src={logoUrl} alt="Company Logo" className="w-full h-full object-contain" />}
                     </div>
                 )}
