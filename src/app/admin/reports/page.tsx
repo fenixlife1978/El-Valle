@@ -333,7 +333,7 @@ export default function ReportsPage() {
     
     useEffect(() => {
         fetchData();
-    }, [fetchData]);
+    }, []);
 
 
     const integralReportData = useMemo<IntegralReportRow[]>(() => {
