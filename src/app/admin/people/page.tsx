@@ -406,7 +406,7 @@ export default function PeopleManagementPage() {
 
                 toast({
                     title: 'Importación Completada',
-                    description: `${successCount} de ${newOwners.length} registros han sido agregados. La creación de cuentas de autenticación debe realizarse manualmente.`,
+                    description: `${successCount} de ${newOwners.length} registros han sido agregados. La creación de cuentas de autenticación debe realizarse manually.`,
                     className: 'bg-green-100 border-green-400 text-green-800'
                 });
 
@@ -707,5 +707,7 @@ export default function PeopleManagementPage() {
 
     
 
+
+    
 
     
