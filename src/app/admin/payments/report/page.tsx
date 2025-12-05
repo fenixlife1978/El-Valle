@@ -11,7 +11,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { useToast } from '@/hooks/use-toast';
-import { CalendarIcon, CheckCircle2, Trash2, PlusCircle, Loader2, Search, XCircle, Wand2, UserPlus } from 'lucide-react';
+import { CalendarIcon, CheckCircle2, Trash2, PlusCircle, Loader2, Search, XCircle, Wand2, UserPlus, Banknote } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -21,18 +21,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { inferPaymentDetails } from '@/ai/flows/infer-payment-details';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/hooks/use-auth';
+import { BankSelectionModal } from '@/components/bank-selection-modal';
 
-
-// --- Static Data ---
-const venezuelanBanks = [
-    { value: 'banesco', label: 'Banesco' },
-    { value: 'mercantil', label: 'Mercantil' },
-    { value: 'provincial', label: 'Provincial' },
-    { value: 'bdv', label: 'Banco de Venezuela' },
-    { value: 'bnc', label: 'Banco Nacional de Crédito (BNC)' },
-    { value: 'tesoro', label: 'Banco del Tesoro' },
-    { value: 'otro', label: 'Otro' },
-];
 
 type Owner = {
     id: string;
@@ -84,6 +74,8 @@ export default function UnifiedPaymentsPage() {
 
     // State for the new beneficiary selection flow
     const [beneficiaryRows, setBeneficiaryRows] = useState<BeneficiaryRow[]>([]);
+    
+    const [isBankModalOpen, setIsBankModalOpen] = useState(false);
 
 
     // --- Data Fetching ---
@@ -252,7 +244,7 @@ export default function UnifiedPaymentsPage() {
         if (!exchangeRate || exchangeRate <= 0) return { isValid: false, error: 'Se requiere una tasa de cambio válida para la fecha seleccionada.' };
         if (!paymentMethod) return { isValid: false, error: 'Debe seleccionar un tipo de pago.' };
         if (!bank) return { isValid: false, error: 'Debe seleccionar un banco.' };
-        if (bank === 'otro' && !otherBank.trim()) return { isValid: false, error: 'Debe especificar el nombre del otro banco.' };
+        if (bank === 'Otro' && !otherBank.trim()) return { isValid: false, error: 'Debe especificar el nombre del otro banco.' };
         if (!totalAmount || Number(totalAmount) <= 0) return { isValid: false, error: 'El monto total debe ser mayor a cero.' };
         if (beneficiaryRows.some(row => !row.owner)) return { isValid: false, error: 'Debe seleccionar un beneficiario para cada fila.' };
         if (beneficiaryRows.some(row => !row.amount || Number(row.amount) <= 0)) return { isValid: false, error: 'Debe completar un monto válido para cada beneficiario.' };
@@ -312,7 +304,7 @@ export default function UnifiedPaymentsPage() {
                 paymentDate: Timestamp.fromDate(paymentDate!),
                 exchangeRate: exchangeRate,
                 paymentMethod: paymentMethod,
-                bank: bank === 'otro' ? otherBank : bank,
+                bank: bank === 'Otro' ? otherBank : bank,
                 reference: reference,
                 totalAmount: Number(totalAmount),
                 beneficiaries: beneficiaries,
@@ -413,12 +405,26 @@ export default function UnifiedPaymentsPage() {
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="bank">Banco Emisor</Label>
-                             <Select value={bank} onValueChange={setBank} disabled={loading}>
-                                <SelectTrigger id="bank"><SelectValue placeholder="Seleccione un banco..." /></SelectTrigger>
-                                <SelectContent>{venezuelanBanks.map(b => <SelectItem key={b.value} value={b.value}>{b.label}</SelectItem>)}</SelectContent>
-                            </Select>
+                            <Button
+                                type="button"
+                                id="bank"
+                                variant="outline"
+                                className="w-full justify-start text-left font-normal"
+                                onClick={() => setIsBankModalOpen(true)}
+                                disabled={loading}
+                            >
+                                {bank ? (
+                                    <>
+                                     <Banknote className="mr-2 h-4 w-4" />
+                                     {bank}
+                                    </>
+                                ) : (
+                                    <span>Seleccione un banco...</span>
+                                )}
+                            </Button>
                         </div>
-                        {bank === 'otro' && (
+
+                        {bank === 'Otro' && (
                             <div className="space-y-2 md:col-span-2">
                                 <Label htmlFor="otherBank">Nombre del Otro Banco</Label>
                                 <Input id="otherBank" value={otherBank} onChange={(e) => setOtherBank(e.target.value)} disabled={loading}/>
@@ -539,8 +545,20 @@ export default function UnifiedPaymentsPage() {
                     </CardFooter>
                 </Card>
             </form>
+            
+            <BankSelectionModal
+                isOpen={isBankModalOpen}
+                onOpenChange={setIsBankModalOpen}
+                selectedValue={bank}
+                onSelect={(value) => {
+                    setBank(value);
+                    if (value !== 'Otro') {
+                        setOtherBank('');
+                    }
+                    setIsBankModalOpen(false);
+                }}
+            />
         </div>
     );
 }
-
 
