@@ -17,7 +17,7 @@ import { db } from '@/lib/firebase';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import QRCode from 'qrcode';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -233,6 +233,7 @@ export default function FinancialBalancePage() {
 
         if (formatType === 'pdf') {
             const doc = new jsPDF();
+            autoTable(doc); // Apply autoTable plugin
             const pageWidth = doc.internal.pageSize.getWidth();
             const margin = 14;
             

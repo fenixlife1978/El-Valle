@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import { es } from "date-fns/locale";
 import { Calendar as CalendarIcon, Download, Search, Loader2, FileText, FileSpreadsheet, ArrowUpDown, Building, BadgeInfo, BadgeCheck, BadgeX, History, ChevronDown, ChevronRight, TrendingUp, TrendingDown, DollarSign, Receipt, Wand2, Megaphone, ArrowLeft, Trash2 } from "lucide-react";
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import { collection, getDocs, query, where, doc, getDoc, orderBy, Timestamp, addDoc, setDoc, writeBatch, deleteDoc, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -763,6 +763,7 @@ export default function ReportsPage() {
 
         if (formatType === 'pdf') {
             const doc = new jsPDF({ orientation: 'landscape' });
+            autoTable(doc); // Apply autoTable plugin
             const pageWidth = doc.internal.pageSize.getWidth();
             let startY = 15;
             if (companyInfo?.logo) doc.addImage(companyInfo.logo, 'PNG', 15, startY, 20, 20);
@@ -818,6 +819,7 @@ export default function ReportsPage() {
         }
 
         const doc = new jsPDF();
+        autoTable(doc); // Apply autoTable plugin
         const pageWidth = doc.internal.pageSize.getWidth();
         const margin = 14;
 
@@ -872,6 +874,7 @@ export default function ReportsPage() {
     
         const filename = `reporte_pagos_${selectedIndividual.name.replace(/\s/g, '_')}`;
         const doc = new jsPDF();
+        autoTable(doc); // Apply autoTable plugin
         const pageWidth = doc.internal.pageSize.getWidth();
         const margin = 14;
 
@@ -953,6 +956,7 @@ export default function ReportsPage() {
 
         const filename = `estado_de_cuenta_${selectedStatementOwner.name.replace(/\s/g, '_')}`;
         const doc = new jsPDF();
+        autoTable(doc); // Apply autoTable plugin
         const pageWidth = doc.internal.pageSize.getWidth();
         const margin = 14;
 
@@ -1031,6 +1035,7 @@ export default function ReportsPage() {
     
         if (formatType === 'pdf') {
             const doc = new jsPDF();
+            autoTable(doc); // Apply autoTable plugin
             const pageWidth = doc.internal.pageSize.getWidth();
             const margin = 14;
     
@@ -1083,6 +1088,7 @@ export default function ReportsPage() {
 
         if (formatType === 'pdf') {
             const doc = new jsPDF();
+            autoTable(doc); // Apply autoTable plugin
             const pageWidth = doc.internal.pageSize.getWidth();
             let startY = 15;
             if (companyInfo?.logo) doc.addImage(companyInfo.logo, 'PNG', 15, startY, 20, 20);
@@ -1131,6 +1137,7 @@ export default function ReportsPage() {
 
         if (formatType === 'pdf') {
             const doc = new jsPDF();
+            autoTable(doc); // Apply autoTable plugin
             const pageWidth = doc.internal.pageSize.getWidth();
             let startY = 15;
             if (companyInfo?.logo) doc.addImage(companyInfo.logo, 'PNG', 15, startY, 20, 20);

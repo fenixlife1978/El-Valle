@@ -18,7 +18,7 @@ import { db } from '@/lib/firebase';
 import { Badge } from '@/components/ui/badge';
 import { differenceInCalendarMonths, format, addMonths, startOfMonth, isBefore } from 'date-fns';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
 
@@ -825,6 +825,7 @@ export default function DebtManagementPage() {
 
     const handleExportPDF = () => {
         const doc = new jsPDF();
+        autoTable(doc); // Apply autoTable plugin
         const pageHeight = doc.internal.pageSize.getHeight();
         const pageWidth = doc.internal.pageSize.getWidth();
         const margin = 14;
