@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from '@/hooks/use-toast';
-import { Upload, Save, Calendar as CalendarIcon, PlusCircle, Loader2, AlertTriangle, Wand2, MoreHorizontal, Edit, FileCog, UserCircle, RefreshCw, Trash2, Circle, Square, RoundedSquare } from 'lucide-react';
+import { Upload, Save, Calendar as CalendarIcon, PlusCircle, Loader2, AlertTriangle, Wand2, MoreHorizontal, Edit, FileCog, UserCircle, RefreshCw, Trash2, Circle, Square, RoundedSquare, Sparkles, Church, CandyCane } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
@@ -45,7 +45,8 @@ type ExchangeRate = {
     active: boolean;
 };
 
-type FrameStyle = 'circle' | 'soft' | 'rounded' | 'square';
+type FrameStyle = 'circle' | 'soft' | 'rounded' | 'square' | 'carnaval' | 'semana-santa' | 'navidad';
+
 
 type Settings = {
     adminProfile: AdminProfile;
@@ -84,15 +85,28 @@ const emptyCompanyInfo: CompanyInfo = {
     rif: '',
     phone: '',
     email: '',
-    logo: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAOEAAADhCAMAAAAJbSJIAAAAgVBMVEX///8BAQEAAAAtLS0QEBCGhoYxMTEzMzN4eHhISEihoaFlZWVCQkKVlZWrq6vo6Ojt7e3X19fOzs57e3vAwMDJycn39/fk5OTw8PCtra1OTk6rq6uurq4WFhYyMjLT09NcXFw/Pz/a2tqenp7FxcVdXV0nJycXFxdAQEC+vr5MTEwCAgLJSSgdAAADVUlEQVR4nO2byXKaQBCGcwIqIIoCiqIi6q4d7/+M8wgmE6aZpDfZae/1LzFjZn9SdybT0QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFsH04P2XjD98+nN9mD6Y9M+3L/aY6A2W/tJ/d67eD1s9wK/fT/P8+u93g8Ywz/C84/vH2s4q2+K3/Qz/jG84d+Kz1S4L5gP5t6d6d7pM+Yf0r+nP5v6r+v/tP5m/rX+e/1v/h/6H/2n/k39h/xL/Wf8R/wn/B/9j/xP/af8S/3/4r/Sf8S/4P/Mf+z/g3/A/9j/5L/m/w5/2n/S/9T/2X/S/9L/wn/F/8x/1f/Of+z/yX/U/8Z/xn/Of+L/3n/Y//S//p/1L/if8Z/yP/C/4r/kf+j/wP/C/5b/gv+A/7P/Af9P/xf/i/wB/xf/K/8L/xP/S/4L/xP/G/9L/wv/A/8r/2P/Af8r/xn/G/8z/wn/U/85/3P/Cf8z/yP/M/8r/xP/A/8j/zP/M/8L/wP/Q/8r/yv/I/8T/xP/I/8T/wP/E/8j/yv/M/8z/wP/S/8j/yv/K/8z/zP/A/8T/wv/K/8r/yv/I/8T/xv/K/9T/1P/M/8T/yP/M/8z/yv/U/9T/wv/I/8T/xv/K/9T/zP/K/8T/xv/I/8L/xP/I/8j/wv/M/8T/xv/M/8r/wv/M/8j/xv/E/8z/wv/G/8r/xP/K/8z/yP/E/8j/yv/U/9T/wv/K/9T/1P/S/9L/yP/U/8L/yv/C/8L/yP/U/8T/yP/E/8T/xv/C/8z/yP/U/8r/yP/I/8T/yP/M/8j/xP/C/8D/yP/E/8T/wv/K/8r/yP/I/8L/xP/C/8T/wv/A/8L/yv/A/8T/xv/K/8D/yv/E/8j/xP/E/8r/xP/C/8z/xv/I/8T/wv/C/8T/xP/E/8j/wv/K/8j/yP/C/8D/yP/G/8D/yP/I/8L/yv/I/8L/yv/E/8j/xP/A/8L/wv/I/8D/xv/E/8D/yv/G/8j/xv/G/8j/xv/G/8L/yv/K/8j/xv/G/8L/yv/K/8j/yP/A/8D/wP/C/8L/xv/I/8j/yP/K/8L/yP/C/8L/yP/C/8L/yP/C/8L/yP/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAArF+d0dD63+v+vY83wAAAAAAAAAAAuAsoXUn6/8i8kAAAAABJRU5ErkJggg=='
+    logo: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAOEAAADhCAMAAAAJbSJIAAAAgVBMVEX///8BAQEAAAAtLS0QEBCGhoYxMTEzMzN4eHhISEihoaFlZWVCQkKVlZWrq6vo6Ojt7e3X19fOzs57e3vAwMDJycn39/fk5OTw8PCtra1OTk6rq6uurq4WFhYyMjLT09NcXFw/Pz/a2tqenp7FxcVdXV0nJycXFxdAQEC+vr5MTEwCAgLJSSgdAAADVUlEQVR4nO2byXKaQBCGcwIqIIoCiqIi6q4d7/+M8wgmE6aZpDfZae/1LzFjZn9SdybT0QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFsH04P2XjD98+nN9mD6Y9M+3L/aY6A2W/tJ/d67eD1s9wK/fT/P8+u93g8Ywz/C84/vH2s4q2+K3/Qz/jG84d+Kz1S4L5gP5t6d6d7pM+Yf0r+nP5v6r+v/tP5m/rX+e/1v/h/6H/2n/k39h/xL/Wf8R/wn/B/9j/xP/af8S/3/4r/Sf8S/4P/Mf+z/g3/A/9j/5L/m/w5/2n/S/9T/2X/S/9L/wn/F/8x/1f/Of+z/yX/U/8Z/xn/Of+L/3n/Y//S//p/1L/if8Z/yP/C/4r/kf+j/wP/C/5b/gv+A/7P/Af9P/xf/i/wB/xf/K/8L/xP/S/4L/xP/G/9L/wv/A/8r/2P/Af8r/xn/G/8z/wn/U/85/3P/Cf8z/yP/M/8r/xP/A/8j/zP/M/8L/wP/Q/8r/yv/I/8T/xP/I/8T/wP/E/8j/yv/M/8z/wP/S/8j/yv/K/8z/zP/A/8T/wv/K/8r/yv/I/8T/xv/K/9T/1P/M/8T/yP/M/8z/yv/U/9T/wv/I/8T/xv/K/9T/zP/K/8T/xv/I/8L/xP/I/8j/wv/M/8T/xv/M/8r/wv/M/8j/xv/E/8z/wv/G/8r/xP/K/8z/yP/E/8j/yv/U/9T/wv/K/9T/1P/S/9L/yP/U/8L/yv/C/8L/yP/U/8T/yP/E/8T/xv/C/8z/yP/U/8r/yP/I/8T/yP/M/8j/xP/C/8D/yP/E/8T/wv/K/8r/yP/I/8L/xP/C/8T/wv/A/8L/yv/A/8T/xv/K/8D/yv/E/8j/xP/E/8r/xP/C/8z/xv/I/8T/wv/C/8T/xP/E/8j/wv/K/8j/yP/C/8D/yP/G/8D/yP/I/8L/yv/I/8L/yv/E/8j/xP/A/8L/wv/I/8D/xv/E/8D/yv/G/8j/xv/G/8j/xv/G/8L/yv/K/8j/xv/G/8L/yv/K/8j/yP/A/8D/wP/C/8L/xv/I/8j/yP/K/8L/yP/C/8L/yP/C/8L/yP/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAArF+d0dD63+v+vY83wAAAAAAAAAAAuAsoXUn6/8i8kAAAAABJRU5ErkJggg=='
 };
 
-const frameStyles = {
-  circle: 'rounded-full',
-  soft: 'rounded-lg',
-  rounded: 'rounded-2xl',
-  square: 'rounded-none',
+const frameStyles: Record<FrameStyle, string> = {
+    circle: 'rounded-full',
+    soft: 'rounded-lg',
+    rounded: 'rounded-2xl',
+    square: 'rounded-none',
+    carnaval: 'p-1 bg-gradient-to-br from-purple-500 via-green-500 to-yellow-500 rounded-lg',
+    'semana-santa': 'p-1 bg-gradient-to-br from-purple-800 to-yellow-600 rounded-lg',
+    navidad: 'p-1 bg-gradient-to-r from-red-600 via-white to-green-600 rounded-lg',
 };
+
+const frameOptions: {value: FrameStyle, label: string, icon: React.ElementType}[] = [
+    { value: 'circle', label: 'Círculo', icon: Circle },
+    { value: 'soft', label: 'Suave', icon: RoundedSquare },
+    { value: 'square', label: 'Cuadrado', icon: Square },
+    { value: 'carnaval', label: 'Carnaval', icon: Sparkles },
+    { value: 'semana-santa', label: 'Semana Santa', icon: Church },
+    { value: 'navidad', label: 'Navidad', icon: CandyCane },
+];
+
 
 export default function SettingsPage() {
     const { toast } = useToast();
@@ -461,19 +475,17 @@ export default function SettingsPage() {
     const FrameSelector = ({ title, onSelect, currentFrame }: { title: string, onSelect: (frame: FrameStyle) => void, currentFrame: FrameStyle }) => (
         <div>
             <Label className="font-semibold">{title}</Label>
-            <div className="flex gap-2 mt-2">
-                {(Object.keys(frameStyles) as FrameStyle[]).map(frame => (
+            <div className="grid grid-cols-3 gap-2 mt-2">
+                {frameOptions.map(({ value, label, icon: Icon }) => (
                     <Button
-                        key={frame}
-                        variant={currentFrame === frame ? 'default' : 'outline'}
-                        size="icon"
-                        onClick={() => onSelect(frame)}
-                        className="capitalize"
+                        key={value}
+                        variant={currentFrame === value ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => onSelect(value)}
+                        className="flex-col h-auto py-2"
                     >
-                        {frame === 'circle' && <Circle className="h-5 w-5" />}
-                        {frame === 'soft' && <RoundedSquare className="h-5 w-5" />}
-                        {frame === 'rounded' && <RoundedSquare className="h-5 w-5" />}
-                        {frame === 'square' && <Square className="h-5 w-5" />}
+                        <Icon className="h-5 w-5 mb-1" />
+                        <span className="text-xs">{label}</span>
                     </Button>
                 ))}
             </div>
@@ -511,8 +523,10 @@ export default function SettingsPage() {
                             <div className="grid md:grid-cols-2 gap-6">
                                 <div className="space-y-4">
                                     <Label>Logo de la Empresa</Label>
-                                    <div className={cn("w-24 h-24 bg-white flex items-center justify-center overflow-hidden border p-1", frameStyles[companyLogoFrame])}>
-                                        {logoPreview && <img src={logoPreview} alt="Company Logo Preview" className="w-full h-full object-contain" />}
+                                    <div className={cn("w-32 h-32 flex items-center justify-center overflow-hidden border", frameStyles[companyLogoFrame])}>
+                                         <div className="w-full h-full bg-white flex items-center justify-center p-1">
+                                            {logoPreview && <img src={logoPreview} alt="Company Logo Preview" className="w-full h-full object-contain" />}
+                                        </div>
                                     </div>
                                     <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById('logo-upload')?.click()}>
                                         <Upload className="mr-2 h-4 w-4"/> Subir Logo
@@ -522,8 +536,10 @@ export default function SettingsPage() {
                                 </div>
                                  <div className="space-y-4">
                                     <Label>Logo de Tasa BCV</Label>
-                                    <div className={cn("w-24 h-24 bg-white flex items-center justify-center overflow-hidden border p-1", frameStyles[bcvLogoFrame])}>
-                                        {bcvLogoPreview && <img src={bcvLogoPreview} alt="BCV Logo Preview" className="w-full h-full object-contain" />}
+                                    <div className={cn("w-32 h-32 flex items-center justify-center overflow-hidden border", frameStyles[bcvLogoFrame])}>
+                                        <div className="w-full h-full bg-white flex items-center justify-center p-1">
+                                            {bcvLogoPreview && <img src={bcvLogoPreview} alt="BCV Logo Preview" className="w-full h-full object-contain" />}
+                                        </div>
                                     </div>
                                      <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById('bcv-logo-upload')?.click()}>
                                         <Upload className="mr-2 h-4 w-4"/> Cambiar Logo BCV
