@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { CheckCircle2, XCircle, MoreHorizontal, Printer, Filter, Loader2, Trash2, Share2, FileText, Download, ArrowLeft } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 import QRCode from 'qrcode';
 import { collection, onSnapshot, query, doc, updateDoc, getDoc, writeBatch, where, orderBy, Timestamp, getDocs, deleteField, deleteDoc, runTransaction, addDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -482,11 +482,11 @@ export default function VerifyPaymentsPage() {
     });
 
     if (paidDebts.length > 0) {
-        (pdfDoc as any).autoTable({ startY: startY, head: [['Período', 'Concepto (Propiedad)', 'Monto ($)', 'Monto Pagado (Bs)']], body: tableBody, theme: 'striped', headStyles: { fillColor: [44, 62, 80], textColor: 255 }, styles: { fontSize: 9, cellPadding: 2.5 } });
+        autoTable(pdfDoc, { startY: startY, head: [['Período', 'Concepto (Propiedad)', 'Monto ($)', 'Monto Pagado (Bs)']], body: tableBody, theme: 'striped', headStyles: { fillColor: [44, 62, 80], textColor: 255 }, styles: { fontSize: 9, cellPadding: 2.5 } });
         startY = (pdfDoc as any).lastAutoTable.finalY;
     } else {
         totalPaidInConcepts = beneficiary.amount;
-        (pdfDoc as any).autoTable({ startY: startY, head: [['Concepto', 'Monto Pagado (Bs)']], body: [['Abono a Saldo a Favor', `Bs. ${formatToTwoDecimals(beneficiary.amount)}`]], theme: 'striped', headStyles: { fillColor: [44, 62, 80], textColor: 255 }, styles: { fontSize: 9, cellPadding: 2.5 } });
+        autoTable(pdfDoc, { startY: startY, head: [['Concepto', 'Monto Pagado (Bs)']], body: [['Abono a Saldo a Favor', `Bs. ${formatToTwoDecimals(beneficiary.amount)}`]], theme: 'striped', headStyles: { fillColor: [44, 62, 80], textColor: 255 }, styles: { fontSize: 9, cellPadding: 2.5 } });
         startY = (pdfDoc as any).lastAutoTable.finalY;
     }
     startY += 8;
@@ -497,7 +497,7 @@ export default function VerifyPaymentsPage() {
         ['Total Abonado en Deudas:', `Bs. ${formatToTwoDecimals(totalPaidInConcepts)}`],
         ['Saldo a Favor Actual:', `Bs. ${formatToTwoDecimals(currentBalance)}`],
     ];
-    (pdfDoc as any).autoTable({ startY: startY, body: summaryData, theme: 'plain', styles: { fontSize: 9, fontStyle: 'bold' }, columnStyles: { 0: { halign: 'right' }, 1: { halign: 'right'} } });
+    autoTable(pdfDoc, { startY: startY, body: summaryData, theme: 'plain', styles: { fontSize: 9, fontStyle: 'bold' }, columnStyles: { 0: { halign: 'right' }, 1: { halign: 'right'} } });
     startY = (pdfDoc as any).lastAutoTable.finalY + 10;
     
     const totalLabel = "TOTAL PAGADO:";
@@ -803,7 +803,7 @@ export default function VerifyPaymentsPage() {
                             <div className="text-right">Bs. {formatToTwoDecimals(receiptData.previousBalance)}</div>
                              <div className="text-right text-muted-foreground">Saldo Actual:</div>
                             <div className="text-right font-bold">Bs. {formatToTwoDecimals(receiptData.currentBalance)}</div>
-                        </div>
+                           </div>
                     </div>
                 )}
                 <DialogFooter className="sm:justify-end gap-2">
@@ -811,7 +811,7 @@ export default function VerifyPaymentsPage() {
                         <Download className="mr-2 h-4 w-4" /> Exportar PDF
                     </Button>
                     <Button onClick={() => generateAndAct('share', receiptData!)}>
-                         <Share2 className="mr-2 h-4 w-4" /> Compartir PDF
+                           <Share2 className="mr-2 h-4 w-4" /> Compartir PDF
                     </Button>
                 </DialogFooter>
             </DialogContent>
@@ -835,26 +835,3 @@ export default function VerifyPaymentsPage() {
     </div>
   );
 }
-    
-    
-
-    
-
-
-
-
-
-    
-
-    
-
-    
-
-    
-
-
-
-
-    
-
-    
