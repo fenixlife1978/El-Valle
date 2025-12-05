@@ -45,7 +45,7 @@ type ExchangeRate = {
     active: boolean;
 };
 
-type FrameStyle = 'circle' | 'soft' | 'rounded' | 'square' | 'carnaval';
+type FrameStyle = 'circle' | 'soft' | 'rounded' | 'square' | 'carnaval' | 'semana-santa' | 'navidad';
 
 
 type Settings = {
@@ -94,6 +94,8 @@ const frameStyles: Record<FrameStyle, string> = {
     rounded: 'rounded-2xl',
     square: 'rounded-none',
     carnaval: 'p-1 bg-gradient-to-br from-purple-500 via-green-500 to-yellow-500 rounded-lg',
+    'semana-santa': 'p-1 bg-gradient-to-br from-purple-700 to-yellow-500 rounded-lg',
+    'navidad': 'p-1 bg-gradient-to-br from-red-600 to-white rounded-lg',
 };
 
 const frameOptions: {value: FrameStyle, label: string, icon: React.ElementType}[] = [
@@ -775,3 +777,5 @@ export default function SettingsPage() {
         </div>
     );
 }
+
+    
