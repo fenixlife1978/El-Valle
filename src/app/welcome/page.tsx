@@ -7,9 +7,20 @@ import { db } from '@/lib/firebase';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
 import RoleSelectionButtons from '@/app/role-selection-buttons';
+import { cn } from '@/lib/utils';
+
+const frameStyles = {
+  circle: 'rounded-full',
+  soft: 'rounded-lg',
+  rounded: 'rounded-2xl',
+  square: 'rounded-none',
+};
+
+type FrameStyle = keyof typeof frameStyles;
 
 function WelcomePageContent() {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [logoFrame, setLogoFrame] = useState<FrameStyle>('circle');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -21,6 +32,9 @@ function WelcomePageContent() {
           const settings = docSnap.data();
           if (settings.companyInfo && settings.companyInfo.logo) {
             setLogoUrl(settings.companyInfo.logo);
+          }
+          if (settings.companyLogoFrame) {
+            setLogoFrame(settings.companyLogoFrame);
           }
         }
       } catch (error) {
@@ -38,7 +52,7 @@ function WelcomePageContent() {
         {loading ? (
           <Skeleton className="w-24 h-24 rounded-full mx-auto mb-6" />
         ) : (
-            <div className="w-24 h-24 rounded-full bg-white flex items-center justify-center overflow-hidden border p-1 mx-auto mb-6">
+            <div className={cn("w-24 h-24 bg-white flex items-center justify-center overflow-hidden border p-1 mx-auto mb-6", frameStyles[logoFrame])}>
                 {logoUrl && <img src={logoUrl} alt="Company Logo" className="w-full h-full object-contain" />}
             </div>
         )}
