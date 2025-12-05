@@ -48,19 +48,17 @@ type FrameStyle = 'circle' | 'soft' | 'rounded' | 'square';
 
 
 type Settings = {
-    id?: string; // B: Añadido ID opcional
+    id?: string;
     adminProfile: AdminProfile;
     companyInfo: CompanyInfo;
     condoFee: number;
     exchangeRates: ExchangeRate[];
     lastCondoFee?: number; // To track the previous fee for adjustment logic
     bcvLogo?: string;
-    companyLogoFrame?: FrameStyle;
-    bcvLogoFrame?: FrameStyle;
 };
 
 type Debt = {
-    id: string; // B: Añadido ID
+    id: string; 
     ownerId: string;
     year: number;
     month: number;
@@ -88,20 +86,6 @@ const emptyCompanyInfo: CompanyInfo = {
     logo: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAOEAAADhCAMAAAAJbSJIAAAAgVBMVEX///8BAQEAAAAtLS0QEBCGhoYxMTEzMzN4eHhISEihoaFlZWVCQkKVlZWrq6vo6Ojt7e3X19fOzs57e3vAwMDJycn39/fk5OTw8PCtra1OTk6rq6uurq4WFhYyMjLT09NcXFw/Pz/a2tqenp7FxcVdXV0nJycXFxdAQEC+vr5MTEwCAgLJSSgdAAADVUlEQVR4nO2byXKaQGcwIqIIoCiqIi6q4d7/+M8wgmE6aZpDfZae/1LzFjZn9SdybT0QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFsH04P2XjD98+nN9mD6Y9N+3L/aY6A2W/tJ/d67eD1s9wK/fT/P8+u93g8Ywz/C84/vH2s4q2+K3/Qz/jG84d+Kz1S4L5gP5t6d6d7pM+Yf0r+nP5v6r+v/tP5m/rX+e/1v/h/6H/2n/k39h/xL/Wf8R/wn/B/9j/xP/af8S/3/4r/Sf8S/4P/Mf+z/g3/A/9j/5L/m/w5/2n/S/9T/2X/S/9L/wn/F/8x/1f/Of+z/yX/U/8Z/xn/Of+L/3n/Y//S//p/1L/if8Z/yP/C/4r/kf+j/wP/C/5b/gv+A/7P/Af9P/xf/i/wB/xf/K/8L/xP/S/4L/xP/G/9L/wv/A/8r/2P/Af8r/xn/G/8z/wn/U/85/3P/Cf8z/yP/M/8r/xP/A/8j/zP/M/8L/wP/Q/8r/yv/I/8T/xP/I/8T/wP/E/8j/yv/M/8z/wP/S/8j/yv/K/8z/zP/A/8T/wv/K/8r/yv/I/8T/xv/K/9T/1P/M/8T/yP/M/8z/yv/U/9T/wv/I/8T/xv/K/9T/zP/K/8T/xv/I/8L/xP/I/8j/wv/M/8T/xv/M/8r/wv/M/8j/xv/E/8z/wv/G/8r/xP/K/8z/yP/E/8j/yv/U/9T/wv/K/9T/1P/S/9L/yP/U/8L/yv/C/8L/yP/U/8T/yP/E/8T/xv/C/8z/yP/U/8r/yP/I/8T/yP/M/8j/xP/C/8D/yP/E/8T/wv/K/8r/yP/I/8L/xP/C/8T/wv/A/8L/yv/A/8T/xv/K/8D/yv/E/8j/xP/E/8r/xP/C/8z/xv/I/8T/wv/C/8T/xP/E/8j/wv/K/8j/yP/C/8D/yP/G/8D/yP/I/8L/yv/I/8L/yv/E/8j/xP/A/8L/wv/I/8D/xv/E/8D/yv/G/8j/xv/G/8j/xv/G/8L/yv/K/8j/xv/G/8L/yv/K/8j/yP/A/8D/wP/C/8L/xv/I/8j/yP/K/8L/yP/C/8L/yP/C/8L/yP/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAArF+d0dD63+v+vY83wAAAAAAAAAAAuAsoXUn6/8i8kAAAAABJRU5ErkJggg=='
 };
 
-// Clase para lograr el efecto circular (rounded-full)
-const frameStyles: Record<FrameStyle, string> = {
-    circle: 'rounded-full',
-    soft: 'rounded-lg',
-    rounded: 'rounded-2xl',
-    square: 'rounded-none',
-};
-
-// Se reemplazó RoundedSquare por Square (ícono válido)
-const frameOptions: {value: FrameStyle, label: string, icon: React.ElementType}[] = [
-    { value: 'circle', label: 'Círculo', icon: Circle },
-    { value: 'soft', label: 'Suave', icon: Sparkles }, // Usando Sparkles para diferenciar de Square
-    { value: 'square', label: 'Cuadrado', icon: Square },
-];
 
 
 export default function SettingsPage() {
@@ -138,10 +122,6 @@ export default function SettingsPage() {
     const [isDeleteRateDialogOpen, setIsDeleteRateDialogOpen] = useState(false);
     const [rateToDelete, setRateToDelete] = useState<ExchangeRate | null>(null);
 
-    // Estado para el marco por defecto: 'circle'
-    const [companyLogoFrame, setCompanyLogoFrame] = useState<FrameStyle>('circle');
-    const [bcvLogoFrame, setBcvLogoFrame] = useState<FrameStyle>('circle');
-
 
     useEffect(() => {
         const settingsRef = doc(db, 'config', 'mainSettings');
@@ -157,9 +137,6 @@ export default function SettingsPage() {
                 setCondoFee(settings.condoFee);
                 setLastCondoFee(settings.condoFee); // Set the last known fee from DB
                 setExchangeRates(settings.exchangeRates || []);
-                // Se cargan los marcos guardados o 'circle' por defecto si no existen
-                setCompanyLogoFrame(settings.companyLogoFrame || 'circle'); 
-                setBcvLogoFrame(settings.bcvLogoFrame || 'circle');
             } else {
                 const initialRate: ExchangeRate = {
                     id: new Date().toISOString(),
@@ -173,8 +150,6 @@ export default function SettingsPage() {
                     condoFee: 25.00,
                     lastCondoFee: 25.00,
                     exchangeRates: [initialRate],
-                    companyLogoFrame: 'circle', // Valor por defecto en la inicialización de DB
-                    bcvLogoFrame: 'circle'
                 });
             }
             setLoading(false);
@@ -221,7 +196,6 @@ export default function SettingsPage() {
     };
     
     const handleAddRate = async () => {
-        // C: Se usa Number() para asegurar el tipo numérico
         const rateAmount = Number(newRateAmount); 
         
         if(!newRateDate || isNaN(rateAmount) || rateAmount <= 0) {
@@ -232,7 +206,7 @@ export default function SettingsPage() {
         const newRate: ExchangeRate = {
             id: new Date().toISOString(), // simple unique id
             date: format(newRateDate, 'yyyy-MM-dd'),
-            rate: rateAmount, // C: Usamos el rateAmount ya parseado
+            rate: rateAmount, 
             active: false
         };
         
@@ -271,7 +245,7 @@ export default function SettingsPage() {
     };
 
     const handleEditRate = async () => {
-        const editedRateAmount = Number(editRateAmount); // C: Se usa Number()
+        const editedRateAmount = Number(editRateAmount);
         
         if (!rateToEdit || !editRateDate || isNaN(editedRateAmount) || editedRateAmount <= 0) {
             toast({ variant: 'destructive', title: 'Error', description: 'Faltan datos o el monto es inválido para editar la tasa.' });
@@ -279,7 +253,7 @@ export default function SettingsPage() {
         }
         const updatedRates = exchangeRates.map(r => 
             r.id === rateToEdit.id 
-            ? { ...r, date: format(editRateDate, 'yyyy-MM-dd'), rate: editedRateAmount } // C: Usamos el monto parseado
+            ? { ...r, date: format(editRateDate, 'yyyy-MM-dd'), rate: editedRateAmount } 
             : r
         );
         
@@ -323,7 +297,6 @@ export default function SettingsPage() {
     const handleCondoFeeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newFee = parseFloat(e.target.value) || 0;
         setCondoFee(newFee);
-        // D: Simplificación del condicional
         setIsFeeChanged(newFee !== lastCondoFee);
     }
 
@@ -356,8 +329,6 @@ export default function SettingsPage() {
                 condoFee: newCondoFee,
                 lastCondoFee: lastCondoFee,
                 bcvLogo: bcvLogo,
-                companyLogoFrame: companyLogoFrame,
-                bcvLogoFrame: bcvLogoFrame,
             };
     
             await updateDoc(settingsRef, dataToSave);
@@ -370,7 +341,6 @@ export default function SettingsPage() {
                 className: 'bg-green-100 border-green-400 text-green-800'
             });
     
-            // D: Condicional para mostrar la alerta de ajuste
             if (isFeeChanged) {
                  toast({
                      title: 'Cuota Actualizada',
@@ -423,7 +393,6 @@ export default function SettingsPage() {
             for (const debtDoc of advanceDebtsSnapshot.docs) {
                 const debt = { id: debtDoc.id, ...debtDoc.data() } as Debt;
                 
-                // CORRECCIÓN 3: Se usa Number() para asegurar que la comparación se haga con números
                 const paidAmount = Number(debt.paidAmountUSD || debt.amountUSD); 
                 
                 const adjustmentKey = `${debt.ownerId}-${debt.year}-${debt.month}`;
@@ -475,25 +444,6 @@ export default function SettingsPage() {
         );
     }
     
-    const FrameSelector = ({ title, onSelect, currentFrame }: { title: string, onSelect: (frame: FrameStyle) => void, currentFrame: FrameStyle }) => (
-        <div>
-            <Label className="font-semibold">{title}</Label>
-            <div className="grid grid-cols-3 gap-2 mt-2">
-                {frameOptions.map(({ value, label, icon: Icon }) => (
-                    <Button
-                        key={value}
-                        variant={currentFrame === value ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => onSelect(value)}
-                        className="flex-col h-auto py-2"
-                    >
-                        <Icon className="h-5 w-5 mb-1" />
-                        <span className="text-xs">{label}</span>
-                    </Button>
-                ))}
-            </div>
-        </div>
-    );
 
     return (
         <div className="space-y-8">
@@ -520,14 +470,13 @@ export default function SettingsPage() {
                      <Card>
                         <CardHeader>
                             <CardTitle>Gestión de Logos</CardTitle>
-                            <CardDescription>Personaliza los logos y sus marcos en la aplicación.</CardDescription>
+                            <CardDescription>Personaliza los logos de la aplicación.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-6">
                             <div className="grid md:grid-cols-2 gap-6">
                                 <div className="space-y-4">
                                     <Label>Logo de la Empresa</Label>
-                                    {/* Aplicación de la clase CSS del marco */}
-                                    <div className={cn("w-32 h-32 flex items-center justify-center overflow-hidden border", frameStyles[companyLogoFrame])}>
+                                    <div className="w-32 h-32 flex items-center justify-center overflow-hidden border rounded-md">
                                          <div className="w-full h-full bg-white flex items-center justify-center p-1">
                                              {logoPreview && <img src={logoPreview} alt="Company Logo Preview" className="w-full h-full object-contain" />}
                                          </div>
@@ -536,12 +485,10 @@ export default function SettingsPage() {
                                         <Upload className="mr-2 h-4 w-4"/> Subir Logo
                                     </Button>
                                     <Input id="logo-upload" type="file" className="hidden" onChange={(e) => handleImageChange(e, 'logo')} accept="image/png, image/jpeg" />
-                                    <FrameSelector title="Marco del Logo de la Empresa" currentFrame={companyLogoFrame} onSelect={setCompanyLogoFrame} />
                                 </div>
                                  <div className="space-y-4">
                                      <Label>Logo de Tasa BCV</Label>
-                                     {/* Aplicación de la clase CSS del marco */}
-                                     <div className={cn("w-32 h-32 flex items-center justify-center overflow-hidden border", frameStyles[bcvLogoFrame])}>
+                                     <div className="w-32 h-32 flex items-center justify-center overflow-hidden border rounded-md">
                                          <div className="w-full h-full bg-white flex items-center justify-center p-1">
                                              {bcvLogoPreview && <img src={bcvLogoPreview} alt="BCV Logo Preview" className="w-full h-full object-contain" />}
                                          </div>
@@ -550,7 +497,6 @@ export default function SettingsPage() {
                                         <Upload className="mr-2 h-4 w-4"/> Cambiar Logo BCV
                                      </Button>
                                      <Input id="bcv-logo-upload" type="file" className="hidden" onChange={(e) => handleImageChange(e, 'bcvLogo')} accept="image/png, image/jpeg" />
-                                      <FrameSelector title="Marco del Logo BCV" currentFrame={bcvLogoFrame} onSelect={setBcvLogoFrame} />
                                  </div>
                             </div>
                         </CardContent>
@@ -563,7 +509,6 @@ export default function SettingsPage() {
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div className="flex items-center gap-6">
-                                {/* Avatar utiliza rounded-full internamente */}
                                 <Avatar className="w-24 h-24 text-lg">
                                     <AvatarImage src={adminAvatarPreview || ''} alt="Admin Avatar" />
                                     <AvatarFallback><UserCircle className="h-12 w-12"/></AvatarFallback>
