@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import Link from 'next/link';
@@ -79,7 +78,7 @@ const BCVIcon = (props: React.ImgHTMLAttributes<HTMLImageElement> & {src?: strin
     }
 
     return (
-        <img src="data:image/png;base64,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" alt="Default BCV Logo" {...props} />
+        <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAABjGlDQ1BJQ0MgcHJvZmlsZQAAKJF9kT1Iw0AcxV9TpSIVh1YQcchQnSyIijhKFYtgobQVWnUweemP0KQhSXFxFFwLDv4sVh1cnHV1cBUEwR8QJ0cdunspscpS8v+83fev54sA9w4Z8qExgEwJ4Rz2d2c2nn+4tPl91i/T4c+s3+hOq3A4fHw353f2nfg/f2d5/sfy3wP3BAnJ5f25+X1sV3MWva3VA7v3u/UK/w3V5f1v/g5fS3sJ5MPf9L/c3h+8d2e8t9+8O/3s3+Hw5+5/v8PA+v7d/3c2g5/vD/3d/3f/8//5/f4//9/v+//9/v+//9/v////+EwAQCgYAABgQCgYAABgQCgYAABgQCgYAABgQCgYAABgQCgYAABgQCgYAABgQCgYAABgQCgYAABgQCgYAABgQCgYAABgQCgYAABgQCgYAABgQCgYAABgQCgYAABgQCgYAABgQCgYAABgQCgYAABgQCgYAABgQCgYAABgQCgYAABgQCgYAABgQCgYAABgQCgYAABgQCgYAABgQCgYAABgQCgYAABgQCgYAAAzp3wdp15h32DgIAAAAJcEhZcwAAFiUAABYlAUlSJPAAAANLSURBVHic7ZpdaFxFGMd/W/GqFqmJgqJ6EAShRz2I4g/iR2wUQXoSQQ9eFA+Cp6gXLyIllqIgu8LYBG3Ekq1q1bZatbVartv2sbe3d2fH3MzO7m3d7R+eM+9M5v/8Z87M/I8zh83bXgD0lWb/VWBfGnggDTyQBh5IAw+kgQfSwANp4IE08EAaOCANKy3QXb/fT9VqNYsWLYz43NlZGa2trUbr66vxfQBQV1+gL+5vby4vLw/L5fJ4oNPpNEVFRcbS0pL5fH7iCwCg7lSBHh4eGnPmzHGlUilRqVSkUqngvHnzxrq6OmP//v2jYDB4LwCArvRAB+rq6oxVq1bF4XAUBodHRkZGhgIDA2l2drbZuXNn3GyfOHFiyGQy0QCg61zQAaGhoWYulxuPjIwMiEQiWFlZGa+srIybm5tjz549I52dnXGnT0lJifv6+gBQ97qgw+h0uuHDw8MjsVgMRkdHR3JycmJbW1ts27ZtZGZmJp6amtp/a2pqsra2ViImAJzZDR2G0WjE5eXlsbGxMVpbW+MPHz4MVVVVRsU99O/fPzI0NMReXl54d3eXvLy8BAApSAn0oAc6OjpGbGxsxJ49eyIAkJaWFrdv3z5eWloar62tDR8fHzE6OjpCoRDIZDKcnZ0lV1dXtLa2kvX1ddLV1SVbW1u0tLSQx8fHpKurS/b29igrKyPj4+Nks1kEBweTrq6uWlpaMD093Zg7d25MmjVrYnFxMYqKinBcXJz4+fl9DwDQXm6mB3paWlrk4eEhvL290dramn379g2fnp5mSkpKtLGxEVu4cGHExsZGhUIhaGlpGbW0tMRevXplVVVVxtDQkE2ZMkUWLFjQTwCg7jSCAyIiIkR2dnbiq1euXBnJyclhdXV1RiaTiYcPH8bS0lL87t27ZGJiIla5cuWYJCUlGZs2bcqtt7d3fACgrjXDAyUnJ4eSk5NjWVlZ4vLysri5uYmVlZWxefPmxR07dsQWFxeHh4eH+NnZWSYnJ0cKCgrEFy5ciKenp3h7e8ufAdBeLpEHuqWlJVpbW4sXLlwo2traWFlZGUdHR2NjY2Osrq6Orq6uWFtbG+vqaq2wAEC7uYge6O3tLbS2toaXl5f4+Pj4HQDsXQID0F4ukge6rq4uWltbi0ajkVZWVqirq2NxcXF8ZmZG2tzc/N9/AP//44kGHiQND6TBh5DAA2nggTTwQBp4IA08kAaeSAM/AfD1/QHg4W3g4S3g4S3g4S3gX7l/AsOqGSuqshhZAAAAAElFTkSuQmCC" alt="Default BCV Logo" {...props} />
     );
 };
 
@@ -106,10 +105,9 @@ const BCVRateCard = ({
     <Card className="mb-6">
       <CardContent className="p-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Avatar className="w-16 h-16 bg-white p-1">
-            <AvatarImage src={logoUrl ?? undefined} className="object-contain" />
-            <AvatarFallback>BCV</AvatarFallback>
-          </Avatar>
+            <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center overflow-hidden border p-1">
+                {logoUrl && <img src={logoUrl} alt="BCV Logo" className="w-full h-full object-contain" />}
+            </div>
           <div>
             <p className="text-sm text-muted-foreground">Tasa Oficial BCV</p>
             <p className="text-3xl font-bold">
@@ -287,10 +285,9 @@ function DashboardLayoutContent({
       <Sidebar className="hidden sm:block">
         <SidebarHeader>
           <div className="flex items-center gap-2 p-2">
-            <Avatar className="w-8 h-8">
-                {companyInfo?.logo ? <AvatarImage src={companyInfo.logo} alt="Logo" /> : null}
-                <AvatarFallback><Building2 className="w-5 h-5 text-primary" /></AvatarFallback>
-            </Avatar>
+            <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center overflow-hidden border p-0.5">
+                {companyInfo?.logo ? <img src={companyInfo.logo} alt="Logo" className="w-full h-full object-contain" /> : <Building2 className="w-5 h-5 text-primary" />}
+            </div>
             <span className="font-semibold text-lg font-headline truncate">{companyInfo?.name || 'Cargando...'}</span>
           </div>
         </SidebarHeader>
