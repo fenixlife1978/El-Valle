@@ -185,7 +185,7 @@ const CustomHeader = ({ ownerData, userRole }: { ownerData: any, userRole: strin
                  </SidebarTrigger>
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="relative h-10 w-10 rounded-full">
+                    <Button variant="ghost" className="relative h-10 w-10 rounded-full hover:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0">
                         <Avatar className="h-10 w-10">
                         <AvatarImage src={ownerData?.avatar} alt={userName} />
                         <AvatarFallback>{userName.charAt(0)}</AvatarFallback>
