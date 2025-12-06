@@ -273,7 +273,7 @@ function DashboardLayoutContent({
       <Sidebar className="hidden sm:block">
         <SidebarHeader>
           <div className="flex items-center gap-2 p-2">
-            <div className={cn("w-8 h-8 bg-white flex items-center justify-center overflow-hidden border p-0.5 rounded-md")}>
+            <div className={cn("w-8 h-8 bg-white flex items-center justify-center overflow-hidden border p-0.5 rounded-full")}>
                 {companyInfo?.logo ? <img src={companyInfo.logo} alt="Logo" className="w-full h-full object-contain" /> : <Building2 className="w-5 h-5 text-primary" />}
             </div>
             <span className="font-semibold text-lg font-headline truncate">{companyInfo?.name || 'Cargando...'}</span>

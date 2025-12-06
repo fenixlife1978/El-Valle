@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from '@/hooks/use-toast';
-import { Upload, Save, Calendar as CalendarIcon, PlusCircle, Loader2, AlertTriangle, Wand2, MoreHorizontal, Edit, FileCog, UserCircle, RefreshCw, Trash2, Circle, Square, Sparkles } from 'lucide-react';
+import { Upload, Save, Calendar as CalendarIcon, PlusCircle, Loader2, AlertTriangle, Wand2, MoreHorizontal, Edit, FileCog, UserCircle, RefreshCw, Trash2, Circle, Square } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
@@ -476,7 +476,7 @@ export default function SettingsPage() {
                             <div className="grid md:grid-cols-2 gap-6">
                                 <div className="space-y-4">
                                     <Label>Logo de la Empresa</Label>
-                                    <div className="w-32 h-32 flex items-center justify-center overflow-hidden border rounded-md">
+                                    <div className="w-32 h-32 flex items-center justify-center overflow-hidden border rounded-full">
                                          <div className="w-full h-full bg-white flex items-center justify-center p-1">
                                              {logoPreview && <img src={logoPreview} alt="Company Logo Preview" className="w-full h-full object-contain" />}
                                          </div>
@@ -488,7 +488,7 @@ export default function SettingsPage() {
                                 </div>
                                  <div className="space-y-4">
                                      <Label>Logo de Tasa BCV</Label>
-                                     <div className="w-32 h-32 flex items-center justify-center overflow-hidden border rounded-md">
+                                     <div className="w-32 h-32 flex items-center justify-center overflow-hidden border rounded-full">
                                          <div className="w-full h-full bg-white flex items-center justify-center p-1">
                                              {bcvLogoPreview && <img src={bcvLogoPreview} alt="BCV Logo Preview" className="w-full h-full object-contain" />}
                                          </div>

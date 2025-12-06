@@ -120,7 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
     }, []);
 
-    const value = {
+    const value: AuthContextType = {
         user,
         ownerData,
         role,
@@ -128,8 +128,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         companyInfo,
         activeRate,
         bcvLogoUrl,
-        companyLogoFrame: null,
-        bcvLogoFrame: null,
     };
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
