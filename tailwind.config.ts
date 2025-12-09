@@ -21,11 +21,6 @@ export default {
     },
     extend: {
       colors: {
-        starbucks: {
-          green: "#00704A",
-          light: "#D4E9E2",
-          dark: "#1E3932"
-        },
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
         card: {
