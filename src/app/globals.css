@@ -4,9 +4,9 @@
 @tailwind utilities;
 
 @layer base {
-  :root, .light, .theme-starbucks {
-    --background: 161 33% 95%; /* Lighter version of D4E9E2 for better contrast */
-    --foreground: 161 29% 17%;
+  :root, .light {
+    --background: 161 33% 90%; /* starbucks-light: #D4E9E2 */
+    --foreground: 161 29% 17%; /* starbucks-dark: #1E3932 */
     
     --card: 0 0% 100%;
     --card-foreground: 161 29% 17%;
@@ -14,16 +14,16 @@
     --popover: 0 0% 100%;
     --popover-foreground: 161 29% 17%;
     
-    --primary: 165 100% 22%;
+    --primary: 165 100% 22%; /* starbucks-green: #00704A */
     --primary-foreground: 0 0% 100%;
     
-    --secondary: 161 33% 90%;
+    --secondary: 161 33% 85%;
     --secondary-foreground: 165 100% 22%;
     
-    --muted: 161 33% 90%;
+    --muted: 161 33% 85%;
     --muted-foreground: 161 29% 40%;
     
-    --accent: 161 33% 85%;
+    --accent: 161 33% 80%;
     --accent-foreground: 165 100% 22%;
     
     --destructive: 0 84.2% 60.2%;
@@ -35,34 +35,34 @@
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
 
-    --border: 161 33% 85%;
-    --input: 161 33% 85%;
+    --border: 161 33% 80%;
+    --input: 161 33% 80%;
     --ring: 165 100% 22%;
 
     --radius: 0.5rem;
   }
 
   .dark {
-    --background: 161 29% 17%;
-    --foreground: 161 33% 95%;
+    --background: 161 29% 10%; /* Darker shade of starbucks-dark */
+    --foreground: 161 33% 90%; /* starbucks-light */
     
-    --card: 161 29% 22%;
-    --card-foreground: 161 33% 95%;
+    --card: 161 29% 17%; /* starbucks-dark */
+    --card-foreground: 161 33% 90%;
     
-    --popover: 161 29% 17%;
-    --popover-foreground: 161 33% 95%;
+    --popover: 161 29% 10%;
+    --popover-foreground: 161 33% 90%;
     
     --primary: 165 100% 32%; /* Brighter green for dark mode */
     --primary-foreground: 0 0% 100%;
     
-    --secondary: 161 29% 25%;
-    --secondary-foreground: 161 33% 95%;
+    --secondary: 161 29% 22%;
+    --secondary-foreground: 161 33% 90%;
     
-    --muted: 161 29% 25%;
+    --muted: 161 29% 22%;
     --muted-foreground: 161 29% 60%;
     
-    --accent: 161 29% 30%;
-    --accent-foreground: 161 33% 95%;
+    --accent: 161 29% 25%;
+    --accent-foreground: 161 33% 90%;
     
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 100%;
@@ -73,8 +73,8 @@
     --warning: 38 92% 40%;
     --warning-foreground: 0 0% 100%;
     
-    --border: 161 29% 30%;
-    --input: 161 29% 30%;
+    --border: 161 29% 25%;
+    --input: 161 29% 25%;
     --ring: 165 100% 32%;
   }
 }
