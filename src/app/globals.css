@@ -5,26 +5,26 @@
 
 @layer base {
   :root, .light {
-    --background: 161 33% 90%; /* starbucks-light: #D4E9E2 */
-    --foreground: 161 29% 17%; /* starbucks-dark: #1E3932 */
+    --background: 0 0% 98%; /* Casi blanco */
+    --foreground: 240 10% 3.9%; /* Casi negro */
     
     --card: 0 0% 100%;
-    --card-foreground: 161 29% 17%;
+    --card-foreground: 240 10% 3.9%;
     
     --popover: 0 0% 100%;
-    --popover-foreground: 161 29% 17%;
+    --popover-foreground: 240 10% 3.9%;
     
-    --primary: 165 100% 22%; /* starbucks-green: #00704A */
-    --primary-foreground: 0 0% 100%;
+    --primary: 142 76% 36%; /* Verde oscuro */
+    --primary-foreground: 0 0% 100%; /* Blanco */
     
-    --secondary: 161 33% 85%;
-    --secondary-foreground: 165 100% 22%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 10% 3.9%;
     
-    --muted: 161 33% 85%;
-    --muted-foreground: 161 29% 40%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
     
-    --accent: 161 33% 80%;
-    --accent-foreground: 165 100% 22%;
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 10% 3.9%;
     
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 100%;
@@ -35,34 +35,34 @@
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
 
-    --border: 161 33% 80%;
-    --input: 161 33% 80%;
-    --ring: 165 100% 22%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 142 76% 36%;
 
     --radius: 0.5rem;
   }
 
   .dark {
-    --background: 161 29% 10%; /* Darker shade of starbucks-dark */
-    --foreground: 161 33% 90%; /* starbucks-light */
+    --background: 240 10% 3.9%; /* Casi negro */
+    --foreground: 0 0% 98%; /* Casi blanco */
     
-    --card: 161 29% 17%; /* starbucks-dark */
-    --card-foreground: 161 33% 90%;
+    --card: 240 10% 3.9%;
+    --card-foreground: 0 0% 98%;
     
-    --popover: 161 29% 10%;
-    --popover-foreground: 161 33% 90%;
+    --popover: 240 10% 3.9%;
+    --popover-foreground: 0 0% 98%;
     
-    --primary: 165 100% 32%; /* Brighter green for dark mode */
+    --primary: 142 71% 41%; /* Verde oscuro para modo oscuro */
     --primary-foreground: 0 0% 100%;
     
-    --secondary: 161 29% 22%;
-    --secondary-foreground: 161 33% 90%;
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
     
-    --muted: 161 29% 22%;
-    --muted-foreground: 161 29% 60%;
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
     
-    --accent: 161 29% 25%;
-    --accent-foreground: 161 33% 90%;
+    --accent: 240 3.7% 15.9%;
+    --accent-foreground: 0 0% 98%;
     
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 100%;
@@ -73,9 +73,9 @@
     --warning: 38 92% 40%;
     --warning-foreground: 0 0% 100%;
     
-    --border: 161 29% 25%;
-    --input: 161 29% 25%;
-    --ring: 165 100% 32%;
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 142 71% 41%;
   }
 }
 
