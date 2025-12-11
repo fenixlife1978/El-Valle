@@ -98,6 +98,11 @@
             "receiptNumbers": {
                 "type": "object",
                 "additionalProperties": { "type": "string" }
+            },
+            "receiptUrl": {
+                "type": "string",
+                "format": "uri",
+                "description": "URL to the uploaded payment receipt image in Firebase Storage."
             }
         }
     },
@@ -358,3 +363,5 @@
     "providers": ["password", "google.com"]
   }
 }
+
+      
