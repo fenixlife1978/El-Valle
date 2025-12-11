@@ -176,16 +176,16 @@ export default function AdminDashboardPage() {
                     <p className="text-xs text-black/80">Pagos reportados esperando verificación.</p>
                 </CardContent>
             </Card>
-            <Card className="bg-green-500/10 border-green-500/20">
+            <Card className="bg-green-500 text-white">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">Unidades Totales</CardTitle>
-                    <Users className="h-4 w-4 text-green-500" />
+                    <Users className="h-4 w-4 text-white" />
                 </CardHeader>
                 <CardContent>
                     {loading ? <Loader2 className="h-6 w-6 animate-spin"/> :
                         <div className="text-2xl font-bold">{stats.totalOwners}</div>
                     }
-                    <p className="text-xs text-muted-foreground">Número de propietarios registrados.</p>
+                    <p className="text-xs text-white/80">Número de propietarios registrados.</p>
                 </CardContent>
             </Card>
              <Card className="bg-muted/50">
