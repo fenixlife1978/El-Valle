@@ -11,17 +11,19 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { useToast } from '@/hooks/use-toast';
-import { CalendarIcon, CheckCircle2, Trash2, PlusCircle, Loader2, Search, XCircle, Wand2, UserPlus, Banknote } from 'lucide-react';
+import { CalendarIcon, CheckCircle2, Trash2, PlusCircle, Loader2, Search, XCircle, Wand2, UserPlus, Banknote, Upload } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc, where, getDocs, Timestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db, storage } from '@/lib/firebase';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { inferPaymentDetails } from '@/ai/flows/infer-payment-details';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/hooks/use-auth';
 import { BankSelectionModal } from '@/components/bank-selection-modal';
+import { Progress } from '@/components/ui/progress';
 
 
 type Owner = {
@@ -68,6 +70,10 @@ export default function UnifiedPaymentsPage() {
     const [beneficiaryType, setBeneficiaryType] = useState<BeneficiaryType>('propio');
     const [totalAmount, setTotalAmount] = useState<string>('');
     
+    // State for file upload
+    const [receiptFile, setReceiptFile] = useState<File | null>(null);
+    const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+
     // State for the AI feature
     const [aiPrompt, setAiPrompt] = useState('');
     const [isInferring, setIsInferring] = useState(false);
@@ -178,6 +184,8 @@ export default function UnifiedPaymentsPage() {
         setBeneficiaryType('propio');
         setTotalAmount('');
         setAiPrompt('');
+        setReceiptFile(null);
+        setUploadProgress(null);
         if (beneficiaryType === 'propio' && authOwnerData) {
             setBeneficiaryRows([{
                 id: Date.now().toString(),
@@ -281,12 +289,36 @@ export default function UnifiedPaymentsPage() {
         e.preventDefault();
         setLoading(true);
 
+        const validation = await validateForm();
+        if (!validation.isValid) {
+            toast({ variant: 'destructive', title: 'Error de Validación', description: validation.error, duration: 6000 });
+            setLoading(false);
+            return;
+        }
+
         try {
-            const validation = await validateForm();
-            if (!validation.isValid) {
-                toast({ variant: 'destructive', title: 'Error de Validación', description: validation.error, duration: 6000 });
-                setLoading(false);
-                return;
+            let receiptDownloadUrl = '';
+            if (receiptFile) {
+                setUploadProgress(0);
+                const storageRef = ref(storage, `payment_receipts/${authUser?.uid}/${Date.now()}_${receiptFile.name}`);
+                const uploadTask = uploadBytesResumable(storageRef, receiptFile);
+
+                receiptDownloadUrl = await new Promise((resolve, reject) => {
+                    uploadTask.on('state_changed',
+                        (snapshot) => {
+                            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                            setUploadProgress(progress);
+                        },
+                        (error) => {
+                            console.error("Upload failed:", error);
+                            reject('La subida del archivo falló.');
+                        },
+                        async () => {
+                            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+                            resolve(downloadURL);
+                        }
+                    );
+                });
             }
 
             const beneficiaries = beneficiaryRows.map(row => {
@@ -312,6 +344,7 @@ export default function UnifiedPaymentsPage() {
                 status: 'pendiente' as 'pendiente',
                 reportedAt: serverTimestamp(),
                 reportedBy: authUser?.uid || 'unknown',
+                receiptUrl: receiptDownloadUrl, // Add the URL here
             };
             
             await addDoc(collection(db, "payments"), paymentData);
@@ -329,6 +362,7 @@ export default function UnifiedPaymentsPage() {
             toast({ variant: "destructive", title: "Error Inesperado", description: errorMessage });
         } finally {
             setLoading(false);
+            setUploadProgress(null);
         }
     };
     
@@ -338,6 +372,14 @@ export default function UnifiedPaymentsPage() {
         return allOwners.filter(owner =>
             owner.name && owner.name.toLowerCase().includes(searchTerm.toLowerCase())
         );
+    };
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            const file = e.target.files[0];
+            // Optional: Add file size/type validation here
+            setReceiptFile(file);
+        }
     };
 
     return (
@@ -430,10 +472,16 @@ export default function UnifiedPaymentsPage() {
                                 <Input id="otherBank" value={otherBank} onChange={(e) => setOtherBank(e.target.value)} disabled={loading}/>
                             </div>
                         )}
-                        <div className="space-y-2 md:col-span-2">
+                        <div className="space-y-2">
                              <Label htmlFor="reference">Referencia</Label>
                              <Input id="reference" value={reference} onChange={(e) => setReference(e.target.value.replace(/\D/g, ''))} disabled={loading}/>
                              <p className="text-xs text-muted-foreground">Últimos 6 dígitos, incluso si comienzan con cero.</p>
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="receipt">Comprobante de Pago (Opcional)</Label>
+                            <Input id="receipt" type="file" onChange={handleFileChange} accept="image/*,.pdf" disabled={loading} />
+                            {uploadProgress !== null && <Progress value={uploadProgress} className="w-full mt-2" />}
+                            {receiptFile && uploadProgress === null && <p className="text-sm text-muted-foreground">Archivo seleccionado: {receiptFile.name}</p>}
                         </div>
                     </CardContent>
                 </Card>
