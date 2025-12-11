@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { CheckCircle2, XCircle, MoreHorizontal, Printer, Filter, Loader2, Trash2, Share2, FileText, Download, ArrowLeft, Link as LinkIcon } from 'lucide-react';
+import { CheckCircle2, XCircle, MoreHorizontal, Printer, Filter, Loader2, Trash2, Share2, FileText, Download, ArrowLeft } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -48,7 +48,6 @@ type FullPayment = {
   bank: string;
   type: PaymentMethod;
   reference: string;
-  receiptUrl?: string; // Added field
   receiptNumber?: string;
   receiptNumbers?: { [ownerId: string]: string };
   reportedBy: string;
@@ -185,7 +184,6 @@ export default function VerifyPaymentsPage() {
                 bank: data.bank,
                 type: data.paymentMethod,
                 reference: data.reference,
-                receiptUrl: data.receiptUrl, // Added field
                 receiptNumber: data.receiptNumber,
                 receiptNumbers: data.receiptNumbers,
                 status: data.status,
@@ -663,7 +661,6 @@ export default function VerifyPaymentsPage() {
                             <TableHead>Fecha</TableHead>
                             <TableHead>Banco</TableHead>
                             <TableHead>Referencia</TableHead>
-                            <TableHead>Comprobante</TableHead>
                             <TableHead>Estado</TableHead>
                             <TableHead className="text-right">Acciones</TableHead>
                         </TableRow>
@@ -671,13 +668,13 @@ export default function VerifyPaymentsPage() {
                     <TableBody>
                         {loading ? (
                             <TableRow>
-                                <TableCell colSpan={9} className="h-24 text-center">
+                                <TableCell colSpan={8} className="h-24 text-center">
                                     <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
                                 </TableCell>
                             </TableRow>
                         ) : filteredPayments.length === 0 ? (
                              <TableRow>
-                                <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
+                                <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
                                     No hay pagos que coincidan con el filtro seleccionado.
                                 </TableCell>
                              </TableRow>
@@ -695,15 +692,6 @@ export default function VerifyPaymentsPage() {
                                 <TableCell>{new Date(payment.date).toLocaleDateString('es-VE')}</TableCell>
                                 <TableCell>{payment.bank}</TableCell>
                                 <TableCell>{payment.reference}</TableCell>
-                                <TableCell>
-                                    {payment.receiptUrl && (
-                                        <Button variant="outline" size="icon" asChild>
-                                            <a href={payment.receiptUrl} target="_blank" rel="noopener noreferrer">
-                                                <LinkIcon className="h-4 w-4" />
-                                            </a>
-                                        </Button>
-                                    )}
-                                </TableCell>
                                 <TableCell>
                                     <Badge variant={statusVariantMap[payment.status]}>
                                         {statusTextMap[payment.status]}
