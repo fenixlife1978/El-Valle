@@ -150,10 +150,10 @@ export default function AdminDashboardPage() {
       <h1 className="text-3xl font-bold font-headline">Panel de Administrador</h1>
       
        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-            <Card>
+            <Card className="bg-blue-900/10 border-blue-500/20">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">Pagos Recibidos este Mes</CardTitle>
-                    <Receipt className="h-4 w-4 text-muted-foreground" />
+                    <Receipt className="h-4 w-4 text-blue-500" />
                 </CardHeader>
                 <CardContent>
                     {loading ? <Loader2 className="h-6 w-6 animate-spin"/> :
@@ -164,10 +164,10 @@ export default function AdminDashboardPage() {
                     }
                 </CardContent>
             </Card>
-            <Card>
+            <Card className="bg-yellow-400/10 border-yellow-500/20">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">Pagos Pendientes</CardTitle>
-                    <AlertCircle className="h-4 w-4 text-muted-foreground" />
+                    <AlertCircle className="h-4 w-4 text-yellow-500" />
                 </CardHeader>
                 <CardContent>
                      {loading ? <Loader2 className="h-6 w-6 animate-spin"/> :
@@ -176,10 +176,10 @@ export default function AdminDashboardPage() {
                     <p className="text-xs text-muted-foreground">Pagos reportados esperando verificación.</p>
                 </CardContent>
             </Card>
-            <Card>
+            <Card className="bg-green-500/10 border-green-500/20">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">Unidades Totales</CardTitle>
-                    <Users className="h-4 w-4 text-muted-foreground" />
+                    <Users className="h-4 w-4 text-green-500" />
                 </CardHeader>
                 <CardContent>
                     {loading ? <Loader2 className="h-6 w-6 animate-spin"/> :
@@ -188,7 +188,7 @@ export default function AdminDashboardPage() {
                     <p className="text-xs text-muted-foreground">Número de propietarios registrados.</p>
                 </CardContent>
             </Card>
-             <Card>
+             <Card className="bg-muted/50">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">Recepción de la Aplicación</CardTitle>
                     <Smile className="h-4 w-4 text-muted-foreground" />
