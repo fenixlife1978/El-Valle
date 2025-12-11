@@ -468,14 +468,14 @@ export default function UnifiedPaymentsPage() {
                                 <Input id="otherBank" value={otherBank} onChange={(e) => setOtherBank(e.target.value)} disabled={loading}/>
                             </div>
                         )}
-                        <div className="space-y-2 md:col-span-2">
+                        <div className="space-y-2">
                              <Label htmlFor="reference">Referencia</Label>
                              <Input id="reference" value={reference} onChange={(e) => setReference(e.target.value.replace(/\D/g, ''))} disabled={loading}/>
                              <p className="text-xs text-muted-foreground">Últimos 6 dígitos, incluso si comienzan con cero.</p>
                         </div>
-                         <div className="space-y-2 md:col-span-2">
+                        <div className="space-y-2">
                             <Label htmlFor="receipt">Comprobante de Pago (Opcional)</Label>
-                            <Input id="receipt" type="file" onChange={handleFileChange} accept="image/*" disabled={loading} />
+                            <Input id="receipt" type="file" onChange={handleFileChange} accept="image/*,.pdf" disabled={loading} />
                             {uploadProgress !== null && <Progress value={uploadProgress} className="w-full mt-2" />}
                             {receiptFile && uploadProgress === null && <p className="text-sm text-muted-foreground">Archivo seleccionado: {receiptFile.name}</p>}
                         </div>
@@ -626,6 +626,3 @@ export default function UnifiedPaymentsPage() {
         </div>
     );
 }
-
-
-    
