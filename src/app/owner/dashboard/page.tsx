@@ -92,6 +92,7 @@ export default function OwnerDashboardPage() {
     const { toast } = useToast();
     const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
     const [showFeedbackWidget, setShowFeedbackWidget] = useState(true);
+    const [hasGivenFeedback, setHasGivenFeedback] = useState(false);
     const router = useRouter();
 
     const [isReceiptPreviewOpen, setIsReceiptPreviewOpen] = useState(false);
@@ -135,6 +136,15 @@ export default function OwnerDashboardPage() {
             paymentsData.sort((a, b) => b.paymentDate.toMillis() - a.paymentDate.toMillis());
             setPayments(paymentsData);
         });
+        
+        const checkFeedback = async () => {
+            const feedbackQuery = query(collection(db, 'app_feedback'), where('ownerId', '==', user.uid));
+            const feedbackSnap = await getDocs(feedbackQuery);
+            if (!feedbackSnap.empty) {
+                setHasGivenFeedback(true);
+            }
+        };
+        checkFeedback();
 
         return () => {
             settingsUnsubscribe();
@@ -177,6 +187,7 @@ export default function OwnerDashboardPage() {
                 timestamp: Timestamp.now(),
             });
             setShowFeedbackWidget(false);
+            setHasGivenFeedback(true); // Ensure widget doesn't reappear in same session
             toast({
                 title: '¡Gracias por tu opinión!',
                 description: 'Valoramos tus comentarios para seguir mejorando.',
@@ -264,39 +275,42 @@ export default function OwnerDashboardPage() {
         pdfDoc.setFontSize(10).setFont('helvetica', 'normal').text(`N° de recibo: ${receiptNumber}`, pageWidth - margin, margin + 45, { align: 'right' });
         if(qrCodeUrl) {
           const qrSize = 30;
-          pdfDoc.addImage(qrCodeUrl, 'PNG', pageWidth - margin - qrSize, margin + 48, qrSize, qrSize);
-        }
-        
-        let startY = margin + 60;
-        pdfDoc.setFontSize(10).text(`Beneficiario: ${beneficiary.ownerName} (${data.ownerUnit})`, margin, startY);
-        startY += 6;
-        pdfDoc.text(`Método de pago: ${payment.type || 'No especificado'}`, margin, startY);
-        startY += 6;
-        pdfDoc.text(`Banco Emisor: ${payment.bank}`, margin, startY);
-        startY += 6;
-        pdfDoc.text(`N° de Referencia Bancaria: ${payment.reference}`, margin, startY);
-        startY += 6;
-        pdfDoc.text(`Fecha del pago: ${format(payment.paymentDate.toDate(), 'dd/MM/yyyy')}`, margin, startY);
-        startY += 6;
-        pdfDoc.text(`Tasa de Cambio Aplicada: Bs. ${formatToTwoDecimals(payment.exchangeRate)} por USD`, margin, startY);
-        startY += 10;
-        
-        let totalPaidInConcepts = 0;
-        const tableBody = paidDebts.map(debt => {
-            const debtAmountBs = (debt.paidAmountUSD || debt.amountUSD) * payment.exchangeRate;
-            totalPaidInConcepts += debtAmountBs;
-            const periodLabel = `${monthsLocale[debt.month]} ${debt.year}`;
-            const concept = `${debt.description}`;
-            return [ periodLabel, concept, `$${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}`, `Bs. ${formatToTwoDecimals(debtAmountBs)}` ];
-        });
-    
-        if (paidDebts.length > 0) {
-            autoTable(pdfDoc, { startY: startY, head: [['Período', 'Concepto', 'Monto ($)', 'Monto Pagado (Bs)']], body: tableBody, theme: 'striped', headStyles: { fillColor: [44, 62, 80], textColor: 255 }, styles: { fontSize: 9, cellPadding: 2.5 } });
-            startY = (pdfDoc as any).lastAutoTable.finalY;
+          autoTable(pdfDoc, {
+            startY: startY,
+            head: [['Período', 'Concepto (Propiedad)', 'Monto ($)', 'Monto Pagado (Bs)']],
+            body: tableBody,
+            theme: 'striped',
+            headStyles: {
+              fillColor: [44, 62, 80],
+              textColor: 255
+            },
+            styles: {
+              fontSize: 9,
+              cellPadding: 2.5
+            }
+          });
+          startY = (pdfDoc as any).lastAutoTable.finalY;
         } else {
-            totalPaidInConcepts = beneficiary.amount;
-            autoTable(pdfDoc, { startY: startY, head: [['Concepto', 'Monto Pagado (Bs)']], body: [['Abono a Saldo a Favor', `Bs. ${formatToTwoDecimals(beneficiary.amount)}`]], theme: 'striped', headStyles: { fillColor: [44, 62, 80], textColor: 255 }, styles: { fontSize: 9, cellPadding: 2.5 } });
-            startY = (pdfDoc as any).lastAutoTable.finalY;
+          totalPaidInConcepts = beneficiary.amount;
+          autoTable(pdfDoc, {
+            startY: startY,
+            head: [
+              ['Concepto', 'Monto Pagado (Bs)']
+            ],
+            body: [
+              ['Abono a Saldo a Favor', `Bs. ${formatToTwoDecimals(beneficiary.amount)}`]
+            ],
+            theme: 'striped',
+            headStyles: {
+              fillColor: [44, 62, 80],
+              textColor: 255
+            },
+            styles: {
+              fontSize: 9,
+              cellPadding: 2.5
+            }
+          });
+          startY = (pdfDoc as any).lastAutoTable.finalY;
         }
         startY += 8;
         
@@ -347,7 +361,7 @@ export default function OwnerDashboardPage() {
                 <p className="text-muted-foreground">Aquí tienes un resumen de tu estado de cuenta y accesos rápidos.</p>
             </div>
 
-            {ownerData && ownerData.passwordChanged === false && showFeedbackWidget && (
+            {ownerData && ownerData.passwordChanged === false && showFeedbackWidget && !hasGivenFeedback && (
                 <Alert variant="default" className="bg-blue-900/20 border-blue-500/50">
                     <AlertDescription className="flex flex-col sm:flex-row items-center justify-between gap-4">
                         <div className="flex-grow">
