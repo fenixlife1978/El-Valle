@@ -475,7 +475,7 @@ export default function UnifiedPaymentsPage() {
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="receipt">Comprobante de Pago (Opcional)</Label>
-                            <Input id="receipt" type="file" onChange={handleFileChange} accept="image/*,.pdf" disabled={loading} />
+                            <Input id="receipt" type="file" onChange={handleFileChange} accept="image/*,image/jpeg,.pdf" disabled={loading} />
                             {uploadProgress !== null && <Progress value={uploadProgress} className="w-full mt-2" />}
                             {receiptFile && uploadProgress === null && <p className="text-sm text-muted-foreground">Archivo seleccionado: {receiptFile.name}</p>}
                         </div>

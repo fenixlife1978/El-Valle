@@ -320,7 +320,7 @@ export default function PettyCashPage() {
     return (
         <div className="space-y-8">
              
-            <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileChange} accept="image/*" />
+            <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileChange} accept="image/*,image/jpeg" />
             <div className="flex items-center justify-between gap-4 flex-wrap">
                 <div>
                     <h1 className="text-3xl font-bold font-headline">Gestión de Caja Chica</h1>
