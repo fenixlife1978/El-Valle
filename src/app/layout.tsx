@@ -80,7 +80,7 @@ export default function RootLayout({
         <AuthProvider>
           <ThemeProvider
             attribute="class"
-            defaultTheme="theme-dark-night"
+            defaultTheme="dark"
             enableSystem
             disableTransitionOnChange
           >

@@ -8,13 +8,8 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 const themes = [
-    { name: "Oscuro", value: "dark", colors: ["#263238", "#81C784"] },
+    { name: "Oscuro", value: "dark", colors: ["#1A2E28", "#6B8E23"] },
     { name: "Noche Oscura", value: "theme-dark-night", colors: ["#09091A", "#A78BFA"] },
-    { name: "Océano", value: "theme-ocean", colors: ["#0F2B4B", "#78DCE8"] },
-    { name: "Bosque", value: "theme-forest", colors: ["#223D22", "#88C088"] },
-    { name: "Atardecer", value: "theme-sunset", colors: ["#4B1F21", "#FF8C8C"] },
-    { name: "Amanecer", value: "theme-sunrise", colors: ["#FFF8F0", "#FF6B6B"] },
-    { name: "Abeja", value: "theme-bumblebee", colors: ["#0A0A0A", "#E0B310"] },
 ]
 
 export function ThemeSwitcher() {

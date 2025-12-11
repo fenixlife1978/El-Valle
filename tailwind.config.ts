@@ -79,6 +79,10 @@ export default {
           border: 'hsl(var(--sidebar-border))',
           ring: 'hsl(var(--sidebar-ring))',
         },
+         'starbucks-dark-roast': {
+            DEFAULT: '#1E3932',
+            foreground: '#FFFFFF',
+          },
       },
       keyframes: {
         'accordion-down': {
