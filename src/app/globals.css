@@ -43,28 +43,28 @@
   }
 
   .dark {
-    --background: 0 0% 0%; /* Negro */
-    --foreground: 0 0% 98%; /* Casi blanco */
+    --background: 140 13% 10%; /* Starbucks Dark Roast Green */
+    --foreground: 48 25% 94%; /* Creamy White */
+
+    --card: 140 13% 13%;
+    --card-foreground: 48 25% 94%;
     
-    --card: 48 8% 28%; /* Beige oscuro */
-    --card-foreground: 0 0% 98%;
+    --popover: 140 13% 10%;
+    --popover-foreground: 48 25% 94%;
     
-    --popover: 48 8% 28%;
-    --popover-foreground: 0 0% 98%;
-    
-    --primary: 120 60% 35%; /* Verde oscuro para modo oscuro */
+    --primary: 158 100% 22%; /* Starbucks Green */
     --primary-foreground: 0 0% 100%;
     
-    --secondary: 240 3.7% 15.9%;
+    --secondary: 140 13% 20%;
     --secondary-foreground: 0 0% 98%;
     
-    --muted: 48 8% 28%; /* Beige oscuro */
+    --muted: 140 13% 18%;
     --muted-foreground: 240 5% 64.9%;
     
-    --accent: 240 3.7% 15.9%;
+    --accent: 140 13% 20%;
     --accent-foreground: 0 0% 98%;
     
-    --destructive: 0 62.8% 30.6%;
+    --destructive: 0 62.8% 40.6%;
     --destructive-foreground: 0 0% 100%;
 
     --success: 142 71% 31%;
@@ -73,9 +73,35 @@
     --warning: 38 92% 40%;
     --warning-foreground: 0 0% 100%;
     
-    --border: 48 8% 35%;
-    --input: 48 8% 32%;
-    --ring: 120 60% 35%;
+    --border: 140 13% 20%;
+    --input: 140 13% 15%;
+    --ring: 158 100% 22%;
+  }
+
+  .theme-dark-night {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 240 4% 10%;
+    --card-foreground: 0 0% 98%;
+    --popover: 240 10% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 262 84% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 4% 16%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 4% 12%;
+    --muted-foreground: 240 5% 65%;
+    --accent: 240 4% 16%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 63% 41%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 142 71% 31%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 40%;
+    --warning-foreground: 0 0% 100%;
+    --border: 240 4% 16%;
+    --input: 240 4% 12%;
+    --ring: 262 84% 60%;
   }
 }
 
