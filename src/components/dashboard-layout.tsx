@@ -54,6 +54,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from './ui/skeleton';
 import { useAuth } from '@/hooks/use-auth';
 import { Loader2 } from 'lucide-react';
+import Marquee from './ui/marquee';
 
 export type NavItem = {
   href: string;
@@ -334,6 +335,15 @@ function DashboardLayoutContent({
       </Sidebar>
       <SidebarInset>
         <CustomHeader ownerData={ownerData} userRole={userRole} />
+        {userRole === 'propietario' && (
+             <div className="relative flex w-full bg-yellow-400 text-black font-semibold overflow-x-hidden">
+                 <Marquee pauseOnHover>
+                    <span className="text-sm">
+                        Estimado Usuario, antes de realizar y reportar un pago le recomendamos usar la calculadora de pago para evitar pagos incompletos o excedentes; recuerda que la autogestión es tu responsabilidad.
+                    </span>
+                 </Marquee>
+             </div>
+        )}
         <main className="flex-1 p-4 md:p-8 bg-muted">
             <BCVRateCard rate={activeRate?.rate || 0} date={activeRate?.date || new Date().toISOString()} loading={loading} logoUrl={bcvLogoUrl} />
             {children}
