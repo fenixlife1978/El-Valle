@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -173,7 +174,7 @@ export default function OwnerSettingsPage() {
                         <div className="space-y-2">
                              <Label htmlFor="avatar-upload">Foto de Perfil</Label>
                              <div className="flex items-center gap-2">
-                                <Input id="avatar-upload" type="file" className="hidden" onChange={handleAvatarChange} accept="image/png, image/jpeg" />
+                                <Input id="avatar-upload" type="file" className="hidden" onChange={handleAvatarChange} accept="image/png,image/jpeg" />
                                 <Button type="button" variant="outline" onClick={() => document.getElementById('avatar-upload')?.click()}>
                                     <Upload className="mr-2 h-4 w-4"/> Cambiar Foto
                                 </Button>
