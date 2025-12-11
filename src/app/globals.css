@@ -5,27 +5,27 @@
 
 @layer base {
   :root, .light {
-    /* Estilo basado en la imagen: Verde oscuro y Beige */
-    --background: 71 30% 95%; /* Beige cremoso muy claro para el fondo principal */
-    --foreground: 71 10% 20%; /* Texto oscuro para contraste */
+    /* Estilo basado en Banesco: Azul corporativo, verde y blanco */
+    --background: 0 0% 100%; /* Blanco */
+    --foreground: 240 10% 3.9%; /* Negro suave */
     
-    --card: 71 30% 92%; /* Beige un poco más oscuro para tarjetas */
-    --card-foreground: 71 10% 20%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
     
-    --popover: 71 30% 92%;
-    --popover-foreground: 71 10% 20%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
     
-    --primary: 155 45% 30%; /* Verde oscuro de la barra lateral */
-    --primary-foreground: 0 0% 100%; /* Blanco */
+    --primary: 208 100% 28%; /* Azul Banesco */
+    --primary-foreground: 0 0% 100%;
     
-    --secondary: 71 30% 88%;
-    --secondary-foreground: 71 10% 20%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
     
-    --muted: 71 30% 90%;
-    --muted-foreground: 71 5% 50%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
     
-    --accent: 155 45% 35%;
-    --accent-foreground: 0 0% 100%;
+    --accent: 83 58% 58%; /* Verde Banesco */
+    --accent-foreground: 240 10% 3.9%;
     
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 100%;
@@ -36,48 +36,37 @@
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
 
-    --border: 71 20% 85%;
-    --input: 71 30% 92%; /* Mismo color que las tarjetas */
-    --ring: 155 45% 30%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 208 100% 28%; /* Azul Banesco */
 
     --radius: 0.5rem;
   }
 
   .dark {
-    /* Fondo negro con tarjetas en beige oscuro */
-    --background: 0 0% 8%; /* Negro */
-    --foreground: 60 10% 95%; /* Blanco suave */
-
-    --card: 48 8% 28%; /* Beige oscuro */
-    --card-foreground: 60 10% 95%;
-    
-    --popover: 48 8% 25%;
-    --popover-foreground: 60 10% 95%;
-    
-    --primary: 158 100% 22%; /* Verde Starbucks clásico */
-    --primary-foreground: 0 0% 100%;
-    
-    --secondary: 48 8% 22%;
-    --secondary-foreground: 60 10% 95%;
-    
-    --muted: 48 8% 28%; /* Beige oscuro */
-    --muted-foreground: 60 5% 70%;
-    
-    --accent: 48 8% 35%;
-    --accent-foreground: 60 10% 95%;
-    
-    --destructive: 0 62.8% 40.6%;
-    --destructive-foreground: 0 0% 100%;
-
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 208 100% 40%; /* Azul Banesco más brillante para modo oscuro */
+    --primary-foreground: 210 40% 98%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 83 58% 58%; /* Verde Banesco */
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 62.8% 50.6%;
+    --destructive-foreground: 210 40% 98%;
     --success: 142 71% 31%;
     --success-foreground: 0 0% 100%;
-
     --warning: 38 92% 40%;
     --warning-foreground: 0 0% 100%;
-    
-    --border: 48 8% 35%;
-    --input: 48 8% 28%;
-    --ring: 158 100% 22%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 208 100% 40%;
   }
 
   .theme-dark-night {
