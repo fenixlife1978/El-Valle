@@ -150,30 +150,30 @@ export default function AdminDashboardPage() {
       <h1 className="text-3xl font-bold font-headline">Panel de Administrador</h1>
       
        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-            <Card className="bg-blue-900/10 border-blue-500/20">
+            <Card className="bg-primary text-primary-foreground">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">Pagos Recibidos este Mes</CardTitle>
-                    <Receipt className="h-4 w-4 text-blue-500" />
+                    <Receipt className="h-4 w-4 text-primary-foreground" />
                 </CardHeader>
                 <CardContent>
                     {loading ? <Loader2 className="h-6 w-6 animate-spin"/> :
                         <>
                             <div className="text-2xl font-bold">Bs. {formatToTwoDecimals(stats.monthlyIncome)}</div>
-                            <p className="text-sm text-muted-foreground">~ ${formatToTwoDecimals(stats.monthlyIncomeUSD)}</p>
+                            <p className="text-sm text-primary-foreground/80">~ ${formatToTwoDecimals(stats.monthlyIncomeUSD)}</p>
                         </>
                     }
                 </CardContent>
             </Card>
-            <Card className="bg-yellow-400/10 border-yellow-500/20">
+            <Card className="bg-yellow-400 text-black">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">Pagos Pendientes</CardTitle>
-                    <AlertCircle className="h-4 w-4 text-yellow-500" />
+                    <AlertCircle className="h-4 w-4" />
                 </CardHeader>
                 <CardContent>
                      {loading ? <Loader2 className="h-6 w-6 animate-spin"/> :
                         <div className="text-2xl font-bold">{stats.pendingPayments}</div>
                      }
-                    <p className="text-xs text-muted-foreground">Pagos reportados esperando verificación.</p>
+                    <p className="text-xs text-black/80">Pagos reportados esperando verificación.</p>
                 </CardContent>
             </Card>
             <Card className="bg-green-500/10 border-green-500/20">
@@ -246,9 +246,3 @@ export default function AdminDashboardPage() {
     </div>
   );
 }
-
-    
-
-    
-
-    
