@@ -2,11 +2,11 @@
 
 'use client';
 
-import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowRight, Loader2, AlertCircle, CheckCircle, Receipt, ThumbsUp, ThumbsDown, X, ArrowLeft } from "lucide-react";
+import { ArrowRight, Loader2, AlertCircle, CheckCircle, Receipt, ThumbsUp, ThumbsDown, X, ArrowLeft, ShieldCheck } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useState, useEffect, useMemo } from 'react';
 import { collection, query, where, onSnapshot, getDocs, doc, Timestamp, orderBy, addDoc } from 'firebase/firestore';
@@ -166,6 +166,14 @@ export default function OwnerDashboardPage() {
             .filter(d => d.status === 'pending' || d.status === 'vencida')
             .reduce((sum, d) => sum + d.amountUSD, 0);
     }, [debts]);
+    
+    const solvencyStatus = useMemo(() => {
+        if (loadingData) return { text: 'Cargando...', variant: 'default' };
+        return totalDebtUSD > 0 
+            ? { text: 'No Solvente', variant: 'destructive' }
+            : { text: 'Solvente', variant: 'success' };
+    }, [totalDebtUSD, loadingData]);
+
 
     const recentPayments = useMemo(() => {
         return payments.filter(p => p.status === 'pendiente' || p.status === 'rechazado').slice(0, 3);
@@ -275,42 +283,66 @@ export default function OwnerDashboardPage() {
         pdfDoc.setFontSize(10).setFont('helvetica', 'normal').text(`N° de recibo: ${receiptNumber}`, pageWidth - margin, margin + 45, { align: 'right' });
         if(qrCodeUrl) {
           const qrSize = 30;
-          autoTable(pdfDoc, {
-            startY: startY,
-            head: [['Período', 'Concepto (Propiedad)', 'Monto ($)', 'Monto Pagado (Bs)']],
-            body: tableBody,
-            theme: 'striped',
-            headStyles: {
-              fillColor: [44, 62, 80],
-              textColor: 255
-            },
-            styles: {
-              fontSize: 9,
-              cellPadding: 2.5
-            }
-          });
-          startY = (pdfDoc as any).lastAutoTable.finalY;
+          pdfDoc.addImage(qrCodeUrl, 'PNG', pageWidth - margin - qrSize, margin + 48, qrSize, qrSize);
+        }
+        
+        let startY = margin + 60;
+        pdfDoc.setFontSize(10).text(`Beneficiario: ${beneficiary.ownerName} (${data.ownerUnit})`, margin, startY);
+        startY += 6;
+        pdfDoc.text(`Método de pago: ${payment.type}`, margin, startY);
+        startY += 6;
+        pdfDoc.text(`Banco Emisor: ${payment.bank}`, margin, startY);
+        startY += 6;
+        pdfDoc.text(`N° de Referencia Bancaria: ${payment.reference}`, margin, startY);
+        startY += 6;
+        pdfDoc.text(`Fecha del pago: ${format(payment.paymentDate.toDate(), 'dd/MM/yyyy')}`, margin, startY);
+        startY += 6;
+        pdfDoc.text(`Tasa de Cambio Aplicada: Bs. ${formatToTwoDecimals(payment.exchangeRate)} por USD`, margin, startY);
+        startY += 10;
+        
+        let totalPaidInConcepts = 0;
+        const tableBody = paidDebts.map(debt => {
+            const debtAmountBs = (debt.paidAmountUSD || debt.amountUSD) * payment.exchangeRate;
+            totalPaidInConcepts += debtAmountBs;
+            const propertyLabel = "Propiedad Principal"; // Simplified for owner view
+            const periodLabel = `${monthsLocale[debt.month]} ${debt.year}`;
+            const concept = `${debt.description}`;
+            return [ periodLabel, concept, `$${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}`, `Bs. ${formatToTwoDecimals(debtAmountBs)}` ];
+        });
+
+        if (paidDebts.length > 0) {
+            autoTable(pdfDoc, {
+                startY: startY,
+                head: [['Período', 'Concepto', 'Monto ($)', 'Monto Pagado (Bs)']],
+                body: tableBody,
+                theme: 'striped',
+                headStyles: {
+                fillColor: [44, 62, 80],
+                textColor: 255
+                },
+                styles: {
+                fontSize: 9,
+                cellPadding: 2.5
+                }
+            });
+            startY = (pdfDoc as any).lastAutoTable.finalY;
         } else {
-          totalPaidInConcepts = beneficiary.amount;
-          autoTable(pdfDoc, {
-            startY: startY,
-            head: [
-              ['Concepto', 'Monto Pagado (Bs)']
-            ],
-            body: [
-              ['Abono a Saldo a Favor', `Bs. ${formatToTwoDecimals(beneficiary.amount)}`]
-            ],
-            theme: 'striped',
-            headStyles: {
-              fillColor: [44, 62, 80],
-              textColor: 255
-            },
-            styles: {
-              fontSize: 9,
-              cellPadding: 2.5
-            }
-          });
-          startY = (pdfDoc as any).lastAutoTable.finalY;
+            totalPaidInConcepts = beneficiary.amount;
+            autoTable(pdfDoc, {
+                startY: startY,
+                head: [['Concepto', 'Monto Pagado (Bs)']],
+                body: [['Abono a Saldo a Favor', `Bs. ${formatToTwoDecimals(beneficiary.amount)}`]],
+                theme: 'striped',
+                headStyles: {
+                fillColor: [44, 62, 80],
+                textColor: 255
+                },
+                styles: {
+                fontSize: 9,
+                cellPadding: 2.5
+                }
+            });
+            startY = (pdfDoc as any).lastAutoTable.finalY;
         }
         startY += 8;
         
@@ -383,7 +415,23 @@ export default function OwnerDashboardPage() {
                 </Alert>
             )}
           
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+                <Card className={solvencyStatus.variant === 'destructive' ? 'bg-destructive/10 border-destructive' : 'bg-success/10 border-success'}>
+                    <CardHeader>
+                        <CardTitle>Estatus de Solvencia</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        {loadingData ? <Loader2 className="h-8 w-8 animate-spin"/> :
+                            <Badge variant={solvencyStatus.variant} className="text-lg">
+                                 <ShieldCheck className="mr-2 h-5 w-5"/>
+                                {solvencyStatus.text}
+                            </Badge>
+                        }
+                    </CardContent>
+                     <CardFooter>
+                         <p className="text-xs text-muted-foreground">El pago de cuota vence los días cinco (5) de cada Mes.</p>
+                    </CardFooter>
+                </Card>
                 <Card>
                     <CardHeader>
                         <CardTitle>Deuda Total Pendiente</CardTitle>
