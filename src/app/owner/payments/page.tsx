@@ -10,7 +10,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { useToast } from '@/hooks/use-toast';
-import { CalendarIcon, CheckCircle2, Trash2, PlusCircle, Loader2, Search, XCircle, Wand2, UserPlus, Banknote } from 'lucide-react';
+import { CalendarIcon, CheckCircle2, Trash2, PlusCircle, Loader2, Search, XCircle, Wand2, UserPlus, Banknote, Info } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -21,6 +21,7 @@ import { inferPaymentDetails } from '@/ai/flows/infer-payment-details';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/hooks/use-auth';
 import { BankSelectionModal } from '@/components/bank-selection-modal';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 
 type Owner = {
@@ -74,6 +75,8 @@ export default function UnifiedPaymentsPage() {
     // State for the new beneficiary selection flow
     const [beneficiaryRows, setBeneficiaryRows] = useState<BeneficiaryRow[]>([]);
     const [isBankModalOpen, setIsBankModalOpen] = useState(false);
+    
+    const [isInfoDialogOpen, setIsInfoDialogOpen] = useState(false);
 
 
     // --- Data Fetching ---
@@ -314,12 +317,8 @@ export default function UnifiedPaymentsPage() {
             
             await addDoc(collection(db, "payments"), paymentData);
             
-            toast({ 
-                title: 'Reporte Enviado Exitosamente', 
-                description: 'El reporte de pago ha sido enviado para revisión.', 
-                className: 'bg-green-100 border-green-400 text-green-800' 
-            });
             resetForm();
+            setIsInfoDialogOpen(true);
 
         } catch (error) {
             console.error("Error submitting payment: ", error);
@@ -554,7 +553,31 @@ export default function UnifiedPaymentsPage() {
                     setIsBankModalOpen(false);
                 }}
             />
+            <Dialog open={isInfoDialogOpen} onOpenChange={setIsInfoDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Info className="h-6 w-6 text-blue-500" />
+                            Reporte Enviado para Revisión
+                        </DialogTitle>
+                        <DialogDescription className="pt-4">
+                            ¡Gracias! Hemos recibido tu reporte de pago. El tiempo máximo para la aprobación es de <strong>24 horas</strong>.
+                            <br /><br />
+                            Te invitamos a ingresar nuevamente después de este lapso para:
+                            <ul className="list-disc list-inside mt-2 space-y-1">
+                                <li>Verificar si el monto enviado cubrió completamente tu deuda.</li>
+                                <li>Descargar tu recibo de pago una vez que sea aprobado.</li>
+                            </ul>
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button onClick={() => setIsInfoDialogOpen(false)}>Entendido</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
 
+
+    
