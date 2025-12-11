@@ -10,12 +10,13 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { useToast } from '@/hooks/use-toast';
-import { CalendarIcon, CheckCircle2, Trash2, PlusCircle, Loader2, Search, XCircle, Wand2, UserPlus, Banknote, Info } from 'lucide-react';
+import { CalendarIcon, CheckCircle2, Trash2, PlusCircle, Loader2, Search, XCircle, Wand2, UserPlus, Banknote, Info, Paperclip } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc, where, getDocs, Timestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db, storage } from '@/lib/firebase';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { inferPaymentDetails } from '@/ai/flows/infer-payment-details';
 import { Textarea } from '@/components/ui/textarea';
@@ -77,6 +78,10 @@ export default function UnifiedPaymentsPage() {
     const [isBankModalOpen, setIsBankModalOpen] = useState(false);
     
     const [isInfoDialogOpen, setIsInfoDialogOpen] = useState(false);
+
+    // State for file upload
+    const [receiptFile, setReceiptFile] = useState<File | null>(null);
+    const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
 
     // --- Data Fetching ---
@@ -179,6 +184,8 @@ export default function UnifiedPaymentsPage() {
         setBeneficiaryType('propio');
         setTotalAmount('');
         setAiPrompt('');
+        setReceiptFile(null);
+        setUploadProgress(null);
         if (beneficiaryType === 'propio' && authOwnerData) {
             setBeneficiaryRows([{
                 id: Date.now().toString(),
@@ -211,6 +218,21 @@ export default function UnifiedPaymentsPage() {
             setBeneficiaryRows(rows => rows.filter(row => row.id !== id));
         } else {
              setBeneficiaryRows([{ id: Date.now().toString(), owner: null, searchTerm: '', amount: '', selectedProperty: null }]);
+        }
+    };
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            if (!['image/jpeg', 'image/png'].includes(file.type)) {
+                toast({ variant: 'destructive', title: 'Tipo de archivo no válido', description: 'Por favor, sube un archivo JPG o PNG.' });
+                return;
+            }
+            if (file.size > 5 * 1024 * 1024) { // 5MB
+                toast({ variant: 'destructive', title: 'Archivo demasiado grande', description: 'El tamaño máximo del archivo es de 5MB.' });
+                return;
+            }
+            setReceiptFile(file);
         }
     };
 
@@ -290,6 +312,31 @@ export default function UnifiedPaymentsPage() {
         }
 
         try {
+            let receiptUrl = '';
+            if (receiptFile) {
+                const userId = authUser?.uid || 'unknown_user';
+                const filePath = `receipts/${userId}/${Date.now()}-${receiptFile.name}`;
+                const storageRef = ref(storage, filePath);
+                const uploadTask = uploadBytesResumable(storageRef, receiptFile);
+
+                await new Promise<void>((resolve, reject) => {
+                    uploadTask.on('state_changed',
+                        (snapshot) => {
+                            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                            setUploadProgress(progress);
+                        },
+                        (error) => {
+                            console.error("Upload error:", error);
+                            reject(error);
+                        },
+                        async () => {
+                            receiptUrl = await getDownloadURL(uploadTask.snapshot.ref);
+                            resolve();
+                        }
+                    );
+                });
+            }
+
             const beneficiaries = beneficiaryRows.map(row => {
                 const owner = row.owner!;
                 const property = beneficiaryType === 'propio' ? row.selectedProperty : (owner.properties && owner.properties[0]);
@@ -301,7 +348,7 @@ export default function UnifiedPaymentsPage() {
                 };
             });
 
-            const paymentData = {
+            const paymentData: any = {
                 paymentDate: Timestamp.fromDate(paymentDate!),
                 exchangeRate: exchangeRate,
                 paymentMethod: paymentMethod,
@@ -314,6 +361,10 @@ export default function UnifiedPaymentsPage() {
                 reportedAt: serverTimestamp(),
                 reportedBy: authUser?.uid || 'unknown',
             };
+
+            if (receiptUrl) {
+                paymentData.receiptUrl = receiptUrl;
+            }
             
             await addDoc(collection(db, "payments"), paymentData);
             
@@ -326,6 +377,7 @@ export default function UnifiedPaymentsPage() {
             toast({ variant: "destructive", title: "Error Inesperado", description: errorMessage });
         } finally {
             setLoading(false);
+            setUploadProgress(null);
         }
     };
     
@@ -430,6 +482,18 @@ export default function UnifiedPaymentsPage() {
                              <Label htmlFor="reference">Referencia</Label>
                              <Input id="reference" value={reference} onChange={(e) => setReference(e.target.value.replace(/\D/g, ''))} disabled={loading}/>
                              <p className="text-xs text-muted-foreground">Últimos 6 dígitos, incluso si comienzan con cero.</p>
+                        </div>
+                        <div className="space-y-2 md:col-span-2">
+                            <Label htmlFor="receipt">Comprobante de Pago (Opcional)</Label>
+                            <Input id="receipt" type="file" onChange={handleFileChange} accept="image/png, image/jpeg, image/jpg" className="pt-2 text-sm" disabled={loading} />
+                             {receiptFile && (
+                                <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+                                    <Paperclip className="h-4 w-4" />
+                                    <span>{receiptFile.name}</span>
+                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setReceiptFile(null)}><XCircle className="h-4 w-4 text-destructive"/></Button>
+                                </div>
+                            )}
+                             {uploadProgress !== null && <progress value={uploadProgress} max="100" className="w-full" />}
                         </div>
                     </CardContent>
                 </Card>
@@ -541,7 +605,7 @@ export default function UnifiedPaymentsPage() {
                     </CardFooter>
                 </Card>
             </form>
-             <BankSelectionModal
+            <BankSelectionModal
                 isOpen={isBankModalOpen}
                 onOpenChange={setIsBankModalOpen}
                 selectedValue={bank}
@@ -578,3 +642,5 @@ export default function UnifiedPaymentsPage() {
         </div>
     );
 }
+
+      

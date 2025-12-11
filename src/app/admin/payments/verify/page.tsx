@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { CheckCircle2, XCircle, MoreHorizontal, Printer, Filter, Loader2, Trash2, Share2, FileText, Download, ArrowLeft } from 'lucide-react';
+import { CheckCircle2, XCircle, MoreHorizontal, Printer, Filter, Loader2, Trash2, Share2, FileText, Download, ArrowLeft, Paperclip } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -54,6 +54,7 @@ type FullPayment = {
   reportedAt?: Timestamp;
   observations?: string;
   isReconciled?: boolean;
+  receiptUrl?: string; // Added field
 };
 
 type Debt = {
@@ -65,7 +66,7 @@ type Debt = {
     amountUSD: number;
     description: string;
     status: 'pending' | 'paid';
-    paidAmountUSD?: number;
+    paidAmountUSD?: number; // Amount at which the debt was paid
     paymentDate?: Timestamp;
     paymentId?: string;
 };
@@ -196,6 +197,7 @@ export default function VerifyPaymentsPage() {
                 reportedAt: data.reportedAt,
                 observations: data.observations,
                 isReconciled: data.isReconciled,
+                receiptUrl: data.receiptUrl,
             });
         });
 
@@ -656,11 +658,10 @@ export default function VerifyPaymentsPage() {
                     <TableHeader>
                         <TableRow>
                             <TableHead>Beneficiario</TableHead>
-                            <TableHead>Unidad</TableHead>
                             <TableHead>Monto</TableHead>
                             <TableHead>Fecha</TableHead>
-                            <TableHead>Banco</TableHead>
                             <TableHead>Referencia</TableHead>
+                            <TableHead>Comprobante</TableHead>
                             <TableHead>Estado</TableHead>
                             <TableHead className="text-right">Acciones</TableHead>
                         </TableRow>
@@ -682,7 +683,6 @@ export default function VerifyPaymentsPage() {
                             filteredPayments.map((payment) => (
                             <TableRow key={payment.id}>
                                 <TableCell className="font-medium">{payment.user}</TableCell>
-                                <TableCell>{payment.unit}</TableCell>
                                 <TableCell>
                                     {payment.type === 'adelanto' 
                                         ? `$${formatToTwoDecimals(payment.amount)}`
@@ -690,8 +690,16 @@ export default function VerifyPaymentsPage() {
                                     }
                                 </TableCell>
                                 <TableCell>{new Date(payment.date).toLocaleDateString('es-VE')}</TableCell>
-                                <TableCell>{payment.bank}</TableCell>
                                 <TableCell>{payment.reference}</TableCell>
+                                <TableCell>
+                                    {payment.receiptUrl && (
+                                        <Button asChild variant="outline" size="icon">
+                                            <a href={payment.receiptUrl} target="_blank" rel="noopener noreferrer">
+                                                <Paperclip className="h-4 w-4" />
+                                            </a>
+                                        </Button>
+                                    )}
+                                </TableCell>
                                 <TableCell>
                                     <Badge variant={statusVariantMap[payment.status]}>
                                         {statusTextMap[payment.status]}
@@ -835,3 +843,5 @@ export default function VerifyPaymentsPage() {
     </div>
   );
 }
+
+      
