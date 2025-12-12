@@ -446,20 +446,17 @@ export default function OwnerDashboardPage() {
                             </>
                         )}
                     </CardContent>
-                     <CardFooter>
-                         <p className="text-xs text-muted-foreground">El pago de cuota vence los días cinco (5) de cada Mes.</p>
-                    </CardFooter>
                 </Card>
-                <Card>
+                <Card className="bg-primary text-primary-foreground">
                     <CardHeader>
                         <CardTitle>Saldo a Favor</CardTitle>
-                        <CardDescription>Monto disponible para ser usado en futuros pagos.</CardDescription>
+                        <CardDescription className="text-primary-foreground/80">Monto disponible para ser usado en futuros pagos.</CardDescription>
                     </CardHeader>
                     <CardContent>
                         {loadingData ? (
                             <Loader2 className="h-8 w-8 animate-spin" />
                         ) : (
-                            <p className="text-3xl font-bold text-green-500">Bs. {formatToTwoDecimals(balanceInFavor)}</p>
+                            <p className="text-3xl font-bold">Bs. {formatToTwoDecimals(balanceInFavor)}</p>
                         )}
                     </CardContent>
                 </Card>
