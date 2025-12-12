@@ -3,6 +3,7 @@ import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
 import { getFirestore, type Firestore } from 'firebase/firestore';
 import { getStorage, type FirebaseStorage } from 'firebase/storage';
 import { getAuth, type Auth } from 'firebase/auth';
+import { getMessaging, type Messaging } from 'firebase/messaging';
 
 const firebaseConfig = {
   "projectId": "condominio-prueba",
@@ -13,10 +14,20 @@ const firebaseConfig = {
   "messagingSenderId": "630518792088"
 };
 
-// Initialize Firebase for SSR
+// Initialize Firebase
 const app: FirebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
 const db: Firestore = getFirestore(app);
 const auth: Auth = getAuth(app);
 const storage: FirebaseStorage = getStorage(app);
 
-export { db, auth, storage, app };
+// Initialize Firebase Cloud Messaging and get a reference to the service
+const getFCM = (): Messaging | null => {
+    if (typeof window !== "undefined") {
+        return getMessaging(app);
+    }
+    return null;
+}
+
+const messaging = getFCM();
+
+export { db, auth, storage, app, messaging };
