@@ -22,6 +22,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Share2, Download } from 'lucide-react';
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useRouter } from "next/navigation";
+import { cn } from "@/lib/utils";
 
 
 type Debt = {
@@ -170,10 +171,10 @@ export default function OwnerDashboardPage() {
     }, [debts, loadingData]);
     
     const solvencyStatus = useMemo(() => {
-        if (loadingData) return { text: 'Cargando...', variant: 'default' };
+        if (loadingData) return { text: 'Cargando...', variant: 'default', colorClass: 'bg-muted text-muted-foreground' };
         return totalDebtUSD > 0 
-            ? { text: 'No Solvente', variant: 'destructive' }
-            : { text: 'Solvente', variant: 'success' };
+            ? { text: 'No Solvente', variant: 'destructive', colorClass: 'bg-destructive/10 text-destructive' }
+            : { text: 'Solvente', variant: 'success', colorClass: 'bg-success/10 text-success' };
     }, [totalDebtUSD, loadingData]);
 
 
@@ -423,12 +424,17 @@ export default function OwnerDashboardPage() {
             )}
 
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                 <Card className={cn("flex flex-col items-center justify-center text-center", solvencyStatus.colorClass)}>
+                    <CardHeader>
+                        <CardTitle className="text-sm font-medium">Estatus de Solvencia</CardTitle>
+                    </CardHeader>
+                    <CardContent className="flex-grow flex items-center justify-center">
+                        <p className="text-5xl font-bold animate-in zoom-in-95">{solvencyStatus.text}</p>
+                    </CardContent>
+                </Card>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Deuda Total</CardTitle>
-                        <Badge variant={solvencyStatus.variant}>
-                            {solvencyStatus.text}
-                        </Badge>
                     </CardHeader>
                     <CardContent>
                         {loadingData ? (
@@ -440,7 +446,7 @@ export default function OwnerDashboardPage() {
                             </>
                         )}
                     </CardContent>
-                    <CardFooter>
+                     <CardFooter>
                          <p className="text-xs text-muted-foreground">El pago de cuota vence los días cinco (5) de cada Mes.</p>
                     </CardFooter>
                 </Card>
@@ -455,19 +461,6 @@ export default function OwnerDashboardPage() {
                         ) : (
                             <p className="text-3xl font-bold text-green-500">Bs. {formatToTwoDecimals(balanceInFavor)}</p>
                         )}
-                    </CardContent>
-                </Card>
-                 <Card className="bg-primary text-primary-foreground">
-                    <CardHeader>
-                        <CardTitle>Reportar un Pago</CardTitle>
-                        <CardDescription className="text-primary-foreground/80">¿Realizaste un pago? Notifícalo aquí para que sea procesado.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <Link href="/owner/payments">
-                            <Button variant="secondary" className="w-full">
-                                Reportar Pago <ArrowRight className="ml-2 h-4 w-4"/>
-                            </Button>
-                        </Link>
                     </CardContent>
                 </Card>
             </div>
