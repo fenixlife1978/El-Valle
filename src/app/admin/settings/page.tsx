@@ -474,27 +474,27 @@ export default function SettingsPage() {
                             <div className="grid md:grid-cols-2 gap-6">
                                 <div className="space-y-4">
                                     <Label>Logo de la Empresa</Label>
-                                    <div className="w-32 h-32 flex items-center justify-center overflow-hidden border rounded-full">
-                                         <div className="w-full h-full bg-white flex items-center justify-center p-1">
+                                    <div className="w-32 h-32 flex items-center justify-center overflow-hidden rounded-full">
+                                         <div className="w-full h-full flex items-center justify-center">
                                              {logoPreview && <img src={logoPreview} alt="Company Logo Preview" className="w-full h-full object-contain" />}
                                          </div>
                                     </div>
                                     <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById('logo-upload')?.click()}>
                                         <Upload className="mr-2 h-4 w-4"/> Subir Logo
                                     </Button>
-                                    <Input id="logo-upload" type="file" className="hidden" onChange={(e) => handleImageChange(e, 'logo')} accept="image/png, image/jpeg" />
+                                    <Input id="logo-upload" type="file" className="hidden" onChange={(e) => handleImageChange(e, 'logo')} accept="image/png, image/jpeg, .jpeg" />
                                 </div>
                                  <div className="space-y-4">
                                      <Label>Logo de Tasa BCV</Label>
-                                     <div className="w-32 h-32 flex items-center justify-center overflow-hidden border rounded-full">
-                                         <div className="w-full h-full bg-white flex items-center justify-center p-1">
+                                     <div className="w-32 h-32 flex items-center justify-center overflow-hidden rounded-full">
+                                         <div className="w-full h-full flex items-center justify-center">
                                              {bcvLogoPreview && <img src={bcvLogoPreview} alt="BCV Logo Preview" className="w-full h-full object-contain" />}
                                          </div>
                                      </div>
                                      <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById('bcv-logo-upload')?.click()}>
                                         <Upload className="mr-2 h-4 w-4"/> Cambiar Logo BCV
                                      </Button>
-                                     <Input id="bcv-logo-upload" type="file" className="hidden" onChange={(e) => handleImageChange(e, 'bcvLogo')} accept="image/png, image/jpeg" />
+                                     <Input id="bcv-logo-upload" type="file" className="hidden" onChange={(e) => handleImageChange(e, 'bcvLogo')} accept="image/png, image/jpeg, .jpeg" />
                                  </div>
                             </div>
                         </CardContent>
