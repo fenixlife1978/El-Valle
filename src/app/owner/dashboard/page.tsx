@@ -6,7 +6,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter }
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowRight, Loader2, AlertCircle, CheckCircle, Receipt, ThumbsUp, ThumbsDown, X, ArrowLeft, ShieldCheck } from "lucide-react";
+import { ArrowRight, Loader2, AlertCircle, CheckCircle, Receipt, ThumbsUp, ThumbsDown, X, ArrowLeft, ShieldCheck, CalendarCheck2, Clock, CalendarX } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useState, useEffect, useMemo } from 'react';
 import { collection, query, where, onSnapshot, getDocs, doc, Timestamp, orderBy, addDoc } from 'firebase/firestore';
@@ -176,6 +176,29 @@ export default function OwnerDashboardPage() {
             ? { text: 'No Solvente', variant: 'destructive', colorClass: 'bg-destructive/10 text-destructive' }
             : { text: 'Solvente', variant: 'success', colorClass: 'bg-success/10 text-success' };
     }, [totalDebtUSD, loadingData]);
+
+    const currentMonthStatus = useMemo(() => {
+        if (loadingData) {
+            return { text: 'Cargando...', Icon: Loader2, colorClass: 'bg-muted text-muted-foreground', isAnimating: true };
+        }
+        const today = new Date();
+        const currentMonth = today.getMonth() + 1;
+        const currentYear = today.getFullYear();
+        const currentDay = today.getDate();
+
+        const currentMonthDebt = debts.find(d => d.year === currentYear && d.month === currentMonth);
+
+        if (!currentMonthDebt || currentMonthDebt.status === 'paid') {
+            return { text: 'Pagado', Icon: CalendarCheck2, colorClass: 'bg-success/10 text-success', isAnimating: false };
+        }
+
+        if (currentDay <= 5) {
+            return { text: 'Pendiente', Icon: Clock, colorClass: 'bg-warning/10 text-warning', isAnimating: false };
+        }
+
+        return { text: 'Vencido', Icon: CalendarX, colorClass: 'bg-destructive/10 text-destructive', isAnimating: false };
+
+    }, [debts, loadingData]);
 
 
     const recentPayments = useMemo(() => {
@@ -423,7 +446,7 @@ export default function OwnerDashboardPage() {
                 </Alert>
             )}
 
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
                  <Card className={cn("flex flex-col items-center justify-center text-center", solvencyStatus.colorClass)}>
                     <CardHeader>
                         <CardTitle className="text-sm font-medium">Estatus de Solvencia</CardTitle>
@@ -431,6 +454,18 @@ export default function OwnerDashboardPage() {
                     <CardContent className="flex-grow flex items-center justify-center">
                         <p className="text-5xl font-bold animate-in zoom-in-95">{solvencyStatus.text}</p>
                     </CardContent>
+                </Card>
+                 <Card className={cn("flex flex-col items-center justify-center text-center", currentMonthStatus.colorClass)}>
+                    <CardHeader>
+                        <CardTitle className="text-sm font-medium">Estado del Mes Actual</CardTitle>
+                    </CardHeader>
+                    <CardContent className="flex-grow flex items-center justify-center flex-col gap-2">
+                        <currentMonthStatus.Icon className={cn("h-12 w-12", currentMonthStatus.isAnimating && "animate-spin")} />
+                        <p className="text-2xl font-bold">{currentMonthStatus.text}</p>
+                    </CardContent>
+                    <CardFooter className="w-full text-center text-xs p-2 border-t mt-2">
+                        <p>El pago de cada cuota VENCE el día 5 del mes en curso</p>
+                    </CardFooter>
                 </Card>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -654,3 +689,4 @@ export default function OwnerDashboardPage() {
         </div>
     );
 }
+
