@@ -62,7 +62,8 @@ export default {
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
-        'chick-yellow': '#F7DC6F',
+        lemon: '#FFF44F',
+        mustard: '#FFC72C',
         chart: {
           '1': 'hsl(var(--chart-1))',
           '2': 'hsl(var(--chart-2))',
