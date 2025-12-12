@@ -193,7 +193,7 @@ export default function OwnerDashboardPage() {
         }
 
         if (currentDay <= 5) {
-            return { text: 'Pendiente', Icon: Clock, colorClass: 'bg-yellow-400 text-black', isAnimating: false };
+            return { text: 'Pendiente', Icon: Clock, colorClass: 'bg-mustard text-black', isAnimating: false };
         }
 
         return { text: 'Vencido', Icon: CalendarX, colorClass: 'bg-destructive/10 text-destructive', isAnimating: false };
