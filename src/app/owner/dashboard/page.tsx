@@ -155,17 +155,19 @@ export default function OwnerDashboardPage() {
     }, [user, loading]);
     
     const pendingDebts = useMemo(() => {
+        if (loadingData || !debts) return [];
         return debts
             .filter(d => d.status === 'pending' || d.status === 'vencida')
             .sort((a,b) => a.year - b.year || a.month - b.month)
             .slice(0, 5);
-    }, [debts]);
+    }, [debts, loadingData]);
 
     const totalDebtUSD = useMemo(() => {
+        if (loadingData || !debts) return 0;
         return debts
             .filter(d => d.status === 'pending' || d.status === 'vencida')
             .reduce((sum, d) => sum + d.amountUSD, 0);
-    }, [debts]);
+    }, [debts, loadingData]);
     
     const solvencyStatus = useMemo(() => {
         if (loadingData) return { text: 'Cargando...', variant: 'default' };
@@ -176,12 +178,14 @@ export default function OwnerDashboardPage() {
 
 
     const recentPayments = useMemo(() => {
+        if (loadingData || !payments) return [];
         return payments.filter(p => p.status === 'pendiente' || p.status === 'rechazado').slice(0, 3);
-    }, [payments]);
+    }, [payments, loadingData]);
 
     const approvedPayments = useMemo(() => {
+        if (loadingData || !payments) return [];
         return payments.filter(p => p.status === 'aprobado').slice(0, 5);
-    }, [payments]);
+    }, [payments, loadingData]);
 
 
     const balanceInFavor = ownerData?.balance || 0;
@@ -392,59 +396,53 @@ export default function OwnerDashboardPage() {
                 <h1 className="text-3xl font-bold font-headline">Bienvenido, {ownerData?.name || 'Propietario'}</h1>
                 <p className="text-muted-foreground">Aquí tienes un resumen de tu estado de cuenta y accesos rápidos.</p>
             </div>
-
+            
             {ownerData && ownerData.passwordChanged === false && showFeedbackWidget && !hasGivenFeedback && (
                 <Alert variant="default" className="bg-blue-900/20 border-blue-500/50">
-                    <AlertDescription className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <AlertDescription className="flex flex-col sm:flex-row items-center justify-between gap-4 relative">
                         <div className="flex-grow">
                             <h3 className="font-bold text-lg text-foreground">¡Hola de nuevo!</h3>
                             <p className="text-muted-foreground">¿Te está gustando tu nueva experiencia en la aplicación?</p>
                         </div>
+
                         <div className="flex items-center gap-2 flex-shrink-0">
                             <Button size="sm" onClick={() => handleFeedback('liked')} className="bg-green-600 hover:bg-green-700">
-                                <ThumbsUp className="mr-2 h-4 w-4"/> Sí, me gusta
+                                <ThumbsUp className="mr-2 h-4 w-4" /> Sí, me gusta
                             </Button>
-                            <Button size="sm" variant="destructive" onClick={() => handleFeedback('disliked')}>
-                                <ThumbsDown className="mr-2 h-4 w-4"/> No, puede mejorar
+
+                             <Button size="sm" variant="destructive" onClick={() => handleFeedback('disliked')}>
+                                <ThumbsDown className="mr-2 h-4 w-4" /> No, puede mejorar
                             </Button>
                         </div>
-                           <Button variant="ghost" size="icon" className="absolute top-2 right-2 h-6 w-6" onClick={() => setShowFeedbackWidget(false)}>
-                               <X className="h-4 w-4" />
-                           </Button>
+                        
+                        <Button variant="ghost" size="icon" className="absolute top-2 right-2 h-6 w-6" onClick={() => setShowFeedbackWidget(false)}>
+                            <X className="h-4 w-4" />
+                        </Button>
                     </AlertDescription>
                 </Alert>
             )}
-          
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-                <Card className={solvencyStatus.variant === 'destructive' ? 'bg-destructive/10 border-destructive' : 'bg-success/10 border-success'}>
-                    <CardHeader>
-                        <CardTitle>Estatus de Solvencia</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        {loadingData ? <Loader2 className="h-8 w-8 animate-spin"/> :
-                            <Badge variant={solvencyStatus.variant} className="text-lg">
-                                 <ShieldCheck className="mr-2 h-5 w-5"/>
-                                {solvencyStatus.text}
-                            </Badge>
-                        }
-                    </CardContent>
-                     <CardFooter>
-                         <p className="text-xs text-muted-foreground">El pago de cuota vence los días cinco (5) de cada Mes.</p>
-                    </CardFooter>
-                </Card>
+
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                 <Card>
-                    <CardHeader>
-                        <CardTitle>Deuda Total Pendiente</CardTitle>
-                        <CardDescription>Monto total de tus cuotas y cargos por pagar.</CardDescription>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Deuda Total</CardTitle>
+                        <Badge variant={solvencyStatus.variant}>
+                            {solvencyStatus.text}
+                        </Badge>
                     </CardHeader>
                     <CardContent>
-                        {loadingData ? <Loader2 className="h-8 w-8 animate-spin"/> :
+                        {loadingData ? (
+                            <Loader2 className="h-8 w-8 animate-spin" />
+                        ) : (
                             <>
                                 <p className="text-3xl font-bold text-destructive">${totalDebtUSD.toFixed(2)}</p>
-                                <p className="text-sm text-muted-foreground">Bs. {formatToTwoDecimals(totalDebtUSD * activeRate)}</p>
+                                <p className="text-sm text-muted-foreground">Aprox. Bs. {formatToTwoDecimals(totalDebtUSD * activeRate)}</p>
                             </>
-                        }
+                        )}
                     </CardContent>
+                    <CardFooter>
+                         <p className="text-xs text-muted-foreground">El pago de cuota vence los días cinco (5) de cada Mes.</p>
+                    </CardFooter>
                 </Card>
                 <Card>
                     <CardHeader>
@@ -452,12 +450,14 @@ export default function OwnerDashboardPage() {
                         <CardDescription>Monto disponible para ser usado en futuros pagos.</CardDescription>
                     </CardHeader>
                     <CardContent>
-                           {loadingData ? <Loader2 className="h-8 w-8 animate-spin"/> :
-                                <p className="text-3xl font-bold text-green-500">Bs. {formatToTwoDecimals(balanceInFavor)}</p>
-                           }
+                        {loadingData ? (
+                            <Loader2 className="h-8 w-8 animate-spin" />
+                        ) : (
+                            <p className="text-3xl font-bold text-green-500">Bs. {formatToTwoDecimals(balanceInFavor)}</p>
+                        )}
                     </CardContent>
                 </Card>
-                <Card className="bg-primary text-primary-foreground">
+                 <Card className="bg-primary text-primary-foreground">
                     <CardHeader>
                         <CardTitle>Reportar un Pago</CardTitle>
                         <CardDescription className="text-primary-foreground/80">¿Realizaste un pago? Notifícalo aquí para que sea procesado.</CardDescription>
@@ -472,178 +472,194 @@ export default function OwnerDashboardPage() {
                 </Card>
             </div>
             
-             <div className="grid gap-6 lg:grid-cols-2">
-                <Card>
+            <div className="grid gap-6 lg:grid-cols-2">
+                 <Card>
                     <CardHeader>
                         <CardTitle>Deudas Pendientes Recientes</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <Table>
-                             <TableHeader>
-                                 <TableRow>
-                                     <TableHead>Período</TableHead>
-                                     <TableHead>Concepto</TableHead>
-                                     <TableHead>Estado</TableHead>
-                                     <TableHead className="text-right">Monto (USD)</TableHead>
-                                 </TableRow>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Período</TableHead>
+                                    <TableHead>Concepto</TableHead>
+                                    <TableHead>Estado</TableHead>
+                                    <TableHead className="text-right">Monto (USD)</TableHead>
+                                </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {loadingData ? (
-                                    <TableRow><TableCell colSpan={4} className="h-24 text-center"><Loader2 className="h-6 w-6 animate-spin"/></TableCell></TableRow>
+                                    <TableRow>
+                                        <TableCell colSpan={4} className="h-24 text-center">
+                                            <Loader2 className="h-6 w-6 animate-spin"/>
+                                        </TableCell>
+                                    </TableRow>
                                 ) : pendingDebts.length === 0 ? (
-                                    <TableRow><TableCell colSpan={4} className="h-24 text-center text-muted-foreground">¡Felicidades! No tienes deudas pendientes.</TableCell></TableRow>
+                                    <TableRow>
+                                        <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">¡Felicidades! No tienes deudas pendientes.</TableCell>
+                                    </TableRow>
                                 ) : (
                                     pendingDebts.map(debt => {
                                         const debtDate = startOfMonth(new Date(debt.year, debt.month - 1));
                                         const isOverdue = isBefore(debtDate, startOfMonth(new Date()));
+                                        
                                         return (
-                                        <TableRow key={debt.id}>
-                                             <TableCell>{monthsLocale[debt.month]} {debt.year}</TableCell>
-                                             <TableCell>{debt.description}</TableCell>
-                                             <TableCell>
-                                                  <Badge variant={isOverdue ? 'destructive' : 'warning'}>
-                                                      {isOverdue ? 'Vencida' : 'Pendiente'}
-                                                  </Badge>
-                                             </TableCell>
-                                             <TableCell className="text-right">${debt.amountUSD.toFixed(2)}</TableCell>
-                                         </TableRow>
-                                        )})
+                                            <TableRow key={debt.id}>
+                                                <TableCell>{monthsLocale[debt.month]} {debt.year}</TableCell>
+                                                <TableCell>{debt.description}</TableCell>
+                                                <TableCell>
+                                                    <Badge variant={isOverdue ? "destructive" : "warning"}>
+                                                        {isOverdue ? 'Vencida' : 'Pendiente'}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="text-right">${debt.amountUSD.toFixed(2)}</TableCell>
+                                            </TableRow>
+                                        )
+                                    })
                                 )}
                             </TableBody>
                         </Table>
                     </CardContent>
                 </Card>
-
-                   <Card>
+                 <Card>
                     <CardHeader>
                         <CardTitle>Últimos Pagos Aprobados</CardTitle>
                     </CardHeader>
                     <CardContent>
-                           <Table>
-                             <TableHeader>
-                                 <TableRow>
-                                     <TableHead>Fecha</TableHead>
-                                     <TableHead>Monto (Bs.)</TableHead>
-                                     <TableHead>Recibo</TableHead>
-                                 </TableRow>
-                             </TableHeader>
-                             <TableBody>
-                                     {loadingData ? (
-                                         <TableRow><TableCell colSpan={3} className="h-24 text-center"><Loader2 className="h-6 w-6 animate-spin"/></TableCell></TableRow>
-                                     ) : approvedPayments.length === 0 ? (
-                                         <TableRow><TableCell colSpan={3} className="h-24 text-center text-muted-foreground">No tienes pagos aprobados recientemente.</TableCell></TableRow>
-                                     ) : (
-                                            approvedPayments.map(p => (
-                                                 <TableRow key={p.id}>
-                                                     <TableCell>{format(p.paymentDate.toDate(), 'dd/MM/yyyy')}</TableCell>
-                                                     <TableCell>{formatToTwoDecimals(p.totalAmount)}</TableCell>
-                                                     <TableCell>
-                                                         <Button variant="outline" size="sm" onClick={() => openReceiptPreview(p)}>
-                                                             <Receipt className="mr-2 h-4 w-4"/>
-                                                             Ver Recibo
-                                                         </Button>
-                                                     </TableCell>
-                                                 </TableRow>
-                                             ))
-                                     )}
-                             </TableBody>
-                           </Table>
-                    </CardContent>
-                </Card>
-
-                 {recentPayments.length > 0 && (
-                     <Card className="lg:col-span-2">
-                         <CardHeader>
-                             <CardTitle className="flex items-center gap-2"><AlertCircle className="text-destructive"/> Pagos con Observaciones</CardTitle>
-                             <CardDescription>Tus reportes de pago más recientes que requieren atención o están pendientes por aprobar.</CardDescription>
-                         </CardHeader>
-                         <CardContent>
-                             <Table>
-                                 <TableHeader>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Fecha</TableHead>
+                                    <TableHead>Monto (Bs.)</TableHead>
+                                    <TableHead>Recibo</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {loadingData ? (
                                      <TableRow>
-                                         <TableHead>Fecha del Reporte</TableHead>
-                                         <TableHead>Referencia</TableHead>
-                                         <TableHead>Monto (Bs.)</TableHead>
-                                         <TableHead>Estado</TableHead>
-                                     </TableRow>
-                                 </TableHeader>
-                                 <TableBody>
-                                     {recentPayments.map(p => (
-                                         <TableRow key={p.id}>
-                                             <TableCell>{format(p.paymentDate.toDate(), 'dd/MM/yyyy')}</TableCell>
-                                             <TableCell>{p.reference}</TableCell>
-                                             <TableCell>{formatToTwoDecimals(p.totalAmount)}</TableCell>
-                                             <TableCell>
-                                                 <Badge variant={p.status === 'rechazado' ? 'destructive' : 'warning'} className="capitalize">{p.status}</Badge>
-                                             </TableCell>
-                                         </TableRow>
-                                     ))}
-                                 </TableBody>
-                             </Table>
-                         </CardContent>
-                     </Card>
-                 )}
-             </div>
-
+                                        <TableCell colSpan={3} className="h-24 text-center">
+                                            <Loader2 className="h-6 w-6 animate-spin"/>
+                                        </TableCell>
+                                    </TableRow>
+                                ) : approvedPayments.length === 0 ? (
+                                    <TableRow>
+                                        <TableCell colSpan={3} className="h-24 text-center text-muted-foreground">No tienes pagos aprobados recientemente.</TableCell>
+                                    </TableRow>
+                                ) : (
+                                    approvedPayments.map(p => (
+                                        <TableRow key={p.id}>
+                                            <TableCell>{format(p.paymentDate.toDate(), 'dd/MM/yyyy')}</TableCell>
+                                            <TableCell>{formatToTwoDecimals(p.totalAmount)}</TableCell>
+                                            <TableCell>
+                                                <Button variant="outline" size="sm" onClick={() => openReceiptPreview(p)}>
+                                                    <Receipt className="mr-2 h-4 w-4"/>
+                                                    Ver Recibo
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))
+                                )}
+                            </TableBody>
+                        </Table>
+                    </CardContent>
+                 </Card>
+                {recentPayments.length > 0 && (
+                    <Card className="lg:col-span-2">
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <AlertCircle className="text-destructive"/>
+                                Pagos con Observaciones
+                            </CardTitle>
+                            <CardDescription>
+                                Tus reportes de pago más recientes que requieren atención o están pendientes por aprobar.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Fecha del Reporte</TableHead>
+                                        <TableHead>Referencia</TableHead>
+                                        <TableHead>Monto (Bs.)</TableHead>
+                                        <TableHead>Estado</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {recentPayments.map(p => (
+                                        <TableRow key={p.id}>
+                                            <TableCell>{format(p.paymentDate.toDate(), 'dd/MM/yyyy')}</TableCell>
+                                            <TableCell>{p.reference}</TableCell>
+                                            <TableCell>{formatToTwoDecimals(p.totalAmount)}</TableCell>
+                                            <TableCell>
+                                                <Badge variant={p.status === 'rechazado' ? 'destructive' : 'warning'} className="capitalize">{p.status}</Badge>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </CardContent>
+                    </Card>
+                )}
+            </div>
              <Dialog open={isReceiptPreviewOpen} onOpenChange={setIsReceiptPreviewOpen}>
-             <DialogContent className="sm:max-w-3xl">
-                 <DialogHeader>
-                     <DialogTitle>Vista Previa del Recibo: {receiptData?.receiptNumber}</DialogTitle>
-                     <DialogDescription>
-                         Recibo de pago para {receiptData?.ownerName} ({receiptData?.ownerUnit}).
-                     </DialogDescription>
-                 </DialogHeader>
-                 {receiptData && (
-                     <div className="space-y-4 max-h-[60vh] overflow-y-auto p-1">
-                         <div className="grid grid-cols-2 gap-4 text-sm">
-                             <div><span className="font-semibold">Fecha de Pago:</span> {format(receiptData.payment.paymentDate.toDate(), 'dd/MM/yyyy')}</div>
-                             <div><span className="font-semibold">Monto Pagado:</span> Bs. {formatToTwoDecimals(receiptData.beneficiary.amount)}</div>
-                             <div><span className="font-semibold">Tasa Aplicada:</span> Bs. {formatToTwoDecimals(receiptData.payment.exchangeRate)}</div>
-                             <div><span className="font-semibold">Referencia:</span> {receiptData.payment.reference}</div>
-                         </div>
-                         <h4 className="font-semibold">Conceptos Pagados</h4>
-                         <Table>
-                             <TableHeader>
-                                 <TableRow>
-                                     <TableHead>Período</TableHead>
-                                     <TableHead>Concepto</TableHead>
-                                     <TableHead className="text-right">Monto (Bs)</TableHead>
-                                 </TableRow>
-                             </TableHeader>
-                             <TableBody>
-                                 {receiptData.paidDebts.length > 0 ? (
-                                         receiptData.paidDebts.map(debt => (
-                                             <TableRow key={debt.id}>
-                                                 <TableCell>{monthsLocale[debt.month]} {debt.year}</TableCell>
-                                                 <TableCell>{debt.description}</TableCell>
-                                                 <TableCell className="text-right">Bs. {formatToTwoDecimals((debt.paidAmountUSD || debt.amountUSD) * receiptData.payment.exchangeRate)}</TableCell>
-                                             </TableRow>
-                                         ))
-                                 ) : (
-                                         <TableRow>
-                                             <TableCell colSpan={3}>Abono a Saldo a Favor</TableCell>
-                                         </TableRow>
-                                 )}
-                             </TableBody>
-                         </Table>
-                           <div className="grid grid-cols-2 gap-4 text-sm pt-4 border-t">
-                             <div className="text-right text-muted-foreground">Saldo Anterior:</div>
-                             <div className="text-right">Bs. {formatToTwoDecimals(receiptData.previousBalance)}</div>
-                             <div className="text-right text-muted-foreground">Saldo Actual:</div>
-                             <div className="text-right font-bold">Bs. {formatToTwoDecimals(receiptData.currentBalance)}</div>
-                           </div>
+         <DialogContent className="sm:max-w-3xl">
+             <DialogHeader>
+                 <DialogTitle>Vista Previa del Recibo: {receiptData?.receiptNumber}</DialogTitle>
+                 <DialogDescription>
+                     Recibo de pago para {receiptData?.ownerName} ({receiptData?.ownerUnit}).
+                 </DialogDescription>
+             </DialogHeader>
+             {receiptData && (
+                 <div className="space-y-4 max-h-[60vh] overflow-y-auto p-1">
+                     <div className="grid grid-cols-2 gap-4 text-sm">
+                         <div><span className="font-semibold">Fecha de Pago:</span> {format(receiptData.payment.paymentDate.toDate(), 'dd/MM/yyyy')}</div>
+                         <div><span className="font-semibold">Monto Pagado:</span> Bs. {formatToTwoDecimals(receiptData.beneficiary.amount)}</div>
+                         <div><span className="font-semibold">Tasa Aplicada:</span> Bs. {formatToTwoDecimals(receiptData.payment.exchangeRate)}</div>
+                         <div><span className="font-semibold">Referencia:</span> {receiptData.payment.reference}</div>
                      </div>
-                 )}
-                 <DialogFooter className="sm:justify-end gap-2">
-                     <Button variant="outline" onClick={() => generateAndAct('download', receiptData!)}>
-                         <Download className="mr-2 h-4 w-4" /> Exportar PDF
-                     </Button>
-                     <Button onClick={() => generateAndAct('share', receiptData!)}>
-                           <Share2 className="mr-2 h-4 w-4" /> Compartir PDF
-                     </Button>
-                 </DialogFooter>
-             </DialogContent>
-         </Dialog>
+                     <h4 className="font-semibold">Conceptos Pagados</h4>
+                     <Table>
+                         <TableHeader>
+                             <TableRow>
+                                 <TableHead>Período</TableHead>
+                                 <TableHead>Concepto</TableHead>
+                                 <TableHead className="text-right">Monto (Bs)</TableHead>
+                             </TableRow>
+                         </TableHeader>
+                         <TableBody>
+                             {receiptData.paidDebts.length > 0 ? (
+                                     receiptData.paidDebts.map(debt => (
+                                         <TableRow key={debt.id}>
+                                             <TableCell>{monthsLocale[debt.month]} {debt.year}</TableCell>
+                                             <TableCell>{debt.description}</TableCell>
+                                             <TableCell className="text-right">Bs. {formatToTwoDecimals((debt.paidAmountUSD || debt.amountUSD) * receiptData.payment.exchangeRate)}</TableCell>
+                                         </TableRow>
+                                     ))
+                             ) : (
+                                     <TableRow>
+                                         <TableCell colSpan={3}>Abono a Saldo a Favor</TableCell>
+                                     </TableRow>
+                             )}
+                         </TableBody>
+                     </Table>
+                       <div className="grid grid-cols-2 gap-4 text-sm pt-4 border-t">
+                         <div className="text-right text-muted-foreground">Saldo Anterior:</div>
+                         <div className="text-right">Bs. {formatToTwoDecimals(receiptData.previousBalance)}</div>
+                         <div className="text-right text-muted-foreground">Saldo Actual:</div>
+                         <div className="text-right font-bold">Bs. {formatToTwoDecimals(receiptData.currentBalance)}</div>
+                       </div>
+                 </div>
+             )}
+             <DialogFooter className="sm:justify-end gap-2">
+                 <Button variant="outline" onClick={() => generateAndAct('download', receiptData!)}>
+                     <Download className="mr-2 h-4 w-4" /> Exportar PDF
+                 </Button>
+                 <Button onClick={() => generateAndAct('share', receiptData!)}>
+                       <Share2 className="mr-2 h-4 w-4" /> Compartir PDF
+                 </Button>
+             </DialogFooter>
+         </DialogContent>
+     </Dialog>
 
         </div>
     );
