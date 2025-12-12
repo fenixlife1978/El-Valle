@@ -8,6 +8,8 @@ import { doc, onSnapshot } from 'firebase/firestore';
 import { useToast } from './use-toast';
 import { db, auth } from '@/lib/firebase';
 import { ensureOwnerProfile, ensureAdminProfile } from '@/lib/user-sync';
+import { initFCM } from '@/lib/init-fcm';
+
 
 type CompanyInfo = {
     name: string;
@@ -45,6 +47,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
     const [activeRate, setActiveRate] = useState<ExchangeRate | null>(null);
     const [bcvLogoUrl, setBcvLogoUrl] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            initFCM();
+        }
+    }, []);
 
     useEffect(() => {
         let ownerUnsubscribe: (() => void) | undefined;

@@ -41,6 +41,11 @@
         },
         "passwordChanged": {
             "type": "boolean"
+        },
+        "fcmTokens": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Array of Firebase Cloud Messaging tokens for push notifications."
         }
       },
       "required": ["uid", "name", "email", "role"]
@@ -98,11 +103,6 @@
             "receiptNumbers": {
                 "type": "object",
                 "additionalProperties": { "type": "string" }
-            },
-            "receiptUrl": {
-                "type": "string",
-                "format": "uri",
-                "description": "URL to the uploaded payment receipt image in Firebase Storage."
             }
         }
     },
@@ -363,5 +363,3 @@
     "providers": ["password", "google.com"]
   }
 }
-
-      
