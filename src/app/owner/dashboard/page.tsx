@@ -193,7 +193,7 @@ export default function OwnerDashboardPage() {
         }
 
         if (currentDay <= 5) {
-            return { text: 'Pendiente', Icon: Clock, colorClass: 'bg-warning/10 text-warning', isAnimating: false };
+            return { text: 'Pendiente', Icon: Clock, colorClass: 'bg-yellow-400 text-black', isAnimating: false };
         }
 
         return { text: 'Vencido', Icon: CalendarX, colorClass: 'bg-destructive/10 text-destructive', isAnimating: false };
@@ -256,7 +256,7 @@ export default function OwnerDashboardPage() {
     
           const paidDebtsQuery = query(collection(db, "debts"), where("paymentId", "==", payment.id), where("ownerId", "==", user.uid));
           const paidDebtsSnapshot = await getDocs(paidDebtsQuery);
-          const paidDebts = paidDebtsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as Debt).sort((a, b) => a.year - b.year || a.month - b.month);
+          const paidDebts = paidDebtsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Debt)).sort((a, b) => a.year - b.year || a.month - b.month);
     
           const totalDebtPaidWithPayment = paidDebts.reduce((sum, debt) => sum + ((debt.paidAmountUSD || debt.amountUSD) * payment.exchangeRate), 0);
           const paymentAmountForOwner = beneficiary.amount;
@@ -689,4 +689,5 @@ export default function OwnerDashboardPage() {
         </div>
     );
 }
+
 
