@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
@@ -141,7 +142,7 @@ function LoginPage() {
                 {loadingLogo ? (
                     <Skeleton className="w-24 h-24 rounded-full mx-auto" />
                 ) : (
-                    <div className={cn("w-24 h-24 bg-white flex items-center justify-center overflow-hidden border p-1 mx-auto rounded-full")}>
+                    <div className="w-24 h-24 bg-white flex items-center justify-center overflow-hidden border p-1 mx-auto rounded-full">
                         {logoUrl && <img src={logoUrl} alt="Company Logo" className="w-full h-full object-contain" />}
                     </div>
                 )}

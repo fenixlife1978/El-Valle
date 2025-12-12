@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -485,7 +486,7 @@ export default function SettingsPage() {
                                     <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById('logo-upload')?.click()}>
                                         <Upload className="mr-2 h-4 w-4"/> Subir Logo
                                     </Button>
-                                    <Input id="logo-upload" type="file" className="hidden" onChange={(e) => handleImageChange(e, 'logo')} accept="image/png,image/jpeg" />
+                                    <Input id="logo-upload" type="file" className="hidden" onChange={(e) => handleImageChange(e, 'logo')} accept="image/png, image/jpeg, image/jpg" />
                                 </div>
                                  <div className="space-y-4">
                                      <Label>Logo de Tasa BCV</Label>
@@ -497,7 +498,7 @@ export default function SettingsPage() {
                                      <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById('bcv-logo-upload')?.click()}>
                                         <Upload className="mr-2 h-4 w-4"/> Cambiar Logo BCV
                                      </Button>
-                                     <Input id="bcv-logo-upload" type="file" className="hidden" onChange={(e) => handleImageChange(e, 'bcvLogo')} accept="image/png,image/jpeg" />
+                                     <Input id="bcv-logo-upload" type="file" className="hidden" onChange={(e) => handleImageChange(e, 'bcvLogo')} accept="image/png, image/jpeg, image/jpg" />
                                  </div>
                             </div>
                         </CardContent>
@@ -517,7 +518,7 @@ export default function SettingsPage() {
                                 <div className="space-y-2">
                                      <Label htmlFor="avatar-upload">Foto de Perfil</Label>
                                      <div className="flex items-center gap-2">
-                                         <Input id="avatar-upload" type="file" className="hidden" onChange={(e) => handleImageChange(e, 'avatar')} accept="image/png,image/jpeg" />
+                                         <Input id="avatar-upload" type="file" className="hidden" onChange={(e) => handleImageChange(e, 'avatar')} accept="image/png,image/jpeg, image/jpg" />
                                          <Button type="button" variant="outline" onClick={() => document.getElementById('avatar-upload')?.click()}>
                                              <Upload className="mr-2 h-4 w-4"/> Cambiar Foto
                                          </Button>
