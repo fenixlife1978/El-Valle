@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -88,10 +89,6 @@ export default function OwnerSettingsPage() {
     const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
-            if (file.size > 1 * 1024 * 1024) { // 1MB limit
-                 toast({ variant: 'destructive', title: 'Archivo muy grande', description: 'La imagen no debe pesar más de 1MB.' });
-                return;
-            }
             const reader = new FileReader();
             reader.onloadend = () => {
                 const result = reader.result as string;
