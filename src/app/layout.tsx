@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
@@ -81,7 +82,7 @@ export default function RootLayout({
           <ThemeProvider
             attribute="class"
             defaultTheme="dark"
-            enableSystem
+            enableSystem={false}
             disableTransitionOnChange
           >
             <AuthGuard>
