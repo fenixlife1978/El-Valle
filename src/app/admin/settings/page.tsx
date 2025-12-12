@@ -131,7 +131,6 @@ export default function SettingsPage() {
             if (docSnap.exists()) {
                 const settings = docSnap.data() as Settings;
                 setAdminProfile(settings.adminProfile || emptyAdminProfile);
-                setAdminAvatarPreview(settings.adminProfile?.avatar);
                 setCompanyInfo(settings.companyInfo || emptyCompanyInfo);
                 setLogoPreview(settings.companyInfo?.logo);
                 setBcvLogo(settings.bcvLogo || '');
@@ -172,7 +171,7 @@ export default function SettingsPage() {
         }
     };
 
-    const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>, target: 'avatar' | 'logo' | 'bcvLogo') => {
+    const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>, target: 'logo' | 'bcvLogo') => {
         const file = e.target.files?.[0];
         if (file) {
             if (file.size > 1 * 1024 * 1024) { // 1MB limit
@@ -182,10 +181,7 @@ export default function SettingsPage() {
             const reader = new FileReader();
             reader.onloadend = () => {
                 const result = reader.result as string;
-                if (target === 'avatar') {
-                    setAdminAvatarPreview(result);
-                    setAdminProfile({ ...adminProfile, avatar: result });
-                } else if (target === 'logo') {
+                if (target === 'logo') {
                     setLogoPreview(result);
                     setCompanyInfo({ ...companyInfo, logo: result });
                 } else {
@@ -325,7 +321,7 @@ export default function SettingsPage() {
                 adminProfile: {
                     name: adminProfile.name || '',
                     email: adminProfile.email || '',
-                    avatar: adminProfile.avatar || '',
+                    avatar: companyInfo.logo, // Use company logo for admin avatar
                 },
                 companyInfo: safeCompanyInfo,
                 condoFee: newCondoFee,
@@ -486,7 +482,7 @@ export default function SettingsPage() {
                                     <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById('logo-upload')?.click()}>
                                         <Upload className="mr-2 h-4 w-4"/> Subir Logo
                                     </Button>
-                                    <Input id="logo-upload" type="file" className="hidden" onChange={(e) => handleImageChange(e, 'logo')} accept="image/png, image/jpeg, image/jpg" />
+                                    <Input id="logo-upload" type="file" className="hidden" onChange={(e) => handleImageChange(e, 'logo')} accept="image/png, image/jpeg" />
                                 </div>
                                  <div className="space-y-4">
                                      <Label>Logo de Tasa BCV</Label>
@@ -498,7 +494,7 @@ export default function SettingsPage() {
                                      <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById('bcv-logo-upload')?.click()}>
                                         <Upload className="mr-2 h-4 w-4"/> Cambiar Logo BCV
                                      </Button>
-                                     <Input id="bcv-logo-upload" type="file" className="hidden" onChange={(e) => handleImageChange(e, 'bcvLogo')} accept="image/png, image/jpeg, image/jpg" />
+                                     <Input id="bcv-logo-upload" type="file" className="hidden" onChange={(e) => handleImageChange(e, 'bcvLogo')} accept="image/png, image/jpeg" />
                                  </div>
                             </div>
                         </CardContent>
@@ -507,25 +503,9 @@ export default function SettingsPage() {
                     <Card>
                         <CardHeader>
                             <CardTitle>Perfil de Administrador</CardTitle>
-                            <CardDescription>Edita tus datos personales.</CardDescription>
+                            <CardDescription>Edita los datos personales del administrador.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            <div className="flex items-center gap-6">
-                                <Avatar className="w-24 h-24 text-lg">
-                                    <AvatarImage src={adminAvatarPreview || ''} alt="Admin Avatar" />
-                                    <AvatarFallback><UserCircle className="h-12 w-12"/></AvatarFallback>
-                                </Avatar>
-                                <div className="space-y-2">
-                                     <Label htmlFor="avatar-upload">Foto de Perfil</Label>
-                                     <div className="flex items-center gap-2">
-                                         <Input id="avatar-upload" type="file" className="hidden" onChange={(e) => handleImageChange(e, 'avatar')} accept="image/png,image/jpeg, image/jpg" />
-                                         <Button type="button" variant="outline" onClick={() => document.getElementById('avatar-upload')?.click()}>
-                                             <Upload className="mr-2 h-4 w-4"/> Cambiar Foto
-                                         </Button>
-                                     </div>
-                                     <p className="text-xs text-muted-foreground">PNG o JPG. Recomendado 200x200px, max 1MB.</p>
-                                </div>
-                             </div>
                             <div className="grid md:grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <Label htmlFor="admin-name">Nombre</Label>

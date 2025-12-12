@@ -124,6 +124,7 @@ const BCVRateCard = ({
 
 const CustomHeader = ({ ownerData, userRole }: { ownerData: any, userRole: string | null }) => {
     const router = useRouter();
+    const { companyInfo } = useAuth();
     const [notifications, setNotifications] = React.useState<Notification[]>([]);
     const [isSheetOpen, setIsSheetOpen] = React.useState(false);
 
@@ -155,6 +156,8 @@ const CustomHeader = ({ ownerData, userRole }: { ownerData: any, userRole: strin
     };
 
     const userName = ownerData?.name || 'Usuario';
+    const avatarSrc = userRole === 'administrador' ? companyInfo?.logo : ownerData?.avatar;
+
 
     return (
         <header className="sticky top-0 z-10 flex h-20 items-center justify-between gap-2 border-b bg-background/80 px-4 backdrop-blur-sm sm:px-6">
@@ -177,7 +180,7 @@ const CustomHeader = ({ ownerData, userRole }: { ownerData: any, userRole: strin
                     <DropdownMenuTrigger asChild>
                     <Button variant="ghost" className="relative h-10 w-10 rounded-full hover:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0">
                         <Avatar className="h-10 w-10">
-                        <AvatarImage src={ownerData?.avatar} alt={userName} />
+                        <AvatarImage src={avatarSrc || ''} alt={userName} />
                         <AvatarFallback>{userName.charAt(0)}</AvatarFallback>
                         </Avatar>
                     </Button>
