@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { CheckCircle2, XCircle, MoreHorizontal, Printer, Filter, Loader2, Trash2, Share2, FileText, Download, ArrowLeft, Paperclip } from 'lucide-react';
+import { CheckCircle2, XCircle, MoreHorizontal, Printer, Filter, Loader2, Trash2, Share2, FileText, Download, ArrowLeft } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -54,7 +54,6 @@ type FullPayment = {
   reportedAt?: Timestamp;
   observations?: string;
   isReconciled?: boolean;
-  receiptUrl?: string; // Added field
 };
 
 type Debt = {
@@ -197,7 +196,6 @@ export default function VerifyPaymentsPage() {
                 reportedAt: data.reportedAt,
                 observations: data.observations,
                 isReconciled: data.isReconciled,
-                receiptUrl: data.receiptUrl,
             });
         });
 
@@ -661,7 +659,6 @@ export default function VerifyPaymentsPage() {
                             <TableHead>Monto</TableHead>
                             <TableHead>Fecha</TableHead>
                             <TableHead>Referencia</TableHead>
-                            <TableHead>Comprobante</TableHead>
                             <TableHead>Estado</TableHead>
                             <TableHead className="text-right">Acciones</TableHead>
                         </TableRow>
@@ -669,13 +666,13 @@ export default function VerifyPaymentsPage() {
                     <TableBody>
                         {loading ? (
                             <TableRow>
-                                <TableCell colSpan={8} className="h-24 text-center">
+                                <TableCell colSpan={7} className="h-24 text-center">
                                     <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
                                 </TableCell>
                             </TableRow>
                         ) : filteredPayments.length === 0 ? (
                              <TableRow>
-                                <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                                <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                                     No hay pagos que coincidan con el filtro seleccionado.
                                 </TableCell>
                              </TableRow>
@@ -691,15 +688,6 @@ export default function VerifyPaymentsPage() {
                                 </TableCell>
                                 <TableCell>{new Date(payment.date).toLocaleDateString('es-VE')}</TableCell>
                                 <TableCell>{payment.reference}</TableCell>
-                                <TableCell>
-                                    {payment.receiptUrl && (
-                                        <Button asChild variant="outline" size="icon">
-                                            <a href={payment.receiptUrl} target="_blank" rel="noopener noreferrer">
-                                                <Paperclip className="h-4 w-4" />
-                                            </a>
-                                        </Button>
-                                    )}
-                                </TableCell>
                                 <TableCell>
                                     <Badge variant={statusVariantMap[payment.status]}>
                                         {statusTextMap[payment.status]}
@@ -845,3 +833,5 @@ export default function VerifyPaymentsPage() {
 }
 
       
+
+    
