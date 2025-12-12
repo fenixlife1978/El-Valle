@@ -28,7 +28,7 @@ export function BottomNavBar({ items, pathname }: { items: BottomNavItem[], path
             >
                <Button
                 variant="default"
-                className="h-16 w-16 rounded-full shadow-lg"
+                className="h-16 w-16 rounded-full shadow-lg border-none"
               >
                 <item.icon className="h-8 w-8" />
                 <span className="sr-only">{item.label}</span>
