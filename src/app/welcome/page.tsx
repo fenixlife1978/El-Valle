@@ -1,15 +1,11 @@
 
-
 'use client';
 
 import { useState, useEffect } from 'react';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
 import RoleSelectionButtons from '@/app/role-selection-buttons';
-import { cn } from '@/lib/utils';
-
 
 function WelcomePageContent() {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
@@ -39,11 +35,15 @@ function WelcomePageContent() {
     <main className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
       <div className="text-center mb-12">
         {loading ? (
-          <Skeleton className="w-24 h-24 rounded-full mx-auto mb-6" />
+          <Skeleton className="w-32 h-32 rounded-full mx-auto mb-6" />
         ) : (
-            <div className="w-24 h-24 flex items-center justify-center overflow-hidden mx-auto mb-6 rounded-full">
-                {logoUrl && <img src={logoUrl} alt="Company Logo" className="w-full h-full object-contain" />}
-            </div>
+          <div className="w-32 h-32 flex items-center justify-center overflow-hidden mx-auto mb-6 rounded-full bg-white p-2">
+            {logoUrl ? (
+              <img src={logoUrl} alt="Logo Empresa" className="w-full h-full object-contain" />
+            ) : (
+              <div className="w-full h-full rounded-full bg-muted" />
+            )}
+          </div>
         )}
         <h1 className="text-4xl font-bold font-headline text-primary">Bienvenid@ a VALLECONDO</h1>
         <p className="text-lg text-muted-foreground mt-2">Seleccione su rol para continuar</p>
