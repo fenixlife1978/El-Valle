@@ -340,9 +340,9 @@ function DashboardLayoutContent({
       <SidebarInset>
         <CustomHeader ownerData={ownerData} userRole={userRole} />
         {userRole === 'propietario' && (
-             <div className="relative flex w-full bg-yellow-400 text-black font-semibold overflow-x-hidden">
+             <div className="relative flex w-full bg-yellow-400 text-black font-semibold overflow-x-hidden py-2">
                  <Marquee pauseOnHover>
-                    <span className="text-sm">
+                    <span className="text-base">
                         Estimado Usuario, antes de realizar y reportar un pago le recomendamos usar la calculadora de pago para evitar pagos incompletos o excedentes; recuerda que la autogestión es tu responsabilidad.
                     </span>
                  </Marquee>
