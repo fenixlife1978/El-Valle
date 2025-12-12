@@ -21,7 +21,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Progress } from '@/components/ui/progress';
-import { ThemeSwitcher } from '@/components/theme-switcher';
 
 
 type AdminProfile = {
@@ -453,18 +452,6 @@ export default function SettingsPage() {
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2 space-y-8">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Apariencia</CardTitle>
-                            <CardDescription>
-                                Personaliza el aspecto de la aplicación para todos los usuarios.
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <ThemeSwitcher />
-                        </CardContent>
-                    </Card>
-
                      <Card>
                         <CardHeader>
                             <CardTitle>Gestión de Logos</CardTitle>
@@ -474,19 +461,19 @@ export default function SettingsPage() {
                             <div className="grid md:grid-cols-2 gap-6">
                                 <div className="space-y-4">
                                     <Label>Logo de la Empresa</Label>
-                                    <div className="w-32 h-32 flex items-center justify-center overflow-hidden rounded-full">
-                                         <div className="w-full h-full flex items-center justify-center">
+                                    <div className="w-32 h-32 flex items-center justify-center overflow-hidden rounded-full bg-white p-1">
+                                        <div className="w-full h-full flex items-center justify-center">
                                              {logoPreview && <img src={logoPreview} alt="Company Logo Preview" className="w-full h-full object-contain" />}
                                          </div>
                                     </div>
                                     <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById('logo-upload')?.click()}>
                                         <Upload className="mr-2 h-4 w-4"/> Subir Logo
                                     </Button>
-                                    <Input id="logo-upload" type="file" className="hidden" onChange={(e) => handleImageChange(e, 'logo')} accept="image/png, image/jpeg, .jpeg" />
+                                    <Input id="logo-upload" type="file" className="hidden" onChange={(e) => handleImageChange(e, 'logo')} accept="image/png, image/jpeg" />
                                 </div>
                                  <div className="space-y-4">
                                      <Label>Logo de Tasa BCV</Label>
-                                     <div className="w-32 h-32 flex items-center justify-center overflow-hidden rounded-full">
+                                     <div className="w-32 h-32 flex items-center justify-center overflow-hidden rounded-full bg-white p-1">
                                          <div className="w-full h-full flex items-center justify-center">
                                              {bcvLogoPreview && <img src={bcvLogoPreview} alt="BCV Logo Preview" className="w-full h-full object-contain" />}
                                          </div>
@@ -494,31 +481,12 @@ export default function SettingsPage() {
                                      <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById('bcv-logo-upload')?.click()}>
                                         <Upload className="mr-2 h-4 w-4"/> Cambiar Logo BCV
                                      </Button>
-                                     <Input id="bcv-logo-upload" type="file" className="hidden" onChange={(e) => handleImageChange(e, 'bcvLogo')} accept="image/png, image/jpeg, .jpeg" />
+                                     <Input id="bcv-logo-upload" type="file" className="hidden" onChange={(e) => handleImageChange(e, 'bcvLogo')} accept="image/png, image/jpeg" />
                                  </div>
                             </div>
                         </CardContent>
                     </Card>
 
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Perfil de Administrador</CardTitle>
-                            <CardDescription>Edita los datos personales del administrador.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="grid md:grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="admin-name">Nombre</Label>
-                                    <Input id="admin-name" name="name" value={adminProfile.name} onChange={(e) => handleInfoChange(e, 'admin')} />
-                                </div>
-                                 <div className="space-y-2">
-                                    <Label htmlFor="admin-email">Email</Label>
-                                    <Input id="admin-email" name="email" type="email" value={adminProfile.email} onChange={(e) => handleInfoChange(e, 'admin')} />
-                                 </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-                    
                     <Card>
                         <CardHeader>
                             <CardTitle>Información de la Empresa</CardTitle>
