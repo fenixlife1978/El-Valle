@@ -173,8 +173,8 @@ export default function OwnerDashboardPage() {
     const solvencyStatus = useMemo(() => {
         if (loadingData) return { text: 'Cargando...', variant: 'default', colorClass: 'bg-muted text-muted-foreground' };
         return totalDebtUSD > 0 
-            ? { text: 'No Solvente', variant: 'destructive', colorClass: 'bg-destructive/10 text-destructive' }
-            : { text: 'Solvente', variant: 'success', colorClass: 'bg-success/10 text-success' };
+            ? { text: 'No Solvente', variant: 'destructive', colorClass: 'bg-red-500 text-white' }
+            : { text: 'Solvente', variant: 'success', colorClass: 'bg-green-500 text-white' };
     }, [totalDebtUSD, loadingData]);
 
     const currentMonthStatus = useMemo(() => {
@@ -189,14 +189,14 @@ export default function OwnerDashboardPage() {
         const currentMonthDebt = debts.find(d => d.year === currentYear && d.month === currentMonth);
 
         if (!currentMonthDebt || currentMonthDebt.status === 'paid') {
-            return { text: 'Pagado', Icon: CalendarCheck2, colorClass: 'bg-success/10 text-success', isAnimating: false };
+            return { text: 'Pagado', Icon: CalendarCheck2, colorClass: 'bg-green-500 text-white', isAnimating: false };
         }
 
         if (currentDay <= 5) {
             return { text: 'Pendiente', Icon: Clock, colorClass: 'bg-mustard text-black', isAnimating: false };
         }
 
-        return { text: 'Vencido', Icon: CalendarX, colorClass: 'bg-destructive/10 text-destructive', isAnimating: false };
+        return { text: 'Vencido', Icon: CalendarX, colorClass: 'bg-red-500 text-white', isAnimating: false };
 
     }, [debts, loadingData]);
 
@@ -252,7 +252,7 @@ export default function OwnerDashboardPage() {
             return;
           }
           
-          const ownerUnitSummary = (beneficiary.street && beneficiary.house) ? `${beneficiary.street} - ${beneficiary.house}` : "Propiedad no especificada";
+          const ownerUnitSummary = (beneficiary.street && beneficiary.house) ? `${'${beneficiary.street}'} - ${'${beneficiary.house}'}` : "Propiedad no especificada";
     
           const paidDebtsQuery = query(collection(db, "debts"), where("paymentId", "==", payment.id), where("ownerId", "==", user.uid));
           const paidDebtsSnapshot = await getDocs(paidDebtsQuery);
@@ -264,7 +264,7 @@ export default function OwnerDashboardPage() {
     
           const receiptNumber = payment.receiptNumbers?.[beneficiary.ownerId] || payment.id.substring(0, 10);
           
-          const receiptUrl = `${window.location.origin}/receipt/${payment.id}/${beneficiary.ownerId}`;
+          const receiptUrl = `${'${window.location.origin}'}/receipt/${'${payment.id}'}/${'${beneficiary.ownerId}'}`;
           const qrDataContent = JSON.stringify({ receiptNumber, date: format(new Date(), 'yyyy-MM-dd'), amount: beneficiary.amount, ownerId: beneficiary.ownerId, url: receiptUrl });
           const qrCodeUrl = await QRCode.toDataURL(qrDataContent, { errorCorrectionLevel: 'M', margin: 2, scale: 4, color: { dark: '#000000', light: '#FFFFFF' } });
     
@@ -304,28 +304,28 @@ export default function OwnerDashboardPage() {
         pdfDoc.setFontSize(9).setFont('helvetica', 'normal');
         pdfDoc.text(companyInfo.rif, margin + 30, margin + 14);
         pdfDoc.text(companyInfo.address, margin + 30, margin + 19);
-        pdfDoc.text(`Teléfono: ${companyInfo.phone}`, margin + 30, margin + 24);
-        pdfDoc.setFontSize(10).text(`Fecha de Emisión: ${format(new Date(), 'dd/MM/yyyy')}`, pageWidth - margin, margin + 8, { align: 'right' });
+        pdfDoc.text(`Teléfono: ${'${companyInfo.phone}'}`, margin + 30, margin + 24);
+        pdfDoc.setFontSize(10).text(`Fecha de Emisión: ${'${format(new Date(), \'dd/MM/yyyy\')}'}`, pageWidth - margin, margin + 8, { align: 'right' });
         pdfDoc.setLineWidth(0.5).line(margin, margin + 32, pageWidth - margin, margin + 32);
         pdfDoc.setFontSize(16).setFont('helvetica', 'bold').text("RECIBO DE PAGO", pageWidth / 2, margin + 45, { align: 'center' });
-        pdfDoc.setFontSize(10).setFont('helvetica', 'normal').text(`N° de recibo: ${receiptNumber}`, pageWidth - margin, margin + 45, { align: 'right' });
+        pdfDoc.setFontSize(10).setFont('helvetica', 'normal').text(`N° de recibo: ${'${receiptNumber}'}`, pageWidth - margin, margin + 45, { align: 'right' });
         if(qrCodeUrl) {
           const qrSize = 30;
           pdfDoc.addImage(qrCodeUrl, 'PNG', pageWidth - margin - qrSize, margin + 48, qrSize, qrSize);
         }
         
         let startY = margin + 60;
-        pdfDoc.setFontSize(10).text(`Beneficiario: ${beneficiary.ownerName} (${data.ownerUnit})`, margin, startY);
+        pdfDoc.setFontSize(10).text(`Beneficiario: ${'${beneficiary.ownerName}'} (${'${data.ownerUnit}'})`, margin, startY);
         startY += 6;
-        pdfDoc.text(`Método de pago: ${payment.type}`, margin, startY);
+        pdfDoc.text(`Método de pago: ${'${payment.type}'}`, margin, startY);
         startY += 6;
-        pdfDoc.text(`Banco Emisor: ${payment.bank}`, margin, startY);
+        pdfDoc.text(`Banco Emisor: ${'${payment.bank}'}`, margin, startY);
         startY += 6;
-        pdfDoc.text(`N° de Referencia Bancaria: ${payment.reference}`, margin, startY);
+        pdfDoc.text(`N° de Referencia Bancaria: ${'${payment.reference}'}`, margin, startY);
         startY += 6;
-        pdfDoc.text(`Fecha del pago: ${format(payment.paymentDate.toDate(), 'dd/MM/yyyy')}`, margin, startY);
+        pdfDoc.text(`Fecha del pago: ${'${format(payment.paymentDate.toDate(), \'dd/MM/yyyy\')}'}`, margin, startY);
         startY += 6;
-        pdfDoc.text(`Tasa de Cambio Aplicada: Bs. ${formatToTwoDecimals(payment.exchangeRate)} por USD`, margin, startY);
+        pdfDoc.text(`Tasa de Cambio Aplicada: Bs. ${'${formatToTwoDecimals(payment.exchangeRate)}'} por USD`, margin, startY);
         startY += 10;
         
         let totalPaidInConcepts = 0;
@@ -333,9 +333,9 @@ export default function OwnerDashboardPage() {
             const debtAmountBs = (debt.paidAmountUSD || debt.amountUSD) * payment.exchangeRate;
             totalPaidInConcepts += debtAmountBs;
             const propertyLabel = "Propiedad Principal"; // Simplified for owner view
-            const periodLabel = `${monthsLocale[debt.month]} ${debt.year}`;
-            const concept = `${debt.description}`;
-            return [ periodLabel, concept, `$${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}`, `Bs. ${formatToTwoDecimals(debtAmountBs)}` ];
+            const periodLabel = `${'${monthsLocale[debt.month]}'} ${'${debt.year}'}`;
+            const concept = `${'${debt.description}'}`;
+            return [ periodLabel, concept, `$${'${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}'}`, `Bs. ${'${formatToTwoDecimals(debtAmountBs)}'}` ];
         });
 
         if (paidDebts.length > 0) {
@@ -359,7 +359,7 @@ export default function OwnerDashboardPage() {
             autoTable(pdfDoc, {
                 startY: startY,
                 head: [['Concepto', 'Monto Pagado (Bs)']],
-                body: [['Abono a Saldo a Favor', `Bs. ${formatToTwoDecimals(beneficiary.amount)}`]],
+                body: [['Abono a Saldo a Favor', `Bs. ${'${formatToTwoDecimals(beneficiary.amount)}'}`]],
                 theme: 'striped',
                 headStyles: {
                 fillColor: [44, 62, 80],
@@ -375,31 +375,31 @@ export default function OwnerDashboardPage() {
         startY += 8;
         
         const summaryData = [
-            ['Saldo a Favor Anterior:', `Bs. ${formatToTwoDecimals(previousBalance)}`],
-            ['Monto del Pago Recibido:', `Bs. ${formatToTwoDecimals(beneficiary.amount)}`],
-            ['Total Abonado en Deudas:', `Bs. ${formatToTwoDecimals(totalPaidInConcepts)}`],
-            ['Saldo a Favor Actual:', `Bs. ${formatToTwoDecimals(currentBalance)}`],
+            ['Saldo a Favor Anterior:', `Bs. ${'${formatToTwoDecimals(previousBalance)}'}`],
+            ['Monto del Pago Recibido:', `Bs. ${'${formatToTwoDecimals(beneficiary.amount)}'}`],
+            ['Total Abonado en Deudas:', `Bs. ${'${formatToTwoDecimals(totalPaidInConcepts)}'}`],
+            ['Saldo a Favor Actual:', `Bs. ${'${formatToTwoDecimals(currentBalance)}'}`],
         ];
         autoTable(pdfDoc, { startY: startY, body: summaryData, theme: 'plain', styles: { fontSize: 9, fontStyle: 'bold' }, columnStyles: { 0: { halign: 'right' }, 1: { halign: 'right'} } });
         startY = (pdfDoc as any).lastAutoTable.finalY + 10;
         
         const totalLabel = "TOTAL PAGADO:";
-        const totalValue = `Bs. ${formatToTwoDecimals(beneficiary.amount)}`;
+        const totalValue = `Bs. ${'${formatToTwoDecimals(beneficiary.amount)}'}`;
         pdfDoc.setFontSize(11).setFont('helvetica', 'bold');
         const totalValueWidth = pdfDoc.getStringUnitWidth(totalValue) * 11 / pdfDoc.internal.scaleFactor;
         pdfDoc.text(totalValue, pageWidth - margin, startY, { align: 'right' });
         pdfDoc.text(totalLabel, pageWidth - margin - totalValueWidth - 2, startY, { align: 'right' });
     
         const pdfOutput = pdfDoc.output('blob');
-        const pdfFile = new File([pdfOutput], `recibo_${receiptNumber}.pdf`, { type: 'application/pdf' });
+        const pdfFile = new File([pdfOutput], `recibo_${'${receiptNumber}'}.pdf`, { type: 'application/pdf' });
     
         if (action === 'download') {
-          pdfDoc.save(`recibo_${receiptNumber}.pdf`);
+          pdfDoc.save(`recibo_${'${receiptNumber}'}.pdf`);
         } else if (navigator.share && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
             try {
               await navigator.share({
-                title: `Recibo de Pago ${receiptNumber}`,
-                text: `Adjunto el recibo de pago para ${data.ownerName}.`,
+                title: `Recibo de Pago ${'${receiptNumber}'}`,
+                text: `Adjunto el recibo de pago para ${'${data.ownerName}'}.`,
                 files: [pdfFile],
               });
             } catch (error) {
@@ -689,5 +689,3 @@ export default function OwnerDashboardPage() {
         </div>
     );
 }
-
-
