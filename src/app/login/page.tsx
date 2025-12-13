@@ -142,7 +142,7 @@ function LoginPage() {
                 {loadingLogo ? (
                     <Skeleton className="w-24 h-24 rounded-full mx-auto" />
                 ) : (
-                    <div className="w-24 h-24 flex items-center justify-center overflow-hidden mx-auto rounded-full">
+                    <div className="w-24 h-24 flex items-center justify-center overflow-hidden mx-auto rounded-full bg-white p-1">
                         {logoUrl && <img src={logoUrl} alt="Company Logo" className="w-full h-full object-contain" />}
                     </div>
                 )}
