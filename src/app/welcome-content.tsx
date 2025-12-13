@@ -37,7 +37,7 @@ function WelcomePageContent() {
         {loading ? (
           <Skeleton className="w-32 h-32 rounded-full mx-auto mb-6" />
         ) : (
-          <div className="w-32 h-32 flex items-center justify-center overflow-hidden mx-auto mb-6">
+          <div className="w-32 h-32 flex items-center justify-center overflow-hidden mx-auto mb-6 rounded-full">
             {logoUrl ? (
               <img src={logoUrl} alt="Logo Empresa" className="w-full h-full object-contain" />
             ) : (
