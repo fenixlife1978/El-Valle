@@ -7,7 +7,7 @@ import { db } from '@/lib/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
 import RoleSelectionButtons from '@/app/role-selection-buttons';
 
-function WelcomePageContent() {
+export default function WelcomePage() {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -37,7 +37,7 @@ function WelcomePageContent() {
         {loading ? (
           <Skeleton className="w-32 h-32 rounded-full mx-auto mb-6" />
         ) : (
-          <div className="w-32 h-32 flex items-center justify-center overflow-hidden mx-auto mb-6 rounded-full bg-white p-1">
+          <div className="w-32 h-32 flex items-center justify-center overflow-hidden mx-auto mb-6 rounded-full bg-white">
             {logoUrl ? (
               <img src={logoUrl} alt="Logo Empresa" className="w-full h-full object-contain" />
             ) : (
@@ -53,8 +53,4 @@ function WelcomePageContent() {
       </div>
     </main>
   );
-}
-
-export default function WelcomePage() {
-    return <WelcomePageContent />;
 }
