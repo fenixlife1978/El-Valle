@@ -13,7 +13,7 @@ import { Label } from '@/components/ui/label';
 import { PlusCircle, MoreHorizontal, Edit, Trash2, FileUp, FileDown, Loader2, MinusCircle, KeyRound, Search, RefreshCw, Eye, EyeOff } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import * as XLSX from 'xlsx';
+import * as ExcelJS from 'exceljs';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc, setDoc, getDocs, writeBatch } from 'firebase/firestore';
@@ -289,7 +289,7 @@ export default function PeopleManagementPage() {
         setCurrentOwner({ ...currentOwner, properties: newProperties });
     };
     
-    const handleExportExcel = () => {
+    const handleExportExcel = async () => {
         const dataToExport = owners.filter(o => o.id !== ADMIN_USER_ID).flatMap(o => {
             const properties = (o.properties && o.properties.length > 0) ? o.properties : [{ street: 'N/A', house: 'N/A'}];
             return properties.map(p => ({
@@ -301,10 +301,29 @@ export default function PeopleManagementPage() {
                 Rol: o.role,
             }));
         });
-        const worksheet = XLSX.utils.json_to_sheet(dataToExport);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Propietarios");
-        XLSX.writeFile(workbook, "propietarios.xlsx");
+        
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet("Propietarios");
+        
+        worksheet.columns = [
+            { header: 'Nombre', key: 'Nombre', width: 30 },
+            { header: 'Calle', key: 'Calle', width: 15 },
+            { header: 'Casa', key: 'Casa', width: 15 },
+            { header: 'Email', key: 'Email', width: 30 },
+            { header: 'Saldo a Favor (Bs.)', key: 'Saldo a Favor (Bs.)', width: 20, style: { numFmt: '#,##0.00' } },
+            { header: 'Rol', key: 'Rol', width: 15 },
+        ];
+        
+        worksheet.addRows(dataToExport);
+
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'propietarios.xlsx';
+        a.click();
+        window.URL.revokeObjectURL(url);
     };
 
     const handleExportPDF = () => {
@@ -365,27 +384,39 @@ export default function PeopleManagementPage() {
                 const data = event.target?.result;
                 if (!data) throw new Error("File data is empty.");
 
-                const workbook = XLSX.read(data, { type: 'binary' });
-                const sheetName = workbook.SheetNames[0];
-                const worksheet = workbook.Sheets[sheetName];
-                const json = XLSX.utils.sheet_to_json(worksheet, { header: ["name", "street", "house", "email", "balance", "role"], range: 1 });
+                const workbook = new ExcelJS.Workbook();
+                await workbook.xlsx.load(data as ArrayBuffer);
+                const worksheet = workbook.getWorksheet(1);
                 
                 const ownersMap: { [key: string]: Partial<Owner> } = {};
-                (json as any[]).forEach(item => {
-                    if (!item.name || !item.email) return; 
-                    const key = item.email.toLowerCase();
+
+                worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+                    if (rowNumber === 1) return; // Skip header
+
+                    const rowData = {
+                        name: row.getCell(1).value as string,
+                        street: row.getCell(2).value as string,
+                        house: row.getCell(3).value as string,
+                        email: row.getCell(4).value as string,
+                        balance: row.getCell(5).value as number,
+                        role: row.getCell(6).value as Role,
+                    };
+
+                    if (!rowData.name || !rowData.email) return; 
+                    const key = rowData.email.toLowerCase();
+
                     if (!ownersMap[key]) {
-                        const balanceNum = parseFloat(item.balance);
+                        const balanceNum = parseFloat(String(rowData.balance));
                         ownersMap[key] = {
-                            name: item.name,
-                            email: item.email,
+                            name: rowData.name,
+                            email: rowData.email,
                             balance: isNaN(balanceNum) ? 0 : parseFloat(balanceNum.toFixed(2)),
-                            role: (item.role === 'administrador' || item.role === 'propietario') ? item.role : 'propietario',
+                            role: (rowData.role === 'administrador' || rowData.role === 'propietario') ? rowData.role : 'propietario',
                             properties: []
                         };
                     }
-                    if (item.street && item.house && ownersMap[key].properties) {
-                        (ownersMap[key].properties as Property[]).push({ street: String(item.street), house: String(item.house) });
+                    if (rowData.street && rowData.house && ownersMap[key].properties) {
+                        (ownersMap[key].properties as Property[]).push({ street: String(rowData.street), house: String(rowData.house) });
                     }
                 });
 
@@ -421,7 +452,7 @@ export default function PeopleManagementPage() {
                 if (e.target) e.target.value = '';
             }
         };
-        reader.readAsBinaryString(file);
+        reader.readAsArrayBuffer(file);
     };
 
 
