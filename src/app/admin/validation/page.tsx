@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { collection, query, where, getDocs, writeBatch, doc, getDoc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db, auth } from '@/lib/firebase';
 import { Loader2, AlertTriangle, ShieldCheck, Search, ArrowLeft } from 'lucide-react';
 import { startOfMonth, isBefore, format } from 'date-fns';
 import { Progress } from '@/components/ui/progress';
@@ -312,3 +312,4 @@ export default function ValidationPage() {
     
 
     
+
