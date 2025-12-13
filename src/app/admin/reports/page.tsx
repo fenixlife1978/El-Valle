@@ -16,7 +16,7 @@ import { es } from "date-fns/locale";
 import { Calendar as CalendarIcon, Download, Search, Loader2, FileText, FileSpreadsheet, ArrowUpDown, Building, BadgeInfo, BadgeCheck, BadgeX, History, ChevronDown, ChevronRight, TrendingUp, TrendingDown, DollarSign, Receipt, Wand2, Megaphone, ArrowLeft, Trash2 } from "lucide-react";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import * as XLSX from 'xlsx';
+import * as ExcelJS from 'exceljs';
 import { collection, getDocs, query, where, doc, getDoc, orderBy, Timestamp, addDoc, setDoc, writeBatch, deleteDoc, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
@@ -736,20 +736,8 @@ export default function ReportsPage() {
     };
 
 
-    const handleExportIntegral = (formatType: 'pdf' | 'excel') => {
+    const handleExportIntegral = async (formatType: 'pdf' | 'excel') => {
         const data = integralReportData;
-        const headers = [["Propietario", "Propiedad", "Fecha Últ. Pago", "Monto Pagado (Bs)", "Tasa BCV", "Saldo a Favor (Bs)", "Estado", "Periodo", "Meses Adeudados", "Deuda por Ajuste ($)"]];
-        const body = data.map(row => [
-            row.name, row.properties, row.lastPaymentDate,
-            row.paidAmount > 0 ? formatToTwoDecimals(row.paidAmount) : '',
-            row.avgRate > 0 ? formatToTwoDecimals(row.avgRate) : '',
-            row.balance > 0 ? formatToTwoDecimals(row.balance) : '',
-            row.status,
-            row.solvencyPeriod,
-            row.monthsOwed > 0 ? row.monthsOwed : '',
-            row.adjustmentDebtUSD > 0 ? `$${row.adjustmentDebtUSD.toFixed(2)}` : ''
-        ]);
-
         const filename = `reporte_integral_${new Date().toISOString().split('T')[0]}`;
         const emissionDate = format(new Date(), "dd/MM/yyyy 'a las' HH:mm:ss");
         let periodString = "Período de Pagos: Todos";
@@ -777,7 +765,18 @@ export default function ReportsPage() {
             startY += 10;
             
             autoTable(doc, {
-                head: headers, body: body, startY: startY,
+                head: [["Propietario", "Propiedad", "Fecha Últ. Pago", "Monto Pagado (Bs)", "Tasa BCV", "Saldo a Favor (Bs)", "Estado", "Periodo", "Meses Adeudados", "Deuda por Ajuste ($)"]], 
+                body: data.map(row => [
+                    row.name, row.properties, row.lastPaymentDate,
+                    row.paidAmount > 0 ? formatToTwoDecimals(row.paidAmount) : '',
+                    row.avgRate > 0 ? formatToTwoDecimals(row.avgRate) : '',
+                    row.balance > 0 ? formatToTwoDecimals(row.balance) : '',
+                    row.status,
+                    row.solvencyPeriod,
+                    row.monthsOwed > 0 ? row.monthsOwed : '',
+                    row.adjustmentDebtUSD > 0 ? `$${row.adjustmentDebtUSD.toFixed(2)}` : ''
+                ]), 
+                startY: startY,
                 headStyles: { fillColor: [30, 80, 180] }, 
                 styles: { fontSize: 7, cellPadding: 1.5, overflow: 'linebreak' },
                  columnStyles: { 
@@ -790,42 +789,37 @@ export default function ReportsPage() {
             });
             doc.save(`${filename}.pdf`);
         } else {
-             const dataToExport = data.map(row => ({
-                 "Propietario": row.name, 
-                 "Propiedad": row.properties, 
-                 "Fecha Últ. Pago": row.lastPaymentDate, 
-                 "Monto Pagado (Bs)": row.paidAmount,
-                 "Tasa BCV": row.avgRate, 
-                 "Saldo a Favor (Bs)": row.balance, 
-                 "Estado": row.status, 
-                 "Periodo": row.solvencyPeriod, 
-                 "Meses Adeudados": row.monthsOwed,
-                 "Deuda por Ajuste ($)": row.adjustmentDebtUSD
-            }));
-            const worksheet = XLSX.utils.json_to_sheet(dataToExport);
-            const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, worksheet, "Reporte Integral");
-            XLSX.writeFile(workbook, `${filename}.xlsx`);
+             const workbook = new ExcelJS.Workbook();
+             const worksheet = workbook.addWorksheet("Reporte Integral");
+             worksheet.columns = [
+                 { header: "Propietario", key: "name", width: 30 },
+                 { header: "Propiedad", key: "properties", width: 25 },
+                 { header: "Fecha Últ. Pago", key: "lastPaymentDate", width: 15 },
+                 { header: "Monto Pagado (Bs)", key: "paidAmount", width: 20, style: { numFmt: '#,##0.00' } },
+                 { header: "Tasa BCV", key: "avgRate", width: 15, style: { numFmt: '#,##0.00' } },
+                 { header: "Saldo a Favor (Bs)", key: "balance", width: 20, style: { numFmt: '#,##0.00' } },
+                 { header: "Estado", key: "status", width: 15 },
+                 { header: "Periodo", key: "solvencyPeriod", width: 25 },
+                 { header: "Meses Adeudados", key: "monthsOwed", width: 15, style: { numFmt: '0' } },
+                 { header: "Deuda por Ajuste ($)", key: "adjustmentDebtUSD", width: 20, style: { numFmt: '$#,##0.00' } },
+             ];
+             worksheet.addRows(data);
+             const buffer = await workbook.xlsx.writeBuffer();
+             const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+             const link = document.createElement('a');
+             link.href = URL.createObjectURL(blob);
+             link.download = `${filename}.xlsx`;
+             link.click();
         }
     };
     
-    const handleExportDelinquency = (formatType: 'pdf' | 'excel') => {
+    const handleExportDelinquency = async (formatType: 'pdf' | 'excel') => {
         const data = filteredAndSortedDelinquents.filter(o => selectedDelinquentOwners.has(o.id));
         if (data.length === 0) {
             toast({ variant: "destructive", title: "Nada para exportar", description: "Por favor, seleccione al menos un propietario." });
             return;
         }
 
-        const doc = new jsPDF();
-        const pageWidth = doc.internal.pageSize.getWidth();
-        const margin = 14;
-
-        if (companyInfo?.logo) doc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25);
-        if (companyInfo) doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, margin + 30, margin + 8);
-        
-        doc.setFontSize(10).text(`Fecha de Emisión: ${new Date().toLocaleDateString('es-VE')}`, pageWidth - margin, margin + 8, { align: 'right' });
-        doc.setFontSize(16).setFont('helvetica', 'bold').text("Reporte de Morosidad", pageWidth / 2, margin + 45, { align: 'center' });
-        
         const head = includeDelinquencyAmounts 
             ? [['Propietario', 'Propiedades', 'Meses Adeudados', 'Deuda (USD)', 'Deuda (Bs.)']]
             : [['Propietario', 'Propiedades', 'Meses Adeudados']];
@@ -840,23 +834,52 @@ export default function ReportsPage() {
         });
 
         if (formatType === 'pdf') {
+            const doc = new jsPDF();
+            const pageWidth = doc.internal.pageSize.getWidth();
+            const margin = 14;
+
+            if (companyInfo?.logo) doc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25);
+            if (companyInfo) doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, margin + 30, margin + 8);
+            
+            doc.setFontSize(10).text(`Fecha de Emisión: ${new Date().toLocaleDateString('es-VE')}`, pageWidth - margin, margin + 8, { align: 'right' });
+            doc.setFontSize(16).setFont('helvetica', 'bold').text("Reporte de Morosidad", pageWidth / 2, margin + 45, { align: 'center' });
+        
             autoTable(doc, {
                 head: head, body: body, startY: margin + 55, headStyles: { fillColor: [220, 53, 69] },
                 styles: { cellPadding: 2, fontSize: 8 },
             });
             doc.save(`reporte_morosidad_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
         } else {
+             const workbook = new ExcelJS.Workbook();
+             const worksheet = workbook.addWorksheet("Morosidad");
+
+             const columns = [
+                 { header: 'Propietario', key: 'name', width: 30 },
+                 { header: 'Propiedades', key: 'properties', width: 30 },
+                 { header: 'Meses Adeudados', key: 'monthsOwed', width: 15 },
+             ];
+             if (includeDelinquencyAmounts) {
+                 columns.push({ header: 'Deuda (USD)', key: 'debtAmountUSD', width: 15, style: { numFmt: '$#,##0.00' } });
+                 columns.push({ header: 'Deuda (Bs.)', key: 'debtAmountBS', width: 15, style: { numFmt: '#,##0.00' } });
+             }
+             worksheet.columns = columns;
+
              const dataToExport = data.map(o => {
-                const baseData = { 'Propietario': o.name, 'Propiedades': o.properties, 'Meses Adeudados': o.monthsOwed };
+                const baseData: any = { name: o.name, properties: o.properties, monthsOwed: o.monthsOwed };
                 if (includeDelinquencyAmounts) {
-                    return { ...baseData, 'Deuda (USD)': o.debtAmountUSD, 'Deuda (Bs.)': o.debtAmountUSD * activeRate };
+                    baseData.debtAmountUSD = o.debtAmountUSD;
+                    baseData.debtAmountBS = o.debtAmountUSD * activeRate;
                 }
                 return baseData;
             });
-            const worksheet = XLSX.utils.json_to_sheet(dataToExport);
-            const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, worksheet, "Morosidad");
-            XLSX.writeFile(workbook, `reporte_morosidad_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+             worksheet.addRows(dataToExport);
+
+             const buffer = await workbook.xlsx.writeBuffer();
+             const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+             const link = document.createElement('a');
+             link.href = URL.createObjectURL(blob);
+             link.download = `reporte_morosidad_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+             link.click();
         }
     };
     
@@ -947,7 +970,7 @@ export default function ReportsPage() {
         doc.save(`${filename}.pdf`);
     };
 
-    const handleExportAccountStatement = (formatType: 'pdf' | 'excel') => {
+    const handleExportAccountStatement = async (formatType: 'pdf' | 'excel') => {
         if (!selectedStatementOwner || !companyInfo || !accountStatementData) return;
 
         const filename = `estado_de_cuenta_${selectedStatementOwner.name.replace(/\s/g, '_')}`;
@@ -1017,7 +1040,7 @@ export default function ReportsPage() {
         doc.save(`${filename}.pdf`);
     };
     
-    const handleExportBalance = (formatType: 'pdf' | 'excel') => {
+    const handleExportBalance = async (formatType: 'pdf' | 'excel') => {
         const data = filteredBalanceOwners;
         if (data.length === 0) {
             toast({ variant: "destructive", title: "Nada para exportar", description: "No hay propietarios con saldo a favor." });
@@ -1025,9 +1048,7 @@ export default function ReportsPage() {
         }
     
         const filename = `reporte_saldos_favor_${format(new Date(), 'yyyy-MM-dd')}`;
-        const head = [['Propietario', 'Propiedades', 'Saldo a Favor (Bs.)']];
-        const body = data.map(o => [o.name, o.properties, `Bs. ${formatToTwoDecimals(o.balance)}`]);
-    
+        
         if (formatType === 'pdf') {
             const doc = new jsPDF();
     
@@ -1047,25 +1068,31 @@ export default function ReportsPage() {
             doc.setFontSize(16).setFont('helvetica', 'bold').text("Reporte de Saldos a Favor", pageWidth / 2, margin + 30, { align: 'center' });
             
             autoTable(doc, {
-                head: head,
-                body: body,
+                head: [['Propietario', 'Propiedades', 'Saldo a Favor (Bs.)']],
+                body: data.map(o => [o.name, o.properties, `Bs. ${formatToTwoDecimals(o.balance)}`]),
                 startY: margin + 40,
                 headStyles: { fillColor: [22, 163, 74] }, // Green color
             });
             doc.save(`${filename}.pdf`);
         } else { // excel
-            const worksheet = XLSX.utils.json_to_sheet(data.map(o => ({
-                'Propietario': o.name,
-                'Propiedades': o.properties,
-                'Saldo a Favor (Bs.)': o.balance
-            })));
-            const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, worksheet, "Saldos a Favor");
-            XLSX.writeFile(workbook, `${filename}.xlsx`);
+            const workbook = new ExcelJS.Workbook();
+            const worksheet = workbook.addWorksheet("Saldos a Favor");
+            worksheet.columns = [
+                { header: 'Propietario', key: 'name', width: 30 },
+                { header: 'Propiedades', key: 'properties', width: 30 },
+                { header: 'Saldo a Favor (Bs.)', key: 'balance', width: 20, style: { numFmt: '#,##0.00' } },
+            ];
+            worksheet.addRows(data);
+            const buffer = await workbook.xlsx.writeBuffer();
+            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `${filename}.xlsx`;
+            link.click();
         }
     };
     
-    const handleExportIncomeReport = (formatType: 'pdf' | 'excel') => {
+    const handleExportIncomeReport = async (formatType: 'pdf' | 'excel') => {
         const data = incomeReportRows;
         if (data.length === 0) {
             toast({ variant: "destructive", title: "Nada para exportar", description: "No hay ingresos en el período seleccionado." });
@@ -1073,8 +1100,6 @@ export default function ReportsPage() {
         }
 
         const filename = `reporte_ingresos_${new Date().toISOString().split('T')[0]}`;
-        const head = [['Propietario', 'Calle', 'Casa', 'Fecha', 'Monto (Bs.)', 'Referencia']];
-        const body = data.map(row => [row.ownerName, row.street, row.house, row.date, formatToTwoDecimals(row.amount), row.reference]);
         
         let periodString = "Período: Todos";
         if (incomeDateRange.from && incomeDateRange.to) periodString = `Período: Desde ${format(incomeDateRange.from, 'P', { locale: es })} hasta ${format(incomeDateRange.to, 'P', { locale: es })}`;
@@ -1095,27 +1120,35 @@ export default function ReportsPage() {
             startY += 10;
             
             autoTable(doc, {
-                head: head, body: body, startY: startY,
+                head: [['Propietario', 'Calle', 'Casa', 'Fecha', 'Monto (Bs.)', 'Referencia']], 
+                body: data.map(row => [row.ownerName, row.street, row.house, row.date, formatToTwoDecimals(row.amount), row.reference]), 
+                startY: startY,
                 headStyles: { fillColor: [30, 80, 180] },
                 styles: { fontSize: 8, cellPadding: 2 }
             });
             doc.save(`${filename}.pdf`);
         } else { // Excel
-            const worksheet = XLSX.utils.json_to_sheet(data.map(row => ({
-                'Propietario': row.ownerName,
-                'Calle': row.street,
-                'Casa': row.house,
-                'Fecha': row.date,
-                'Monto (Bs.)': row.amount,
-                'Referencia': row.reference,
-            })));
-            const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, worksheet, "Ingresos");
-            XLSX.writeFile(workbook, `${filename}.xlsx`);
+             const workbook = new ExcelJS.Workbook();
+             const worksheet = workbook.addWorksheet("Ingresos");
+             worksheet.columns = [
+                 { header: 'Propietario', key: 'ownerName', width: 30 },
+                 { header: 'Calle', key: 'street', width: 15 },
+                 { header: 'Casa', key: 'house', width: 15 },
+                 { header: 'Fecha', key: 'date', width: 15 },
+                 { header: 'Monto (Bs.)', key: 'amount', width: 20, style: { numFmt: '#,##0.00' } },
+                 { header: 'Referencia', key: 'reference', width: 20 },
+             ];
+             worksheet.addRows(data);
+             const buffer = await workbook.xlsx.writeBuffer();
+             const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+             const link = document.createElement('a');
+             link.href = URL.createObjectURL(blob);
+             link.download = `${filename}.xlsx`;
+             link.click();
         }
     };
     
-    const handleExportMonthlyReport = (formatType: 'pdf' | 'excel') => {
+    const handleExportMonthlyReport = async (formatType: 'pdf' | 'excel') => {
         const data = monthlyReportData;
         if (data.length === 0) {
             toast({ variant: "destructive", title: "Nada para exportar", description: "No hay pagos aprobados en el período seleccionado." });
@@ -1123,9 +1156,6 @@ export default function ReportsPage() {
         }
 
         const filename = `reporte_mensual_${selectedYear}_${selectedMonth}`;
-        const head = [['Propietario', 'Propiedad', 'Fecha Pago', 'Monto (Bs.)', 'Referencia', 'Meses Pagados']];
-        const body = data.map(row => [row.ownerName, row.properties, row.paymentDate, formatToTwoDecimals(row.amount), row.reference, row.paidMonths]);
-        
         const periodString = `Período: ${monthOptions.find(m => m.value === selectedMonth)?.label} ${selectedYear}`;
 
         if (formatType === 'pdf') {
@@ -1142,7 +1172,9 @@ export default function ReportsPage() {
             startY += 10;
             
             autoTable(doc, {
-                head: head, body: body, startY: startY,
+                head: [['Propietario', 'Propiedad', 'Fecha Pago', 'Monto (Bs.)', 'Referencia', 'Meses Pagados']], 
+                body: data.map(row => [row.ownerName, row.properties, row.paymentDate, formatToTwoDecimals(row.amount), row.reference, row.paidMonths]),
+                startY: startY,
                 headStyles: { fillColor: [30, 80, 180] },
                 styles: { fontSize: 8, cellPadding: 2 },
                  columnStyles: {
@@ -1151,17 +1183,23 @@ export default function ReportsPage() {
             });
             doc.save(`${filename}.pdf`);
         } else { // Excel
-            const worksheet = XLSX.utils.json_to_sheet(data.map(row => ({
-                'Propietario': row.ownerName,
-                'Propiedad': row.properties,
-                'Fecha Pago': row.paymentDate,
-                'Monto (Bs.)': row.amount,
-                'Referencia': row.reference,
-                'Meses Pagados': row.paidMonths
-            })));
-            const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, worksheet, "Pagos Mensuales");
-            XLSX.writeFile(workbook, `${filename}.xlsx`);
+             const workbook = new ExcelJS.Workbook();
+             const worksheet = workbook.addWorksheet("Pagos Mensuales");
+             worksheet.columns = [
+                 { header: 'Propietario', key: 'ownerName', width: 30 },
+                 { header: 'Propiedad', key: 'properties', width: 20 },
+                 { header: 'Fecha Pago', key: 'paymentDate', width: 15 },
+                 { header: 'Monto (Bs.)', key: 'amount', width: 20, style: { numFmt: '#,##0.00' } },
+                 { header: 'Referencia', key: 'reference', width: 20 },
+                 { header: 'Meses Pagados', key: 'paidMonths', width: 40 },
+             ];
+             worksheet.addRows(data);
+             const buffer = await workbook.xlsx.writeBuffer();
+             const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+             const link = document.createElement('a');
+             link.href = URL.createObjectURL(blob);
+             link.download = `${filename}.xlsx`;
+             link.click();
         }
     };
 

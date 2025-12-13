@@ -8,7 +8,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { collection, onSnapshot, addDoc, doc, deleteDoc, serverTimestamp, orderBy, query, Timestamp, updateDoc, writeBatch, where, getDocs } from 'firebase/firestore';
-// Asumo que db es la instancia de Firestore, por lo que la importación no tiene cambios.
 import { db } from '@/lib/firebase'; 
 import { PlusCircle, Trash2, Loader2, ListPlus, XCircle, BarChart3, Users, CheckSquare, CalendarIcon, Edit, Play, Lock, Timer, ArrowLeft } from 'lucide-react';
 import { format, parse } from 'date-fns';
@@ -82,7 +81,6 @@ export default function SurveysPage() {
     const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
     
     useEffect(() => {
-        // CORRECCIÓN 1: Se usa 'db' en lugar de 'db()'
         const q = query(collection(db, "surveys"), orderBy("createdAt", "desc"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const surveysData = snapshot.docs.map(doc => ({
@@ -216,7 +214,6 @@ export default function SurveysPage() {
         }
         
         setIsSubmitting(true);
-        // La importación de 'db' ya apunta a la instancia, no necesita ser llamada.
         const firestore = db; 
         try {
             const finalQuestions = questions.map(q => ({
@@ -282,7 +279,6 @@ export default function SurveysPage() {
     const handleDeleteSurvey = async () => {
         if (!surveyToDelete) return;
         try {
-            // CORRECCIÓN 2: Se usa 'db' en lugar de 'db()'
             await deleteDoc(doc(db, "surveys", surveyToDelete.id)); 
             toast({ title: 'Encuesta Eliminada' });
         } catch (error) {

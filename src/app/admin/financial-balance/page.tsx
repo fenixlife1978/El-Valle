@@ -18,7 +18,7 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import * as XLSX from 'xlsx';
+import * as ExcelJS from 'exceljs';
 import QRCode from 'qrcode';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useRouter } from 'next/navigation';
@@ -298,25 +298,32 @@ export default function FinancialBalancePage() {
             doc.save(`Balance_Financiero_${statement.id}.pdf`);
 
         } else { // Excel
-            const wb = XLSX.utils.book_new();
-            const wsData = [
-                ['BALANCE FINANCIERO', period],
-                [],
-                ['DÍA', 'INGRESOS', 'MONTO'],
-                ...statement.ingresos.map(i => [i.dia || '', i.concepto, i.monto]),
-                ['', 'TOTAL INGRESOS', totalIngresos],
-                [],
-                ['DÍA', 'EGRESOS', 'MONTO'],
-                ...statement.egresos.map(e => [e.dia || '', e.concepto, e.monto]),
-                ['', 'TOTAL EGRESOS', totalEgresos],
-                [],
-                ['', 'SALDO NETO O SALDO FINAL DEL MES EN BANCO', saldoNeto],
-                [],
-                ['Notas', statement.notas]
-            ];
-            const ws = XLSX.utils.aoa_to_sheet(wsData);
-            XLSX.utils.book_append_sheet(wb, ws, `Balance ${statement.id}`);
-            XLSX.writeFile(wb, `Balance_Financiero_${statement.id}.xlsx`);
+            const workbook = new ExcelJS.Workbook();
+            const worksheet = workbook.addWorksheet(`Balance ${statement.id}`);
+
+            worksheet.addRow(['BALANCE FINANCIERO', period]);
+            worksheet.addRow([]);
+            worksheet.addRow(['DÍA', 'INGRESOS', 'MONTO']);
+            statement.ingresos.forEach(i => worksheet.addRow([i.dia || '', i.concepto, i.monto]));
+            worksheet.addRow(['', 'TOTAL INGRESOS', totalIngresos]);
+            worksheet.addRow([]);
+            worksheet.addRow(['DÍA', 'EGRESOS', 'MONTO']);
+            statement.egresos.forEach(e => worksheet.addRow([e.dia || '', e.concepto, e.monto]));
+            worksheet.addRow(['', 'TOTAL EGRESOS', totalEgresos]);
+            worksheet.addRow([]);
+            worksheet.addRow(['', 'SALDO NETO O SALDO FINAL DEL MES EN BANCO', saldoNeto]);
+            worksheet.addRow([]);
+            worksheet.addRow(['Notas', statement.notas]);
+            
+            workbook.xlsx.writeBuffer().then((buffer) => {
+                const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `Balance_Financiero_${statement.id}.xlsx`;
+                a.click();
+                window.URL.revokeObjectURL(url);
+            });
         }
     };
 
