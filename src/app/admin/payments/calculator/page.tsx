@@ -155,7 +155,7 @@ export default function PaymentCalculatorPage() {
     }, [ownerDebts]);
     
     const handlePendingDebtSelection = (debtId: string) => {
-        setSelectedPendingDebts(prev => prev.includes(debtId) ? prev.filter(id => id !== id) : [...prev, debtId]);
+        setSelectedPendingDebts(prev => prev.includes(debtId) ? prev.filter(id => id !== debtId) : [...prev, debtId]);
     };
     
     const handleAdvanceMonthSelection = (monthValue: string) => {
