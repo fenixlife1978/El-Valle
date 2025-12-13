@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
-import RoleSelectionButtons from '@/app/role-selection-buttons';
+import RoleSelectionButtons from '@/components/role-selection-buttons';
 
 export default function WelcomePage() {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
