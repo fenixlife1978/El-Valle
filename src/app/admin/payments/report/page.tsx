@@ -545,7 +545,6 @@ export default function UnifiedPaymentsPage() {
                     </CardFooter>
                 </Card>
             </form>
-            
             <BankSelectionModal
                 isOpen={isBankModalOpen}
                 onOpenChange={setIsBankModalOpen}
@@ -558,14 +557,28 @@ export default function UnifiedPaymentsPage() {
                     setIsBankModalOpen(false);
                 }}
             />
+            <Dialog open={isInfoDialogOpen} onOpenChange={setIsInfoDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Info className="h-6 w-6 text-blue-500" />
+                            Reporte Enviado para Revisión
+                        </DialogTitle>
+                        <DialogDescription className="pt-4">
+                            ¡Gracias! Hemos recibido tu reporte de pago. El tiempo máximo para la aprobación es de <strong>24 horas</strong>.
+                            <br /><br />
+                            Te invitamos a ingresar nuevamente después de este lapso para:
+                            <ul className="list-disc list-inside mt-2 space-y-1">
+                                <li>Verificar si el monto enviado cubrió completamente tu deuda.</li>
+                                <li>Descargar tu recibo de pago una vez que sea aprobado.</li>
+                            </ul>
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button onClick={() => setIsInfoDialogOpen(false)}>Entendido</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
-
-
-
-
-
-      
-
-    
