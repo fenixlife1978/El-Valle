@@ -258,7 +258,7 @@ export default function OwnerDashboardPage() {
         setIsGenerating(true);
 
         try {
-            const { jsPDF, autoTable, QRCode } = await importPdfLibs();
+            const { jsPDF, autoTable } = await importPdfLibs();
             const doc = new jsPDF('p', 'mm', 'a4');
             const { payment, beneficiary, paidDebts, previousBalance, currentBalance, receiptNumber } = receiptData;
             
@@ -586,7 +586,7 @@ export default function OwnerDashboardPage() {
                                 <h4 className="font-bold pt-2 border-t">Detalles Cubiertos</h4>
                                 {receiptData.paidDebts.length > 0 ? (
                                     <ul className="list-disc pl-5 text-sm">
-                                        {receiptData.paidDebts.map(d => <li key={d.id}>{d.description} ({monthsLocale[d.month]} {d.year})</li>)}
+                                        {receiptData.paidDebts.map((d, index) => <li key={`${d.id}-${index}`}>{d.description} ({monthsLocale[d.month]} {d.year})</li>)}
                                     </ul>
                                 ) : (
                                     <p className="text-sm italic">El pago fue abonado a su saldo a favor.</p>
@@ -623,12 +623,11 @@ export default function OwnerDashboardPage() {
 // COMPONENTES AUXILIARES (Función de importación de PDF)
 // -------------------------------------------------------------------------
 const importPdfLibs = async () => {
-    const [{ default: jsPDF }, autoTableModule, { default: QRCode }] = await Promise.all([
+    const [{ default: jsPDF }, autoTableModule] = await Promise.all([
         import('jspdf'),
         import('jspdf-autotable'),
-        import('qrcode')
     ]);
-    return { jsPDF, autoTable: autoTableModule, QRCode };
+    return { jsPDF, autoTable: autoTableModule };
 };
 
     
