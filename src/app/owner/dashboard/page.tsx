@@ -24,7 +24,7 @@ import { getToken, onMessage } from 'firebase/messaging'
 // Imports de Lógica y Librerías de Next/React
 import { useAuth } from "@/hooks/use-auth";
 import { useState, useEffect, useMemo } from 'react';
-import { collection, query, where, onSnapshot, getDocs, doc, Timestamp, orderBy, addDoc, serverTimestamp, limit } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, getDocs, doc, Timestamp, orderBy, addDoc, serverTimestamp, limit, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { format, isBefore, startOfMonth } from "date-fns";
 import { es } from 'date-fns/locale';
@@ -691,5 +691,3 @@ const generateReceiptPDF = async (receiptData: ReceiptData, companyInfo: Company
         return null;
     }
 }
-
-    
