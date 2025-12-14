@@ -142,10 +142,12 @@ export default function OwnerDashboardPage() {
                     setDebts(debtsList);
                 });
 
-                // Suscripción a pagos
-                const paymentsQuery = query(collection(db, 'payments'), where('beneficiaryIds', 'array-contains', ownerId), orderBy('paymentDate', 'desc'));
+                // Suscripción a pagos - AHORA SIN ORDER BY
+                const paymentsQuery = query(collection(db, 'payments'), where('beneficiaryIds', 'array-contains', ownerId));
                 const unsubPayments = onSnapshot(paymentsQuery, (snapshot) => {
                     const paymentsList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Payment));
+                    // Ordenar en el cliente
+                    paymentsList.sort((a, b) => b.paymentDate.toMillis() - a.paymentDate.toMillis());
                     setPayments(paymentsList);
                 });
                 
@@ -585,7 +587,7 @@ export default function OwnerDashboardPage() {
                                 <Separator />
                                 <div className="text-right text-sm space-y-1">
                                     <p>Saldo Anterior: Bs. {formatToTwoDecimals(receiptData.previousBalance)}</p>
-                                    <p className="font-bold">Saldo Actual a Favor: Bs. {formatToTwoDecimals(receiptData.currentBalance)}</p>
+                                    <p className="font-bold">Saldo a Favor Actual: Bs. {formatToTwoDecimals(receiptData.currentBalance)}</p>
                                 </div>
                             </div>
                              <DialogFooter className="flex-col sm:flex-row gap-2 pt-4">
