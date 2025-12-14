@@ -1,5 +1,4 @@
-
-import type {Config} from 'tailwindcss';
+import type { Config } from 'tailwindcss';
 
 export default {
   darkMode: 'class',
@@ -20,50 +19,90 @@ export default {
       sm: 'calc(var(--radius) - 4px)',
     },
     extend: {
+      /**
+       * ✅ NUEVO BLOQUE: COLORES LEGACY (TUS COLORES ACTUALES)
+       * Estos colores NO se perderán nunca.
+       */
       colors: {
+        legacy: {
+          primary: '#004D40',
+          secondary: '#0074d9',
+          neutral: '#676767',
+          warning: '#F0A703',
+          danger: '#ff5757',
+        },
+
+        /**
+         * ✅ NUEVO BLOQUE: TOKENS QUE APUNTAN A TUS COLORES ACTUALES
+         * Puedes cambiar estos tokens sin perder los legacy.
+         */
+        token: {
+          primary: 'var(--color-primary)',
+          secondary: 'var(--color-secondary)',
+          neutral: 'var(--color-neutral)',
+          warning: 'var(--color-warning)',
+          danger: 'var(--color-danger)',
+        },
+
+        /**
+         * ✅ BLOQUE ORIGINAL (NO MODIFICADO)
+         * Todo tu sistema HSL sigue funcionando igual.
+         */
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
+
         card: {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
+
         popover: {
           DEFAULT: 'hsl(var(--popover))',
           foreground: 'hsl(var(--popover-foreground))',
         },
+
         primary: {
           DEFAULT: 'hsl(var(--primary))',
           foreground: 'hsl(var(--primary-foreground))',
         },
+
         secondary: {
           DEFAULT: 'hsl(var(--secondary))',
           foreground: 'hsl(var(--secondary-foreground))',
         },
+
         muted: {
           DEFAULT: 'hsl(var(--muted))',
           foreground: 'hsl(var(--muted-foreground))',
         },
+
         accent: {
           DEFAULT: 'hsl(var(--accent))',
           foreground: 'hsl(var(--accent-foreground))',
         },
+
         destructive: {
           DEFAULT: 'hsl(var(--destructive))',
           foreground: 'hsl(var(--destructive-foreground))',
         },
+
         success: {
           DEFAULT: 'hsl(var(--success))',
           foreground: 'hsl(var(--success-foreground))',
         },
+
         warning: {
           DEFAULT: 'hsl(var(--warning))',
           foreground: 'hsl(var(--warning-foreground))',
         },
+
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
+
         lemon: '#FFF44F',
         mustard: '#FFC72C',
+
         chart: {
           '1': 'hsl(var(--chart-1))',
           '2': 'hsl(var(--chart-2))',
@@ -71,6 +110,7 @@ export default {
           '4': 'hsl(var(--chart-4))',
           '5': 'hsl(var(--chart-5))',
         },
+
         sidebar: {
           DEFAULT: 'hsl(var(--sidebar-background))',
           foreground: 'hsl(var(--sidebar-foreground))',
@@ -81,27 +121,21 @@ export default {
           border: 'hsl(var(--sidebar-border))',
           ring: 'hsl(var(--sidebar-ring))',
         },
-         'starbucks-dark-roast': {
-            DEFAULT: '#1E3932',
-            foreground: '#FFFFFF',
-          },
+
+        'starbucks-dark-roast': {
+          DEFAULT: '#1E3932',
+          foreground: '#FFFFFF',
+        },
       },
+
       keyframes: {
         'accordion-down': {
-          from: {
-            height: '0',
-          },
-          to: {
-            height: 'var(--radix-accordion-content-height)',
-          },
+          from: { height: '0' },
+          to: { height: 'var(--radix-accordion-content-height)' },
         },
         'accordion-up': {
-          from: {
-            height: 'var(--radix-accordion-content-height)',
-          },
-          to: {
-            height: '0',
-          },
+          from: { height: 'var(--radix-accordion-content-height)' },
+          to: { height: '0' },
         },
         'marquee-horizontal': {
           from: { transform: 'translateX(0)' },
@@ -112,6 +146,7 @@ export default {
           to: { transform: 'translateY(-100%)' },
         },
       },
+
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',

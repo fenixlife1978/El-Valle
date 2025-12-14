@@ -1,7 +1,21 @@
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ✅ BLOQUE LEGACY + TOKENS (SE AGREGA ARRIBA) */
+:root {
+  --color-primary-legacy: #004D40;
+  --color-secondary-legacy: #0074d9;
+  --color-neutral-legacy: #676767;
+  --color-warning-legacy: #F0A703;
+  --color-danger-legacy: #ff5757;
+
+  --color-primary: var(--color-primary-legacy);
+  --color-secondary: var(--color-secondary-legacy);
+  --color-neutral: var(--color-neutral-legacy);
+  --color-warning: var(--color-warning-legacy);
+  --color-danger: var(--color-danger-legacy);
+}
 
 @layer base {
   :root, .light {
