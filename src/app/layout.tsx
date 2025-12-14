@@ -84,7 +84,6 @@ export default function RootLayout({
             defaultTheme="dark"
             enableSystem={false}
             disableTransitionOnChange
-            value={{ dark: 'theme-dark-night', light: 'light' }}
           >
             <AuthGuard>
               {children}
