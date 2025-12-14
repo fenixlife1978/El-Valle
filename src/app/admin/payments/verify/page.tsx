@@ -445,10 +445,11 @@ export default function VerifyPaymentsPage() {
     }
     pdfDoc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, margin + 30, margin + 8);
     pdfDoc.setFontSize(9).setFont('helvetica', 'normal');
-    pdfDoc.text(companyInfo.rif, margin + 30, margin + 14);
+    pdfDoc.text(`${companyInfo.rif} | ${companyInfo.phone}`, margin + 30, margin + 14);
     pdfDoc.text(companyInfo.address, margin + 30, margin + 19);
-    pdfDoc.text(`Teléfono: ${companyInfo.phone}`, margin + 30, margin + 24);
+    
     pdfDoc.setFontSize(10).text(`Fecha de Emisión: ${format(new Date(), 'dd/MM/yyyy')}`, pageWidth - margin, margin + 8, { align: 'right' });
+    
     pdfDoc.setLineWidth(0.5).line(margin, margin + 32, pageWidth - margin, margin + 32);
     pdfDoc.setFontSize(16).setFont('helvetica', 'bold').text("RECIBO DE PAGO", pageWidth / 2, margin + 45, { align: 'center' });
     pdfDoc.setFontSize(10).setFont('helvetica', 'normal').text(`N° de recibo: ${receiptNumber}`, pageWidth - margin, margin + 45, { align: 'right' });
