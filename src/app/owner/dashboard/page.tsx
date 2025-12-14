@@ -21,7 +21,7 @@ import { Separator } from '@/components/ui/separator';
 // Imports de Lógica y Librerías de Next/React
 import { useAuth } from "@/hooks/use-auth";
 import { useState, useEffect, useMemo } from 'react';
-import { collection, query, where, onSnapshot, getDocs, doc, Timestamp, orderBy, addDoc, serverTimestamp, limit, getDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, getDocs, doc, Timestamp, orderBy, addDoc, serverTimestamp, limit, getDoc, runTransaction } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { format, isBefore, startOfMonth } from "date-fns";
 import { es } from "date-fns/locale";
@@ -257,46 +257,45 @@ export default function OwnerDashboardPage() {
     };
     
     const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptData) => {
-        // CORRECCIÓN CLAVE: Usamos 'data' (el argumento) y verificamos que no sea nulo.
         if (!data || !companyInfo) return; 
 
         const { payment, beneficiary, paidDebts, previousBalance, currentBalance, qrCodeUrl, receiptNumber } = data;
         
-        const pdfDoc = new jsPDF();
-        const pageWidth = pdfDoc.internal.pageSize.getWidth();
+        const doc = new jsPDF();
+        const pageWidth = doc.internal.pageSize.getWidth();
         const margin = 14;
 
         if (companyInfo.logo) {
-            try { pdfDoc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25); }
+            try { doc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25); }
             catch(e) { console.error("Error adding logo to PDF", e); }
         }
-        pdfDoc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, margin + 30, margin + 8);
-        pdfDoc.setFontSize(9).setFont('helvetica', 'normal');
-        pdfDoc.text(`${companyInfo.rif} | ${companyInfo.phone}`, margin + 30, margin + 14);
-        pdfDoc.text(companyInfo.address, margin + 30, margin + 19);
+        doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, margin + 30, margin + 8);
+        doc.setFontSize(9).setFont('helvetica', 'normal');
+        doc.text(`${companyInfo.rif} | ${companyInfo.phone}`, margin + 30, margin + 14);
+        doc.text(companyInfo.address, margin + 30, margin + 19);
         
-        pdfDoc.setFontSize(10).text(`Fecha de Emisión: ${format(new Date(), 'dd/MM/yyyy')}`, pageWidth - margin, margin + 8, { align: 'right' });
+        doc.setFontSize(10).text(`Fecha de Emisión: ${format(new Date(), 'dd/MM/yyyy')}`, pageWidth - margin, margin + 8, { align: 'right' });
         
-        pdfDoc.setLineWidth(0.5).line(margin, margin + 32, pageWidth - margin, margin + 32);
-        pdfDoc.setFontSize(16).setFont('helvetica', 'bold').text("RECIBO DE PAGO", pageWidth / 2, margin + 45, { align: 'center' });
-        pdfDoc.setFontSize(10).setFont('helvetica', 'normal').text(`N° de recibo: ${receiptNumber}`, pageWidth - margin, margin + 45, { align: 'right' });
+        doc.setLineWidth(0.5).line(margin, margin + 32, pageWidth - margin, margin + 32);
+        doc.setFontSize(16).setFont('helvetica', 'bold').text("RECIBO DE PAGO", pageWidth / 2, margin + 45, { align: 'center' });
+        doc.setFontSize(10).setFont('helvetica', 'normal').text(`N° de recibo: ${receiptNumber}`, pageWidth - margin, margin + 45, { align: 'right' });
         if(qrCodeUrl) {
           const qrSize = 30;
-          pdfDoc.addImage(qrCodeUrl, 'PNG', pageWidth - margin - qrSize, margin + 48, qrSize, qrSize);
+          doc.addImage(qrCodeUrl, 'PNG', pageWidth - margin - qrSize, margin + 48, qrSize, qrSize);
         }
         
         let startY = margin + 60;
-        pdfDoc.setFontSize(10).text(`Beneficiario: ${beneficiary.ownerName} (${data.ownerUnit})`, margin, startY);
+        doc.setFontSize(10).text(`Beneficiario: ${beneficiary.ownerName} (${data.ownerUnit})`, margin, startY);
         startY += 6;
-        pdfDoc.text(`Método de pago: ${payment.type}`, margin, startY);
+        doc.text(`Método de pago: ${payment.type}`, margin, startY);
         startY += 6;
-        pdfDoc.text(`Banco Emisor: ${payment.bank}`, margin, startY);
+        doc.text(`Banco Emisor: ${payment.bank}`, margin, startY);
         startY += 6;
-        pdfDoc.text(`N° de Referencia Bancaria: ${payment.reference}`, margin, startY);
+        doc.text(`N° de Referencia Bancaria: ${payment.reference}`, margin, startY);
         startY += 6;
-        pdfDoc.text(`Fecha del pago: ${format(payment.paymentDate.toDate(), 'dd/MM/yyyy')}`, margin, startY);
+        doc.text(`Fecha del pago: ${format(payment.paymentDate.toDate(), 'dd/MM/yyyy')}`, margin, startY);
         startY += 6;
-        pdfDoc.text(`Tasa de Cambio Aplicada: Bs. ${formatToTwoDecimals(payment.exchangeRate)} por USD`, margin, startY);
+        doc.text(`Tasa de Cambio Aplicada: Bs. ${formatToTwoDecimals(payment.exchangeRate)} por USD`, margin, startY);
         startY += 10;
         
         let totalPaidInConcepts = 0;
@@ -310,12 +309,12 @@ export default function OwnerDashboardPage() {
         });
 
         if (paidDebts.length > 0) {
-            autoTable(pdfDoc, { startY: startY, head: [['Período', 'Concepto (Propiedad)', 'Monto ($)', 'Monto Pagado (Bs)']], body: tableBody, theme: 'striped', headStyles: { fillColor: [44, 62, 80], textColor: 255 }, styles: { fontSize: 9, cellPadding: 2.5 } });
-            startY = (pdfDoc as any).lastAutoTable.finalY;
+            autoTable(doc, { startY: startY, head: [['Período', 'Concepto (Propiedad)', 'Monto ($)', 'Monto Pagado (Bs)']], body: tableBody, theme: 'striped', headStyles: { fillColor: [44, 62, 80], textColor: 255 }, styles: { fontSize: 9, cellPadding: 2.5 } });
+            startY = (doc as any).lastAutoTable.finalY;
         } else {
             totalPaidInConcepts = beneficiary.amount;
-            autoTable(pdfDoc, { startY: startY, head: [['Concepto', 'Monto Pagado (Bs)']], body: [['Abono a Saldo a Favor', `Bs. ${formatToTwoDecimals(beneficiary.amount)}`]], theme: 'striped', headStyles: { fillColor: [44, 62, 80], textColor: 255 }, styles: { fontSize: 9, cellPadding: 2.5 } });
-            startY = (pdfDoc as any).lastAutoTable.finalY;
+            autoTable(doc, { startY: startY, head: [['Concepto', 'Monto Pagado (Bs)']], body: [['Abono a Saldo a Favor', `Bs. ${formatToTwoDecimals(beneficiary.amount)}`]], theme: 'striped', headStyles: { fillColor: [44, 62, 80], textColor: 255 }, styles: { fontSize: 9, cellPadding: 2.5 } });
+            startY = (doc as any).lastAutoTable.finalY;
         }
         startY += 8;
         
@@ -325,45 +324,44 @@ export default function OwnerDashboardPage() {
             ['Total Abonado en Deudas:', `Bs. ${formatToTwoDecimals(totalPaidInConcepts)}`],
             ['Saldo a Favor Actual:', `Bs. ${formatToTwoDecimals(currentBalance)}`],
         ];
-        autoTable(pdfDoc, { startY: startY, body: summaryData, theme: 'plain', styles: { fontSize: 9, fontStyle: 'bold' }, columnStyles: { 0: { halign: 'right' }, 1: { halign: 'right'} } });
-        startY = (pdfDoc as any).lastAutoTable.finalY + 10;
+        autoTable(doc, { startY: startY, body: summaryData, theme: 'plain', styles: { fontSize: 9, fontStyle: 'bold' }, columnStyles: { 0: { halign: 'right' }, 1: { halign: 'right'} } });
+        startY = (doc as any).lastAutoTable.finalY + 10;
         
         const totalLabel = "TOTAL PAGADO:";
         const totalValue = `Bs. ${formatToTwoDecimals(beneficiary.amount)}`;
-        pdfDoc.setFontSize(11).setFont('helvetica', 'bold');
-        const totalValueWidth = pdfDoc.getStringUnitWidth(totalValue) * 11 / pdfDoc.internal.scaleFactor;
-        pdfDoc.text(totalValue, pageWidth - margin, startY, { align: 'right' });
-        pdfDoc.text(totalLabel, pageWidth - margin - totalValueWidth - 2, startY, { align: 'right' });
+        doc.setFontSize(11).setFont('helvetica', 'bold');
+        const totalValueWidth = doc.getStringUnitWidth(totalValue) * 11 / doc.internal.scaleFactor;
+        doc.text(totalValue, pageWidth - margin, startY, { align: 'right' });
+        doc.text(totalLabel, pageWidth - margin - totalValueWidth - 2, startY, { align: 'right' });
 
-        const footerStartY = pdfDoc.internal.pageSize.getHeight() - 55;
+        const footerStartY = doc.internal.pageSize.getHeight() - 55;
         startY = startY > footerStartY ? footerStartY : startY + 10;
         if (payment.observations) {
-            pdfDoc.setFontSize(8).setFont('helvetica', 'italic');
-            const splitObservations = pdfDoc.splitTextToSize(`Observaciones: ${payment.observations}`, pageWidth - margin * 2);
-            pdfDoc.text(splitObservations, margin, startY);
+            doc.setFontSize(8).setFont('helvetica', 'italic');
+            const splitObservations = doc.splitTextToSize(`Observaciones: ${payment.observations}`, pageWidth - margin * 2);
+            doc.text(splitObservations, margin, startY);
             startY += (splitObservations.length * 3.5) + 4;
         }
         const legalNote = 'Todo propietario que requiera de firma y sello húmedo deberá imprimir éste recibo y hacerlo llegar al condominio para su respectiva estampa.';
-        const splitLegalNote = pdfDoc.splitTextToSize(legalNote, pageWidth - (margin * 2));
-        pdfDoc.setFontSize(8).setFont('helvetica', 'bold').text(splitLegalNote, margin, startY);
+        const splitLegalNote = doc.splitTextToSize(legalNote, pageWidth - (margin * 2));
+        doc.setFontSize(8).setFont('helvetica', 'bold').text(splitLegalNote, margin, startY);
         let noteY = startY + (splitLegalNote.length * 3) + 2;
-        pdfDoc.setFontSize(8).setFont('helvetica', 'normal').text('Este recibo confirma que el pago ha sido validado para la(s) cuota(s) y propiedad(es) aquí detalladas.', margin, noteY);
+        doc.setFontSize(8).setFont('helvetica', 'normal').text('Este recibo confirma que el pago ha sido validado para la(s) cuota(s) y propiedad(es) aquí detalladas.', margin, noteY);
         noteY += 4;
-        pdfDoc.setFont('helvetica', 'bold').text(`Firma electrónica: '${companyInfo.name} - Condominio'`, margin, noteY);
+        doc.setFont('helvetica', 'bold').text(`Firma electrónica: '${companyInfo.name} - Condominio'`, margin, noteY);
         noteY += 6;
-        pdfDoc.setLineWidth(0.2).line(margin, noteY, pageWidth - margin, noteY);
+        doc.setLineWidth(0.2).line(margin, noteY, pageWidth - margin, noteY);
         noteY += 4;
-        pdfDoc.setFontSize(7).setFont('helvetica', 'italic').text('Este recibo se generó de manera automática y es válido sin firma manuscrita.', pageWidth / 2, noteY, { align: 'center'});
+        doc.setFontSize(7).setFont('helvetica', 'italic').text('Este recibo se generó de manera automática y es válido sin firma manuscrita.', pageWidth / 2, noteY, { align: 'center'});
 
-        const pdfOutput = pdfDoc.output('blob');
+        const pdfOutput = doc.output('blob');
         const pdfFile = new File([pdfOutput], `recibo_${receiptNumber}.pdf`, { type: 'application/pdf' });
 
         if (action === 'download') {
-            pdfDoc.save(`recibo_${receiptNumber}.pdf`);
+            doc.save(`recibo_${receiptNumber}.pdf`);
         } else if (navigator.share && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
             try {
                 await navigator.share({
-                    // CORRECCIÓN APLICADA: Usamos 'data' en lugar del estado 'receiptData'
                     title: `Recibo de Pago ${data.receiptNumber}`, 
                     text: `Recibo de pago para ${data.ownerName}.`,
                     files: [pdfFile],
@@ -466,7 +464,7 @@ export default function OwnerDashboardPage() {
 
     return (
         <div className="space-y-6 md:space-y-8 p-4 md:p-8">
-            <h1 className="text-3xl font-bold font-headline">¡Hola, {ownerData.name?.split(' ')[0] || 'Propietario'}!</h1>
+            <h1 className="text-3xl font-bold font-headline">👋 ¡Hola, {ownerData.name?.split(' ')[0] || 'Propietario'}!</h1>
             
             <Alert className="border-mustard bg-mustard/10 text-mustard-foreground shadow-md">
                 <HelpCircle className="h-4 w-4 !text-mustard" />
