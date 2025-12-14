@@ -24,7 +24,7 @@ import { getToken, onMessage } from 'firebase/messaging'
 // Imports de Lógica y Librerías de Next/React
 import { useAuth } from "@/hooks/use-auth";
 import { useState, useEffect, useMemo } from 'react';
-import { collection, query, where, onSnapshot, getDocs, doc, Timestamp, orderBy, addDoc, serverTimestamp, limit } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, getDocs, doc, Timestamp, orderBy, addDoc, serverTimestamp, limit, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { format, isBefore, startOfMonth } from "date-fns";
 import { es } from 'date-fns/locale';
@@ -403,7 +403,7 @@ export default function OwnerDashboardPage() {
                         No se encontraron datos asociados a su usuario. Por favor, contacte a la administración.
                     </AlertDescription>
                 </Alert>
-                <Button onClick={() => router.push('/welcome')} className="mt-4"><ArrowLeft className="h-4 w-4 mr-2" /> Ir a Inicio</Button>
+                
             </div>
         );
     }
