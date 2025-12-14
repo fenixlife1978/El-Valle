@@ -1,3 +1,4 @@
+
 import { redirect } from 'next/navigation';
 
 // The root page of the application now redirects to the welcome screen,
