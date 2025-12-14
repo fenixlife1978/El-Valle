@@ -20,6 +20,8 @@ import autoTable from 'jspdf-autotable'
 import QRCode from 'qrcode'
 import { getMessagingService } from '@/lib/firebase'
 import { getToken, onMessage } from 'firebase/messaging'
+import { Separator } from '@/components/ui/separator';
+
 
 // Imports de Lógica y Librerías de Next/React
 import { useAuth } from "@/hooks/use-auth";
@@ -417,7 +419,7 @@ export default function OwnerDashboardPage() {
 
     return (
         <div className="space-y-6 md:space-y-8 p-4 md:p-8">
-            <h1 className="text-3xl font-bold font-headline">👋 ¡Hola, {ownerData.name?.split(' ')[0] || 'Propietario'}!</h1>
+            <h1 className="text-3xl font-bold font-headline">¡Hola, {ownerData.name?.split(' ')[0] || 'Propietario'}!</h1>
             
             <Alert className="border-mustard bg-mustard/10 text-mustard-foreground shadow-md">
                 <HelpCircle className="h-4 w-4 !text-mustard" />
