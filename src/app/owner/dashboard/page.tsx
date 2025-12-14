@@ -24,7 +24,7 @@ import { getToken, onMessage } from 'firebase/messaging'
 // Imports de Lógica y Librerías de Next/React
 import { useAuth } from "@/hooks/use-auth";
 import { useState, useEffect, useMemo } from 'react';
-import { collection, query, where, onSnapshot, getDocs, doc, Timestamp, orderBy, addDoc, serverTimestamp, limit, getDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, getDocs, doc, Timestamp, orderBy, addDoc, serverTimestamp, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { format, isBefore, startOfMonth } from "date-fns";
 import { es } from 'date-fns/locale';
@@ -152,12 +152,12 @@ export default function OwnerDashboardPage() {
                 });
                 
                 // Suscripción a feedback
-                const feedbackQuery = query(collection(db, 'app_feedback'), where('ownerId', '==', ownerId), orderBy('timestamp', 'desc'), limit(1));
+                const feedbackQuery = query(collection(db, 'app_feedback'), where('ownerId', '==', ownerId), limit(1));
                 const unsubFeedback = onSnapshot(feedbackQuery, (snapshot) => {
                     if (!snapshot.empty) {
+                        setFeedbackSent(true);
                         const feedbackData = snapshot.docs[0].data();
                         setLastFeedback(feedbackData.response);
-                        setFeedbackSent(true);
                     } else {
                         setFeedbackSent(false);
                     }
@@ -524,38 +524,35 @@ export default function OwnerDashboardPage() {
             </Card>
 
              {/* --- Feedback de la App --- */}
-             <Card className="bg-muted">
-                <CardHeader>
-                    <CardTitle className="text-base">¿Qué tal tu experiencia con la app?</CardTitle>
-                </CardHeader>
-                <CardContent className="flex items-center justify-center gap-4">
-                     <Button 
-                        variant={lastFeedback === 'liked' ? 'default' : 'outline'} 
-                        size="lg"
-                        onClick={() => handleFeedback('liked')}
-                        disabled={feedbackSent}
-                        className="flex-1 transition-all duration-300"
-                    >
-                        <ThumbsUp className="mr-2 h-5 w-5"/>
-                        Me gusta
-                    </Button>
-                    <Button 
-                        variant={lastFeedback === 'disliked' ? 'destructive' : 'outline'} 
-                        size="lg"
-                        onClick={() => handleFeedback('disliked')}
-                        disabled={feedbackSent}
-                        className="flex-1 transition-all duration-300"
-                    >
-                        <ThumbsDown className="mr-2 h-5 w-5"/>
-                        No me gusta
-                    </Button>
-                </CardContent>
-                {feedbackSent && 
-                    <CardFooter>
-                        <p className="text-sm text-center text-muted-foreground w-full">¡Gracias por tu opinión!</p>
-                    </CardFooter>
-                }
-            </Card>
+             {!feedbackSent && (
+                <Card className="bg-muted">
+                    <CardHeader>
+                        <CardTitle className="text-base">¿Qué tal tu experiencia con la app?</CardTitle>
+                    </CardHeader>
+                    <CardContent className="flex items-center justify-center gap-4">
+                        <Button 
+                            variant={lastFeedback === 'liked' ? 'default' : 'outline'} 
+                            size="lg"
+                            onClick={() => handleFeedback('liked')}
+                            disabled={feedbackSent}
+                            className="flex-1 transition-all duration-300"
+                        >
+                            <ThumbsUp className="mr-2 h-5 w-5"/>
+                            Me gusta
+                        </Button>
+                        <Button 
+                            variant={lastFeedback === 'disliked' ? 'destructive' : 'outline'} 
+                            size="lg"
+                            onClick={() => handleFeedback('disliked')}
+                            disabled={feedbackSent}
+                            className="flex-1 transition-all duration-300"
+                        >
+                            <ThumbsDown className="mr-2 h-5 w-5"/>
+                            No me gusta
+                        </Button>
+                    </CardContent>
+                </Card>
+             )}
 
 
             {/* --- Modal de Recibo --- */}
