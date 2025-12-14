@@ -10,8 +10,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
+// IMPORTACIÓN DE DIALOG COMPLETA
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"; 
 import { useToast } from '@/hooks/use-toast';
-import { CalendarIcon, CheckCircle2, Trash2, PlusCircle, Loader2, Search, XCircle, Wand2, UserPlus, Banknote } from 'lucide-react';
+// IMPORTACIÓN DE ICONOS - Se agregó 'Info'
+import { CalendarIcon, CheckCircle2, Trash2, PlusCircle, Loader2, Search, XCircle, Wand2, UserPlus, Banknote, Info } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -558,27 +561,24 @@ export default function UnifiedPaymentsPage() {
                 }}
             />
             <Dialog open={isInfoDialogOpen} onOpenChange={setIsInfoDialogOpen}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2">
-                            <Info className="h-6 w-6 text-blue-500" />
-                            Reporte Enviado para Revisión
-                        </DialogTitle>
-                        <DialogDescription className="pt-4">
-                            ¡Gracias! Hemos recibido tu reporte de pago. El tiempo máximo para la aprobación es de <strong>24 horas</strong>.
-                            <br /><br />
-                            Te invitamos a ingresar nuevamente después de este lapso para:
-                            <ul className="list-disc list-inside mt-2 space-y-1">
-                                <li>Verificar si el monto enviado cubrió completamente tu deuda.</li>
-                                <li>Descargar tu recibo de pago una vez que sea aprobado.</li>
-                            </ul>
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter>
-                        <Button onClick={() => setIsInfoDialogOpen(false)}>Entendido</Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-        </div>
-    );
-}
+    <DialogContent>
+        <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+                <Info className="h-6 w-6 text-blue-500" />
+                Reporte Enviado para Revisión
+            </DialogTitle>
+            <DialogDescription className="pt-4">
+                ¡Gracias! Hemos recibido tu reporte de pago. El tiempo máximo para la aprobación es de <strong>24 horas</strong>.
+                <br /><br />
+                Te invitamos a ingresar nuevamente después de este lapso para:
+                <ul className="list-disc list-inside mt-2 space-y-1">
+                    <li>Verificar si el monto enviado cubrió completamente tu deuda.</li>
+                    <li>Descargar tu recibo de pago una vez que sea aprobado.</li>
+                </ul>
+            </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+            <Button onClick={() => setIsInfoDialogOpen(false)}>Entendido</Button>
+        </DialogFooter>
+    </DialogContent>
+</Dialog>
