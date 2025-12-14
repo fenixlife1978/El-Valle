@@ -6,7 +6,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter }
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, AlertCircle, CheckCircle, Receipt, ThumbsUp, ThumbsDown, X, ArrowLeft, ShieldCheck, CalendarCheck2, Clock, CalendarX, Share2, Download } from "lucide-react";
+import { Loader2, AlertCircle, CheckCircle, Receipt, ThumbsUp, ThumbsDown, X, ArrowLeft, ShieldCheck, CalendarCheck2, Clock, CalendarX, Share2, Download, Banknote, HelpCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import Image from 'next/image';
@@ -27,7 +27,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { collection, query, where, onSnapshot, getDocs, doc, Timestamp, orderBy, addDoc, serverTimestamp, limit, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { format, isBefore, startOfMonth } from "date-fns";
-import { es } from 'date-fns/locale';
+import { es } from "date-fns/locale";
 import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
@@ -419,52 +419,65 @@ export default function OwnerDashboardPage() {
         <div className="space-y-6 md:space-y-8 p-4 md:p-8">
             <h1 className="text-3xl font-bold font-headline">👋 ¡Hola, {ownerData.name?.split(' ')[0] || 'Propietario'}!</h1>
             
-            {/* --- Tarjeta de Estado de Cuenta --- */}
-            <Card className={cn("border-2 shadow-lg", 
-                statusVariant === 'success' && 'border-green-500',
-                statusVariant === 'warning' && 'border-yellow-500',
-                statusVariant === 'destructive' && 'border-red-500'
-            )}>
-                <CardHeader>
-                    <div className="flex justify-between items-start">
-                        <CardTitle className="flex items-center gap-2">
-                             {stats.isSolvente ? <ShieldCheck className="h-6 w-6 text-green-500"/> : <AlertCircle className="h-6 w-6 text-red-500"/>}
-                            Estado de Cuenta
-                        </CardTitle>
-                         <Badge variant={statusVariant} className="text-sm px-3 py-1">
-                            {stats.isSolvente ? 'Solvente' : stats.isVencida ? 'Deuda Vencida' : 'Pendiente'}
-                        </Badge>
-                    </div>
-                     <CardDescription>Unidad: {ownerUnit}</CardDescription>
-                </CardHeader>
-                <CardContent className="flex flex-col md:flex-row items-center justify-between gap-4">
-                     <div className="text-center md:text-left">
-                        <p className="text-sm text-muted-foreground">Deuda Pendiente (USD)</p>
-                        <p className={cn("text-5xl font-extrabold", stats.isSolvente ? 'text-green-500' : 'text-destructive')}>
-                             ${formatToTwoDecimals(stats.totalPendingUSD)}
-                        </p>
-                         {!stats.isSolvente && <p className="text-xs text-muted-foreground mt-1">Deuda más antigua: {stats.oldestDebtDate}</p>}
-                    </div>
-                    {stats.isSolvente ? (
-                         <Card className="bg-green-500/10 border-green-500 text-green-700 p-4 text-center">
-                            <CardContent className="p-2">
-                                <ShieldCheck className="h-16 w-16 mx-auto mb-2"/>
-                                <p className="font-semibold">¡Felicitaciones! Estás al día.</p>
-                            </CardContent>
-                        </Card>
-                    ) : (
-                         <div className="flex flex-col items-center md:items-end gap-2">
-                             <Button asChild className="w-full md:w-auto">
-                                <Link href="/owner/payments/calculator">
-                                    <CalendarCheck2 className="mr-2 h-4 w-4" />
-                                    Calcular y Pagar Deuda
-                                </Link>
-                             </Button>
-                             <p className="text-xs text-center md:text-right text-muted-foreground">Usa la calculadora para pagar deudas y adelantar cuotas.</p>
+            <Alert className="border-mustard bg-mustard/10 text-mustard-foreground shadow-md">
+                <HelpCircle className="h-4 w-4 !text-mustard" />
+                <AlertDescription className="font-semibold">
+                    La Cuota de Cada Mes vence el Día 5, a partir del día 6 tu estado puede ser Solvente o No Solvente.
+                </AlertDescription>
+            </Alert>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* --- Tarjeta de Estado de Cuenta --- */}
+                <Card className={cn("border-2 shadow-lg col-span-1", 
+                    statusVariant === 'success' && 'border-green-500',
+                    statusVariant === 'warning' && 'border-yellow-500',
+                    statusVariant === 'destructive' && 'border-red-500'
+                )}>
+                    <CardHeader>
+                        <div className="flex justify-between items-start">
+                            <CardTitle className="flex items-center gap-2">
+                                {stats.isSolvente ? <ShieldCheck className="h-6 w-6 text-green-500"/> : <AlertCircle className="h-6 w-6 text-red-500"/>}
+                                Estado de Cuenta
+                            </CardTitle>
+                            <Badge variant={statusVariant} className="text-sm px-3 py-1">
+                                {stats.isSolvente ? 'Solvente' : stats.isVencida ? 'Deuda Vencida' : 'Pendiente'}
+                            </Badge>
                         </div>
-                    )}
-                </CardContent>
-            </Card>
+                        <CardDescription>Unidad: {ownerUnit}</CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex flex-col items-center justify-between gap-4">
+                        <div className="text-center">
+                            <p className="text-sm text-muted-foreground">Deuda Pendiente (USD)</p>
+                            <p className={cn("text-5xl font-extrabold", stats.isSolvente ? 'text-green-500' : 'text-destructive')}>
+                                ${formatToTwoDecimals(stats.totalPendingUSD)}
+                            </p>
+                            {!stats.isSolvente && <p className="text-xs text-muted-foreground mt-1">Deuda más antigua: {stats.oldestDebtDate}</p>}
+                        </div>
+                        
+                        <Button asChild className="w-full" disabled={stats.isSolvente}>
+                            <Link href="/owner/payments/calculator">
+                                <CalendarCheck2 className="mr-2 h-4 w-4" />
+                                Calcular y Pagar Deuda
+                            </Link>
+                        </Button>
+                    </CardContent>
+                </Card>
+                {/* --- Tarjeta de Saldo a Favor --- */}
+                <Card className="shadow-lg">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <Banknote className="h-6 w-6 text-primary"/>
+                            Saldo a Favor
+                        </CardTitle>
+                        <CardDescription>Monto disponible para cubrir futuras deudas.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex items-center justify-center">
+                        <p className="text-5xl font-extrabold text-primary">
+                             Bs. {formatToTwoDecimals(ownerData.balance || 0)}
+                        </p>
+                    </CardContent>
+                </Card>
+            </div>
 
             {/* --- Historial de Pagos --- */}
             <Card>
