@@ -1,5 +1,4 @@
 
-
 'use client';
 
 // Imports de UI (MANTENER TODOS LOS IMPORTS EN LA PARTE SUPERIOR)
@@ -12,9 +11,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import Image from 'next/image';
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
 } from "@/components/ui/popover"
 import { Separator } from '@/components/ui/separator';
 
@@ -36,7 +35,7 @@ import QRCode from 'qrcode';
 
 
 // -------------------------------------------------------------------------
-// TIPOS Y CONSTANTES (Sin Cambios)
+// TIPOS Y CONSTANTES
 // -------------------------------------------------------------------------
 
 type Debt = {
@@ -49,7 +48,7 @@ type Debt = {
     paidAmountUSD?: number;
     property: { street: string, house: string };
 };
-// ... (Otros tipos Payment, CompanyInfo, ReceiptData, monthsLocale, formatToTwoDecimals, solventeImage sin cambios)
+
 type Payment = {
     id: string;
     status: 'pendiente' | 'aprobado' | 'rechazado';
@@ -223,6 +222,7 @@ export default function OwnerDashboardPage() {
             isVencida
         };
     }, [debts, payments]);
+
     
     // -------------------------------------------------------------------------
     // MANEJADORES DE EVENTOS
@@ -257,7 +257,8 @@ export default function OwnerDashboardPage() {
     };
     
     const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptData) => {
-        if (!data || !companyInfo) return;
+        // CORRECCIÓN CLAVE: Usamos 'data' (el argumento) y verificamos que no sea nulo.
+        if (!data || !companyInfo) return; 
 
         const { payment, beneficiary, paidDebts, previousBalance, currentBalance, qrCodeUrl, receiptNumber } = data;
         
@@ -358,14 +359,15 @@ export default function OwnerDashboardPage() {
         const pdfFile = new File([pdfOutput], `recibo_${receiptNumber}.pdf`, { type: 'application/pdf' });
 
         if (action === 'download') {
-          pdfDoc.save(`recibo_${receiptNumber}.pdf`);
+            pdfDoc.save(`recibo_${receiptNumber}.pdf`);
         } else if (navigator.share && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
             try {
-              await navigator.share({
-                title: `Recibo de Pago ${receiptNumber}`,
-                text: `Recibo de pago para ${receiptData.ownerName}.`,
-                files: [pdfFile],
-              });
+                await navigator.share({
+                    // CORRECCIÓN APLICADA: Usamos 'data' en lugar del estado 'receiptData'
+                    title: `Recibo de Pago ${data.receiptNumber}`, 
+                    text: `Recibo de pago para ${data.ownerName}.`,
+                    files: [pdfFile],
+                });
             } catch (error) {
               console.error('Error al compartir:', error);
               const url = URL.createObjectURL(pdfFile);
@@ -454,7 +456,7 @@ export default function OwnerDashboardPage() {
             </div>
         );
     }
-
+    
     const ownerUnit = (ownerData.properties && ownerData.properties.length > 0) 
         ? `${ownerData.properties[0].street} - ${ownerData.properties[0].house}` 
         : 'N/A';
@@ -469,7 +471,7 @@ export default function OwnerDashboardPage() {
             <Alert className="border-mustard bg-mustard/10 text-mustard-foreground shadow-md">
                 <HelpCircle className="h-4 w-4 !text-mustard" />
                 <AlertDescription className="font-semibold">
-                    La Cuota de Cada Mes vence el Día 5, a partir del día 6 tu estado puede ser Solvente o No Solvente.
+                    Recuerda que tú Cuota Condominial se Carga el día 1 y Vence los días 5 de cada Mes
                 </AlertDescription>
             </Alert>
             
@@ -571,21 +573,21 @@ export default function OwnerDashboardPage() {
                                 );
                             })}
                              {payments.length === 0 && (
-                                <TableRow><TableCell colSpan={4} className="h-24 text-center text-muted-foreground">No tienes pagos registrados.</TableCell></TableRow>
+                                 <TableRow><TableCell colSpan={4} className="h-24 text-center text-muted-foreground">No tienes pagos registrados.</TableCell></TableRow>
                             )}
                         </TableBody>
                     </Table>
                 </CardContent>
-                 <CardFooter>
+                   <CardFooter>
                     <Link href="/owner/payments" passHref>
                         <Button variant="link" className="px-0">Ver historial completo y reportar pago →</Button>
                     </Link>
                 </CardFooter>
             </Card>
 
-             {/* --- Feedback de la App --- */}
+              {/* --- Feedback de la App --- */}
              {!feedbackSent && (
-                <Card className="bg-muted">
+                 <Card className="bg-muted">
                     <CardHeader>
                         <CardTitle className="text-base">¿Qué tal tu experiencia con la app?</CardTitle>
                     </CardHeader>
@@ -612,7 +614,7 @@ export default function OwnerDashboardPage() {
                         </Button>
                     </CardContent>
                 </Card>
-             )}
+              )}
 
 
             {/* --- Modal de Recibo --- */}
@@ -622,17 +624,17 @@ export default function OwnerDashboardPage() {
                         <>
                             <DialogHeader>
                                 <DialogTitle className="flex items-center gap-2">
-                                     <Receipt className="text-primary"/> Recibo de Pago N°: {receiptData.receiptNumber}
+                                    <Receipt className="text-primary"/> Recibo de Pago N°: {receiptData.receiptNumber}
                                 </DialogTitle>
                                 <DialogDescription>
-                                     Emitido el {format(new Date(), 'dd MMMM, yyyy', {locale: es})}
+                                    Emitido el {format(new Date(), 'dd MMMM, yyyy', {locale: es})}
                                 </DialogDescription>
                             </DialogHeader>
                             <div className="max-h-[60vh] overflow-y-auto p-4 space-y-4 border rounded-md">
-                                 <p><strong>Propietario:</strong> {receiptData.ownerName}</p>
-                                 <p><strong>Propiedad:</strong> {receiptData.ownerUnit}</p>
-                                 <p><strong>Fecha del Pago:</strong> {format(receiptData.payment.paymentDate.toDate(), 'dd/MM/yyyy')}</p>
-                                 <p><strong>Monto Pagado:</strong> Bs. {formatToTwoDecimals(receiptData.beneficiary.amount)}</p>
+                                <p><strong>Propietario:</strong> {receiptData.ownerName}</p>
+                                <p><strong>Propiedad:</strong> {receiptData.ownerUnit}</p>
+                                <p><strong>Fecha del Pago:</strong> {format(receiptData.payment.paymentDate.toDate(), 'dd/MM/yyyy')}</p>
+                                <p><strong>Monto Pagado:</strong> Bs. {formatToTwoDecimals(receiptData.beneficiary.amount)}</p>
                                 <h4 className="font-bold pt-2 border-t">Detalles Cubiertos</h4>
                                 {receiptData.paidDebts.length > 0 ? (
                                     <ul className="list-disc pl-5 text-sm">
@@ -647,7 +649,7 @@ export default function OwnerDashboardPage() {
                                     <p className="font-bold">Saldo a Favor Actual: Bs. {formatToTwoDecimals(receiptData.currentBalance)}</p>
                                 </div>
                             </div>
-                             <DialogFooter className="flex-col sm:flex-row gap-2 pt-4">
+                              <DialogFooter className="flex-col sm:flex-row gap-2 pt-4">
                                 <Button className="w-full sm:w-auto" onClick={() => handleGenerateAndAct('download', receiptData)} disabled={isGenerating}>
                                     {isGenerating ? <Loader2 className="h-4 w-4 animate-spin mr-2"/> : <Download className="h-4 w-4 mr-2"/>}
                                     Descargar PDF
@@ -659,9 +661,9 @@ export default function OwnerDashboardPage() {
                             </DialogFooter>
                         </>
                     ) : (
-                         <div className="flex items-center justify-center p-8">
-                            <Loader2 className="h-8 w-8 animate-spin" />
-                        </div>
+                          <div className="flex items-center justify-center p-8">
+                                <Loader2 className="h-8 w-8 animate-spin" />
+                          </div>
                     )}
                 </DialogContent>
             </Dialog>
@@ -670,4 +672,3 @@ export default function OwnerDashboardPage() {
 }
 
     
-

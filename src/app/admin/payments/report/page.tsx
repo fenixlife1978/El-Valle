@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -80,6 +79,10 @@ export default function UnifiedPaymentsPage() {
     const [beneficiaryRows, setBeneficiaryRows] = useState<BeneficiaryRow[]>([]);
     
     const [isBankModalOpen, setIsBankModalOpen] = useState(false);
+    
+    // SOLUCIÓN Código 2304: Declaración del estado del Dialog de información
+    const [isInfoDialogOpen, setIsInfoDialogOpen] = useState(false); 
+
 
     // --- Data Fetching ---
     useEffect(() => {
@@ -101,9 +104,9 @@ export default function UnifiedPaymentsPage() {
     useEffect(() => {
         const fetchRateAndFee = async () => {
              try {
-                const settingsRef = doc(db, 'config', 'mainSettings');
-                const docSnap = await getDoc(settingsRef);
-                if (docSnap.exists()) {
+               const settingsRef = doc(db, 'config', 'mainSettings');
+               const docSnap = await getDoc(settingsRef);
+               if (docSnap.exists()) {
                     const settings = docSnap.data();
 
                     if (paymentDate) {
@@ -217,7 +220,7 @@ export default function UnifiedPaymentsPage() {
     };
 
 
-     const handleInferDetails = async () => {
+    const handleInferDetails = async () => {
         if (!aiPrompt.trim()) {
             toast({ variant: 'destructive', title: 'Texto Vacío', description: 'Por favor, ingrese una descripción del pago.' });
             return;
@@ -324,6 +327,9 @@ export default function UnifiedPaymentsPage() {
                 description: 'El reporte de pago ha sido enviado para revisión.', 
                 className: 'bg-green-100 border-green-400 text-green-800' 
             });
+            // Opcionalmente, puedes abrir el diálogo informativo aquí
+            // setIsInfoDialogOpen(true); 
+
             resetForm();
 
         } catch (error) {
@@ -344,7 +350,7 @@ export default function UnifiedPaymentsPage() {
     };
 
     return (
-        <div className="space-y-8">
+        <div className="space-y-8"> {/* <-- Línea 347, inicio del div principal */}
             <div>
                 <h1 className="text-3xl font-bold font-headline">Reportar un Pago</h1>
                 <p className="text-muted-foreground">Formulario para registrar pagos propios o a terceros.</p>
@@ -383,14 +389,14 @@ export default function UnifiedPaymentsPage() {
                         <div className="space-y-2">
                              <Label htmlFor="paymentDate">Fecha del Pago</Label>
                              <Popover>
-                                <PopoverTrigger asChild>
-                                    <Button id="paymentDate" variant={"outline"} className={cn("w-full justify-start", !paymentDate && "text-muted-foreground")} disabled={loading}>
-                                        <CalendarIcon className="mr-2 h-4 w-4" />
-                                        {paymentDate ? format(paymentDate, "PPP", { locale: es }) : <span>Seleccione una fecha</span>}
-                                    </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={paymentDate} onSelect={setPaymentDate} initialFocus locale={es} disabled={(date) => date > new Date()} /></PopoverContent>
-                            </Popover>
+                                 <PopoverTrigger asChild>
+                                     <Button id="paymentDate" variant={"outline"} className={cn("w-full justify-start", !paymentDate && "text-muted-foreground")} disabled={loading}>
+                                         <CalendarIcon className="mr-2 h-4 w-4" />
+                                         {paymentDate ? format(paymentDate, "PPP", { locale: es }) : <span>Seleccione una fecha</span>}
+                                     </Button>
+                                 </PopoverTrigger>
+                                 <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={paymentDate} onSelect={setPaymentDate} initialFocus locale={es} disabled={(date) => date > new Date()} /></PopoverContent>
+                             </Popover>
                         </div>
                         <div className="space-y-2">
                             <Label>Tasa de Cambio (Bs. por USD)</Label>
@@ -399,11 +405,11 @@ export default function UnifiedPaymentsPage() {
                         <div className="space-y-2">
                            <Label htmlFor="paymentMethod">Tipo de Pago</Label>
                            <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as PaymentMethod)} disabled={loading}>
-                                <SelectTrigger id="paymentMethod"><SelectValue placeholder="Seleccione..." /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="transferencia">Transferencia</SelectItem>
-                                    <SelectItem value="movil">Pago Móvil</SelectItem>
-                                </SelectContent>
+                                 <SelectTrigger id="paymentMethod"><SelectValue placeholder="Seleccione..." /></SelectTrigger>
+                                 <SelectContent>
+                                     <SelectItem value="transferencia">Transferencia</SelectItem>
+                                     <SelectItem value="movil">Pago Móvil</SelectItem>
+                                 </SelectContent>
                            </Select>
                         </div>
                         <div className="space-y-2">
@@ -418,15 +424,14 @@ export default function UnifiedPaymentsPage() {
                             >
                                 {bank ? (
                                     <>
-                                     <Banknote className="mr-2 h-4 w-4" />
-                                     {bank}
+                                       <Banknote className="mr-2 h-4 w-4" />
+                                       {bank}
                                     </>
                                 ) : (
                                     <span>Seleccione un banco...</span>
                                 )}
                             </Button>
                         </div>
-
                         {bank === 'Otro' && (
                             <div className="space-y-2">
                                 <Label htmlFor="otherBank">Nombre del Otro Banco</Label>
@@ -449,88 +454,89 @@ export default function UnifiedPaymentsPage() {
                     <CardContent className="space-y-6">
                         <div className="grid md:grid-cols-2 gap-6">
                              <div className="space-y-2">
-                                <Label htmlFor="totalAmount">Monto Total del Pago (Bs.)</Label>
-                                <Input id="totalAmount" type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} placeholder="0.00" disabled={loading}/>
-                            </div>
-                            <div className="space-y-3">
-                                <Label>Tipo de Pago</Label>
-                                <RadioGroup value={beneficiaryType} onValueChange={(v) => setBeneficiaryType(v as BeneficiaryType)} className="flex gap-4" disabled={loading}>
-                                    <div className="flex items-center space-x-2"><RadioGroupItem value="propio" id="r-propio" /><Label htmlFor="r-propio">Pago Propio</Label></div>
-                                    <div className="flex items-center space-x-2"><RadioGroupItem value="terceros" id="r-terceros" /><Label htmlFor="r-terceros">Pago a Terceros</Label></div>
-                                </RadioGroup>
-                            </div>
+                                 <Label htmlFor="totalAmount">Monto Total del Pago (Bs.)</Label>
+                                 <Input id="totalAmount" type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} placeholder="0.00" disabled={loading}/>
+                             </div>
+                             <div className="space-y-3">
+                                 <Label>Tipo de Pago</Label>
+                                 <RadioGroup value={beneficiaryType} onValueChange={(v) => setBeneficiaryType(v as BeneficiaryType)} className="flex gap-4" disabled={loading}>
+                                     <div className="flex items-center space-x-2"><RadioGroupItem value="propio" id="r-propio" /><Label htmlFor="r-propio">Pago Propio</Label></div>
+                                     <div className="flex items-center space-x-2"><RadioGroupItem value="terceros" id="r-terceros" /><Label htmlFor="r-terceros">Pago a Terceros</Label></div>
+                                 </RadioGroup>
+                             </div>
                         </div>
 
                         <div className="space-y-4">
                             <Label className="font-semibold">Asignación de Montos</Label>
                              {beneficiaryRows.map((row, index) => (
-                                <Card key={row.id} className="p-4 bg-muted/50 relative">
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div className="space-y-2">
-                                            <Label htmlFor={`search-${row.id}`}>
-                                                {beneficiaryType === 'propio' ? 'Beneficiario' : `Beneficiario ${index + 1}`}
-                                            </Label>
-                                            {!row.owner ? (
-                                                <>
-                                                    <div className="relative">
-                                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                                        <Input id={`search-${row.id}`} placeholder="Buscar por nombre (mín. 3 caracteres)..." className="pl-9" value={row.searchTerm} onChange={(e) => updateBeneficiaryRow(row.id, { searchTerm: e.target.value })} disabled={loading || (beneficiaryType === 'propio' && index > 0)} />
-                                                    </div>
-                                                    {row.searchTerm.length >= 3 && getFilteredOwners(row.searchTerm).length > 0 && (
-                                                        <Card className="border rounded-md">
-                                                            <ScrollArea className="h-32">
-                                                                {getFilteredOwners(row.searchTerm).map(owner => (
-                                                                    <div key={owner.id} onClick={() => handleOwnerSelect(row.id, owner)} className="p-2 hover:bg-muted cursor-pointer border-b last:border-b-0">
-                                                                        <p className="font-medium text-sm">{owner.name}</p>
-                                                                    </div>
-                                                                ))}
-                                                            </ScrollArea>
-                                                        </Card>
-                                                    )}
-                                                </>
-                                            ) : (
-                                                <div className="p-3 bg-background rounded-md flex items-center justify-between">
-                                                    <div>
-                                                        <p className="font-semibold text-primary">{row.owner.name}</p>
-                                                        <p className="text-sm text-muted-foreground">{row.owner.properties?.map(p => `${p.street}-${p.house}`).join(', ')}</p>
-                                                    </div>
-                                                    <Button variant="ghost" size="icon" onClick={() => updateBeneficiaryRow(row.id, { owner: null, selectedProperty: null })} disabled={loading || (beneficiaryType === 'propio' && index > 0)}>
-                                                        <XCircle className="h-5 w-5 text-destructive" />
-                                                    </Button>
-                                                </div>
-                                            )}
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label htmlFor={`amount-${row.id}`}>Monto Asignado (Bs.)</Label>
-                                            <Input id={`amount-${row.id}`} type="number" placeholder="0.00" value={row.amount} onChange={(e) => updateBeneficiaryRow(row.id, { amount: e.target.value })} disabled={loading || !row.owner} />
-                                        </div>
-                                    </div>
-                                    {beneficiaryType === 'propio' && row.owner && (
-                                        <div className="mt-4 space-y-2">
-                                            <Label>Asignar a Propiedad</Label>
-                                             <Select 
-                                                onValueChange={(v) => updateBeneficiaryRow(row.id, { selectedProperty: row.owner!.properties.find(p => `${p.street}-${p.house}` === v) || null })} 
-                                                value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''}
-                                                disabled={loading || !row.owner}
-                                            >
-                                                <SelectTrigger><SelectValue placeholder="Seleccione una propiedad..." /></SelectTrigger>
-                                                <SelectContent>
-                                                    {row.owner.properties.map(p => (
-                                                        <SelectItem key={`${p.street}-${p.house}`} value={`${p.street}-${p.house}`}>{`${p.street} - ${p.house}`}</SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                    )}
-                                    {beneficiaryType === 'terceros' && (
-                                        <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive" onClick={() => removeBeneficiaryRow(row.id)} disabled={loading}><Trash2 className="h-4 w-4"/></Button>
-                                    )}
-                                </Card>
-                            ))}
-                           
-                            {beneficiaryType === 'terceros' && (
-                                <Button type="button" variant="outline" size="sm" onClick={addBeneficiaryRow} disabled={loading}><UserPlus className="mr-2 h-4 w-4"/>Añadir Otro Beneficiario</Button>
-                            )}
+                                 <Card key={row.id} className="p-4 bg-muted/50 relative">
+                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                         <div className="space-y-2">
+                                             <Label htmlFor={`search-${row.id}`}>
+                                                 {beneficiaryType === 'propio' ? 'Beneficiario' : `Beneficiario ${index + 1}`}
+                                             </Label>
+                                             {!row.owner ? (
+                                                 <>
+                                                     <div className="relative">
+                                                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                                         <Input id={`search-${row.id}`} placeholder="Buscar por nombre (mín. 3 caracteres)..." className="pl-9" value={row.searchTerm} onChange={(e) => updateBeneficiaryRow(row.id, { searchTerm: e.target.value })} disabled={loading || (beneficiaryType === 'propio' && index > 0)} />
+                                                     </div>
+                                                     {row.searchTerm.length >= 3 && getFilteredOwners(row.searchTerm).length > 0 && (
+                                                         <Card className="border rounded-md">
+                                                             <ScrollArea className="h-32">
+                                                                 {getFilteredOwners(row.searchTerm).map(owner => (
+                                                                      <div key={owner.id} onClick={() => handleOwnerSelect(row.id, owner)} className="p-2 hover:bg-muted cursor-pointer border-b last:border-b-0">
+                                                                          <p className="font-medium text-sm">{owner.name}</p>
+                                                                          <p className="text-sm text-muted-foreground">{owner.properties?.map(p => `${p.street}-${p.house}`).join(', ')}</p>
+                                                                      </div>
+                                                                  ))}
+                                                             </ScrollArea>
+                                                         </Card>
+                                                     )}
+                                                 </>
+                                             ) : (
+                                                 <div className="p-3 bg-background rounded-md flex items-center justify-between">
+                                                     <div>
+                                                         <p className="font-semibold text-primary">{row.owner.name}</p>
+                                                         <p className="text-sm text-muted-foreground">{row.owner.properties?.map(p => `${p.street}-${p.house}`).join(', ')}</p>
+                                                     </div>
+                                                     <Button variant="ghost" size="icon" onClick={() => updateBeneficiaryRow(row.id, { owner: null, selectedProperty: null })} disabled={loading || (beneficiaryType === 'propio' && index > 0)}>
+                                                         <XCircle className="h-5 w-5 text-destructive" />
+                                                     </Button>
+                                                 </div>
+                                             )}
+                                         </div>
+                                         <div className="space-y-2">
+                                             <Label htmlFor={`amount-${row.id}`}>Monto Asignado (Bs.)</Label>
+                                             <Input id={`amount-${row.id}`} type="number" placeholder="0.00" value={row.amount} onChange={(e) => updateBeneficiaryRow(row.id, { amount: e.target.value })} disabled={loading || !row.owner} />
+                                         </div>
+                                     </div>
+                                     {beneficiaryType === 'propio' && row.owner && (
+                                         <div className="mt-4 space-y-2">
+                                             <Label>Asignar a Propiedad</Label>
+                                              <Select 
+                                                 onValueChange={(v) => updateBeneficiaryRow(row.id, { selectedProperty: row.owner!.properties.find(p => `${p.street}-${p.house}` === v) || null })} 
+                                                 value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''}
+                                                 disabled={loading || !row.owner}
+                                             >
+                                                 <SelectTrigger><SelectValue placeholder="Seleccione una propiedad..." /></SelectTrigger>
+                                                 <SelectContent>
+                                                     {row.owner.properties.map(p => (
+                                                          <SelectItem key={`${p.street}-${p.house}`} value={`${p.street}-${p.house}`}>{`${p.street} - ${p.house}`}</SelectItem>
+                                                      ))}
+                                                 </SelectContent>
+                                             </Select>
+                                         </div>
+                                     )}
+                                     {beneficiaryType === 'terceros' && (
+                                         <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive" onClick={() => removeBeneficiaryRow(row.id)} disabled={loading}><Trash2 className="h-4 w-4"/></Button>
+                                     )}
+                                 </Card>
+                             ))}
+                            
+                             {beneficiaryType === 'terceros' && (
+                                 <Button type="button" variant="outline" size="sm" onClick={addBeneficiaryRow} disabled={loading}><UserPlus className="mr-2 h-4 w-4"/>Añadir Otro Beneficiario</Button>
+                             )}
 
                             <CardFooter className="p-4 bg-background/50 rounded-lg space-y-2 mt-4 flex-col items-stretch">
                                 <div className="flex justify-between text-sm font-medium"><span>Monto Total del Pago:</span><span>Bs. {Number(totalAmount || 0).toFixed(2)}</span></div>
@@ -541,10 +547,10 @@ export default function UnifiedPaymentsPage() {
                         </div>
                     </CardContent>
                     <CardFooter className='flex flex-col items-end gap-4'>
-                         <Button type="submit" className="w-full md:w-auto" disabled={loading}>
-                            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CheckCircle2 className="mr-2 h-4 w-4"/>}
-                            {loading ? 'Enviando...' : 'Enviar Reporte'}
-                        </Button>
+                           <Button type="submit" className="w-full md:w-auto" disabled={loading}>
+                                {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CheckCircle2 className="mr-2 h-4 w-4"/>}
+                                {loading ? 'Enviando...' : 'Enviar Reporte'}
+                            </Button>
                     </CardFooter>
                 </Card>
             </form>
@@ -561,24 +567,27 @@ export default function UnifiedPaymentsPage() {
                 }}
             />
             <Dialog open={isInfoDialogOpen} onOpenChange={setIsInfoDialogOpen}>
-    <DialogContent>
-        <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-                <Info className="h-6 w-6 text-blue-500" />
-                Reporte Enviado para Revisión
-            </DialogTitle>
-            <DialogDescription className="pt-4">
-                ¡Gracias! Hemos recibido tu reporte de pago. El tiempo máximo para la aprobación es de <strong>24 horas</strong>.
-                <br /><br />
-                Te invitamos a ingresar nuevamente después de este lapso para:
-                <ul className="list-disc list-inside mt-2 space-y-1">
-                    <li>Verificar si el monto enviado cubrió completamente tu deuda.</li>
-                    <li>Descargar tu recibo de pago una vez que sea aprobado.</li>
-                </ul>
-            </DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-            <Button onClick={() => setIsInfoDialogOpen(false)}>Entendido</Button>
-        </DialogFooter>
-    </DialogContent>
-</Dialog>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Info className="h-6 w-6 text-blue-500" />
+                            Reporte Enviado para Revisión
+                        </DialogTitle>
+                        <DialogDescription className="pt-4">
+                            ¡Gracias! Hemos recibido tu reporte de pago. El tiempo máximo para la aprobación es de <strong>24 horas</strong>.
+                            <br /><br />
+                            Te invitamos a ingresar nuevamente después de este lapso para:
+                            <ul className="list-disc list-inside mt-2 space-y-1">
+                                <li>Verificar si el monto enviado cubrió completamente tu deuda.</li>
+                                <li>Descargar tu recibo de pago una vez que sea aprobado.</li>
+                            </ul>
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button onClick={() => setIsInfoDialogOpen(false)}>Entendido</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        </div>
+    );
+}
