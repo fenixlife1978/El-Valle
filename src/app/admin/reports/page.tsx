@@ -853,16 +853,34 @@ export default function ReportsPage() {
              const workbook = new ExcelJS.Workbook();
              const worksheet = workbook.addWorksheet("Morosidad");
 
-             const columns = [
-                 { header: 'Propietario', key: 'name', width: 30 },
-                 { header: 'Propiedades', key: 'properties', width: 30 },
-                 { header: 'Meses Adeudados', key: 'monthsOwed', width: 15 },
-             ];
-             if (includeDelinquencyAmounts) {
-                 columns.push({ header: 'Deuda (USD)', key: 'debtAmountUSD', width: 15, style: { numFmt: '$#,##0.00' } });
-                 columns.push({ header: 'Deuda (Bs.)', key: 'debtAmountBS', width: 15, style: { numFmt: '#,##0.00' } });
-             }
-             worksheet.columns = columns;
+             const columns: { 
+                header: string; 
+                key: string; 
+                width: number; 
+                style?: { numFmt?: string } 
+            }[] = [
+                { header: 'Propietario', key: 'name', width: 30 },
+                { header: 'Propiedades', key: 'properties', width: 30 },
+                { header: 'Meses Adeudados', key: 'monthsOwed', width: 15 },
+            ];
+            
+            if (includeDelinquencyAmounts) {
+                columns.push({
+                    header: 'Deuda (USD)',
+                    key: 'debtAmountUSD',
+                    width: 15,
+                    style: { numFmt: '$#,##0.00' }
+                });
+            
+                columns.push({
+                    header: 'Deuda (Bs.)',
+                    key: 'debtAmountBS',
+                    width: 15,
+                    style: { numFmt: '#,##0.00' }
+                });
+            }
+            
+             worksheet.columns = columns as any;
 
              const dataToExport = data.map(o => {
                 const baseData: any = { name: o.name, properties: o.properties, monthsOwed: o.monthsOwed };

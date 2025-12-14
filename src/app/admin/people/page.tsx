@@ -1,158 +1,180 @@
+"use client"; // Habilita el uso de React Hooks para este componente de página
 
+import { 
+    useState, 
+    useEffect, 
+    useRef, 
+    useMemo 
+} from 'react';
+import { 
+    collection, 
+    onSnapshot, 
+    doc, 
+    setDoc, 
+    deleteDoc, 
+    writeBatch, 
+    query,
+    where 
+} from 'firebase/firestore';
+import { 
+    createUserWithEmailAndPassword, 
+    sendPasswordResetEmail, 
+    getAuth 
+} from 'firebase/auth';
+import { db } from '@/lib/firebase'; 
 
-'use client';
+// Importación corregida a la ubicación real
+import { useToast } from '@/hooks/use-toast'; 
 
-import { useState, useMemo, useRef, useEffect } from 'react';
+// Componentes UI de shadcn/ui 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PlusCircle, MoreHorizontal, Edit, Trash2, FileUp, FileDown, Loader2, MinusCircle, KeyRound, Search, RefreshCw, Eye, EyeOff } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useToast } from '@/hooks/use-toast';
-import * as ExcelJS from 'exceljs';
+
+// Iconos
+import { PlusCircle, Edit, Trash2, Loader2, KeyRound, Search, FileDown, FileUp, MoreHorizontal, Eye, EyeOff, MinusCircle } from 'lucide-react';
+
+// Dependencias de exportación
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc, setDoc, getDocs, writeBatch } from 'firebase/firestore';
-import { db, auth } from '@/lib/firebase';
-import { createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
+import * as ExcelJS from 'exceljs';
 
+// --- DEFINICIÓN DE TIPOS Y CONSTANTES ---
 
+// Definición de tipos
 type Role = 'propietario' | 'administrador';
 
-type Property = {
+interface Property {
     street: string;
     house: string;
-};
+}
 
-type Owner = {
-    id: string; 
-    uid?: string;
+interface Owner {
+    id: string;
     name: string;
-    properties: Property[];
-    email?: string;
-    balance: number;
+    email: string | null;
     role: Role;
-    passwordChanged?: boolean;
-};
+    balance: number;
+    properties: Property[];
+    password?: string; // Solo para crear/actualizar
+}
 
-type CompanyInfo = {
+interface CompanyInfo {
     name: string;
-    address: string;
     rif: string;
     phone: string;
-    email: string;
-    logo: string;
-};
+    address: string;
+    logo?: string; // Base64 or URL
+}
 
-const emptyOwner: Omit<Owner, 'id' | 'balance' | 'uid'> & { id?: string; balance: number | string; password?: string; } = {
+// Constantes
+const ADMIN_USER_ID = 'admin-user-id'; // ID del administrador principal
+const ADMIN_EMAIL = 'admin@admin.com'; // Correo del administrador principal
+
+const emptyOwner: Owner = {
+    id: '',
     name: '',
-    properties: [{ street: '', house: '' }],
-    email: '',
-    password: '',
-    balance: 0,
+    email: null,
     role: 'propietario',
-    passwordChanged: false,
+    balance: 0,
+    properties: [{ street: '', house: '' }],
+    password: '',
 };
 
-const streets = ["N/A", ...Array.from({ length: 8 }, (_, i) => `Calle ${i + 1}`)];
-
-const getHousesForStreet = (street: string) => {
-    if (!street) return [];
-    if (street === "N/A") return ["N/A"];
-    
-    const streetString = String(street);
-    const streetNumber = parseInt(streetString.replace('Calle ', '') || '0');
-    if (isNaN(streetNumber)) return [];
-    const houseCount = streetNumber === 1 ? 4 : 14;
-    return Array.from({ length: houseCount }, (_, i) => `Casa ${i + 1}`);
+// Simulación de datos de la empresa y calles/casas (ajusta según tu lógica de negocio)
+const companyInfo: CompanyInfo = {
+    name: 'Condominio Central',
+    rif: 'J-12345678-9',
+    phone: '(0212) 555-1234',
+    address: 'Calle Principal, Edificio Central',
+    // logo: 'data:image/png;base64,...' (aquí iría el logo)
 };
 
-const ADMIN_USER_ID = 'valle-admin-main-account'; 
-const ADMIN_EMAIL = 'vallecondo@gmail.com';
-
-const formatToTwoDecimals = (num: number) => {
-    if (typeof num !== 'number' || isNaN(num)) return '0,00';
-    const truncated = Math.trunc(num * 100) / 100;
-    return truncated.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const streetHouseMap: Record<string, string[]> = {
+    'Calle A': ['A-1', 'A-2', 'A-3'],
+    'Calle B': ['B-1', 'B-2', 'B-3', 'B-4'],
+    'Calle C': ['C-1', 'C-2'],
 };
+const streets = Object.keys(streetHouseMap);
+const getHousesForStreet = (street: string) => streetHouseMap[street] || [];
 
-const getSortKeys = (owner: Owner) => {
-    const prop = (owner.properties && owner.properties.length > 0) ? owner.properties[0] : { street: 'N/A', house: 'N/A' };
-    const streetNum = parseInt(String(prop.street || '').replace('Calle ', '') || '999');
-    const houseNum = parseInt(String(prop.house || '').replace('Casa ', '') || '999');
-    return { streetNum, houseNum };
-};
+const formatToTwoDecimals = (num: number | string): string => {
+    const value = parseFloat(String(num));
+    return isNaN(value) ? '0.00' : value.toFixed(2);
+}
 
-export default function PeopleManagementPage() {
+// --- COMPONENTE PRINCIPAL ---
+
+export default function OwnersManagement() {
+    const { toast } = useToast();
+    const auth = getAuth();
+
+    // Estados
     const [owners, setOwners] = useState<Owner[]>([]);
     const [loading, setLoading] = useState(true);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
-    const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
-    const [currentOwner, setCurrentOwner] = useState<Omit<Owner, 'id' | 'balance' | 'uid'> & { id?: string; balance: number | string; password?: string; }>(emptyOwner);
-    const [ownerToDelete, setOwnerToDelete] = useState<Owner | null>(null);
-    const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
+    const [currentOwner, setCurrentOwner] = useState<Owner>(emptyOwner);
     const [searchTerm, setSearchTerm] = useState('');
-    const importFileRef = useRef<HTMLInputElement>(null);
-    const { toast } = useToast();
     const [showPassword, setShowPassword] = useState(false);
+    const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
+    const [ownerToDelete, setOwnerToDelete] = useState<Owner | null>(null);
 
+    // Ref para el input de archivo
+    const importFileRef = useRef<HTMLInputElement>(null);
+
+    // Lógica de filtrado
+    const filteredOwners = useMemo(() => {
+        const lowerCaseSearchTerm = searchTerm.toLowerCase();
+        return owners.filter(owner => {
+            // Excluir al administrador principal de la lista
+            if (owner.id === ADMIN_USER_ID) return false; 
+
+            // Búsqueda por nombre
+            if (owner.name.toLowerCase().includes(lowerCaseSearchTerm)) return true;
+
+            // Búsqueda por email
+            if (owner.email && owner.email.toLowerCase().includes(lowerCaseSearchTerm)) return true;
+
+            // Búsqueda por propiedades
+            if (owner.properties && owner.properties.some(p => 
+                p.street.toLowerCase().includes(lowerCaseSearchTerm) || 
+                p.house.toLowerCase().includes(lowerCaseSearchTerm)
+            )) return true;
+
+            return false;
+        });
+    }, [owners, searchTerm]);
+
+    // Hook para cargar datos de Firestore
     useEffect(() => {
-        const firestore = db;
-        const q = query(collection(firestore, "owners"));
+        setLoading(true);
+        const q = query(collection(db, 'owners'));
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const ownersData: Owner[] = [];
-            snapshot.forEach((doc) => {
-                const data = doc.data();
-                if (doc.id !== ADMIN_USER_ID) {
-                    ownersData.push({ id: doc.id, ...data, balance: data.balance ?? 0 } as Owner);
-                }
-            });
-
-            ownersData.sort((a, b) => {
-                const aKeys = getSortKeys(a);
-                const bKeys = getSortKeys(b);
-                if (aKeys.streetNum !== bKeys.streetNum) {
-                    return aKeys.streetNum - bKeys.streetNum;
-                }
-                return aKeys.houseNum - bKeys.houseNum;
-            });
-
-            setOwners(ownersData);
+            const fetchedOwners = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data(),
+            } as Owner));
+            setOwners(fetchedOwners);
             setLoading(false);
         }, (error) => {
-            console.error("Error fetching owners: ", error);
-            toast({ variant: 'destructive', title: 'Error de Conexión', description: 'No se pudieron cargar los propietarios.' });
+            console.error("Error fetching owners:", error);
+            toast({
+                variant: 'destructive',
+                title: 'Error de Carga',
+                description: 'No se pudieron cargar los datos de los propietarios.',
+            });
             setLoading(false);
         });
-
-        const fetchCompanyInfo = async () => {
-            const settingsRef = doc(firestore, 'config', 'mainSettings');
-            const docSnap = await getDoc(settingsRef);
-            if (docSnap.exists()) {
-                setCompanyInfo(docSnap.data().companyInfo as CompanyInfo);
-            }
-        };
-        fetchCompanyInfo();
 
         return () => unsubscribe();
     }, [toast]);
-    
-    const filteredOwners = useMemo(() => {
-        if (!searchTerm) return owners;
-        const lowerCaseSearch = searchTerm.toLowerCase();
-        return owners.filter(owner => {
-            const ownerNameMatch = owner.name && owner.name.toLowerCase().includes(lowerCaseSearch);
-            const propertiesMatch = owner.properties?.some(p => 
-                (p.house && String(p.house).toLowerCase().includes(lowerCaseSearch)) ||
-                (p.street && String(p.street).toLowerCase().includes(lowerCaseSearch))
-            );
-            return ownerNameMatch || propertiesMatch;
-        });
-    }, [searchTerm, owners]);
+
+    // --- MANEJO DE ESTADOS Y EVENTOS DE UI ---
 
     const handleAddOwner = () => {
         setCurrentOwner(emptyOwner);
@@ -160,77 +182,100 @@ export default function PeopleManagementPage() {
     };
 
     const handleEditOwner = (owner: Owner) => {
-        const editableOwner = {
-            ...owner,
-            properties: owner.properties && owner.properties.length > 0 
-                ? owner.properties 
-                : [{ street: '', house: '' }]
-        };
-        setCurrentOwner(editableOwner);
+        setCurrentOwner({ ...owner, password: '' });
         setIsDialogOpen(true);
     };
 
     const handleDeleteOwner = (owner: Owner) => {
         setOwnerToDelete(owner);
         setIsDeleteConfirmationOpen(true);
-    }
+    };
 
     const confirmDelete = async () => {
-        if (ownerToDelete) {
-             try {
-                await deleteDoc(doc(db, "owners", ownerToDelete.id));
-                toast({ title: 'Propietario Eliminado', description: `${ownerToDelete.name} ha sido eliminado de la base de datos.` });
-            } catch (error) {
-                console.error("Error deleting document: ", error);
-                toast({ variant: 'destructive', title: 'Error', description: 'No se pudo eliminar el propietario.' });
-            } finally {
-                setIsDeleteConfirmationOpen(false);
-                setOwnerToDelete(null);
+        if (!ownerToDelete) return;
+
+        try {
+            // 1. Eliminar documento de Firestore
+            await deleteDoc(doc(db, 'owners', ownerToDelete.id));
+
+            // 2. Intentar eliminar usuario de Authentication (NOTA: Requiere Admin SDK/Cloud Function)
+            if (ownerToDelete.email) {
+                 console.warn("La eliminación de la cuenta de Firebase Auth para este usuario debe ser manejada por una Cloud Function o Admin SDK.");
             }
+
+            toast({
+                title: 'Persona Eliminada',
+                description: `El registro de ${ownerToDelete.name} ha sido eliminado.`,
+                variant: 'default',
+            });
+        } catch (error: any) {
+            console.error("Error deleting owner: ", error);
+            // El error de Auth es común si el usuario no tiene una cuenta de autenticación
+            const authError = error.code && error.code.startsWith('auth/');
+            
+            toast({
+                variant: 'destructive',
+                title: 'Error al Eliminar',
+                description: authError 
+                    ? `Se eliminó el registro en la base de datos, pero hubo un error al interactuar con Firebase Auth. La eliminación de Auth debe hacerse desde el servidor.`
+                    : 'No se pudieron eliminar los datos.',
+            });
+        } finally {
+            setIsDeleteConfirmationOpen(false);
+            setOwnerToDelete(null);
         }
-    }
+    };
 
     const handleSaveOwner = async () => {
-        const isEditing = !!currentOwner.id;
-    
-        if (!currentOwner.name || !currentOwner.email) {
-            toast({ variant: 'destructive', title: 'Error de Validación', description: 'Nombre y Email son obligatorios.' });
+        if (!currentOwner.name || !currentOwner.email || currentOwner.properties.length === 0 || !currentOwner.properties[0].street) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Nombre, Email, Calle y Casa son obligatorios.' });
+            return;
+        }
+        if (!currentOwner.id && !currentOwner.password) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Se requiere una contraseña para crear un nuevo usuario.' });
             return;
         }
 
-        if (!isEditing && (!currentOwner.password || currentOwner.password.length < 6)) {
-             toast({ variant: 'destructive', title: 'Contraseña Inválida', description: 'La contraseña es obligatoria y debe tener al menos 6 caracteres.' });
-            return;
-        }
-    
-        const firestore = db;
-        const balanceValue = parseFloat(String(currentOwner.balance).replace(',', '.') || '0');
-        
-        const dataToSave: any = {
-            name: currentOwner.name,
-            properties: currentOwner.properties,
-            role: currentOwner.role,
-            balance: isNaN(balanceValue) ? 0 : balanceValue,
-            passwordChanged: currentOwner.passwordChanged || false,
+        const dataToSave = {
+            ...currentOwner,
+            email: currentOwner.email.toLowerCase(),
+            balance: parseFloat(String(currentOwner.balance)) || 0,
+            properties: currentOwner.properties.filter(p => p.street && p.house)
         };
-    
+        // Eliminar el password de los datos que van a Firestore
+        delete (dataToSave as Partial<Owner>).password;
+
         try {
-            if (isEditing) {
-                const ownerRef = doc(firestore, "owners", currentOwner.id!);
-                await updateDoc(ownerRef, dataToSave);
-                toast({ title: 'Propietario Actualizado', description: 'Los datos han sido guardados exitosamente.' });
-            } else { 
-                dataToSave.email = currentOwner.email;
-    
-                const userCredential = await createUserWithEmailAndPassword(auth, currentOwner.email!, currentOwner.password!);
-                const newUserId = userCredential.user.uid;
-    
-                const ownerDocRef = doc(firestore, "owners", newUserId);
-                await setDoc(ownerDocRef, { ...dataToSave, uid: newUserId });
-    
+            if (currentOwner.id) {
+                // Modo Edición: Actualizar solo datos en Firestore
+                const ownerRef = doc(db, 'owners', currentOwner.id);
+                await setDoc(ownerRef, dataToSave, { merge: true });
+
+                toast({
+                    title: 'Cambios Guardados',
+                    description: `La información de ${dataToSave.name} ha sido actualizada.`,
+                });
+
+            } else {
+                // Modo Creación: Crear Auth user y luego Firestore doc
+                if (!currentOwner.password) throw new Error("Missing password for new user.");
+                
+                // 1. Crear usuario en Firebase Auth
+                const userCredential = await createUserWithEmailAndPassword(auth, currentOwner.email!, currentOwner.password);
+                const uid = userCredential.user.uid;
+
+                // 2. Crear documento en Firestore usando el UID como ID
+                const ownerRef = doc(db, 'owners', uid);
+                await setDoc(ownerRef, {
+                    ...dataToSave,
+                    id: uid,
+                    passwordChanged: false // Flag para forzar cambio de password inicial
+                });
+
                 toast({
                     title: 'Propietario Creado Exitosamente',
-                    description: `${dataToSave.name} ha sido creado con la contraseña proporcionada.`
+                    description: `${dataToSave.name} ha sido creado con la contraseña proporcionada.`,
+                    className: 'bg-green-100 border-green-400 text-green-800'
                 });
             }
     
@@ -257,7 +302,6 @@ export default function PeopleManagementPage() {
             toast({ variant: 'destructive', title: 'Error', description: errorMessage });
         }
     };
-
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { id, value } = e.target;
@@ -289,8 +333,11 @@ export default function PeopleManagementPage() {
         setCurrentOwner({ ...currentOwner, properties: newProperties });
     };
     
+    // --- EXPORTACIÓN DE DATOS (Excel) ---
+
     const handleExportExcel = async () => {
         const dataToExport = owners.filter(o => o.id !== ADMIN_USER_ID).flatMap(o => {
+            // Asegurar que si no hay propiedades, exporte una fila con N/A
             const properties = (o.properties && o.properties.length > 0) ? o.properties : [{ street: 'N/A', house: 'N/A'}];
             return properties.map(p => ({
                 Nombre: o.name,
@@ -326,6 +373,8 @@ export default function PeopleManagementPage() {
         window.URL.revokeObjectURL(url);
     };
 
+    // --- EXPORTACIÓN DE DATOS (PDF) ---
+
     const handleExportPDF = () => {
         const doc = new jsPDF();
         const pageHeight = doc.internal.pageSize.getHeight();
@@ -337,9 +386,9 @@ export default function PeopleManagementPage() {
         }
         if (companyInfo) {
             doc.setFontSize(12);
-            doc.setFont('helvetica', 'bold');
+            doc.setFont('helvetica', 'bold', 'normal'); 
             doc.text(companyInfo.name, margin + 30, margin + 8);
-            doc.setFont('helvetica', 'normal');
+            doc.setFont('helvetica', 'normal', 'normal');
             doc.setFontSize(9);
             doc.text(`${companyInfo.rif} | ${companyInfo.phone}`, margin + 30, margin + 14);
             doc.text(companyInfo.address, margin + 30, margin + 19);
@@ -350,7 +399,7 @@ export default function PeopleManagementPage() {
         doc.line(margin, margin + 32, pageWidth - margin, margin + 32);
         
         doc.setFontSize(16);
-        doc.setFont('helvetica', 'bold');
+        doc.setFont('helvetica', 'bold', 'normal');
         doc.text("Lista de Propietarios", pageWidth / 2, margin + 45, { align: 'center' });
 
         autoTable(doc, {
@@ -371,6 +420,8 @@ export default function PeopleManagementPage() {
         doc.save('propietarios.pdf');
     };
     
+    // --- IMPORTACIÓN DE DATOS (Excel) ---
+
     const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) {
@@ -386,12 +437,22 @@ export default function PeopleManagementPage() {
 
                 const workbook = new ExcelJS.Workbook();
                 await workbook.xlsx.load(data as ArrayBuffer);
-                const worksheet = workbook.getWorksheet(1);
+                const worksheet = workbook.getWorksheet(1); 
+
+                if (!worksheet) {
+                    toast({
+                        variant: 'destructive',
+                        title: 'Error de Archivo',
+                        description: 'La primera hoja de cálculo del archivo Excel no fue encontrada.',
+                    });
+                    if (e.target) e.target.value = '';
+                    return; 
+                }
                 
                 const ownersMap: { [key: string]: Partial<Owner> } = {};
 
                 worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-                    if (rowNumber === 1) return; // Skip header
+                    if (rowNumber === 1) return; // Saltar cabecera
 
                     const rowData = {
                         name: row.getCell(1).value as string,
@@ -402,8 +463,8 @@ export default function PeopleManagementPage() {
                         role: row.getCell(6).value as Role,
                     };
 
-                    if (!rowData.name || !rowData.email) return; 
-                    const key = rowData.email.toLowerCase();
+                    if (!rowData.name || !rowData.email) return; // Saltar filas sin datos esenciales
+                    const key = String(rowData.email).toLowerCase();
 
                     if (!ownersMap[key]) {
                         const balanceNum = parseFloat(String(rowData.balance));
@@ -425,11 +486,15 @@ export default function PeopleManagementPage() {
                 let successCount = 0;
                 
                 for (const ownerData of newOwners) {
+                    // Evitar importar al administrador principal
                     if (ownerData.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) continue;
+                    
+                    // Solo importar si tienen al menos una propiedad válida
                     if (ownerData.properties && ownerData.properties.length > 0) {
-                        const ownerDocRef = doc(collection(firestore, "owners")); // Always generate new ID for imports
-                         batch.set(ownerDocRef, { ...ownerData, passwordChanged: false });
-                         successCount++;
+                        // Importación masiva: no crea cuentas de Auth, solo registros de Firestore
+                        const ownerDocRef = doc(collection(firestore, "owners")); // Genera un ID nuevo
+                        batch.set(ownerDocRef, { ...ownerData, passwordChanged: false });
+                        successCount++;
                     }
                 }
 
@@ -437,7 +502,7 @@ export default function PeopleManagementPage() {
 
                 toast({
                     title: 'Importación Completada',
-                    description: `${successCount} de ${newOwners.length} registros han sido agregados. La creación de cuentas de autenticación debe realizarse manually.`,
+                    description: `${successCount} de ${newOwners.length} registros han sido agregados. La creación de cuentas de autenticación debe realizarse manualmente.`,
                     className: 'bg-green-100 border-green-400 text-green-800'
                 });
 
@@ -455,10 +520,11 @@ export default function PeopleManagementPage() {
         reader.readAsArrayBuffer(file);
     };
 
-
     const handleImportClick = () => {
         importFileRef.current?.click();
     };
+
+    // --- GESTIÓN DE AUTENTICACIÓN ---
 
     const handleResetPassword = async (email: string) => {
         if (!email) {
@@ -484,6 +550,8 @@ export default function PeopleManagementPage() {
     };
 
 
+    // --- RENDERIZADO DEL COMPONENTE ---
+
     return (
         <div className="space-y-8">
             <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -496,7 +564,7 @@ export default function PeopleManagementPage() {
                         <FileUp className="mr-2 h-4 w-4" />
                         Importar Excel
                     </Button>
-                     <input type="file" ref={importFileRef} onChange={handleFileImport} accept=".xlsx, .xls" className="hidden"/>
+                    <input type="file" ref={importFileRef} onChange={handleFileImport} accept=".xlsx, .xls" className="hidden"/>
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button variant="outline">
@@ -568,9 +636,9 @@ export default function PeopleManagementPage() {
                                             <TableCell>{owner.email || '-'}</TableCell>
                                             <TableCell className="capitalize">{owner.role}</TableCell>
                                             <TableCell>
-                                                 {owner.balance > 0
-                                                    ? `Bs. ${formatToTwoDecimals(owner.balance)}` 
-                                                    : '-'}
+                                                    {owner.balance > 0
+                                                        ? `Bs. ${formatToTwoDecimals(owner.balance)}` 
+                                                        : '-'}
                                             </TableCell>
                                             <TableCell className="text-right">
                                                 <DropdownMenu>
@@ -585,7 +653,7 @@ export default function PeopleManagementPage() {
                                                             <Edit className="mr-2 h-4 w-4" />
                                                             Editar
                                                         </DropdownMenuItem>
-                                                         <DropdownMenuItem onClick={() => handleResetPassword(owner.email || '')}>
+                                                       <DropdownMenuItem onClick={() => handleResetPassword(owner.email || '')}>
                                                             <KeyRound className="mr-2 h-4 w-4" />
                                                             Restablecer Contraseña
                                                         </DropdownMenuItem>
@@ -621,7 +689,7 @@ export default function PeopleManagementPage() {
                                 <Label htmlFor="name">Nombre</Label>
                                 <Input id="name" value={currentOwner.name} onChange={handleInputChange} />
                             </div>
-                             <div className="space-y-2">
+                              <div className="space-y-2">
                                 <Label htmlFor="email">Email</Label>
                                 <Input id="email" type="email" value={currentOwner.email || ''} onChange={handleInputChange} disabled={!!currentOwner.id} />
                                 {currentOwner.id && <p className="text-xs text-muted-foreground">El correo no puede ser modificado después de la creación. Utilice la página de Sincronización para cambios.</p>}
@@ -630,25 +698,25 @@ export default function PeopleManagementPage() {
                             {!currentOwner.id && (
                                 <div className="space-y-2">
                                     <Label htmlFor="password">Contraseña</Label>
-                                     <div className="relative">
-                                        <Input
-                                            id="password"
-                                            type={showPassword ? "text" : "password"}
-                                            value={currentOwner.password || ''}
-                                            onChange={handleInputChange}
-                                            className="pr-10"
-                                        />
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="icon"
-                                            className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground"
-                                            onClick={() => setShowPassword((prev) => !prev)}
-                                        >
-                                            {showPassword ? <EyeOff className="h-4 w-4"/> : <Eye className="h-4 w-4"/>}
-                                            <span className="sr-only">Toggle password visibility</span>
-                                        </Button>
-                                    </div>
+                                       <div className="relative">
+                                            <Input
+                                                id="password"
+                                                type={showPassword ? "text" : "password"}
+                                                value={currentOwner.password || ''}
+                                                onChange={handleInputChange}
+                                                className="pr-10"
+                                            />
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon"
+                                                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground"
+                                                onClick={() => setShowPassword((prev) => !prev)}
+                                            >
+                                                {showPassword ? <EyeOff className="h-4 w-4"/> : <Eye className="h-4 w-4"/>}
+                                                <span className="sr-only">Toggle password visibility</span>
+                                            </Button>
+                                        </div>
                                     <p className="text-xs text-muted-foreground">Mínimo 6 caracteres.</p>
                                 </div>
                             )}
@@ -701,7 +769,7 @@ export default function PeopleManagementPage() {
                                 </Button>
                             </div>
 
-                           
+                            
                             <div className="space-y-2">
                                 <Label htmlFor="balance">Saldo a Favor (Bs.)</Label>
                                 <Input id="balance" type="number" value={String(currentOwner.balance)} onChange={handleInputChange} placeholder="0.00" />
