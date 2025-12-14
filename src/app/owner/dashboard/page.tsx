@@ -1,4 +1,5 @@
 
+
 'use client';
 
 // Imports de UI (MANTENER TODOS LOS IMPORTS EN LA PARTE SUPERIOR)
@@ -15,11 +16,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import jsPDF from 'jspdf'
-import autoTable from 'jspdf-autotable'
-import QRCode from 'qrcode'
-import { getMessagingService } from '@/lib/firebase'
-import { getToken, onMessage } from 'firebase/messaging'
 import { Separator } from '@/components/ui/separator';
 
 
@@ -144,7 +140,7 @@ export default function OwnerDashboardPage() {
                     setDebts(debtsList);
                 });
 
-                // Suscripción a pagos - AHORA SIN ORDER BY
+                // Suscripción a pagos
                 const paymentsQuery = query(collection(db, 'payments'), where('beneficiaryIds', 'array-contains', ownerId));
                 const unsubPayments = onSnapshot(paymentsQuery, (snapshot) => {
                     const paymentsList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Payment));
@@ -266,7 +262,6 @@ export default function OwnerDashboardPage() {
             const doc = new jsPDF('p', 'mm', 'a4');
             const { payment, beneficiary, paidDebts, previousBalance, currentBalance, receiptNumber } = receiptData;
             
-            // Lógica de generación de PDF aquí... (resumida para brevedad)
             const pageWidth = doc.internal.pageSize.getWidth();
             const margin = 14;
             let y = margin;
@@ -294,7 +289,7 @@ export default function OwnerDashboardPage() {
                 ];
             });
 
-            autoTable(doc, {
+            autoTable.default(doc, {
                 startY: y,
                 head: [['Período', 'Concepto', 'Monto Pagado (Bs)']],
                 body: tableBody,
@@ -309,7 +304,7 @@ export default function OwnerDashboardPage() {
                 ['Saldo Actual:', `Bs. ${formatToTwoDecimals(currentBalance)}`],
             ];
 
-            autoTable(doc, {
+            autoTable.default(doc, {
                 startY: y, body: summary, theme: 'plain', styles: { fontStyle: 'bold', fontSize: 10 },
                 columnStyles: { 0: { halign: 'right' }, 1: { halign: 'right'} }
             });
@@ -628,80 +623,12 @@ export default function OwnerDashboardPage() {
 // COMPONENTES AUXILIARES (Función de importación de PDF)
 // -------------------------------------------------------------------------
 const importPdfLibs = async () => {
-  const [{ default: jsPDF }, autoTable, { default: QRCode }] = await Promise.all([
-    import('jspdf'),
-    import('jspdf-autotable'),
-    import('qrcode')
-  ]);
-  return { jsPDF, autoTable, QRCode };
+    const [{ default: jsPDF }, autoTableModule, { default: QRCode }] = await Promise.all([
+        import('jspdf'),
+        import('jspdf-autotable'),
+        import('qrcode')
+    ]);
+    return { jsPDF, autoTable: autoTableModule, QRCode };
 };
 
-// -------------------------------------------------------------------------
-// FUNCIÓN DE GENERACIÓN DE PDF
-// -------------------------------------------------------------------------
-const generateReceiptPDF = async (receiptData: ReceiptData, companyInfo: CompanyInfo, qrCodeUrl?: string): Promise<jsPDF | null> => {
-    if (!receiptData) return null;
     
-    try {
-        const { jsPDF, autoTable } = await importPdfLibs();
-        const doc = new jsPDF();
-        const pageWidth = doc.internal.pageSize.getWidth();
-        const margin = 14;
-        let y = margin;
-        
-        // Header
-        if (companyInfo.logo) {
-             try { doc.addImage(companyInfo.logo, 'PNG', margin, y, 25, 25); }
-             catch(e) { console.error("Error adding logo to PDF", e); }
-        }
-        doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, margin + 30, y + 8);
-        doc.setFontSize(9).setFont('helvetica', 'normal').text(companyInfo.rif, margin + 30, y + 14);
-
-        // Title
-        doc.setFontSize(16).setFont('helvetica', 'bold').text("RECIBO DE PAGO", pageWidth / 2, y + 35, { align: 'center' });
-        doc.setFontSize(10).setFont('helvetica', 'normal').text(`N°: ${receiptData.receiptNumber}`, pageWidth - margin, y + 35, { align: 'right' });
-        y += 45;
-        
-        // Details
-        doc.setFontSize(10).text(`Propietario: ${receiptData.ownerName}`, margin, y); y += 6;
-        doc.text(`Propiedad: ${receiptData.ownerUnit}`, margin, y); y+= 6;
-        doc.text(`Fecha Pago: ${format(receiptData.payment.paymentDate.toDate(), 'dd/MM/yyyy')}`, margin, y); y+= 10;
-
-        const tableBody = receiptData.paidDebts.map(debt => {
-            const debtAmountBs = (debt.paidAmountUSD || debt.amountUSD) * receiptData.payment.exchangeRate;
-            return [
-                `${monthsLocale[debt.month]} ${debt.year}`,
-                debt.description,
-                `$${formatToTwoDecimals(debt.paidAmountUSD || debt.amountUSD)}`,
-                `Bs. ${formatToTwoDecimals(debtAmountBs)}`
-            ];
-        });
-        
-        if (tableBody.length > 0) {
-            autoTable(doc, {
-                startY: y,
-                head: [['Período', 'Concepto', 'Monto ($)', 'Monto Pagado (Bs)']],
-                body: tableBody,
-                theme: 'grid',
-            });
-            y = (doc as any).lastAutoTable.finalY;
-        } else {
-            doc.text('Abono a saldo a favor.', margin, y);
-            y += 10;
-        }
-        
-        // Footer Summary
-        y += 10;
-        const finalY = doc.internal.pageSize.getHeight() - 20;
-        doc.setFontSize(10).setFont('helvetica', 'bold').text('Total Pagado:', pageWidth - margin - 50, finalY - 15);
-        doc.text(`Bs. ${formatToTwoDecimals(receiptData.beneficiary.amount)}`, pageWidth - margin, finalY - 15, { align: 'right' });
-        doc.text('Saldo a Favor Actual:', pageWidth - margin - 50, finalY - 5);
-        doc.text(`Bs. ${formatToTwoDecimals(receiptData.currentBalance)}`, pageWidth - margin, finalY - 5, { align: 'right' });
-
-        return doc;
-
-    } catch (e) {
-        console.error("Error generating PDF:", e);
-        return null;
-    }
-}
