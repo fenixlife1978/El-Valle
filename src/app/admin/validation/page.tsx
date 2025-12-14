@@ -140,7 +140,7 @@ export default function ValidationPage() {
         setNewPaymentDate(undefined);
         return "Fechas actualizadas correctamente.";
     };
-
+    
     const syncProfiles = async () => {
         // This functionality is now largely handled automatically on login.
         // This button serves as a manual trigger for a full system check.

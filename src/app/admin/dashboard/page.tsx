@@ -1,3 +1,5 @@
+
+
 'use client';
 
 // NOTA: Si el error persiste, la causa es una exportación incorrecta (export vs export default) 
