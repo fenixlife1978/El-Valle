@@ -19,58 +19,58 @@
 
 @layer base {
   :root, .light {
-    /* Paleta para Banco Mercantil (Modo Claro) */
-    --background: 0 0% 98%; /* Gris muy claro */
-    --foreground: 224 71.4% 4.1%; /* Negro/azul oscuro para texto */
+    /* Paleta Naranja/Azul/Gris (Modo Claro) */
+    --background: 210 20% 98%; /* Gris muy claro */
+    --foreground: 215 25% 27%; /* Gris oscuro para texto */
     --card: 0 0% 100%; /* Blanco */
-    --card-foreground: 224 71.4% 4.1%;
+    --card-foreground: 215 25% 27%;
     --popover: 0 0% 100%;
-    --popover-foreground: 224 71.4% 4.1%;
-    --primary: 212 100% 34%; /* Azul Mercantil (#0054ad) */
-    --primary-foreground: 0 0% 98%; /* Texto blanco para contraste */
-    --secondary: 210 40% 96.1%; /* Gris claro */
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --popover-foreground: 215 25% 27%;
+    --primary: 25 95% 53%; /* Naranja Vibrante (#ff6600) */
+    --primary-foreground: 0 0% 100%; /* Texto blanco */
+    --secondary: 212 100% 50%; /* Azul (#007bff) */
+    --secondary-foreground: 0 0% 100%;
+    --muted: 210 30% 96.1%;
+    --muted-foreground: 215 16.3% 46.9%;
+    --accent: 210 30% 96.1%;
+    --accent-foreground: 215 25% 27%;
     --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive-foreground: 0 0% 100%;
     --success: 142 71% 41%;
     --success-foreground: 0 0% 100%;
-    --warning: 48 96% 53%;
-    --warning-foreground: 240 10% 3.9%;
+    --warning: 45 100% 51%; /* Amarillo (#ffc107) */
+    --warning-foreground: 215 25% 27%;
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 212 100% 34%;
+    --ring: 25 95% 53%; /* Naranja */
     --radius: 0.5rem;
   }
 
   .dark {
-    /* Paleta para Banco Mercantil (Modo Oscuro) */
-    --background: 222 47% 11.2%; /* Fondo azul oscuro */
-    --foreground: 210 40% 98%; /* Texto blanco */
-    --card: 222 47% 15%; /* Tarjetas un poco más claras */
-    --card-foreground: 210 40% 98%;
-    --popover: 222 47% 11.2%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 212 100% 48%; /* Azul Mercantil más brillante para modo oscuro */
-    --primary-foreground: 0 0% 98%; /* Texto blanco para contraste */
-    --secondary: 217 33% 18%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 222 47% 18%;
+    /* Paleta Naranja/Azul/Gris (Modo Oscuro) */
+    --background: 220 13% 18%; /* Gris oscuro */
+    --foreground: 210 20% 98%; /* Texto casi blanco */
+    --card: 220 13% 22%; /* Gris un poco más claro */
+    --card-foreground: 210 20% 98%;
+    --popover: 220 13% 18%;
+    --popover-foreground: 210 20% 98%;
+    --primary: 25 95% 53%; /* Naranja Vibrante */
+    --primary-foreground: 215 25% 27%; /* Texto oscuro para contraste */
+    --secondary: 212 100% 50%; /* Azul */
+    --secondary-foreground: 0 0% 100%;
+    --muted: 220 13% 22%;
     --muted-foreground: 215 20% 65%;
-    --accent: 217 33% 18%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 220 13% 26%;
+    --accent-foreground: 210 20% 98%;
     --destructive: 0 63% 51%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive-foreground: 0 0% 100%;
     --success: 142 71% 41%;
     --success-foreground: 0 0% 100%;
-    --warning: 38 92% 50%;
-    --warning-foreground: 48 96% 89%;
-    --border: 217 33% 22%;
-    --input: 217 33% 18%;
-    --ring: 212 100% 48%;
+    --warning: 45 100% 51%; /* Amarillo */
+    --warning-foreground: 215 25% 27%;
+    --border: 217 13% 30%;
+    --input: 217 13% 26%;
+    --ring: 25 95% 53%; /* Naranja */
   }
 }
 

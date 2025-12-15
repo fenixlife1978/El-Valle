@@ -76,7 +76,9 @@ export default {
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
         brand: {
-          orange: 'hsl(24.6 95% 53.1%)',
+          blue: '#007bff',
+          orange: '#ff6600',
+          yellow: '#ffc107',
         },
         lemon: '#FFF44F',
         mustard: '#FFC72C',
