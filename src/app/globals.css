@@ -20,40 +20,58 @@
 @layer base {
   :root, .light {
     /* Paleta Mercantil Azul como fondo */
-    --background: 212 100% 34%; /* Azul Mercantil (#0054ad) */
-    --foreground: 0 0% 100%; /* Texto blanco para contraste */
-    --card: 0 0% 100%; /* Blanco, como se pidió */
-    --card-foreground: 215 25% 27%; /* Texto oscuro en tarjetas */
-    --popover: 0 0% 100%;
-    --popover-foreground: 215 25% 27%;
+    --background: 210 30% 96.1%; /* Un gris muy claro para el fondo general */
+    --foreground: 215 25% 27%; /* Texto oscuro principal */
+    
+    /* El azul corporativo para las tarjetas y el menú */
+    --card: 212 100% 34%; /* Azul Mercantil (#0054ad) */
+    --card-foreground: 0 0% 100%; /* Texto blanco en las tarjetas */
+    
+    --popover: 212 100% 34%;
+    --popover-foreground: 0 0% 100%;
+    
     --primary: 25 95% 53%; /* Naranja Vibrante (#ff6600) para acciones */
-    --primary-foreground: 0 0% 100%; /* Texto blanco en botones naranjas */
-    --secondary: 212 100% 50%; /* Azul más brillante para elementos secundarios */
+    --primary-foreground: 0 0% 100%; 
+    
+    --secondary: 212 100% 50%;
     --secondary-foreground: 0 0% 100%;
-    --muted: 210 30% 96.1%;
-    --muted-foreground: 215 16.3% 46.9%;
+    
+    --muted: 212 100% 34%; /* Muted también será el azul */
+    --muted-foreground: 0 0% 90%; /* Texto un poco más tenue en muted */
+    
     --accent: 210 30% 96.1%;
     --accent-foreground: 215 25% 27%;
+    
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 100%;
+    
     --success: 142 71% 41%;
     --success-foreground: 0 0% 100%;
+    
     --warning: 45 100% 51%; /* Amarillo (#ffc107) */
     --warning-foreground: 215 25% 27%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 25 95% 53%; /* Naranja para el anillo de foco */
+    
+    --border: 212 100% 29%; /* Borde un poco más oscuro que el azul */
+    --input: 0 0% 100%; /* Input blanco para contraste */
+    --ring: 25 95% 53%;
     --radius: 0.5rem;
+
+    /* Colores específicos para la barra lateral */
+    --sidebar-background: 212 100% 34%; /* Azul Mercantil */
+    --sidebar-foreground: 0 0% 100%; /* Texto blanco */
+    --sidebar-accent: 212 100% 40%; /* Un azul un poco más claro para hover */
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 212 100% 29%;
   }
 
   .dark {
     /* Paleta Naranja/Azul/Gris (Modo Oscuro) */
     --background: 220 13% 18%; /* Gris oscuro */
     --foreground: 210 20% 98%; /* Texto casi blanco */
-    --card: 220 13% 22%; /* Gris un poco más claro */
-    --card-foreground: 210 20% 98%;
-    --popover: 220 13% 18%;
-    --popover-foreground: 210 20% 98%;
+    --card: 212 100% 34%; /* Azul Mercantil */
+    --card-foreground: 0 0% 100%; /* Texto blanco */
+    --popover: 212 100% 34%;
+    --popover-foreground: 0 0% 100%;
     --primary: 25 95% 53%; /* Naranja Vibrante */
     --primary-foreground: 215 25% 27%; /* Texto oscuro para contraste */
     --secondary: 212 100% 50%; /* Azul */
@@ -68,9 +86,15 @@
     --success-foreground: 0 0% 100%;
     --warning: 45 100% 51%; /* Amarillo */
     --warning-foreground: 215 25% 27%;
-    --border: 217 13% 30%;
+    --border: 212 100% 29%;
     --input: 217 13% 26%;
     --ring: 25 95% 53%; /* Naranja */
+
+    --sidebar-background: 212 100% 34%; /* Azul Mercantil */
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-accent: 212 100% 40%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 212 100% 29%;
   }
 }
 
