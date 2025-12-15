@@ -75,7 +75,7 @@ type Debt = {
     month: number;
     amountUSD: number;
     description: string;
-    status: 'pending' | 'paid';
+    status: 'pending' | 'paid' | 'vencida';
     paymentId?: string; // <-- ¡Esta es la línea clave que faltaba!
     paymentDate?: Timestamp;
     paidAmountUSD?: number;
@@ -275,7 +275,7 @@ export default function ReportsPage() {
 
             delinquencyDebtsSnapshot.docs.forEach(doc => {
                 const debt = doc.data();
-                if (debt.status === 'pending') {
+                if (debt.status === 'pending' || debt.status === 'vencida') {
                     const ownerData = debtsByOwner.get(debt.ownerId) || { totalUSD: 0, count: 0 };
                     const debtDate = startOfMonth(new Date(debt.year, debt.month - 1));
                     const firstOfCurrentMonth = startOfMonth(new Date());
@@ -403,7 +403,7 @@ export default function ReportsPage() {
             }
             
              const hasAnyPendingDebtThatMattersForSolvency = ownerDebts.some(d => {
-                if (d.status !== 'pending') return false;
+                if (d.status !== 'pending' && d.status !== 'vencida') return false;
                 const debtDate = startOfMonth(new Date(d.year, d.month - 1));
                 return isBefore(debtDate, firstOfCurrentMonth) || isEqual(debtDate, firstOfCurrentMonth);
             });
@@ -456,7 +456,7 @@ export default function ReportsPage() {
                 .reduce((sum, d) => sum + d.amountUSD, 0);
             
             let monthsOwed = ownerDebts.filter(d => {
-                if (d.status !== 'pending') return false;
+                if (d.status !== 'pending' && d.status !== 'vencida') return false;
                 const debtDate = startOfMonth(new Date(d.year, d.month - 1));
                 const firstOfCurrentMonth = startOfMonth(new Date());
                 return isBefore(debtDate, firstOfCurrentMonth) || isEqual(debtDate, firstOfCurrentMonth);
@@ -641,7 +641,7 @@ export default function ReportsPage() {
         setIndividualPayments(paymentsWithDebts);
 
         const totalDebt = allDebts
-            .filter(d => d.ownerId === owner.id && d.status === 'pending')
+            .filter(d => d.ownerId === owner.id && (d.status === 'pending' || d.status === 'vencida'))
             .reduce((acc, debt) => acc + debt.amountUSD, 0);
         setIndividualDebtUSD(totalDebt);
     };
@@ -658,7 +658,7 @@ export default function ReportsPage() {
                 p.beneficiaries.some(b => b.ownerId === owner.id) && p.status === 'aprobado'
             ).sort((a, b) => a.paymentDate.toMillis() - b.paymentDate.toMillis());
 
-        const totalDebtUSD = ownerDebts.filter(d => d.status === 'pending').reduce((sum, d) => sum + d.amountUSD, 0);
+        const totalDebtUSD = ownerDebts.filter(d => d.status === 'pending' || d.status === 'vencida').reduce((sum, d) => sum + d.amountUSD, 0);
         const totalPaidBs = ownerPayments.reduce((sum, p) => sum + p.totalAmount, 0);
 
         setAccountStatementData({
@@ -1092,6 +1092,7 @@ export default function ReportsPage() {
                 body: data.map(o => [o.name, o.properties, `Bs. ${formatToTwoDecimals(o.balance)}`]),
                 startY: margin + 40,
                 headStyles: { fillColor: [22, 163, 74] }, // Green color
+                styles: { fontSize: 10, cellPadding: 2.5 },
             });
             doc.save(`${filename}.pdf`);
         } else { // excel
@@ -1321,7 +1322,7 @@ export default function ReportsPage() {
                                         <TableHead>Propietario</TableHead>
                                         <TableHead>Propiedad</TableHead>
                                         <TableHead>Fecha Últ. Pago</TableHead>
-                                        <TableHead className="text-right">Monto Pagado</TableHead>
+                                        <TableHead className="text-right">Monto Pagado (Bs)</TableHead>
                                         <TableHead className="text-right">Tasa BCV</TableHead>
                                         <TableHead className="text-right">Saldo a Favor</TableHead>
                                         <TableHead>Estado</TableHead>
