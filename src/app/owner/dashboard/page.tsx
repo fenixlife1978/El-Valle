@@ -466,8 +466,8 @@ export default function OwnerDashboardPage() {
         <div className="space-y-6 md:space-y-8 p-4 md:p-8">
             <h1 className="text-3xl font-bold font-headline">👋 ¡Hola, {ownerData.name?.split(' ')[0] || 'Propietario'}!</h1>
             
-            <Alert className="border-mustard bg-mustard/10 text-mustard-foreground shadow-md">
-                <HelpCircle className="h-4 w-4 !text-mustard" />
+            <Alert className="border-orange-500 bg-orange-500/10 text-orange-foreground shadow-md">
+                <HelpCircle className="h-4 w-4 !text-orange-500" />
                 <AlertDescription className="font-semibold">
                     Recuerda que tú Cuota Condominial se Carga el día 1 y Vence los días 5 de cada Mes
                 </AlertDescription>
@@ -668,5 +668,3 @@ export default function OwnerDashboardPage() {
         </div>
     );
 }
-
-    
