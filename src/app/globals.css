@@ -19,16 +19,16 @@
 
 @layer base {
   :root, .light {
-    /* Paleta Naranja/Azul/Gris (Modo Claro) */
-    --background: 210 20% 98%; /* Gris muy claro */
-    --foreground: 215 25% 27%; /* Gris oscuro para texto */
-    --card: 0 0% 100%; /* Blanco */
-    --card-foreground: 215 25% 27%;
+    /* Paleta Mercantil Azul como fondo */
+    --background: 212 100% 34%; /* Azul Mercantil (#0054ad) */
+    --foreground: 0 0% 100%; /* Texto blanco para contraste */
+    --card: 0 0% 100%; /* Blanco, como se pidió */
+    --card-foreground: 215 25% 27%; /* Texto oscuro en tarjetas */
     --popover: 0 0% 100%;
     --popover-foreground: 215 25% 27%;
-    --primary: 25 95% 53%; /* Naranja Vibrante (#ff6600) */
-    --primary-foreground: 0 0% 100%; /* Texto blanco */
-    --secondary: 212 100% 50%; /* Azul (#007bff) */
+    --primary: 25 95% 53%; /* Naranja Vibrante (#ff6600) para acciones */
+    --primary-foreground: 0 0% 100%; /* Texto blanco en botones naranjas */
+    --secondary: 212 100% 50%; /* Azul más brillante para elementos secundarios */
     --secondary-foreground: 0 0% 100%;
     --muted: 210 30% 96.1%;
     --muted-foreground: 215 16.3% 46.9%;
@@ -42,7 +42,7 @@
     --warning-foreground: 215 25% 27%;
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 25 95% 53%; /* Naranja */
+    --ring: 25 95% 53%; /* Naranja para el anillo de foco */
     --radius: 0.5rem;
   }
 
