@@ -19,78 +19,57 @@
 
 @layer base {
   :root, .light {
-    /* Paleta de Banco Mercantil */
-    --background: 220 13% 98%; /* Gris muy claro */
-    --foreground: 220 13% 10%; /* Texto oscuro */
-    
+    /* Paleta por defecto, no se usa si se fuerza el modo oscuro */
+    --background: 0 0% 100%;
+    --foreground: 224 71.4% 4.1%;
     --card: 0 0% 100%;
-    --card-foreground: 220 13% 10%;
-    
+    --card-foreground: 224 71.4% 4.1%;
     --popover: 0 0% 100%;
-    --popover-foreground: 220 13% 10%;
-    
-    --primary: 3 80% 54%; /* Naranja/Rojo Mercantil */
-    --primary-foreground: 0 0% 100%;
-    
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    
-    --accent: 220 13% 94%;
-    --accent-foreground: 220 13% 10%;
-    
+    --popover-foreground: 224 71.4% 4.1%;
+    --primary: 142.1 76.2% 36.3%;
+    --primary-foreground: 355.7 100% 97.3%;
+    --secondary: 220 13% 91%;
+    --secondary-foreground: 220 14% 21%;
+    --muted: 220 13% 91%;
+    --muted-foreground: 220 9% 46%;
+    --accent: 220 13% 91%;
+    --accent-foreground: 220 14% 21%;
     --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 100%;
-
+    --destructive-foreground: 0 0% 98%;
     --success: 142 71% 41%;
     --success-foreground: 0 0% 100%;
-
     --warning: 48 96% 53%;
     --warning-foreground: 240 10% 3.9%;
-
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 3 80% 54%; /* Naranja/Rojo Mercantil */
-
+    --ring: 142.1 76.2% 36.3%;
     --radius: 0.5rem;
   }
 
   .dark {
-    --background: 220 13% 10%; /* Fondo oscuro */
+    --background: 222 47% 11%;
     --foreground: 210 40% 98%;
-    
-    --card: 220 13% 14%;
+    --card: 222 47% 11%;
     --card-foreground: 210 40% 98%;
-    
-    --popover: 220 13% 10%;
+    --popover: 222 47% 11%;
     --popover-foreground: 210 40% 98%;
-    
-    --primary: 3 80% 54%; /* Naranja/Rojo Mercantil */
-    --primary-foreground: 0 0% 100%;
-    
-    --secondary: 217.2 32.6% 17.5%;
+    --primary: 158 87% 33%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 217 33% 18%;
     --secondary-foreground: 210 40% 98%;
-    
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    
-    --accent: 217.2 32.6% 22.5%;
+    --muted: 217 33% 18%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 217 33% 18%;
     --accent-foreground: 210 40% 98%;
-    
-    --destructive: 0 62.8% 50.6%;
+    --destructive: 0 63% 51%;
     --destructive-foreground: 210 40% 98%;
-
-    --success: 142 71% 31%;
+    --success: 142 71% 41%;
     --success-foreground: 0 0% 100%;
-
     --warning: 48 96% 53%;
-    --warning-foreground: 222.2 47.4% 11.2%;
-
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 3 80% 54%;
+    --warning-foreground: 240 10% 3.9%;
+    --border: 217 33% 18%;
+    --input: 217 33% 18%;
+    --ring: 158 87% 33%;
   }
 }
 
