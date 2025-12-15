@@ -13,11 +13,14 @@ import { db, auth } from '@/lib/firebase';
 import { Loader2, AlertTriangle, ShieldCheck, Search, ArrowLeft } from 'lucide-react';
 import { startOfMonth, isBefore, format } from 'date-fns';
 import { Progress } from '@/components/ui/progress';
-import { useRouter } from 'next/navigation';
+import { ensureAdminProfile } from '@/lib/user-sync';
+import { cn } from "@/lib/utils";
+import { useAuth } from '@/hooks/use-auth';
 
 export default function ValidationPage() {
     const { toast } = useToast();
-    const router = useRouter();
+    const { user: adminUser } = useAuth();
+    
     const [loading, setLoading] = useState<Record<string, boolean>>({});
     const [progress, setProgress] = useState(0);
 
@@ -75,6 +78,32 @@ export default function ValidationPage() {
         return "No se encontraron cuotas vencidas para actualizar.";
     };
     
+    const markDecember2025AsOverdue = async () => {
+        const firestore = db;
+        const debtsRef = collection(firestore, "debts");
+        const q = query(
+            debtsRef,
+            where("year", "==", 2025),
+            where("month", "==", 12),
+            where("status", "==", "pending")
+        );
+        const querySnapshot = await getDocs(q);
+
+        if (querySnapshot.empty) {
+            return "No se encontraron deudas pendientes para Diciembre de 2025.";
+        }
+
+        const batch = writeBatch(firestore);
+        let updatedCount = 0;
+        querySnapshot.forEach(doc => {
+            batch.update(doc.ref, { status: "vencida" });
+            updatedCount++;
+        });
+
+        await batch.commit();
+        return `Se actualizaron ${updatedCount} deudas de Diciembre 2025 a 'Vencida'.`;
+    };
+
     const generateMissingReceipts = async () => {
         // This is a placeholder. Receipt generation is complex and tied to payment approval.
         // This function simulates checking for payments that should have a receipt but don't.
@@ -230,6 +259,13 @@ export default function ValidationPage() {
                     </div>
                 </ValidationCard>
 
+                <ValidationCard title="Actualizar Deudas de Diciembre 2025" description="Cambia el estado de todas las deudas pendientes de Diciembre 2025 a 'Vencida'." actionName="Actualizar Diciembre 2025" onAction={() => handleAction('Actualizar Diciembre 2025', markDecember2025AsOverdue)}>
+                    <div className="p-4 bg-muted/50 rounded-lg flex items-start gap-3 text-sm">
+                        <AlertTriangle className="h-5 w-5 mt-0.5 text-orange-500 shrink-0"/>
+                        <p>Esta acción solo afecta a los registros especificados y no se puede deshacer fácilmente.</p>
+                    </div>
+                </ValidationCard>
+                
                 <ValidationCard title="Generar Recibos Faltantes" description="Busca pagos aprobados que no tengan un recibo y lo genera." actionName="Generar Recibos" onAction={() => handleAction('Generar Recibos', generateMissingReceipts)}>
                     <p className="text-sm text-muted-foreground">Esta función asegura que cada pago confirmado tenga su comprobante correspondiente en el sistema.</p>
                 </ValidationCard>
@@ -308,8 +344,3 @@ export default function ValidationPage() {
         </div>
     );
 }
-
-    
-
-    
-
