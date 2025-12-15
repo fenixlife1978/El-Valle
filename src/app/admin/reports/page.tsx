@@ -823,14 +823,13 @@ export default function ReportsPage() {
         }
 
         const head = includeDelinquencyAmounts 
-            ? [['Propietario', 'Propiedades', 'Meses Adeudados', 'Deuda (USD)', 'Deuda (Bs.)']]
+            ? [['Propietario', 'Propiedades', 'Meses Adeudados', 'Deuda (USD)']]
             : [['Propietario', 'Propiedades', 'Meses Adeudados']];
         
         const body = data.map(o => {
             const row: (string|number)[] = [o.name, o.properties, o.monthsOwed];
             if (includeDelinquencyAmounts) {
                 row.push(`$${o.debtAmountUSD.toFixed(2)}`);
-                row.push(`Bs. ${formatToTwoDecimals(o.debtAmountUSD * activeRate)}`);
             }
             return row;
         });
@@ -873,13 +872,6 @@ export default function ReportsPage() {
                     width: 15,
                     style: { numFmt: '$#,##0.00' }
                 });
-            
-                columns.push({
-                    header: 'Deuda (Bs.)',
-                    key: 'debtAmountBS',
-                    width: 15,
-                    style: { numFmt: '#,##0.00' }
-                });
             }
             
              worksheet.columns = columns as any;
@@ -888,7 +880,6 @@ export default function ReportsPage() {
                 const baseData: any = { name: o.name, properties: o.properties, monthsOwed: o.monthsOwed };
                 if (includeDelinquencyAmounts) {
                     baseData.debtAmountUSD = o.debtAmountUSD;
-                    baseData.debtAmountBS = o.debtAmountUSD * activeRate;
                 }
                 return baseData;
             });
