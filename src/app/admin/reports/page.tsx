@@ -1,3 +1,4 @@
+
 // @ts-nocheck
 
 
@@ -847,7 +848,7 @@ export default function ReportsPage() {
         
             autoTable(doc, {
                 head: head, body: body, startY: margin + 55, headStyles: { fillColor: [220, 53, 69] },
-                styles: { cellPadding: 2, fontSize: 8 },
+                styles: { cellPadding: 2.5, fontSize: 10 },
             });
             doc.save(`reporte_morosidad_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
         } else {
