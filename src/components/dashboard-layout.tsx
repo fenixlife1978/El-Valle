@@ -235,7 +235,7 @@ const CustomHeader = ({ ownerData, userRole }: { ownerData: any, userRole: strin
                                             <p className="font-semibold">{n.title}</p>
                                             <p className="text-sm text-muted-foreground">{n.body}</p>
                                             <p className="text-xs text-muted-foreground/80 mt-1">
-                                                {formatDistanceToNow(n.createdAt.toDate(), { addSuffix: true, locale: es })}
+                                                {n.createdAt ? formatDistanceToNow(n.createdAt.toDate(), { addSuffix: true, locale: es }) : 'Ahora mismo'}
                                             </p>
                                         </div>
                                     </div>
