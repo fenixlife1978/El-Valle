@@ -1,12 +1,13 @@
 
 import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
-import { db, auth } from './firebase'; // Asegúrate que tu archivo firebase exporte 'auth'
+import { db } from './firebase'; 
+import type { User } from 'firebase/auth';
 
 // Función para inicializar FCM
-export const initFCM = async () => {
-    // Verifica si el código se está ejecutando en el navegador
-    if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+export const initFCM = async (user: User | null) => {
+    // Verifica si el código se está ejecutando en el navegador y si hay un usuario
+    if (typeof window === 'undefined' || typeof navigator === 'undefined' || !user) {
         return;
     }
     
@@ -24,41 +25,36 @@ export const initFCM = async () => {
     const { app } = await import("./firebase");
     const messaging = getMessaging(app);
 
-    // Esperar a que el usuario inicie sesión para obtener su UID
-    auth.onAuthStateChanged(async (user) => {
-        if (user) {
-            try {
-                // Solicitar permiso para notificaciones
-                const permission = await Notification.requestPermission();
-                if (permission === 'granted') {
-                    console.log('Permiso de notificación concedido.');
+    try {
+        // Solicitar permiso para notificaciones
+        const permission = await Notification.requestPermission();
+        if (permission === 'granted') {
+            console.log('Permiso de notificación concedido.');
 
-                    // Obtener el token de registro del dispositivo
-                    const currentToken = await getToken(messaging, {
-                        vapidKey: 'BMD597wz0wYm3qYxW4wZ_mG8f-j8N4X0c8X6Z_l8H6z6R4wT_pZ2c5dJ6s9K3c1yZ3gK2jW7L8hR4dJ2l3f4e1M', // Reemplaza con tu VAPID key
-                    });
+            // Obtener el token de registro del dispositivo
+            const currentToken = await getToken(messaging, {
+                vapidKey: 'BMD597wz0wYm3qYxW4wZ_mG8f-j8N4X0c8X6Z_l8H6z6R4wT_pZ2c5dJ6s9K3c1yZ3gK2jW7L8hR4dJ2l3f4e1M', // Reemplaza con tu VAPID key
+            });
 
-                    if (currentToken) {
-                        console.log('FCM Token:', currentToken);
+            if (currentToken) {
+                console.log('FCM Token:', currentToken);
 
-                        // Guardar el token en Firestore, asociado al usuario
-                        const userDocRef = doc(db, 'owners', user.uid);
-                        // Usamos arrayUnion para añadir el token sin duplicarlo si ya existe
-                        await updateDoc(userDocRef, {
-                            fcmTokens: arrayUnion(currentToken)
-                        });
+                // Guardar el token en Firestore, asociado al usuario
+                const userDocRef = doc(db, 'owners', user.uid);
+                // Usamos arrayUnion para añadir el token sin duplicarlo si ya existe
+                await updateDoc(userDocRef, {
+                    fcmTokens: arrayUnion(currentToken)
+                });
 
-                    } else {
-                        console.log('No se pudo obtener el token de registro. Pide permiso de notificación.');
-                    }
-                } else {
-                    console.log('El usuario denegó el permiso para notificaciones.');
-                }
-            } catch (error) {
-                console.error('Error al obtener el token de FCM:', error);
+            } else {
+                console.log('No se pudo obtener el token de registro. Pide permiso de notificación.');
             }
+        } else {
+            console.log('El usuario denegó el permiso para notificaciones.');
         }
-    });
+    } catch (error) {
+        console.error('Error al obtener el token de FCM:', error);
+    }
 
     // Manejar mensajes entrantes mientras la app está en primer plano
     onMessage(messaging, (payload) => {
