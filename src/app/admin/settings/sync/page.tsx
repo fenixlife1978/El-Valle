@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { collection, query, where, getDocs, doc, updateDoc, deleteDoc, Timestamp, addDoc } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
-import { Loader2, AlertTriangle, ShieldCheck, Search } from 'lucide-react';
+import { Loader2, AlertTriangle, ShieldCheck, Search, Info } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { ensureAdminProfile } from '@/lib/user-sync';
 import { cn } from "@/lib/utils";
