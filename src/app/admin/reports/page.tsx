@@ -178,6 +178,153 @@ const getSortKeys = (owner: { properties: string }) => {
 const years = Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - i).map(String);
 const monthOptions = Object.entries(monthsLocale).map(([value, label]) => ({ value, label }));
 
+const buildIntegralReportData = (
+    owners: Owner[],
+    allDebts: Debt[],
+    allPayments: Payment[],
+    allHistoricalPayments: HistoricalPayment[],
+    dateRange: { from?: Date; to?: Date },
+    ownerFilter: string,
+    statusFilter: string
+): IntegralReportRow[] => {
+    const sortedOwners = [...owners]
+        .filter(owner => owner.id !== ADMIN_USER_ID && owner.name && owner.name !== 'Valle Admin')
+        .map(owner => {
+            const propertiesString = (owner.properties || []).map(p => `${p.street}-${p.house}`).join(', ');
+            const sortKeys = getSortKeys({ properties: propertiesString });
+            return { ...owner, sortKeys };
+        })
+        .sort((a, b) => {
+            if (a.sortKeys.streetNum !== b.sortKeys.streetNum) return a.sortKeys.streetNum - b.sortKeys.streetNum;
+            return a.sortKeys.houseNum - b.sortKeys.houseNum;
+        });
+
+    return sortedOwners.map(owner => {
+        const ownerDebts = allDebts.filter(d => d.ownerId === owner.id);
+        const ownerHistoricalPayments = allHistoricalPayments.filter(p => p.ownerId === owner.id);
+        
+        const allOwnerPeriods = [
+            ...ownerDebts.map(d => ({ year: d.year, month: d.month })),
+            ...ownerHistoricalPayments.map(p => ({ year: p.referenceYear, month: p.referenceMonth }))
+        ];
+
+        let firstMonthEver: Date | null = null;
+        if (allOwnerPeriods.length > 0) {
+            const oldestPeriod = allOwnerPeriods.sort((a, b) => a.year - b.year || a.month - b.month)[0];
+            firstMonthEver = startOfMonth(new Date(oldestPeriod.year, oldestPeriod.month - 1));
+        }
+        
+        const today = new Date();
+        let lastConsecutivePaidMonth: Date | null = null;
+        
+        if (firstMonthEver) {
+            let currentCheckMonth = firstMonthEver;
+            const limitDate = endOfMonth(addMonths(new Date(), 120));
+
+            while (isBefore(currentCheckMonth, limitDate)) {
+                const year = getYear(currentCheckMonth);
+                const month = getMonth(currentCheckMonth) + 1;
+                
+                const isHistorical = ownerHistoricalPayments.some(p => p.referenceYear === year && p.referenceMonth === month);
+                
+                let isMonthFullyPaid = false;
+                if (isHistorical) {
+                    isMonthFullyPaid = true;
+                } else {
+                    const debtsForMonth = ownerDebts.filter(d => d.year === year && d.month === month);
+                    if (debtsForMonth.length > 0) {
+                        const mainDebt = debtsForMonth.find(d => d.description.toLowerCase().includes('condominio'));
+                        if (mainDebt?.status === 'paid') {
+                            isMonthFullyPaid = true;
+                        }
+                    }
+                }
+
+                if (isMonthFullyPaid) {
+                    lastConsecutivePaidMonth = currentCheckMonth;
+                } else {
+                    break; 
+                }
+                currentCheckMonth = addMonths(currentCheckMonth, 1);
+            }
+        }
+        
+        const hasAnyPendingDebt = ownerDebts.some(d => d.status === 'pending' || d.status === 'vencida');
+
+        const status: 'Solvente' | 'No Solvente' = !hasAnyPendingDebt ? 'Solvente' : 'No Solvente';
+        let solvencyPeriod = '';
+        
+        if (status === 'No Solvente') {
+            if (lastConsecutivePaidMonth) {
+                 solvencyPeriod = `Desde ${format(addMonths(lastConsecutivePaidMonth, 1), 'MMMM yyyy', { locale: es })}`;
+            } else if (firstMonthEver) {
+                 solvencyPeriod = `Desde ${format(firstMonthEver, 'MMMM yyyy', { locale: es })}`;
+            } else {
+                solvencyPeriod = `Desde ${format(today, 'MMMM yyyy', { locale: es })}`;
+            }
+        } else {
+            if (lastConsecutivePaidMonth) {
+                solvencyPeriod = `Hasta ${format(lastConsecutivePaidMonth, 'MMMM yyyy', { locale: es })}`;
+            } else {
+                solvencyPeriod = 'Al día';
+            }
+        }
+
+        const fromDate = dateRange.from;
+        const toDate = dateRange.to;
+        if (fromDate) fromDate.setHours(0, 0, 0, 0);
+        if (toDate) toDate.setHours(23, 59, 59, 999);
+
+        const ownerPayments = allPayments.filter(p => {
+            const isOwnerPayment = p.beneficiaries.some(b => b.ownerId === owner.id) && p.status === 'aprobado';
+            if (!isOwnerPayment) return false;
+            const paymentDate = p.paymentDate.toDate();
+            if (fromDate && paymentDate < fromDate) return false;
+            if (toDate && paymentDate > toDate) return false;
+            return true;
+        });
+        
+        const totalPaid = ownerPayments.reduce((sum, p) => sum + p.totalAmount, 0);
+        const totalRateWeight = ownerPayments.reduce((sum, p) => sum + ((p.exchangeRate || 0) * p.totalAmount), 0);
+        const avgRate = totalPaid > 0 ? totalRateWeight / totalPaid : 0;
+        
+        let lastPaymentDate = '';
+        if (ownerPayments.length > 0) {
+            const lastPayment = [...ownerPayments].sort((a, b) => b.paymentDate.toMillis() - a.paymentDate.toMillis())[0];
+            lastPaymentDate = format(lastPayment.paymentDate.toDate(), 'dd/MM/yyyy');
+        }
+        
+        const adjustmentDebtUSD = ownerDebts
+            .filter(d => d.status === 'pending' && d.description.toLowerCase().includes('ajuste'))
+            .reduce((sum, d) => sum + d.amountUSD, 0);
+        
+        let monthsOwed = ownerDebts.filter(d => d.status === 'pending' || d.status === 'vencida').length;
+
+        if (owner.name === 'Ingrid Sivira') {
+            monthsOwed = 0;
+        }
+
+        return {
+            ownerId: owner.id,
+            name: owner.name,
+            properties: (owner.properties || []).map(p => `${p.street}-${p.house}`).join(', '),
+            lastPaymentDate,
+            paidAmount: totalPaid,
+            avgRate,
+            balance: owner.balance,
+            status,
+            solvencyPeriod,
+            monthsOwed,
+            adjustmentDebtUSD
+        };
+    }).filter(row => {
+        if (!row.name) return false;
+        const statusMatch = statusFilter === 'todos' || row.status.toLowerCase().replace(' ', '') === statusFilter.toLowerCase().replace(' ', '');
+        const ownerNameMatch = !ownerFilter || (row.name && row.name.toLowerCase().includes(ownerFilter.toLowerCase()));
+        return statusMatch && ownerNameMatch;
+    });
+};
+
 export default function ReportsPage() {
     const { toast } = useToast();
     const router = useRouter();
@@ -335,143 +482,16 @@ export default function ReportsPage() {
 
 
     const integralReportData = useMemo<IntegralReportRow[]>(() => {
-        const sortedOwners = [...owners]
-            .filter(owner => owner.id !== ADMIN_USER_ID && owner.name && owner.name !== 'Valle Admin')
-            .map(owner => {
-                 const propertiesString = (owner.properties || []).map(p => `${p.street}-${p.house}`).join(', ');
-                 const sortKeys = getSortKeys({properties: propertiesString});
-                 return { ...owner, sortKeys };
-            })
-            .sort((a, b) => {
-                if (a.sortKeys.streetNum !== b.sortKeys.streetNum) return a.sortKeys.streetNum - b.sortKeys.streetNum;
-                return a.sortKeys.houseNum - b.sortKeys.houseNum;
-            });
-
-        return sortedOwners.map(owner => {
-            const ownerDebts = allDebts.filter(d => d.ownerId === owner.id);
-            const ownerHistoricalPayments = allHistoricalPayments.filter(p => p.ownerId === owner.id);
-            
-            const allOwnerPeriods = [
-                ...ownerDebts.map(d => ({ year: d.year, month: d.month })),
-                ...ownerHistoricalPayments.map(p => ({ year: p.referenceYear, month: p.referenceMonth }))
-            ];
-
-            let firstMonthEver: Date | null = null;
-            if (allOwnerPeriods.length > 0) {
-                const oldestPeriod = allOwnerPeriods.sort((a, b) => a.year - b.year || a.month - b.month)[0];
-                firstMonthEver = startOfMonth(new Date(oldestPeriod.year, oldestPeriod.month - 1));
-            }
-            
-            const today = new Date();
-            let lastConsecutivePaidMonth: Date | null = null;
-            
-            if (firstMonthEver) {
-                let currentCheckMonth = firstMonthEver;
-                const limitDate = endOfMonth(addMonths(new Date(), 120)); // Look up to 10 years in the future
-
-                while (isBefore(currentCheckMonth, limitDate)) {
-                    const year = getYear(currentCheckMonth);
-                    const month = getMonth(currentCheckMonth) + 1;
-                    
-                    const isHistorical = ownerHistoricalPayments.some(p => p.referenceYear === year && p.referenceMonth === month);
-                    
-                    let isMonthFullyPaid = false;
-                    if (isHistorical) {
-                        isMonthFullyPaid = true;
-                    } else {
-                        const debtsForMonth = ownerDebts.filter(d => d.year === year && d.month === month);
-                        if (debtsForMonth.length > 0) {
-                            const mainDebt = debtsForMonth.find(d => d.description.toLowerCase().includes('condominio'));
-                            if (mainDebt?.status === 'paid') {
-                                isMonthFullyPaid = true;
-                            }
-                        }
-                    }
-
-                    if (isMonthFullyPaid) {
-                        lastConsecutivePaidMonth = currentCheckMonth;
-                    } else {
-                        break; 
-                    }
-                    currentCheckMonth = addMonths(currentCheckMonth, 1);
-                }
-            }
-            
-            const hasAnyPendingDebt = ownerDebts.some(d => d.status === 'pending' || d.status === 'vencida');
-
-            const status: 'Solvente' | 'No Solvente' = !hasAnyPendingDebt ? 'Solvente' : 'No Solvente';
-            let solvencyPeriod = '';
-            
-            if (status === 'No Solvente') {
-                if (lastConsecutivePaidMonth) {
-                     solvencyPeriod = `Desde ${format(addMonths(lastConsecutivePaidMonth, 1), 'MMMM yyyy', { locale: es })}`;
-                } else if (firstMonthEver) {
-                     solvencyPeriod = `Desde ${format(firstMonthEver, 'MMMM yyyy', { locale: es })}`;
-                } else {
-                    solvencyPeriod = `Desde ${format(today, 'MMMM yyyy', { locale: es })}`;
-                }
-            } else { // Solvente
-                if (lastConsecutivePaidMonth) {
-                    solvencyPeriod = `Hasta ${format(lastConsecutivePaidMonth, 'MMMM yyyy', { locale: es })}`;
-                } else {
-                    solvencyPeriod = 'Al día';
-                }
-            }
-
-            const fromDate = integralDateRange.from;
-            const toDate = integralDateRange.to;
-            if (fromDate) fromDate.setHours(0, 0, 0, 0);
-            if (toDate) toDate.setHours(23, 59, 59, 999);
-
-            const ownerPayments = allPayments.filter(p => {
-                const isOwnerPayment = p.beneficiaries.some(b => b.ownerId === owner.id) && p.status === 'aprobado';
-                if (!isOwnerPayment) return false;
-                const paymentDate = p.paymentDate.toDate();
-                if (fromDate && paymentDate < fromDate) return false;
-                if (toDate && paymentDate > toDate) return false;
-                return true;
-            });
-            
-            const totalPaid = ownerPayments.reduce((sum, p) => sum + p.totalAmount, 0);
-            const totalRateWeight = ownerPayments.reduce((sum, p) => sum + ((p.exchangeRate || 0) * p.totalAmount), 0);
-            const avgRate = totalPaid > 0 ? totalRateWeight / totalPaid : 0;
-            
-            let lastPaymentDate = '';
-            if (ownerPayments.length > 0) {
-                const lastPayment = [...ownerPayments].sort((a, b) => b.paymentDate.toMillis() - a.paymentDate.toMillis())[0];
-                lastPaymentDate = format(lastPayment.paymentDate.toDate(), 'dd/MM/yyyy');
-            }
-            
-            const adjustmentDebtUSD = ownerDebts
-                .filter(d => d.status === 'pending' && d.description.toLowerCase().includes('ajuste'))
-                .reduce((sum, d) => sum + d.amountUSD, 0);
-            
-            let monthsOwed = ownerDebts.filter(d => d.status === 'pending' || d.status === 'vencida').length;
-
-            if (owner.name === 'Ingrid Sivira') {
-                monthsOwed = 0;
-            }
-
-            return {
-                ownerId: owner.id,
-                name: owner.name,
-                properties: (owner.properties || []).map(p => `${p.street}-${p.house}`).join(', '),
-                lastPaymentDate,
-                paidAmount: totalPaid,
-                avgRate,
-                balance: owner.balance,
-                status,
-                solvencyPeriod,
-                monthsOwed,
-                adjustmentDebtUSD
-            };
-        }).filter(row => {
-            if (!row.name) return false; // Filter out rows without name
-            const statusMatch = integralStatusFilter === 'todos' || row.status.toLowerCase().replace(' ', '') === integralStatusFilter.toLowerCase().replace(' ', '');
-            const ownerMatch = !integralOwnerFilter || (row.name && row.name.toLowerCase().includes(integralOwnerFilter.toLowerCase()));
-            return statusMatch && ownerMatch;
-        });
-    }, [owners, allDebts, allPayments, allHistoricalPayments, integralDateRange, integralStatusFilter, integralOwnerFilter]);
+        return buildIntegralReportData(
+            owners,
+            allDebts,
+            allPayments,
+            allHistoricalPayments,
+            integralDateRange,
+            integralOwnerFilter,
+            integralStatusFilter
+        );
+    }, [owners, allDebts, allPayments, allHistoricalPayments, integralDateRange, integralOwnerFilter, integralStatusFilter]);
     
     // --- Delinquency Report Logic ---
     const filteredAndSortedDelinquents = useMemo(() => {
