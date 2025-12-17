@@ -14,7 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import QRCode from 'qrcode';
-import { collection, onSnapshot, query, doc, updateDoc, getDoc, writeBatch, where, orderBy, Timestamp, getDocs, deleteField, deleteDoc, runTransaction, addDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, doc, updateDoc, getDoc, writeBatch, where, orderBy, Timestamp, getDocs, deleteField, deleteDoc, runTransaction, addDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { format, addMonths, startOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -361,6 +361,17 @@ export default function VerifyPaymentsPage() {
                     
                     const finalBalance = availableFundsInCents / 100;
                     transaction.update(ownerRef, { balance: finalBalance, receiptCounter: newReceiptCounter });
+                    
+                    // Create notification for the owner
+                    const notificationsRef = doc(collection(ownerRef, "notifications"));
+                    transaction.set(notificationsRef, {
+                        title: "Pago Aprobado",
+                        body: `Tu pago de Bs. ${formatToTwoDecimals(beneficiary.amount)} ha sido aprobado y aplicado.`,
+                        createdAt: serverTimestamp(),
+                        read: false,
+                        href: `/owner/dashboard`,
+                        paymentId: paymentData.id
+                    });
                 }
                  const observationNote = `Pago aprobado. Tasa aplicada: Bs. ${formatToTwoDecimals(exchangeRate)}.`;
                  transaction.update(paymentRef, { status: 'aprobado', observations: observationNote, exchangeRate: exchangeRate, receiptNumbers: newReceiptNumbers });

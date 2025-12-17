@@ -1,4 +1,3 @@
-
 'use client';
 import { useState, useEffect, useMemo } from 'react';
 import { Button } from "@/components/ui/button";
@@ -50,7 +49,7 @@ type BeneficiaryRow = {
 };
 
 
-const OWNER_USER_ID = 'valle-admin-main-account';
+const ADMIN_USER_ID = 'valle-admin-main-account';
 
 export default function UnifiedPaymentsPage() {
     const { toast } = useToast();
@@ -314,8 +313,20 @@ export default function UnifiedPaymentsPage() {
                 reportedBy: authUser?.uid || 'unknown',
             };
             
-            await addDoc(collection(db, "payments"), paymentData);
+            const paymentRef = await addDoc(collection(db, "payments"), paymentData);
             
+            // Create notification for admin
+            const adminDocRef = doc(db, 'owners', ADMIN_USER_ID);
+            const notificationsRef = doc(collection(adminDocRef, "notifications"));
+            await setDoc(notificationsRef, {
+              title: "Nuevo Pago Reportado",
+              body: `${authOwnerData?.name || 'Un propietario'} ha reportado un nuevo pago de Bs. ${totalAmount}.`,
+              createdAt: serverTimestamp(),
+              read: false,
+              href: `/admin/payments/verify`,
+              paymentId: paymentRef.id
+            });
+
             resetForm();
             setIsInfoDialogOpen(true);
 
