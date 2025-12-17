@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -17,7 +18,7 @@ import { CalendarIcon, CheckCircle2, Trash2, PlusCircle, Loader2, Search, XCircl
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc, where, getDocs, Timestamp } from 'firebase/firestore';
+import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc, where, getDocs, Timestamp, setDoc } from 'firebase/firestore';
 import { db, storage } from '@/lib/firebase';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -52,7 +53,7 @@ type BeneficiaryRow = {
 };
 
 
-const OWNER_USER_ID = 'valle-admin-main-account';
+const ADMIN_USER_ID = 'valle-admin-main-account';
 
 export default function UnifiedPaymentsPage() {
     const { toast } = useToast();
@@ -320,17 +321,23 @@ export default function UnifiedPaymentsPage() {
                 reportedBy: authUser?.uid || 'unknown',
             };
             
-            await addDoc(collection(db, "payments"), paymentData);
+            const paymentRef = await addDoc(collection(db, "payments"), paymentData);
             
-            toast({ 
-                title: 'Reporte Enviado Exitosamente', 
-                description: 'El reporte de pago ha sido enviado para revisión.', 
-                className: 'bg-green-100 border-green-400 text-green-800' 
+            // Create notification for admin
+            const adminDocRef = doc(db, 'owners', ADMIN_USER_ID);
+            const notificationsRef = doc(collection(adminDocRef, "notifications"));
+            await setDoc(notificationsRef, {
+              title: "Nuevo Pago Reportado",
+              body: `${authOwnerData?.name || 'Un propietario'} ha reportado un nuevo pago de Bs. ${totalAmount}.`,
+              createdAt: serverTimestamp(),
+              read: false,
+              href: `/admin/payments/verify`,
+              paymentId: paymentRef.id
             });
-            // Opcionalmente, puedes abrir el diálogo informativo aquí
-            // setIsInfoDialogOpen(true); 
 
             resetForm();
+            setIsInfoDialogOpen(true);
+
 
         } catch (error) {
             console.error("Error submitting payment: ", error);
@@ -389,14 +396,14 @@ export default function UnifiedPaymentsPage() {
                         <div className="space-y-2">
                              <Label htmlFor="paymentDate">Fecha del Pago</Label>
                              <Popover>
-                                 <PopoverTrigger asChild>
-                                     <Button id="paymentDate" variant={"outline"} className={cn("w-full justify-start", !paymentDate && "text-muted-foreground")} disabled={loading}>
-                                         <CalendarIcon className="mr-2 h-4 w-4" />
-                                         {paymentDate ? format(paymentDate, "PPP", { locale: es }) : <span>Seleccione una fecha</span>}
-                                     </Button>
-                                 </PopoverTrigger>
-                                 <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={paymentDate} onSelect={setPaymentDate} initialFocus locale={es} disabled={(date) => date > new Date()} /></PopoverContent>
-                             </Popover>
+                                <PopoverTrigger asChild>
+                                    <Button id="paymentDate" variant={"outline"} className={cn("w-full justify-start", !paymentDate && "text-muted-foreground")} disabled={loading}>
+                                        <CalendarIcon className="mr-2 h-4 w-4" />
+                                        {paymentDate ? format(paymentDate, "PPP", { locale: es }) : <span>Seleccione una fecha</span>}
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={paymentDate} onSelect={setPaymentDate} initialFocus locale={es} disabled={(date) => date > new Date()} /></PopoverContent>
+                            </Popover>
                         </div>
                         <div className="space-y-2">
                             <Label>Tasa de Cambio (Bs. por USD)</Label>
