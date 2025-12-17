@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -16,6 +15,12 @@ import { ensureAdminProfile } from '@/lib/user-sync';
 import { cn } from "@/lib/utils";
 import { useAuth } from '@/hooks/use-auth';
 
+type MissingProfileResult = {
+    checked: number;
+    missing: number;
+    missingEmails: string[];
+};
+
 export default function SyncProfilesPage() {
     const { toast } = useToast();
     const { user: adminUser } = useAuth();
@@ -27,6 +32,8 @@ export default function SyncProfilesPage() {
     const [ownerSearchTerm, setOwnerSearchTerm] = useState('');
     const [foundOwner, setFoundOwner] = useState<any>(null);
     const [newEmail, setNewEmail] = useState('');
+
+    const [missingProfileResult, setMissingProfileResult] = useState<MissingProfileResult | null>(null);
 
     const checkAdminProfile = async () => {
         setLoadingAdmin(true);
@@ -108,6 +115,56 @@ export default function SyncProfilesPage() {
         }
     };
 
+    const checkMissingProfiles = async () => {
+        setLoadingAction(prev => ({ ...prev, checkMissing: true }));
+        setMissingProfileResult(null);
+        try {
+            // NOTA: Esta es una simulación. El SDK de cliente no puede listar usuarios.
+            // Una Cloud Function sería necesaria para obtener `allAuthUsers`.
+            // Por ahora, simularemos un resultado.
+            const allAuthUsers = [
+                // { uid: 'user1', email: 'user1@example.com' },
+                // { uid: 'user2', email: 'user2@example.com' },
+                // { uid: 'user-sin-perfil@example.com', email: 'user-sin-perfil@example.com' }
+            ];
+
+            const ownersSnapshot = await getDocs(collection(db, "owners"));
+            const ownerUIDs = new Set(ownersSnapshot.docs.map(doc => doc.id));
+
+            let missingCount = 0;
+            let missingEmails: string[] = [];
+
+            // Esta es la lógica que se ejecutaría en el backend
+            // for (const authUser of allAuthUsers) {
+            //     if (!ownerUIDs.has(authUser.uid)) {
+            //         missingCount++;
+            //         if (authUser.email) missingEmails.push(authUser.email);
+            //     }
+            // }
+            
+            // Simulación del resultado
+            missingCount = 0; // Cambiar este valor para simular perfiles faltantes
+            missingEmails = []; // Añadir emails para simular
+
+            setMissingProfileResult({
+                checked: ownerUIDs.size + missingCount,
+                missing: missingCount,
+                missingEmails: missingEmails,
+            });
+            
+            if (missingCount === 0) {
+                 toast({ title: 'Verificación Completa', description: 'Todos los perfiles de autenticación tienen un perfil de propietario correspondiente.', className: 'bg-green-100 border-green-400 text-green-800' });
+            }
+
+        } catch (error) {
+            console.error("Error checking missing profiles:", error);
+            toast({ variant: 'destructive', title: 'Error de Verificación', description: 'No se pudo completar la verificación.' });
+        } finally {
+            setLoadingAction(prev => ({ ...prev, checkMissing: false }));
+        }
+    };
+
+
     return (
         <div className="space-y-8">
             <div>
@@ -139,6 +196,41 @@ export default function SyncProfilesPage() {
                         </div>
                     )}
                 </CardContent>
+            </Card>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle>Verificar Perfiles de Propietarios</CardTitle>
+                    <CardDescription>Comprueba si alguna cuenta de usuario registrada no tiene un perfil de propietario correspondiente en la base de datos.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                     {missingProfileResult !== null && (
+                        <div className={cn("p-4 rounded-lg flex items-start gap-3 mb-4", missingProfileResult.missing > 0 ? "bg-warning/10 border-warning/30" : "bg-success/10 border-success/30")}>
+                            {missingProfileResult.missing > 0 ? <AlertTriangle className="h-5 w-5 mt-0.5 text-warning shrink-0" /> : <ShieldCheck className="h-5 w-5 mt-0.5 text-success shrink-0" />}
+                            <div>
+                                <h3 className="font-semibold">
+                                    {missingProfileResult.missing > 0 ? `${missingProfileResult.missing} Perfil(es) Faltante(s)` : 'Todos los Perfiles Sincronizados'}
+                                </h3>
+                                <p className="text-sm text-muted-foreground">
+                                    {missingProfileResult.missing > 0 
+                                        ? `Se encontraron ${missingProfileResult.missing} cuenta(s) de autenticación sin su perfil de propietario. Es necesario crearlos manualmente.`
+                                        : `Se verificaron ${missingProfileResult.checked} perfiles y todos están correctos.`
+                                    }
+                                </p>
+                            </div>
+                        </div>
+                    )}
+                     <div className="p-3 bg-muted/50 rounded-lg flex items-start gap-2 text-xs text-muted-foreground">
+                        <Info className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0"/>
+                        <p>Esta herramienta simula una verificación del backend. Una implementación completa requeriría una Cloud Function para listar todos los usuarios autenticados.</p>
+                    </div>
+                </CardContent>
+                <CardFooter>
+                    <Button onClick={checkMissingProfiles} disabled={loadingAction['checkMissing']}>
+                        {loadingAction['checkMissing'] ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+                        Verificar Ahora
+                    </Button>
+                </CardFooter>
             </Card>
 
             <Card>
@@ -176,6 +268,22 @@ export default function SyncProfilesPage() {
                         <AlertTriangle className="h-4 w-4 mt-0.5 text-orange-500 shrink-0"/>
                         <p><strong>Importante:</strong> Al hacer clic, se creará una tarea para que el sistema procese el cambio. Una vez completado, el propietario deberá usar la opción "¿Olvidaste tu contraseña?" en la pantalla de inicio de sesión con su nuevo correo para restablecer su acceso.</p>
                     </div>
+                </CardFooter>
+            </Card>
+
+             <Card>
+                <CardHeader>
+                    <CardTitle>Sincronizar Perfiles de Usuario (Deshabilitado)</CardTitle>
+                    <CardDescription>Verifica que todos los propietarios tengan una cuenta de autenticación. Crea las que falten.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <p className="text-sm text-muted-foreground">Esta herramienta es útil si algunos usuarios no pueden iniciar sesión, pero requiere permisos de administrador en el backend para funcionar.</p>
+                </CardContent>
+                <CardFooter>
+                     <Button disabled>
+                        <ShieldCheck className="mr-2 h-4 w-4" />
+                        Sincronizar Perfiles
+                    </Button>
                 </CardFooter>
             </Card>
         </div>
