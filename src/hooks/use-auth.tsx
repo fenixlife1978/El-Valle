@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
@@ -49,12 +48,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [bcvLogoUrl, setBcvLogoUrl] = useState<string | null>(null);
 
     useEffect(() => {
-        if (typeof window !== 'undefined') {
-            initFCM();
-        }
-    }, []);
-
-    useEffect(() => {
         let ownerUnsubscribe: (() => void) | undefined;
 
         const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -70,11 +63,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 setUser(firebaseUser);
                 setRole(userRole);
 
-                // This logic ensures profiles are checked/created for BOTH admins and owners upon login
                 if (isAdministrator) {
                     await ensureAdminProfile();
                 } else {
                     await ensureOwnerProfile(firebaseUser);
+                }
+                
+                // Call initFCM() only after user is authenticated and profile is ensured
+                if (typeof window !== 'undefined') {
+                    initFCM(firebaseUser);
                 }
 
                 const userDocRef = doc(db, 'owners', userDocId);
@@ -82,7 +79,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     if (snapshot.exists()) {
                         setOwnerData({ id: snapshot.id, ...snapshot.data() });
                     } else {
-                        // This case should be rare after ensureProfile logic, but it's a good fallback.
                         setOwnerData(null);
                     }
                     setLoading(false);
