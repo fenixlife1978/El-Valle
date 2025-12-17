@@ -580,15 +580,14 @@ export default function UnifiedPaymentsPage() {
                             <Info className="h-6 w-6 text-blue-500" />
                             Reporte Enviado para Revisión
                         </DialogTitle>
-                        <DialogDescription className="pt-4">
-                            ¡Gracias! Hemos recibido tu reporte de pago. El tiempo máximo para la aprobación es de <strong>24 horas</strong>.
-                            <br /><br />
-                            Te invitamos a ingresar nuevamente después de este lapso para:
-                            <ul className="list-disc list-inside mt-2 space-y-1">
+                        <div className="pt-4 text-sm text-muted-foreground">
+                            <p>¡Gracias! Hemos recibido tu reporte de pago. El tiempo máximo para la aprobación es de <strong>24 horas</strong>.</p>
+                            <p className="mt-4">Te invitamos a ingresar nuevamente después de este lapso para:</p>
+                             <ul className="list-disc list-inside mt-2 space-y-1">
                                 <li>Verificar si el monto enviado cubrió completamente tu deuda.</li>
                                 <li>Descargar tu recibo de pago una vez que sea aprobado.</li>
                             </ul>
-                        </DialogDescription>
+                        </div>
                     </DialogHeader>
                     <DialogFooter>
                         <Button onClick={() => setIsInfoDialogOpen(false)}>Entendido</Button>
@@ -598,3 +597,4 @@ export default function UnifiedPaymentsPage() {
         </div>
     );
 }
+
