@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Building2, LogOut, type LucideIcon, ChevronDown, Bell, Check, PanelLeftClose } from 'lucide-react';
 import * as React from 'react';
-import { doc, onSnapshot, collection, query, writeBatch, orderBy } from 'firebase/firestore';
+import { doc, onSnapshot, collection, query, writeBatch, orderBy, setDoc } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
 import { format, formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -70,6 +70,7 @@ type Notification = {
     body: string;
     createdAt: any; // Firestore Timestamp
     read: boolean;
+    href?: string;
 };
 
 const BCVRateCard = ({
@@ -154,6 +155,20 @@ const CustomHeader = ({ ownerData, userRole }: { ownerData: any, userRole: strin
         await signOut(auth);
         router.push('/');
     };
+    
+    const handleNotificationClick = async (notification: Notification) => {
+        if (!ownerData?.id) return;
+        // Mark as read
+        if (!notification.read) {
+            const notifRef = doc(db, `owners/${ownerData.id}/notifications/${notification.id}`);
+            await setDoc(notifRef, { read: true }, { merge: true });
+        }
+        // Navigate if href exists
+        if (notification.href) {
+            router.push(notification.href);
+            setIsSheetOpen(false);
+        }
+    };
 
     const userName = ownerData?.name || 'Usuario';
     const avatarSrc = userRole === 'administrador' ? companyInfo?.logo : ownerData?.avatar;
@@ -214,7 +229,7 @@ const CustomHeader = ({ ownerData, userRole }: { ownerData: any, userRole: strin
                         ) : (
                             <div className="space-y-3">
                                 {notifications.map(n => (
-                                    <div key={n.id} className={cn("p-3 rounded-lg border flex gap-4 items-start", n.read ? "bg-transparent border-border/50" : "bg-primary/10 border-primary/30")}>
+                                    <div key={n.id} onClick={() => handleNotificationClick(n)} className={cn("p-3 rounded-lg border flex gap-4 items-start cursor-pointer", n.read ? "bg-transparent border-border/50 hover:bg-muted/50" : "bg-primary/10 border-primary/30 hover:bg-primary/20")}>
                                         {!n.read && <span className="mt-1.5 block h-2 w-2 shrink-0 rounded-full bg-primary" />}
                                         <div className="flex-grow">
                                             <p className="font-semibold">{n.title}</p>

@@ -3,6 +3,7 @@
 
 
 
+
 import { doc, getDoc, setDoc, Timestamp, collection, query, where, getDocs, writeBatch, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { type User } from 'firebase/auth';
@@ -28,7 +29,8 @@ export const ensureAdminProfile = async (showToast?: (options: any) => void): Pr
                 properties: [{ street: 'N/A', house: 'N/A' }],
                 passwordChanged: true, 
                 creadoPor: "sistema-inicializacion",
-                fechaCreacion: Timestamp.now()
+                fechaCreacion: Timestamp.now(),
+                fcmTokens: [],
             });
             if (showToast) {
                 showToast({ title: "Perfil de Administrador Creado", description: "El perfil principal de administrador fue creado exitosamente." });
@@ -81,6 +83,7 @@ export const ensureOwnerProfile = async (user: User, showToast?: (options: any) 
             batch.set(ownerRefByUID, {
                 ...oldData,
                 uid: user.uid,
+                fcmTokens: oldData.fcmTokens || [],
             });
 
             batch.delete(oldDoc.ref);
@@ -102,6 +105,7 @@ export const ensureOwnerProfile = async (user: User, showToast?: (options: any) 
                 properties: [],
                 passwordChanged: false,
                 createdAt: Timestamp.now(),
+                fcmTokens: [],
             });
             if (showToast) {
                 showToast({ title: "Perfil de Propietario Creado", description: `Se ha creado un nuevo perfil para ${user.email}.` });
