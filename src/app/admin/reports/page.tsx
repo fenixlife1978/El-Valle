@@ -446,7 +446,7 @@ export default function ReportsPage() {
                 .filter(d => d.status === 'pending' && d.description.toLowerCase().includes('ajuste'))
                 .reduce((sum, d) => sum + d.amountUSD, 0);
             
-            const monthsOwed = ownerDebts.filter(d => d.status === 'pending' || d.status === 'vencida').length;
+            let monthsOwed = ownerDebts.filter(d => d.status === 'pending' || d.status === 'vencida').length;
 
             if (owner.name === 'Ingrid Sivira') {
                 monthsOwed = 0;
