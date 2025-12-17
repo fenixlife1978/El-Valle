@@ -1,4 +1,5 @@
 
+
 'use client';
 
 // Imports de UI (MANTENER TODOS LOS IMPORTS EN LA PARTE SUPERIOR)
@@ -205,12 +206,18 @@ export default function OwnerDashboardPage() {
             oldestDebtDate = `${monthsLocale[oldest.month]} ${oldest.year}`;
         }
         
-        const currentDate = new Date();
-        const startOfCurrentMonth = startOfMonth(currentDate);
+        const today = new Date();
+        const firstOfCurrentMonth = startOfMonth(today);
         
         const isVencida = pendingDebts.some(d => {
-            const debtDate = new Date(d.year, d.month - 1, 1);
-            return isBefore(debtDate, startOfCurrentMonth);
+            const debtDate = new Date(d.year, d.month - 1);
+            if (isBefore(debtDate, firstOfCurrentMonth)) {
+                return true;
+            }
+            if (debtDate.getFullYear() === today.getFullYear() && debtDate.getMonth() === today.getMonth()) {
+                return today.getDate() > 5;
+            }
+            return false;
         });
 
         return {
