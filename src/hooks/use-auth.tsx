@@ -70,6 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 setUser(firebaseUser);
                 setRole(userRole);
 
+                // This logic ensures profiles are checked/created for BOTH admins and owners upon login
                 if (isAdministrator) {
                     await ensureAdminProfile();
                 } else {
@@ -81,6 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     if (snapshot.exists()) {
                         setOwnerData({ id: snapshot.id, ...snapshot.data() });
                     } else {
+                        // This case should be rare after ensureProfile logic, but it's a good fallback.
                         setOwnerData(null);
                     }
                     setLoading(false);
