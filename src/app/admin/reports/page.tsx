@@ -1,4 +1,5 @@
 
+
 // @ts-nocheck
 
 
@@ -277,13 +278,8 @@ export default function ReportsPage() {
                 const debt = doc.data();
                 if (debt.status === 'pending' || debt.status === 'vencida') {
                     const ownerData = debtsByOwner.get(debt.ownerId) || { totalUSD: 0, count: 0 };
-                    const debtDate = startOfMonth(new Date(debt.year, debt.month - 1));
-                    const firstOfCurrentMonth = startOfMonth(new Date());
-                    const isOverdueOrCurrent = isBefore(debtDate, firstOfCurrentMonth) || isEqual(debtDate, firstOfCurrentMonth);
-
-                    if (isOverdueOrCurrent) {
-                        ownerData.count += 1;
-                    }
+                    
+                    ownerData.count += 1; // Count all pending/vencida debts
                     ownerData.totalUSD += debt.amountUSD;
                     debtsByOwner.set(debt.ownerId, ownerData);
                 }
@@ -367,7 +363,6 @@ export default function ReportsPage() {
             }
             
             const today = new Date();
-            const firstOfCurrentMonth = startOfMonth(today);
             let lastConsecutivePaidMonth: Date | null = null;
             
             if (firstMonthEver) {
@@ -402,13 +397,9 @@ export default function ReportsPage() {
                 }
             }
             
-             const hasAnyPendingDebtThatMattersForSolvency = ownerDebts.some(d => {
-                if (d.status !== 'pending' && d.status !== 'vencida') return false;
-                const debtDate = startOfMonth(new Date(d.year, d.month - 1));
-                return isBefore(debtDate, firstOfCurrentMonth) || isEqual(debtDate, firstOfCurrentMonth);
-            });
+            const hasAnyPendingDebt = ownerDebts.some(d => d.status === 'pending' || d.status === 'vencida');
 
-            const status: 'Solvente' | 'No Solvente' = !hasAnyPendingDebtThatMattersForSolvency ? 'Solvente' : 'No Solvente';
+            const status: 'Solvente' | 'No Solvente' = !hasAnyPendingDebt ? 'Solvente' : 'No Solvente';
             let solvencyPeriod = '';
             
             if (status === 'No Solvente') {
@@ -455,12 +446,7 @@ export default function ReportsPage() {
                 .filter(d => d.status === 'pending' && d.description.toLowerCase().includes('ajuste'))
                 .reduce((sum, d) => sum + d.amountUSD, 0);
             
-            let monthsOwed = ownerDebts.filter(d => {
-                if (d.status !== 'pending' && d.status !== 'vencida') return false;
-                const debtDate = startOfMonth(new Date(d.year, d.month - 1));
-                const firstOfCurrentMonth = startOfMonth(new Date());
-                return isBefore(debtDate, firstOfCurrentMonth) || isEqual(debtDate, firstOfCurrentMonth);
-            }).length;
+            const monthsOwed = ownerDebts.filter(d => d.status === 'pending' || d.status === 'vencida').length;
 
             if (owner.name === 'Ingrid Sivira') {
                 monthsOwed = 0;
@@ -848,6 +834,9 @@ export default function ReportsPage() {
             autoTable(doc, {
                 head: head, body: body, startY: margin + 55, headStyles: { fillColor: [220, 53, 69] },
                 styles: { cellPadding: 2.5, fontSize: 10 },
+                columnStyles: {
+                    3: { halign: 'right' }
+                }
             });
             doc.save(`reporte_morosidad_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
         } else {
@@ -1084,6 +1073,9 @@ export default function ReportsPage() {
                 startY: margin + 40,
                 headStyles: { fillColor: [22, 163, 74] }, // Green color
                 styles: { fontSize: 10, cellPadding: 2.5 },
+                columnStyles: {
+                    2: { halign: 'right' }
+                }
             });
             doc.save(`${filename}.pdf`);
         } else { // excel
@@ -1136,7 +1128,10 @@ export default function ReportsPage() {
                 body: data.map(row => [row.ownerName, row.street, row.house, row.date, formatToTwoDecimals(row.amount), row.reference]), 
                 startY: startY,
                 headStyles: { fillColor: [30, 80, 180] },
-                styles: { fontSize: 8, cellPadding: 2 }
+                styles: { fontSize: 8, cellPadding: 2 },
+                 columnStyles: {
+                    4: { halign: 'right' }
+                }
             });
             doc.save(`${filename}.pdf`);
         } else { // Excel

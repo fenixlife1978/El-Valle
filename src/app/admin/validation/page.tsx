@@ -60,12 +60,26 @@ export default function ValidationPage() {
         
         const batch = writeBatch(firestore);
         let updatedCount = 0;
-        const firstOfCurrentMonth = startOfMonth(new Date());
+        const today = new Date();
+        const firstOfCurrentMonth = startOfMonth(today);
 
         querySnapshot.forEach(doc => {
             const debt = doc.data();
             const debtDate = startOfMonth(new Date(debt.year, debt.month - 1));
+            
+            let shouldBeOverdue = false;
+            // If the debt month is before the current month, it's overdue.
             if (isBefore(debtDate, firstOfCurrentMonth)) {
+                shouldBeOverdue = true;
+            }
+            // If the debt is for the current month, it's overdue only if it's past the 5th.
+            else if (debtDate.getFullYear() === today.getFullYear() && debtDate.getMonth() === today.getMonth()) {
+                if (today.getDate() > 5) {
+                    shouldBeOverdue = true;
+                }
+            }
+
+            if (shouldBeOverdue) {
                 batch.update(doc.ref, { status: "vencida" });
                 updatedCount++;
             }
