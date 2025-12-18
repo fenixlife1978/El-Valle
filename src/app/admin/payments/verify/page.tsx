@@ -314,7 +314,6 @@ export default function VerifyPaymentsPage() {
                                     status: 'paid', paidAmountUSD: debt.amountUSD,
                                     paymentDate: paymentData.paymentDate, paymentId: paymentData.id,
                                 });
-                                break; // Exit after paying one debt
                             }
                         }
                     }
@@ -846,4 +845,5 @@ export default function VerifyPaymentsPage() {
       
 
     
+
 
