@@ -303,7 +303,9 @@ export default function VerifyPaymentsPage() {
                         .map(d => ({ id: d.id, ...d.data() } as Debt))
                         .sort((a, b) => a.year - b.year || a.month - b.month);
                     
-                    if (sortedDebts.length > 0) {
+                    let hasPendingDebts = sortedDebts.length > 0;
+                    
+                    if (hasPendingDebts) {
                         for (const debt of sortedDebts) {
                             const debtRef = doc(db, 'debts', debt.id);
                             const debtAmountInCents = Math.round(debt.amountUSD * exchangeRate * 100);
@@ -316,10 +318,15 @@ export default function VerifyPaymentsPage() {
                                 });
                             }
                         }
+                        // Re-check if any debts are still pending after applying funds
+                        const remainingPendingQuery = query(collection(db, 'debts'), where('ownerId', '==', ownerId), where('status', '==', 'pending'));
+                        const remainingSnapshot = await getDocs(remainingPendingQuery);
+                        hasPendingDebts = !remainingSnapshot.empty;
                     }
                     
                     const condoFeeInCents = Math.round(currentCondoFee * exchangeRate * 100);
-                    if (paymentData.type !== 'adelanto' && availableFundsInCents >= condoFeeInCents) {
+                    // Only process advance payments if there are NO pending debts left.
+                    if (!hasPendingDebts && paymentData.type !== 'adelanto' && availableFundsInCents >= condoFeeInCents) {
                         const allExistingDebtsQuery = query(collection(db, 'debts'), where('ownerId', '==', ownerId));
                         const allExistingDebtsSnap = await getDocs(allExistingDebtsQuery); // Outside transaction read
                         const existingDebtPeriods = new Set(allExistingDebtsSnap.docs.map(d => `${d.data().year}-${d.data().month}`));
@@ -841,9 +848,3 @@ export default function VerifyPaymentsPage() {
     </div>
   );
 }
-
-      
-
-    
-
-
