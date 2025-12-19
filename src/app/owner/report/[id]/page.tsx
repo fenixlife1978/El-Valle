@@ -8,7 +8,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { Loader2, FileText, Download, ArrowLeft } from 'lucide-react';
-import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
+import { doc, getDoc, collection, getDocs, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -266,7 +266,7 @@ export default function ReportViewerPage() {
         
         autoTable(doc, {
             head: [["Propietario", "Propiedad", "Fecha Últ. Pago", "Monto Pagado (Bs)", "Tasa BCV", "Saldo a Favor (Bs)", "Estado", "Periodo", "Meses Adeudados", "Deuda por Ajuste ($)"]], 
-            body: data.map(row => [
+            body: data.map((row: any) => [
                 row.name, row.properties, row.lastPaymentDate,
                 row.paidAmount > 0 ? formatToTwoDecimals(row.paidAmount) : '',
                 row.avgRate > 0 ? formatToTwoDecimals(row.avgRate) : '',
@@ -309,8 +309,8 @@ export default function ReportViewerPage() {
     // --- Render Balance Report ---
     if (reportType === 'balance') {
         const { ingresos, egresos, notas } = reportData;
-        const totalIngresos = ingresos.reduce((sum, item) => sum + Number(item.monto), 0);
-        const totalEgresos = egresos.reduce((sum, item) => sum + Number(item.monto), 0);
+        const totalIngresos = ingresos.reduce((sum: number, item: FinancialItem) => sum + Number(item.monto), 0);
+        const totalEgresos = egresos.reduce((sum: number, item: FinancialItem) => sum + Number(item.monto), 0);
         const saldoNeto = totalIngresos - totalEgresos;
         const monthLabel = months.find(m => m.value === reportData.id.split('-')[1])?.label;
         const yearLabel = reportData.id.split('-')[0];
@@ -332,7 +332,7 @@ export default function ReportViewerPage() {
                             <Table>
                                 <TableHeader><TableRow><TableHead>Concepto</TableHead><TableHead className="text-right">Monto (Bs.)</TableHead></TableRow></TableHeader>
                                 <TableBody>
-                                    {ingresos.map((item, index) => <TableRow key={`ingreso-${index}`}><TableCell>{item.concepto}</TableCell><TableCell className="text-right">{formatToTwoDecimals(item.monto)}</TableCell></TableRow>)}
+                                    {ingresos.map((item: FinancialItem, index: number) => <TableRow key={`ingreso-${index}`}><TableCell>{item.concepto}</TableCell><TableCell className="text-right">{formatToTwoDecimals(item.monto)}</TableCell></TableRow>)}
                                 </TableBody>
                                 <TableFooter><TableRow><TableCell className="font-bold">Total Ingresos</TableCell><TableCell className="text-right font-bold">{formatToTwoDecimals(totalIngresos)}</TableCell></TableRow></TableFooter>
                             </Table>
@@ -344,7 +344,7 @@ export default function ReportViewerPage() {
                             <Table>
                                 <TableHeader><TableRow><TableHead>Concepto</TableHead><TableHead className="text-right">Monto (Bs.)</TableHead></TableRow></TableHeader>
                                 <TableBody>
-                                    {egresos.map((item, index) => <TableRow key={`egreso-${index}`}><TableCell>{item.concepto}</TableCell><TableCell className="text-right">{formatToTwoDecimals(item.monto)}</TableCell></TableRow>)}
+                                    {egresos.map((item: FinancialItem, index: number) => <TableRow key={`egreso-${index}`}><TableCell>{item.concepto}</TableCell><TableCell className="text-right">{formatToTwoDecimals(item.monto)}</TableCell></TableRow>)}
                                 </TableBody>
                                 <TableFooter><TableRow><TableCell className="font-bold">Total Egresos</TableCell><TableCell className="text-right font-bold">{formatToTwoDecimals(totalEgresos)}</TableCell></TableRow></TableFooter>
                             </Table>

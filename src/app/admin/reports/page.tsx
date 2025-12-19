@@ -300,10 +300,7 @@ const buildIntegralReportData = (
         
         let monthsOwed = ownerDebts.filter(d => d.status === 'pending' || d.status === 'vencida').length;
 
-        if (owner.name === 'Ingrid Sivira') {
-            monthsOwed = 0;
-        }
-
+        
         return {
             ownerId: owner.id,
             name: owner.name,
@@ -1695,7 +1692,7 @@ export default function ReportsPage() {
                                                 <TableCell className="font-medium">{owner.name}</TableCell>
                                                 <TableCell>{owner.properties}</TableCell>
                                                 <TableCell>{owner.monthsOwed}</TableCell>
-                                                <TableCell className="text-right font-semibold">${owner.debtAmountUSD.toFixed(2)}</TableCell>
+                                                <TableCell className="text-right font-semibold">$${owner.debtAmountUSD.toFixed(2)}</TableCell>
                                             </TableRow>
                                         ))
                                     ) : (
