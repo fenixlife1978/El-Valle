@@ -23,6 +23,7 @@ type FinancialItem = {
     id: string;
     concepto: string;
     monto: number;
+    dia: string;
 };
 
 type FinancialStatement = {
@@ -52,6 +53,7 @@ type Debt = {
     status: 'pending' | 'paid' | 'vencida';
     paidAmountUSD?: number;
     property: { street: string, house: string };
+    paymentId?: string;
 };
 
 type Payment = {
@@ -111,7 +113,12 @@ export default function ReportViewerPage() {
                 const publishedReportRef = doc(db, "published_reports", reportId);
                 const publishedReportSnap = await getDoc(publishedReportRef);
                 if (publishedReportSnap.exists()) {
-                    setReportDate(publishedReportSnap.data().createdAt.toDate());
+                     const createdAtData = publishedReportSnap.data().createdAt;
+                     if (createdAtData instanceof Timestamp) {
+                         setReportDate(createdAtData.toDate());
+                     } else if (typeof createdAtData === 'string') {
+                         setReportDate(new Date(createdAtData));
+                     }
                 }
 
                 const settingsRef = doc(db, 'config', 'mainSettings');
@@ -148,7 +155,6 @@ export default function ReportViewerPage() {
                     const paymentsData = paymentsSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Payment));
                     const historicalData = historicalPaymentsSnapshot.docs.map(d => d.data() as HistoricalPayment);
 
-                    // Re-use logic from admin reports page (or move to a shared lib function)
                     const integralData = buildIntegralReportData(ownersData, debtsData, paymentsData, historicalData);
                     setReportData(integralData);
 
@@ -168,7 +174,6 @@ export default function ReportViewerPage() {
     }, [reportId, toast]);
 
     const handleGeneratePdf = async () => {
-        // PDF generation logic will be specific to report type
         if (reportType === 'balance') {
             generateBalancePdf();
         } else if (reportType === 'integral') {
@@ -215,17 +220,17 @@ export default function ReportViewerPage() {
         let startY = margin + 70;
         
         autoTable(doc, {
-            head: [['INGRESOS', 'MONTO (Bs.)']],
-            body: statement.ingresos.map(i => [i.concepto, { content: formatToTwoDecimals(i.monto), styles: { halign: 'right' } }]),
-            foot: [[{ content: 'TOTAL INGRESOS', styles: { halign: 'right' } }, { content: formatToTwoDecimals(totalIngresos), styles: { halign: 'right' } }]],
+            head: [['DÍA', 'INGRESOS', 'MONTO (Bs.)']],
+            body: statement.ingresos.map(i => [i.dia, i.concepto, { content: formatToTwoDecimals(i.monto), styles: { halign: 'right' } }]),
+            foot: [[{ content: '', styles: { halign: 'right' } }, { content: 'TOTAL INGRESOS', styles: { halign: 'right' } }, { content: formatToTwoDecimals(totalIngresos), styles: { halign: 'right' } }]],
             startY: startY, theme: 'striped', headStyles: { fillColor: [22, 163, 74], halign: 'center' }, footStyles: { fillColor: [22, 163, 74], textColor: 255, fontStyle: 'bold' },
         });
         startY = (doc as any).lastAutoTable.finalY + 10;
         
         autoTable(doc, {
-            head: [['EGRESOS', 'MONTO (Bs.)']],
-            body: statement.egresos.map(e => [e.concepto, { content: formatToTwoDecimals(e.monto), styles: { halign: 'right' } }]),
-            foot: [[{ content: 'TOTAL EGRESOS', styles: { halign: 'right' } }, { content: formatToTwoDecimals(totalEgresos), styles: { halign: 'right' } }]],
+            head: [['DÍA', 'EGRESOS', 'MONTO (Bs.)']],
+            body: statement.egresos.map(e => [e.dia, e.concepto, { content: formatToTwoDecimals(e.monto), styles: { halign: 'right' } }]),
+            foot: [[{ content: '', styles: { halign: 'right' } }, { content: 'TOTAL EGRESOS', styles: { halign: 'right' } }, { content: formatToTwoDecimals(totalEgresos), styles: { halign: 'right' } }]],
             startY: startY, theme: 'striped', headStyles: { fillColor: [220, 53, 69], halign: 'center' }, footStyles: { fillColor: [220, 53, 69], textColor: 255, fontStyle: 'bold' },
         });
         startY = (doc as any).lastAutoTable.finalY + 10;
@@ -297,7 +302,7 @@ export default function ReportViewerPage() {
     if (!reportData) {
          return (
             <div className="text-center p-8">
-                <p>Reporte no encontrado.</p>
+                <p>Reporte no encontrado o datos insuficientes.</p>
                 <Button variant="outline" onClick={() => router.back()} className="mt-4">
                     <ArrowLeft className="mr-2 h-4 w-4" />
                     Atrás
@@ -330,11 +335,11 @@ export default function ReportViewerPage() {
                         <CardHeader><CardTitle className="text-green-500">Ingresos</CardTitle></CardHeader>
                         <CardContent>
                             <Table>
-                                <TableHeader><TableRow><TableHead>Concepto</TableHead><TableHead className="text-right">Monto (Bs.)</TableHead></TableRow></TableHeader>
+                                <TableHeader><TableRow><TableHead>Día</TableHead><TableHead>Concepto</TableHead><TableHead className="text-right">Monto (Bs.)</TableHead></TableRow></TableHeader>
                                 <TableBody>
-                                    {ingresos.map((item: FinancialItem, index: number) => <TableRow key={`ingreso-${index}`}><TableCell>{item.concepto}</TableCell><TableCell className="text-right">{formatToTwoDecimals(item.monto)}</TableCell></TableRow>)}
+                                    {ingresos.map((item: FinancialItem, index: number) => <TableRow key={`ingreso-${index}`}><TableCell>{item.dia}</TableCell><TableCell>{item.concepto}</TableCell><TableCell className="text-right">{formatToTwoDecimals(item.monto)}</TableCell></TableRow>)}
                                 </TableBody>
-                                <TableFooter><TableRow><TableCell className="font-bold">Total Ingresos</TableCell><TableCell className="text-right font-bold">{formatToTwoDecimals(totalIngresos)}</TableCell></TableRow></TableFooter>
+                                <TableFooter><TableRow><TableCell colSpan={2} className="font-bold text-right">Total Ingresos</TableCell><TableCell className="text-right font-bold">{formatToTwoDecimals(totalIngresos)}</TableCell></TableRow></TableFooter>
                             </Table>
                         </CardContent>
                     </Card>
@@ -342,11 +347,11 @@ export default function ReportViewerPage() {
                         <CardHeader><CardTitle className="text-destructive">Egresos</CardTitle></CardHeader>
                         <CardContent>
                             <Table>
-                                <TableHeader><TableRow><TableHead>Concepto</TableHead><TableHead className="text-right">Monto (Bs.)</TableHead></TableRow></TableHeader>
+                                <TableHeader><TableRow><TableHead>Día</TableHead><TableHead>Concepto</TableHead><TableHead className="text-right">Monto (Bs.)</TableHead></TableRow></TableHeader>
                                 <TableBody>
-                                    {egresos.map((item: FinancialItem, index: number) => <TableRow key={`egreso-${index}`}><TableCell>{item.concepto}</TableCell><TableCell className="text-right">{formatToTwoDecimals(item.monto)}</TableCell></TableRow>)}
+                                    {egresos.map((item: FinancialItem, index: number) => <TableRow key={`egreso-${index}`}><TableCell>{item.dia}</TableCell><TableCell>{item.concepto}</TableCell><TableCell className="text-right">{formatToTwoDecimals(item.monto)}</TableCell></TableRow>)}
                                 </TableBody>
-                                <TableFooter><TableRow><TableCell className="font-bold">Total Egresos</TableCell><TableCell className="text-right font-bold">{formatToTwoDecimals(totalEgresos)}</TableCell></TableRow></TableFooter>
+                                <TableFooter><TableRow><TableCell colSpan={2} className="font-bold text-right">Total Egresos</TableCell><TableCell className="text-right font-bold">{formatToTwoDecimals(totalEgresos)}</TableCell></TableRow></TableFooter>
                             </Table>
                         </CardContent>
                     </Card>
@@ -417,7 +422,6 @@ export default function ReportViewerPage() {
 
 
 // --- Helper function to build integral report data ---
-// This could be moved to a separate /lib file
 const buildIntegralReportData = (
     owners: Owner[],
     allDebts: Debt[],
@@ -545,4 +549,4 @@ const buildIntegralReportData = (
             adjustmentDebtUSD
         };
     });
-}
+};
