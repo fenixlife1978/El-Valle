@@ -103,7 +103,6 @@ export default function ReportViewerPage() {
   const { toast } = useToast();
   const params = useParams();
   const router = useRouter();
-  // ✅ corregido: manejar string | string[]
   const reportId: string = Array.isArray(params?.id) ? params?.id[0] : params?.id ?? '';
 
   const [loading, setLoading] = useState(true);
@@ -298,7 +297,7 @@ export default function ReportViewerPage() {
   // PDF generation for Integral Report
   const generateIntegralPdf = () => {
     if (!reportData || !companyInfo) return;
-    const data = reportData;
+    const data = reportData as any[];
     const doc = new jsPDF({ orientation: 'landscape' });
     let startY = 15;
 
@@ -351,351 +350,354 @@ export default function ReportViewerPage() {
   }
 
   if (!reportData) {
-    return ( 
-    <div className="text-center p-8"> 
-      <p>Reporte no encontrado o datos insuficientes.</p> 
-      <Button variant="outline" onClick={() => router.back()} className="mt-4"> 
-        <ArrowLeft className="mr-2 h-4 w-4" /> 
-        Atrás 
-      </Button> 
-    </div> );
-            
-              // --- Render Balance Report ---
-              if (reportType === 'balance') {
-                const { ingresos, egresos, notas } = reportData as FinancialStatement;
-                const totalIngresos = ingresos.reduce((sum: number, item: FinancialItem) => sum + Number(item.monto), 0);
-                const totalEgresos = egresos.reduce((sum: number, item: FinancialItem) => sum + Number(item.monto), 0);
-                const saldoNeto = totalIngresos - totalEgresos;
-                const monthLabel = months.find(m => m.value === reportData.id.split('-')[1])?.label;
-                const yearLabel = reportData.id.split('-')[0];
-                const period = `${monthLabel} ${yearLabel}`;
-            
-                return (
-                  <div className="space-y-8">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h1 className="text-3xl font-bold font-headline">Balance Financiero: {period}</h1>
-                        {reportDate && (
-                          <p className="text-muted-foreground">
-                            Publicado el {format(reportDate, 'dd MMMM, yyyy', { locale: es })}
-                          </p>
-                        )}
-                      </div>
-                      <Button onClick={handleGeneratePdf}>
-                        <Download className="mr-2 h-4 w-4" />
-                        Descargar PDF
-                      </Button>
-                    </div>
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="text-green-500">Ingresos</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead>Día</TableHead>
-                                <TableHead>Concepto</TableHead>
-                                <TableHead className="text-right">Monto (Bs.)</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {ingresos.map((item: FinancialItem, index: number) => (
-                                <TableRow key={`ingreso-${index}`}>
-                                  <TableCell>{item.dia}</TableCell>
-                                  <TableCell>{item.concepto}</TableCell>
-                                  <TableCell className="text-right">{formatToTwoDecimals(item.monto)}</TableCell>
-                                </TableRow>
-                              ))}
-                            </TableBody>
-                            <TableFooter>
-                              <TableRow>
-                                <TableCell colSpan={2} className="font-bold text-right">Total Ingresos</TableCell>
-                                <TableCell className="text-right font-bold">{formatToTwoDecimals(totalIngresos)}</TableCell>
-                              </TableRow>
-                            </TableFooter>
-                          </Table>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="text-destructive">Egresos</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead>Día</TableHead>
-                                <TableHead>Concepto</TableHead>
-                                <TableHead className="text-right">Monto (Bs.)</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {egresos.map((item: FinancialItem, index: number) => (
-                                <TableRow key={`egreso-${index}`}>
-                                  <TableCell>{item.dia}</TableCell>
-                                  <TableCell>{item.concepto}</TableCell>
-                                  <TableCell className="text-right">{formatToTwoDecimals(item.monto)}</TableCell>
-                                </TableRow>
-                              ))}
-                            </TableBody>
-                            <TableFooter>
-                              <TableRow>
-                                <TableCell colSpan={2} className="font-bold text-right">Total Egresos</TableCell>
-                                <TableCell className="text-right font-bold">{formatToTwoDecimals(totalEgresos)}</TableCell>
-                              </TableRow>
-                            </TableFooter>
-                          </Table>
-                        </CardContent>
-                      </Card>
-                    </div>
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Resumen del Período</CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        <div className="p-4 bg-primary/10 rounded-md">
-                          <Label htmlFor="saldoNeto" className="text-base font-bold">SALDO NETO</Label>
-                          <p
-                            id="saldoNeto"
-                            className={`text-2xl font-bold text-center ${saldoNeto >= 0 ? 'text-primary' : 'text-destructive'}`}
-                          >
-                            {formatToTwoDecimals(saldoNeto)}
-                          </p>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Notas Adicionales</Label>
-                          <p className="text-sm text-muted-foreground p-4 border rounded-md bg-muted/50 whitespace-pre-wrap">
-                            {notas || 'No hay notas para este período.'}
-                          </p>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
-                );
-              }
-            
-              // --- Render Integral Report ---
-              if (reportType === 'integral') {
-                const integralData = reportData as any[];
-                return (
-                  <div className="space-y-8">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h1 className="text-3xl font-bold font-headline">Reporte Integral de Propietarios</h1>
-                        {reportDate && (
-                          <p className="text-muted-foreground">
-                            Publicado el {format(reportDate, 'dd MMMM, yyyy', { locale: es })}
-                          </p>
-                        )}
-                      </div>
-                      <Button onClick={handleGeneratePdf}>
-                        <Download className="mr-2 h-4 w-4" />
-                        Descargar PDF
-                      </Button>
-                    </div>
-                    <Card>
-                      <CardContent className="p-0">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Propietario</TableHead>
-                              <TableHead>Estado</TableHead>
-                              <TableHead>Periodo</TableHead>
-                              <TableHead className="text-center">Meses Adeudados</TableHead>
-                              <TableHead className="text-right">Saldo a Favor (Bs)</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {integralData.map((row: any) => (
-                              <TableRow key={row.ownerId}>
-                                <TableCell className="font-medium">{row.name}</TableCell>
-                                <TableCell>
-                                  <span
-                                    className={`font-semibold ${
-                                      row.status === 'No Solvente' ? 'text-destructive' : 'text-green-600'
-                                    }`}
-                                  >
-                                    {row.status}
-                                  </span>
-                                </TableCell>
-                                <TableCell className="capitalize">{row.solvencyPeriod}</TableCell>
-                                <TableCell className="text-center">{row.monthsOwed > 0 ? row.monthsOwed : ''}</TableCell>
-                                <TableCell className="text-right">
-                                  {row.balance > 0 ? `Bs. ${formatToTwoDecimals(row.balance)}` : ''}
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </CardContent>
-                    </Card>
-                  </div>
-                );
-              }
-            
-              return null; // Should not happen
-            }
+    return (
+      <div className="text-center p-8">
+        <p>Reporte no encontrado o datos insuficientes.</p>
+        <Button variant="outline" onClick={() => router.back()} className="mt-4">
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Atrás
+        </Button>
+      </div>
+    );
+  }
+
+  // --- Render Balance Report ---
+  if (reportType === 'balance') {
+    const { ingresos, egresos, notas } = reportData as FinancialStatement;
+    const totalIngresos = ingresos.reduce((sum: number, item: FinancialItem) => sum + Number(item.monto), 0);
+    const totalEgresos = egresos.reduce((sum: number, item: FinancialItem) => sum + Number(item.monto), 0);
+    const saldoNeto = totalIngresos - totalEgresos;
+    const monthLabel = months.find(m => m.value === reportData.id.split('-')[1])?.label;
+    const yearLabel = reportData.id.split('-')[0];
+    const period = `${monthLabel} ${yearLabel}`;
+
+    return (
+      <div className="space-y-8">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold font-headline">Balance Financiero: {period}</h1>
+            {reportDate && (
+              <p className="text-muted-foreground">
+                Publicado el {format(reportDate, 'dd MMMM, yyyy', { locale: es })}
+              </p>
+            )}
+          </div>
+          <Button onClick={handleGeneratePdf}>
+            <Download className="mr-2 h-4 w-4" />
+            Descargar PDF
+          </Button>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-green-500">Ingresos</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Día</TableHead>
+                    <TableHead>Concepto</TableHead>
+                    <TableHead className="text-right">Monto (Bs.)</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {ingresos.map((item: FinancialItem, index: number) => (
+                    <TableRow key={`ingreso-${index}`}>
+                      <TableCell>{item.dia}</TableCell>
+                      <TableCell>{item.concepto}</TableCell>
+                      <TableCell className="text-right">{formatToTwoDecimals(item.monto)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+                <TableFooter>
+                  <TableRow>
+                    <TableCell colSpan={2} className="font-bold text-right">Total Ingresos</TableCell>
+                    <TableCell className="text-right font-bold">{formatToTwoDecimals(totalIngresos)}</TableCell>
+                  </TableRow>
+                </TableFooter>
+              </Table>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-destructive">Egresos</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Día</TableHead>
+                    <TableHead>Concepto</TableHead>
+                    <TableHead className="text-right">Monto (Bs.)</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {egresos.map((item: FinancialItem, index: number) => (
+                    <TableRow key={`egreso-${index}`}>
+                      <TableCell>{item.dia}</TableCell>
+                      <TableCell>{item.concepto}</TableCell>
+                      <TableCell className="text-right">{formatToTwoDecimals(item.monto)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+                <TableFooter>
+                  <TableRow>
+                    <TableCell colSpan={2} className="font-bold text-right">Total Egresos</TableCell>
+                    <TableCell className="text-right font-bold">{formatToTwoDecimals(totalEgresos)}</TableCell>
+                  </TableRow>
+                </TableFooter>
+              </Table>
+            </CardContent>
+          </Card>
+        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Resumen del Período</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="p-4 bg-primary/10 rounded-md">
+              <Label htmlFor="saldoNeto" className="text-base font-bold">SALDO NETO</Label>
+              <p
+                id="saldoNeto"
+                className={`text-2xl font-bold text-center ${saldoNeto >= 0 ? 'text-primary' : 'text-destructive'}`}
+              >
+                {formatToTwoDecimals(saldoNeto)}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>Notas Adicionales</Label>
+              <p className="text-sm text-muted-foreground p-4 border rounded-md bg-muted/50 whitespace-pre-wrap">
+                {notas || 'No hay notas para este período.'}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // --- Render Integral Report ---
+  if (reportType === 'integral') {
+    const integralData = reportData as any[];
+    return (
+      <div className="space-y-8">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold font-headline">Reporte Integral de Propietarios</h1>
+            {reportDate && (
+              <p className="text-muted-foreground">
+                Publicado el {format(reportDate, 'dd MMMM, yyyy', { locale: es })}
+              </p>
+            )}
+          </div>
+          <Button onClick={handleGeneratePdf}>
+            <Download className="mr-2 h-4 w-4" />
+            Descargar PDF
+          </Button>
+        </div>
+        <Card>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Propietario</TableHead>
+                  <TableHead>Estado</TableHead>
+                  <TableHead>Periodo</TableHead>
+                  <TableHead className="text-center">Meses Adeudados</TableHead>
+                  <TableHead className="text-right">Saldo a Favor (Bs)</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {integralData.map((row: any) => (
+                  <TableRow key={row.ownerId}>
+                    <TableCell className="font-medium">{row.name}</TableCell>
+                    <TableCell>
+                      <span
+                        className={`font-semibold ${
+                          row.status === 'No Solvente' ? 'text-destructive' : 'text-green-600'
+                        }`}
+                      >
+                        {row.status}
+                      </span>
+                    </TableCell>
+                    <TableCell className="capitalize">{row.solvencyPeriod}</TableCell>
+                    <TableCell className="text-center">{row.monthsOwed > 0 ? row.monthsOwed : ''}</TableCell>
+                    <TableCell className="text-right">
+                      {row.balance > 0 ? `Bs. ${formatToTwoDecimals(row.balance)}` : ''}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return null; // Should not happen
+}
+
 // --- Helper function to build integral report data ---
 const buildIntegralReportData = (
-    owners: Owner[],
-    allDebts: Debt[],
-    allPayments: Payment[],
-    allHistoricalPayments: HistoricalPayment[]
-  ) => {
-    const {
-      format,
-      addMonths,
-      startOfMonth,
-      getYear,
-      getMonth,
-      isBefore,
-      endOfMonth,
-    } = require('date-fns');
-  
-    const sortedOwners = [...owners]
-      .filter(
-        owner =>
-          owner.id !== 'valle-admin-main-account' &&
-          owner.name &&
-          owner.name !== 'Valle Admin'
-      )
-      .map(owner => {
-        const streetNum = parseInt(
-          String(owner.properties?.[0]?.street || '').replace('Calle ', '') || '999'
+  owners: Owner[],
+  allDebts: Debt[],
+  allPayments: Payment[],
+  allHistoricalPayments: HistoricalPayment[]
+) => {
+  const {
+    format: fnsFormat,
+    addMonths,
+    startOfMonth,
+    getYear,
+    getMonth,
+    isBefore,
+    endOfMonth,
+  } = require('date-fns');
+  const { es: esLocale } = require('date-fns/locale');
+
+  const sortedOwners = [...owners]
+    .filter(
+      owner =>
+        owner.id !== 'valle-admin-main-account' &&
+        owner.name &&
+        owner.name !== 'Valle Admin'
+    )
+    .map(owner => {
+      const streetNum = parseInt(
+        String(owner.properties?.[0]?.street || '').replace('Calle ', '') || '999'
+      );
+      const houseNum = parseInt(
+        String(owner.properties?.[0]?.house || '').replace('Casa ', '') || '999'
+      );
+      return { ...owner, sortKeys: { streetNum, houseNum } };
+    })
+    .sort((a, b) => {
+      if (a.sortKeys.streetNum !== b.sortKeys.streetNum)
+        return a.sortKeys.streetNum - b.sortKeys.streetNum;
+      return a.sortKeys.houseNum - b.sortKeys.houseNum;
+    });
+
+  return sortedOwners.map(owner => {
+    const ownerDebts = allDebts.filter(d => d.ownerId === owner.id);
+    const ownerHistoricalPayments = allHistoricalPayments.filter(p => p.ownerId === owner.id);
+
+    const allOwnerPeriods = [
+      ...ownerDebts.map(d => ({ year: d.year, month: d.month })),
+      ...ownerHistoricalPayments.map(p => ({ year: p.referenceYear, month: p.referenceMonth })),
+    ];
+
+    let firstMonthEver: Date | null = null;
+    if (allOwnerPeriods.length > 0) {
+      const oldestPeriod = allOwnerPeriods.sort((a, b) => a.year - b.year || a.month - b.month)[0];
+      firstMonthEver = startOfMonth(new Date(oldestPeriod.year, oldestPeriod.month - 1));
+    }
+
+    let lastConsecutivePaidMonth: Date | null = null;
+
+    if (firstMonthEver) {
+      let currentCheckMonth = firstMonthEver;
+      const limitDate = endOfMonth(addMonths(new Date(), 120));
+
+      while (isBefore(currentCheckMonth, limitDate)) {
+        const year = getYear(currentCheckMonth);
+        const month = getMonth(currentCheckMonth) + 1;
+
+        const isHistorical = ownerHistoricalPayments.some(
+          p => p.referenceYear === year && p.referenceMonth === month
         );
-        const houseNum = parseInt(
-          String(owner.properties?.[0]?.house || '').replace('Casa ', '') || '999'
-        );
-        return { ...owner, sortKeys: { streetNum, houseNum } };
-      })
-      .sort((a, b) => {
-        if (a.sortKeys.streetNum !== b.sortKeys.streetNum)
-          return a.sortKeys.streetNum - b.sortKeys.streetNum;
-        return a.sortKeys.houseNum - b.sortKeys.houseNum;
-      });
-  
-    return sortedOwners.map(owner => {
-      const ownerDebts = allDebts.filter(d => d.ownerId === owner.id);
-      const ownerHistoricalPayments = allHistoricalPayments.filter(p => p.ownerId === owner.id);
-  
-      const allOwnerPeriods = [
-        ...ownerDebts.map(d => ({ year: d.year, month: d.month })),
-        ...ownerHistoricalPayments.map(p => ({ year: p.referenceYear, month: p.referenceMonth })),
-      ];
-  
-      let firstMonthEver: Date | null = null;
-      if (allOwnerPeriods.length > 0) {
-        const oldestPeriod = allOwnerPeriods.sort((a, b) => a.year - b.year || a.month - b.month)[0];
-        firstMonthEver = startOfMonth(new Date(oldestPeriod.year, oldestPeriod.month - 1));
-      }
-  
-      let lastConsecutivePaidMonth: Date | null = null;
-  
-      if (firstMonthEver) {
-        let currentCheckMonth = firstMonthEver;
-        const limitDate = endOfMonth(addMonths(new Date(), 120));
-  
-        while (isBefore(currentCheckMonth, limitDate)) {
-          const year = getYear(currentCheckMonth);
-          const month = getMonth(currentCheckMonth) + 1;
-  
-          const isHistorical = ownerHistoricalPayments.some(
-            p => p.referenceYear === year && p.referenceMonth === month
-          );
-  
-          let isMonthFullyPaid = false;
-          if (isHistorical) {
-            isMonthFullyPaid = true;
-          } else {
-            const debtsForMonth = ownerDebts.filter(d => d.year === year && d.month === month);
-            if (debtsForMonth.length > 0) {
-              const mainDebt = debtsForMonth.find(d =>
-                d.description.toLowerCase().includes('condominio')
-              );
-              if (mainDebt?.status === 'paid') {
-                isMonthFullyPaid = true;
-              }
+
+        let isMonthFullyPaid = false;
+        if (isHistorical) {
+          isMonthFullyPaid = true;
+        } else {
+          const debtsForMonth = ownerDebts.filter(d => d.year === year && d.month === month);
+          if (debtsForMonth.length > 0) {
+            const mainDebt = debtsForMonth.find(d =>
+              d.description.toLowerCase().includes('condominio')
+            );
+            if (mainDebt?.status === 'paid') {
+              isMonthFullyPaid = true;
             }
           }
-  
-          if (isMonthFullyPaid) {
-            lastConsecutivePaidMonth = currentCheckMonth;
-          } else {
-            break;
-          }
-          currentCheckMonth = addMonths(currentCheckMonth, 1);
         }
-      }
-  
-      const hasAnyPendingDebt = ownerDebts.some(
-        d => d.status === 'pending' || d.status === 'vencida'
-      );
-  
-      const status: 'Solvente' | 'No Solvente' = !hasAnyPendingDebt ? 'Solvente' : 'No Solvente';
-      let solvencyPeriod = '';
-  
-      if (status === 'No Solvente') {
-        if (lastConsecutivePaidMonth) {
-          solvencyPeriod = `Desde ${format(addMonths(lastConsecutivePaidMonth, 1), 'MMMM yyyy', {
-            locale: es,
-          })}`;
-        } else if (firstMonthEver) {
-          solvencyPeriod = `Desde ${format(firstMonthEver, 'MMMM yyyy', { locale: es })}`;
+
+        if (isMonthFullyPaid) {
+          lastConsecutivePaidMonth = currentCheckMonth;
         } else {
-          solvencyPeriod = `Desde ${format(new Date(), 'MMMM yyyy', { locale: es })}`;
+          break;
         }
+        currentCheckMonth = addMonths(currentCheckMonth, 1);
+      }
+    }
+
+    const hasAnyPendingDebt = ownerDebts.some(
+      d => d.status === 'pending' || d.status === 'vencida'
+    );
+
+    const status: 'Solvente' | 'No Solvente' = !hasAnyPendingDebt ? 'Solvente' : 'No Solvente';
+    let solvencyPeriod = '';
+
+    if (status === 'No Solvente') {
+      if (lastConsecutivePaidMonth) {
+        solvencyPeriod = `Desde ${fnsFormat(addMonths(lastConsecutivePaidMonth, 1), 'MMMM yyyy', {
+          locale: esLocale,
+        })}`;
+      } else if (firstMonthEver) {
+        solvencyPeriod = `Desde ${fnsFormat(firstMonthEver, 'MMMM yyyy', { locale: esLocale })}`;
       } else {
-        if (lastConsecutivePaidMonth) {
-          solvencyPeriod = `Hasta ${format(lastConsecutivePaidMonth, 'MMMM yyyy', { locale: es })}`;
-        } else {
-          solvencyPeriod = 'Al día';
-        }
+        solvencyPeriod = `Desde ${fnsFormat(new Date(), 'MMMM yyyy', { locale: esLocale })}`;
       }
-  
-      const ownerPayments = allPayments.filter(
-        p => p.beneficiaries.some(b => b.ownerId === owner.id) && p.status === 'aprobado'
-      );
-  
-      const totalPaid = ownerPayments.reduce((sum, p) => sum + p.totalAmount, 0);
-      const totalRateWeight = ownerPayments.reduce(
-        (sum, p) => sum + (p.exchangeRate || 0) * p.totalAmount,
-        0
-      );
-      const avgRate = totalPaid > 0 ? totalRateWeight / totalPaid : 0;
-  
-      let lastPaymentDate = '';
-      if (ownerPayments.length > 0) {
-        const lastPayment = [...ownerPayments].sort(
-          (a, b) => b.paymentDate.toMillis() - a.paymentDate.toMillis()
-        )[0];
-        lastPaymentDate = format(lastPayment.paymentDate.toDate(), 'dd/MM/yyyy');
+    } else {
+      if (lastConsecutivePaidMonth) {
+        solvencyPeriod = `Hasta ${fnsFormat(lastConsecutivePaidMonth, 'MMMM yyyy', { locale: esLocale })}`;
+      } else {
+        solvencyPeriod = 'Al día';
       }
-  
-      const adjustmentDebtUSD = ownerDebts
-        .filter(d => d.status === 'pending' && d.description.toLowerCase().includes('ajuste'))
-        .reduce((sum, d) => sum + d.amountUSD, 0);
-  
-      let monthsOwed = ownerDebts.filter(d => d.status === 'pending' || d.status === 'vencida').length;
-  
-      if (owner.name === 'Ingrid Sivira') {
-        monthsOwed = 0;
-      }
-  
-      return {
-        ownerId: owner.id,
-        name: owner.name,
-        properties: (owner.properties || []).map(p => `${p.street}-${p.house}`).join(', '),
-        lastPaymentDate,
-        paidAmount: totalPaid,
-        avgRate,
-        balance: owner.balance,
-        status,
-        solvencyPeriod,
-        monthsOwed,
-        adjustmentDebtUSD,
-      };
-    });
-  };
-              
+    }
+
+    const ownerPayments = allPayments.filter(
+      p => p.beneficiaries.some(b => b.ownerId === owner.id) && p.status === 'aprobado'
+    );
+
+    const totalPaid = ownerPayments.reduce((sum, p) => sum + p.totalAmount, 0);
+    const totalRateWeight = ownerPayments.reduce(
+      (sum, p) => sum + (p.exchangeRate || 0) * p.totalAmount,
+      0
+    );
+    const avgRate = totalPaid > 0 ? totalRateWeight / totalPaid : 0;
+
+    let lastPaymentDate = '';
+    if (ownerPayments.length > 0) {
+      const lastPayment = [...ownerPayments].sort(
+        (a, b) => b.paymentDate.toMillis() - a.paymentDate.toMillis()
+      )[0];
+      lastPaymentDate = fnsFormat(lastPayment.paymentDate.toDate(), 'dd/MM/yyyy');
+    }
+
+    const adjustmentDebtUSD = ownerDebts
+      .filter(d => d.status === 'pending' && d.description.toLowerCase().includes('ajuste'))
+      .reduce((sum, d) => sum + d.amountUSD, 0);
+
+    let monthsOwed = ownerDebts.filter(d => d.status === 'pending' || d.status === 'vencida').length;
+
+    if (owner.name === 'Ingrid Sivira') {
+      monthsOwed = 0;
+    }
+
+    return {
+      ownerId: owner.id,
+      name: owner.name,
+      properties: (owner.properties || []).map(p => `${p.street}-${p.house}`).join(', '),
+      lastPaymentDate,
+      paidAmount: totalPaid,
+      avgRate,
+      balance: owner.balance,
+      status,
+      solvencyPeriod,
+      monthsOwed,
+      adjustmentDebtUSD,
+    };
+  });
+};
