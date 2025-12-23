@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -33,47 +34,27 @@ type FinancialStatement = {
   createdAt: string;
 };
 
-type Owner = {
-  id: string;
-  name: string;
-  properties: { street: string; house: string }[];
-  email?: string;
-  balance: number;
-};
-
-type Debt = {
-  id: string;
-  ownerId: string;
-  year: number;
-  month: number;
-  amountUSD: number;
-  description: string;
-  status: 'pending' | 'paid' | 'vencida';
-  paidAmountUSD?: number;
-  property: { street: string; house: string };
-  paymentId?: string;
-};
-
-type Payment = {
-  id: string;
-  paymentDate: Timestamp;
-  totalAmount: number;
-  exchangeRate?: number;
-  beneficiaries: {
+type IntegralReportRow = {
     ownerId: string;
-    street?: string;
-    house?: string;
-    amount: number;
-  }[];
-  status: 'aprobado' | 'pendiente' | 'rechazado';
+    name: string;
+    properties: string;
+    lastPaymentDate: string;
+    paidAmount: number;
+    avgRate: number;
+    balance: number;
+    status: 'Solvente' | 'No Solvente';
+    solvencyPeriod: string;
+    monthsOwed: number;
+    adjustmentDebtUSD: number;
 };
 
-type HistoricalPayment = {
-  ownerId: string;
-  referenceMonth: number;
-  referenceYear: number;
-  amountUSD: number;
+type SavedIntegralReport = {
+    id: string;
+    createdAt: Timestamp;
+    data: IntegralReportRow[];
+    filters: any;
 };
+
 
 type CompanyInfo = {
   name: string;
@@ -122,15 +103,21 @@ export default function ReportViewerPage() {
 
         const publishedReportRef = doc(db, "published_reports", reportId);
         const publishedReportSnap = await getDoc(publishedReportRef);
+        
+        let sourceId = reportId; // Fallback for old balance reports
         if (publishedReportSnap.exists()) {
-          const createdAtData = publishedReportSnap.data().createdAt;
+          const pubData = publishedReportSnap.data();
+          const createdAtData = pubData.createdAt;
           if (createdAtData instanceof Timestamp) {
             setReportDate(createdAtData.toDate());
           } else if (typeof createdAtData === 'string') {
             setReportDate(new Date(createdAtData));
           }
+          if (pubData.sourceId) {
+             sourceId = pubData.sourceId;
+          }
         }
-
+        
         const settingsRef = doc(db, 'config', 'mainSettings');
         const settingsSnap = await getDoc(settingsRef);
         if (settingsSnap.exists()) {
@@ -146,43 +133,24 @@ export default function ReportViewerPage() {
           if (reportSnap.exists()) {
             setReportData({ id: reportSnap.id, ...reportSnap.data() } as FinancialStatement);
           } else {
-            toast({
-              variant: 'destructive',
-              title: 'Error',
-              description: 'No se encontró el balance financiero solicitado.',
-            });
+            toast({ variant: 'destructive', title: 'Error', description: 'No se encontró el balance financiero solicitado.' });
           }
         } else if (isIntegral) {
           setReportType('integral');
-          const ownersQuery = getDocs(collection(db, 'owners'));
-          const debtsQuery = getDocs(collection(db, 'debts'));
-          const paymentsQuery = getDocs(collection(db, 'payments'));
-          const historicalPaymentsQuery = getDocs(collection(db, 'historical_payments'));
+          const docRef = doc(db, "integral_reports", sourceId);
+          const reportSnap = await getDoc(docRef);
 
-          const [ownersSnapshot, debtsSnapshot, paymentsSnapshot, historicalPaymentsSnapshot] =
-            await Promise.all([ownersQuery, debtsQuery, paymentsQuery, historicalPaymentsQuery]);
-
-          const ownersData = ownersSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Owner));
-          const debtsData = debtsSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Debt));
-          const paymentsData = paymentsSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Payment));
-          const historicalData = historicalPaymentsSnapshot.docs.map(d => d.data() as HistoricalPayment);
-
-          const integralData = buildIntegralReportData(ownersData, debtsData, paymentsData, historicalData);
-          setReportData(integralData);
+          if (reportSnap.exists()) {
+            setReportData({ id: reportSnap.id, ...reportSnap.data() } as SavedIntegralReport);
+          } else {
+             toast({ variant: 'destructive', title: 'Error', description: 'No se encontró el reporte integral guardado.' });
+          }
         } else {
-          toast({
-            variant: 'destructive',
-            title: 'Error',
-            description: 'Tipo de reporte no reconocido.',
-          });
+          toast({ variant: 'destructive', title: 'Error', description: 'Tipo de reporte no reconocido.' });
         }
       } catch (error) {
         console.error("Error fetching report:", error);
-        toast({
-          variant: 'destructive',
-          title: 'Error',
-          description: 'No se pudo cargar el reporte.',
-        });
+        toast({ variant: 'destructive', title: 'Error', description: 'No se pudo cargar el reporte.' });
       } finally {
         setLoading(false);
       }
@@ -198,7 +166,7 @@ export default function ReportViewerPage() {
       generateIntegralPdf();
     }
   };
-  // PDF generation for Balance Report
+  
   const generateBalancePdf = async () => {
     if (!reportData || !companyInfo) return;
     const statement = reportData as FinancialStatement;
@@ -294,10 +262,9 @@ export default function ReportViewerPage() {
     doc.save(`Balance_Financiero_${statement.id}.pdf`);
   };
 
-  // PDF generation for Integral Report
   const generateIntegralPdf = () => {
     if (!reportData || !companyInfo) return;
-    const data = reportData as any[];
+    const data = reportData.data as IntegralReportRow[];
     const doc = new jsPDF({ orientation: 'landscape' });
     let startY = 15;
 
@@ -338,8 +305,9 @@ export default function ReportViewerPage() {
       },
     });
 
-    doc.save(`Reporte_Integral_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+    doc.save(`Reporte_Integral_${format(reportData.createdAt.toDate(), 'yyyy-MM-dd')}.pdf`);
   };
+
 
   if (loading) {
     return (
@@ -479,7 +447,7 @@ export default function ReportViewerPage() {
 
   // --- Render Integral Report ---
   if (reportType === 'integral') {
-    const integralData = reportData as any[];
+    const integralData = reportData.data as IntegralReportRow[];
     return (
       <div className="space-y-8">
         <div className="flex items-center justify-between">
@@ -539,165 +507,4 @@ export default function ReportViewerPage() {
   return null; // Should not happen
 }
 
-// --- Helper function to build integral report data ---
-const buildIntegralReportData = (
-  owners: Owner[],
-  allDebts: Debt[],
-  allPayments: Payment[],
-  allHistoricalPayments: HistoricalPayment[]
-) => {
-  const {
-    format: fnsFormat,
-    addMonths,
-    startOfMonth,
-    getYear,
-    getMonth,
-    isBefore,
-    endOfMonth,
-  } = require('date-fns');
-  const { es: esLocale } = require('date-fns/locale');
-
-  const sortedOwners = [...owners]
-    .filter(
-      owner =>
-        owner.id !== 'valle-admin-main-account' &&
-        owner.name &&
-        owner.name !== 'Valle Admin'
-    )
-    .map(owner => {
-      const streetNum = parseInt(
-        String(owner.properties?.[0]?.street || '').replace('Calle ', '') || '999'
-      );
-      const houseNum = parseInt(
-        String(owner.properties?.[0]?.house || '').replace('Casa ', '') || '999'
-      );
-      return { ...owner, sortKeys: { streetNum, houseNum } };
-    })
-    .sort((a, b) => {
-      if (a.sortKeys.streetNum !== b.sortKeys.streetNum)
-        return a.sortKeys.streetNum - b.sortKeys.streetNum;
-      return a.sortKeys.houseNum - b.sortKeys.houseNum;
-    });
-
-  return sortedOwners.map(owner => {
-    const ownerDebts = allDebts.filter(d => d.ownerId === owner.id);
-    const ownerHistoricalPayments = allHistoricalPayments.filter(p => p.ownerId === owner.id);
-
-    const allOwnerPeriods = [
-      ...ownerDebts.map(d => ({ year: d.year, month: d.month })),
-      ...ownerHistoricalPayments.map(p => ({ year: p.referenceYear, month: p.referenceMonth })),
-    ];
-
-    let firstMonthEver: Date | null = null;
-    if (allOwnerPeriods.length > 0) {
-      const oldestPeriod = allOwnerPeriods.sort((a, b) => a.year - b.year || a.month - b.month)[0];
-      firstMonthEver = startOfMonth(new Date(oldestPeriod.year, oldestPeriod.month - 1));
-    }
-
-    let lastConsecutivePaidMonth: Date | null = null;
-
-    if (firstMonthEver) {
-      let currentCheckMonth = firstMonthEver;
-      const limitDate = endOfMonth(addMonths(new Date(), 120));
-
-      while (isBefore(currentCheckMonth, limitDate)) {
-        const year = getYear(currentCheckMonth);
-        const month = getMonth(currentCheckMonth) + 1;
-
-        const isHistorical = ownerHistoricalPayments.some(
-          p => p.referenceYear === year && p.referenceMonth === month
-        );
-
-        let isMonthFullyPaid = false;
-        if (isHistorical) {
-          isMonthFullyPaid = true;
-        } else {
-          const debtsForMonth = ownerDebts.filter(d => d.year === year && d.month === month);
-          if (debtsForMonth.length > 0) {
-            const mainDebt = debtsForMonth.find(d =>
-              d.description.toLowerCase().includes('condominio')
-            );
-            if (mainDebt?.status === 'paid') {
-              isMonthFullyPaid = true;
-            }
-          }
-        }
-
-        if (isMonthFullyPaid) {
-          lastConsecutivePaidMonth = currentCheckMonth;
-        } else {
-          break;
-        }
-        currentCheckMonth = addMonths(currentCheckMonth, 1);
-      }
-    }
-
-    const hasAnyPendingDebt = ownerDebts.some(
-      d => d.status === 'pending' || d.status === 'vencida'
-    );
-
-    const status: 'Solvente' | 'No Solvente' = !hasAnyPendingDebt ? 'Solvente' : 'No Solvente';
-    let solvencyPeriod = '';
-
-    if (status === 'No Solvente') {
-      if (lastConsecutivePaidMonth) {
-        solvencyPeriod = `Desde ${fnsFormat(addMonths(lastConsecutivePaidMonth, 1), 'MMMM yyyy', {
-          locale: esLocale,
-        })}`;
-      } else if (firstMonthEver) {
-        solvencyPeriod = `Desde ${fnsFormat(firstMonthEver, 'MMMM yyyy', { locale: esLocale })}`;
-      } else {
-        solvencyPeriod = `Desde ${fnsFormat(new Date(), 'MMMM yyyy', { locale: esLocale })}`;
-      }
-    } else {
-      if (lastConsecutivePaidMonth) {
-        solvencyPeriod = `Hasta ${fnsFormat(lastConsecutivePaidMonth, 'MMMM yyyy', { locale: esLocale })}`;
-      } else {
-        solvencyPeriod = 'Al día';
-      }
-    }
-
-    const ownerPayments = allPayments.filter(
-      p => p.beneficiaries.some(b => b.ownerId === owner.id) && p.status === 'aprobado'
-    );
-
-    const totalPaid = ownerPayments.reduce((sum, p) => sum + p.totalAmount, 0);
-    const totalRateWeight = ownerPayments.reduce(
-      (sum, p) => sum + (p.exchangeRate || 0) * p.totalAmount,
-      0
-    );
-    const avgRate = totalPaid > 0 ? totalRateWeight / totalPaid : 0;
-
-    let lastPaymentDate = '';
-    if (ownerPayments.length > 0) {
-      const lastPayment = [...ownerPayments].sort(
-        (a, b) => b.paymentDate.toMillis() - a.paymentDate.toMillis()
-      )[0];
-      lastPaymentDate = fnsFormat(lastPayment.paymentDate.toDate(), 'dd/MM/yyyy');
-    }
-
-    const adjustmentDebtUSD = ownerDebts
-      .filter(d => d.status === 'pending' && d.description.toLowerCase().includes('ajuste'))
-      .reduce((sum, d) => sum + d.amountUSD, 0);
-
-    let monthsOwed = ownerDebts.filter(d => d.status === 'pending' || d.status === 'vencida').length;
-
-    if (owner.name === 'Ingrid Sivira') {
-      monthsOwed = 0;
-    }
-
-    return {
-      ownerId: owner.id,
-      name: owner.name,
-      properties: (owner.properties || []).map(p => `${p.street}-${p.house}`).join(', '),
-      lastPaymentDate,
-      paidAmount: totalPaid,
-      avgRate,
-      balance: owner.balance,
-      status,
-      solvencyPeriod,
-      monthsOwed,
-      adjustmentDebtUSD,
-    };
-  });
-};
+    

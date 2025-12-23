@@ -173,13 +173,53 @@
             "monto": {"type": "number"}
         }
     },
+     "IntegralReport": {
+      "title": "Integral Report",
+      "description": "A saved instance of a generated integral report.",
+      "type": "object",
+      "properties": {
+        "createdAt": { "type": "string", "format": "date-time" },
+        "data": {
+          "type": "array",
+          "items": { "$ref": "#/entities/IntegralReportRow" }
+        },
+        "filters": {
+          "type": "object",
+          "properties": {
+            "statusFilter": { "type": "string" },
+            "ownerFilter": { "type": "string" },
+            "dateRangeFrom": { "type": "string", "format": "date" },
+            "dateRangeTo": { "type": "string", "format": "date" }
+          }
+        }
+      }
+    },
+    "IntegralReportRow": {
+      "title": "Integral Report Row",
+      "description": "A single row within a saved integral report.",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string" },
+        "name": { "type": "string" },
+        "properties": { "type": "string" },
+        "lastPaymentDate": { "type": "string" },
+        "paidAmount": { "type": "number" },
+        "avgRate": { "type": "number" },
+        "balance": { "type": "number" },
+        "status": { "type": "string" },
+        "solvencyPeriod": { "type": "string" },
+        "monthsOwed": { "type": "number" },
+        "adjustmentDebtUSD": { "type": "number" }
+      }
+    },
     "PublishedReport": {
         "title": "Published Report",
         "description": "Controls which reports are visible to owners.",
         "type": "object",
         "properties": {
             "type": {"type": "string", "enum": ["balance", "integral"]},
-            "createdAt": {"type": "string", "format": "date-time"}
+            "createdAt": {"type": "string", "format": "date-time"},
+            "sourceId": {"type": "string", "description": "The ID of the source document in its respective collection (e.g., integral_reports)"}
         }
     },
     "PettyCash": {
@@ -332,6 +372,10 @@
         "schema": { "$ref": "#/entities/FinancialStatement" },
         "description": "Stores monthly financial statements."
     },
+     "/integral_reports/{reportId}": {
+      "schema": { "$ref": "#/entities/IntegralReport" },
+      "description": "Stores generated instances of integral reports."
+    },
     "/published_reports/{reportId}": {
         "schema": { "$ref": "#/entities/PublishedReport" },
         "description": "Controls which reports are visible to owners."
@@ -365,3 +409,5 @@
     "providers": ["password", "google.com"]
   }
 }
+
+    

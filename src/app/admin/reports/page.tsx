@@ -16,11 +16,11 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from "@/lib/utils";
 import { es } from "date-fns/locale";
-import { Calendar as CalendarIcon, Download, Search, Loader2, FileText, FileSpreadsheet, ArrowUpDown, Building, BadgeInfo, BadgeCheck, BadgeX, History, ChevronDown, ChevronRight, TrendingUp, TrendingDown, DollarSign, Receipt, Wand2, Megaphone, ArrowLeft, Trash2 } from "lucide-react";
+import { Calendar as CalendarIcon, Download, Search, Loader2, FileText, FileSpreadsheet, ArrowUpDown, Building, BadgeInfo, BadgeCheck, BadgeX, History, ChevronDown, ChevronRight, TrendingUp, TrendingDown, DollarSign, Receipt, Wand2, Megaphone, ArrowLeft, Trash2, MoreHorizontal, Eye } from "lucide-react";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as ExcelJS from 'exceljs';
-import { collection, getDocs, query, where, doc, getDoc, orderBy, Timestamp, addDoc, setDoc, writeBatch, deleteDoc, limit } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, getDoc, orderBy, Timestamp, addDoc, setDoc, writeBatch, deleteDoc, limit, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { Calendar } from "@/components/ui/calendar";
@@ -106,6 +106,26 @@ type IntegralReportRow = {
     adjustmentDebtUSD: number;
 };
 
+type SavedIntegralReport = {
+    id: string;
+    createdAt: Timestamp;
+    data: IntegralReportRow[];
+    filters: {
+        statusFilter: string;
+        ownerFilter: string;
+        dateRangeFrom?: string;
+        dateRangeTo?: string;
+    }
+};
+
+type PublishedReport = {
+    id: string;
+    type: 'integral' | 'balance';
+    sourceId: string;
+    createdAt: Timestamp;
+};
+
+
 type DelinquentOwner = {
     id: string;
     name: string;
@@ -183,9 +203,7 @@ const buildIntegralReportData = (
     allDebts: Debt[],
     allPayments: Payment[],
     allHistoricalPayments: HistoricalPayment[],
-    dateRange: { from?: Date; to?: Date },
-    ownerFilter: string,
-    statusFilter: string
+    dateRange: { from?: Date; to?: Date }
 ): IntegralReportRow[] => {
     const sortedOwners = [...owners]
         .filter(owner => owner.id !== ADMIN_USER_ID && owner.name && owner.name !== 'Valle Admin')
@@ -314,11 +332,6 @@ const buildIntegralReportData = (
             monthsOwed,
             adjustmentDebtUSD
         };
-    }).filter(row => {
-        if (!row.name) return false;
-        const statusMatch = statusFilter === 'todos' || row.status.toLowerCase().replace(' ', '') === statusFilter.toLowerCase().replace(' ', '');
-        const ownerNameMatch = !ownerFilter || (row.name && row.name.toLowerCase().includes(ownerFilter.toLowerCase()));
-        return statusMatch && ownerNameMatch;
     });
 };
 
@@ -336,6 +349,11 @@ export default function ReportsPage() {
     const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
     const [activeRate, setActiveRate] = useState(0);
     const [condoFee, setCondoFee] = useState(0);
+
+    // New state for saved integral reports
+    const [savedIntegralReports, setSavedIntegralReports] = useState<SavedIntegralReport[]>([]);
+    const [publishedReports, setPublishedReports] = useState<PublishedReport[]>([]);
+
 
     // Filters for Integral Report
     const [integralStatusFilter, setIntegralStatusFilter] = useState('todos');
@@ -475,19 +493,39 @@ export default function ReportsPage() {
     
     useEffect(() => {
         fetchData();
-    }, []);
+
+        // Listen for real-time updates on saved and published reports
+        const savedReportsQuery = query(collection(db, 'integral_reports'), orderBy('createdAt', 'desc'));
+        const savedUnsub = onSnapshot(savedReportsQuery, (snapshot) => {
+            setSavedIntegralReports(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SavedIntegralReport)));
+        });
+
+        const publishedReportsQuery = query(collection(db, 'published_reports'));
+        const publishedUnsub = onSnapshot(publishedReportsQuery, (snapshot) => {
+            setPublishedReports(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PublishedReport)));
+        });
+        
+        return () => {
+            savedUnsub();
+            publishedUnsub();
+        };
+    }, [fetchData]);
 
 
     const integralReportData = useMemo<IntegralReportRow[]>(() => {
-        return buildIntegralReportData(
+        const data = buildIntegralReportData(
             owners,
             allDebts,
             allPayments,
             allHistoricalPayments,
-            integralDateRange,
-            integralOwnerFilter,
-            integralStatusFilter
+            integralDateRange
         );
+
+        return data.filter(row => {
+            const statusMatch = integralStatusFilter === 'todos' || row.status.toLowerCase().replace(' ', '') === integralStatusFilter.toLowerCase().replace(' ', '');
+            const ownerNameMatch = !integralOwnerFilter || (row.name && row.name.toLowerCase().includes(integralOwnerFilter.toLowerCase()));
+            return statusMatch && ownerNameMatch;
+        });
     }, [owners, allDebts, allPayments, allHistoricalPayments, integralDateRange, integralOwnerFilter, integralStatusFilter]);
     
     // --- Delinquency Report Logic ---
@@ -673,14 +711,46 @@ export default function ReportsPage() {
         });
     };
     
-    const handlePublishIntegralReport = async () => {
+    const handleGenerateAndSaveIntegral = async () => {
         setGeneratingReport(true);
         try {
-            const reportId = `integral-${format(new Date(), 'yyyy-MM-dd-HH-mm')}`;
-            const reportRef = doc(db, 'published_reports', reportId);
+            // Refetch all data to ensure it's current
+            const ownersData = (await getDocs(collection(db, 'owners'))).docs.map(d => ({ id: d.id, ...d.data() } as Owner));
+            const debtsData = (await getDocs(collection(db, 'debts'))).docs.map(d => ({ id: d.id, ...d.data() } as Debt));
+            const paymentsData = (await getDocs(collection(db, 'payments'))).docs.map(d => ({ id: d.id, ...d.data() } as Payment));
+            const historicalData = (await getDocs(collection(db, 'historical_payments'))).docs.map(d => d.data() as HistoricalPayment);
+            
+            const dataToSave = buildIntegralReportData(ownersData, debtsData, paymentsData, historicalData, integralDateRange);
+
+            const reportRef = doc(collection(db, "integral_reports"));
+            await setDoc(reportRef, {
+                createdAt: Timestamp.now(),
+                data: dataToSave,
+                filters: {
+                    statusFilter: integralStatusFilter,
+                    ownerFilter: integralOwnerFilter,
+                    dateRangeFrom: integralDateRange.from?.toISOString(),
+                    dateRangeTo: integralDateRange.to?.toISOString(),
+                }
+            });
+
+            toast({ title: "Reporte Guardado", description: "El reporte integral ha sido generado y guardado." });
+        } catch (error) {
+            console.error('Error saving integral report:', error);
+            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo guardar el reporte integral.' });
+        } finally {
+            setGeneratingReport(false);
+        }
+    };
+    
+    const handlePublishIntegralReport = async (reportId: string) => {
+        setGeneratingReport(true);
+        try {
+            const publicationId = `integral-${reportId}`;
+            const reportRef = doc(db, 'published_reports', publicationId);
             await setDoc(reportRef, {
                 type: 'integral',
-                title: 'Reporte Integral de Propietarios',
+                sourceId: reportId,
                 createdAt: Timestamp.now(),
             });
 
@@ -693,131 +763,52 @@ export default function ReportsPage() {
                     body: 'El reporte integral de propietarios ya está disponible para su consulta.',
                     createdAt: Timestamp.now(),
                     read: false,
-                    href: `/owner/report/${reportId}`
+                    href: `/owner/report/${publicationId}`
                 });
             });
             await batch.commit();
 
-            toast({
-                title: 'Reporte Integral Publicado',
-                description: 'El reporte ahora es visible para los propietarios y han sido notificados.',
-                className: 'bg-blue-100 text-blue-800'
-            });
+            toast({ title: 'Reporte Publicado', description: 'El reporte integral ahora es visible para los propietarios.', className: 'bg-blue-100 text-blue-800' });
         } catch (error) {
             console.error('Error publishing integral report:', error);
-            toast({ variant: 'destructive', title: 'Error de Publicación', description: 'No se pudo publicar el reporte.' });
+            toast({ variant: 'destructive', title: 'Error de Publicación' });
         } finally {
             setGeneratingReport(false);
         }
     };
 
-    const handleDeleteIntegralPublication = async () => {
-        if (!window.confirm('¿Está seguro de que desea ELIMINAR LA PUBLICACIÓN del último reporte integral?')) {
+    const handleDeleteIntegralPublication = async (reportId: string) => {
+        setGeneratingReport(true);
+        try {
+            await deleteDoc(doc(db, 'published_reports', `integral-${reportId}`));
+            toast({ title: 'Publicación Eliminada' });
+        } catch (error) {
+            console.error("Error deleting integral report publication:", error);
+            toast({ variant: 'destructive', title: 'Error' });
+        } finally {
+            setGeneratingReport(false);
+        }
+    };
+
+    const handleDeleteSavedIntegralReport = async (reportId: string) => {
+        if (!window.confirm("¿Está seguro? Esta acción eliminará permanentemente el reporte guardado. Si está publicado, también se eliminará la publicación.")) {
             return;
         }
         setGeneratingReport(true);
         try {
-            const q = query(
-                collection(db, 'published_reports'), 
-                where('type', '==', 'integral'), 
-                orderBy('createdAt', 'desc'), 
-                limit(1)
-            );
-            const snapshot = await getDocs(q);
-            if (snapshot.empty) {
-                toast({ title: 'No encontrado', description: 'No se encontró ningún reporte integral publicado para eliminar.' });
-                setGeneratingReport(false);
-                return;
-            }
-            const reportToDelete = snapshot.docs[0];
-            await deleteDoc(reportToDelete.ref);
-            toast({ title: 'Publicación Eliminada', description: 'El último reporte integral publicado ha sido eliminado.' });
+            const batch = writeBatch(db);
+            batch.delete(doc(db, 'integral_reports', reportId));
+            batch.delete(doc(db, 'published_reports', `integral-${reportId}`)); // Also delete publication if it exists
+            await batch.commit();
+            toast({ title: 'Reporte Eliminado' });
         } catch (error) {
-            console.error("Error deleting integral report publication:", error);
-            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo eliminar la publicación.' });
+            console.error("Error deleting saved integral report:", error);
+            toast({ variant: 'destructive', title: 'Error al eliminar' });
         } finally {
             setGeneratingReport(false);
         }
     };
 
-
-    const handleExportIntegral = async (formatType: 'pdf' | 'excel') => {
-        const data = integralReportData;
-        const filename = `reporte_integral_${new Date().toISOString().split('T')[0]}`;
-        const emissionDate = format(new Date(), "dd/MM/yyyy 'a las' HH:mm:ss");
-        let periodString = "Período de Pagos: Todos";
-        if (integralDateRange.from && integralDateRange.to) {
-            periodString = `Período de Pagos: Desde ${format(integralDateRange.from, 'P', { locale: es })} hasta ${format(integralDateRange.to, 'P', { locale: es })}`;
-        } else if (integralDateRange.from) {
-            periodString = `Período de Pagos: Desde ${format(integralDateRange.from, 'P', { locale: es })}`;
-        } else if (integralDateRange.to) {
-            periodString = `Período de Pagos: Hasta ${format(integralDateRange.to, 'P', { locale: es })}`;
-        }
-
-        if (formatType === 'pdf') {
-            const doc = new jsPDF({ orientation: 'landscape' });
-            let startY = 15;
-            if (companyInfo?.logo) doc.addImage(companyInfo.logo, 'PNG', 15, startY, 20, 20);
-            if (companyInfo) doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, 40, startY + 5);
-
-            doc.setFontSize(16).setFont('helvetica', 'bold').text('Reporte Integral de Propietarios', doc.internal.pageSize.getWidth() / 2, startY + 15, { align: 'center'});
-            
-            startY += 25;
-            doc.setFontSize(9).setFont('helvetica', 'normal');
-            doc.text(periodString, 15, startY);
-            doc.text(`Fecha de Emisión: ${emissionDate}`, doc.internal.pageSize.getWidth() - 15, startY, { align: 'right'});
-            
-            startY += 10;
-            
-            autoTable(doc, {
-                head: [["Propietario", "Propiedad", "Fecha Últ. Pago", "Monto Pagado (Bs)", "Tasa BCV", "Saldo a Favor (Bs)", "Estado", "Periodo", "Meses Adeudados", "Deuda por Ajuste ($)"]], 
-                body: data.map(row => [
-                    row.name, row.properties, row.lastPaymentDate,
-                    row.paidAmount > 0 ? formatToTwoDecimals(row.paidAmount) : '',
-                    row.avgRate > 0 ? formatToTwoDecimals(row.avgRate) : '',
-                    row.balance > 0 ? formatToTwoDecimals(row.balance) : '',
-                    row.status,
-                    row.solvencyPeriod,
-                    row.monthsOwed > 0 ? row.monthsOwed : '',
-                    row.adjustmentDebtUSD > 0 ? `$${row.adjustmentDebtUSD.toFixed(2)}` : ''
-                ]), 
-                startY: startY,
-                headStyles: { fillColor: [30, 80, 180] }, 
-                styles: { fontSize: 7, cellPadding: 1.5, overflow: 'linebreak' },
-                 columnStyles: { 
-                    3: { halign: 'right' },
-                    4: { halign: 'right' },
-                    5: { halign: 'right' },
-                    8: { halign: 'center' },
-                    9: { halign: 'right' },
-                }
-            });
-            doc.save(`${filename}.pdf`);
-        } else {
-             const workbook = new ExcelJS.Workbook();
-             const worksheet = workbook.addWorksheet("Reporte Integral");
-             worksheet.columns = [
-                 { header: "Propietario", key: "name", width: 30 },
-                 { header: "Propiedad", key: "properties", width: 25 },
-                 { header: "Fecha Últ. Pago", key: "lastPaymentDate", width: 15 },
-                 { header: "Monto Pagado (Bs)", key: "paidAmount", width: 20, style: { numFmt: '#,##0.00' } },
-                 { header: "Tasa BCV", key: "avgRate", width: 15, style: { numFmt: '#,##0.00' } },
-                 { header: "Saldo a Favor (Bs)", key: "balance", width: 20, style: { numFmt: '#,##0.00' } },
-                 { header: "Estado", key: "status", width: 15 },
-                 { header: "Periodo", key: "solvencyPeriod", width: 25 },
-                 { header: "Meses Adeudados", key: "monthsOwed", width: 15, style: { numFmt: '0' } },
-                 { header: "Deuda por Ajuste ($)", key: "adjustmentDebtUSD", width: 20, style: { numFmt: '$#,##0.00' } },
-             ];
-             worksheet.addRows(data);
-             const buffer = await workbook.xlsx.writeBuffer();
-             const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-             const link = document.createElement('a');
-             link.href = URL.createObjectURL(blob);
-             link.download = `${filename}.xlsx`;
-             link.click();
-        }
-    };
-    
     const handleExportDelinquency = async (formatType: 'pdf' | 'excel') => {
         const data = filteredAndSortedDelinquents.filter(o => selectedDelinquentOwners.has(o.id));
         if (data.length === 0) {
@@ -1261,7 +1252,7 @@ export default function ReportsPage() {
                     <Card>
                         <CardHeader>
                             <CardTitle>Reporte Integral de Propietarios</CardTitle>
-                            <CardDescription>Una vista consolidada del estado financiero de todos los propietarios.</CardDescription>
+                            <CardDescription>Genere, guarde y publique una vista consolidada del estado de todos los propietarios.</CardDescription>
                              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-4">
                                 <div className="space-y-2">
                                     <Label>Buscar Propietario</Label>
@@ -1306,53 +1297,50 @@ export default function ReportsPage() {
                         </CardHeader>
                         <CardContent>
                              <div className="flex justify-end gap-2 mb-4">
-                                <Button variant="outline" onClick={handlePublishIntegralReport} disabled={generatingReport}>
-                                    <Megaphone className="mr-2 h-4 w-4" /> Publicar Reporte
-                                </Button>
-                                <Button variant="destructive" onClick={handleDeleteIntegralPublication} disabled={generatingReport}>
-                                    <Trash2 className="mr-2 h-4 w-4" /> Eliminar Publicación
-                                </Button>
-                                <Button variant="outline" onClick={() => handleExportIntegral('pdf')} disabled={generatingReport}>
-                                    <FileText className="mr-2 h-4 w-4" /> Exportar a PDF
-                                </Button>
-                                <Button variant="outline" onClick={() => handleExportIntegral('excel')} disabled={generatingReport}>
-                                    <FileSpreadsheet className="mr-2 h-4 w-4" /> Exportar a Excel
+                                <Button onClick={handleGenerateAndSaveIntegral} disabled={generatingReport}>
+                                    <FileText className="mr-2 h-4 w-4" /> Generar y Guardar Reporte
                                 </Button>
                             </div>
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Propietario</TableHead>
-                                        <TableHead>Propiedad</TableHead>
-                                        <TableHead>Fecha Últ. Pago</TableHead>
-                                        <TableHead className="text-right">Monto Pagado (Bs)</TableHead>
-                                        <TableHead className="text-right">Tasa BCV</TableHead>
-                                        <TableHead className="text-right">Saldo a Favor</TableHead>
-                                        <TableHead>Estado</TableHead>
-                                        <TableHead>Periodo</TableHead>
-                                        <TableHead className="text-center">Meses Adeudados</TableHead>
-                                        <TableHead className="text-right">Deuda por Ajuste ($)</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {integralReportData.map(row => (
-                                        <TableRow key={row.ownerId}>
-                                            <TableCell className="font-medium">{row.name}</TableCell>
-                                            <TableCell>{row.properties}</TableCell>
-                                            <TableCell>{row.lastPaymentDate}</TableCell>
-                                            <TableCell className="text-right">{row.paidAmount > 0 ? `Bs. ${formatToTwoDecimals(row.paidAmount)}`: ''}</TableCell>
-                                            <TableCell className="text-right">{row.avgRate > 0 ? `Bs. ${formatToTwoDecimals(row.avgRate)}`: ''}</TableCell>
-                                            <TableCell className="text-right">{row.balance > 0 ? `Bs. ${formatToTwoDecimals(row.balance)}`: ''}</TableCell>
-                                            <TableCell>
-                                                <span className={cn('font-semibold', row.status === 'No Solvente' ? 'text-destructive' : 'text-green-600')}>{row.status}</span>
-                                            </TableCell>
-                                            <TableCell className="capitalize">{row.solvencyPeriod}</TableCell>
-                                            <TableCell className="text-center">{row.monthsOwed > 0 ? row.monthsOwed : ''}</TableCell>
-                                            <TableCell className="text-right">{row.adjustmentDebtUSD > 0 ? `$${row.adjustmentDebtUSD.toFixed(2)}`: ''}</TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
+
+                             <h3 className="text-lg font-semibold mb-2">Reportes Integrales Guardados</h3>
+                             <Table>
+                                 <TableHeader>
+                                     <TableRow>
+                                         <TableHead>Fecha de Creación</TableHead>
+                                         <TableHead>Filtros Aplicados</TableHead>
+                                         <TableHead>Estado</TableHead>
+                                         <TableHead className="text-right">Acciones</TableHead>
+                                     </TableRow>
+                                 </TableHeader>
+                                 <TableBody>
+                                     {savedIntegralReports.map(report => {
+                                         const isPublished = publishedReports.some(p => p.sourceId === report.id);
+                                         return (
+                                             <TableRow key={report.id}>
+                                                 <TableCell>{format(report.createdAt.toDate(), "dd/MM/yyyy HH:mm")}</TableCell>
+                                                 <TableCell className="text-xs text-muted-foreground">
+                                                     <p>Estado: {report.filters.statusFilter}</p>
+                                                     <p>Propietario: {report.filters.ownerFilter || 'Todos'}</p>
+                                                 </TableCell>
+                                                 <TableCell>
+                                                     <Badge variant={isPublished ? "success" : "outline"}>{isPublished ? "Publicado" : "No Publicado"}</Badge>
+                                                 </TableCell>
+                                                 <TableCell className="text-right">
+                                                     <DropdownMenu>
+                                                         <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4"/></Button></DropdownMenuTrigger>
+                                                         <DropdownMenuContent>
+                                                             <DropdownMenuItem onClick={() => router.push(`/owner/report/integral-${report.id}`)}><Eye className="mr-2 h-4 w-4" /> Ver / Descargar</DropdownMenuItem>
+                                                             {!isPublished && <DropdownMenuItem onClick={() => handlePublishIntegralReport(report.id)}><Megaphone className="mr-2 h-4 w-4"/> Publicar</DropdownMenuItem>}
+                                                             {isPublished && <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteIntegralPublication(report.id)}><Trash2 className="mr-2 h-4 w-4"/> Quitar Publicación</DropdownMenuItem>}
+                                                             <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteSavedIntegralReport(report.id)}><Trash2 className="mr-2 h-4 w-4"/> Eliminar</DropdownMenuItem>
+                                                         </DropdownMenuContent>
+                                                     </DropdownMenu>
+                                                 </TableCell>
+                                             </TableRow>
+                                         );
+                                     })}
+                                 </TableBody>
+                             </Table>
                         </CardContent>
                     </Card>
                 </TabsContent>
@@ -1890,3 +1878,5 @@ export default function ReportsPage() {
         </div>
     );
 }
+
+    
