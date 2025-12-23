@@ -5,10 +5,23 @@ import { usePathname, useRouter } from 'next/navigation';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
 import { useAuth } from '@/hooks/use-auth';
 import { BottomNavBar } from '@/components/bottom-nav-bar';
-import { Loader2, Home, Plus, FileSearch, Settings, Banknote } from 'lucide-react';
+import { Loader2, Home, Plus, FileSearch, Settings, Banknote, Calculator, ClipboardList, Receipt, Landmark } from 'lucide-react';
 
 const ownerNavItems: NavItem[] = [
-  // ... tus items de navegación de propietario
+  { href: "/owner/dashboard", icon: Home, label: "Inicio" },
+  { 
+    href: "/owner/payments", 
+    icon: Landmark, 
+    label: "Pagos",
+    items: [
+      { href: "/owner/payments/report", label: "Reportar Pago" },
+      { href: "/owner/payment-methods", label: "Métodos de Pago" },
+      { href: "/owner/payments/calculator", label: "Calculadora de Pagos" },
+    ]
+  },
+  { href: "/owner/reports", icon: FileSearch, label: "Informes" },
+  { href: "/owner/surveys", icon: ClipboardList, label: "Encuestas" },
+  { href: "/owner/settings", icon: Settings, label: "Configuración" },
 ];
 
 type BottomNavItem = {
