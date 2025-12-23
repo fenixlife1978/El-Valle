@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
@@ -14,7 +12,8 @@ const publicPaths = ['/welcome', '/login', '/forgot-password', '/register'];
 
 function AuthGuard({ children }: { children: ReactNode }) {
   const { user, role, loading } = useAuth();
-  const pathname = usePathname();
+  const rawPathname = usePathname();
+  const pathname = rawPathname ?? ''; // ✅ aseguramos que nunca sea null
   const router = useRouter();
 
   useEffect(() => {
@@ -60,7 +59,6 @@ function AuthGuard({ children }: { children: ReactNode }) {
   
   return <>{children}</>;
 }
-
 
 export default function RootLayout({
   children,

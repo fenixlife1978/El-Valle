@@ -261,8 +261,8 @@ export default function UnifiedPaymentsPage() {
              return { isValid: false, error: `El monto total (Bs. ${Number(totalAmount).toFixed(2)}) no coincide con la suma de los montos asignados (Bs. ${assignedTotal.toFixed(2)}).` };
         }
         
-        if (!/^\d{6,}$/.test(reference)) {
-            return { isValid: false, error: 'La referencia debe tener al menos 6 dígitos.' };
+        if (reference.length !== 6) {
+            return { isValid: false, error: 'La referencia debe tener exactamente 6 dígitos.' };
         }
         
         try {
@@ -446,9 +446,18 @@ export default function UnifiedPaymentsPage() {
                             </div>
                         )}
                         <div className="space-y-2">
-                             <Label htmlFor="reference">Referencia</Label>
-                             <Input id="reference" value={reference} onChange={(e) => setReference(e.target.value.replace(/\D/g, ''))} disabled={loading}/>
-                             <p className="text-xs text-muted-foreground">Últimos 6 dígitos, incluso si comienzan con cero.</p>
+                             <Label htmlFor="reference">Últimos 6 dígitos de la Referencia</Label>
+                             <Input 
+                                id="reference" 
+                                value={reference} 
+                                onChange={(e) => {
+                                    const digitsOnly = e.target.value.replace(/\D/g, '');
+                                    setReference(digitsOnly.slice(0, 6));
+                                }}
+                                maxLength={6} 
+                                disabled={loading}
+                             />
+                             <p className="text-xs text-muted-foreground">La referencia debe tener 6 dígitos.</p>
                         </div>
                     </CardContent>
                 </Card>
@@ -580,13 +589,13 @@ export default function UnifiedPaymentsPage() {
                             <Info className="h-6 w-6 text-blue-500" />
                             Reporte Enviado para Revisión
                         </DialogTitle>
-                        <div className="pt-4 text-sm text-muted-foreground">
-                            <p>¡Gracias! Hemos recibido tu reporte de pago. El tiempo máximo para la aprobación es de <strong>24 horas</strong>.</p>
-                            <p className="mt-4">Te invitamos a ingresar nuevamente después de este lapso para:</p>
-                             <ul className="list-disc list-inside mt-2 space-y-1">
-                                <li>Verificar si el monto enviado cubrió completamente tu deuda.</li>
-                                <li>Descargar tu recibo de pago una vez que sea aprobado.</li>
-                            </ul>
+                        <div className="pt-4 text-sm text-muted-foreground space-y-4">
+                           <p>¡Gracias! Hemos recibido tu reporte de pago. El tiempo máximo para la aprobación es de <strong>24 horas</strong>.</p>
+                           <p>Te invitamos a ingresar nuevamente después de este lapso para:</p>
+                           <ul className="list-disc list-inside space-y-1">
+                               <li>Verificar si el monto enviado cubrió completamente tu deuda.</li>
+                               <li>Descargar tu recibo de pago una vez que sea aprobado.</li>
+                           </ul>
                         </div>
                     </DialogHeader>
                     <DialogFooter>
@@ -597,4 +606,3 @@ export default function UnifiedPaymentsPage() {
         </div>
     );
 }
-

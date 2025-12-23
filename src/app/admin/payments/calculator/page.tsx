@@ -206,6 +206,10 @@ export default function PaymentCalculatorPage() {
             toast({ variant: 'destructive', title: 'Campos requeridos', description: 'Por favor, complete todos los detalles del pago.' });
             return;
         }
+        if (paymentDetails.reference.length !== 6) {
+            toast({ variant: 'destructive', title: 'Referencia Inválida', description: 'La referencia debe tener exactamente 6 dígitos.' });
+            return;
+        }
         if (paymentDetails.bank === 'otro' && !paymentDetails.otherBank) {
             toast({ variant: 'destructive', title: 'Campo requerido', description: 'Por favor, especifique el nombre del otro banco.' });
             return;
@@ -449,8 +453,16 @@ export default function PaymentCalculatorPage() {
                             </div>
                         )}
                         <div className="space-y-2">
-                            <Label htmlFor="reference">Referencia</Label>
-                            <Input id="reference" value={paymentDetails.reference} onChange={(e) => setPaymentDetails(d => ({...d, reference: e.target.value.replace(/\D/g, '')}))} />
+                            <Label htmlFor="reference">Últimos 6 dígitos de la Referencia</Label>
+                            <Input 
+                                id="reference" 
+                                value={paymentDetails.reference} 
+                                onChange={(e) => {
+                                    const digitsOnly = e.target.value.replace(/\D/g, '');
+                                    setPaymentDetails(d => ({...d, reference: digitsOnly.slice(0, 6)}));
+                                }}
+                                maxLength={6}
+                            />
                         </div>
                     </div>
                     <DialogFooter>
@@ -473,3 +485,4 @@ export default function PaymentCalculatorPage() {
     
 
     
+
