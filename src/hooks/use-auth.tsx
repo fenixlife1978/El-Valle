@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
@@ -13,6 +14,12 @@ import { initFCM } from '@/lib/init-fcm';
 type CompanyInfo = {
     name: string;
     logo: string;
+    address?: string;
+    rif?: string;
+    phone?: string;
+    email?: string;
+    bankName?: string;
+    accountNumber?: string;
 };
 
 type ExchangeRate = {
@@ -100,7 +107,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const settingsUnsubscribe = onSnapshot(settingsRef, (docSnap) => {
             if (docSnap.exists()) {
                 const settingsData = docSnap.data();
-                setCompanyInfo(settingsData.companyInfo || null);
+                
+                // Ensure all fields have a default value
+                const loadedCompanyInfo = settingsData.companyInfo || {};
+                setCompanyInfo({
+                    name: loadedCompanyInfo.name || '',
+                    logo: loadedCompanyInfo.logo || '',
+                    address: loadedCompanyInfo.address || '',
+                    rif: loadedCompanyInfo.rif || '',
+                    phone: loadedCompanyInfo.phone || '',
+                    email: loadedCompanyInfo.email || '',
+                    bankName: loadedCompanyInfo.bankName || '',
+                    accountNumber: loadedCompanyInfo.accountNumber || '',
+                });
+
                 setBcvLogoUrl(settingsData.bcvLogo || null);
 
 

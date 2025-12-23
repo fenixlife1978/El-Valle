@@ -134,7 +134,13 @@ export default function SettingsPage() {
             if (docSnap.exists()) {
                 const settings = docSnap.data() as Settings;
                 setAdminProfile(settings.adminProfile || emptyAdminProfile);
-                setCompanyInfo(settings.companyInfo || emptyCompanyInfo);
+
+                const loadedCompanyInfo = settings.companyInfo || {};
+                setCompanyInfo({
+                    ...emptyCompanyInfo,
+                    ...loadedCompanyInfo,
+                });
+
                 setLogoPreview(settings.companyInfo?.logo);
                 setBcvLogo(settings.bcvLogo || '');
                 setBcvLogoPreview(settings.bcvLogo ?? null);
