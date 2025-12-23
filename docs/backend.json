@@ -63,7 +63,9 @@
                     "rif": {"type": "string"},
                     "phone": {"type": "string"},
                     "email": {"type": "string", "format": "email"},
-                    "logo": {"type": "string", "format": "uri"}
+                    "logo": {"type": "string", "format": "uri"},
+                    "bankName": {"type": "string"},
+                    "accountNumber": {"type": "string"}
                 }
             },
             "condoFee": {

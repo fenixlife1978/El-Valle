@@ -36,6 +36,8 @@ type CompanyInfo = {
     phone: string;
     email: string;
     logo: string;
+    bankName: string;
+    accountNumber: string;
 };
 
 type ExchangeRate = {
@@ -84,7 +86,9 @@ const emptyCompanyInfo: CompanyInfo = {
     rif: '',
     phone: '',
     email: '',
-    logo: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAOEAAADhCAMAAAAJbSJIAAAAA1BMVEX///+nxBvIAAAASElEQVR4nO3BMQEAAADCoPVPbQ0PoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD+BsNEAAG8Vkk/AAAAAElFTkSuQmCC'
+    logo: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAOEAAADhCAMAAAAJbSJIAAAAA1BMVEX///+nxBvIAAAASElEQVR4nO3BMQEAAADCoPVPbQ0PoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD+BsNEAAG8Vkk/AAAAAElFTkSuQmCC',
+    bankName: '',
+    accountNumber: ''
 };
 
 
@@ -309,6 +313,8 @@ export default function SettingsPage() {
                     phone: companyInfo?.phone || '',
                     email: companyInfo?.email || '',
                     logo: companyInfo?.logo || '',
+                    bankName: companyInfo?.bankName || '',
+                    accountNumber: companyInfo?.accountNumber || '',
                 },
                 adminProfile: {
                     name: adminProfile.name || '',
@@ -477,8 +483,8 @@ export default function SettingsPage() {
 
                     <Card>
                         <CardHeader>
-                            <CardTitle>Información de la Empresa</CardTitle>
-                            <CardDescription>Edita los datos principales de la comunidad o empresa gestora.</CardDescription>
+                            <CardTitle>Información del Condominio</CardTitle>
+                            <CardDescription>Edita los datos principales que se mostrarán en la aplicación y en los reportes.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div className="grid md:grid-cols-2 gap-4">
@@ -501,6 +507,14 @@ export default function SettingsPage() {
                                 <div className="space-y-2">
                                     <Label htmlFor="email">Correo Electrónico</Label>
                                     <Input id="email" name="email" type="email" value={companyInfo.email} onChange={(e) => handleInfoChange(e, 'company')} />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="bankName">Nombre del Banco</Label>
+                                    <Input id="bankName" name="bankName" value={companyInfo.bankName} onChange={(e) => handleInfoChange(e, 'company')} />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="accountNumber">Número de Cuenta</Label>
+                                    <Input id="accountNumber" name="accountNumber" value={companyInfo.accountNumber} onChange={(e) => handleInfoChange(e, 'company')} />
                                 </div>
                             </div>
                         </CardContent>

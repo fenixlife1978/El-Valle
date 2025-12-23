@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
@@ -8,18 +7,14 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Shield, User, Eye, EyeOff } from 'lucide-react';
+import { Loader2, Eye, EyeOff } from 'lucide-react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
 import Link from 'next/link';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
-import { cn } from '@/lib/utils';
-
 
 const ADMIN_USER_ID = 'valle-admin-main-account';
-
 
 function LoginPage() {
     const router = useRouter();
@@ -36,7 +31,7 @@ function LoginPage() {
     const [loadingLogo, setLoadingLogo] = useState(true);
 
     useEffect(() => {
-        const roleParam = searchParams.get('role');
+        const roleParam = searchParams?.get('role') ?? null; // ✅ corregido
         if (roleParam === 'admin' || roleParam === 'owner') {
             setRole(roleParam);
         } else {
@@ -207,7 +202,6 @@ function LoginPage() {
         </main>
     );
 }
-
 
 // Wrap the main component in Suspense for useSearchParams
 export default function LoginPageWithSuspense() {
