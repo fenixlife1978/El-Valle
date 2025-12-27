@@ -37,3 +37,4 @@ pnpm-debug.log*
 *.tsbuildinfo
 next-env.d.ts
 service-account.json
+service-account.json
