@@ -265,6 +265,7 @@ export default function UnifiedPaymentsPage() {
             return { isValid: false, error: 'La referencia debe tener exactamente 6 dígitos.' };
         }
         
+        // Check for duplicate payment
         try {
             const q = query(collection(db, "payments"), 
                 where("reference", "==", reference),
@@ -440,7 +441,7 @@ export default function UnifiedPaymentsPage() {
                             </Button>
                         </div>
                         {bank === 'Otro' && (
-                            <div className="space-y-2">
+                            <div className="space-y-2 md:col-span-2">
                                 <Label htmlFor="otherBank">Nombre del Otro Banco</Label>
                                 <Input id="otherBank" value={otherBank} onChange={(e) => setOtherBank(e.target.value)} disabled={loading}/>
                             </div>
@@ -589,7 +590,7 @@ export default function UnifiedPaymentsPage() {
                             <Info className="h-6 w-6 text-blue-500" />
                             Reporte Enviado para Revisión
                         </DialogTitle>
-                        <div className="pt-4 text-sm text-muted-foreground space-y-4">
+                         <div className="pt-4 text-sm text-muted-foreground space-y-4">
                            <p>¡Gracias! Hemos recibido tu reporte de pago. El tiempo máximo para la aprobación es de <strong>24 horas</strong>.</p>
                            <p>Te invitamos a ingresar nuevamente después de este lapso para:</p>
                            <ul className="list-disc list-inside space-y-1">

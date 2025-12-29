@@ -260,6 +260,7 @@ export default function UnifiedPaymentsPage() {
             return { isValid: false, error: 'La referencia debe tener exactamente 6 dígitos.' };
         }
         
+        // Check for duplicate payment
         try {
             const q = query(collection(db, "payments"), 
                 where("reference", "==", reference),

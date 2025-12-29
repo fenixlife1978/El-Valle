@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Loader2, Info, Calculator, Minus, Equal, Check, Receipt, ArrowLeft } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { collection, query, onSnapshot, where, doc, getDoc, writeBatch, Timestamp, addDoc } from 'firebase/firestore';
+import { collection, query, onSnapshot, where, doc, getDoc, writeBatch, Timestamp, addDoc, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -182,6 +182,19 @@ export default function OwnerPaymentCalculatorPage() {
                 setProcessingPayment(false);
                 return;
             }
+            const paymentDate = Timestamp.now();
+
+            const q = query(collection(db, "payments"), 
+                where("reference", "==", paymentDetails.reference),
+                where("totalAmount", "==", paymentAmountBs),
+                where("paymentDate", "==", paymentDate)
+            );
+            const querySnapshot = await getDocs(q);
+            if (!querySnapshot.empty) {
+                toast({ variant: "destructive", title: "Pago Duplicado", description: 'Ya existe un reporte de pago con esta misma referencia, monto y fecha.' });
+                setProcessingPayment(false);
+                return;
+            }
 
             const paymentData = {
                 reportedBy: user.uid,
@@ -189,8 +202,8 @@ export default function OwnerPaymentCalculatorPage() {
                 beneficiaryIds: [user.uid],
                 totalAmount: paymentAmountBs,
                 exchangeRate: activeRate,
-                paymentDate: Timestamp.now(),
-                reportedAt: Timestamp.now(),
+                paymentDate: paymentDate,
+                reportedAt: paymentDate,
                 paymentMethod: paymentDetails.paymentMethod,
                 bank: paymentDetails.bank === 'otro' ? paymentDetails.otherBank : paymentDetails.bank,
                 reference: paymentDetails.reference,
