@@ -1,3 +1,4 @@
+
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
@@ -74,6 +75,22 @@ export default function RootLayout({
         <link rel="icon" href="/icon.png" type="image/png" sizes="any" />
         <title>VALLECONDO</title>
         <meta name="description" content="Condominium Management App" />
+        {/* SDK de OneSignal */}
+        <script src="https://cdn.onesignal.com/sdks/OneSignalSDK.js" async=""></script>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.OneSignal = window.OneSignal || [];
+              OneSignal.push(function() {
+                OneSignal.init({
+                  appId: "4d13c648-04bc-4aa1-b50a-bbd4b9350c3c",
+                  notifyButton: { enable: true }
+                });
+                OneSignal.showNativePrompt();
+              });
+            `,
+          }}
+        />
       </head>
       <body className="font-body antialiased bg-background text-foreground">
         <AuthProvider>
