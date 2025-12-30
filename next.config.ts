@@ -1,8 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-    // Asegura que Next reconozca páginas con estas extensiones
-    pageExtensions: ['ts', 'tsx', 'js', 'jsx'],
-  };
+  // pageExtensions: ['ts', 'tsx', 'js', 'jsx'], // Eliminado para usar los valores por defecto de Next.js
+};
   
-  export default nextConfig;
-  
+export default nextConfig;
