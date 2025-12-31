@@ -20,6 +20,7 @@ import jsPDF from 'jspdf';
 import QRCode from 'qrcode';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { useAuthorization } from '@/hooks/use-authorization';
 
 type Owner = {
   id: string;
@@ -102,6 +103,7 @@ const templates: Template[] = [
 
 export default function CertificatesPage() {
   const { toast } = useToast();
+  const { requestAuthorization } = useAuthorization();
   const [owners, setOwners] = useState<Owner[]>([]);
   const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
@@ -216,59 +218,61 @@ export default function CertificatesPage() {
   };
 
   const handleGenerateAndSave = async () => {
-    let person: Partial<Owner & ManualPerson> | null = null;
-    let property: { street: string; house: string } | null = null;
+    requestAuthorization(async () => {
+        let person: Partial<Owner & ManualPerson> | null = null;
+        let property: { street: string; house: string } | null = null;
 
-    if (entryMode === 'search') {
-      if (!selectedOwner || !selectedProperty) {
-        toast({ variant: 'destructive', title: 'Datos Incompletos', description: 'Debe seleccionar un propietario y una propiedad.' });
-        return;
-      }
-      person = selectedOwner;
-      property = selectedProperty;
-    } else {
-      if (!manualData.name || !manualData.cedula || !manualData.street || !manualData.house) {
-        toast({
-          variant: 'destructive',
-          title: 'Datos Incompletos',
-          description: 'Nombre, Cédula, Calle y Casa son obligatorios en modo manual.'
-        });
-        return;
-      }
-      person = manualData;
-      property = { street: manualData.street, house: manualData.house };
-    }
+        if (entryMode === 'search') {
+          if (!selectedOwner || !selectedProperty) {
+            toast({ variant: 'destructive', title: 'Datos Incompletos', description: 'Debe seleccionar un propietario y una propiedad.' });
+            return;
+          }
+          person = selectedOwner;
+          property = selectedProperty;
+        } else {
+          if (!manualData.name || !manualData.cedula || !manualData.street || !manualData.house) {
+            toast({
+              variant: 'destructive',
+              title: 'Datos Incompletos',
+              description: 'Nombre, Cédula, Calle y Casa son obligatorios en modo manual.'
+            });
+            return;
+          }
+          person = manualData;
+          property = { street: manualData.street, house: manualData.house };
+        }
 
-    if (!selectedTemplateId || !certificateBody) {
-      toast({
-        variant: 'destructive',
-        title: 'Datos Incompletos',
-        description: 'Debe seleccionar una plantilla y tener contenido en el cuerpo del documento.'
-      });
-      return;
-    }
+        if (!selectedTemplateId || !certificateBody) {
+          toast({
+            variant: 'destructive',
+            title: 'Datos Incompletos',
+            description: 'Debe seleccionar una plantilla y tener contenido en el cuerpo del documento.'
+          });
+          return;
+        }
 
-    setIsSubmitting(true);
-    try {
-        const docData = {
-          ownerId: entryMode === 'search' ? (person as any).id : 'manual',
-          ownerName: person!.name as string,
-          ownerCedula: (person!.cedula as string) || 'N/A',
-          property: property!,
-          type: selectedTemplateId,
-          body: certificateBody,
-          createdAt: serverTimestamp() as Timestamp
-        };
-        const docRef = await addDoc(collection(db, 'certificates'), docData);
-        await generatePDF({ ...docData, id: docRef.id, createdAt: Timestamp.now() } as Certificate);
-        toast({ title: 'Constancia Generada', description: 'El documento PDF ha sido creado y guardado en el historial.' });
-        resetDialog();
-      } catch (error) {
-        console.error(error);
-        toast({ variant: 'destructive', title: 'Error', description: 'No se pudo guardar la constancia.' });
-      } finally {
-        setIsSubmitting(false);
-      }
+        setIsSubmitting(true);
+        try {
+            const docData = {
+              ownerId: entryMode === 'search' ? (person as any).id : 'manual',
+              ownerName: person!.name as string,
+              ownerCedula: (person!.cedula as string) || 'N/A',
+              property: property!,
+              type: selectedTemplateId,
+              body: certificateBody,
+              createdAt: serverTimestamp() as Timestamp
+            };
+            const docRef = await addDoc(collection(db, 'certificates'), docData);
+            await generatePDF({ ...docData, id: docRef.id, createdAt: Timestamp.now() } as Certificate);
+            toast({ title: 'Constancia Generada', description: 'El documento PDF ha sido creado y guardado en el historial.' });
+            resetDialog();
+          } catch (error) {
+            console.error(error);
+            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo guardar la constancia.' });
+          } finally {
+            setIsSubmitting(false);
+          }
+    });
     };
   
     const generatePDF = async (certificate: Certificate) => {
@@ -326,17 +330,19 @@ export default function CertificatesPage() {
     };
   
     const handleDeleteCertificate = async () => {
-      if (!certificateToDelete) return;
-      try {
-        await deleteDoc(doc(db, 'certificates', certificateToDelete.id));
-        toast({ title: 'Constancia Eliminada', description: 'El registro ha sido eliminado exitosamente.' });
-      } catch (error) {
-        console.error('Error deleting certificate: ', error);
-        toast({ variant: 'destructive', title: 'Error', description: 'No se pudo eliminar la constancia.' });
-      } finally {
-        setCertificateToDelete(null);
-        setIsDeleteConfirmationOpen(false);
-      }
+        if (!certificateToDelete) return;
+        requestAuthorization(async () => {
+            try {
+                await deleteDoc(doc(db, 'certificates', certificateToDelete.id));
+                toast({ title: 'Constancia Eliminada', description: 'El registro ha sido eliminado exitosamente.' });
+            } catch (error) {
+                console.error('Error deleting certificate: ', error);
+                toast({ variant: 'destructive', title: 'Error', description: 'No se pudo eliminar la constancia.' });
+            } finally {
+                setCertificateToDelete(null);
+                setIsDeleteConfirmationOpen(false);
+            }
+        });
     };
   
     return (
@@ -654,4 +660,3 @@ export default function CertificatesPage() {
     </div>
   );
 }
-  

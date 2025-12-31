@@ -37,6 +37,17 @@ service cloud.firestore {
       // Only admins can change settings.
       allow write: if isAdmin();
     }
+    
+    // Logs collection: Audit trail for admin actions.
+    match /logs/{logId} {
+        // Only admins can read logs.
+        allow read: if isAdmin();
+        // Logs are created by the system on behalf of the user, so creation must be allowed for any signed-in user.
+        allow create: if isSignedIn();
+        // Nobody can update or delete logs.
+        allow update, delete: if false;
+    }
+
 
     // Payments collection: Where users report their payments.
     match /payments/{paymentId} {
@@ -59,7 +70,7 @@ service cloud.firestore {
     // Certificates collection: Residence/solvency certificates.
     match /certificates/{certId} {
         // Only admins can manage certificates.
-        allow read, write: isAdmin();
+        allow read, write: if isAdmin();
     }
 
     // Financial Statements collection: Monthly financial reports.

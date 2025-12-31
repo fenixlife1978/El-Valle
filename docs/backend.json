@@ -86,6 +86,29 @@
             }
         }
     },
+    "Authorization": {
+      "title": "Authorization Configuration",
+      "description": "Stores security-related configurations, like the authorization key.",
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string",
+          "description": "The master key required for critical administrative actions."
+        }
+      }
+    },
+    "Log": {
+        "title": "Audit Log",
+        "description": "A record of a significant system event for auditing purposes.",
+        "type": "object",
+        "properties": {
+            "userId": {"type": "string"},
+            "userName": {"type": "string"},
+            "action": {"type": "string", "description": "e.g., 'authorization_attempt'"},
+            "result": {"type": "string", "enum": ["success", "failure"]},
+            "timestamp": {"type": "string", "format": "date-time"}
+        }
+    },
     "Payment": {
         "title": "Payment Record",
         "description": "A record of a payment made by a user.",
@@ -356,6 +379,14 @@
         "schema": { "$ref": "#/entities/Config" },
         "description": "Stores general application settings like company info and exchange rates."
     },
+    "/config/authorization": {
+      "schema": { "$ref": "#/entities/Authorization" },
+      "description": "Stores the admin authorization key."
+    },
+    "/logs/{logId}": {
+      "schema": { "$ref": "#/entities/Log" },
+      "description": "Stores audit logs for important system events."
+    },
     "/payments/{paymentId}": {
         "schema": { "$ref": "#/entities/Payment" },
         "description": "Stores payment records submitted by users."
@@ -409,5 +440,3 @@
     "providers": ["password", "google.com"]
   }
 }
-
-    

@@ -7,6 +7,7 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from '@/components/theme-provider';
 import { AuthProvider, useAuth } from '@/hooks/use-auth';
+import { AuthorizationProvider } from '@/hooks/use-authorization';
 import { Loader2 } from 'lucide-react';
 
 const publicPaths = ['/welcome', '/login', '/forgot-password', '/register'];
@@ -94,17 +95,19 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased bg-background text-foreground">
         <AuthProvider>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="dark"
-            enableSystem={false}
-            disableTransitionOnChange
-          >
-            <AuthGuard>
-              {children}
-            </AuthGuard>
-            <Toaster />
-          </ThemeProvider>
+          <AuthorizationProvider>
+            <ThemeProvider
+              attribute="class"
+              defaultTheme="dark"
+              enableSystem={false}
+              disableTransitionOnChange
+            >
+              <AuthGuard>
+                {children}
+              </AuthGuard>
+              <Toaster />
+            </ThemeProvider>
+          </AuthorizationProvider>
         </AuthProvider>
       </body>
     </html>
