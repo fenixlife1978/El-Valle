@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -34,7 +32,6 @@ export default function OwnerHistoryPage() {
         const fetchReports = async () => {
             setLoading(true);
             try {
-                // Fetch all published reports, not just balances
                 const reportsQuery = query(
                     collection(db, "published_reports"), 
                     orderBy('createdAt', 'desc')
@@ -82,7 +79,7 @@ export default function OwnerHistoryPage() {
         <div className="space-y-8">
             
             <div>
-                <h1 className="text-3xl font-bold font-headline">Historial de Reportes</h1>
+                <h1 className="text-3xl font-bold font-headline">Publicaciones Financieras Históricas</h1>
                 <p className="text-muted-foreground">Consulta los informes publicados por la administración.</p>
             </div>
             

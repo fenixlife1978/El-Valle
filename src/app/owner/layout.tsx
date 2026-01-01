@@ -19,7 +19,7 @@ const ownerNavItems: NavItem[] = [
       { href: "/owner/payments/calculator", label: "Calculadora de Pagos" },
     ]
   },
-  { href: "/owner/reports", icon: FileSearch, label: "Informes" },
+  { href: "/owner/reports", icon: FileSearch, label: "Publicaciones" },
   { href: "/owner/surveys", icon: ClipboardList, label: "Encuestas" },
   { href: "/owner/settings", icon: Settings, label: "Configuración" },
 ];
@@ -35,7 +35,7 @@ const bottomNavItems: BottomNavItem[] = [
   { href: '/owner/dashboard', icon: Home, label: 'Inicio' },
   { href: '/owner/payment-methods', icon: Banknote, label: 'Pagar' },
   { href: '/owner/payments/report', icon: Plus, label: 'Reportar', isCentral: true },
-  { href: '/owner/reports', icon: FileSearch, label: 'Informes' },
+  { href: '/owner/reports', icon: FileSearch, label: 'Publicaciones' },
   { href: '/owner/settings', icon: Settings, label: 'Ajustes' },
 ];
 
