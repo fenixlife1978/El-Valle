@@ -98,25 +98,27 @@ export default function ReportViewerPage() {
     const fetchReport = async () => {
       setLoading(true);
       try {
-        const isIntegral = reportId.startsWith('integral-');
-        const isBalance = reportId.startsWith('balance-');
-
         const publishedReportRef = doc(db, "published_reports", reportId);
         const publishedReportSnap = await getDoc(publishedReportRef);
-        
-        let sourceId = reportId; // Fallback for old balance reports
-        if (publishedReportSnap.exists()) {
-          const pubData = publishedReportSnap.data();
-          const createdAtData = pubData.createdAt;
-          if (createdAtData instanceof Timestamp) {
-            setReportDate(createdAtData.toDate());
-          } else if (typeof createdAtData === 'string') {
-            setReportDate(new Date(createdAtData));
-          }
-          if (pubData.sourceId) {
-             sourceId = pubData.sourceId;
-          }
+
+        if (!publishedReportSnap.exists()) {
+            toast({ variant: 'destructive', title: 'Error', description: 'El reporte solicitado no está publicado o no existe.' });
+            setLoading(false);
+            return;
         }
+
+        const pubData = publishedReportSnap.data();
+        const reportType = pubData.type;
+        const sourceId = pubData.sourceId; // This is the ID of the actual report document
+        const createdAtData = pubData.createdAt;
+
+        if (createdAtData instanceof Timestamp) {
+          setReportDate(createdAtData.toDate());
+        } else if (typeof createdAtData === 'string') {
+          setReportDate(new Date(createdAtData));
+        }
+
+        setReportType(reportType);
         
         const settingsRef = doc(db, 'config', 'mainSettings');
         const settingsSnap = await getDoc(settingsRef);
@@ -124,29 +126,19 @@ export default function ReportViewerPage() {
           setCompanyInfo(settingsSnap.data().companyInfo as CompanyInfo);
         }
 
-        if (isBalance) {
-          setReportType('balance');
-          const balanceId = reportId.replace('balance-', '');
-          const docRef = doc(db, "financial_statements", balanceId);
-          const reportSnap = await getDoc(docRef);
-
-          if (reportSnap.exists()) {
-            setReportData({ id: reportSnap.id, ...reportSnap.data() } as FinancialStatement);
-          } else {
-            toast({ variant: 'destructive', title: 'Error', description: 'No se encontró el balance financiero solicitado.' });
-          }
-        } else if (isIntegral) {
-          setReportType('integral');
+        let reportSnap;
+        if (reportType === 'balance') {
+          const docRef = doc(db, "financial_statements", sourceId);
+          reportSnap = await getDoc(docRef);
+        } else if (reportType === 'integral') {
           const docRef = doc(db, "integral_reports", sourceId);
-          const reportSnap = await getDoc(docRef);
+          reportSnap = await getDoc(docRef);
+        }
 
-          if (reportSnap.exists()) {
-            setReportData({ id: reportSnap.id, ...reportSnap.data() } as SavedIntegralReport);
-          } else {
-             toast({ variant: 'destructive', title: 'Error', description: 'No se encontró el reporte integral guardado.' });
-          }
+        if (reportSnap && reportSnap.exists()) {
+          setReportData({ id: reportSnap.id, ...reportSnap.data() });
         } else {
-          toast({ variant: 'destructive', title: 'Error', description: 'Tipo de reporte no reconocido.' });
+          toast({ variant: 'destructive', title: 'Error', description: 'No se encontraron los datos fuente del reporte.' });
         }
       } catch (error) {
         console.error("Error fetching report:", error);
@@ -275,7 +267,7 @@ export default function ReportViewerPage() {
 
     startY += 25;
     doc.setFontSize(9).setFont('helvetica', 'normal');
-    doc.text(`Fecha de Emisión: ${format(new Date(), "dd/MM/yyyy 'a las' HH:mm:ss")}`, doc.internal.pageSize.getWidth() - 15, startY, { align: 'right' });
+    doc.text(`Fecha de Emisión: ${format(new Date(), "dd/MM/yyyy 'a las' HH:mm:ss")}`, doc.internal.pageSize.getWidth() - 15, startY, { align: 'right'});
 
     startY += 10;
 
@@ -506,5 +498,3 @@ export default function ReportViewerPage() {
 
   return null; // Should not happen
 }
-
-    

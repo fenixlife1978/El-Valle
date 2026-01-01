@@ -32,7 +32,8 @@ import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useRouter } from 'next/navigation';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { useAuthorization } from '@/hooks/use-authorization';
 
 
 type Owner = {
@@ -339,6 +340,7 @@ const buildIntegralReportData = (
 
 export default function ReportsPage() {
     const { toast } = useToast();
+    const { requestAuthorization } = useAuthorization();
     const router = useRouter();
     const [loading, setLoading] = useState(true);
     const [generatingReport, setGeneratingReport] = useState(false);
@@ -747,69 +749,77 @@ export default function ReportsPage() {
     };
     
     const handlePublishIntegralReport = async (reportId: string) => {
-        setGeneratingReport(true);
-        try {
-            const publicationId = `integral-${reportId}`;
-            const reportRef = doc(db, 'published_reports', publicationId);
-            await setDoc(reportRef, {
-                type: 'integral',
-                sourceId: reportId,
-                createdAt: Timestamp.now(),
-            });
-
-            const ownersSnapshot = await getDocs(query(collection(db, 'owners'), where('role', '==', 'propietario')));
-            const batch = writeBatch(db);
-            ownersSnapshot.forEach(ownerDoc => {
-                const notificationsRef = doc(collection(db, `owners/${ownerDoc.id}/notifications`));
-                batch.set(notificationsRef, {
-                    title: 'Nuevo Reporte Publicado',
-                    body: 'El reporte integral de propietarios ya está disponible para su consulta.',
+        requestAuthorization(async () => {
+            setGeneratingReport(true);
+            try {
+                const publicationId = `integral-${reportId}`;
+                const reportRef = doc(db, 'published_reports', publicationId);
+                await setDoc(reportRef, {
+                    type: 'integral',
+                    sourceId: reportId,
                     createdAt: Timestamp.now(),
-                    read: false,
-                    href: `/owner/report/${publicationId}`
                 });
-            });
-            await batch.commit();
 
-            toast({ title: 'Reporte Publicado', description: 'El reporte integral ahora es visible para los propietarios.', className: 'bg-blue-100 text-blue-800' });
-        } catch (error) {
-            console.error('Error publishing integral report:', error);
-            toast({ variant: 'destructive', title: 'Error de Publicación' });
-        } finally {
-            setGeneratingReport(false);
-        }
+                const ownersSnapshot = await getDocs(query(collection(db, 'owners'), where('role', '==', 'propietario')));
+                const batch = writeBatch(db);
+                ownersSnapshot.forEach(ownerDoc => {
+                    const notificationsRef = doc(collection(db, `owners/${ownerDoc.id}/notifications`));
+                    batch.set(notificationsRef, {
+                        title: 'Nuevo Reporte Publicado',
+                        body: 'El reporte integral de propietarios ya está disponible para su consulta.',
+                        createdAt: Timestamp.now(),
+                        read: false,
+                        href: `/owner/report/${publicationId}`
+                    });
+                });
+                await batch.commit();
+
+                toast({ title: 'Reporte Publicado', description: 'El reporte integral ahora es visible para los propietarios.', className: 'bg-blue-100 text-blue-800' });
+            } catch (error) {
+                console.error('Error publishing integral report:', error);
+                toast({ variant: 'destructive', title: 'Error de Publicación' });
+            } finally {
+                setGeneratingReport(false);
+            }
+        });
     };
 
     const handleDeleteIntegralPublication = async (reportId: string) => {
-        setGeneratingReport(true);
-        try {
-            await deleteDoc(doc(db, 'published_reports', `integral-${reportId}`));
-            toast({ title: 'Publicación Eliminada' });
-        } catch (error) {
-            console.error("Error deleting integral report publication:", error);
-            toast({ variant: 'destructive', title: 'Error' });
-        } finally {
-            setGeneratingReport(false);
-        }
+        requestAuthorization(async () => {
+            setGeneratingReport(true);
+            try {
+                // The reportId from the UI will be like `integral-XXXX`. This is correct.
+                await deleteDoc(doc(db, 'published_reports', reportId));
+                toast({ title: 'Publicación Eliminada' });
+            } catch (error) {
+                console.error("Error deleting integral report publication:", error);
+                toast({ variant: 'destructive', title: 'Error' });
+            } finally {
+                setGeneratingReport(false);
+            }
+        });
     };
 
     const handleDeleteSavedIntegralReport = async (reportId: string) => {
-        if (!window.confirm("¿Está seguro? Esta acción eliminará permanentemente el reporte guardado. Si está publicado, también se eliminará la publicación.")) {
-            return;
-        }
-        setGeneratingReport(true);
-        try {
-            const batch = writeBatch(db);
-            batch.delete(doc(db, 'integral_reports', reportId));
-            batch.delete(doc(db, 'published_reports', `integral-${reportId}`)); // Also delete publication if it exists
-            await batch.commit();
-            toast({ title: 'Reporte Eliminado' });
-        } catch (error) {
-            console.error("Error deleting saved integral report:", error);
-            toast({ variant: 'destructive', title: 'Error al eliminar' });
-        } finally {
-            setGeneratingReport(false);
-        }
+        requestAuthorization(async () => {
+            if (!window.confirm("¿Está seguro? Esta acción eliminará permanentemente el reporte guardado. Si está publicado, también se eliminará la publicación.")) {
+                return;
+            }
+            setGeneratingReport(true);
+            try {
+                const batch = writeBatch(db);
+                batch.delete(doc(db, 'integral_reports', reportId));
+                // Also delete publication if it exists
+                batch.delete(doc(db, 'published_reports', `integral-${reportId}`)); 
+                await batch.commit();
+                toast({ title: 'Reporte Eliminado' });
+            } catch (error) {
+                console.error("Error deleting saved integral report:", error);
+                toast({ variant: 'destructive', title: 'Error al eliminar' });
+            } finally {
+                setGeneratingReport(false);
+            }
+        });
     };
     
     const handlePreviewIntegralReport = (report: SavedIntegralReport) => {
@@ -1946,8 +1956,8 @@ export default function ReportsPage() {
                                         <TableHead>Propietario</TableHead>
                                         <TableHead>Estado</TableHead>
                                         <TableHead>Periodo Solvencia</TableHead>
-                                        <TableHead>Meses Adeudados</TableHead>
-                                        <TableHead className="text-right">Saldo a Favor</TableHead>
+                                        <TableHead className="text-center">Meses Adeudados</TableHead>
+                                        <TableHead className="text-right">Saldo a Favor (Bs)</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -1971,5 +1981,3 @@ export default function ReportsPage() {
         </div>
     );
 }
-
-    
