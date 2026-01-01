@@ -1,3 +1,4 @@
+
 "use client"; // Habilita el uso de React Hooks para este componente de página
 
 import { 
@@ -126,6 +127,7 @@ export default function OwnersManagement() {
     const [loading, setLoading] = useState(true);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [currentOwner, setCurrentOwner] = useState<Owner>(emptyOwner);
+    const [isEditingAdmin, setIsEditingAdmin] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
@@ -133,6 +135,8 @@ export default function OwnersManagement() {
 
     // Ref para el input de archivo
     const importFileRef = useRef<HTMLInputElement>(null);
+
+    const isMainAdmin = currentUser?.email?.toLowerCase() === 'vallecondo@gmail.com';
 
     // Lógica de filtrado
     const filterUsers = (users: Owner[], term: string) => {
@@ -176,18 +180,25 @@ export default function OwnersManagement() {
 
     // --- MANEJO DE ESTADOS Y EVENTOS DE UI ---
 
-    const handleAddOwner = () => {
-        setCurrentOwner(emptyOwner);
+    const handleAddUser = (role: Role) => {
+        const newUser = {
+            ...emptyOwner,
+            role,
+            properties: role === 'administrador' ? [] : [{ street: '', house: '' }],
+        };
+        setCurrentOwner(newUser);
+        setIsEditingAdmin(role === 'administrador');
         setIsDialogOpen(true);
     };
 
     const handleEditOwner = (owner: Owner) => {
         setCurrentOwner({ ...owner, password: '' });
+        setIsEditingAdmin(owner.role === 'administrador');
         setIsDialogOpen(true);
     };
 
     const handleDeleteOwner = (owner: Owner) => {
-        if (owner.id === ADMIN_USER_ID) {
+        if (owner.email?.toLowerCase() === 'vallecondo@gmail.com') {
             toast({ variant: 'destructive', title: 'Acción no permitida', description: 'El administrador principal no puede ser eliminado.' });
             return;
         }
@@ -234,8 +245,12 @@ export default function OwnersManagement() {
 
     const handleSaveOwner = async () => {
         requestAuthorization(async () => {
-            if (!currentOwner.name || !currentOwner.email || currentOwner.properties.length === 0 || !currentOwner.properties[0].street) {
-                toast({ variant: 'destructive', title: 'Error', description: 'Nombre, Email, Calle y Casa son obligatorios.' });
+            if (!currentOwner.name || !currentOwner.email) {
+                toast({ variant: 'destructive', title: 'Error', description: 'Nombre y Email son obligatorios.' });
+                return;
+            }
+             if (currentOwner.role === 'propietario' && (currentOwner.properties.length === 0 || !currentOwner.properties[0].street)) {
+                toast({ variant: 'destructive', title: 'Error', description: 'Un propietario debe tener al menos una propiedad con calle y casa.' });
                 return;
             }
             if (!currentOwner.id && !currentOwner.password) {
@@ -246,8 +261,8 @@ export default function OwnersManagement() {
             const dataToSave = {
                 ...currentOwner,
                 email: currentOwner.email.toLowerCase(),
-                balance: parseFloat(String(currentOwner.balance)) || 0,
-                properties: currentOwner.properties.filter(p => p.street && p.house)
+                balance: currentOwner.role === 'propietario' ? (parseFloat(String(currentOwner.balance)) || 0) : 0,
+                properties: currentOwner.role === 'propietario' ? currentOwner.properties.filter(p => p.street && p.house) : []
             };
             // Eliminar el password de los datos que van a Firestore
             delete (dataToSave as Partial<Owner>).password;
@@ -320,7 +335,12 @@ export default function OwnersManagement() {
     };
 
     const handleRoleChange = (value: string) => {
-        setCurrentOwner({ ...currentOwner, role: value as Role });
+        const newRole = value as Role;
+        setCurrentOwner({ 
+            ...currentOwner, 
+            role: newRole,
+            properties: newRole === 'administrador' ? [] : [{ street: '', house: '' }]
+        });
     };
 
     const handlePropertyChange = (index: number, field: 'street' | 'house', value: string) => {
@@ -494,7 +514,7 @@ export default function OwnersManagement() {
                 
                 for (const userData of newUsers) {
                     // Evitar la importación del administrador principal si ya existe
-                    if (userData.email?.toLowerCase() === ADMIN_USER_ID.toLowerCase()) continue;
+                    if (userData.email?.toLowerCase() === 'vallecondo@gmail.com') continue;
                     
                     if (userData.properties && userData.properties.length > 0) {
                         const userDocRef = doc(collection(firestore, "owners"));
@@ -555,8 +575,6 @@ export default function OwnersManagement() {
     };
 
     const renderUsersTable = (users: Owner[], title: string, isAdminsTab: boolean) => {
-        const isMainAdmin = currentUser?.uid === ADMIN_USER_ID;
-        
         return (
             <CardContent className="p-0">
                 <div className="overflow-x-auto">
@@ -564,7 +582,7 @@ export default function OwnersManagement() {
                         <TableHeader>
                             <TableRow>
                                 <TableHead>Nombre</TableHead>
-                                <TableHead>Propiedades</TableHead>
+                                {!isAdminsTab && <TableHead>Propiedades</TableHead>}
                                 <TableHead>Email</TableHead>
                                 <TableHead>Rol</TableHead>
                                 {!isAdminsTab && <TableHead>Saldo a Favor (Bs.)</TableHead>}
@@ -574,13 +592,13 @@ export default function OwnersManagement() {
                         <TableBody>
                             {loading ? (
                                 <TableRow>
-                                    <TableCell colSpan={isAdminsTab ? 5 : 6} className="h-24 text-center">
+                                    <TableCell colSpan={isAdminsTab ? 4 : 6} className="h-24 text-center">
                                         <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
                                     </TableCell>
                                 </TableRow>
                             ) : users.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={isAdminsTab ? 5 : 6} className="h-24 text-center text-muted-foreground">
+                                    <TableCell colSpan={isAdminsTab ? 4 : 6} className="h-24 text-center text-muted-foreground">
                                         No se encontraron {title.toLowerCase()} que coincidan con la búsqueda.
                                     </TableCell>
                                 </TableRow>
@@ -588,12 +606,14 @@ export default function OwnersManagement() {
                                 users.map((user) => (
                                     <TableRow key={user.id}>
                                         <TableCell className="font-medium">{user.name}</TableCell>
-                                        <TableCell>
-                                            {user.properties && user.properties.length > 0 
-                                                ? user.properties.map(p => `${p.street} - ${p.house}`).join(', ') 
-                                                : 'N/A'
-                                            }
-                                        </TableCell>
+                                        {!isAdminsTab && (
+                                            <TableCell>
+                                                {user.properties && user.properties.length > 0 
+                                                    ? user.properties.map(p => `${p.street} - ${p.house}`).join(', ') 
+                                                    : 'N/A'
+                                                }
+                                            </TableCell>
+                                        )}
                                         <TableCell>{user.email || '-'}</TableCell>
                                         <TableCell className="capitalize">{user.role}</TableCell>
                                         {!isAdminsTab && 
@@ -612,7 +632,7 @@ export default function OwnersManagement() {
                                                     </Button>
                                                 </DropdownMenuTrigger>
                                                 <DropdownMenuContent align="end">
-                                                    {(isMainAdmin || !isAdminsTab) && (
+                                                    {(isMainAdmin || !isAdminsTab || user.id === currentUser?.uid) && (
                                                         <DropdownMenuItem onClick={() => handleEditOwner(user)}>
                                                             <Edit className="mr-2 h-4 w-4" />
                                                             Editar
@@ -622,8 +642,8 @@ export default function OwnersManagement() {
                                                         <KeyRound className="mr-2 h-4 w-4" />
                                                         Restablecer Contraseña
                                                     </DropdownMenuItem>
-                                                    {(isMainAdmin || !isAdminsTab) && (
-                                                        <DropdownMenuItem onClick={() => handleDeleteOwner(user)} disabled={user.id === ADMIN_USER_ID} className="text-destructive focus:text-destructive focus:bg-destructive/10">
+                                                    {isMainAdmin && user.email?.toLowerCase() !== 'vallecondo@gmail.com' && (
+                                                        <DropdownMenuItem onClick={() => handleDeleteOwner(user)} className="text-destructive focus:text-destructive focus:bg-destructive/10">
                                                             <Trash2 className="mr-2 h-4 w-4" />
                                                             Eliminar
                                                         </DropdownMenuItem>
@@ -653,7 +673,7 @@ export default function OwnersManagement() {
                 <div className="flex gap-2 flex-wrap">
                     <Button onClick={handleImportClick} variant="outline">
                         <FileUp className="mr-2 h-4 w-4" />
-                        Importar Excel
+                        Importar Propietarios
                     </Button>
                     <input type="file" ref={importFileRef} onChange={handleFileImport} accept=".xlsx, .xls" className="hidden"/>
                     <DropdownMenu>
@@ -668,10 +688,16 @@ export default function OwnersManagement() {
                             <DropdownMenuItem onClick={handleExportPDF}>Exportar Propietarios a PDF</DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
-                    <Button onClick={handleAddOwner}>
+                    <Button onClick={() => handleAddUser('propietario')}>
                         <PlusCircle className="mr-2 h-4 w-4" />
-                        Agregar Persona
+                        Agregar Propietario
                     </Button>
+                     {isMainAdmin && (
+                        <Button onClick={() => handleAddUser('administrador')} variant="secondary">
+                            <PlusCircle className="mr-2 h-4 w-4" />
+                            Agregar Administrador
+                        </Button>
+                    )}
                 </div>
             </div>
             
@@ -711,7 +737,7 @@ export default function OwnersManagement() {
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                 <DialogContent className="sm:max-w-md max-h-[90vh] flex flex-col">
                     <DialogHeader>
-                        <DialogTitle>{currentOwner.id ? 'Editar Persona' : 'Agregar Nueva Persona'}</DialogTitle>
+                        <DialogTitle>{currentOwner.id ? `Editar ${isEditingAdmin ? 'Administrador' : 'Propietario'}` : `Agregar Nuev${isEditingAdmin ? 'o Administrador' : 'a Persona'}`}</DialogTitle>
                         <DialogDescription>
                            {currentOwner.id ? 'Modifique la información y haga clic en guardar.' : "Complete el perfil para crear la cuenta de usuario."}
                         </DialogDescription>
@@ -767,46 +793,48 @@ export default function OwnersManagement() {
                                 </Select>
                             </div>
                             
-                            <div className="space-y-4">
-                                <Label>Propiedades</Label>
-                                {currentOwner.properties.map((prop, index) => {
-                                    const houseOptions = getHousesForStreet(prop.street);
-                                    return (
-                                    <div key={index} className="grid grid-cols-10 gap-2 items-center p-2 rounded-md border">
-                                        <div className="col-span-4 space-y-1">
-                                            <Label htmlFor={`street-${index}`} className="text-xs">Calle</Label>
-                                            <Select onValueChange={(v) => handlePropertyChange(index, 'street', v)} value={prop.street}>
-                                                <SelectTrigger><SelectValue placeholder="Calle..." /></SelectTrigger>
-                                                <SelectContent>{streets.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-                                            </Select>
+                            {!isEditingAdmin && (
+                                <>
+                                <div className="space-y-4">
+                                    <Label>Propiedades</Label>
+                                    {currentOwner.properties.map((prop, index) => {
+                                        const houseOptions = getHousesForStreet(prop.street);
+                                        return (
+                                        <div key={index} className="grid grid-cols-10 gap-2 items-center p-2 rounded-md border">
+                                            <div className="col-span-4 space-y-1">
+                                                <Label htmlFor={`street-${index}`} className="text-xs">Calle</Label>
+                                                <Select onValueChange={(v) => handlePropertyChange(index, 'street', v)} value={prop.street}>
+                                                    <SelectTrigger><SelectValue placeholder="Calle..." /></SelectTrigger>
+                                                    <SelectContent>{streets.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div className="col-span-4 space-y-1">
+                                                <Label htmlFor={`house-${index}`} className="text-xs">Casa</Label>
+                                                <Select onValueChange={(v) => handlePropertyChange(index, 'house', v)} value={prop.house} disabled={!prop.street}>
+                                                    <SelectTrigger><SelectValue placeholder="Casa..." /></SelectTrigger>
+                                                    <SelectContent>{houseOptions.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div className="col-span-2 flex items-end justify-end h-full">
+                                            {currentOwner.properties.length > 1 && (
+                                                <Button size="icon" variant="ghost" className="text-destructive" onClick={() => removeProperty(index)}>
+                                                    <MinusCircle className="h-5 w-5"/>
+                                                </Button>
+                                            )}
+                                            </div>
                                         </div>
-                                        <div className="col-span-4 space-y-1">
-                                            <Label htmlFor={`house-${index}`} className="text-xs">Casa</Label>
-                                            <Select onValueChange={(v) => handlePropertyChange(index, 'house', v)} value={prop.house} disabled={!prop.street}>
-                                                <SelectTrigger><SelectValue placeholder="Casa..." /></SelectTrigger>
-                                                <SelectContent>{houseOptions.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
-                                            </Select>
-                                        </div>
-                                        <div className="col-span-2 flex items-end justify-end h-full">
-                                        {currentOwner.properties.length > 1 && (
-                                            <Button size="icon" variant="ghost" className="text-destructive" onClick={() => removeProperty(index)}>
-                                                <MinusCircle className="h-5 w-5"/>
-                                            </Button>
-                                        )}
-                                        </div>
-                                    </div>
-                                )})}
-                                <Button variant="outline" size="sm" onClick={addProperty}>
-                                    <PlusCircle className="mr-2 h-4 w-4"/>
-                                    Agregar Propiedad
-                                </Button>
-                            </div>
-
-                            
-                            <div className="space-y-2">
-                                <Label htmlFor="balance">Saldo a Favor (Bs.)</Label>
-                                <Input id="balance" type="number" value={String(currentOwner.balance)} onChange={handleInputChange} placeholder="0.00" />
-                            </div>
+                                    )})}
+                                    <Button variant="outline" size="sm" onClick={addProperty}>
+                                        <PlusCircle className="mr-2 h-4 w-4"/>
+                                        Agregar Propiedad
+                                    </Button>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="balance">Saldo a Favor (Bs.)</Label>
+                                    <Input id="balance" type="number" value={String(currentOwner.balance)} onChange={handleInputChange} placeholder="0.00" />
+                                </div>
+                                </>
+                            )}
                         </div>
                     </div>
                     <DialogFooter className="mt-auto pt-4 border-t">
@@ -834,3 +862,4 @@ export default function OwnersManagement() {
         </div>
     );
 }
+
