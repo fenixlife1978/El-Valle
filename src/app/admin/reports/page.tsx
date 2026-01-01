@@ -42,6 +42,7 @@ type Owner = {
     properties: { street: string, house: string }[];
     email?: string;
     balance: number;
+    role: 'propietario' | 'administrador';
 };
 
 type Payment = {
@@ -184,7 +185,6 @@ const formatToTwoDecimals = (num: number) => {
     return truncated.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-const ADMIN_USER_ID = 'valle-admin-main-account';
 
 const getSortKeys = (owner: { properties: string }) => {
     let street = 'N/A', house = 'N/A';
@@ -209,7 +209,7 @@ const buildIntegralReportData = (
     dateRange: { from?: Date; to?: Date }
 ): IntegralReportRow[] => {
     const sortedOwners = [...owners]
-        .filter(owner => owner.id !== ADMIN_USER_ID && owner.name && owner.name !== 'Valle Admin')
+        .filter(owner => owner.role === 'propietario')
         .map(owner => {
             const propertiesString = (owner.properties || []).map(p => `${p.street}-${p.house}`).join(', ');
             const sortKeys = getSortKeys({ properties: propertiesString });
@@ -438,7 +438,7 @@ export default function ReportsPage() {
 
              // --- Delinquency Data Calculation ---
             const debtsByOwner = new Map<string, { totalUSD: number, count: number }>();
-            const delinquencyDebtsQuery = query(collection(db, 'debts'), where('ownerId', '!=', ADMIN_USER_ID));
+            const delinquencyDebtsQuery = query(collection(db, 'debts'), where('role', '!=', 'administrador'));
             const delinquencyDebtsSnapshot = await getDocs(delinquencyDebtsQuery);
 
             delinquencyDebtsSnapshot.docs.forEach(doc => {
@@ -470,7 +470,7 @@ export default function ReportsPage() {
             setSelectedDelinquentOwners(new Set(delinquentData.map(o => o.id)));
 
             // --- Balance Report Data Calculation ---
-            const ownersWithBalance = ownersData.filter(o => o.id !== ADMIN_USER_ID && o.balance > 0);
+            const ownersWithBalance = ownersData.filter(o => o.role !== 'administrador' && o.balance > 0);
             
             const balanceReportData = ownersWithBalance.map(owner => {
                 const ownerData = {
@@ -769,7 +769,7 @@ export default function ReportsPage() {
                         body: 'El reporte integral de propietarios ya está disponible para su consulta.',
                         createdAt: Timestamp.now(),
                         read: false,
-                        href: `/owner/report/${publicationId}`
+                        href: `/owner/reports`
                     });
                 });
                 await batch.commit();

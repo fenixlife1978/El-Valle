@@ -29,13 +29,15 @@ import { useAuthorization } from '@/hooks/use-authorization';
 
 // Componentes UI de shadcn/ui 
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+
 
 // Iconos
 import { PlusCircle, Edit, Trash2, Loader2, KeyRound, Search, FileDown, FileUp, MoreHorizontal, Eye, EyeOff, MinusCircle } from 'lucide-react';
@@ -74,7 +76,6 @@ interface CompanyInfo {
 }
 
 // Constantes
-const ADMIN_USER_ID = 'admin-user-id'; // ID del administrador principal
 const ADMIN_EMAIL = 'admin@admin.com'; // Correo del administrador principal
 
 const emptyOwner: Owner = {
@@ -118,6 +119,7 @@ export default function OwnersManagement() {
 
     // Estados
     const [owners, setOwners] = useState<Owner[]>([]);
+    const [admins, setAdmins] = useState<Owner[]>([]);
     const [loading, setLoading] = useState(true);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [currentOwner, setCurrentOwner] = useState<Owner>(emptyOwner);
@@ -130,45 +132,38 @@ export default function OwnersManagement() {
     const importFileRef = useRef<HTMLInputElement>(null);
 
     // Lógica de filtrado
-    const filteredOwners = useMemo(() => {
-        const lowerCaseSearchTerm = searchTerm.toLowerCase();
-        return owners.filter(owner => {
-            // Excluir al administrador principal de la lista
-            if (owner.id === ADMIN_USER_ID) return false; 
-
-            // Búsqueda por nombre
-            if (owner.name.toLowerCase().includes(lowerCaseSearchTerm)) return true;
-
-            // Búsqueda por email
-            if (owner.email && owner.email.toLowerCase().includes(lowerCaseSearchTerm)) return true;
-
-            // Búsqueda por propiedades
-            if (owner.properties && owner.properties.some(p => 
+    const filterUsers = (users: Owner[], term: string) => {
+        const lowerCaseSearchTerm = term.toLowerCase();
+        return users.filter(user => {
+            if (user.name.toLowerCase().includes(lowerCaseSearchTerm)) return true;
+            if (user.email && user.email.toLowerCase().includes(lowerCaseSearchTerm)) return true;
+            if (user.properties && user.properties.some(p => 
                 p.street.toLowerCase().includes(lowerCaseSearchTerm) || 
                 p.house.toLowerCase().includes(lowerCaseSearchTerm)
             )) return true;
-
             return false;
         });
-    }, [owners, searchTerm]);
+    };
+
+    const filteredOwners = useMemo(() => filterUsers(owners, searchTerm), [owners, searchTerm]);
+    const filteredAdmins = useMemo(() => filterUsers(admins, searchTerm), [admins, searchTerm]);
+
 
     // Hook para cargar datos de Firestore
     useEffect(() => {
         setLoading(true);
         const q = query(collection(db, 'owners'));
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const fetchedOwners = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data(),
-            } as Owner));
-            setOwners(fetchedOwners);
+            const allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner));
+            setOwners(allUsers.filter(u => u.role === 'propietario'));
+            setAdmins(allUsers.filter(u => u.role === 'administrador'));
             setLoading(false);
         }, (error) => {
-            console.error("Error fetching owners:", error);
+            console.error("Error fetching users:", error);
             toast({
                 variant: 'destructive',
                 title: 'Error de Carga',
-                description: 'No se pudieron cargar los datos de los propietarios.',
+                description: 'No se pudieron cargar los datos de los usuarios.',
             });
             setLoading(false);
         });
@@ -207,7 +202,7 @@ export default function OwnersManagement() {
                 }
     
                 toast({
-                    title: 'Persona Eliminada',
+                    title: 'Usuario Eliminado',
                     description: `El registro de ${ownerToDelete.name} ha sido eliminado.`,
                     variant: 'default',
                 });
@@ -278,7 +273,7 @@ export default function OwnersManagement() {
                     });
     
                     toast({
-                        title: 'Propietario Creado Exitosamente',
+                        title: 'Usuario Creado Exitosamente',
                         description: `${dataToSave.name} ha sido creado con la contraseña proporcionada.`,
                         className: 'bg-green-100 border-green-400 text-green-800'
                     });
@@ -342,8 +337,7 @@ export default function OwnersManagement() {
     // --- EXPORTACIÓN DE DATOS (Excel) ---
 
     const handleExportExcel = async () => {
-        const dataToExport = owners.filter(o => o.id !== ADMIN_USER_ID).flatMap(o => {
-            // Asegurar que si no hay propiedades, exporte una fila con N/A
+        const dataToExport = owners.flatMap(o => {
             const properties = (o.properties && o.properties.length > 0) ? o.properties : [{ street: 'N/A', house: 'N/A'}];
             return properties.map(p => ({
                 Nombre: o.name,
@@ -410,7 +404,7 @@ export default function OwnersManagement() {
 
         autoTable(doc, {
             head: [['Nombre', 'Propiedades', 'Email', 'Rol', 'Saldo a Favor (Bs.)']],
-            body: owners.filter(o => o.id !== ADMIN_USER_ID).map(o => {
+            body: owners.map(o => {
                 const properties = (o.properties && o.properties.length > 0) 
                     ? o.properties.map(p => `${p.street} - ${p.house}`).join('\n') 
                     : 'N/A';
@@ -455,7 +449,7 @@ export default function OwnersManagement() {
                     return; 
                 }
                 
-                const ownersMap: { [key: string]: Partial<Owner> } = {};
+                const usersMap: { [key: string]: Partial<Owner> } = {};
 
                 worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
                     if (rowNumber === 1) return; // Saltar cabecera
@@ -472,9 +466,9 @@ export default function OwnersManagement() {
                     if (!rowData.name || !rowData.email) return; // Saltar filas sin datos esenciales
                     const key = String(rowData.email).toLowerCase();
 
-                    if (!ownersMap[key]) {
+                    if (!usersMap[key]) {
                         const balanceNum = parseFloat(String(rowData.balance));
-                        ownersMap[key] = {
+                        usersMap[key] = {
                             name: rowData.name,
                             email: rowData.email,
                             balance: isNaN(balanceNum) ? 0 : parseFloat(balanceNum.toFixed(2)),
@@ -482,24 +476,21 @@ export default function OwnersManagement() {
                             properties: []
                         };
                     }
-                    if (rowData.street && rowData.house && ownersMap[key].properties) {
-                        (ownersMap[key].properties as Property[]).push({ street: String(rowData.street), house: String(rowData.house) });
+                    if (rowData.street && rowData.house && usersMap[key].properties) {
+                        (usersMap[key].properties as Property[]).push({ street: String(rowData.street), house: String(rowData.house) });
                     }
                 });
 
-                const newOwners = Object.values(ownersMap);
+                const newUsers = Object.values(usersMap);
                 const batch = writeBatch(firestore);
                 let successCount = 0;
                 
-                for (const ownerData of newOwners) {
-                    // Evitar importar al administrador principal
-                    if (ownerData.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) continue;
+                for (const userData of newUsers) {
+                    if (userData.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) continue;
                     
-                    // Solo importar si tienen al menos una propiedad válida
-                    if (ownerData.properties && ownerData.properties.length > 0) {
-                        // Importación masiva: no crea cuentas de Auth, solo registros de Firestore
-                        const ownerDocRef = doc(collection(firestore, "owners")); // Genera un ID nuevo
-                        batch.set(ownerDocRef, { ...ownerData, passwordChanged: false });
+                    if (userData.properties && userData.properties.length > 0) {
+                        const userDocRef = doc(collection(firestore, "owners"));
+                        batch.set(userDocRef, { ...userData, passwordChanged: false });
                         successCount++;
                     }
                 }
@@ -508,7 +499,7 @@ export default function OwnersManagement() {
 
                 toast({
                     title: 'Importación Completada',
-                    description: `${successCount} de ${newOwners.length} registros han sido agregados. La creación de cuentas de autenticación debe realizarse manualmente.`,
+                    description: `${successCount} de ${newUsers.length} registros han sido agregados. La creación de cuentas de autenticación debe realizarse manualmente.`,
                     className: 'bg-green-100 border-green-400 text-green-800'
                 });
 
@@ -534,7 +525,7 @@ export default function OwnersManagement() {
 
     const handleResetPassword = async (email: string) => {
         if (!email) {
-            toast({ variant: 'destructive', title: 'Error', description: 'El propietario no tiene un correo electrónico registrado.' });
+            toast({ variant: 'destructive', title: 'Error', description: 'El usuario no tiene un correo electrónico registrado.' });
             return;
         }
 
@@ -555,6 +546,82 @@ export default function OwnersManagement() {
         }
     };
 
+    const renderUsersTable = (users: Owner[], title: string) => (
+        <CardContent className="p-0">
+            <div className="overflow-x-auto">
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Nombre</TableHead>
+                            <TableHead>Propiedades</TableHead>
+                            <TableHead>Email</TableHead>
+                            <TableHead>Rol</TableHead>
+                            <TableHead>Saldo a Favor (Bs.)</TableHead>
+                            <TableHead className="text-right">Acciones</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {loading ? (
+                            <TableRow>
+                                <TableCell colSpan={6} className="h-24 text-center">
+                                    <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
+                                </TableCell>
+                            </TableRow>
+                        ) : users.length === 0 ? (
+                            <TableRow>
+                                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                                    No se encontraron {title.toLowerCase()} que coincidan con la búsqueda.
+                                </TableCell>
+                            </TableRow>
+                        ) : (
+                            users.map((user) => (
+                                <TableRow key={user.id}>
+                                    <TableCell className="font-medium">{user.name}</TableCell>
+                                    <TableCell>
+                                        {user.properties && user.properties.length > 0 
+                                            ? user.properties.map(p => `${p.street} - ${p.house}`).join(', ') 
+                                            : 'N/A'
+                                        }
+                                    </TableCell>
+                                    <TableCell>{user.email || '-'}</TableCell>
+                                    <TableCell className="capitalize">{user.role}</TableCell>
+                                    <TableCell>
+                                            {user.balance > 0
+                                                ? `Bs. ${formatToTwoDecimals(user.balance)}` 
+                                                : '-'}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button variant="ghost" className="h-8 w-8 p-0">
+                                                    <span className="sr-only">Abrir menú</span>
+                                                    <MoreHorizontal className="h-4 w-4" />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                                <DropdownMenuItem onClick={() => handleEditOwner(user)}>
+                                                    <Edit className="mr-2 h-4 w-4" />
+                                                    Editar
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => handleResetPassword(user.email || '')}>
+                                                    <KeyRound className="mr-2 h-4 w-4" />
+                                                    Restablecer Contraseña
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => handleDeleteOwner(user)} className="text-destructive focus:text-destructive focus:bg-destructive/10">
+                                                    <Trash2 className="mr-2 h-4 w-4" />
+                                                    Eliminar
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    </TableCell>
+                                </TableRow>
+                            ))
+                        )}
+                    </TableBody>
+                </Table>
+            </div>
+        </CardContent>
+    );
 
     // --- RENDERIZADO DEL COMPONENTE ---
 
@@ -579,8 +646,8 @@ export default function OwnersManagement() {
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent>
-                            <DropdownMenuItem onClick={handleExportExcel}>Exportar a Excel</DropdownMenuItem>
-                            <DropdownMenuItem onClick={handleExportPDF}>Exportar a PDF</DropdownMenuItem>
+                            <DropdownMenuItem onClick={handleExportExcel}>Exportar Propietarios a Excel</DropdownMenuItem>
+                            <DropdownMenuItem onClick={handleExportPDF}>Exportar Propietarios a PDF</DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
                     <Button onClick={handleAddOwner}>
@@ -589,97 +656,39 @@ export default function OwnersManagement() {
                     </Button>
                 </div>
             </div>
-
+            
             <Card>
                 <CardHeader>
-                    <CardTitle>Lista de Propietarios</CardTitle>
-                    <div className="relative mt-2">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                            placeholder="Buscar por nombre, calle o casa..."
-                            className="pl-9"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
+                    <CardTitle>Listas de Usuarios</CardTitle>
+                    <div className="flex justify-between items-center gap-4">
+                        <CardDescription>Filtre y gestione propietarios y administradores por separado.</CardDescription>
+                        <div className="relative mt-2 max-w-sm w-full">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input
+                                placeholder="Buscar por nombre, calle o casa..."
+                                className="pl-9"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </div>
                     </div>
                 </CardHeader>
-                <CardContent className="p-0">
-                    <div className="overflow-x-auto">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Nombre</TableHead>
-                                    <TableHead>Propiedades</TableHead>
-                                    <TableHead>Email</TableHead>
-                                    <TableHead>Rol</TableHead>
-                                    <TableHead>Saldo a Favor (Bs.)</TableHead>
-                                    <TableHead className="text-right">Acciones</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {loading ? (
-                                    <TableRow>
-                                        <TableCell colSpan={6} className="h-24 text-center">
-                                            <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
-                                        </TableCell>
-                                    </TableRow>
-                                ) : filteredOwners.length === 0 ? (
-                                    <TableRow>
-                                        <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                                            No se encontraron personas que coincidan con la búsqueda.
-                                        </TableCell>
-                                    </TableRow>
-                                ) : (
-                                    filteredOwners.map((owner) => (
-                                        <TableRow key={owner.id}>
-                                            <TableCell className="font-medium">{owner.name}</TableCell>
-                                            <TableCell>
-                                                {owner.properties && owner.properties.length > 0 
-                                                    ? owner.properties.map(p => `${p.street} - ${p.house}`).join(', ') 
-                                                    : 'N/A'
-                                                }
-                                            </TableCell>
-                                            <TableCell>{owner.email || '-'}</TableCell>
-                                            <TableCell className="capitalize">{owner.role}</TableCell>
-                                            <TableCell>
-                                                    {owner.balance > 0
-                                                        ? `Bs. ${formatToTwoDecimals(owner.balance)}` 
-                                                        : '-'}
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                <DropdownMenu>
-                                                    <DropdownMenuTrigger asChild>
-                                                        <Button variant="ghost" className="h-8 w-8 p-0">
-                                                            <span className="sr-only">Abrir menú</span>
-                                                            <MoreHorizontal className="h-4 w-4" />
-                                                        </Button>
-                                                    </DropdownMenuTrigger>
-                                                    <DropdownMenuContent align="end">
-                                                        <DropdownMenuItem onClick={() => handleEditOwner(owner)}>
-                                                            <Edit className="mr-2 h-4 w-4" />
-                                                            Editar
-                                                        </DropdownMenuItem>
-                                                       <DropdownMenuItem onClick={() => handleResetPassword(owner.email || '')}>
-                                                            <KeyRound className="mr-2 h-4 w-4" />
-                                                            Restablecer Contraseña
-                                                        </DropdownMenuItem>
-                                                        {owner.id !== ADMIN_USER_ID && (
-                                                            <DropdownMenuItem onClick={() => handleDeleteOwner(owner)} className="text-destructive focus:text-destructive focus:bg-destructive/10">
-                                                                <Trash2 className="mr-2 h-4 w-4" />
-                                                                Eliminar
-                                                            </DropdownMenuItem>
-                                                        )}
-                                                    </DropdownMenuContent>
-                                                </DropdownMenu>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))
-                                )}
-                            </TableBody>
-                        </Table>
-                    </div>
+                <CardContent>
+                    <Tabs defaultValue="owners">
+                        <TabsList className="grid w-full grid-cols-2">
+                            <TabsTrigger value="owners">Propietarios</TabsTrigger>
+                            <TabsTrigger value="admins">Administradores</TabsTrigger>
+                        </TabsList>
+                        <TabsContent value="owners">
+                            {renderUsersTable(filteredOwners, 'Propietarios')}
+                        </TabsContent>
+                        <TabsContent value="admins">
+                            {renderUsersTable(filteredAdmins, 'Administradores')}
+                        </TabsContent>
+                    </Tabs>
                 </CardContent>
             </Card>
+
 
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                 <DialogContent className="sm:max-w-md max-h-[90vh] flex flex-col">
