@@ -31,6 +31,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useRouter } from 'next/navigation';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 
 type Owner = {
@@ -1331,7 +1332,7 @@ export default function ReportsPage() {
                                                          <DropdownMenuContent>
                                                              <DropdownMenuItem onClick={() => router.push(`/owner/report/integral-${report.id}`)}><Eye className="mr-2 h-4 w-4" /> Ver / Descargar</DropdownMenuItem>
                                                              {!isPublished && <DropdownMenuItem onClick={() => handlePublishIntegralReport(report.id)}><Megaphone className="mr-2 h-4 w-4"/> Publicar</DropdownMenuItem>}
-                                                             {isPublished && <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteIntegralPublication(report.id)}><Trash2 className="mr-2 h-4 w-4"/> Quitar Publicación</DropdownMenuItem>}
+                                                             {isPublished && <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteIntegralPublication(`integral-${report.id}`)}><Trash2 className="mr-2 h-4 w-4"/> Quitar Publicación</DropdownMenuItem>}
                                                              <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteSavedIntegralReport(report.id)}><Trash2 className="mr-2 h-4 w-4"/> Eliminar</DropdownMenuItem>
                                                          </DropdownMenuContent>
                                                      </DropdownMenu>
