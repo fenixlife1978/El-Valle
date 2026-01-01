@@ -7,7 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Loader2, FileText, Scale } from "lucide-react";
-import { collection, getDocs, query, orderBy, Timestamp, where } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -15,7 +15,7 @@ import { es } from 'date-fns/locale';
 import Link from 'next/link';
 
 type PublishedReport = {
-    id: string; // e.g., 'balance-2025-10'
+    id: string; // e.g., 'balance-2025-10' or 'integral-...'
     type: 'balance' | 'integral';
     createdAt: Date; 
 };
@@ -34,10 +34,9 @@ export default function OwnerHistoryPage() {
         const fetchReports = async () => {
             setLoading(true);
             try {
-                // Query only for 'balance' type reports
+                // Fetch all published reports, not just balances
                 const reportsQuery = query(
                     collection(db, "published_reports"), 
-                    where('type', '==', 'balance'),
                     orderBy('createdAt', 'desc')
                 );
                 const snapshot = await getDocs(reportsQuery);
@@ -73,7 +72,10 @@ export default function OwnerHistoryPage() {
             const monthName = monthsLocale[month] || 'Mes Desconocido';
             return `Balance Financiero - ${monthName} ${year}`;
         }
-        return 'Reporte';
+        if (report.type === 'integral') {
+             return `Reporte Integral`;
+        }
+        return 'Reporte General';
     };
 
     return (
@@ -81,18 +83,18 @@ export default function OwnerHistoryPage() {
             
             <div>
                 <h1 className="text-3xl font-bold font-headline">Historial de Reportes</h1>
-                <p className="text-muted-foreground">Consulta los balances financieros publicados por la administración.</p>
+                <p className="text-muted-foreground">Consulta los informes publicados por la administración.</p>
             </div>
             
             <Card>
                 <CardHeader>
-                    <CardTitle>Balances Financieros Publicados</CardTitle>
+                    <CardTitle>Informes Publicados</CardTitle>
                 </CardHeader>
                 <CardContent>
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead>Período del Reporte</TableHead>
+                                <TableHead>Nombre del Reporte</TableHead>
                                 <TableHead>Fecha de Publicación</TableHead>
                                 <TableHead className="text-right">Acciones</TableHead>
                             </TableRow>
@@ -107,14 +109,14 @@ export default function OwnerHistoryPage() {
                             ) : reports.length === 0 ? (
                                 <TableRow>
                                     <TableCell colSpan={3} className="h-24 text-center text-muted-foreground">
-                                        No hay balances financieros publicados.
+                                        No hay reportes publicados.
                                     </TableCell>
                                 </TableRow>
                             ) : (
                                 reports.map((report) => (
                                     <TableRow key={report.id}>
                                         <TableCell className="font-medium flex items-center gap-2">
-                                            <Scale className="h-4 w-4 text-primary"/>
+                                            {report.type === 'balance' ? <Scale className="h-4 w-4 text-primary"/> : <FileText className="h-4 w-4 text-primary"/>}
                                             {getReportNameAndPeriod(report)}
                                         </TableCell>
                                         <TableCell>
