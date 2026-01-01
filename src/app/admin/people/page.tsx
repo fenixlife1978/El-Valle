@@ -26,6 +26,8 @@ import { db } from '@/lib/firebase';
 // Importación corregida a la ubicación real
 import { useToast } from '@/hooks/use-toast'; 
 import { useAuthorization } from '@/hooks/use-authorization';
+import { useAuth } from '@/hooks/use-auth';
+
 
 // Componentes UI de shadcn/ui 
 import { Button } from '@/components/ui/button';
@@ -76,7 +78,7 @@ interface CompanyInfo {
 }
 
 // Constantes
-const ADMIN_EMAIL = 'admin@admin.com'; // Correo del administrador principal
+const ADMIN_USER_ID = 'valle-admin-main-account'; // ID del administrador principal
 
 const emptyOwner: Owner = {
     id: '',
@@ -115,6 +117,7 @@ const formatToTwoDecimals = (num: number | string): string => {
 export default function OwnersManagement() {
     const { toast } = useToast();
     const { requestAuthorization } = useAuthorization();
+    const { user: currentUser } = useAuth();
     const auth = getAuth();
 
     // Estados
@@ -184,6 +187,10 @@ export default function OwnersManagement() {
     };
 
     const handleDeleteOwner = (owner: Owner) => {
+        if (owner.id === ADMIN_USER_ID) {
+            toast({ variant: 'destructive', title: 'Acción no permitida', description: 'El administrador principal no puede ser eliminado.' });
+            return;
+        }
         setOwnerToDelete(owner);
         setIsDeleteConfirmationOpen(true);
     };
@@ -486,7 +493,8 @@ export default function OwnersManagement() {
                 let successCount = 0;
                 
                 for (const userData of newUsers) {
-                    if (userData.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) continue;
+                    // Evitar la importación del administrador principal si ya existe
+                    if (userData.email?.toLowerCase() === ADMIN_USER_ID.toLowerCase()) continue;
                     
                     if (userData.properties && userData.properties.length > 0) {
                         const userDocRef = doc(collection(firestore, "owners"));
@@ -546,83 +554,93 @@ export default function OwnersManagement() {
         }
     };
 
-    const renderUsersTable = (users: Owner[], title: string) => (
-        <CardContent className="p-0">
-            <div className="overflow-x-auto">
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>Nombre</TableHead>
-                            <TableHead>Propiedades</TableHead>
-                            <TableHead>Email</TableHead>
-                            <TableHead>Rol</TableHead>
-                            <TableHead>Saldo a Favor (Bs.)</TableHead>
-                            <TableHead className="text-right">Acciones</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {loading ? (
+    const renderUsersTable = (users: Owner[], title: string, isAdminsTab: boolean) => {
+        const isMainAdmin = currentUser?.uid === ADMIN_USER_ID;
+        
+        return (
+            <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                    <Table>
+                        <TableHeader>
                             <TableRow>
-                                <TableCell colSpan={6} className="h-24 text-center">
-                                    <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
-                                </TableCell>
+                                <TableHead>Nombre</TableHead>
+                                <TableHead>Propiedades</TableHead>
+                                <TableHead>Email</TableHead>
+                                <TableHead>Rol</TableHead>
+                                {!isAdminsTab && <TableHead>Saldo a Favor (Bs.)</TableHead>}
+                                <TableHead className="text-right">Acciones</TableHead>
                             </TableRow>
-                        ) : users.length === 0 ? (
-                            <TableRow>
-                                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                                    No se encontraron {title.toLowerCase()} que coincidan con la búsqueda.
-                                </TableCell>
-                            </TableRow>
-                        ) : (
-                            users.map((user) => (
-                                <TableRow key={user.id}>
-                                    <TableCell className="font-medium">{user.name}</TableCell>
-                                    <TableCell>
-                                        {user.properties && user.properties.length > 0 
-                                            ? user.properties.map(p => `${p.street} - ${p.house}`).join(', ') 
-                                            : 'N/A'
-                                        }
-                                    </TableCell>
-                                    <TableCell>{user.email || '-'}</TableCell>
-                                    <TableCell className="capitalize">{user.role}</TableCell>
-                                    <TableCell>
-                                            {user.balance > 0
-                                                ? `Bs. ${formatToTwoDecimals(user.balance)}` 
-                                                : '-'}
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        <DropdownMenu>
-                                            <DropdownMenuTrigger asChild>
-                                                <Button variant="ghost" className="h-8 w-8 p-0">
-                                                    <span className="sr-only">Abrir menú</span>
-                                                    <MoreHorizontal className="h-4 w-4" />
-                                                </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="end">
-                                                <DropdownMenuItem onClick={() => handleEditOwner(user)}>
-                                                    <Edit className="mr-2 h-4 w-4" />
-                                                    Editar
-                                                </DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => handleResetPassword(user.email || '')}>
-                                                    <KeyRound className="mr-2 h-4 w-4" />
-                                                    Restablecer Contraseña
-                                                </DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => handleDeleteOwner(user)} className="text-destructive focus:text-destructive focus:bg-destructive/10">
-                                                    <Trash2 className="mr-2 h-4 w-4" />
-                                                    Eliminar
-                                                </DropdownMenuItem>
-                                            </DropdownMenuContent>
-                                        </DropdownMenu>
+                        </TableHeader>
+                        <TableBody>
+                            {loading ? (
+                                <TableRow>
+                                    <TableCell colSpan={isAdminsTab ? 5 : 6} className="h-24 text-center">
+                                        <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
                                     </TableCell>
                                 </TableRow>
-                            ))
-                        )}
-                    </TableBody>
-                </Table>
-            </div>
-        </CardContent>
-    );
-
+                            ) : users.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={isAdminsTab ? 5 : 6} className="h-24 text-center text-muted-foreground">
+                                        No se encontraron {title.toLowerCase()} que coincidan con la búsqueda.
+                                    </TableCell>
+                                </TableRow>
+                            ) : (
+                                users.map((user) => (
+                                    <TableRow key={user.id}>
+                                        <TableCell className="font-medium">{user.name}</TableCell>
+                                        <TableCell>
+                                            {user.properties && user.properties.length > 0 
+                                                ? user.properties.map(p => `${p.street} - ${p.house}`).join(', ') 
+                                                : 'N/A'
+                                            }
+                                        </TableCell>
+                                        <TableCell>{user.email || '-'}</TableCell>
+                                        <TableCell className="capitalize">{user.role}</TableCell>
+                                        {!isAdminsTab && 
+                                            <TableCell>
+                                                {user.balance > 0
+                                                    ? `Bs. ${formatToTwoDecimals(user.balance)}` 
+                                                    : '-'}
+                                            </TableCell>
+                                        }
+                                        <TableCell className="text-right">
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button variant="ghost" className="h-8 w-8 p-0">
+                                                        <span className="sr-only">Abrir menú</span>
+                                                        <MoreHorizontal className="h-4 w-4" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end">
+                                                    {(isMainAdmin || !isAdminsTab) && (
+                                                        <DropdownMenuItem onClick={() => handleEditOwner(user)}>
+                                                            <Edit className="mr-2 h-4 w-4" />
+                                                            Editar
+                                                        </DropdownMenuItem>
+                                                    )}
+                                                    <DropdownMenuItem onClick={() => handleResetPassword(user.email || '')}>
+                                                        <KeyRound className="mr-2 h-4 w-4" />
+                                                        Restablecer Contraseña
+                                                    </DropdownMenuItem>
+                                                    {(isMainAdmin || !isAdminsTab) && (
+                                                        <DropdownMenuItem onClick={() => handleDeleteOwner(user)} disabled={user.id === ADMIN_USER_ID} className="text-destructive focus:text-destructive focus:bg-destructive/10">
+                                                            <Trash2 className="mr-2 h-4 w-4" />
+                                                            Eliminar
+                                                        </DropdownMenuItem>
+                                                    )}
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            )}
+                        </TableBody>
+                    </Table>
+                </div>
+            </CardContent>
+        );
+    }
+    
     // --- RENDERIZADO DEL COMPONENTE ---
 
     return (
@@ -680,10 +698,10 @@ export default function OwnersManagement() {
                             <TabsTrigger value="admins">Administradores</TabsTrigger>
                         </TabsList>
                         <TabsContent value="owners">
-                            {renderUsersTable(filteredOwners, 'Propietarios')}
+                            {renderUsersTable(filteredOwners, 'Propietarios', false)}
                         </TabsContent>
                         <TabsContent value="admins">
-                            {renderUsersTable(filteredAdmins, 'Administradores')}
+                            {renderUsersTable(filteredAdmins, 'Administradores', true)}
                         </TabsContent>
                     </Tabs>
                 </CardContent>
