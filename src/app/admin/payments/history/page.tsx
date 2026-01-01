@@ -17,6 +17,7 @@ import { format, differenceInCalendarMonths, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useRouter } from 'next/navigation';
+import { useAuthorization } from '@/hooks/use-authorization';
 
 type Owner = {
     id: string;
@@ -73,6 +74,7 @@ export default function HistoricalPaymentsPage() {
 
     const { toast } = useToast();
     const router = useRouter();
+    const { requestAuthorization } = useAuthorization();
 
     useEffect(() => {
         const firestore = db;
@@ -130,107 +132,111 @@ export default function HistoricalPaymentsPage() {
 
     const confirmDelete = async () => {
         if (!paymentToDelete?.id) return;
-        try {
-            await deleteDoc(doc(db, "historical_payments", paymentToDelete.id));
-            toast({ title: "Pago eliminado", description: "El registro del pago histórico ha sido eliminado." });
-        } catch (error) {
-            console.error(error);
-            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo eliminar el registro.' });
-        } finally {
-            setIsDeleteConfirmationOpen(false);
-            setPaymentToDelete(null);
-        }
+        requestAuthorization(async () => {
+            try {
+                await deleteDoc(doc(db, "historical_payments", paymentToDelete.id!));
+                toast({ title: "Pago eliminado", description: "El registro del pago histórico ha sido eliminado." });
+            } catch (error) {
+                console.error(error);
+                toast({ variant: 'destructive', title: 'Error', description: 'No se pudo eliminar el registro.' });
+            } finally {
+                setIsDeleteConfirmationOpen(false);
+                setPaymentToDelete(null);
+            }
+        });
     };
     
     const handleSavePayment = async () => {
-        if (!selectedOwner || !selectedProperty || !amountUSD || parseFloat(amountUSD) <= 0) {
-            toast({ variant: 'destructive', title: 'Campos requeridos', description: 'Debe seleccionar un propietario, una propiedad y un monto mensual válido en USD.' });
-            return;
-        }
+        requestAuthorization(async () => {
+            if (!selectedOwner || !selectedProperty || !amountUSD || parseFloat(amountUSD) <= 0) {
+                toast({ variant: 'destructive', title: 'Campos requeridos', description: 'Debe seleccionar un propietario, una propiedad y un monto mensual válido en USD.' });
+                return;
+            }
 
-        const startDate = new Date(fromYear, fromMonth - 1);
-        const endDate = new Date(toYear, toMonth - 1);
+            const startDate = new Date(fromYear, fromMonth - 1);
+            const endDate = new Date(toYear, toMonth - 1);
 
-        if (startDate > endDate) {
-            toast({ variant: 'destructive', title: 'Rango Inválido', description: 'La fecha de inicio no puede ser posterior a la fecha final.' });
-            return;
-        }
+            if (startDate > endDate) {
+                toast({ variant: 'destructive', title: 'Rango Inválido', description: 'La fecha de inicio no puede ser posterior a la fecha final.' });
+                return;
+            }
 
-        setIsSubmitting(true);
-        const firestore = db;
-        try {
-            const batch = writeBatch(firestore);
-            const monthsToGenerate = differenceInCalendarMonths(endDate, startDate) + 1;
-            let paymentsCreated = 0;
+            setIsSubmitting(true);
+            const firestore = db;
+            try {
+                const batch = writeBatch(firestore);
+                const monthsToGenerate = differenceInCalendarMonths(endDate, startDate) + 1;
+                let paymentsCreated = 0;
 
-            const existingDebtsQuery = query(collection(firestore, 'debts'), 
-                where('ownerId', '==', selectedOwner.id),
-                where('property.street', '==', selectedProperty.street),
-                where('property.house', '==', selectedProperty.house)
-            );
-            const existingHistoricalPaymentsQuery = query(collection(firestore, 'historical_payments'),
-                where('ownerId', '==', selectedOwner.id),
-                where('property.street', '==', selectedProperty.street),
-                where('property.house', '==', selectedProperty.house)
-            );
+                const existingDebtsQuery = query(collection(firestore, 'debts'), 
+                    where('ownerId', '==', selectedOwner.id),
+                    where('property.street', '==', selectedProperty.street),
+                    where('property.house', '==', selectedProperty.house)
+                );
+                const existingHistoricalPaymentsQuery = query(collection(firestore, 'historical_payments'),
+                    where('ownerId', '==', selectedOwner.id),
+                    where('property.street', '==', selectedProperty.street),
+                    where('property.house', '==', selectedProperty.house)
+                );
 
-            const [existingDebtsSnapshot, existingHistoricalSnapshot] = await Promise.all([
-                getDocs(existingDebtsQuery),
-                getDocs(existingHistoricalPaymentsQuery)
-            ]);
+                const [existingDebtsSnapshot, existingHistoricalSnapshot] = await Promise.all([
+                    getDocs(existingDebtsQuery),
+                    getDocs(existingHistoricalPaymentsQuery)
+                ]);
 
-            const occupiedPeriods = new Set([
-                ...existingDebtsSnapshot.docs.map(d => `${d.data().year}-${d.data().month}`),
-                ...existingHistoricalSnapshot.docs.map(d => `${d.data().referenceYear}-${d.data().referenceMonth}`)
-            ]);
+                const occupiedPeriods = new Set([
+                    ...existingDebtsSnapshot.docs.map(d => `${d.data().year}-${d.data().month}`),
+                    ...existingHistoricalSnapshot.docs.map(d => `${d.data().referenceYear}-${d.data().referenceMonth}`)
+                ]);
 
-            for (let i = 0; i < monthsToGenerate; i++) {
-                const currentDate = addMonths(startDate, i);
-                const currentYear = currentDate.getFullYear();
-                const currentMonth = currentDate.getMonth() + 1;
+                for (let i = 0; i < monthsToGenerate; i++) {
+                    const currentDate = addMonths(startDate, i);
+                    const currentYear = currentDate.getFullYear();
+                    const currentMonth = currentDate.getMonth() + 1;
+                    
+                    if (occupiedPeriods.has(`${currentYear}-${currentMonth}`)) {
+                        continue; // Skip if a debt or historical payment already exists
+                    }
+
+                    const paymentRef = doc(collection(firestore, "historical_payments"));
+                    batch.set(paymentRef, {
+                        ownerId: selectedOwner.id,
+                        ownerName: selectedOwner.name,
+                        property: selectedProperty,
+                        referenceMonth: currentMonth,
+                        referenceYear: currentYear,
+                        amountUSD: parseFloat(amountUSD),
+                        paymentDate: Timestamp.fromDate(new Date(currentYear, currentMonth -1)), // Use the reference date as payment date
+                        createdAt: serverTimestamp(),
+                        observations,
+                    });
+                    paymentsCreated++;
+                }
                 
-                if (occupiedPeriods.has(`${currentYear}-${currentMonth}`)) {
-                    continue; // Skip if a debt or historical payment already exists
+                if (paymentsCreated > 0) {
+                    await batch.commit();
+                    toast({
+                        title: "Pagos Registrados",
+                        description: `Se han guardado ${paymentsCreated} pagos históricos.`,
+                        className: "bg-green-100 text-green-800"
+                    });
+                } else {
+                     toast({
+                        title: "Sin Cambios",
+                        description: "Todos los meses en el rango seleccionado ya tienen un pago o deuda registrada.",
+                        variant: "default"
+                    });
                 }
 
-                const paymentRef = doc(collection(firestore, "historical_payments"));
-                batch.set(paymentRef, {
-                    ownerId: selectedOwner.id,
-                    ownerName: selectedOwner.name,
-                    property: selectedProperty,
-                    referenceMonth: currentMonth,
-                    referenceYear: currentYear,
-                    amountUSD: parseFloat(amountUSD),
-                    paymentDate: Timestamp.fromDate(new Date(currentYear, currentMonth -1)), // Use the reference date as payment date
-                    createdAt: serverTimestamp(),
-                    observations,
-                });
-                paymentsCreated++;
-            }
-            
-            if (paymentsCreated > 0) {
-                await batch.commit();
-                toast({
-                    title: "Pagos Registrados",
-                    description: `Se han guardado ${paymentsCreated} pagos históricos.`,
-                    className: "bg-green-100 text-green-800"
-                });
-            } else {
-                 toast({
-                    title: "Sin Cambios",
-                    description: "Todos los meses en el rango seleccionado ya tienen un pago o deuda registrada.",
-                    variant: "default"
-                });
-            }
+                setIsDialogOpen(false);
 
-            setIsDialogOpen(false);
-
-        } catch (error) {
-            console.error(error);
-            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo guardar el registro de los pagos.' });
-        } finally {
-            setIsSubmitting(false);
-        }
+            } catch (error) {
+                console.error(error);
+                toast({ variant: 'destructive', title: 'Error', description: 'No se pudo guardar el registro de los pagos.' });
+            } finally {
+                setIsSubmitting(false);
+            }
+        });
     };
 
     const handleSelectOwner = (owner: Owner) => {
@@ -423,3 +429,4 @@ export default function HistoricalPaymentsPage() {
     
 
     
+

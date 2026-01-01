@@ -24,6 +24,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import QRCode from 'qrcode';
 import { useRouter } from 'next/navigation';
+import { useAuthorization } from '@/hooks/use-authorization';
 
 
 type Expense = {
@@ -82,6 +83,7 @@ export default function PettyCashPage() {
 
     const { toast } = useToast();
     const router = useRouter();
+    const { requestAuthorization } = useAuthorization();
 
     useEffect(() => {
         const firestore = db;
@@ -125,74 +127,80 @@ export default function PettyCashPage() {
     };
 
     const handleSaveReplenishment = async () => {
-        if (!repDate || !repAmount || parseFloat(repAmount) <= 0 || !repDescription) {
-            toast({ variant: 'destructive', title: 'Datos incompletos', description: 'Fecha, monto y descripción son obligatorios.' });
-            return;
-        }
-        setIsSubmitting(true);
-        try {
-            await addDoc(collection(db, "petty_cash_replenishments"), {
-                date: Timestamp.fromDate(repDate),
-                amount: parseFloat(repAmount),
-                description: repDescription,
-                expenses: [],
-            });
-            toast({ title: 'Reposición Guardada', description: 'El nuevo fondo de caja chica ha sido registrado.' });
-            resetRepDialog();
-        } catch (error) {
-            console.error(error);
-            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo guardar la reposición.' });
-        } finally {
-            setIsSubmitting(false);
-        }
+        requestAuthorization(async () => {
+            if (!repDate || !repAmount || parseFloat(repAmount) <= 0 || !repDescription) {
+                toast({ variant: 'destructive', title: 'Datos incompletos', description: 'Fecha, monto y descripción son obligatorios.' });
+                return;
+            }
+            setIsSubmitting(true);
+            try {
+                await addDoc(collection(db, "petty_cash_replenishments"), {
+                    date: Timestamp.fromDate(repDate),
+                    amount: parseFloat(repAmount),
+                    description: repDescription,
+                    expenses: [],
+                });
+                toast({ title: 'Reposición Guardada', description: 'El nuevo fondo de caja chica ha sido registrado.' });
+                resetRepDialog();
+            } catch (error) {
+                console.error(error);
+                toast({ variant: 'destructive', title: 'Error', description: 'No se pudo guardar la reposición.' });
+            } finally {
+                setIsSubmitting(false);
+            }
+        });
     };
     
     const handleSaveExpense = async () => {
-        if (!currentRepId || !expenseDate || !expenseAmount || parseFloat(expenseAmount) <= 0 || !expenseDescription) {
-            toast({ variant: 'destructive', title: 'Datos incompletos', description: 'Fecha, concepto y monto son obligatorios.' });
-            return;
-        }
-        setIsSubmitting(true);
-        try {
-            const repRef = doc(db, 'petty_cash_replenishments', currentRepId);
-            const newExpense: Omit<Expense, 'id'> & { id: string } = {
-                id: `${Date.now()}-${Math.random()}`, // Unique ID for array element
-                date: Timestamp.fromDate(expenseDate),
-                description: expenseDescription,
-                amount: parseFloat(expenseAmount),
-            };
-            await updateDoc(repRef, { expenses: arrayUnion(newExpense) });
-            toast({ title: 'Gasto Guardado', description: 'El gasto ha sido añadido a la reposición.' });
-            resetExpenseDialog();
-        } catch (error) {
-            console.error(error);
-            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo guardar el gasto.' });
-        } finally {
-            setIsSubmitting(false);
-        }
+        requestAuthorization(async () => {
+            if (!currentRepId || !expenseDate || !expenseAmount || parseFloat(expenseAmount) <= 0 || !expenseDescription) {
+                toast({ variant: 'destructive', title: 'Datos incompletos', description: 'Fecha, concepto y monto son obligatorios.' });
+                return;
+            }
+            setIsSubmitting(true);
+            try {
+                const repRef = doc(db, 'petty_cash_replenishments', currentRepId);
+                const newExpense: Omit<Expense, 'id'> & { id: string } = {
+                    id: `${Date.now()}-${Math.random()}`, // Unique ID for array element
+                    date: Timestamp.fromDate(expenseDate),
+                    description: expenseDescription,
+                    amount: parseFloat(expenseAmount),
+                };
+                await updateDoc(repRef, { expenses: arrayUnion(newExpense) });
+                toast({ title: 'Gasto Guardado', description: 'El gasto ha sido añadido a la reposición.' });
+                resetExpenseDialog();
+            } catch (error) {
+                console.error(error);
+                toast({ variant: 'destructive', title: 'Error', description: 'No se pudo guardar el gasto.' });
+            } finally {
+                setIsSubmitting(false);
+            }
+        });
     };
     
     const handleDeleteExpense = async (repId: string, expense: Expense) => {
-        if (!window.confirm('¿Está seguro de que desea eliminar este gasto?')) return;
-        try {
-            const repRef = doc(db, 'petty_cash_replenishments', repId);
-            await updateDoc(repRef, { expenses: arrayRemove(expense) });
-            toast({ title: 'Gasto Eliminado' });
-        } catch (error) {
-            console.error(error);
-            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo eliminar el gasto.' });
-        }
+        requestAuthorization(async () => {
+            try {
+                const repRef = doc(db, 'petty_cash_replenishments', repId);
+                await updateDoc(repRef, { expenses: arrayRemove(expense) });
+                toast({ title: 'Gasto Eliminado' });
+            } catch (error) {
+                console.error(error);
+                toast({ variant: 'destructive', title: 'Error', description: 'No se pudo eliminar el gasto.' });
+            }
+        });
     };
 
     const handleDeleteReplenishment = async (repId: string) => {
-        if (!window.confirm('¿Está seguro de que desea eliminar esta reposición y todos sus gastos asociados? Esta acción no se puede deshacer.')) return;
-        try {
-            await deleteDoc(doc(db, 'petty_cash_replenishments', repId));
-            toast({ title: 'Reposición Eliminada' });
-        } catch (error) {
-            console.error(error);
-            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo eliminar la reposición.' });
-        }
+        requestAuthorization(async () => {
+            try {
+                await deleteDoc(doc(db, 'petty_cash_replenishments', repId));
+                toast({ title: 'Reposición Eliminada' });
+            } catch (error) {
+                console.error(error);
+                toast({ variant: 'destructive', title: 'Error', description: 'No se pudo eliminar la reposición.' });
+            }
+        });
     };
 
     const handleUploadClick = (repId: string, expenseId: string) => {

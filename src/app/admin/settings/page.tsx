@@ -21,6 +21,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Progress } from '@/components/ui/progress';
+import { useAuthorization } from '@/hooks/use-authorization';
 
 
 type AdminProfile = {
@@ -95,6 +96,7 @@ const emptyCompanyInfo: CompanyInfo = {
 
 export default function SettingsPage() {
     const { toast } = useToast();
+    const { requestAuthorization } = useAuthorization();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     
@@ -126,6 +128,11 @@ export default function SettingsPage() {
 
     const [isDeleteRateDialogOpen, setIsDeleteRateDialogOpen] = useState(false);
     const [rateToDelete, setRateToDelete] = useState<ExchangeRate | null>(null);
+
+    // New state for changing authorization key
+    const [isAuthKeyDialogOpen, setIsAuthKeyDialogOpen] = useState(false);
+    const [newAuthKey, setNewAuthKey] = useState('');
+    const [confirmNewAuthKey, setConfirmNewAuthKey] = useState('');
 
 
     useEffect(() => {
@@ -199,45 +206,49 @@ export default function SettingsPage() {
     };
     
     const handleAddRate = async () => {
-        const rateAmount = Number(newRateAmount); 
-        
-        if(!newRateDate || isNaN(rateAmount) || rateAmount <= 0) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Por favor, complete la fecha y el monto de la tasa con un valor positivo.' });
-            return;
-        }
-        
-        const newRate: ExchangeRate = {
-            id: new Date().toISOString(), // simple unique id
-            date: format(newRateDate, 'yyyy-MM-dd'),
-            rate: rateAmount, 
-            active: false
-        };
-        
-        try {
-            const settingsRef = doc(db, 'config', 'mainSettings');
-            await updateDoc(settingsRef, {
-                exchangeRates: arrayUnion(newRate)
-            });
-            setNewRateDate(new Date());
-            setNewRateAmount('');
-            toast({ title: 'Tasa Agregada', description: 'La nueva tasa de cambio ha sido añadida al historial.' });
-        } catch (error) {
-            console.error("Error adding rate:", error);
-            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo agregar la nueva tasa.' });
-        }
+        requestAuthorization(async () => {
+            const rateAmount = Number(newRateAmount); 
+            
+            if(!newRateDate || isNaN(rateAmount) || rateAmount <= 0) {
+                toast({ variant: 'destructive', title: 'Error', description: 'Por favor, complete la fecha y el monto de la tasa con un valor positivo.' });
+                return;
+            }
+            
+            const newRate: ExchangeRate = {
+                id: new Date().toISOString(), // simple unique id
+                date: format(newRateDate, 'yyyy-MM-dd'),
+                rate: rateAmount, 
+                active: false
+            };
+            
+            try {
+                const settingsRef = doc(db, 'config', 'mainSettings');
+                await updateDoc(settingsRef, {
+                    exchangeRates: arrayUnion(newRate)
+                });
+                setNewRateDate(new Date());
+                setNewRateAmount('');
+                toast({ title: 'Tasa Agregada', description: 'La nueva tasa de cambio ha sido añadida al historial.' });
+            } catch (error) {
+                console.error("Error adding rate:", error);
+                toast({ variant: 'destructive', title: 'Error', description: 'No se pudo agregar la nueva tasa.' });
+            }
+        });
     };
 
     const handleActivateRate = async (rateToActivate: ExchangeRate) => {
-        const updatedRates = exchangeRates.map(r => ({...r, active: r.id === rateToActivate.id }));
-        
-        try {
-            const settingsRef = doc(db, 'config', 'mainSettings');
-            await updateDoc(settingsRef, { exchangeRates: updatedRates });
-            toast({ title: 'Tasa Activada', description: `La tasa de ${rateToActivate.rate.toFixed(2)} ahora es la activa.` });
-        } catch (error) {
-            console.error("Error activating rate:", error);
-            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo activar la tasa.' });
-        }
+        requestAuthorization(async () => {
+            const updatedRates = exchangeRates.map(r => ({...r, active: r.id === rateToActivate.id }));
+            
+            try {
+                const settingsRef = doc(db, 'config', 'mainSettings');
+                await updateDoc(settingsRef, { exchangeRates: updatedRates });
+                toast({ title: 'Tasa Activada', description: `La tasa de ${rateToActivate.rate.toFixed(2)} ahora es la activa.` });
+            } catch (error) {
+                console.error("Error activating rate:", error);
+                toast({ variant: 'destructive', title: 'Error', description: 'No se pudo activar la tasa.' });
+            }
+        });
     }
     
     const openEditRateDialog = (rate: ExchangeRate) => {
@@ -248,53 +259,57 @@ export default function SettingsPage() {
     };
 
     const handleEditRate = async () => {
-        const editedRateAmount = Number(editRateAmount);
-        
-        if (!rateToEdit || !editRateDate || isNaN(editedRateAmount) || editedRateAmount <= 0) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Faltan datos o el monto es inválido para editar la tasa.' });
-            return;
-        }
-        const updatedRates = exchangeRates.map(r => 
-            r.id === rateToEdit.id 
-            ? { ...r, date: format(editRateDate, 'yyyy-MM-dd'), rate: editedRateAmount } 
-            : r
-        );
-        
-        try {
-            const settingsRef = doc(db, 'config', 'mainSettings');
-            await updateDoc(settingsRef, { exchangeRates: updatedRates });
-            toast({ title: 'Tasa Actualizada', description: 'La tasa de cambio ha sido modificada.' });
-        } catch (error) {
-            console.error("Error editing rate:", error);
-            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo modificar la tasa.' });
-        } finally {
-            setIsRateDialogOpen(false);
-            setRateToEdit(null);
-        }
+        requestAuthorization(async () => {
+            const editedRateAmount = Number(editRateAmount);
+            
+            if (!rateToEdit || !editRateDate || isNaN(editedRateAmount) || editedRateAmount <= 0) {
+                toast({ variant: 'destructive', title: 'Error', description: 'Faltan datos o el monto es inválido para editar la tasa.' });
+                return;
+            }
+            const updatedRates = exchangeRates.map(r => 
+                r.id === rateToEdit.id 
+                ? { ...r, date: format(editRateDate, 'yyyy-MM-dd'), rate: editedRateAmount } 
+                : r
+            );
+            
+            try {
+                const settingsRef = doc(db, 'config', 'mainSettings');
+                await updateDoc(settingsRef, { exchangeRates: updatedRates });
+                toast({ title: 'Tasa Actualizada', description: 'La tasa de cambio ha sido modificada.' });
+            } catch (error) {
+                console.error("Error editing rate:", error);
+                toast({ variant: 'destructive', title: 'Error', description: 'No se pudo modificar la tasa.' });
+            } finally {
+                setIsRateDialogOpen(false);
+                setRateToEdit(null);
+            }
+        });
     };
     
     const handleDeleteRate = async () => {
         if (!rateToDelete) return;
 
-        if (rateToDelete.active) {
-            toast({ variant: 'destructive', title: 'Acción no permitida', description: 'No se puede eliminar la tasa activa. Active otra tasa primero.' });
-            setIsDeleteRateDialogOpen(false);
-            return;
-        }
-
-        const updatedRates = exchangeRates.filter(r => r.id !== rateToDelete.id);
-
-        try {
-            const settingsRef = doc(db, 'config', 'mainSettings');
-            await updateDoc(settingsRef, { exchangeRates: updatedRates });
-            toast({ title: 'Tasa Eliminada', description: 'La tasa ha sido eliminada del historial.' });
-        } catch (error) {
-            console.error("Error deleting rate:", error);
-            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo eliminar la tasa.' });
-        } finally {
-            setIsDeleteRateDialogOpen(false);
-            setRateToDelete(null);
-        }
+        requestAuthorization(async () => {
+            if (rateToDelete.active) {
+                toast({ variant: 'destructive', title: 'Acción no permitida', description: 'No se puede eliminar la tasa activa. Active otra tasa primero.' });
+                setIsDeleteRateDialogOpen(false);
+                return;
+            }
+    
+            const updatedRates = exchangeRates.filter(r => r.id !== rateToDelete.id);
+    
+            try {
+                const settingsRef = doc(db, 'config', 'mainSettings');
+                await updateDoc(settingsRef, { exchangeRates: updatedRates });
+                toast({ title: 'Tasa Eliminada', description: 'La tasa ha sido eliminada del historial.' });
+            } catch (error) {
+                console.error("Error deleting rate:", error);
+                toast({ variant: 'destructive', title: 'Error', description: 'No se pudo eliminar la tasa.' });
+            } finally {
+                setIsDeleteRateDialogOpen(false);
+                setRateToDelete(null);
+            }
+        });
     };
     
     const handleCondoFeeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -304,132 +319,157 @@ export default function SettingsPage() {
     }
 
     const handleSaveChanges = async () => {
-        setSaving(true);
-        const newCondoFee = Number(condoFee);
+        requestAuthorization(async () => {
+            setSaving(true);
+            const newCondoFee = Number(condoFee);
 
-        try {
-            const settingsRef = doc(db, 'config', 'mainSettings');
+            try {
+                const settingsRef = doc(db, 'config', 'mainSettings');
 
-            // Save companyInfo separately to avoid nested entity errors
-            await updateDoc(settingsRef, {
-                companyInfo: {
-                    name: companyInfo?.name || '',
-                    address: companyInfo?.address || '',
-                    rif: companyInfo?.rif || '',
-                    phone: companyInfo?.phone || '',
-                    email: companyInfo?.email || '',
-                    logo: companyInfo?.logo || '',
-                    bankName: companyInfo?.bankName || '',
-                    accountNumber: companyInfo?.accountNumber || '',
-                },
-                adminProfile: {
-                    name: adminProfile.name || '',
-                    email: adminProfile.email || '',
-                    avatar: companyInfo.logo,
-                },
-                condoFee: newCondoFee,
-                lastCondoFee: lastCondoFee,
-                bcvLogo: bcvLogo,
-            });
+                // Save companyInfo separately to avoid nested entity errors
+                await updateDoc(settingsRef, {
+                    companyInfo: {
+                        name: companyInfo?.name || '',
+                        address: companyInfo?.address || '',
+                        rif: companyInfo?.rif || '',
+                        phone: companyInfo?.phone || '',
+                        email: companyInfo?.email || '',
+                        logo: companyInfo?.logo || '',
+                        bankName: companyInfo?.bankName || '',
+                        accountNumber: companyInfo?.accountNumber || '',
+                    },
+                    adminProfile: {
+                        name: adminProfile.name || '',
+                        email: adminProfile.email || '',
+                        avatar: companyInfo.logo,
+                    },
+                    condoFee: newCondoFee,
+                    lastCondoFee: lastCondoFee,
+                    bcvLogo: bcvLogo,
+                });
 
-            toast({
-                title: 'Cambios Guardados',
-                description: 'La configuración ha sido actualizada exitosamente.',
-                className: 'bg-green-100 border-green-400 text-green-800'
-            });
+                toast({
+                    title: 'Cambios Guardados',
+                    description: 'La configuración ha sido actualizada exitosamente.',
+                    className: 'bg-green-100 border-green-400 text-green-800'
+                });
 
-            if (isFeeChanged) {
-                 toast({
-                     title: 'Cuota Actualizada',
-                     description: 'Puede proceder a ajustar las deudas por adelantado si es necesario.',
-                     className: 'bg-blue-100 border-blue-400 text-blue-800'
-                 });
+                if (isFeeChanged) {
+                     toast({
+                         title: 'Cuota Actualizada',
+                         description: 'Puede proceder a ajustar las deudas por adelantado si es necesario.',
+                         className: 'bg-blue-100 border-blue-400 text-blue-800'
+                     });
+                }
+                setLastCondoFee(newCondoFee);
+                 
+            } catch(error) {
+                 console.error("Error saving settings:", error);
+                 toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron guardar los cambios. ' + (error as Error).message });
+            } finally {
+                setSaving(false);
             }
-            setLastCondoFee(newCondoFee);
-             
-        } catch(error) {
-             console.error("Error saving settings:", error);
-             toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron guardar los cambios. ' + (error as Error).message });
-        } finally {
-            setSaving(false);
-        }
+        });
     };
     
     const handleFeeAdjustment = async () => {
-        setIsAdjustmentRunning(true);
-        toast({ title: 'Iniciando ajuste...', description: 'Buscando pagos adelantados para ajustar.' });
+        requestAuthorization(async () => {
+            setIsAdjustmentRunning(true);
+            toast({ title: 'Iniciando ajuste...', description: 'Buscando pagos adelantados para ajustar.' });
 
-        const newCondoFee = Number(condoFee);
-        const firestore = db;
-        try {
-            const paidAdvanceQuery = query(
-                collection(firestore, "debts"),
-                where("status", "==", "paid"),
-                where("description", "==", "Cuota de Condominio (Pagada por adelantado)")
-            );
-            const advanceDebtsSnapshot = await getDocs(paidAdvanceQuery);
-            
-            const adjustmentQuery = query(
-                collection(firestore, "debts"),
-                where("description", "==", "Ajuste por aumento de cuota")
-            );
-            const adjustmentDebtsSnapshot = await getDocs(adjustmentQuery);
-            const existingAdjustments = new Set(
-                adjustmentDebtsSnapshot.docs.map(d => `${d.data().ownerId}-${d.data().year}-${d.data().month}`)
-            );
-            
-            if (advanceDebtsSnapshot.empty) {
-                toast({ title: 'No se requieren ajustes', description: 'No se encontraron pagos por adelantado.' });
-                setIsAdjustmentRunning(false);
-                return;
-            }
-                                    
-            const batch = writeBatch(firestore);
-            let adjustmentsCreated = 0;
-            
-            for (const debtDoc of advanceDebtsSnapshot.docs) {
-                const debt = { id: debtDoc.id, ...debtDoc.data() } as Debt;
+            const newCondoFee = Number(condoFee);
+            const firestore = db;
+            try {
+                const paidAdvanceQuery = query(
+                    collection(firestore, "debts"),
+                    where("status", "==", "paid"),
+                    where("description", "==", "Cuota de Condominio (Pagada por adelantado)")
+                );
+                const advanceDebtsSnapshot = await getDocs(paidAdvanceQuery);
                 
-                const paidAmount = Number(debt.paidAmountUSD || debt.amountUSD); 
+                const adjustmentQuery = query(
+                    collection(firestore, "debts"),
+                    where("description", "==", "Ajuste por aumento de cuota")
+                );
+                const adjustmentDebtsSnapshot = await getDocs(adjustmentQuery);
+                const existingAdjustments = new Set(
+                    adjustmentDebtsSnapshot.docs.map(d => `${d.data().ownerId}-${d.data().year}-${d.data().month}`)
+                );
                 
-                const adjustmentKey = `${debt.ownerId}-${debt.year}-${debt.month}`;
-                if (paidAmount < newCondoFee && !existingAdjustments.has(adjustmentKey)) {
-                    const difference = newCondoFee - paidAmount;
-                    const adjustmentDebtRef = doc(collection(firestore, "debts"));
-                    
-                    batch.set(adjustmentDebtRef, {
-                        ownerId: debt.ownerId,
-                        property: debt.property,
-                        year: debt.year,
-                        month: debt.month,
-                        amountUSD: difference,
-                        description: "Ajuste por aumento de cuota",
-                        status: "pending",
-                        createdAt: serverTimestamp()
-                    });
-                    adjustmentsCreated++;
+                if (advanceDebtsSnapshot.empty) {
+                    toast({ title: 'No se requieren ajustes', description: 'No se encontraron pagos por adelantado.' });
+                    setIsAdjustmentRunning(false);
+                    return;
                 }
-            }
+                                        
+                const batch = writeBatch(firestore);
+                let adjustmentsCreated = 0;
+                
+                for (const debtDoc of advanceDebtsSnapshot.docs) {
+                    const debt = { id: debtDoc.id, ...debtDoc.data() } as Debt;
+                    
+                    const paidAmount = Number(debt.paidAmountUSD || debt.amountUSD); 
+                    
+                    const adjustmentKey = `${debt.ownerId}-${debt.year}-${debt.month}`;
+                    if (paidAmount < newCondoFee && !existingAdjustments.has(adjustmentKey)) {
+                        const difference = newCondoFee - paidAmount;
+                        const adjustmentDebtRef = doc(collection(firestore, "debts"));
+                        
+                        batch.set(adjustmentDebtRef, {
+                            ownerId: debt.ownerId,
+                            property: debt.property,
+                            year: debt.year,
+                            month: debt.month,
+                            amountUSD: difference,
+                            description: "Ajuste por aumento de cuota",
+                            status: "pending",
+                            createdAt: serverTimestamp()
+                        });
+                        adjustmentsCreated++;
+                    }
+                }
 
-            if (adjustmentsCreated > 0) {
-                await batch.commit();
-                toast({
-                    title: 'Ajuste Completado',
-                    description: `Se han generado ${adjustmentsCreated} nuevas deudas por ajuste de cuota.`,
-                    className: 'bg-green-100 border-green-400 text-green-800'
-                });
-            } else {
-                toast({ title: 'No se requieren nuevos ajustes', description: 'Todos los pagos por adelantado ya están al día o ajustados.' });
-            }
+                if (adjustmentsCreated > 0) {
+                    await batch.commit();
+                    toast({
+                        title: 'Ajuste Completado',
+                        description: `Se han generado ${adjustmentsCreated} nuevas deudas por ajuste de cuota.`,
+                        className: 'bg-green-100 border-green-400 text-green-800'
+                    });
+                } else {
+                    toast({ title: 'No se requieren nuevos ajustes', description: 'Todos los pagos por adelantado ya están al día o ajustados.' });
+                }
 
-        } catch (error) {
-            console.error("Error during fee adjustment: ", error);
-            const errorMessage = error instanceof Error ? error.message : "Ocurrió un error desconocido.";
-            toast({ variant: 'destructive', title: 'Error en el Ajuste', description: errorMessage });
-        } finally {
-            setIsAdjustmentRunning(false);
-            setIsFeeChanged(false);
+            } catch (error) {
+                console.error("Error during fee adjustment: ", error);
+                const errorMessage = error instanceof Error ? error.message : "Ocurrió un error desconocido.";
+                toast({ variant: 'destructive', title: 'Error en el Ajuste', description: errorMessage });
+            } finally {
+                setIsAdjustmentRunning(false);
+                setIsFeeChanged(false);
+            }
+        });
+    };
+
+    const handleChangeAuthKey = async () => {
+        if (!newAuthKey || newAuthKey !== confirmNewAuthKey) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Las claves no coinciden o están vacías.' });
+            return;
         }
+
+        requestAuthorization(async () => {
+            try {
+                const keyDocRef = doc(db, 'config', 'authorization');
+                await setDoc(keyDocRef, { key: newAuthKey });
+                toast({ title: 'Clave de Autorización Actualizada', className: 'bg-green-100' });
+                setIsAuthKeyDialogOpen(false);
+                setNewAuthKey('');
+                setConfirmNewAuthKey('');
+            } catch (error) {
+                toast({ variant: 'destructive', title: 'Error', description: 'No se pudo actualizar la clave.' });
+                console.error(error);
+            }
+        });
     };
 
 
@@ -578,6 +618,18 @@ export default function SettingsPage() {
                                 </div>
                             )}
                         </CardFooter>
+                    </Card>
+
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Seguridad</CardTitle>
+                            <CardDescription>Gestiona la clave de autorización para acciones críticas.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <Button variant="outline" className="w-full" onClick={() => setIsAuthKeyDialogOpen(true)}>
+                                Cambiar Clave de Autorización
+                            </Button>
+                        </CardContent>
                     </Card>
                     
                     <Card>
@@ -761,6 +813,32 @@ export default function SettingsPage() {
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setIsDeleteRateDialogOpen(false)}>Cancelar</Button>
                         <Button variant="destructive" onClick={handleDeleteRate}>Eliminar</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Diálogo para cambiar Clave de Autorización */}
+            <Dialog open={isAuthKeyDialogOpen} onOpenChange={setIsAuthKeyDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Cambiar Clave de Autorización</DialogTitle>
+                        <DialogDescription>
+                            Ingrese la nueva clave de autorización. Esta clave se solicitará para acciones críticas.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="newAuthKey">Nueva Clave</Label>
+                            <Input id="newAuthKey" type="password" value={newAuthKey} onChange={(e) => setNewAuthKey(e.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="confirmNewAuthKey">Confirmar Nueva Clave</Label>
+                            <Input id="confirmNewAuthKey" type="password" value={confirmNewAuthKey} onChange={(e) => setConfirmNewAuthKey(e.target.value)} />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsAuthKeyDialogOpen(false)}>Cancelar</Button>
+                        <Button onClick={handleChangeAuthKey}>Actualizar Clave</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

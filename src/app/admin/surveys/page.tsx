@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { useRouter } from 'next/navigation';
+import { useAuthorization } from '@/hooks/use-authorization';
 
 type SurveyQuestion = {
     id: string;
@@ -62,6 +63,7 @@ export default function SurveysPage() {
     const [loading, setLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const router = useRouter();
+    const { requestAuthorization } = useAuthorization();
     
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
@@ -188,106 +190,110 @@ export default function SurveysPage() {
     };
     
     const handleSaveSurvey = async () => {
-        if (!title.trim()) {
-            toast({ variant: 'destructive', title: 'Título requerido', description: 'Por favor, ingrese un título para la encuesta.' });
-            return;
-        }
-        if (questions.some(q => !q.questionText.trim())) {
-             toast({ variant: 'destructive', title: 'Preguntas incompletas', description: 'Todas las preguntas deben tener texto.' });
-            return;
-        }
-        if (questions.some(q => q.options.filter(o => o.text.trim() !== '').length < 2)) {
-             toast({ variant: 'destructive', title: 'Opciones insuficientes', description: 'Cada pregunta debe tener al menos dos opciones con texto.' });
-            return;
-        }
-        if (!startDate || !endDate || !startTime || !endTime) {
-            toast({ variant: 'destructive', title: 'Fechas requeridas', description: 'Debe definir una fecha y hora de inicio y fin.' });
-            return;
-        }
-
-        const startDateTime = parse(`${format(startDate, 'yyyy-MM-dd')} ${startTime}`, 'yyyy-MM-dd HH:mm', new Date());
-        const endDateTime = parse(`${format(endDate, 'yyyy-MM-dd')} ${endTime}`, 'yyyy-MM-dd HH:mm', new Date());
-
-        if (startDateTime >= endDateTime) {
-            toast({ variant: 'destructive', title: 'Fechas inválidas', description: 'La fecha de inicio debe ser anterior a la fecha de cierre.' });
-            return;
-        }
-        
-        setIsSubmitting(true);
-        const firestore = db; 
-        try {
-            const finalQuestions = questions.map(q => ({
-                id: q.id,
-                questionText: q.questionText,
-                options: q.options.filter(opt => opt.text.trim())
-            }));
-
-            if (isEditing && editingSurveyId) {
-                const surveyRef = doc(firestore, 'surveys', editingSurveyId);
-                await updateDoc(surveyRef, {
-                    title,
-                    questions: finalQuestions.map(q => ({id: q.id, questionText: q.questionText, options: q.options.map(o => o.text) })), // Store as string array
-                    startDate: Timestamp.fromDate(startDateTime),
-                    endDate: Timestamp.fromDate(endDateTime),
-                });
-                toast({ title: 'Encuesta Actualizada', description: 'Los cambios han sido guardados.' });
-            } else {
-                const initialResults: Survey['results'] = {};
-                finalQuestions.forEach(q => {
-                    initialResults[q.id] = q.options.reduce((acc, opt) => {
-                        acc[opt.text] = 0;
-                        return acc;
-                    }, {} as { [key: string]: number });
-                });
-
-                const surveyRef = await addDoc(collection(firestore, 'surveys'), {
-                    title,
-                    questions: finalQuestions.map(q => ({id: q.id, questionText: q.questionText, options: q.options.map(o => o.text) })),
-                    createdAt: serverTimestamp(),
-                    startDate: Timestamp.fromDate(startDateTime),
-                    endDate: Timestamp.fromDate(endDateTime),
-                    results: initialResults,
-                    totalVotes: 0,
-                });
-                 // Notify all owners
-                const ownersSnapshot = await getDocs(query(collection(firestore, 'owners'), where('role', '==', 'propietario')));
-                const batch = writeBatch(firestore);
-                ownersSnapshot.forEach(ownerDoc => {
-                    const notificationsRef = doc(collection(firestore, `owners/${ownerDoc.id}/notifications`));
-                    batch.set(notificationsRef, {
-                        title: 'Nueva Encuesta Disponible',
-                        body: `Participa en la encuesta: "${title}"`,
-                        createdAt: Timestamp.now(),
-                        read: false,
-                        href: `/owner/surveys`
-                    });
-                });
-                await batch.commit();
-
-                toast({ title: 'Encuesta Creada', description: 'La nueva encuesta está disponible y los propietarios han sido notificados.' });
+        requestAuthorization(async () => {
+            if (!title.trim()) {
+                toast({ variant: 'destructive', title: 'Título requerido', description: 'Por favor, ingrese un título para la encuesta.' });
+                return;
             }
-
-            resetDialog();
-        } catch (error) {
-            console.error('Error saving survey:', error);
-            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo guardar la encuesta.' });
-        } finally {
-            setIsSubmitting(false);
-        }
+            if (questions.some(q => !q.questionText.trim())) {
+                 toast({ variant: 'destructive', title: 'Preguntas incompletas', description: 'Todas las preguntas deben tener texto.' });
+                return;
+            }
+            if (questions.some(q => q.options.filter(o => o.text.trim() !== '').length < 2)) {
+                 toast({ variant: 'destructive', title: 'Opciones insuficientes', description: 'Cada pregunta debe tener al menos dos opciones con texto.' });
+                return;
+            }
+            if (!startDate || !endDate || !startTime || !endTime) {
+                toast({ variant: 'destructive', title: 'Fechas requeridas', description: 'Debe definir una fecha y hora de inicio y fin.' });
+                return;
+            }
+    
+            const startDateTime = parse(`${format(startDate, 'yyyy-MM-dd')} ${startTime}`, 'yyyy-MM-dd HH:mm', new Date());
+            const endDateTime = parse(`${format(endDate, 'yyyy-MM-dd')} ${endTime}`, 'yyyy-MM-dd HH:mm', new Date());
+    
+            if (startDateTime >= endDateTime) {
+                toast({ variant: 'destructive', title: 'Fechas inválidas', description: 'La fecha de inicio debe ser anterior a la fecha de cierre.' });
+                return;
+            }
+            
+            setIsSubmitting(true);
+            const firestore = db; 
+            try {
+                const finalQuestions = questions.map(q => ({
+                    id: q.id,
+                    questionText: q.questionText,
+                    options: q.options.filter(opt => opt.text.trim())
+                }));
+    
+                if (isEditing && editingSurveyId) {
+                    const surveyRef = doc(firestore, 'surveys', editingSurveyId);
+                    await updateDoc(surveyRef, {
+                        title,
+                        questions: finalQuestions.map(q => ({id: q.id, questionText: q.questionText, options: q.options.map(o => o.text) })), // Store as string array
+                        startDate: Timestamp.fromDate(startDateTime),
+                        endDate: Timestamp.fromDate(endDateTime),
+                    });
+                    toast({ title: 'Encuesta Actualizada', description: 'Los cambios han sido guardados.' });
+                } else {
+                    const initialResults: Survey['results'] = {};
+                    finalQuestions.forEach(q => {
+                        initialResults[q.id] = q.options.reduce((acc, opt) => {
+                            acc[opt.text] = 0;
+                            return acc;
+                        }, {} as { [key: string]: number });
+                    });
+    
+                    const surveyRef = await addDoc(collection(firestore, 'surveys'), {
+                        title,
+                        questions: finalQuestions.map(q => ({id: q.id, questionText: q.questionText, options: q.options.map(o => o.text) })),
+                        createdAt: serverTimestamp(),
+                        startDate: Timestamp.fromDate(startDateTime),
+                        endDate: Timestamp.fromDate(endDateTime),
+                        results: initialResults,
+                        totalVotes: 0,
+                    });
+                     // Notify all owners
+                    const ownersSnapshot = await getDocs(query(collection(firestore, 'owners'), where('role', '==', 'propietario')));
+                    const batch = writeBatch(firestore);
+                    ownersSnapshot.forEach(ownerDoc => {
+                        const notificationsRef = doc(collection(firestore, `owners/${ownerDoc.id}/notifications`));
+                        batch.set(notificationsRef, {
+                            title: 'Nueva Encuesta Disponible',
+                            body: `Participa en la encuesta: "${title}"`,
+                            createdAt: Timestamp.now(),
+                            read: false,
+                            href: `/owner/surveys`
+                        });
+                    });
+                    await batch.commit();
+    
+                    toast({ title: 'Encuesta Creada', description: 'La nueva encuesta está disponible y los propietarios han sido notificados.' });
+                }
+    
+                resetDialog();
+            } catch (error) {
+                console.error('Error saving survey:', error);
+                toast({ variant: 'destructive', title: 'Error', description: 'No se pudo guardar la encuesta.' });
+            } finally {
+                setIsSubmitting(false);
+            }
+        });
     };
 
     const handleDeleteSurvey = async () => {
         if (!surveyToDelete) return;
-        try {
-            await deleteDoc(doc(db, "surveys", surveyToDelete.id)); 
-            toast({ title: 'Encuesta Eliminada' });
-        } catch (error) {
-            console.error("Error deleting survey:", error);
-            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo eliminar la encuesta.' });
-        } finally {
-            setSurveyToDelete(null);
-            setIsDeleteConfirmationOpen(false);
-        }
+        requestAuthorization(async () => {
+            try {
+                await deleteDoc(doc(db, "surveys", surveyToDelete.id)); 
+                toast({ title: 'Encuesta Eliminada' });
+            } catch (error) {
+                console.error("Error deleting survey:", error);
+                toast({ variant: 'destructive', title: 'Error', description: 'No se pudo eliminar la encuesta.' });
+            } finally {
+                setSurveyToDelete(null);
+                setIsDeleteConfirmationOpen(false);
+            }
+        });
     };
     
     return (

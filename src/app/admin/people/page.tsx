@@ -25,6 +25,7 @@ import { db } from '@/lib/firebase';
 
 // Importación corregida a la ubicación real
 import { useToast } from '@/hooks/use-toast'; 
+import { useAuthorization } from '@/hooks/use-authorization';
 
 // Componentes UI de shadcn/ui 
 import { Button } from '@/components/ui/button';
@@ -112,6 +113,7 @@ const formatToTwoDecimals = (num: number | string): string => {
 
 export default function OwnersManagement() {
     const { toast } = useToast();
+    const { requestAuthorization } = useAuthorization();
     const auth = getAuth();
 
     // Estados
@@ -194,113 +196,117 @@ export default function OwnersManagement() {
     const confirmDelete = async () => {
         if (!ownerToDelete) return;
 
-        try {
-            // 1. Eliminar documento de Firestore
-            await deleteDoc(doc(db, 'owners', ownerToDelete.id));
-
-            // 2. Intentar eliminar usuario de Authentication (NOTA: Requiere Admin SDK/Cloud Function)
-            if (ownerToDelete.email) {
-                 console.warn("La eliminación de la cuenta de Firebase Auth para este usuario debe ser manejada por una Cloud Function o Admin SDK.");
+        requestAuthorization(async () => {
+            try {
+                // 1. Eliminar documento de Firestore
+                await deleteDoc(doc(db, 'owners', ownerToDelete.id!));
+    
+                // 2. Intentar eliminar usuario de Authentication (NOTA: Requiere Admin SDK/Cloud Function)
+                if (ownerToDelete.email) {
+                     console.warn("La eliminación de la cuenta de Firebase Auth para este usuario debe ser manejada por una Cloud Function o Admin SDK.");
+                }
+    
+                toast({
+                    title: 'Persona Eliminada',
+                    description: `El registro de ${ownerToDelete.name} ha sido eliminado.`,
+                    variant: 'default',
+                });
+            } catch (error: any) {
+                console.error("Error deleting owner: ", error);
+                // El error de Auth es común si el usuario no tiene una cuenta de autenticación
+                const authError = error.code && error.code.startsWith('auth/');
+                
+                toast({
+                    variant: 'destructive',
+                    title: 'Error al Eliminar',
+                    description: authError 
+                        ? `Se eliminó el registro en la base de datos, pero hubo un error al interactuar con Firebase Auth. La eliminación de Auth debe hacerse desde el servidor.`
+                        : 'No se pudieron eliminar los datos.',
+                });
+            } finally {
+                setIsDeleteConfirmationOpen(false);
+                setOwnerToDelete(null);
             }
-
-            toast({
-                title: 'Persona Eliminada',
-                description: `El registro de ${ownerToDelete.name} ha sido eliminado.`,
-                variant: 'default',
-            });
-        } catch (error: any) {
-            console.error("Error deleting owner: ", error);
-            // El error de Auth es común si el usuario no tiene una cuenta de autenticación
-            const authError = error.code && error.code.startsWith('auth/');
-            
-            toast({
-                variant: 'destructive',
-                title: 'Error al Eliminar',
-                description: authError 
-                    ? `Se eliminó el registro en la base de datos, pero hubo un error al interactuar con Firebase Auth. La eliminación de Auth debe hacerse desde el servidor.`
-                    : 'No se pudieron eliminar los datos.',
-            });
-        } finally {
-            setIsDeleteConfirmationOpen(false);
-            setOwnerToDelete(null);
-        }
+        });
     };
 
     const handleSaveOwner = async () => {
-        if (!currentOwner.name || !currentOwner.email || currentOwner.properties.length === 0 || !currentOwner.properties[0].street) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Nombre, Email, Calle y Casa son obligatorios.' });
-            return;
-        }
-        if (!currentOwner.id && !currentOwner.password) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Se requiere una contraseña para crear un nuevo usuario.' });
-            return;
-        }
-
-        const dataToSave = {
-            ...currentOwner,
-            email: currentOwner.email.toLowerCase(),
-            balance: parseFloat(String(currentOwner.balance)) || 0,
-            properties: currentOwner.properties.filter(p => p.street && p.house)
-        };
-        // Eliminar el password de los datos que van a Firestore
-        delete (dataToSave as Partial<Owner>).password;
-
-        try {
-            if (currentOwner.id) {
-                // Modo Edición: Actualizar solo datos en Firestore
-                const ownerRef = doc(db, 'owners', currentOwner.id);
-                await setDoc(ownerRef, dataToSave, { merge: true });
-
-                toast({
-                    title: 'Cambios Guardados',
-                    description: `La información de ${dataToSave.name} ha sido actualizada.`,
-                });
-
-            } else {
-                // Modo Creación: Crear Auth user y luego Firestore doc
-                if (!currentOwner.password) throw new Error("Missing password for new user.");
-                
-                // 1. Crear usuario en Firebase Auth
-                const userCredential = await createUserWithEmailAndPassword(auth, currentOwner.email!, currentOwner.password);
-                const uid = userCredential.user.uid;
-
-                // 2. Crear documento en Firestore usando el UID como ID
-                const ownerRef = doc(db, 'owners', uid);
-                await setDoc(ownerRef, {
-                    ...dataToSave,
-                    id: uid,
-                    passwordChanged: false // Flag para forzar cambio de password inicial
-                });
-
-                toast({
-                    title: 'Propietario Creado Exitosamente',
-                    description: `${dataToSave.name} ha sido creado con la contraseña proporcionada.`,
-                    className: 'bg-green-100 border-green-400 text-green-800'
-                });
+        requestAuthorization(async () => {
+            if (!currentOwner.name || !currentOwner.email || currentOwner.properties.length === 0 || !currentOwner.properties[0].street) {
+                toast({ variant: 'destructive', title: 'Error', description: 'Nombre, Email, Calle y Casa son obligatorios.' });
+                return;
+            }
+            if (!currentOwner.id && !currentOwner.password) {
+                toast({ variant: 'destructive', title: 'Error', description: 'Se requiere una contraseña para crear un nuevo usuario.' });
+                return;
             }
     
-            setIsDialogOpen(false);
-            setCurrentOwner(emptyOwner);
-        } catch (error: any) {
-            console.error("Error saving owner: ", error);
-            let errorMessage = 'No se pudieron guardar los cambios.';
-            if (error.code) {
-                switch (error.code) {
-                    case 'auth/email-already-in-use':
-                        errorMessage = 'El correo electrónico ya está en uso por otra cuenta.';
-                        break;
-                    case 'auth/invalid-email':
-                        errorMessage = 'El formato del correo electrónico no es válido.';
-                        break;
-                    case 'auth/weak-password':
-                        errorMessage = 'La contraseña es demasiado débil (mínimo 6 caracteres).';
-                        break;
-                    default:
-                        errorMessage = `Error de autenticación: ${error.message}`;
+            const dataToSave = {
+                ...currentOwner,
+                email: currentOwner.email.toLowerCase(),
+                balance: parseFloat(String(currentOwner.balance)) || 0,
+                properties: currentOwner.properties.filter(p => p.street && p.house)
+            };
+            // Eliminar el password de los datos que van a Firestore
+            delete (dataToSave as Partial<Owner>).password;
+    
+            try {
+                if (currentOwner.id) {
+                    // Modo Edición: Actualizar solo datos en Firestore
+                    const ownerRef = doc(db, 'owners', currentOwner.id);
+                    await setDoc(ownerRef, dataToSave, { merge: true });
+    
+                    toast({
+                        title: 'Cambios Guardados',
+                        description: `La información de ${dataToSave.name} ha sido actualizada.`,
+                    });
+    
+                } else {
+                    // Modo Creación: Crear Auth user y luego Firestore doc
+                    if (!currentOwner.password) throw new Error("Missing password for new user.");
+                    
+                    // 1. Crear usuario en Firebase Auth
+                    const userCredential = await createUserWithEmailAndPassword(auth, currentOwner.email!, currentOwner.password);
+                    const uid = userCredential.user.uid;
+    
+                    // 2. Crear documento en Firestore usando el UID como ID
+                    const ownerRef = doc(db, 'owners', uid);
+                    await setDoc(ownerRef, {
+                        ...dataToSave,
+                        id: uid,
+                        passwordChanged: false // Flag para forzar cambio de password inicial
+                    });
+    
+                    toast({
+                        title: 'Propietario Creado Exitosamente',
+                        description: `${dataToSave.name} ha sido creado con la contraseña proporcionada.`,
+                        className: 'bg-green-100 border-green-400 text-green-800'
+                    });
                 }
+        
+                setIsDialogOpen(false);
+                setCurrentOwner(emptyOwner);
+            } catch (error: any) {
+                console.error("Error saving owner: ", error);
+                let errorMessage = 'No se pudieron guardar los cambios.';
+                if (error.code) {
+                    switch (error.code) {
+                        case 'auth/email-already-in-use':
+                            errorMessage = 'El correo electrónico ya está en uso por otra cuenta.';
+                            break;
+                        case 'auth/invalid-email':
+                            errorMessage = 'El formato del correo electrónico no es válido.';
+                            break;
+                        case 'auth/weak-password':
+                            errorMessage = 'La contraseña es demasiado débil (mínimo 6 caracteres).';
+                            break;
+                        default:
+                            errorMessage = `Error de autenticación: ${error.message}`;
+                    }
+                }
+                toast({ variant: 'destructive', title: 'Error', description: errorMessage });
             }
-            toast({ variant: 'destructive', title: 'Error', description: errorMessage });
-        }
+        });
     };
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {

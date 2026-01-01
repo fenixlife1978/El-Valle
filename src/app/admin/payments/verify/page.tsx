@@ -19,6 +19,7 @@ import { db } from '@/lib/firebase';
 import { format, addMonths, startOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useRouter } from 'next/navigation';
+import { useAuthorization } from '@/hooks/use-authorization';
 
 type PaymentStatus = 'pendiente' | 'aprobado' | 'rechazado';
 type PaymentMethod = 'transferencia' | 'movil' | 'adelanto' | 'conciliacion';
@@ -125,6 +126,7 @@ export default function VerifyPaymentsPage() {
   const [paymentToDelete, setPaymentToDelete] = useState<FullPayment | null>(null);
   const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
   const { toast } = useToast();
+  const { requestAuthorization } = useAuthorization();
   const [ownersMap, setOwnersMap] = useState<Map<string, Owner>>(new Map());
   const router = useRouter();
 
@@ -225,175 +227,177 @@ export default function VerifyPaymentsPage() {
   const handleStatusChange = async (id: string, newStatus: PaymentStatus) => {
     const paymentRef = doc(db, 'payments', id);
   
-    if (newStatus === 'rechazado') {
-      try {
-        await updateDoc(paymentRef, { status: 'rechazado' });
-        toast({ title: 'Pago Rechazado', description: `El pago ha sido marcado como rechazado.` });
-      } catch (error) {
-        console.error("Error rejecting payment: ", error);
-        toast({ variant: 'destructive', title: 'Error', description: 'No se pudo actualizar el estado.' });
-      }
-      return;
-    }
-  
-    if (newStatus === 'aprobado') {
-        try {
-            await runTransaction(db, async (transaction) => {
-                // --- 1. READS ---
-                const paymentDoc = await transaction.get(paymentRef);
-                if (!paymentDoc.exists() || paymentDoc.data().status === 'aprobado') {
-                    throw new Error('El pago no existe o ya fue aprobado anteriormente.');
-                }
-                const paymentData = { id: paymentDoc.id, ...paymentDoc.data() } as FullPayment;
-
-                const settingsRef = doc(db, 'config', 'mainSettings');
-                const settingsSnap = await transaction.get(settingsRef);
-                if (!settingsSnap.exists()) throw new Error('No se encontró el documento de configuración.');
-                
-                const settingsData = settingsSnap.data();
-                const allRates = (settingsData.exchangeRates || []) as {date: string, rate: number}[];
-                const currentCondoFee = settingsData.condoFee || 0;
-                
-                if (currentCondoFee <= 0 && paymentData.type !== 'adelanto') {
-                    throw new Error('La cuota de condominio debe ser mayor a cero. Por favor, configúrela.');
-                }
-
-                const paymentDateString = format(paymentData.paymentDate.toDate(), 'yyyy-MM-dd');
-                const applicableRates = allRates.filter(r => r.date <= paymentDateString).sort((a, b) => b.date.localeCompare(a.date));
-                const exchangeRate = applicableRates.length > 0 ? applicableRates[0].rate : 0;
-                
-                if (!exchangeRate || exchangeRate <= 0) {
-                    throw new Error(`No se encontró una tasa de cambio válida para la fecha del pago (${paymentDateString}).`);
-                }
-                paymentData.exchangeRate = exchangeRate;
-
-                const allBeneficiaryIds = Array.from(new Set(paymentData.beneficiaries.map(b => b.ownerId)));
-                if (allBeneficiaryIds.length === 0) throw new Error("El pago no tiene beneficiarios definidos.");
-
-                const ownerDocs = await Promise.all(allBeneficiaryIds.map(ownerId => transaction.get(doc(db, 'owners', ownerId))));
-                const ownerDataMap = new Map<string, any>();
-                ownerDocs.forEach((ownerDoc) => {
-                    if (!ownerDoc.exists()) throw new Error(`El propietario ${ownerDoc.id} no fue encontrado.`);
-                    ownerDataMap.set(ownerDoc.id, ownerDoc.data());
-                });
-
-                // --- 2. LOGIC AND WRITES ---
-                const newReceiptNumbers: { [key: string]: string } = {};
-
-                for (const beneficiary of paymentData.beneficiaries) {
-                    const ownerId = beneficiary.ownerId;
-                    const ownerData = ownerDataMap.get(ownerId);
-                    if (!ownerData) continue;
-
-                    const ownerRef = doc(db, 'owners', ownerId);
-                    const receiptCounter = ownerData.receiptCounter || 0;
-                    const newReceiptCounter = receiptCounter + 1;
-                    const receiptNumber = `REC-${ownerId.substring(0, 4).toUpperCase()}-${String(newReceiptCounter).padStart(5, '0')}`;
-                    newReceiptNumbers[ownerId] = receiptNumber;
-
-                    const initialBalance = ownerData.balance || 0;
-                    const paymentAmountForOwner = beneficiary.amount;
-
-                    let availableFundsInCents = Math.round(paymentAmountForOwner * 100) + Math.round(initialBalance * 100);
-                    
-                    const debtsQuery = query(collection(db, 'debts'), where('ownerId', '==', ownerId), where('status', '==', 'pending'));
-                    const debtsSnapshot = await getDocs(debtsQuery); // This read is outside transaction but fine as it is before writes.
-                    
-                    const sortedDebts = debtsSnapshot.docs
-                        .map(d => ({ id: d.id, ...d.data() } as Debt))
-                        .sort((a, b) => a.year - b.year || a.month - b.month);
-                    
-                    let hasPendingDebts = sortedDebts.length > 0;
-                    
-                    if (hasPendingDebts) {
-                        for (const debt of sortedDebts) {
-                            const debtRef = doc(db, 'debts', debt.id);
-                            const debtAmountInCents = Math.round(debt.amountUSD * exchangeRate * 100);
-                            
-                            if (availableFundsInCents >= debtAmountInCents) {
-                                availableFundsInCents -= debtAmountInCents;
-                                transaction.update(debtRef, {
-                                    status: 'paid', paidAmountUSD: debt.amountUSD,
-                                    paymentDate: paymentData.paymentDate, paymentId: paymentData.id,
-                                });
-                            }
-                        }
-                        // Re-check if any debts are still pending after applying funds
-                        const remainingPendingQuery = query(collection(db, 'debts'), where('ownerId', '==', ownerId), where('status', '==', 'pending'));
-                        const remainingSnapshot = await getDocs(remainingPendingQuery);
-                        hasPendingDebts = !remainingSnapshot.empty;
+    requestAuthorization(async () => {
+        if (newStatus === 'rechazado') {
+          try {
+            await updateDoc(paymentRef, { status: 'rechazado' });
+            toast({ title: 'Pago Rechazado', description: `El pago ha sido marcado como rechazado.` });
+          } catch (error) {
+            console.error("Error rejecting payment: ", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo actualizar el estado.' });
+          }
+          return;
+        }
+      
+        if (newStatus === 'aprobado') {
+            try {
+                await runTransaction(db, async (transaction) => {
+                    // --- 1. READS ---
+                    const paymentDoc = await transaction.get(paymentRef);
+                    if (!paymentDoc.exists() || paymentDoc.data().status === 'aprobado') {
+                        throw new Error('El pago no existe o ya fue aprobado anteriormente.');
                     }
+                    const paymentData = { id: paymentDoc.id, ...paymentDoc.data() } as FullPayment;
+    
+                    const settingsRef = doc(db, 'config', 'mainSettings');
+                    const settingsSnap = await transaction.get(settingsRef);
+                    if (!settingsSnap.exists()) throw new Error('No se encontró el documento de configuración.');
                     
-                    const condoFeeInCents = Math.round(currentCondoFee * exchangeRate * 100);
-                    // Only process advance payments if there are NO pending debts left.
-                    if (!hasPendingDebts && paymentData.type !== 'adelanto' && availableFundsInCents >= condoFeeInCents) {
-                        const allExistingDebtsQuery = query(collection(db, 'debts'), where('ownerId', '==', ownerId));
-                        const allExistingDebtsSnap = await getDocs(allExistingDebtsQuery); // Outside transaction read
-                        const existingDebtPeriods = new Set(allExistingDebtsSnap.docs.map(d => `${d.data().year}-${d.data().month}`));
-
-                        const startDate = startOfMonth(new Date());
-
-                        if (ownerData.properties && ownerData.properties.length > 0) {
-                             for (const property of ownerData.properties) {
-                                for (let i = 0; i < 24; i++) { // Limit future debt creation
-                                    if (availableFundsInCents < condoFeeInCents) break;
-
-                                    const futureDebtDate = addMonths(startDate, i);
-                                    const futureYear = futureDebtDate.getFullYear();
-                                    const futureMonth = futureDebtDate.getMonth() + 1;
-                                    const periodKey = `${futureYear}-${futureMonth}`;
-                                    
-                                    if (existingDebtPeriods.has(periodKey)) continue;
-
-                                    availableFundsInCents -= condoFeeInCents;
-                                    
-                                    const debtRef = doc(collection(db, 'debts'));
-                                    transaction.set(debtRef, {
-                                        ownerId: ownerId,
-                                        property: property,
-                                        year: futureYear, month: futureMonth,
-                                        amountUSD: currentCondoFee,
-                                        description: "Cuota de Condominio (Pagada por adelantado)",
-                                        status: 'paid', paidAmountUSD: currentCondoFee,
+                    const settingsData = settingsSnap.data();
+                    const allRates = (settingsData.exchangeRates || []) as {date: string, rate: number}[];
+                    const currentCondoFee = settingsData.condoFee || 0;
+                    
+                    if (currentCondoFee <= 0 && paymentData.type !== 'adelanto') {
+                        throw new Error('La cuota de condominio debe ser mayor a cero. Por favor, configúrela.');
+                    }
+    
+                    const paymentDateString = format(paymentData.paymentDate.toDate(), 'yyyy-MM-dd');
+                    const applicableRates = allRates.filter(r => r.date <= paymentDateString).sort((a, b) => b.date.localeCompare(a.date));
+                    const exchangeRate = applicableRates.length > 0 ? applicableRates[0].rate : 0;
+                    
+                    if (!exchangeRate || exchangeRate <= 0) {
+                        throw new Error(`No se encontró una tasa de cambio válida para la fecha del pago (${paymentDateString}).`);
+                    }
+                    paymentData.exchangeRate = exchangeRate;
+    
+                    const allBeneficiaryIds = Array.from(new Set(paymentData.beneficiaries.map(b => b.ownerId)));
+                    if (allBeneficiaryIds.length === 0) throw new Error("El pago no tiene beneficiarios definidos.");
+    
+                    const ownerDocs = await Promise.all(allBeneficiaryIds.map(ownerId => transaction.get(doc(db, 'owners', ownerId))));
+                    const ownerDataMap = new Map<string, any>();
+                    ownerDocs.forEach((ownerDoc) => {
+                        if (!ownerDoc.exists()) throw new Error(`El propietario ${ownerDoc.id} no fue encontrado.`);
+                        ownerDataMap.set(ownerDoc.id, ownerDoc.data());
+                    });
+    
+                    // --- 2. LOGIC AND WRITES ---
+                    const newReceiptNumbers: { [key: string]: string } = {};
+    
+                    for (const beneficiary of paymentData.beneficiaries) {
+                        const ownerId = beneficiary.ownerId;
+                        const ownerData = ownerDataMap.get(ownerId);
+                        if (!ownerData) continue;
+    
+                        const ownerRef = doc(db, 'owners', ownerId);
+                        const receiptCounter = ownerData.receiptCounter || 0;
+                        const newReceiptCounter = receiptCounter + 1;
+                        const receiptNumber = `REC-${ownerId.substring(0, 4).toUpperCase()}-${String(newReceiptCounter).padStart(5, '0')}`;
+                        newReceiptNumbers[ownerId] = receiptNumber;
+    
+                        const initialBalance = ownerData.balance || 0;
+                        const paymentAmountForOwner = beneficiary.amount;
+    
+                        let availableFundsInCents = Math.round(paymentAmountForOwner * 100) + Math.round(initialBalance * 100);
+                        
+                        const debtsQuery = query(collection(db, 'debts'), where('ownerId', '==', ownerId), where('status', '==', 'pending'));
+                        const debtsSnapshot = await getDocs(debtsQuery); // This read is outside transaction but fine as it is before writes.
+                        
+                        const sortedDebts = debtsSnapshot.docs
+                            .map(d => ({ id: d.id, ...d.data() } as Debt))
+                            .sort((a, b) => a.year - b.year || a.month - b.month);
+                        
+                        let hasPendingDebts = sortedDebts.length > 0;
+                        
+                        if (hasPendingDebts) {
+                            for (const debt of sortedDebts) {
+                                const debtRef = doc(db, 'debts', debt.id);
+                                const debtAmountInCents = Math.round(debt.amountUSD * exchangeRate * 100);
+                                
+                                if (availableFundsInCents >= debtAmountInCents) {
+                                    availableFundsInCents -= debtAmountInCents;
+                                    transaction.update(debtRef, {
+                                        status: 'paid', paidAmountUSD: debt.amountUSD,
                                         paymentDate: paymentData.paymentDate, paymentId: paymentData.id,
                                     });
-                                    existingDebtPeriods.add(periodKey);
                                 }
-                                if (availableFundsInCents < condoFeeInCents) break;
+                            }
+                            // Re-check if any debts are still pending after applying funds
+                            const remainingPendingQuery = query(collection(db, 'debts'), where('ownerId', '==', ownerId), where('status', '==', 'pending'));
+                            const remainingSnapshot = await getDocs(remainingPendingQuery);
+                            hasPendingDebts = !remainingSnapshot.empty;
+                        }
+                        
+                        const condoFeeInCents = Math.round(currentCondoFee * exchangeRate * 100);
+                        // Only process advance payments if there are NO pending debts left.
+                        if (!hasPendingDebts && paymentData.type !== 'adelanto' && availableFundsInCents >= condoFeeInCents) {
+                            const allExistingDebtsQuery = query(collection(db, 'debts'), where('ownerId', '==', ownerId));
+                            const allExistingDebtsSnap = await getDocs(allExistingDebtsQuery); // Outside transaction read
+                            const existingDebtPeriods = new Set(allExistingDebtsSnap.docs.map(d => `${d.data().year}-${d.data().month}`));
+    
+                            const startDate = startOfMonth(new Date());
+    
+                            if (ownerData.properties && ownerData.properties.length > 0) {
+                                 for (const property of ownerData.properties) {
+                                    for (let i = 0; i < 24; i++) { // Limit future debt creation
+                                        if (availableFundsInCents < condoFeeInCents) break;
+    
+                                        const futureDebtDate = addMonths(startDate, i);
+                                        const futureYear = futureDebtDate.getFullYear();
+                                        const futureMonth = futureDebtDate.getMonth() + 1;
+                                        const periodKey = `${futureYear}-${futureMonth}`;
+                                        
+                                        if (existingDebtPeriods.has(periodKey)) continue;
+    
+                                        availableFundsInCents -= condoFeeInCents;
+                                        
+                                        const debtRef = doc(collection(db, 'debts'));
+                                        transaction.set(debtRef, {
+                                            ownerId: ownerId,
+                                            property: property,
+                                            year: futureYear, month: futureMonth,
+                                            amountUSD: currentCondoFee,
+                                            description: "Cuota de Condominio (Pagada por adelantado)",
+                                            status: 'paid', paidAmountUSD: currentCondoFee,
+                                            paymentDate: paymentData.paymentDate, paymentId: paymentData.id,
+                                        });
+                                        existingDebtPeriods.add(periodKey);
+                                    }
+                                    if (availableFundsInCents < condoFeeInCents) break;
+                                }
                             }
                         }
+                        
+                        const finalBalance = availableFundsInCents / 100;
+                        transaction.update(ownerRef, { balance: finalBalance, receiptCounter: newReceiptCounter });
+                        
+                        // Create notification for the owner
+                        const notificationsRef = doc(collection(ownerRef, "notifications"));
+                        transaction.set(notificationsRef, {
+                            title: "Pago Aprobado",
+                            body: `Tu pago de Bs. ${formatToTwoDecimals(beneficiary.amount)} ha sido aprobado y aplicado.`,
+                            createdAt: serverTimestamp(),
+                            read: false,
+                            href: `/owner/dashboard`,
+                            paymentId: paymentData.id
+                        });
                     }
-                    
-                    const finalBalance = availableFundsInCents / 100;
-                    transaction.update(ownerRef, { balance: finalBalance, receiptCounter: newReceiptCounter });
-                    
-                    // Create notification for the owner
-                    const notificationsRef = doc(collection(ownerRef, "notifications"));
-                    transaction.set(notificationsRef, {
-                        title: "Pago Aprobado",
-                        body: `Tu pago de Bs. ${formatToTwoDecimals(beneficiary.amount)} ha sido aprobado y aplicado.`,
-                        createdAt: serverTimestamp(),
-                        read: false,
-                        href: `/owner/dashboard`,
-                        paymentId: paymentData.id
-                    });
-                }
-                 const observationNote = `Pago aprobado. Tasa aplicada: Bs. ${formatToTwoDecimals(exchangeRate)}.`;
-                 transaction.update(paymentRef, { status: 'aprobado', observations: observationNote, exchangeRate: exchangeRate, receiptNumbers: newReceiptNumbers });
-
-            });
+                     const observationNote = `Pago aprobado. Tasa aplicada: Bs. ${formatToTwoDecimals(exchangeRate)}.`;
+                     transaction.update(paymentRef, { status: 'aprobado', observations: observationNote, exchangeRate: exchangeRate, receiptNumbers: newReceiptNumbers });
     
-            toast({
-                title: 'Pago Aprobado y Procesado',
-                description: 'El saldo de los propietarios y las deudas han sido actualizados.',
-                className: 'bg-green-100 border-green-400 text-green-800',
-            });
-        } catch (error) {
-            console.error("Error processing payment approval: ", error);
-            const errorMessage = error instanceof Error ? error.message : 'No se pudo aprobar y procesar el pago.';
-            toast({ variant: 'destructive', title: 'Error en la Operación', description: errorMessage });
+                });
+        
+                toast({
+                    title: 'Pago Aprobado y Procesado',
+                    description: 'El saldo de los propietarios y las deudas han sido actualizados.',
+                    className: 'bg-green-100 border-green-400 text-green-800',
+                });
+            } catch (error) {
+                console.error("Error processing payment approval: ", error);
+                const errorMessage = error instanceof Error ? error.message : 'No se pudo aprobar y procesar el pago.';
+                toast({ variant: 'destructive', title: 'Error en la Operación', description: errorMessage });
+            }
         }
-    }
+    });
   };
 
   const openReceiptPreview = async (payment: FullPayment, beneficiary: Beneficiary) => {
@@ -575,66 +579,64 @@ export default function VerifyPaymentsPage() {
 
   const confirmDelete = async () => {
     if (!paymentToDelete) return;
-    const paymentRef = doc(db, "payments", paymentToDelete.id);
+    
+    requestAuthorization(async () => {
+        const paymentRef = doc(db, "payments", paymentToDelete.id);
 
-    try {
-        if (paymentToDelete.status === 'aprobado') {
-             const batch = writeBatch(db);
-
-            // Revert owner balances
-            for (const beneficiary of paymentToDelete.beneficiaries) {
-                const ownerRef = doc(db, 'owners', beneficiary.ownerId);
-                const ownerDoc = await getDoc(ownerRef);
-                if (ownerDoc.exists()) {
-                    const currentBalance = ownerDoc.data().balance || 0;
-                    const amountToRevert = beneficiary.amount || 0;
-                    // This logic is simplified; a full reversal would require knowing how much balance was used.
-                    // For now, we revert the paid amount back to the balance.
-                    batch.update(ownerRef, { balance: currentBalance + amountToRevert });
+        try {
+            if (paymentToDelete.status === 'aprobado') {
+                 const batch = writeBatch(db);
+    
+                // Revert owner balances
+                for (const beneficiary of paymentToDelete.beneficiaries) {
+                    const ownerRef = doc(db, 'owners', beneficiary.ownerId);
+                    const ownerDoc = await getDoc(ownerRef);
+                    if (ownerDoc.exists()) {
+                        const currentBalance = ownerDoc.data().balance || 0;
+                        const amountToRevert = beneficiary.amount || 0;
+                        batch.update(ownerRef, { balance: currentBalance + amountToRevert });
+                    }
                 }
+    
+                // Un-pay associated debts
+                const debtsToRevertQuery = query(collection(db, 'debts'), where('paymentId', '==', paymentToDelete.id));
+                const debtsToRevertSnapshot = await getDocs(debtsToRevertQuery);
+                debtsToRevertSnapshot.forEach(debtDoc => {
+                    if (debtDoc.data().description.includes('Pagada por adelantado')) {
+                        batch.delete(debtDoc.ref);
+                    } else {
+                        batch.update(debtDoc.ref, {
+                            status: 'pending',
+                            paymentDate: deleteField(),
+                            paidAmountUSD: deleteField(),
+                            paymentId: deleteField()
+                        });
+                    }
+                });
+                
+                batch.delete(paymentRef);
+                await batch.commit();
+    
+                toast({ title: "Pago Revertido", description: "El pago ha sido eliminado y las deudas y saldos han sido revertidos." });
+    
+            } else {
+                await deleteDoc(paymentRef);
+                toast({ title: "Pago Eliminado", description: "El registro del pago pendiente/rechazado ha sido eliminado." });
             }
-
-            // Un-pay associated debts
-            const debtsToRevertQuery = query(collection(db, 'debts'), where('paymentId', '==', paymentToDelete.id));
-            const debtsToRevertSnapshot = await getDocs(debtsToRevertQuery);
-            debtsToRevertSnapshot.forEach(debtDoc => {
-                if (debtDoc.data().description.includes('Pagada por adelantado')) {
-                    // If it was an advance payment debt, delete it entirely
-                    batch.delete(debtDoc.ref);
-                } else {
-                    // Otherwise, revert it to pending
-                    batch.update(debtDoc.ref, {
-                        status: 'pending',
-                        paymentDate: deleteField(),
-                        paidAmountUSD: deleteField(),
-                        paymentId: deleteField()
-                    });
-                }
+    
+        } catch (error) {
+            console.error("Error deleting/reverting payment: ", error);
+            const errorMessage = error instanceof Error ? error.message : "No se pudo completar la operación.";
+            toast({
+                variant: "destructive",
+                title: "Error en la Operación",
+                description: errorMessage,
             });
-            
-            // Delete the payment itself
-            batch.delete(paymentRef);
-            await batch.commit();
-
-            toast({ title: "Pago Revertido", description: "El pago ha sido eliminado y las deudas y saldos han sido revertidos." });
-
-        } else {
-            await deleteDoc(paymentRef);
-            toast({ title: "Pago Eliminado", description: "El registro del pago pendiente/rechazado ha sido eliminado." });
+        } finally {
+            setIsDeleteConfirmationOpen(false);
+            setPaymentToDelete(null);
         }
-
-    } catch (error) {
-        console.error("Error deleting/reverting payment: ", error);
-        const errorMessage = error instanceof Error ? error.message : "No se pudo completar la operación.";
-        toast({
-            variant: "destructive",
-            title: "Error en la Operación",
-            description: errorMessage,
-        });
-    } finally {
-        setIsDeleteConfirmationOpen(false);
-        setPaymentToDelete(null);
-    }
+    });
   };
 
 
