@@ -32,6 +32,7 @@ import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useRouter } from 'next/navigation';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Dialog, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 
 
 type Owner = {
@@ -354,6 +355,7 @@ export default function ReportsPage() {
     // New state for saved integral reports
     const [savedIntegralReports, setSavedIntegralReports] = useState<SavedIntegralReport[]>([]);
     const [publishedReports, setPublishedReports] = useState<PublishedReport[]>([]);
+    const [reportToPreview, setReportToPreview] = useState<SavedIntegralReport | null>(null);
 
 
     // Filters for Integral Report
@@ -809,6 +811,57 @@ export default function ReportsPage() {
             setGeneratingReport(false);
         }
     };
+    
+    const handlePreviewIntegralReport = (report: SavedIntegralReport) => {
+        setReportToPreview(report);
+    };
+
+    const handleExportIntegralPdf = (report: SavedIntegralReport) => {
+        if (!report || !companyInfo) return;
+        const data = report.data;
+        const doc = new jsPDF({ orientation: 'landscape' });
+        let startY = 15;
+
+        if (companyInfo?.logo) doc.addImage(companyInfo.logo, 'PNG', 15, startY, 20, 20);
+        if (companyInfo) doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, 40, startY + 5);
+
+        doc.setFontSize(16).setFont('helvetica', 'bold').text('Reporte Integral de Propietarios', doc.internal.pageSize.getWidth() / 2, startY + 15, { align: 'center'});
+
+        startY += 25;
+        doc.setFontSize(9).setFont('helvetica', 'normal');
+        doc.text(`Fecha de Emisión: ${format(new Date(), "dd/MM/yyyy 'a las' HH:mm:ss")}`, doc.internal.pageSize.getWidth() - 15, startY, { align: 'right'});
+
+        startY += 10;
+
+        autoTable(doc, {
+            head: [["Propietario", "Propiedad", "Fecha Últ. Pago", "Monto Pagado (Bs)", "Tasa BCV", "Saldo a Favor (Bs)", "Estado", "Periodo", "Meses Adeudados", "Deuda por Ajuste ($)"]],
+            body: data.map((row: any) => [
+                row.name,
+                row.properties,
+                row.lastPaymentDate,
+                row.paidAmount > 0 ? formatToTwoDecimals(row.paidAmount) : '',
+                row.avgRate > 0 ? formatToTwoDecimals(row.avgRate) : '',
+                row.balance > 0 ? formatToTwoDecimals(row.balance) : '',
+                row.status,
+                row.solvencyPeriod,
+                row.monthsOwed > 0 ? row.monthsOwed : '',
+                row.adjustmentDebtUSD > 0 ? `$${row.adjustmentDebtUSD.toFixed(2)}` : '',
+            ]),
+            startY,
+            headStyles: { fillColor: [30, 80, 180] },
+            styles: { fontSize: 7, cellPadding: 1.5, overflow: 'linebreak' },
+            columnStyles: {
+                3: { halign: 'right' },
+                4: { halign: 'right' },
+                5: { halign: 'right' },
+                8: { halign: 'center' },
+                9: { halign: 'right' },
+            },
+        });
+
+        doc.save(`Reporte_Integral_${format(report.createdAt.toDate(), 'yyyy-MM-dd')}.pdf`);
+    };
+
 
     const handleExportDelinquency = async (formatType: 'pdf' | 'excel') => {
         const data = filteredAndSortedDelinquents.filter(o => selectedDelinquentOwners.has(o.id));
@@ -1330,7 +1383,8 @@ export default function ReportsPage() {
                                                      <DropdownMenu>
                                                          <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4"/></Button></DropdownMenuTrigger>
                                                          <DropdownMenuContent>
-                                                             <DropdownMenuItem onClick={() => router.push(`/owner/report/integral-${report.id}`)}><Eye className="mr-2 h-4 w-4" /> Ver / Descargar</DropdownMenuItem>
+                                                             <DropdownMenuItem onClick={() => handlePreviewIntegralReport(report)}><Eye className="mr-2 h-4 w-4" /> Ver</DropdownMenuItem>
+                                                             <DropdownMenuItem onClick={() => handleExportIntegralPdf(report)}><Download className="mr-2 h-4 w-4" /> Exportar PDF</DropdownMenuItem>
                                                              {!isPublished && <DropdownMenuItem onClick={() => handlePublishIntegralReport(report.id)}><Megaphone className="mr-2 h-4 w-4"/> Publicar</DropdownMenuItem>}
                                                              {isPublished && <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteIntegralPublication(`integral-${report.id}`)}><Trash2 className="mr-2 h-4 w-4"/> Quitar Publicación</DropdownMenuItem>}
                                                              <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteSavedIntegralReport(report.id)}><Trash2 className="mr-2 h-4 w-4"/> Eliminar</DropdownMenuItem>
@@ -1876,6 +1930,44 @@ export default function ReportsPage() {
                     </Card>
                 </TabsContent>
             </Tabs>
+             {reportToPreview && (
+                <Dialog open={!!reportToPreview} onOpenChange={(open) => !open && setReportToPreview(null)}>
+                    <DialogContent className="max-w-4xl">
+                        <DialogHeader>
+                            <DialogTitle>Vista Previa del Reporte Integral</DialogTitle>
+                            <DialogDescription>
+                                Generado el {format(reportToPreview.createdAt.toDate(), "dd/MM/yyyy HH:mm")}
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="max-h-[70vh] overflow-y-auto">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Propietario</TableHead>
+                                        <TableHead>Estado</TableHead>
+                                        <TableHead>Periodo Solvencia</TableHead>
+                                        <TableHead>Meses Adeudados</TableHead>
+                                        <TableHead className="text-right">Saldo a Favor</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {reportToPreview.data.map(row => (
+                                        <TableRow key={row.ownerId}>
+                                            <TableCell className="font-medium">{row.name}<br/><span className="text-xs text-muted-foreground">{row.properties}</span></TableCell>
+                                            <TableCell>
+                                                <Badge variant={row.status === 'Solvente' ? 'success' : 'destructive'}>{row.status}</Badge>
+                                            </TableCell>
+                                            <TableCell>{row.solvencyPeriod}</TableCell>
+                                            <TableCell className="text-center">{row.monthsOwed > 0 ? row.monthsOwed : '-'}</TableCell>
+                                            <TableCell className="text-right">{row.balance > 0 ? `Bs. ${formatToTwoDecimals(row.balance)}` : '-'}</TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </DialogContent>
+                </Dialog>
+            )}
         </div>
     );
 }
