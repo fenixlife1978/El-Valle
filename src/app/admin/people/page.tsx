@@ -130,8 +130,6 @@ export default function OwnersManagement() {
     const [isEditingAdmin, setIsEditingAdmin] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [showPassword, setShowPassword] = useState(false);
-    const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
-    const [ownerToDelete, setOwnerToDelete] = useState<Owner | null>(null);
 
     // Ref para el input de archivo
     const importFileRef = useRef<HTMLInputElement>(null);
@@ -202,31 +200,24 @@ export default function OwnersManagement() {
             toast({ variant: 'destructive', title: 'Acción no permitida', description: 'El administrador principal no puede ser eliminado.' });
             return;
         }
-        setOwnerToDelete(owner);
-        setIsDeleteConfirmationOpen(true);
-    };
-
-    const confirmDelete = async () => {
-        if (!ownerToDelete) return;
 
         requestAuthorization(async () => {
             try {
                 // 1. Eliminar documento de Firestore
-                await deleteDoc(doc(db, 'owners', ownerToDelete.id!));
+                await deleteDoc(doc(db, 'owners', owner.id!));
     
                 // 2. Intentar eliminar usuario de Authentication (NOTA: Requiere Admin SDK/Cloud Function)
-                if (ownerToDelete.email) {
+                if (owner.email) {
                      console.warn("La eliminación de la cuenta de Firebase Auth para este usuario debe ser manejada por una Cloud Function o Admin SDK.");
                 }
     
                 toast({
                     title: 'Usuario Eliminado',
-                    description: `El registro de ${ownerToDelete.name} ha sido eliminado.`,
+                    description: `El registro de ${owner.name} ha sido eliminado.`,
                     variant: 'default',
                 });
             } catch (error: any) {
                 console.error("Error deleting owner: ", error);
-                // El error de Auth es común si el usuario no tiene una cuenta de autenticación
                 const authError = error.code && error.code.startsWith('auth/');
                 
                 toast({
@@ -236,9 +227,6 @@ export default function OwnersManagement() {
                         ? `Se eliminó el registro en la base de datos, pero hubo un error al interactuar con Firebase Auth. La eliminación de Auth debe hacerse desde el servidor.`
                         : 'No se pudieron eliminar los datos.',
                 });
-            } finally {
-                setIsDeleteConfirmationOpen(false);
-                setOwnerToDelete(null);
             }
         });
     };
@@ -843,22 +831,6 @@ export default function OwnersManagement() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-
-            <Dialog open={isDeleteConfirmationOpen} onOpenChange={setIsDeleteConfirmationOpen}>
-                <DialogContent className="sm:max-w-[425px]">
-                    <DialogHeader>
-                        <DialogTitle>¿Estás seguro?</DialogTitle>
-                        <DialogDescription>
-                            Esta acción no se puede deshacer. Esto eliminará permanentemente a <span className="font-semibold">{ownerToDelete?.name}</span> de la base de datos de la app.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setIsDeleteConfirmationOpen(false)}>Cancelar</Button>
-                        <Button variant="destructive" onClick={confirmDelete}>Sí, eliminar</Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-
         </div>
     );
 }
