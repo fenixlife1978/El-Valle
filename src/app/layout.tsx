@@ -1,4 +1,3 @@
-
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
@@ -77,7 +76,7 @@ export default function RootLayout({
         <title>VALLECONDO</title>
         <meta name="description" content="Condominium Management App" />
         {/* SDK de OneSignal */}
-        <script src="https://cdn.onesignal.com/sdks/OneSignalSDK.js" async=""></script>
+        <script src="https://cdn.onesignal.com/sdks/OneSignalSDK.js" async></script>
         <script
           dangerouslySetInnerHTML={{
             __html: `
