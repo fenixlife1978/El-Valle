@@ -1,4 +1,5 @@
 
+
 {
   "entities": {
     "UserProfile": {
@@ -82,6 +83,13 @@
                         "active": {"type": "boolean"}
                     },
                     "required": ["id", "date", "rate", "active"]
+                }
+            },
+            "loginSettings": {
+                "type": "object",
+                "properties": {
+                    "ownerLoginEnabled": { "type": "boolean" },
+                    "disabledMessage": { "type": "string" }
                 }
             }
         }

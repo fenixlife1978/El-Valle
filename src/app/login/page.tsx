@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
@@ -31,7 +32,7 @@ function LoginPage() {
     const [loadingLogo, setLoadingLogo] = useState(true);
 
     useEffect(() => {
-        const roleParam = searchParams?.get('role') ?? null; // ✅ corregido
+        const roleParam = searchParams?.get('role') ?? null;
         if (roleParam === 'admin' || roleParam === 'owner') {
             setRole(roleParam);
         } else {
@@ -70,11 +71,31 @@ function LoginPage() {
 
         setLoading(true);
         try {
+             // Fetch login settings first
+            const settingsRef = doc(db, 'config', 'mainSettings');
+            const settingsSnap = await getDoc(settingsRef);
+            
+            if (role === 'owner' && settingsSnap.exists()) {
+                const settings = settingsSnap.data();
+                if (settings.loginSettings && !settings.loginSettings.ownerLoginEnabled) {
+                    toast({
+                        variant: 'destructive',
+                        title: 'Acceso Deshabilitado',
+                        description: settings.loginSettings.disabledMessage || 'El inicio de sesión para propietarios está deshabilitado temporalmente.',
+                        duration: 10000,
+                    });
+                    setLoading(false);
+                    return;
+                }
+            }
+
+
             let userRoleFromDB: string | null = null;
             if (role === 'admin') {
-                const adminRef = doc(db, "owners", ADMIN_USER_ID);
-                const adminSnap = await getDoc(adminRef);
-                if (adminSnap.exists() && adminSnap.data().email?.toLowerCase() === email.toLowerCase()) {
+                // Admin login is not subject to the general owner block
+                const q = query(collection(db, "owners"), where("email", "==", email.toLowerCase()), where("role", "==", "administrador"));
+                const querySnapshot = await getDocs(q);
+                 if (!querySnapshot.empty) {
                     userRoleFromDB = 'administrador';
                 }
             } else {

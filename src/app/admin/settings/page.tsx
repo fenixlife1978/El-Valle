@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from '@/hooks/use-toast';
-import { Upload, Save, Calendar as CalendarIcon, PlusCircle, Loader2, AlertTriangle, Wand2, MoreHorizontal, Edit, FileCog, UserCircle, RefreshCw, Trash2, Circle, Square } from 'lucide-react';
+import { Upload, Save, Calendar as CalendarIcon, PlusCircle, Loader2, AlertTriangle, Wand2, MoreHorizontal, Edit, FileCog, UserCircle, RefreshCw, Trash2, Circle, Square, Power, PowerOff } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
@@ -22,6 +22,8 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuIte
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Progress } from '@/components/ui/progress';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { Switch } from '@/components/ui/switch';
+import { Textarea } from '@/components/ui/textarea';
 
 
 type AdminProfile = {
@@ -48,7 +50,10 @@ type ExchangeRate = {
     active: boolean;
 };
 
-type FrameStyle = 'circle' | 'soft' | 'rounded' | 'square';
+type LoginSettings = {
+  ownerLoginEnabled: boolean;
+  disabledMessage: string;
+};
 
 
 type Settings = {
@@ -59,6 +64,7 @@ type Settings = {
     exchangeRates: ExchangeRate[];
     lastCondoFee?: number; // To track the previous fee for adjustment logic
     bcvLogo?: string;
+    loginSettings: LoginSettings;
 };
 
 type Debt = {
@@ -133,6 +139,11 @@ export default function SettingsPage() {
     const [isAuthKeyDialogOpen, setIsAuthKeyDialogOpen] = useState(false);
     const [newAuthKey, setNewAuthKey] = useState('');
     const [confirmNewAuthKey, setConfirmNewAuthKey] = useState('');
+    
+    const [loginSettings, setLoginSettings] = useState<LoginSettings>({
+        ownerLoginEnabled: true,
+        disabledMessage: 'Estimado Propietario, el acceso al sistema se encuentra temporalmente deshabilitado por mantenimiento. Agradecemos su paciencia.'
+    });
 
 
     useEffect(() => {
@@ -154,6 +165,9 @@ export default function SettingsPage() {
                 setCondoFee(settings.condoFee);
                 setLastCondoFee(settings.condoFee); // Set the last known fee from DB
                 setExchangeRates(settings.exchangeRates || []);
+                if (settings.loginSettings) {
+                    setLoginSettings(settings.loginSettings);
+                }
             } else {
                 const initialRate: ExchangeRate = {
                     id: new Date().toISOString(),
@@ -167,6 +181,10 @@ export default function SettingsPage() {
                     condoFee: 25.00,
                     lastCondoFee: 25.00,
                     exchangeRates: [initialRate],
+                    loginSettings: {
+                        ownerLoginEnabled: true,
+                        disabledMessage: 'Estimado Propietario, el acceso al sistema se encuentra temporalmente deshabilitado por mantenimiento. Agradecemos su paciencia.'
+                    },
                 });
             }
             setLoading(false);
@@ -346,6 +364,7 @@ export default function SettingsPage() {
                     condoFee: newCondoFee,
                     lastCondoFee: lastCondoFee,
                     bcvLogo: bcvLogo,
+                    loginSettings: loginSettings,
                 });
 
                 toast({
@@ -569,6 +588,40 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="lg:col-span-1 space-y-8">
+                     <Card>
+                        <CardHeader>
+                            <CardTitle>Control de Acceso de Propietarios</CardTitle>
+                            <CardDescription>Habilita o deshabilita el inicio de sesión para todos los propietarios.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="flex items-center space-x-4 rounded-md border p-4">
+                                <div className="flex-1 space-y-1">
+                                    <p className="text-sm font-medium leading-none">
+                                        {loginSettings.ownerLoginEnabled ? 'Inicio de Sesión Habilitado' : 'Inicio de Sesión Deshabilitado'}
+                                    </p>
+                                    <p className="text-sm text-muted-foreground">
+                                        {loginSettings.ownerLoginEnabled ? <Power className="h-4 w-4 text-green-500 inline mr-1" /> : <PowerOff className="h-4 w-4 text-destructive inline mr-1" />}
+                                        Actualmente los propietarios {loginSettings.ownerLoginEnabled ? 'pueden' : 'no pueden'} iniciar sesión.
+                                    </p>
+                                </div>
+                                <Switch
+                                    checked={loginSettings.ownerLoginEnabled}
+                                    onCheckedChange={(checked) => setLoginSettings(s => ({ ...s, ownerLoginEnabled: checked }))}
+                                />
+                            </div>
+                             <div className="space-y-2">
+                                <Label htmlFor="disabledMessage">Mensaje de Bloqueo</Label>
+                                <Textarea
+                                    id="disabledMessage"
+                                    value={loginSettings.disabledMessage}
+                                    onChange={(e) => setLoginSettings(s => ({ ...s, disabledMessage: e.target.value }))}
+                                    placeholder="Mensaje que verán los propietarios si el acceso está deshabilitado..."
+                                    rows={4}
+                                />
+                            </div>
+                        </CardContent>
+                    </Card>
+
                     <Card>
                         <CardHeader>
                             <CardTitle>Gestión de Cuota Condominial</CardTitle>
@@ -592,14 +645,6 @@ export default function SettingsPage() {
                            )}
                         </CardContent>
                         <CardFooter className="flex flex-col space-y-3">
-                            <Button 
-                                onClick={handleSaveChanges} 
-                                disabled={saving} 
-                                className="w-full"
-                            >
-                                {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4"/>}
-                                {saving ? 'Guardando...' : 'Guardar Cambios'}
-                            </Button>
                              {condoFee > lastCondoFee && isFeeChanged && !isAdjustmentRunning && (
                                 <Button 
                                     onClick={handleFeeAdjustment} 
@@ -745,6 +790,16 @@ export default function SettingsPage() {
                                 </Table>
                             </div>
                         </CardContent>
+                    </Card>
+                </div>
+                 <div className="lg:col-span-3">
+                    <Card>
+                        <CardFooter>
+                             <Button onClick={handleSaveChanges} disabled={saving} className="w-full">
+                                {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4"/>}
+                                {saving ? 'Guardando...' : 'Guardar Toda la Configuración'}
+                            </Button>
+                        </CardFooter>
                     </Card>
                 </div>
             </div>
