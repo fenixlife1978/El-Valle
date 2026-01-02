@@ -786,9 +786,11 @@ export default function ReportsPage() {
 
     const handleDeleteIntegralPublication = async (reportId: string) => {
         requestAuthorization(async () => {
+            if (!window.confirm("¿Está seguro? Esto hará que el reporte ya no sea visible para los propietarios, pero no eliminará el reporte guardado.")) {
+                return;
+            }
             setGeneratingReport(true);
             try {
-                // The reportId from the UI will be like `integral-XXXX`. This is correct.
                 await deleteDoc(doc(db, 'published_reports', reportId));
                 toast({ title: 'Publicación Eliminada' });
             } catch (error) {
@@ -809,8 +811,13 @@ export default function ReportsPage() {
             try {
                 const batch = writeBatch(db);
                 batch.delete(doc(db, 'integral_reports', reportId));
+                
                 // Also delete publication if it exists
-                batch.delete(doc(db, 'published_reports', `integral-${reportId}`)); 
+                const publicationId = `integral-${reportId}`;
+                const pubDocRef = doc(db, 'published_reports', publicationId);
+                // We don't need to check existence, delete is idempotent
+                batch.delete(pubDocRef); 
+                
                 await batch.commit();
                 toast({ title: 'Reporte Eliminado' });
             } catch (error) {
@@ -1378,7 +1385,7 @@ export default function ReportsPage() {
                                  </TableHeader>
                                  <TableBody>
                                      {savedIntegralReports.map(report => {
-                                         const isPublished = publishedReports.some(p => p.sourceId === report.id);
+                                         const isPublished = publishedReports.some(p => p.id === `integral-${report.id}`);
                                          return (
                                              <TableRow key={report.id}>
                                                  <TableCell>{format(report.createdAt.toDate(), "dd/MM/yyyy HH:mm")}</TableCell>
