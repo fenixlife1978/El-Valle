@@ -548,7 +548,7 @@ export default function VerifyPaymentsPage() {
     noteY += 4;
     pdfDoc.setFontSize(7).setFont('helvetica', 'italic').text('Este recibo se generó de manera automática y es válido sin firma manuscrita.', pageWidth / 2, noteY, { align: 'center'});
 
-    const pdfOutput = pdfDoc.output('blob');
+    const pdfOutput = doc.output('blob');
     const pdfFile = new File([pdfOutput], `recibo_${receiptNumber}.pdf`, { type: 'application/pdf' });
 
     if (action === 'download') {
