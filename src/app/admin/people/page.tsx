@@ -1,4 +1,5 @@
 
+
 "use client"; // Habilita el uso de React Hooks para este componente de página
 
 import { 
@@ -131,7 +132,7 @@ export default function OwnersManagement() {
     // Ref para el input de archivo
     const importFileRef = useRef<HTMLInputElement>(null);
 
-    const isMainAdmin = currentUser?.email?.toLowerCase() === 'vallecondo@gmail.com';
+    const isMainAdmin = currentUser?.uid === ADMIN_USER_ID;
 
     // Lógica de filtrado
     const filterUsers = (users: Owner[], term: string) => {
@@ -223,7 +224,7 @@ export default function OwnersManagement() {
 
 
     const handleDeleteOwner = (owner: Owner) => {
-        if (owner.email?.toLowerCase() === 'vallecondo@gmail.com') {
+        if (owner.id === ADMIN_USER_ID) {
             toast({ variant: 'destructive', title: 'Acción no permitida', description: 'El administrador principal no puede ser eliminado.' });
             return;
         }
@@ -235,12 +236,8 @@ export default function OwnersManagement() {
 
     const handleSaveOwner = async () => {
         requestAuthorization(async () => {
-            if (!currentOwner.name || !currentOwner.email) {
-                toast({ variant: 'destructive', title: 'Error', description: 'Nombre y Email son obligatorios.' });
-                return;
-            }
-             if (currentOwner.role === 'propietario' && (currentOwner.properties.length === 0 || !currentOwner.properties[0].street)) {
-                toast({ variant: 'destructive', title: 'Error', description: 'Un propietario debe tener al menos una propiedad con calle y casa.' });
+            if (!currentOwner.email) {
+                toast({ variant: 'destructive', title: 'Error', description: 'El Email es obligatorio para crear o editar un usuario.' });
                 return;
             }
             if (!currentOwner.id && !currentOwner.password) {
@@ -250,6 +247,7 @@ export default function OwnersManagement() {
     
             const dataToSave = {
                 ...currentOwner,
+                name: currentOwner.name || '',
                 email: currentOwner.email.toLowerCase(),
                 balance: currentOwner.role === 'propietario' ? (parseFloat(String(currentOwner.balance)) || 0) : 0,
                 properties: currentOwner.role === 'propietario' ? currentOwner.properties.filter(p => p.street && p.house) : []
@@ -265,7 +263,7 @@ export default function OwnersManagement() {
     
                     toast({
                         title: 'Cambios Guardados',
-                        description: `La información de ${dataToSave.name} ha sido actualizada.`,
+                        description: `La información de ${dataToSave.name || 'usuario'} ha sido actualizada.`,
                     });
     
                 } else {
@@ -286,7 +284,7 @@ export default function OwnersManagement() {
     
                     toast({
                         title: 'Usuario Creado Exitosamente',
-                        description: `${dataToSave.name} ha sido creado con la contraseña proporcionada.`,
+                        description: `${dataToSave.name || dataToSave.email} ha sido creado con la contraseña proporcionada.`,
                         className: 'bg-green-100 border-green-400 text-green-800'
                     });
                 }
@@ -836,4 +834,5 @@ export default function OwnersManagement() {
         </div>
     );
 }
+
 
