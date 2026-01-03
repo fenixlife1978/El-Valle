@@ -100,13 +100,10 @@ const companyInfo: CompanyInfo = {
     // logo: 'data:image/png;base64,...' (aquí iría el logo)
 };
 
-const streetHouseMap: Record<string, string[]> = {
-    'Calle A': ['A-1', 'A-2', 'A-3'],
-    'Calle B': ['B-1', 'B-2', 'B-3', 'B-4'],
-    'Calle C': ['C-1', 'C-2'],
-};
-const streets = Object.keys(streetHouseMap);
-const getHousesForStreet = (street: string) => streetHouseMap[street] || [];
+const streets = Array.from({ length: 8 }, (_, i) => `Calle ${i + 1}`);
+const houses = Array.from({ length: 14 }, (_, i) => `Casa ${i + 1}`);
+const getHousesForStreet = (street: string) => houses;
+
 
 const formatToTwoDecimals = (num: number | string): string => {
     const value = parseFloat(String(num));
@@ -195,6 +192,36 @@ export default function OwnersManagement() {
         setIsDialogOpen(true);
     };
 
+    const confirmDelete = async (owner: Owner) => {
+        try {
+            // 1. Eliminar documento de Firestore
+            await deleteDoc(doc(db, 'owners', owner.id!));
+
+            // 2. Intentar eliminar usuario de Authentication (NOTA: Requiere Admin SDK/Cloud Function)
+            if (owner.email) {
+                 console.warn("La eliminación de la cuenta de Firebase Auth para este usuario debe ser manejada por una Cloud Function o Admin SDK.");
+            }
+
+            toast({
+                title: 'Usuario Eliminado',
+                description: `El registro de ${owner.name} ha sido eliminado.`,
+                variant: 'default',
+            });
+        } catch (error: any) {
+            console.error("Error deleting owner: ", error);
+            const authError = error.code && error.code.startsWith('auth/');
+            
+            toast({
+                variant: 'destructive',
+                title: 'Error al Eliminar',
+                description: authError 
+                    ? `Se eliminó el registro en la base de datos, pero hubo un error al interactuar con Firebase Auth. La eliminación de Auth debe hacerse desde el servidor.`
+                    : 'No se pudieron eliminar los datos.',
+            });
+        }
+    };
+
+
     const handleDeleteOwner = (owner: Owner) => {
         if (owner.email?.toLowerCase() === 'vallecondo@gmail.com') {
             toast({ variant: 'destructive', title: 'Acción no permitida', description: 'El administrador principal no puede ser eliminado.' });
@@ -202,32 +229,7 @@ export default function OwnersManagement() {
         }
 
         requestAuthorization(async () => {
-            try {
-                // 1. Eliminar documento de Firestore
-                await deleteDoc(doc(db, 'owners', owner.id!));
-    
-                // 2. Intentar eliminar usuario de Authentication (NOTA: Requiere Admin SDK/Cloud Function)
-                if (owner.email) {
-                     console.warn("La eliminación de la cuenta de Firebase Auth para este usuario debe ser manejada por una Cloud Function o Admin SDK.");
-                }
-    
-                toast({
-                    title: 'Usuario Eliminado',
-                    description: `El registro de ${owner.name} ha sido eliminado.`,
-                    variant: 'default',
-                });
-            } catch (error: any) {
-                console.error("Error deleting owner: ", error);
-                const authError = error.code && error.code.startsWith('auth/');
-                
-                toast({
-                    variant: 'destructive',
-                    title: 'Error al Eliminar',
-                    description: authError 
-                        ? `Se eliminó el registro en la base de datos, pero hubo un error al interactuar con Firebase Auth. La eliminación de Auth debe hacerse desde el servidor.`
-                        : 'No se pudieron eliminar los datos.',
-                });
-            }
+            await confirmDelete(owner);
         });
     };
 
@@ -580,13 +582,13 @@ export default function OwnersManagement() {
                         <TableBody>
                             {loading ? (
                                 <TableRow>
-                                    <TableCell colSpan={isAdminsTab ? 4 : 6} className="h-24 text-center">
+                                    <TableCell colSpan={isAdminsTab ? 4 : 5} className="h-24 text-center">
                                         <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
                                     </TableCell>
                                 </TableRow>
                             ) : users.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={isAdminsTab ? 4 : 6} className="h-24 text-center text-muted-foreground">
+                                    <TableCell colSpan={isAdminsTab ? 4 : 5} className="h-24 text-center text-muted-foreground">
                                         No se encontraron {title.toLowerCase()} que coincidan con la búsqueda.
                                     </TableCell>
                                 </TableRow>
@@ -620,7 +622,7 @@ export default function OwnersManagement() {
                                                     </Button>
                                                 </DropdownMenuTrigger>
                                                 <DropdownMenuContent align="end">
-                                                    {(isMainAdmin || !isAdminsTab || user.id === currentUser?.uid) && (
+                                                    {(isMainAdmin || !isAdminsTab || (user.id === currentUser?.uid && isAdminsTab)) && (
                                                         <DropdownMenuItem onClick={() => handleEditOwner(user)}>
                                                             <Edit className="mr-2 h-4 w-4" />
                                                             Editar
@@ -630,7 +632,7 @@ export default function OwnersManagement() {
                                                         <KeyRound className="mr-2 h-4 w-4" />
                                                         Restablecer Contraseña
                                                     </DropdownMenuItem>
-                                                    {isMainAdmin && user.email?.toLowerCase() !== 'vallecondo@gmail.com' && (
+                                                    {isMainAdmin && user.id !== ADMIN_USER_ID && (
                                                         <DropdownMenuItem onClick={() => handleDeleteOwner(user)} className="text-destructive focus:text-destructive focus:bg-destructive/10">
                                                             <Trash2 className="mr-2 h-4 w-4" />
                                                             Eliminar
