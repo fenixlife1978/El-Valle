@@ -294,10 +294,10 @@ export default function VerifyPaymentsPage() {
                         const receiptNumber = `REC-${ownerId.substring(0, 4).toUpperCase()}-${String(newReceiptCounter).padStart(5, '0')}`;
                         newReceiptNumbers[ownerId] = receiptNumber;
     
-                        const initialBalance = ownerData.balance || 0;
-                        const paymentAmountForOwner = beneficiary.amount;
+                        const initialBalanceInCents = Math.round((ownerData.balance || 0) * 100);
+                        const paymentAmountForOwnerInCents = Math.round(beneficiary.amount * 100);
     
-                        let availableFundsInCents = Math.round(paymentAmountForOwner * 100) + Math.round(initialBalance * 100);
+                        let availableFundsInCents = paymentAmountForOwnerInCents + initialBalanceInCents;
                         
                         const debtsQuery = query(collection(db, 'debts'), where('ownerId', '==', ownerId), where('status', '==', 'pending'));
                         const debtsSnapshot = await getDocs(debtsQuery); // This read is outside transaction but fine as it is before writes.
@@ -548,7 +548,7 @@ export default function VerifyPaymentsPage() {
     noteY += 4;
     pdfDoc.setFontSize(7).setFont('helvetica', 'italic').text('Este recibo se generó de manera automática y es válido sin firma manuscrita.', pageWidth / 2, noteY, { align: 'center'});
 
-    const pdfOutput = doc.output('blob');
+    const pdfOutput = pdfDoc.output('blob');
     const pdfFile = new File([pdfOutput], `recibo_${receiptNumber}.pdf`, { type: 'application/pdf' });
 
     if (action === 'download') {
@@ -850,3 +850,4 @@ export default function VerifyPaymentsPage() {
     </div>
   );
 }
+

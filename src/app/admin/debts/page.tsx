@@ -286,7 +286,6 @@ export default function DebtManagementPage() {
         
         let reconciledCount = 0;
         let processedOwners = 0;
-        const condoFeeInBs = condoFee * activeRate;
         const firestore = db;
 
         for (const owner of ownersWithBalance) {
@@ -298,15 +297,13 @@ export default function DebtManagementPage() {
                     
                     // --- ALL READS FIRST ---
                     const ownerDoc = await transaction.get(ownerRef);
-                    // These reads happen outside the transaction but are completed before any writes.
                     const pendingDebtsSnapshot = await getDocs(pendingDebtsQuery); 
                     
                     if (!ownerDoc.exists()) throw new Error(`Propietario ${owner.id} no encontrado.`);
 
                     let availableBalanceInCents = Math.round((ownerDoc.data().balance || 0) * 100);
-                    if (availableBalanceInCents <= 0) return; // No balance to process
+                    if (availableBalanceInCents <= 0) return;
 
-                    // --- LOGIC AND CALCULATION (Happens after all reads) ---
                     let balanceChanged = false;
 
                     const sortedDebts = pendingDebtsSnapshot.docs
@@ -336,12 +333,11 @@ export default function DebtManagementPage() {
                                 });
                             }
                         }
-                        // Re-check if debts are still pending after applying funds
                         const remainingPendingSnapshot = await getDocs(query(collection(firestore, 'debts'), where('ownerId', '==', owner.id), where('status', '==', 'pending')));
                         hasPendingDebts = !remainingPendingSnapshot.empty;
                     }
                     
-                    // Only proceed to pay future months if NO old debts are left
+                    const condoFeeInBs = condoFee * activeRate;
                     const condoFeeInCents = Math.round(condoFeeInBs * 100);
                     if (!hasPendingDebts && owner.properties && owner.properties.length > 0 && availableBalanceInCents >= condoFeeInCents) {
                         const allExistingDebtsSnap = await getDocs(query(collection(firestore, 'debts'), where('ownerId', '==', owner.id)));
@@ -1275,3 +1271,4 @@ export default function DebtManagementPage() {
     // Fallback while loading or if view is invalid
     return null;
 }
+
