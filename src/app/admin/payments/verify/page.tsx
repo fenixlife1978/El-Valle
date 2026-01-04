@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { CheckCircle2, XCircle, MoreHorizontal, Printer, Filter, Loader2, Trash2, Share2, FileText, Download, ArrowLeft } from 'lucide-react';
+import { CheckCircle2, XCircle, MoreHorizontal, Printer, Filter, Loader2, Trash2, Share2, FileText, Download, ArrowLeft, RefreshCw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -224,6 +224,93 @@ export default function VerifyPaymentsPage() {
     return () => unsubscribe();
   }, [toast, ownersMap]);
 
+  const handleReconcileBalance = async (ownerId: string) => {
+    requestAuthorization(async () => {
+      toast({ title: "Iniciando conciliación manual...", description: "Por favor espere." });
+      try {
+        await runTransaction(db, async (transaction) => {
+          const ownerRef = doc(db, 'owners', ownerId);
+          const ownerDoc = await transaction.get(ownerRef);
+          if (!ownerDoc.exists()) throw new Error("Propietario no encontrado.");
+
+          let availableFunds = new Decimal(ownerDoc.data().balance || 0);
+          if (availableFunds.lessThanOrEqualTo(0)) throw new Error("El propietario no tiene saldo a favor para conciliar.");
+
+          const settingsRef = doc(db, 'config', 'mainSettings');
+          const settingsSnap = await transaction.get(settingsRef);
+          if (!settingsSnap.exists()) throw new Error('No se encontró el documento de configuración.');
+          
+          const settingsData = settingsSnap.data();
+          const currentCondoFee = new Decimal(settingsData.condoFee || 0);
+          const activeRate = new Decimal((settingsData.exchangeRates || []).find(r => r.active)?.rate || 0);
+
+          if (activeRate.lessThanOrEqualTo(0)) throw new Error("No hay una tasa de cambio activa configurada.");
+
+          const debtsQuery = query(collection(db, 'debts'), where('ownerId', '==', ownerId), where('status', '==', 'pending'));
+          const debtsSnapshot = await getDocs(debtsQuery); // This read is outside transaction but acceptable here.
+          
+          const sortedDebts = debtsSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Debt)).sort((a, b) => a.year - b.year || a.month - b.month);
+          
+          let balanceChanged = false;
+
+          for (const debt of sortedDebts) {
+              const debtAmountBs = new Decimal(debt.amountUSD).times(activeRate);
+              if (availableFunds.greaterThanOrEqualTo(debtAmountBs)) {
+                  availableFunds = availableFunds.minus(debtAmountBs);
+                  transaction.update(doc(db, 'debts', debt.id), { status: 'paid', paidAmountUSD: debt.amountUSD, paymentDate: Timestamp.now(), paymentId: `conciliacion-manual-${Date.now()}` });
+                  balanceChanged = true;
+              } else {
+                  break;
+              }
+          }
+
+          if (currentCondoFee.greaterThan(0)) {
+            const condoFeeBs = currentCondoFee.times(activeRate);
+            const allExistingDebtsSnap = await getDocs(query(collection(db, 'debts'), where('ownerId', '==', ownerId)));
+            const existingDebtPeriods = new Set(allExistingDebtsSnap.docs.map(d => `${d.data().year}-${d.data().month}`));
+            
+            const startDate = startOfMonth(new Date());
+            const ownerProperties = ownerDoc.data().properties || [];
+
+            if(ownerProperties.length > 0) {
+              for (let i = 0; i < 24; i++) {
+                if (availableFunds.lessThan(condoFeeBs)) break;
+
+                const futureDebtDate = addMonths(startDate, i);
+                const futureYear = futureDebtDate.getFullYear();
+                const futureMonth = futureDebtDate.getMonth() + 1;
+                const periodKey = `${futureYear}-${futureMonth}`;
+                
+                if (existingDebtPeriods.has(periodKey)) continue;
+
+                availableFunds = availableFunds.minus(condoFeeBs);
+                const debtRef = doc(collection(db, 'debts'));
+                transaction.set(debtRef, {
+                    ownerId: ownerId, property: ownerProperties[0], year: futureYear, month: futureMonth,
+                    amountUSD: currentCondoFee.toNumber(), description: "Cuota de Condominio (Pagada por adelantado)", status: 'paid', paidAmountUSD: currentCondoFee.toNumber(),
+                    paymentDate: Timestamp.now(), paymentId: `conciliacion-manual-adv-${Date.now()}`
+                });
+                existingDebtPeriods.add(periodKey);
+                balanceChanged = true;
+              }
+            }
+          }
+
+          if(balanceChanged) {
+            transaction.update(ownerRef, { balance: availableFunds.toDecimalPlaces(2).toNumber() });
+          } else {
+            throw new Error("El saldo a favor no es suficiente para cubrir ninguna deuda pendiente o futura.");
+          }
+        });
+
+        toast({ title: "Conciliación Manual Exitosa", description: "El saldo del propietario ha sido aplicado a sus deudas.", className: 'bg-green-100' });
+
+      } catch (error) {
+        console.error("Error during manual reconciliation: ", error);
+        toast({ variant: 'destructive', title: 'Error en Conciliación', description: error instanceof Error ? error.message : "Ocurrió un error inesperado." });
+      }
+    });
+  };
 
   const handleStatusChange = async (id: string, newStatus: PaymentStatus) => {
     const paymentRef = doc(db, 'payments', id);
@@ -256,20 +343,20 @@ export default function VerifyPaymentsPage() {
                     
                     const settingsData = settingsSnap.data();
                     const allRates = (settingsData.exchangeRates || []) as {date: string, rate: number}[];
-                    const currentCondoFee = settingsData.condoFee || 0;
+                    const currentCondoFee = new Decimal(settingsData.condoFee || 0);
                     
-                    if (currentCondoFee <= 0 && paymentData.type !== 'adelanto') {
+                    if (currentCondoFee.lessThanOrEqualTo(0) && paymentData.type !== 'adelanto') {
                         throw new Error('La cuota de condominio debe ser mayor a cero. Por favor, configúrela.');
                     }
     
                     const paymentDateString = format(paymentData.paymentDate.toDate(), 'yyyy-MM-dd');
                     const applicableRates = allRates.filter(r => r.date <= paymentDateString).sort((a, b) => b.date.localeCompare(a.date));
-                    const exchangeRate = applicableRates.length > 0 ? applicableRates[0].rate : 0;
+                    const exchangeRate = new Decimal(applicableRates.length > 0 ? applicableRates[0].rate : 0);
                     
-                    if (!exchangeRate || exchangeRate <= 0) {
+                    if (exchangeRate.lessThanOrEqualTo(0)) {
                         throw new Error(`No se encontró una tasa de cambio válida para la fecha del pago (${paymentDateString}).`);
                     }
-                    paymentData.exchangeRate = exchangeRate;
+                    paymentData.exchangeRate = exchangeRate.toNumber();
     
                     const allBeneficiaryIds = Array.from(new Set(paymentData.beneficiaries.map(b => b.ownerId)));
                     if (allBeneficiaryIds.length === 0) throw new Error("El pago no tiene beneficiarios definidos.");
@@ -300,14 +387,12 @@ export default function VerifyPaymentsPage() {
                         const debtsQuery = query(collection(db, 'debts'), where('ownerId', '==', ownerId), where('status', '==', 'pending'));
                         const debtsSnapshot = await getDocs(debtsQuery); // This read is outside transaction but fine as it is before writes.
                         
-                        const sortedDebts = debtsSnapshot.docs
-                            .map(d => ({ id: d.id, ...d.data() } as Debt))
-                            .sort((a, b) => a.year - b.year || a.month - b.month);
+                        const sortedDebts = debtsSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Debt)).sort((a, b) => a.year - b.year || a.month - b.month);
                         
                         if (sortedDebts.length > 0) {
                             for (const debt of sortedDebts) {
                                 const debtRef = doc(db, 'debts', debt.id);
-                                const debtAmountBs = new Decimal(debt.amountUSD).times(new Decimal(exchangeRate));
+                                const debtAmountBs = new Decimal(debt.amountUSD).times(exchangeRate);
                                 
                                 if (availableFunds.greaterThanOrEqualTo(debtAmountBs)) {
                                     availableFunds = availableFunds.minus(debtAmountBs);
@@ -325,7 +410,7 @@ export default function VerifyPaymentsPage() {
                         const remainingPendingDebtsSnapshot = await getDocs(remainingPendingDebtsQuery);
                         
                         if (remainingPendingDebtsSnapshot.empty && paymentData.type !== 'adelanto') {
-                            const condoFeeBs = new Decimal(currentCondoFee).times(new Decimal(exchangeRate));
+                            const condoFeeBs = currentCondoFee.times(exchangeRate);
                             
                             if (condoFeeBs.greaterThan(0)) {
                                 const allExistingDebtsQuery = query(collection(db, 'debts'), where('ownerId', '==', ownerId));
@@ -353,9 +438,9 @@ export default function VerifyPaymentsPage() {
                                                 ownerId: ownerId,
                                                 property: property,
                                                 year: futureYear, month: futureMonth,
-                                                amountUSD: currentCondoFee,
+                                                amountUSD: currentCondoFee.toNumber(),
                                                 description: "Cuota de Condominio (Pagada por adelantado)",
-                                                status: 'paid', paidAmountUSD: currentCondoFee,
+                                                status: 'paid', paidAmountUSD: currentCondoFee.toNumber(),
                                                 paymentDate: paymentData.paymentDate, paymentId: paymentData.id,
                                             });
                                             existingDebtPeriods.add(periodKey);
@@ -379,8 +464,8 @@ export default function VerifyPaymentsPage() {
                             paymentId: paymentData.id
                         });
                     }
-                     const observationNote = `Pago aprobado. Tasa aplicada: Bs. ${formatToTwoDecimals(exchangeRate)}.`;
-                     transaction.update(paymentRef, { status: 'aprobado', observations: observationNote, exchangeRate: exchangeRate, receiptNumbers: newReceiptNumbers });
+                     const observationNote = `Pago aprobado. Tasa aplicada: Bs. ${exchangeRate.toDecimalPlaces(2).toNumber()}.`;
+                     transaction.update(paymentRef, { status: 'aprobado', observations: observationNote, exchangeRate: exchangeRate.toNumber(), receiptNumbers: newReceiptNumbers });
     
                 });
         
@@ -733,7 +818,8 @@ export default function VerifyPaymentsPage() {
                                                 </>
                                             )}
                                             {payment.status === 'aprobado' && (
-                                                payment.beneficiaries.length > 1 ? (
+                                              <>
+                                                {payment.beneficiaries.length > 1 ? (
                                                     <DropdownMenuSub>
                                                         <DropdownMenuSubTrigger>
                                                             <Printer className="mr-2 h-4 w-4" />
@@ -752,7 +838,13 @@ export default function VerifyPaymentsPage() {
                                                         <Printer className="mr-2 h-4 w-4" />
                                                         Ver Recibo
                                                     </DropdownMenuItem>
-                                                )
+                                                )}
+                                                 <DropdownMenuItem onClick={() => handleReconcileBalance(payment.beneficiaries[0].ownerId)}>
+                                                    <RefreshCw className="mr-2 h-4 w-4" />
+                                                    Forzar Conciliación
+                                                </DropdownMenuItem>
+                                                <DropdownMenuSeparator />
+                                              </>
                                             )}
                                              <DropdownMenuItem onClick={() => handleDeletePayment(payment)} className="text-destructive">
                                                 <Trash2 className="mr-2 h-4 w-4" />
@@ -848,6 +940,7 @@ export default function VerifyPaymentsPage() {
     </div>
   );
 }
+
 
 
 
