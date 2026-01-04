@@ -232,7 +232,7 @@ export default function VerifyPaymentsPage() {
           const ownerRef = doc(db, 'owners', ownerId);
           const ownerDoc = await transaction.get(ownerRef);
           if (!ownerDoc.exists()) throw new Error("Propietario no encontrado.");
-
+          
           let availableFunds = new Decimal(ownerDoc.data().balance || 0);
           if (availableFunds.lessThanOrEqualTo(0)) throw new Error("El propietario no tiene saldo a favor para conciliar.");
 
@@ -242,7 +242,7 @@ export default function VerifyPaymentsPage() {
           
           const settingsData = settingsSnap.data();
           const currentCondoFee = new Decimal(settingsData.condoFee || 0);
-          const activeRate = new Decimal((settingsData.exchangeRates || []).find(r => r.active)?.rate || 0);
+          const activeRate = new Decimal((settingsData.exchangeRates || []).find((r:any) => r.active)?.rate || 0);
 
           if (activeRate.lessThanOrEqualTo(0)) throw new Error("No hay una tasa de cambio activa configurada.");
 
@@ -253,6 +253,7 @@ export default function VerifyPaymentsPage() {
           
           let balanceChanged = false;
 
+          // 1. Liquidar deudas pendientes
           for (const debt of sortedDebts) {
               const debtAmountBs = new Decimal(debt.amountUSD).times(activeRate);
               if (availableFunds.greaterThanOrEqualTo(debtAmountBs)) {
@@ -260,10 +261,11 @@ export default function VerifyPaymentsPage() {
                   transaction.update(doc(db, 'debts', debt.id), { status: 'paid', paidAmountUSD: debt.amountUSD, paymentDate: Timestamp.now(), paymentId: `conciliacion-manual-${Date.now()}` });
                   balanceChanged = true;
               } else {
-                  break;
+                  break; // No hay suficiente saldo para la siguiente deuda cronológica
               }
           }
 
+          // 2. Liquidar cuotas futuras si hay saldo y no hay deudas pendientes
           if (currentCondoFee.greaterThan(0)) {
             const condoFeeBs = currentCondoFee.times(activeRate);
             const allExistingDebtsSnap = await getDocs(query(collection(db, 'debts'), where('ownerId', '==', ownerId)));
@@ -281,7 +283,7 @@ export default function VerifyPaymentsPage() {
                 const futureMonth = futureDebtDate.getMonth() + 1;
                 const periodKey = `${futureYear}-${futureMonth}`;
                 
-                if (existingDebtPeriods.has(periodKey)) continue;
+                if (existingDebtPeriods.has(periodKey)) continue; // Skip if a debt (paid or not) already exists
 
                 availableFunds = availableFunds.minus(condoFeeBs);
                 const debtRef = doc(collection(db, 'debts'));
@@ -290,7 +292,7 @@ export default function VerifyPaymentsPage() {
                     amountUSD: currentCondoFee.toNumber(), description: "Cuota de Condominio (Pagada por adelantado)", status: 'paid', paidAmountUSD: currentCondoFee.toNumber(),
                     paymentDate: Timestamp.now(), paymentId: `conciliacion-manual-adv-${Date.now()}`
                 });
-                existingDebtPeriods.add(periodKey);
+                existingDebtPeriods.add(periodKey); // Add to set to avoid duplicates within the same transaction
                 balanceChanged = true;
               }
             }
@@ -385,68 +387,60 @@ export default function VerifyPaymentsPage() {
                         let availableFunds = new Decimal(beneficiary.amount).plus(new Decimal(ownerData.balance || 0));
                         
                         const debtsQuery = query(collection(db, 'debts'), where('ownerId', '==', ownerId), where('status', '==', 'pending'));
-                        const debtsSnapshot = await getDocs(debtsQuery); // This read is outside transaction but fine as it is before writes.
+                        const debtsSnapshot = await getDocs(debtsQuery); 
                         
                         const sortedDebts = debtsSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Debt)).sort((a, b) => a.year - b.year || a.month - b.month);
                         
-                        let hasPendingDebts = sortedDebts.length > 0;
-
-                        if (hasPendingDebts) {
-                            for (const debt of sortedDebts) {
-                                const debtRef = doc(db, 'debts', debt.id);
-                                const debtAmountBs = new Decimal(debt.amountUSD).times(exchangeRate);
-                                
-                                if (availableFunds.gte(debtAmountBs)) {
-                                    availableFunds = availableFunds.minus(debtAmountBs);
-                                    transaction.update(debtRef, {
-                                        status: 'paid', paidAmountUSD: debt.amountUSD,
-                                        paymentDate: paymentData.paymentDate, paymentId: paymentData.id,
-                                    });
-                                } else {
-                                    break; 
-                                }
+                        // 2.1 Liquidar deudas pendientes
+                        for (const debt of sortedDebts) {
+                            const debtRef = doc(db, 'debts', debt.id);
+                            const debtAmountBs = new Decimal(debt.amountUSD).times(exchangeRate);
+                            
+                            if (availableFunds.greaterThanOrEqualTo(debtAmountBs)) {
+                                availableFunds = availableFunds.minus(debtAmountBs);
+                                transaction.update(debtRef, {
+                                    status: 'paid', paidAmountUSD: debt.amountUSD,
+                                    paymentDate: paymentData.paymentDate, paymentId: paymentData.id,
+                                });
+                            } else {
+                                break; 
                             }
-                            const remainingPendingDebtsSnapshot = await getDocs(query(collection(db, 'debts'), where('ownerId', '==', ownerId), where('status', '==', 'pending')));
-                            hasPendingDebts = !remainingPendingDebtsSnapshot.empty;
                         }
                         
-                        if (!hasPendingDebts && paymentData.type !== 'adelanto') {
+                        // 2.2 Liquidar cuotas futuras si hay saldo y no hay deudas pendientes
+                        if (paymentData.type !== 'adelanto' && currentCondoFee.greaterThan(0)) {
                             const condoFeeBs = currentCondoFee.times(exchangeRate);
-                            
-                            if (condoFeeBs.greaterThan(0)) {
-                                const allExistingDebtsQuery = query(collection(db, 'debts'), where('ownerId', '==', ownerId));
-                                const allExistingDebtsSnap = await getDocs(allExistingDebtsQuery);
-                                const existingDebtPeriods = new Set(allExistingDebtsSnap.docs.map(d => `${d.data().year}-${d.data().month}`));
-        
-                                const startDate = startOfMonth(new Date());
-        
-                                if (ownerData.properties && ownerData.properties.length > 0) {
-                                    const property = ownerData.properties[0]; // Apply to first property
+                            const allExistingDebtsSnap = await getDocs(query(collection(db, 'debts'), where('ownerId', '==', ownerId)));
+                            const existingDebtPeriods = new Set(allExistingDebtsSnap.docs.map(d => `${d.data().year}-${d.data().month}`));
+
+                            const startDate = startOfMonth(new Date());
+
+                            if (ownerData.properties && ownerData.properties.length > 0) {
+                                const property = ownerData.properties[0];
+                                
+                                for (let i = 0; i < 24; i++) { // Loop for up to 2 years
+                                    if (availableFunds.lessThan(condoFeeBs)) break;
+
+                                    const futureDebtDate = addMonths(startDate, i);
+                                    const futureYear = futureDebtDate.getFullYear();
+                                    const futureMonth = futureDebtDate.getMonth() + 1;
+                                    const periodKey = `${futureYear}-${futureMonth}`;
                                     
-                                    for (let i = 0; i < 24; i++) { // Loop for up to 2 years
-                                        if (availableFunds.lt(condoFeeBs)) break;
-    
-                                        const futureDebtDate = addMonths(startDate, i);
-                                        const futureYear = futureDebtDate.getFullYear();
-                                        const futureMonth = futureDebtDate.getMonth() + 1;
-                                        const periodKey = `${futureYear}-${futureMonth}`;
-                                        
-                                        if (existingDebtPeriods.has(periodKey)) continue;
-    
-                                        availableFunds = availableFunds.minus(condoFeeBs);
-                                        
-                                        const debtRef = doc(collection(db, 'debts'));
-                                        transaction.set(debtRef, {
-                                            ownerId: ownerId,
-                                            property: property,
-                                            year: futureYear, month: futureMonth,
-                                            amountUSD: currentCondoFee.toNumber(),
-                                            description: "Cuota de Condominio (Pagada por adelantado)",
-                                            status: 'paid', paidAmountUSD: currentCondoFee.toNumber(),
-                                            paymentDate: paymentData.paymentDate, paymentId: paymentData.id,
-                                        });
-                                        existingDebtPeriods.add(periodKey);
-                                    }
+                                    if (existingDebtPeriods.has(periodKey)) continue;
+
+                                    availableFunds = availableFunds.minus(condoFeeBs);
+                                    
+                                    const debtRef = doc(collection(db, 'debts'));
+                                    transaction.set(debtRef, {
+                                        ownerId: ownerId,
+                                        property: property,
+                                        year: futureYear, month: futureMonth,
+                                        amountUSD: currentCondoFee.toNumber(),
+                                        description: "Cuota de Condominio (Pagada por adelantado)",
+                                        status: 'paid', paidAmountUSD: currentCondoFee.toNumber(),
+                                        paymentDate: paymentData.paymentDate, paymentId: paymentData.id,
+                                    });
+                                    existingDebtPeriods.add(periodKey);
                                 }
                             }
                         }
@@ -940,6 +934,7 @@ export default function VerifyPaymentsPage() {
     </div>
   );
 }
+
 
 
 

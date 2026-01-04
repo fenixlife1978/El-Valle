@@ -294,63 +294,55 @@ export default function DebtManagementPage() {
             try {
                 await runTransaction(firestore, async (transaction) => {
                     const ownerRef = doc(firestore, 'owners', owner.id);
-                    const pendingDebtsQuery = query(collection(firestore, 'debts'), where('ownerId', '==', owner.id), where('status', '==', 'pending'));
-                    
                     const ownerDoc = await transaction.get(ownerRef);
-                    const pendingDebtsSnapshot = await getDocs(pendingDebtsQuery); 
-                    
                     if (!ownerDoc.exists()) throw new Error(`Propietario ${owner.id} no encontrado.`);
-
+                    
                     let availableFunds = new Decimal(ownerDoc.data().balance || 0);
                     if (availableFunds.lessThanOrEqualTo(0)) return;
 
                     let balanceChanged = false;
 
+                    const pendingDebtsQuery = query(collection(firestore, 'debts'), where('ownerId', '==', owner.id), where('status', '==', 'pending'));
+                    const pendingDebtsSnapshot = await getDocs(pendingDebtsQuery);
+                    
                     const sortedDebts = pendingDebtsSnapshot.docs
                         .map(d => ({ ref: d.ref, id: d.id, ...d.data() } as Debt & { ref: any }))
                         .sort((a, b) => a.year - b.year || a.month - b.month);
                     
-                    let hasPendingDebts = sortedDebts.length > 0;
+                    // 1. Liquidar deudas pendientes
+                    for (const debt of sortedDebts) {
+                        const debtAmountBs = new Decimal(debt.amountUSD).times(new Decimal(activeRate));
+                        if (availableFunds.greaterThanOrEqualTo(debtAmountBs)) {
+                            availableFunds = availableFunds.minus(debtAmountBs);
+                            balanceChanged = true;
 
-                    if (hasPendingDebts) {
-                        for (const debt of sortedDebts) {
-                            const debtAmountBs = new Decimal(debt.amountUSD).times(new Decimal(activeRate));
-                            if (availableFunds.gte(debtAmountBs)) {
-                                availableFunds = availableFunds.minus(debtAmountBs);
-                                balanceChanged = true;
+                            const paymentRef = doc(collection(firestore, "payments"));
+                            transaction.set(paymentRef, {
+                                reportedBy: owner.id,
+                                beneficiaries: [{ ownerId: owner.id, ownerName: owner.name, ...debt.property, amount: debtAmountBs.toNumber() }],
+                                totalAmount: debtAmountBs.toNumber(), exchangeRate: activeRate, paymentDate: Timestamp.now(), reportedAt: Timestamp.now(),
+                                paymentMethod: 'conciliacion', bank: 'Sistema (Saldo a Favor)', reference: `CONC-${debt.year}-${debt.month}`, status: 'aprobado',
+                                observations: `Cuota de ${months.find(m=>m.value === debt.month)?.label} ${debt.year} pagada por conciliación para ${debt.property.street} - ${debt.property.house}.`,
+                            });
 
-                                const paymentRef = doc(collection(firestore, "payments"));
-                                transaction.set(paymentRef, {
-                                    reportedBy: owner.id,
-                                    beneficiaries: [{ ownerId: owner.id, ownerName: owner.name, ...debt.property, amount: debtAmountBs.toNumber() }],
-                                    totalAmount: debtAmountBs.toNumber(), exchangeRate: activeRate, paymentDate: Timestamp.now(), reportedAt: Timestamp.now(),
-                                    paymentMethod: 'conciliacion', bank: 'Sistema (Saldo a Favor)', reference: `CONC-${debt.year}-${debt.month}`, status: 'aprobado',
-                                    observations: `Cuota de ${months.find(m=>m.value === debt.month)?.label} ${debt.year} pagada por conciliación para ${debt.property.street} - ${debt.property.house}.`,
-                                });
-
-                                transaction.update(debt.ref, {
-                                    status: 'paid', paidAmountUSD: debt.amountUSD, paymentDate: Timestamp.now(), paymentId: paymentRef.id
-                                });
-                            } else {
-                                break;
-                            }
+                            transaction.update(debt.ref, {
+                                status: 'paid', paidAmountUSD: debt.amountUSD, paymentDate: Timestamp.now(), paymentId: paymentRef.id
+                            });
+                        } else {
+                            break;
                         }
-                        const remainingPendingSnapshot = await getDocs(query(collection(firestore, 'debts'), where('ownerId', '==', owner.id), where('status', '==', 'pending')));
-                        hasPendingDebts = !remainingPendingSnapshot.empty;
                     }
-                    
-                    const condoFeeBs = new Decimal(condoFee).times(new Decimal(activeRate));
 
-                    if (!hasPendingDebts && condoFeeBs.gt(0) && owner.properties && owner.properties.length > 0) {
+                    // 2. Liquidar cuotas futuras si hay saldo
+                    const condoFeeBs = new Decimal(condoFee).times(new Decimal(activeRate));
+                    if (condoFeeBs.greaterThan(0) && owner.properties && owner.properties.length > 0) {
                         const allExistingDebtsSnap = await getDocs(query(collection(firestore, 'debts'), where('ownerId', '==', owner.id)));
                         const existingDebtPeriodsByProp = new Map<string, Set<string>>();
                         allExistingDebtsSnap.docs.forEach(d => {
                             const debtData = d.data();
-                            if (debtData.property && debtData.property.street && debtData.property.house) {
-                                const propKey = `${debtData.property.street}-${debtData.property.house}`;
-                                if(!existingDebtPeriodsByProp.has(propKey)) existingDebtPeriodsByProp.set(propKey, new Set());
-                                existingDebtPeriodsByProp.get(propKey)!.add(`${debtData.year}-${debtData.month}`);
-                            }
+                            const propKey = `${debtData.property.street}-${debtData.property.house}`;
+                            if(!existingDebtPeriodsByProp.has(propKey)) existingDebtPeriodsByProp.set(propKey, new Set());
+                            existingDebtPeriodsByProp.get(propKey)!.add(`${debtData.year}-${debtData.month}`);
                         });
                         
                         const startDate = startOfMonth(new Date());
@@ -361,7 +353,7 @@ export default function DebtManagementPage() {
                              const existingDebtsForProp = existingDebtPeriodsByProp.get(propKey) || new Set();
 
                              for (let i = 0; i < 24; i++) { // Check for up to 2 years
-                                if (availableFunds.lt(condoFeeBs)) break;
+                                if (availableFunds.lessThan(condoFeeBs)) break;
 
                                 const futureDebtDate = addMonths(startDate, i);
                                 const futureYear = futureDebtDate.getFullYear();
@@ -721,15 +713,10 @@ export default function DebtManagementPage() {
                 const ownerDoc = await transaction.get(ownerRef);
                 if (!ownerDoc.exists()) throw "El documento del propietario no existe.";
                 
-                const pendingDebtsQuery = query(collection(firestore, 'debts'), where('ownerId', '==', selectedOwner.id), where('status', '==', 'pending'));
-                const pendingDebtsSnapshot = await getDocs(pendingDebtsQuery);
-                const hasPendingDebts = !pendingDebtsSnapshot.empty;
-
-
-                // --- 2. LOGIC & WRITES ---
                 let availableBalance = new Decimal(ownerDoc.data().balance || 0);
                 let balanceUpdated = false;
 
+                // --- 2. LOGIC & WRITES ---
                 for (let i = 0; i < monthsToGenerate; i++) {
                     const debtDate = addMonths(startDate, i);
                     const debtYear = debtDate.getFullYear();
@@ -742,7 +729,7 @@ export default function DebtManagementPage() {
                     const debtRef = doc(collection(firestore, "debts"));
                     let debtData: any = { ownerId: selectedOwner.id, property: propertyForMassDebt, year: debtYear, month: debtMonth, amountUSD: amountUSD, description: description, status: 'pending' };
                     
-                    if (!hasPendingDebts && availableBalance.gte(debtAmountBs)) {
+                    if (availableBalance.greaterThanOrEqualTo(debtAmountBs)) {
                         availableBalance = availableBalance.minus(debtAmountBs);
                         balanceUpdated = true;
                         const paymentDate = Timestamp.now();
@@ -1272,6 +1259,7 @@ export default function DebtManagementPage() {
     // Fallback while loading or if view is invalid
     return null;
 }
+
 
 
 
