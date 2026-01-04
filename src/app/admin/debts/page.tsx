@@ -20,6 +20,7 @@ import { differenceInCalendarMonths, format, addMonths, startOfMonth, isBefore }
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import Decimal from 'decimal.js';
 
 
 type Owner = {
@@ -295,14 +296,13 @@ export default function DebtManagementPage() {
                     const ownerRef = doc(firestore, 'owners', owner.id);
                     const pendingDebtsQuery = query(collection(firestore, 'debts'), where('ownerId', '==', owner.id), where('status', '==', 'pending'));
                     
-                    // --- ALL READS FIRST ---
                     const ownerDoc = await transaction.get(ownerRef);
                     const pendingDebtsSnapshot = await getDocs(pendingDebtsQuery); 
                     
                     if (!ownerDoc.exists()) throw new Error(`Propietario ${owner.id} no encontrado.`);
 
-                    let availableBalanceInCents = Math.round((ownerDoc.data().balance || 0) * 100);
-                    if (availableBalanceInCents <= 0) return;
+                    let availableBalance = new Decimal(ownerDoc.data().balance || 0);
+                    if (availableBalance.lessThanOrEqualTo(0)) return;
 
                     let balanceChanged = false;
 
@@ -312,16 +312,16 @@ export default function DebtManagementPage() {
                     
                     if (sortedDebts.length > 0) {
                         for (const debt of sortedDebts) {
-                            const debtAmountInCents = Math.round(debt.amountUSD * activeRate * 100);
-                            if (availableBalanceInCents >= debtAmountInCents) {
-                                availableBalanceInCents -= debtAmountInCents;
+                            const debtAmountBs = new Decimal(debt.amountUSD).times(new Decimal(activeRate));
+                            if (availableBalance.greaterThanOrEqualTo(debtAmountBs)) {
+                                availableBalance = availableBalance.minus(debtAmountBs);
                                 balanceChanged = true;
 
                                 const paymentRef = doc(collection(firestore, "payments"));
                                 transaction.set(paymentRef, {
                                     reportedBy: owner.id,
-                                    beneficiaries: [{ ownerId: owner.id, ownerName: owner.name, ...debt.property, amount: debt.amountUSD * activeRate }],
-                                    totalAmount: debt.amountUSD * activeRate, exchangeRate: activeRate, paymentDate: Timestamp.now(), reportedAt: Timestamp.now(),
+                                    beneficiaries: [{ ownerId: owner.id, ownerName: owner.name, ...debt.property, amount: debtAmountBs.toNumber() }],
+                                    totalAmount: debtAmountBs.toNumber(), exchangeRate: activeRate, paymentDate: Timestamp.now(), reportedAt: Timestamp.now(),
                                     paymentMethod: 'conciliacion', bank: 'Sistema (Saldo a Favor)', reference: `CONC-${debt.year}-${debt.month}`, status: 'aprobado',
                                     observations: `Cuota de ${months.find(m=>m.value === debt.month)?.label} ${debt.year} pagada por conciliación para ${debt.property.street} - ${debt.property.house}.`,
                                 });
@@ -338,9 +338,9 @@ export default function DebtManagementPage() {
                     const remainingPendingSnapshot = await getDocs(query(collection(firestore, 'debts'), where('ownerId', '==', owner.id), where('status', '==', 'pending')));
                     const hasPendingDebts = !remainingPendingSnapshot.empty;
 
-                    const condoFeeInCents = Math.round(condoFee * activeRate * 100);
+                    const condoFeeBs = new Decimal(condoFee).times(new Decimal(activeRate));
 
-                    if (!hasPendingDebts && condoFeeInCents > 0 && owner.properties && owner.properties.length > 0) {
+                    if (!hasPendingDebts && condoFeeBs.greaterThan(0) && owner.properties && owner.properties.length > 0) {
                         const allExistingDebtsSnap = await getDocs(query(collection(firestore, 'debts'), where('ownerId', '==', owner.id)));
                         const existingDebtPeriodsByProp = new Map<string, Set<string>>();
                         allExistingDebtsSnap.docs.forEach(d => {
@@ -359,8 +359,8 @@ export default function DebtManagementPage() {
                              const propKey = `${property.street}-${property.house}`;
                              const existingDebtsForProp = existingDebtPeriodsByProp.get(propKey) || new Set();
 
-                             for (let i = 0; i < 24; i++) { // Limit to 2 years of advance payments
-                                if (availableBalanceInCents < condoFeeInCents) break;
+                             for (let i = 0; i < 24; i++) {
+                                if (availableBalance.lessThan(condoFeeBs)) break;
 
                                 const futureDebtDate = addMonths(startDate, i);
                                 const futureYear = futureDebtDate.getFullYear();
@@ -369,14 +369,14 @@ export default function DebtManagementPage() {
                                 
                                 if (existingDebtsForProp.has(periodKey)) continue;
 
-                                availableBalanceInCents -= condoFeeInCents;
+                                availableBalance = availableBalance.minus(condoFeeBs);
                                 balanceChanged = true;
 
                                 const paymentDate = Timestamp.now();
                                 const paymentRef = doc(collection(firestore, 'payments'));
                                 transaction.set(paymentRef, {
-                                    reportedBy: owner.id, beneficiaries: [{ ownerId: owner.id, ownerName: owner.name, ...property, amount: condoFee * activeRate }],
-                                    totalAmount: condoFee * activeRate, exchangeRate: activeRate, paymentDate: paymentDate, reportedAt: paymentDate,
+                                    reportedBy: owner.id, beneficiaries: [{ ownerId: owner.id, ownerName: owner.name, ...property, amount: condoFeeBs.toNumber() }],
+                                    totalAmount: condoFeeBs.toNumber(), exchangeRate: activeRate, paymentDate: paymentDate, reportedAt: paymentDate,
                                     paymentMethod: 'conciliacion', bank: 'Sistema (Adelanto por Saldo)', reference: `CONC-ADV-${futureYear}-${futureMonth}`, status: 'aprobado',
                                     observations: `Cuota de ${months.find(m=>m.value === futureMonth)?.label} ${futureYear} para ${property.street} - ${property.house} pagada por adelanto automático.`
                                 });
@@ -393,7 +393,7 @@ export default function DebtManagementPage() {
                     }
     
                     if (balanceChanged) {
-                        transaction.update(ownerRef, { balance: availableBalanceInCents / 100 });
+                        transaction.update(ownerRef, { balance: availableBalance.toDecimalPlaces(2).toNumber() });
                         if(!reconciledCount) reconciledCount++;
                     }
                 });
@@ -726,7 +726,7 @@ export default function DebtManagementPage() {
 
 
                 // --- 2. LOGIC & WRITES ---
-                let currentBalanceInCents = Math.round((ownerDoc.data().balance || 0) * 100);
+                let availableBalance = new Decimal(ownerDoc.data().balance || 0);
                 let balanceUpdated = false;
 
                 for (let i = 0; i < monthsToGenerate; i++) {
@@ -737,21 +737,20 @@ export default function DebtManagementPage() {
                     if (existingDebtPeriods.has(`${debtYear}-${debtMonth}`)) continue; 
 
                     newDebtsCreated++;
-                    const debtAmountInCents = Math.round(amountUSD * activeRate * 100);
+                    const debtAmountBs = new Decimal(amountUSD).times(new Decimal(activeRate));
                     const debtRef = doc(collection(firestore, "debts"));
                     let debtData: any = { ownerId: selectedOwner.id, property: propertyForMassDebt, year: debtYear, month: debtMonth, amountUSD: amountUSD, description: description, status: 'pending' };
                     
-                    // Only use balance if there are NO older pending debts
-                    if (!hasPendingDebts && currentBalanceInCents >= debtAmountInCents) {
-                        currentBalanceInCents -= debtAmountInCents;
+                    if (!hasPendingDebts && availableBalance.greaterThanOrEqualTo(debtAmountBs)) {
+                        availableBalance = availableBalance.minus(debtAmountBs);
                         balanceUpdated = true;
                         const paymentDate = Timestamp.now();
 
                         const paymentRef = doc(collection(firestore, "payments"));
                         transaction.set(paymentRef, {
                             reportedBy: selectedOwner.id,
-                            beneficiaries: [{ ownerId: selectedOwner.id, ownerName: selectedOwner.name, ...propertyForMassDebt, amount: amountUSD * activeRate }],
-                            totalAmount: amountUSD * activeRate, exchangeRate: activeRate, paymentDate: paymentDate, reportedAt: paymentDate,
+                            beneficiaries: [{ ownerId: selectedOwner.id, ownerName: selectedOwner.name, ...propertyForMassDebt, amount: debtAmountBs.toNumber() }],
+                            totalAmount: debtAmountBs.toNumber(), exchangeRate: activeRate, paymentDate: paymentDate, reportedAt: paymentDate,
                             paymentMethod: 'conciliacion', bank: 'Sistema (Saldo a Favor)', reference: `CONC-DEBT-${paymentDate.toMillis()}`, status: 'aprobado',
                             observations: `Cuota de ${months.find(m=>m.value === debtMonth)?.label} ${debtYear} para ${propertyForMassDebt.street}-${propertyForMassDebt.house} pagada por conciliación.`,
                         });
@@ -762,7 +761,7 @@ export default function DebtManagementPage() {
                 }
                 
                 if (balanceUpdated) {
-                    transaction.update(ownerRef, { balance: currentBalanceInCents / 100 });
+                    transaction.update(ownerRef, { balance: availableBalance.toDecimalPlaces(2).toNumber() });
                 }
             });
 
@@ -1272,5 +1271,6 @@ export default function DebtManagementPage() {
     // Fallback while loading or if view is invalid
     return null;
 }
+
 
 
