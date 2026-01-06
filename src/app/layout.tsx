@@ -14,31 +14,25 @@ const publicPaths = ['/welcome', '/login', '/forgot-password', '/register'];
 function AuthGuard({ children }: { children: ReactNode }) {
   const { user, role, loading } = useAuth();
   const rawPathname = usePathname();
-  const pathname = rawPathname ?? ''; // ✅ aseguramos que nunca sea null
+  const pathname = rawPathname ?? '';
   const router = useRouter();
 
   useEffect(() => {
     if (loading) {
-      return; // Wait until loading is false
+      return;
     }
 
     const isPublic = publicPaths.some(path => pathname.startsWith(path));
 
-    // If user is logged in
     if (user) {
-      // If they are on a public page, redirect them to their dashboard
       if (isPublic) {
         router.replace(role === 'administrador' ? '/admin/dashboard' : '/owner/dashboard');
       }
-    } 
-    // If user is not logged in and not on a public page
-    else if (!isPublic) {
+    } else if (!isPublic) {
       router.replace('/welcome');
     }
-
   }, [user, role, loading, pathname, router]);
 
-  // While loading, or if redirecting, show a loader to prevent flicker
   if (loading || (!user && !publicPaths.some(path => pathname.startsWith(path)))) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background">
@@ -48,16 +42,15 @@ function AuthGuard({ children }: { children: ReactNode }) {
     );
   }
 
-  // If user is logged in, but on a public page, we show loader while redirecting
   if (user && publicPaths.some(path => pathname.startsWith(path))) {
-     return (
+    return (
       <div className="flex h-screen w-full items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
         <p className="ml-2">Redirigiendo...</p>
       </div>
     );
   }
-  
+
   return <>{children}</>;
 }
 
@@ -71,10 +64,29 @@ export default function RootLayout({
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet" />
-        <link rel="icon" href="/icon.png" type="image/png" sizes="any" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap"
+          rel="stylesheet"
+        />
+        <link rel="icon" href="/favicon-new.png" type="image/png" sizes="any" />
         <title>VALLECONDO</title>
-        <meta name="description" content="Condominium Management App" />
+        <meta name="description" content="App de Autogestion de Condominio Res. El Valle" />
+
+        {/* Open Graph para WhatsApp/Facebook */}
+        <meta property="og:title" content="VALLECONDO" />
+        <meta property="og:description" content="App de Autogestion de Condominio Res. El Valle" />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content="https://TU-DOMINIO.com" />
+        <meta property="og:image" content="https://TU-DOMINIO.com/favicon-new.png" />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+
+        {/* Twitter Cards */}
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="VALLECONDO" />
+        <meta name="twitter:description" content="App de Autogestion de Condominio Res. El Valle" />
+        <meta name="twitter:image" content="https://TU-DOMINIO.com/favicon-new.png" />
+
         {/* SDK de OneSignal */}
         <script src="https://cdn.onesignal.com/sdks/OneSignalSDK.js" async></script>
         <script
@@ -112,3 +124,4 @@ export default function RootLayout({
     </html>
   );
 }
+
