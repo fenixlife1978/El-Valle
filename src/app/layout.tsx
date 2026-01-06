@@ -70,11 +70,11 @@ export default function RootLayout({
         />
         <link rel="icon" href="/og-banner.png" type="image/png" sizes="any" />
         <title>VALLECONDO</title>
-        <meta name="description" content="App de Autogestión de Condominio Res. El Valle" />
+        <meta name="description" content="App de Autogestion de Condominio Conjunto Residencial El Valle" />
 
         {/* Open Graph para WhatsApp/Facebook */}
         <meta property="og:title" content="VALLECONDO" />
-        <meta property="og:description" content="App de Autogestión de Condominio Res. El Valle" />
+        <meta property="og:description" content="App de Autogestion de Condominio Conjunto Residencial El Valle" />
         <meta property="og:type" content="website" />
         <meta property="og:url" content="https://valle-condo.vercel.app" />
         <meta property="og:image" content="https://valle-condo.vercel.app/og-banner.png" />
@@ -85,7 +85,7 @@ export default function RootLayout({
         {/* Twitter Cards */}
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="VALLECONDO" />
-        <meta name="twitter:description" content="App de Autogestión de Condominio Conjunto Residencial El Valle" />
+        <meta name="twitter:description" content="App de Autogestion de Condominio Conjunto Residencial El Valle" />
         <meta name="twitter:image" content="https://valle-condo.vercel.app/og-banner.png" />
 
         {/* SDK de OneSignal */}
