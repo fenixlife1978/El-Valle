@@ -68,24 +68,25 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap"
           rel="stylesheet"
         />
-        <link rel="icon" href="/favicon-new.png" type="image/png" sizes="any" />
+        <link rel="icon" href="/og-banner.png" type="image/png" sizes="any" />
         <title>VALLECONDO</title>
-        <meta name="description" content="App de Autogestion de Condominio Res. El Valle" />
+        <meta name="description" content="App de Autogestión de Condominio Res. El Valle" />
 
         {/* Open Graph para WhatsApp/Facebook */}
         <meta property="og:title" content="VALLECONDO" />
-        <meta property="og:description" content="App de Autogestion de Condominio Res. El Valle" />
+        <meta property="og:description" content="App de Autogestión de Condominio Res. El Valle" />
         <meta property="og:type" content="website" />
-        <meta property="og:url" content="https://TU-DOMINIO.com" />
-        <meta property="og:image" content="https://TU-DOMINIO.com/favicon-new.png" />
+        <meta property="og:url" content="https://valle-condo.vercel.app" />
+        <meta property="og:image" content="https://valle-condo.vercel.app/og-banner.png" />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
+        <meta property="og:image:alt" content="VALLECONDO Banner" />
 
         {/* Twitter Cards */}
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="VALLECONDO" />
-        <meta name="twitter:description" content="App de Autogestion de Condominio Res. El Valle" />
-        <meta name="twitter:image" content="https://TU-DOMINIO.com/favicon-new.png" />
+        <meta name="twitter:description" content="App de Autogestión de Condominio Res. El Valle" />
+        <meta name="twitter:image" content="https://valle-condo.vercel.app/og-banner.png" />
 
         {/* SDK de OneSignal */}
         <script src="https://cdn.onesignal.com/sdks/OneSignalSDK.js" async></script>
@@ -124,4 +125,3 @@ export default function RootLayout({
     </html>
   );
 }
-
