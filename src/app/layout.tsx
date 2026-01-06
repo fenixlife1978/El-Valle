@@ -85,7 +85,7 @@ export default function RootLayout({
         {/* Twitter Cards */}
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="VALLECONDO" />
-        <meta name="twitter:description" content="App de Autogestión de Condominio Res. El Valle" />
+        <meta name="twitter:description" content="App de Autogestión de Condominio Conjunto Residencial El Valle" />
         <meta name="twitter:image" content="https://valle-condo.vercel.app/og-banner.png" />
 
         {/* SDK de OneSignal */}
