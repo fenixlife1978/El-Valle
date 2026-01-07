@@ -384,7 +384,8 @@ export default function VerifyPaymentsPage() {
                         const receiptNumber = `REC-${ownerId.substring(0, 4).toUpperCase()}-${String(newReceiptCounter).padStart(5, '0')}`;
                         newReceiptNumbers[ownerId] = receiptNumber;
     
-                        let availableFunds = new Decimal(beneficiary.amount).plus(new Decimal(ownerData.balance || 0));
+                        let availableFunds = new Decimal(beneficiary.amount);
+                        let ownerBalance = new Decimal(ownerData.balance || 0);
                         
                         const debtsQuery = query(collection(db, 'debts'), where('ownerId', '==', ownerId));
                         const debtsSnapshot = await getDocs(debtsQuery); 
@@ -454,7 +455,7 @@ export default function VerifyPaymentsPage() {
                             }
                         }
                         
-                        const finalBalance = availableFunds.toDecimalPlaces(2).toNumber();
+                        const finalBalance = ownerBalance.plus(availableFunds).toDecimalPlaces(2).toNumber();
                         transaction.update(ownerRef, { balance: finalBalance, receiptCounter: newReceiptCounter });
                         
                         const notificationsRef = doc(collection(ownerRef, "notifications"));
