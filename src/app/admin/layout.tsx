@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -15,6 +16,7 @@ import {
     Plus,
 } from 'lucide-react';
 import { type ReactNode, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { usePathname, useRouter } from 'next/navigation';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
 import { useAuth } from '@/hooks/use-auth';
@@ -62,10 +64,11 @@ const adminBottomNavItems = [
   { href: '/admin/settings', icon: Settings, label: 'Ajustes' },
 ];
 
-export default function AdminLayout({ children }: { children: ReactNode }) {
+
+function AdminLayoutContent({ children }: { children: ReactNode }) {
     const { ownerData, role, loading } = useAuth();
     const rawPathname = usePathname();
-    const pathname: string = rawPathname ?? ''; // ✅ aseguramos que nunca sea null
+    const pathname: string = rawPathname ?? '';
     const router = useRouter();
 
     useEffect(() => {
@@ -86,8 +89,22 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     return (
         <DashboardLayout ownerData={ownerData} userRole={role} navItems={adminNavItems}>
             <div className="pb-20 sm:pb-0">{children}</div>
-            {/* ✅ corregido: pathname nunca será null */}
             <BottomNavBar items={adminBottomNavItems} pathname={pathname} />
         </DashboardLayout>
     );
+}
+
+const DynamicAdminLayout = dynamic(() => Promise.resolve(AdminLayoutContent), {
+  loading: () => (
+    <div className="flex h-screen w-full items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="ml-2">Cargando módulo...</p>
+    </div>
+  ),
+  ssr: false,
+});
+
+
+export default function AdminLayout({ children }: { children: ReactNode }) {
+    return <DynamicAdminLayout>{children}</DynamicAdminLayout>
 }
