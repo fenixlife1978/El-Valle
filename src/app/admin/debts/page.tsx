@@ -302,17 +302,18 @@ export default function DebtManagementPage() {
 
                     let balanceChanged = false;
 
-                    const pendingDebtsQuery = query(collection(firestore, 'debts'), where('ownerId', '==', owner.id), where('status', '==', 'pending'));
-                    const pendingDebtsSnapshot = await getDocs(pendingDebtsQuery);
+                    const allDebtsQuery = query(collection(firestore, 'debts'), where('ownerId', '==', owner.id));
+                    const allDebtsSnapshot = await getDocs(allDebtsQuery);
+                    const allOwnerDebts = allDebtsSnapshot.docs.map(d => ({ ref: d.ref, id: d.id, ...d.data() } as Debt & { ref: any }));
                     
-                    const sortedDebts = pendingDebtsSnapshot.docs
-                        .map(d => ({ ref: d.ref, id: d.id, ...d.data() } as Debt & { ref: any }))
+                    const pendingDebts = allOwnerDebts
+                        .filter(d => d.status === 'pending')
                         .sort((a, b) => a.year - b.year || a.month - b.month);
                     
                     // 1. Liquidar deudas pendientes
-                    for (const debt of sortedDebts) {
+                    for (const debt of pendingDebts) {
                         const debtAmountBs = new Decimal(debt.amountUSD).times(new Decimal(activeRate));
-                        if (availableFunds.greaterThanOrEqualTo(debtAmountBs)) {
+                        if (availableFunds.gte(debtAmountBs)) {
                             availableFunds = availableFunds.minus(debtAmountBs);
                             balanceChanged = true;
 
@@ -336,31 +337,33 @@ export default function DebtManagementPage() {
                     // 2. Liquidar cuotas futuras si hay saldo
                     const condoFeeBs = new Decimal(condoFee).times(new Decimal(activeRate));
                     if (condoFeeBs.greaterThan(0) && owner.properties && owner.properties.length > 0) {
-                        const allExistingDebtsSnap = await getDocs(query(collection(firestore, 'debts'), where('ownerId', '==', owner.id)));
-                        const existingDebtPeriodsByProp = new Map<string, Set<string>>();
-                        allExistingDebtsSnap.docs.forEach(d => {
-                            const debtData = d.data();
-                            const propKey = `${debtData.property.street}-${debtData.property.house}`;
-                            if(!existingDebtPeriodsByProp.has(propKey)) existingDebtPeriodsByProp.set(propKey, new Set());
-                            existingDebtPeriodsByProp.get(propKey)!.add(`${debtData.year}-${debtData.month}`);
-                        });
+                        const paidDebtPeriods = new Set(allOwnerDebts.filter(d => d.status === 'paid').map(d => `${d.year}-${d.month}`));
                         
-                        const startDate = startOfMonth(new Date());
+                        let lastPaidPeriod = { year: 1970, month: 1 };
+                        allOwnerDebts.forEach(d => {
+                            if (d.status === 'paid') {
+                                if (d.year > lastPaidPeriod.year || (d.year === lastPaidPeriod.year && d.month > lastPaidPeriod.month)) {
+                                    lastPaidPeriod = { year: d.year, month: d.month };
+                                }
+                            }
+                        });
 
+                        let nextPeriodDate = addMonths(new Date(lastPaidPeriod.year, lastPaidPeriod.month -1), 1);
+                        
                         for (const property of owner.properties) {
                              if (!property || !property.street || !property.house) continue;
-                             const propKey = `${property.street}-${property.house}`;
-                             const existingDebtsForProp = existingDebtPeriodsByProp.get(propKey) || new Set();
-
+                             
                              for (let i = 0; i < 24; i++) { // Check for up to 2 years
                                 if (availableFunds.lessThan(condoFeeBs)) break;
 
-                                const futureDebtDate = addMonths(startDate, i);
-                                const futureYear = futureDebtDate.getFullYear();
-                                const futureMonth = futureDebtDate.getMonth() + 1;
+                                const futureYear = nextPeriodDate.getFullYear();
+                                const futureMonth = nextPeriodDate.getMonth() + 1;
                                 const periodKey = `${futureYear}-${futureMonth}`;
                                 
-                                if (existingDebtsForProp.has(periodKey)) continue;
+                                if (paidDebtPeriods.has(periodKey)) {
+                                    nextPeriodDate = addMonths(nextPeriodDate, 1);
+                                    continue;
+                                }
 
                                 availableFunds = availableFunds.minus(condoFeeBs);
                                 balanceChanged = true;
@@ -380,7 +383,8 @@ export default function DebtManagementPage() {
                                     description: "Cuota de Condominio (Pagada por adelantado)", status: 'paid', paidAmountUSD: condoFee,
                                     paymentDate: paymentDate, paymentId: paymentRef.id,
                                 });
-                                existingDebtsForProp.add(periodKey);
+                                paidDebtPeriods.add(periodKey);
+                                nextPeriodDate = addMonths(nextPeriodDate, 1);
                             }
                         }
                     }
@@ -729,7 +733,7 @@ export default function DebtManagementPage() {
                     const debtRef = doc(collection(firestore, "debts"));
                     let debtData: any = { ownerId: selectedOwner.id, property: propertyForMassDebt, year: debtYear, month: debtMonth, amountUSD: amountUSD, description: description, status: 'pending' };
                     
-                    if (availableBalance.greaterThanOrEqualTo(debtAmountBs)) {
+                    if (availableBalance.gte(debtAmountBs)) {
                         availableBalance = availableBalance.minus(debtAmountBs);
                         balanceUpdated = true;
                         const paymentDate = Timestamp.now();
@@ -1264,3 +1268,6 @@ export default function DebtManagementPage() {
 
 
 
+
+
+    
