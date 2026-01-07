@@ -414,27 +414,9 @@ export default function ReportsPage() {
             const savedReportsQuery = query(collection(db, 'integral_reports'), orderBy('createdAt', 'desc'));
             const publishedReportsQuery = query(collection(db, 'published_reports'));
             
-            const [
-                settingsSnap, 
-                ownersSnapshot, 
-                paymentsSnapshot, 
-                debtsSnapshot, 
-                historicalPaymentsSnapshot,
-                savedReportsSnapshot,
-                publishedReportsSnapshot
-            ] = await Promise.all([
-                getDoc(settingsRef),
-                getDocs(ownersQuery),
-                getDocs(paymentsQuery),
-                getDocs(debtsQuery),
-                getDocs(historicalPaymentsQuery),
-                getDocs(savedReportsQuery),
-                getDocs(publishedReportsQuery),
-            ]);
+            const unsubs: (() => void)[] = [];
 
-            setSavedIntegralReports(savedReportsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SavedIntegralReport)));
-            setPublishedReports(publishedReportsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PublishedReport)));
-
+            const settingsSnap = await getDoc(settingsRef);
             let rate = 0;
             if (settingsSnap.exists()){
                  const settings = settingsSnap.data();
@@ -445,16 +427,31 @@ export default function ReportsPage() {
                  rate = activeRateObj ? activeRateObj.rate : (rates.length > 0 ? rates[0]?.rate : 0);
                  setActiveRate(rate);
             }
+            
+            unsubs.push(onSnapshot(savedReportsQuery, (snapshot) => {
+                setSavedIntegralReports(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SavedIntegralReport)));
+            }));
+            
+            unsubs.push(onSnapshot(publishedReportsQuery, (snapshot) => {
+                setPublishedReports(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PublishedReport)));
+            }));
 
+
+            const ownersSnapshot = await getDocs(ownersQuery);
             const ownersData = ownersSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Owner));
             setOwners(ownersData);
 
+            const paymentsSnapshot = await getDocs(paymentsQuery);
             const paymentsData = paymentsSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Payment));
             setAllPayments(paymentsData);
             
+            const debtsSnapshot = await getDocs(debtsQuery);
             const debtsData = debtsSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Debt));
             setAllDebts(debtsData);
+            
+            const historicalPaymentsSnapshot = await getDocs(historicalPaymentsQuery);
             setAllHistoricalPayments(historicalPaymentsSnapshot.docs.map(d => d.data() as HistoricalPayment));
+
 
              // --- Delinquency Data Calculation ---
             const debtsByOwner = new Map<string, { totalUSD: number, count: number }>();
@@ -507,6 +504,8 @@ export default function ReportsPage() {
             });
 
             setBalanceOwners(balanceReportData);
+            
+            return () => unsubs.forEach(unsub => unsub());
 
         } catch (error) {
             console.error("Error fetching report data:", error);
@@ -517,7 +516,10 @@ export default function ReportsPage() {
     }, [toast]);
     
     useEffect(() => {
-        fetchData();
+        const unsub = fetchData();
+        return () => {
+            unsub.then(cleanup => cleanup && cleanup());
+        }
     }, [fetchData]);
 
 
@@ -752,15 +754,15 @@ export default function ReportsPage() {
         }
     };
     
-    const handlePublishIntegralReport = async (reportId: string) => {
+    const handlePublishIntegralReport = async (reportId: string, report: SavedIntegralReport) => {
         requestAuthorization(async () => {
             setGeneratingReport(true);
             try {
-                const publicationId = `integral-${reportId}`;
+                const publicationId = `integral-${report.id}`;
                 const reportRef = doc(db, 'published_reports', publicationId);
                 await setDoc(reportRef, {
                     type: 'integral',
-                    sourceId: reportId,
+                    sourceId: report.id,
                     createdAt: Timestamp.now(),
                 });
 
@@ -777,7 +779,7 @@ export default function ReportsPage() {
                     });
                 });
                 await batch.commit();
-                await fetchData(); // Refresh data to show new publication status
+
                 toast({ title: 'Reporte Publicado', description: 'El reporte integral ahora es visible para los propietarios.', className: 'bg-blue-100 text-blue-800' });
             } catch (error) {
                 console.error('Error publishing integral report:', error);
@@ -795,7 +797,6 @@ export default function ReportsPage() {
                 const publicationId = `integral-${reportId}`;
                 const pubDocRef = doc(db, 'published_reports', publicationId);
                 await deleteDoc(pubDocRef);
-                await fetchData(); // Refresh data
                 toast({ title: 'Publicación Eliminada' });
             } catch (error) {
                 console.error("Error deleting integral report publication:", error);
@@ -818,7 +819,6 @@ export default function ReportsPage() {
                 batch.delete(pubDocRef); 
                 
                 await batch.commit();
-                await fetchData(); // Refresh data
                 toast({ title: 'Reporte Eliminado' });
             } catch (error) {
                 console.error("Error deleting saved integral report:", error);
@@ -1402,7 +1402,7 @@ export default function ReportsPage() {
                                                          <DropdownMenuContent>
                                                              <DropdownMenuItem onClick={() => handlePreviewIntegralReport(report)}><Eye className="mr-2 h-4 w-4" /> Ver</DropdownMenuItem>
                                                              <DropdownMenuItem onClick={() => handleExportIntegralPdf(report)}><Download className="mr-2 h-4 w-4" /> Exportar PDF</DropdownMenuItem>
-                                                             {!isPublished && <DropdownMenuItem onClick={() => handlePublishIntegralReport(report.id)}><Megaphone className="mr-2 h-4 w-4"/> Publicar</DropdownMenuItem>}
+                                                             {!isPublished && <DropdownMenuItem onClick={() => handlePublishIntegralReport(report.id, report)}><Megaphone className="mr-2 h-4 w-4"/> Publicar</DropdownMenuItem>}
                                                              {isPublished && <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteIntegralPublication(report.id)}><Trash2 className="mr-2 h-4 w-4"/> Quitar Publicación</DropdownMenuItem>}
                                                              <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteSavedIntegralReport(report.id)}><Trash2 className="mr-2 h-4 w-4"/> Eliminar</DropdownMenuItem>
                                                          </DropdownMenuContent>

@@ -64,15 +64,6 @@ export type NavItem = {
   items?: Omit<NavItem, 'icon' | 'items'>[];
 };
 
-type Notification = {
-    id: string;
-    title: string;
-    body: string;
-    createdAt: any; // Firestore Timestamp
-    read: boolean;
-    href?: string;
-};
-
 const BCVRateCard = ({
   rate,
   date,
@@ -126,50 +117,12 @@ const BCVRateCard = ({
 const CustomHeader = ({ ownerData, userRole }: { ownerData: any, userRole: string | null }) => {
     const router = useRouter();
     const { companyInfo } = useAuth();
-    const [notifications, setNotifications] = React.useState<Notification[]>([]);
-    const [isSheetOpen, setIsSheetOpen] = React.useState(false);
-
-    React.useEffect(() => {
-        if (!ownerData?.id) return;
-        const q = query(collection(db, `owners/${ownerData.id}/notifications`), orderBy('createdAt', 'desc'));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const notifs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Notification));
-            setNotifications(notifs);
-        });
-        return () => unsubscribe();
-    }, [ownerData?.id]);
-
-    const hasUnread = notifications.some(n => !n.read);
-
-    const handleMarkAllRead = async () => {
-        if (!ownerData?.id) return;
-        const batch = writeBatch(db);
-        notifications.filter(n => !n.read).forEach(n => {
-            const notifRef = doc(db, `owners/${ownerData.id}/notifications/${n.id}`);
-            batch.update(notifRef, { read: true });
-        });
-        await batch.commit();
-    };
-
+    
     const handleLogout = async () => {
         await signOut(auth);
         router.push('/');
     };
     
-    const handleNotificationClick = async (notification: Notification) => {
-        if (!ownerData?.id) return;
-        // Mark as read
-        if (!notification.read) {
-            const notifRef = doc(db, `owners/${ownerData.id}/notifications/${notification.id}`);
-            await setDoc(notifRef, { read: true }, { merge: true });
-        }
-        // Navigate if href exists
-        if (notification.href) {
-            router.push(notification.href);
-            setIsSheetOpen(false);
-        }
-    };
-
     const userName = ownerData?.name || 'Usuario';
     const avatarSrc = userRole === 'administrador' ? companyInfo?.logo : ownerData?.avatar;
 
@@ -184,10 +137,6 @@ const CustomHeader = ({ ownerData, userRole }: { ownerData: any, userRole: strin
             </div>
 
             <div className="flex items-center gap-2 flex-1 justify-end">
-                <Button variant="ghost" size="icon" className="relative" onClick={() => setIsSheetOpen(true)}>
-                    <Bell className="h-5 w-5" />
-                    {hasUnread && <span className="absolute top-2 right-2.5 block h-2 w-2 rounded-full bg-destructive" />}
-                </Button>
                 <SidebarTrigger className="h-9 w-9 sm:flex">
                     <PanelLeftClose />
                  </SidebarTrigger>
@@ -215,44 +164,6 @@ const CustomHeader = ({ ownerData, userRole }: { ownerData: any, userRole: strin
                     </DropdownMenuContent>
                 </DropdownMenu>
             </div>
-             <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-                <SheetContent className="flex flex-col">
-                    <SheetHeader>
-                        <SheetTitle>Notificaciones</SheetTitle>
-                    </SheetHeader>
-                    <div className="flex-grow overflow-y-auto -mx-6 px-6">
-                        {notifications.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
-                                <Bell className="h-12 w-12 mb-4"/>
-                                <p>No tienes notificaciones nuevas.</p>
-                            </div>
-                        ) : (
-                            <div className="space-y-3">
-                                {notifications.map(n => (
-                                    <div key={n.id} onClick={() => handleNotificationClick(n)} className={cn("p-3 rounded-lg border flex gap-4 items-start cursor-pointer", n.read ? "bg-transparent border-border/50 hover:bg-muted/50" : "bg-primary/10 border-primary/30 hover:bg-primary/20")}>
-                                        {!n.read && <span className="mt-1.5 block h-2 w-2 shrink-0 rounded-full bg-primary" />}
-                                        <div className="flex-grow">
-                                            <p className="font-semibold">{n.title}</p>
-                                            <p className="text-sm text-muted-foreground">{n.body}</p>
-                                            <p className="text-xs text-muted-foreground/80 mt-1">
-                                                {n.createdAt ? formatDistanceToNow(n.createdAt.toDate(), { addSuffix: true, locale: es }) : 'Ahora mismo'}
-                                            </p>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                    {hasUnread && (
-                        <SheetFooter>
-                            <Button variant="outline" onClick={handleMarkAllRead}>
-                                <Check className="mr-2 h-4 w-4"/>
-                                Marcar todas como leídas
-                            </Button>
-                        </SheetFooter>
-                    )}
-                </SheetContent>
-            </Sheet>
         </header>
     );
 };

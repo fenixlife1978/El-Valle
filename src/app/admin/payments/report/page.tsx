@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -322,20 +323,8 @@ export default function UnifiedPaymentsPage() {
                 reportedBy: authUser?.uid || 'unknown',
             };
             
-            const paymentRef = await addDoc(collection(db, "payments"), paymentData);
+            await addDoc(collection(db, "payments"), paymentData);
             
-            // Create notification for admin
-            const adminDocRef = doc(db, 'owners', ADMIN_USER_ID);
-            const notificationsRef = doc(collection(adminDocRef, "notifications"));
-            await setDoc(notificationsRef, {
-              title: "Nuevo Pago Reportado",
-              body: `${authOwnerData?.name || 'Un propietario'} ha reportado un nuevo pago de Bs. ${totalAmount}.`,
-              createdAt: serverTimestamp(),
-              read: false,
-              href: `/admin/payments/verify`,
-              paymentId: paymentRef.id
-            });
-
             resetForm();
             setIsInfoDialogOpen(true);
 

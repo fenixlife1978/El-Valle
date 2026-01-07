@@ -1,8 +1,13 @@
 
+
 import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { db } from './firebase'; 
 import type { User } from 'firebase/auth';
+
+const ADMIN_USER_ID = 'valle-admin-main-account';
+const ADMIN_EMAIL = 'vallecondo@gmail.com';
+
 
 // Función para inicializar FCM
 export const initFCM = async (user: User | null) => {
@@ -39,8 +44,11 @@ export const initFCM = async (user: User | null) => {
             if (currentToken) {
                 console.log('FCM Token:', currentToken);
 
+                const isAdministrator = user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+                const userDocId = isAdministrator ? ADMIN_USER_ID : user.uid;
+                
                 // Guardar el token en Firestore, asociado al usuario
-                const userDocRef = doc(db, 'owners', user.uid);
+                const userDocRef = doc(db, 'owners', userDocId);
                 // Usamos arrayUnion para añadir el token sin duplicarlo si ya existe
                 await updateDoc(userDocRef, {
                     fcmTokens: arrayUnion(currentToken)
@@ -55,19 +63,4 @@ export const initFCM = async (user: User | null) => {
     } catch (error) {
         console.error('Error al obtener el token de FCM:', error);
     }
-
-    // Manejar mensajes entrantes mientras la app está en primer plano
-    onMessage(messaging, (payload) => {
-        console.log('Mensaje recibido en primer plano. ', payload);
-        // Aquí puedes mostrar una notificación personalizada dentro de la app
-        // Por ejemplo, usando un toast
-        const notificationTitle = payload.notification?.title || 'Nueva Notificación';
-        const notificationOptions = {
-            body: payload.notification?.body || '',
-            icon: '/icon.png',
-        };
-
-        // Muestra una notificación nativa del navegador
-        new Notification(notificationTitle, notificationOptions);
-    });
 };
