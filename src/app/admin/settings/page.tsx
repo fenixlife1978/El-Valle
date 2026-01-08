@@ -344,27 +344,23 @@ export default function SettingsPage() {
             try {
                 const settingsRef = doc(db, 'config', 'mainSettings');
 
-                // Save companyInfo separately to avoid nested entity errors
                 await updateDoc(settingsRef, {
-                    companyInfo: {
-                        name: companyInfo?.name || '',
-                        address: companyInfo?.address || '',
-                        rif: companyInfo?.rif || '',
-                        phone: companyInfo?.phone || '',
-                        email: companyInfo?.email || '',
-                        logo: companyInfo?.logo || '',
-                        bankName: companyInfo?.bankName || '',
-                        accountNumber: companyInfo?.accountNumber || '',
-                    },
-                    adminProfile: {
-                        name: adminProfile.name || '',
-                        email: adminProfile.email || '',
-                        avatar: companyInfo.logo,
-                    },
+                    'companyInfo.name': companyInfo?.name || '',
+                    'companyInfo.address': companyInfo?.address || '',
+                    'companyInfo.rif': companyInfo?.rif || '',
+                    'companyInfo.phone': companyInfo?.phone || '',
+                    'companyInfo.email': companyInfo?.email || '',
+                    'companyInfo.logo': companyInfo?.logo || '',
+                    'companyInfo.bankName': companyInfo?.bankName || '',
+                    'companyInfo.accountNumber': companyInfo?.accountNumber || '',
+                    'adminProfile.name': adminProfile.name || '',
+                    'adminProfile.email': adminProfile.email || '',
+                    'adminProfile.avatar': companyInfo.logo,
+                    'loginSettings.ownerLoginEnabled': loginSettings.ownerLoginEnabled,
+                    'loginSettings.disabledMessage': loginSettings.disabledMessage,
                     condoFee: newCondoFee,
                     lastCondoFee: lastCondoFee,
                     bcvLogo: bcvLogo,
-                    loginSettings: loginSettings,
                 });
 
                 toast({
