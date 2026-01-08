@@ -300,8 +300,6 @@ export default function DebtManagementPage() {
                     let availableFunds = new Decimal(ownerDoc.data().balance || 0);
                     if (availableFunds.lessThanOrEqualTo(0)) return;
 
-                    let balanceChanged = false;
-
                     const allDebtsQuery = query(collection(firestore, 'debts'), where('ownerId', '==', owner.id));
                     const allDebtsSnapshot = await getDocs(allDebtsQuery);
                     const allOwnerDebts = allDebtsSnapshot.docs.map(d => ({ ref: d.ref, id: d.id, ...d.data() } as Debt & { ref: any }));
@@ -315,7 +313,6 @@ export default function DebtManagementPage() {
                         const debtAmountBs = new Decimal(debt.amountUSD).times(new Decimal(activeRate));
                         if (availableFunds.gte(debtAmountBs)) {
                             availableFunds = availableFunds.minus(debtAmountBs);
-                            balanceChanged = true;
 
                             const paymentRef = doc(collection(firestore, "payments"));
                             transaction.set(paymentRef, {
@@ -337,11 +334,11 @@ export default function DebtManagementPage() {
                     // 2. Liquidar cuotas futuras si hay saldo
                     const condoFeeBs = new Decimal(condoFee).times(new Decimal(activeRate));
                     if (condoFeeBs.greaterThan(0) && owner.properties && owner.properties.length > 0) {
-                        const paidDebtPeriods = new Set(allOwnerDebts.filter(d => d.status === 'paid').map(d => `${d.year}-${d.month}`));
+                        const allPaidPeriods = new Set(allOwnerDebts.map(d => `${d.year}-${d.month}`));
                         
                         let lastPaidPeriod = { year: 1970, month: 1 };
                         allOwnerDebts.forEach(d => {
-                            if (d.status === 'paid') {
+                            if (d.status === 'paid' || pendingDebts.some(pd => pd.id === d.id)) {
                                 if (d.year > lastPaidPeriod.year || (d.year === lastPaidPeriod.year && d.month > lastPaidPeriod.month)) {
                                     lastPaidPeriod = { year: d.year, month: d.month };
                                 }
@@ -360,13 +357,12 @@ export default function DebtManagementPage() {
                                 const futureMonth = nextPeriodDate.getMonth() + 1;
                                 const periodKey = `${futureYear}-${futureMonth}`;
                                 
-                                if (paidDebtPeriods.has(periodKey)) {
+                                if (allPaidPeriods.has(periodKey)) {
                                     nextPeriodDate = addMonths(nextPeriodDate, 1);
                                     continue;
                                 }
 
                                 availableFunds = availableFunds.minus(condoFeeBs);
-                                balanceChanged = true;
 
                                 const paymentDate = Timestamp.now();
                                 const paymentRef = doc(collection(firestore, 'payments'));
@@ -383,16 +379,14 @@ export default function DebtManagementPage() {
                                     description: "Cuota de Condominio (Pagada por adelantado)", status: 'paid', paidAmountUSD: condoFee,
                                     paymentDate: paymentDate, paymentId: paymentRef.id,
                                 });
-                                paidDebtPeriods.add(periodKey);
+                                allPaidPeriods.add(periodKey);
                                 nextPeriodDate = addMonths(nextPeriodDate, 1);
                             }
                         }
                     }
     
-                    if (balanceChanged) {
-                        transaction.update(ownerRef, { balance: availableFunds.toDecimalPlaces(2).toNumber() });
-                        if(!reconciledCount) reconciledCount++;
-                    }
+                    transaction.update(ownerRef, { balance: availableFunds.toDecimalPlaces(2).toNumber() });
+                    if(!reconciledCount) reconciledCount++;
                 });
             } catch (error) {
                 console.error(`Error procesando propietario ${owner.id}:`, error);
@@ -718,7 +712,6 @@ export default function DebtManagementPage() {
                 if (!ownerDoc.exists()) throw "El documento del propietario no existe.";
                 
                 let availableBalance = new Decimal(ownerDoc.data().balance || 0);
-                let balanceUpdated = false;
 
                 // --- 2. LOGIC & WRITES ---
                 for (let i = 0; i < monthsToGenerate; i++) {
@@ -735,7 +728,6 @@ export default function DebtManagementPage() {
                     
                     if (availableBalance.gte(debtAmountBs)) {
                         availableBalance = availableBalance.minus(debtAmountBs);
-                        balanceUpdated = true;
                         const paymentDate = Timestamp.now();
 
                         const paymentRef = doc(collection(firestore, "payments"));
@@ -752,9 +744,7 @@ export default function DebtManagementPage() {
                     transaction.set(debtRef, debtData);
                 }
                 
-                if (balanceUpdated) {
-                    transaction.update(ownerRef, { balance: availableBalance.toDecimalPlaces(2).toNumber() });
-                }
+                transaction.update(ownerRef, { balance: availableBalance.toDecimalPlaces(2).toNumber() });
             });
 
             if (newDebtsCreated > 0) {

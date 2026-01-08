@@ -271,7 +271,7 @@ export default function VerifyPaymentsPage() {
 
           // 2. Liquidar cuotas futuras si hay saldo
           if (currentCondoFee.greaterThan(0)) {
-            const allPaidPeriods = new Set(allOwnerDebts.filter(d => d.status === 'paid').map(d => `${d.year}-${d.month}`));
+            const allPaidPeriods = new Set(allOwnerDebts.map(d => `${d.year}-${d.month}`));
             
             let lastPaidPeriod = { year: 1970, month: 1 };
             allOwnerDebts.forEach(d => {
@@ -397,8 +397,7 @@ export default function VerifyPaymentsPage() {
                         const receiptNumber = `REC-${ownerId.substring(0, 4).toUpperCase()}-${String(newReceiptCounter).padStart(5, '0')}`;
                         newReceiptNumbers[ownerId] = receiptNumber;
     
-                        // Correctly calculate total available funds for this transaction
-                        let availableFunds = new Decimal(beneficiary.amount);
+                        let availableFunds = new Decimal(beneficiary.amount).plus(new Decimal(ownerData.balance || 0));
                         
                         const debtsQuery = query(collection(db, 'debts'), where('ownerId', '==', ownerId));
                         const debtsSnapshot = await getDocs(debtsQuery); 
@@ -426,22 +425,23 @@ export default function VerifyPaymentsPage() {
                         if (currentCondoFee.greaterThan(0)) {
                             const condoFeeBs = currentCondoFee.times(exchangeRate);
                             
-                            const allPaidPeriods = new Set(allOwnerDebts.filter(d => d.status === 'paid').map(d => `${d.year}-${d.month}`));
+                            const allPaidPeriods = new Set(allOwnerDebts.map(d => `${d.year}-${d.month}`));
                             let lastPaidPeriod = { year: 1970, month: 1 };
+                            
                             allOwnerDebts.forEach(d => {
-                                if (d.status === 'paid') {
+                                if (d.status === 'paid' || pendingDebts.some(pd => pd.id === d.id)) { // Consider debts just paid
                                     if (d.year > lastPaidPeriod.year || (d.year === lastPaidPeriod.year && d.month > lastPaidPeriod.month)) {
                                         lastPaidPeriod = { year: d.year, month: d.month };
                                     }
                                 }
                             });
                             
-                            let nextPeriodDate = addMonths(new Date(lastPaidPeriod.year, lastPaidPeriod.month - 1), 1);
+                            let nextPeriodDate = addMonths(new Date(lastPaidPeriod.year, lastPaidPeriod.month -1), 1);
                             
                             const ownerProperties = ownerData.properties || [];
                             if (ownerProperties.length > 0) {
                                 const property = ownerProperties[0];
-                                for (let i = 0; i < 24; i++) {
+                                for (let i = 0; i < 24; i++) { // Limit to 2 years of advance payments
                                     if (availableFunds.lessThan(condoFeeBs)) break;
     
                                     const futureYear = nextPeriodDate.getFullYear();
@@ -462,13 +462,13 @@ export default function VerifyPaymentsPage() {
                                         status: 'paid', paidAmountUSD: currentCondoFee.toNumber(),
                                         paymentDate: paymentData.paymentDate, paymentId: paymentData.id,
                                     });
-                                    allPaidPeriods.add(periodKey);
+                                    allPaidPeriods.add(periodKey); // Mark as paid for this transaction
                                     nextPeriodDate = addMonths(nextPeriodDate, 1);
                                 }
                             }
                         }
                         
-                        const finalBalance = new Decimal(ownerData.balance || 0).plus(availableFunds).toDecimalPlaces(2).toNumber();
+                        const finalBalance = availableFunds.toDecimalPlaces(2).toNumber();
                         transaction.update(ownerRef, { balance: finalBalance, receiptCounter: newReceiptCounter });
                         
                         const notificationsRef = doc(collection(ownerRef, "notifications"));
@@ -967,4 +967,5 @@ export default function VerifyPaymentsPage() {
 
 
     
+
 
