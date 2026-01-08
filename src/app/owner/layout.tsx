@@ -6,6 +6,7 @@ import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
 import { useAuth } from '@/hooks/use-auth';
 import { BottomNavBar } from '@/components/bottom-nav-bar';
 import { Loader2, Home, Plus, FileSearch, Settings, Banknote, Calculator, ClipboardList, Receipt, Landmark } from 'lucide-react';
+import { initializeFCM } from '@/lib/init-fcm';
 
 const ownerNavItems: NavItem[] = [
   { href: "/owner/dashboard", icon: Home, label: "Inicio" },
@@ -40,9 +41,9 @@ const bottomNavItems: BottomNavItem[] = [
 ];
 
 export default function OwnerLayout({ children }: { children: ReactNode }) {
-  const { ownerData, role, loading } = useAuth();
+  const { user, ownerData, role, loading } = useAuth();
   const rawPathname = usePathname();
-  const pathname: string = rawPathname ?? ''; // ✅ aseguramos que nunca sea null
+  const pathname: string = rawPathname ?? '';
   const router = useRouter();
 
   useEffect(() => {
@@ -50,6 +51,12 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
       router.replace('/welcome');
     }
   }, [role, loading, router]);
+  
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator && user) {
+        initializeFCM();
+    }
+  }, [user]);
 
   if (loading || role !== 'propietario') {
     return (
