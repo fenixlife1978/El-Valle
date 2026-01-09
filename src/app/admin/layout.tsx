@@ -22,7 +22,7 @@ import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
 import { useAuth } from '@/hooks/use-auth';
 import { BottomNavBar } from '@/components/bottom-nav-bar';
 import { Loader2 } from 'lucide-react';
-import { initializeFCM } from '@/lib/init-fcm';
+import { initFCM } from '@/lib/init-fcm';
 
 
 const adminNavItems: NavItem[] = [
@@ -81,7 +81,7 @@ function AdminLayoutContent({ children }: { children: ReactNode }) {
 
     useEffect(() => {
         if (typeof window !== 'undefined' && 'serviceWorker' in navigator && user) {
-            initializeFCM();
+            initFCM(user);
         }
     }, [user]);
 
