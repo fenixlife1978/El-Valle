@@ -1,47 +1,34 @@
-
-
 'use client';
 
-// NOTA: Si el error persiste, la causa es una exportación incorrecta (export vs export default) 
-// en uno de estos archivos de componentes de UI. Hemos verificado Card y Badge, el problema 
-// probablemente está en Table, Progress, o Button.
-
-import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Landmark, AlertCircle, Building, Eye, Printer, Loader2, Users, Receipt, TrendingUp, CheckCircle, ThumbsUp, ThumbsDown, Smile, ArrowLeft } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { AlertCircle, Eye, Loader2, Users, Receipt, CheckCircle, Smile } from "lucide-react";
 import { useEffect, useState } from "react";
 import { collection, query, where, onSnapshot, Timestamp, orderBy, limit, doc, getDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase'; // Importación de la instancia de Firebase
+import { db } from '@/lib/firebase';
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Button } from "@/components/ui/button";
 
 /**
  * Función auxiliar para formatear números a dos decimales y usar separador de miles.
- * @param num - Número a formatear.
- * @returns Cadena de texto formateada (ej: "1.234,56").
  */
 const formatToTwoDecimals = (num: number) => {
     if (typeof num !== 'number' || isNaN(num)) return '0,00';
-    // Se utiliza Math.trunc para evitar problemas de coma flotante en la multiplicación/división.
     const truncated = Math.trunc(num * 100) / 100;
-    // Formato ES-VE para usar coma como separador decimal.
     return truncated.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-// Definiciones de tipos para los datos de Firebase
+// Definiciones de tipos
 type Payment = {
     id: string;
-    beneficiaries: { ownerName: string }[];
-    totalAmount: number; // Monto en moneda local (Bs) o USD, dependiendo del método
+    beneficiaries?: { ownerName: string }[];
+    totalAmount: number;
     paymentDate: Timestamp;
     reference: string;
-    // Otros campos necesarios para la lógica (ej: exchangeRate, paymentMethod)
     exchangeRate?: number;
     paymentMethod?: string;
+    status: string;
 };
 
 type Feedback = {
@@ -49,11 +36,9 @@ type Feedback = {
     response: 'liked' | 'disliked';
 };
 
-
 export default function AdminDashboardPage() {
-    const router = useRouter();
     const [loading, setLoading] = useState(true);
-    const [activeRate, setActiveRate] = useState(0); // Tasa de cambio actual para conversión
+    const [activeRate, setActiveRate] = useState(0);
     const [stats, setStats] = useState({
         monthlyIncome: 0,
         monthlyIncomeUSD: 0,
@@ -64,18 +49,16 @@ export default function AdminDashboardPage() {
     const [feedbackData, setFeedbackData] = useState<Feedback[]>([]);
 
     useEffect(() => {
-        // Inicializa la fecha de inicio del mes para consultas
+        // Inicializa la fecha de inicio del mes
         const startOfMonth = new Date();
         startOfMonth.setDate(1);
         startOfMonth.setHours(0, 0, 0, 0);
         const startOfMonthTimestamp = Timestamp.fromDate(startOfMonth);
 
-        /**
-         * Fetches the active exchange rate from Firebase configuration.
-         */
+        // 1. Obtener Tasa de Cambio
         const fetchSettings = async () => {
-             const settingsRef = doc(db, 'config', 'mainSettings');
-             try {
+            const settingsRef = doc(db, 'config', 'mainSettings');
+            try {
                 const settingsSnap = await getDoc(settingsRef);
                 if (settingsSnap.exists()) {
                     const settings = settingsSnap.data();
@@ -85,49 +68,22 @@ export default function AdminDashboardPage() {
                     if (activeRateObj) {
                         setActiveRate(activeRateObj.rate);
                     } else if (rates.length > 0) {
-                        // Si no hay activa, usa la más reciente
                         const sortedRates = [...rates].sort((a:any,b:any) => new Date(b.date).getTime() - new Date(a.date).getTime());
                         setActiveRate(sortedRates[0].rate);
                     }
                 }
-             } catch (error) {
-                 console.error("Error fetching settings:", error);
-                 // Opcional: manejar el estado de error de manera visible
-             }
+            } catch (error) {
+                console.error("Error fetching settings:", error);
+            }
         };
         fetchSettings();
 
-        // -------------------------------------------------------------------------
-        // 1. Consultas a Firebase
-        // -------------------------------------------------------------------------
-
-        // Pagos aprobados este mes
+        // 2. Suscripciones en tiempo real
         const paymentsQuery = query(
             collection(db, 'payments'),
             where('status', '==', 'aprobado'),
             where('paymentDate', '>=', startOfMonthTimestamp)
         );
-
-        // Pagos pendientes
-        const pendingPaymentsQuery = query(collection(db, 'payments'), where('status', '==', 'pendiente'));
-        
-        // Conteo total de propietarios (unidades)
-        const ownersQuery = query(collection(db, 'owners'));
-
-        // Últimos pagos aprobados (para la tabla)
-        const recentPaymentsQuery = query(
-            collection(db, 'payments'), 
-            where('status', '==', 'aprobado'),
-            orderBy('paymentDate', 'desc'), // Ordenar por fecha descendente
-            limit(5) // Limitar a 5 resultados
-        );
-
-        // Feedback de la aplicación
-        const feedbackQuery = query(collection(db, 'app_feedback'));
-
-        // -------------------------------------------------------------------------
-        // 2. Suscripciones (onSnapshot)
-        // -------------------------------------------------------------------------
 
         const unsubPayments = onSnapshot(paymentsQuery, (snapshot) => {
             let totalBs = 0;
@@ -137,50 +93,43 @@ export default function AdminDashboardPage() {
                 const amountBs = data.totalAmount || 0;
                 totalBs += amountBs;
 
-                // Lógica de conversión a USD
                 if (data.paymentMethod === 'adelanto') {
-                    totalUsd += amountBs; // Si es adelanto, el totalAmount ya es USD
+                    totalUsd += amountBs;
                 } else {
-                    // Usa la tasa específica del pago si existe, si no usa la activa, si no, usa 1
                     const rate = data.exchangeRate || activeRate || 1; 
-                     if (rate > 0) {
-                        totalUsd += amountBs / rate;
-                    }
+                    if (rate > 0) totalUsd += amountBs / rate;
                 }
             });
-
             setStats(prev => ({ ...prev, monthlyIncome: totalBs, monthlyIncomeUSD: totalUsd }));
+            setLoading(false); // Desactivar carga cuando lleguen los primeros datos críticos
         });
 
-        const unsubPending = onSnapshot(pendingPaymentsQuery, (snapshot) => {
+        const unsubPending = onSnapshot(query(collection(db, 'payments'), where('status', '==', 'pendiente')), (snapshot) => {
             setStats(prev => ({ ...prev, pendingPayments: snapshot.size }));
         });
 
-        const unsubOwners = onSnapshot(ownersQuery, (snapshot) => {
-            // Se asume que uno de los documentos es el administrador y se excluye
+        const unsubOwners = onSnapshot(collection(db, 'owners'), (snapshot) => {
             setStats(prev => ({ ...prev, totalOwners: snapshot.size > 0 ? snapshot.size - 1 : 0 })); 
         });
 
-        const unsubRecent = onSnapshot(recentPaymentsQuery, (snapshot) => {
+        const unsubRecent = onSnapshot(query(
+            collection(db, 'payments'), 
+            where('status', '==', 'aprobado'),
+            orderBy('paymentDate', 'desc'),
+            limit(5)
+        ), (snapshot) => {
             const approvedPayments = snapshot.docs.map(doc => ({ 
                 id: doc.id, 
                 ...doc.data() 
             })) as Payment[];
-            // Ya que la consulta usa orderBy, no necesitamos ordenar aquí, solo tomar los 5.
             setRecentPayments(approvedPayments);
         });
         
-        const unsubFeedback = onSnapshot(feedbackQuery, (snapshot) => {
+        const unsubFeedback = onSnapshot(collection(db, 'app_feedback'), (snapshot) => {
             const feedbackList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Feedback));
             setFeedbackData(feedbackList);
         });
 
-        setLoading(false);
-        
-        // -------------------------------------------------------------------------
-        // 3. Cleanup (Desuscripción)
-        // -------------------------------------------------------------------------
-        
         return () => {
             unsubPayments();
             unsubPending();
@@ -188,124 +137,118 @@ export default function AdminDashboardPage() {
             unsubRecent();
             unsubFeedback();
         }
+    }, [activeRate]);
 
-    }, [activeRate]); // Vuelve a ejecutar si la tasa de cambio cambia
-    
-    // Cálculo de estadísticas de feedback
     const likes = feedbackData.filter(f => f.response === 'liked').length;
     const dislikes = feedbackData.filter(f => f.response === 'disliked').length;
     const totalFeedback = likes + dislikes;
     const satisfactionRate = totalFeedback > 0 ? (likes / totalFeedback) * 100 : 0;
 
-    // -------------------------------------------------------------------------
-    // 4. Renderizado (JSX)
-    // -------------------------------------------------------------------------
-
     return (
-        <div className="space-y-8">
-            
-            <h1 className="text-3xl font-bold font-headline">Panel de Administrador</h1>
+        <div className="space-y-8 p-4 md:p-8">
+            <h1 className="text-3xl font-bold tracking-tight">Panel de Administrador</h1>
             
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-                 {/* Tarjeta de Pagos Recibidos */}
                 <Card className="bg-primary text-primary-foreground">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Pagos Recibidos este Mes</CardTitle>
-                        <Receipt className="h-4 w-4 text-primary-foreground" />
+                        <CardTitle className="text-sm font-medium">Pagos Recibidos (Mes)</CardTitle>
+                        <Receipt className="h-4 w-4 opacity-70" />
                     </CardHeader>
                     <CardContent>
                         {loading ? <Loader2 className="h-6 w-6 animate-spin"/> :
                             <>
                                 <div className="text-2xl font-bold">Bs. {formatToTwoDecimals(stats.monthlyIncome)}</div>
-                                <p className="text-sm text-primary-foreground/80">~ ${formatToTwoDecimals(stats.monthlyIncomeUSD)}</p>
+                                <p className="text-xs opacity-80">aprox. ${formatToTwoDecimals(stats.monthlyIncomeUSD)}</p>
                             </>
                         }
                     </CardContent>
                 </Card>
                 
-                {/* Tarjeta de Pagos Pendientes */}
-                <Card className="bg-yellow-400 text-black">
+                <Card className="bg-yellow-500 text-yellow-950">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Pagos Pendientes</CardTitle>
                         <AlertCircle className="h-4 w-4" />
                     </CardHeader>
                     <CardContent>
-                         {loading ? <Loader2 className="h-6 w-6 animate-spin"/> :
-                             <div className="text-2xl font-bold">{stats.pendingPayments}</div>
-                         }
-                        <p className="text-xs text-black/80">Pagos reportados esperando verificación.</p>
+                        {loading ? <Loader2 className="h-6 w-6 animate-spin"/> :
+                            <div className="text-2xl font-bold">{stats.pendingPayments}</div>
+                        }
+                        <p className="text-xs opacity-80">Por verificar</p>
                     </CardContent>
                 </Card>
                 
-                {/* Tarjeta de Unidades Totales */}
-                <Card className="bg-green-500 text-white">
+                <Card className="bg-green-600 text-white">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Unidades Totales</CardTitle>
-                        <Users className="h-4 w-4 text-white" />
+                        <CardTitle className="text-sm font-medium">Unidades Registradas</CardTitle>
+                        <Users className="h-4 w-4" />
                     </CardHeader>
                     <CardContent>
                         {loading ? <Loader2 className="h-6 w-6 animate-spin"/> :
                             <div className="text-2xl font-bold">{stats.totalOwners}</div>
                         }
-                        <p className="text-xs text-white/80">Número de propietarios registrados.</p>
+                        <p className="text-xs opacity-80">Propietarios activos</p>
                     </CardContent>
                 </Card>
                 
-                {/* Tarjeta de Satisfacción */}
-                 <Card className="bg-muted/50">
+                <Card className="border-2">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Recepción de la Aplicación</CardTitle>
+                        <CardTitle className="text-sm font-medium">Satisfacción App</CardTitle>
                         <Smile className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
                         {loading ? <Loader2 className="h-6 w-6 animate-spin"/> :
                             <>
-                                <div className="text-2xl font-bold">{satisfactionRate.toFixed(0)}% <span className="text-base font-normal text-muted-foreground">de satisfacción</span></div>
-                                <p className="text-xs text-muted-foreground">
-                                    <span className="text-green-500 font-semibold">{likes} les gusta</span> vs <span className="text-red-500 font-semibold">{dislikes} no les gusta</span> de {totalFeedback} respuestas.
-                                </p>
+                                <div className="text-2xl font-bold">{satisfactionRate.toFixed(0)}%</div>
                                 <Progress value={satisfactionRate} className="mt-2 h-2" />
+                                <p className="text-[10px] mt-2 text-muted-foreground">
+                                    {likes} 👍 / {dislikes} 👎 ({totalFeedback} votos)
+                                </p>
                             </>
                         }
                     </CardContent>
                 </Card>
             </div>
 
-            {/* Tabla de Últimos Pagos */}
-            <Card>
+            <Card shadow-sm>
                 <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <CheckCircle className="text-green-500" />
+                    <CardTitle className="flex items-center gap-2 text-xl">
+                        <CheckCircle className="text-green-500 w-5 h-5" />
                         Últimos Pagos Aprobados
                     </CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Propietario</TableHead>
-                                <TableHead>Monto (Bs.)</TableHead>
-                                <TableHead>Fecha de Pago</TableHead>
-                                <TableHead>Referencia</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {loading ? (
-                                <TableRow><TableCell colSpan={4} className="h-24 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto"/></TableCell></TableRow>
-                            ) : recentPayments.length === 0 ? (
-                                <TableRow><TableCell colSpan={4} className="h-24 text-center text-muted-foreground">No hay pagos aprobados recientemente.</TableCell></TableRow>
-                            ) : (
-                                recentPayments.map(payment => (
-                                    <TableRow key={payment.id}>
-                                        <TableCell className="font-medium">{payment.beneficiaries[0]?.ownerName || 'N/A'}</TableCell>
-                                        <TableCell>Bs. {formatToTwoDecimals(payment.totalAmount)}</TableCell>
-                                        <TableCell>{format(payment.paymentDate.toDate(), 'dd MMMM, yyyy', { locale: es })}</TableCell>
-                                        <TableCell>{payment.reference}</TableCell>
-                                    </TableRow>
-                                ))
-                            )}
-                        </TableBody>
-                    </Table>
+                    <div className="rounded-md border">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Propietario</TableHead>
+                                    <TableHead>Monto (Bs.)</TableHead>
+                                    <TableHead>Fecha</TableHead>
+                                    <TableHead>Referencia</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {loading ? (
+                                    <TableRow><TableCell colSpan={4} className="h-24 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto"/></TableCell></TableRow>
+                                ) : recentPayments.length === 0 ? (
+                                    <TableRow><TableCell colSpan={4} className="h-24 text-center text-muted-foreground">No hay pagos recientes.</TableCell></TableRow>
+                                ) : (
+                                    recentPayments.map(payment => (
+                                        <TableRow key={payment.id}>
+                                            <TableCell className="font-medium">
+                                                {payment.beneficiaries?.[0]?.ownerName || 'Sin nombre'}
+                                            </TableCell>
+                                            <TableCell>Bs. {formatToTwoDecimals(payment.totalAmount)}</TableCell>
+                                            <TableCell>
+                                                {payment.paymentDate ? format(payment.paymentDate.toDate(), 'dd/MM/yyyy', { locale: es }) : '---'}
+                                            </TableCell>
+                                            <TableCell className="font-mono text-xs">{payment.reference}</TableCell>
+                                        </TableRow>
+                                    ))
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
                 </CardContent>
             </Card>
         </div>

@@ -1,3 +1,7 @@
+import { getMessaging, getToken, onMessage } from 'firebase/messaging';
+import { app, db } from './firebase';
+import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
+
 async function urlBase64ToUint8Array(base64String: string) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding)
@@ -13,45 +17,50 @@ async function urlBase64ToUint8Array(base64String: string) {
   return outputArray;
 }
 
-export const initializeFCM = async () => {
-  if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) {
-    console.warn('Push messaging is not supported');
-    return;
-  }
+export const initFCM = async (user: any) => {
+  if (typeof window !== 'undefined' && 'serviceWorker' in navigator && user) {
+    try {
+      const messaging = getMessaging(app);
 
-  try {
-    const swRegistration = await navigator.serviceWorker.register('/sw.js');
-    console.log('Service Worker registered successfully:', swRegistration);
-
-    let subscription = await swRegistration.pushManager.getSubscription();
-    if (subscription === null) {
-      console.log('No subscription found, requesting permission...');
-      const permission = await Notification.requestPermission();
-      if (permission !== 'granted') {
-        console.warn('Notification permission not granted.');
-        return;
-      }
+      // Check for an existing token
+      const currentToken = await getToken(messaging, { vapidKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY });
       
-      const applicationServerKey = await urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!);
-      subscription = await swRegistration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey,
-      });
-      console.log('New subscription created:', subscription);
+      if (currentToken) {
+        console.log('FCM token:', currentToken);
+        // Send the token to your server and save it
+        const userRef = doc(db, 'users', user.uid);
+        await updateDoc(userRef, {
+            fcmTokens: arrayUnion(currentToken)
+        });
 
-      // Send the new subscription to the backend
-      await fetch('/api/save-subscription', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(subscription),
+      } else {
+        console.log('No registration token available. Requesting permission...');
+        const permission = await Notification.requestPermission();
+        if (permission === 'granted') {
+          console.log('Notification permission granted.');
+          const new_token = await getToken(messaging, { vapidKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY });
+          if (new_token) {
+             console.log('New FCM token:', new_token);
+             const userRef = doc(db, 'users', user.uid);
+             await updateDoc(userRef, {
+                fcmTokens: arrayUnion(new_token)
+             });
+          }
+        }
+      }
+
+      onMessage(messaging, (payload) => {
+        console.log('Message received. ', payload);
+        // You can handle foreground messages here, e.g., show a custom toast notification.
+        // For example:
+        // toast({
+        //   title: payload.notification?.title,
+        //   description: payload.notification?.body,
+        // });
       });
-      console.log('Subscription sent to server.');
-    } else {
-      console.log('Existing subscription found:', subscription);
+
+    } catch (error) {
+      console.error('An error occurred while retrieving token. ', error);
     }
-  } catch (error) {
-    console.error('Service Worker registration failed:', error);
   }
 };
