@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -260,9 +258,21 @@ export default function VerifyPaymentsPage() {
           // 1. Liquidar deudas pendientes
           for (const debt of pendingDebts) {
               const debtAmountBs = new Decimal(debt.amountUSD).times(activeRate);
-              if (availableFunds.greaterThanOrEqualTo(debtAmountBs)) {
+              if (availableFunds.gte(debtAmountBs)) {
                   availableFunds = availableFunds.minus(debtAmountBs);
-                  transaction.update(doc(db, 'debts', debt.id), { status: 'paid', paidAmountUSD: debt.amountUSD, paymentDate: Timestamp.now(), paymentId: `conciliacion-manual-${Date.now()}` });
+
+                  const paymentRef = doc(collection(db, "payments"));
+                  transaction.set(paymentRef, {
+                      reportedBy: ownerId,
+                      beneficiaries: [{ ownerId: ownerId, ownerName: ownerDoc.data().name, ...debt.property, amount: debtAmountBs.toNumber() }],
+                      totalAmount: debtAmountBs.toNumber(), exchangeRate: activeRate.toNumber(), paymentDate: Timestamp.now(), reportedAt: Timestamp.now(),
+                      paymentMethod: 'conciliacion', bank: 'Sistema (Saldo a Favor)', reference: `CONC-${debt.year}-${debt.month}`, status: 'aprobado',
+                      observations: `Cuota de ${monthsLocale[debt.month]} ${debt.year} pagada por conciliación para ${debt.property.street} - ${debt.property.house}.`,
+                  });
+
+                  transaction.update(doc(db, 'debts', debt.id), {
+                      status: 'paid', paidAmountUSD: debt.amountUSD, paymentDate: Timestamp.now(), paymentId: paymentRef.id
+                  });
                   balanceChanged = true;
               } else {
                   break; 
@@ -270,54 +280,62 @@ export default function VerifyPaymentsPage() {
           }
 
           // 2. Liquidar cuotas futuras si hay saldo
-          if (currentCondoFee.greaterThan(0)) {
-            const allPaidPeriods = new Set(allOwnerDebts.map(d => `${d.year}-${d.month}`));
-            
-            let lastPaidPeriod = { year: 1970, month: 1 };
-            allOwnerDebts.forEach(d => {
-                if (d.status === 'paid') {
-                    if (d.year > lastPaidPeriod.year || (d.year === lastPaidPeriod.year && d.month > lastPaidPeriod.month)) {
-                        lastPaidPeriod = { year: d.year, month: d.month };
-                    }
-                }
-            });
-            let nextPeriodDate = addMonths(new Date(lastPaidPeriod.year, lastPaidPeriod.month -1), 1);
-            
-            const ownerProperties = ownerDoc.data().properties || [];
+          if (currentCondoFee.greaterThan(0) && (ownerDoc.data().properties || []).length > 0) {
+              const allPaidPeriods = new Set(allOwnerDebts.map(d => `${d.year}-${d.month}`));
+              
+              let lastPaidPeriod = { year: 1970, month: 1 };
+              allOwnerDebts.forEach(d => {
+                  if (d.status === 'paid' || pendingDebts.some(pd => pd.id === d.id)) {
+                      if (d.year > lastPaidPeriod.year || (d.year === lastPaidPeriod.year && d.month > lastPaidPeriod.month)) {
+                          lastPaidPeriod = { year: d.year, month: d.month };
+                      }
+                  }
+              });
 
-            if(ownerProperties.length > 0) {
-              const property = ownerProperties[0];
-              for (let i = 0; i < 24; i++) { // Limit to 2 years of advance payments
-                if (availableFunds.lessThan(condoFeeBs)) break;
+              let nextPeriodDate = addMonths(new Date(lastPaidPeriod.year, lastPaidPeriod.month - 1), 1);
+              
+              for (const property of ownerDoc.data().properties) {
+                   if (!property || !property.street || !property.house) continue;
+                   
+                   for (let i = 0; i < 24; i++) { // Check for up to 2 years
+                      if (availableFunds.lessThan(condoFeeBs)) break;
 
-                const futureYear = nextPeriodDate.getFullYear();
-                const futureMonth = nextPeriodDate.getMonth() + 1;
-                const periodKey = `${futureYear}-${futureMonth}`;
-                
-                if (allPaidPeriods.has(periodKey)) {
-                    nextPeriodDate = addMonths(nextPeriodDate, 1);
-                    continue; 
-                }
+                      const futureYear = nextPeriodDate.getFullYear();
+                      const futureMonth = nextPeriodDate.getMonth() + 1;
+                      const periodKey = `${futureYear}-${futureMonth}`;
+                      
+                      if (allPaidPeriods.has(periodKey)) {
+                          nextPeriodDate = addMonths(nextPeriodDate, 1);
+                          continue;
+                      }
 
-                availableFunds = availableFunds.minus(condoFeeBs);
-                const debtRef = doc(collection(db, 'debts'));
-                transaction.set(debtRef, {
-                    ownerId: ownerId, property: property, year: futureYear, month: futureMonth,
-                    amountUSD: currentCondoFee.toNumber(), description: "Cuota de Condominio (Pagada por adelantado)",
-                    status: 'paid', paidAmountUSD: currentCondoFee.toNumber(),
-                    paymentDate: Timestamp.now(), paymentId: `conciliacion-manual-adv-${Date.now()}`
-                });
-                allPaidPeriods.add(periodKey); 
-                nextPeriodDate = addMonths(nextPeriodDate, 1);
-                balanceChanged = true;
+                      availableFunds = availableFunds.minus(condoFeeBs);
+                      balanceChanged = true;
+
+                      const paymentDate = Timestamp.now();
+                      const paymentRef = doc(collection(db, 'payments'));
+                      transaction.set(paymentRef, {
+                          reportedBy: ownerId, beneficiaries: [{ ownerId: ownerId, ownerName: ownerDoc.data().name, ...property, amount: condoFeeBs.toNumber() }],
+                          totalAmount: condoFeeBs.toNumber(), exchangeRate: activeRate.toNumber(), paymentDate: paymentDate, reportedAt: paymentDate,
+                          paymentMethod: 'conciliacion', bank: 'Sistema (Adelanto por Saldo)', reference: `CONC-ADV-${futureYear}-${futureMonth}`, status: 'aprobado',
+                          observations: `Cuota de ${monthsLocale[futureMonth]} ${futureYear} para ${property.street} - ${property.house} pagada por adelanto automático.`
+                      });
+
+                      const debtRef = doc(collection(db, 'debts'));
+                      transaction.set(debtRef, {
+                          ownerId: ownerId, property: property, year: futureYear, month: futureMonth, amountUSD: currentCondoFee.toNumber(),
+                          description: "Cuota de Condominio (Pagada por adelantado)", status: 'paid', paidAmountUSD: currentCondoFee.toNumber(),
+                          paymentDate: paymentDate, paymentId: paymentRef.id,
+                      });
+                      allPaidPeriods.add(periodKey);
+                      nextPeriodDate = addMonths(nextPeriodDate, 1);
+                  }
               }
-            }
           }
-
           if(balanceChanged) {
             transaction.update(ownerRef, { balance: availableFunds.toDecimalPlaces(2).toNumber() });
           } else {
-            throw new Error("El saldo a favor no es suficiente para cubrir ninguna deuda pendiente o futura.");
+             throw new Error("El saldo a favor no es suficiente para cubrir ninguna deuda pendiente o futura.");
           }
         });
 
@@ -370,7 +388,7 @@ export default function VerifyPaymentsPage() {
                     const applicableRates = allRates.filter(r => r.date <= paymentDateString).sort((a, b) => b.date.localeCompare(a.date));
                     const exchangeRate = new Decimal(applicableRates.length > 0 ? applicableRates[0].rate : 0);
                     
-                    if (exchangeRate.lessThanOrEqualTo(0)) {
+                    if (exchangeRate.lessThanOrEqualTo(0) && paymentData.type !== 'adelanto') {
                         throw new Error(`No se encontró una tasa de cambio válida para la fecha del pago (${paymentDateString}).`);
                     }
                     paymentData.exchangeRate = exchangeRate.toNumber();
@@ -404,7 +422,9 @@ export default function VerifyPaymentsPage() {
                         const debtsSnapshot = await getDocs(debtsQuery); 
                         
                         const allOwnerDebts = debtsSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Debt));
-                        const pendingDebts = allOwnerDebts.filter(d => d.status === 'pending').sort((a, b) => a.year - b.year || a.month - b.month);
+                        const pendingDebts = allOwnerDebts
+                            .filter(d => d.status === 'pending')
+                            .sort((a, b) => a.year - b.year || a.month - b.month);
                         
                         // 1. Liquidate pending debts
                         for (const debt of pendingDebts) {
@@ -437,7 +457,7 @@ export default function VerifyPaymentsPage() {
                                 }
                             });
                             
-                            let nextPeriodDate = addMonths(new Date(lastPaidPeriod.year, lastPaidPeriod.month -1), 1);
+                            let nextPeriodDate = addMonths(new Date(lastPaidPeriod.year, lastPaidPeriod.month - 1), 1);
                             
                             const ownerProperties = ownerData.properties || [];
                             if (ownerProperties.length > 0) {
@@ -630,7 +650,7 @@ export default function VerifyPaymentsPage() {
     pdfDoc.text(totalValue, pageWidth - margin, startY, { align: 'right' });
     pdfDoc.text(totalLabel, pageWidth - margin - totalValueWidth - 2, startY, { align: 'right' });
 
-    const footerStartY = pdfDoc.internal.pageSize.getHeight() - 55;
+    const footerStartY = doc.internal.pageSize.getHeight() - 55;
     startY = startY > footerStartY ? footerStartY : startY + 10;
     if (payment.observations) {
         pdfDoc.setFontSize(8).setFont('helvetica', 'italic');
@@ -914,7 +934,7 @@ export default function VerifyPaymentsPage() {
                     <DialogTitle>¿Está seguro?</DialogTitle>
                     <DialogDescription>
                         Esta acción no se puede deshacer. Esto eliminará permanentemente el registro del pago. Si el pago ya fue aprobado, se revertirán las deudas y saldos del propietario afectado.
-                    </DialogDescription>
+                    </D escription>
                 </DialogHeader>
                 <DialogFooter>
                     <Button variant="outline" onClick={() => setIsDeleteConfirmationOpen(false)}>Cancelar</Button>
@@ -927,4 +947,7 @@ export default function VerifyPaymentsPage() {
 }
 ```
 
-I've fixed the syntax errors in `src/app/admin/settings/page.tsx` and the other files you pointed out. I removed the erroneous, unquoted string and corrected the object definitions to ensure all properties have valid string values. I also made sure all JSX tags are properly closed. The code should compile and run correctly now.
+<suggestion>
+He notado que la lógica para mostrar el contenido del PDF dentro del `DialogContent` en `src/app/admin/payments/verify/page.tsx` está vacía. Para mejorar la experiencia del usuario, podría generar y mostrar el PDF directamente en el diálogo utilizando un `<iframe>` o un visor de PDF. ¿Te gustaría que lo implemente?
+</suggestion>
+</user>
