@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -285,33 +286,33 @@ export default function VerifyPaymentsPage() {
               
               let lastPaidPeriod = { year: 1970, month: 1 };
               allOwnerDebts.forEach(d => {
-                  if (d.status === 'paid' || pendingDebts.some(pd => pd.id === d.id)) {
+                  if (d.status === 'paid' || pendingDebts.some(pd => pd.id === d.id)) { // Consider debts just paid
                       if (d.year > lastPaidPeriod.year || (d.year === lastPaidPeriod.year && d.month > lastPaidPeriod.month)) {
                           lastPaidPeriod = { year: d.year, month: d.month };
                       }
                   }
               });
-
+              
               let nextPeriodDate = addMonths(new Date(lastPaidPeriod.year, lastPaidPeriod.month - 1), 1);
               
               for (const property of ownerDoc.data().properties) {
                    if (!property || !property.street || !property.house) continue;
                    
-                   for (let i = 0; i < 24; i++) { // Check for up to 2 years
+                   for (let i = 0; i < 24; i++) { // Limit to 2 years of advance payments
                       if (availableFunds.lessThan(condoFeeBs)) break;
-
+    
                       const futureYear = nextPeriodDate.getFullYear();
                       const futureMonth = nextPeriodDate.getMonth() + 1;
                       const periodKey = `${futureYear}-${futureMonth}`;
                       
                       if (allPaidPeriods.has(periodKey)) {
                           nextPeriodDate = addMonths(nextPeriodDate, 1);
-                          continue;
+                          continue; 
                       }
-
+    
                       availableFunds = availableFunds.minus(condoFeeBs);
                       balanceChanged = true;
-
+                      
                       const paymentDate = Timestamp.now();
                       const paymentRef = doc(collection(db, 'payments'));
                       transaction.set(paymentRef, {
@@ -323,11 +324,12 @@ export default function VerifyPaymentsPage() {
 
                       const debtRef = doc(collection(db, 'debts'));
                       transaction.set(debtRef, {
-                          ownerId: ownerId, property: property, year: futureYear, month: futureMonth, amountUSD: currentCondoFee.toNumber(),
-                          description: "Cuota de Condominio (Pagada por adelantado)", status: 'paid', paidAmountUSD: currentCondoFee.toNumber(),
+                          ownerId: ownerId, property: property, year: futureYear, month: futureMonth,
+                          amountUSD: currentCondoFee.toNumber(), description: "Cuota de Condominio (Pagada por adelantado)",
+                          status: 'paid', paidAmountUSD: currentCondoFee.toNumber(),
                           paymentDate: paymentDate, paymentId: paymentRef.id,
                       });
-                      allPaidPeriods.add(periodKey);
+                      allPaidPeriods.add(periodKey); // Mark as paid for this transaction
                       nextPeriodDate = addMonths(nextPeriodDate, 1);
                   }
               }
@@ -650,7 +652,7 @@ export default function VerifyPaymentsPage() {
     pdfDoc.text(totalValue, pageWidth - margin, startY, { align: 'right' });
     pdfDoc.text(totalLabel, pageWidth - margin - totalValueWidth - 2, startY, { align: 'right' });
 
-    const footerStartY = doc.internal.pageSize.getHeight() - 55;
+    const footerStartY = pdfDoc.internal.pageSize.getHeight() - 55;
     startY = startY > footerStartY ? footerStartY : startY + 10;
     if (payment.observations) {
         pdfDoc.setFontSize(8).setFont('helvetica', 'italic');
@@ -760,7 +762,6 @@ export default function VerifyPaymentsPage() {
         }
     });
   };
-
 
   const filteredPayments = payments.filter(p => filter === 'todos' || p.status === filter);
 
@@ -934,7 +935,7 @@ export default function VerifyPaymentsPage() {
                     <DialogTitle>¿Está seguro?</DialogTitle>
                     <DialogDescription>
                         Esta acción no se puede deshacer. Esto eliminará permanentemente el registro del pago. Si el pago ya fue aprobado, se revertirán las deudas y saldos del propietario afectado.
-                    </D escription>
+                    </DialogDescription>
                 </DialogHeader>
                 <DialogFooter>
                     <Button variant="outline" onClick={() => setIsDeleteConfirmationOpen(false)}>Cancelar</Button>
@@ -945,9 +946,3 @@ export default function VerifyPaymentsPage() {
     </div>
   );
 }
-```
-
-<suggestion>
-He notado que la lógica para mostrar el contenido del PDF dentro del `DialogContent` en `src/app/admin/payments/verify/page.tsx` está vacía. Para mejorar la experiencia del usuario, podría generar y mostrar el PDF directamente en el diálogo utilizando un `<iframe>` o un visor de PDF. ¿Te gustaría que lo implemente?
-</suggestion>
-</user>
