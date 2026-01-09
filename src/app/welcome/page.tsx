@@ -23,7 +23,7 @@ export default function WelcomePage() {
         const docSnap = await getDoc(settingsRef);
         if (docSnap.exists()) {
           const settings = docSnap.data();
-          if (settings.companyInfo && settings.companyInfo.logo) {
+          if (settings.companyInfo?.logo) {
             setLogoUrl(settings.companyInfo.logo);
           }
         }
@@ -54,30 +54,30 @@ export default function WelcomePage() {
         <p className="text-lg text-muted-foreground mt-2">Seleccione su rol para continuar</p>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-2xl">
-          <Card className="hover:border-primary transition-all">
-              <CardHeader className="items-center text-center">
-                  <Shield className="h-12 w-12 text-primary mb-4" />
-                  <CardTitle>Administrador</CardTitle>
-                  <CardDescription>Acceso al panel de gestión y configuración del condominio.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                  <Button className="w-full" onClick={() => router.push('/login?role=admin')}>
-                      Entrar como Administrador
-                  </Button>
-              </CardContent>
-          </Card>
-          <Card className="hover:border-primary transition-all">
-              <CardHeader className="items-center text-center">
-                  <User className="h-12 w-12 text-primary mb-4" />
-                  <CardTitle>Propietario</CardTitle>
-                  <CardDescription>Consulte sus deudas, pagos y estado de cuenta.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                  <Button className="w-full" onClick={() => router.push('/login?role=owner')}>
-                      Entrar como Propietario
-                  </Button>
-              </CardContent>
-          </Card>
+        <Card className="hover:border-primary transition-all">
+          <CardHeader className="items-center text-center">
+            <Shield className="h-12 w-12 text-primary mb-4" />
+            <CardTitle>Administrador</CardTitle>
+            <CardDescription>Acceso al panel de gestión y configuración del condominio.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button className="w-full" onClick={() => router.push('/login?role=admin')}>
+              Entrar como Administrador
+            </Button>
+          </CardContent>
+        </Card>
+        <Card className="hover:border-primary transition-all">
+          <CardHeader className="items-center text-center">
+            <User className="h-12 w-12 text-primary mb-4" />
+            <CardTitle>Propietario</CardTitle>
+            <CardDescription>Consulte sus deudas, pagos y estado de cuenta.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button className="w-full" onClick={() => router.push('/login?role=owner')}>
+              Entrar como Propietario
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     </main>
   );

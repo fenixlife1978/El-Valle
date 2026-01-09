@@ -51,7 +51,8 @@
     "genkit": "^1.22.0",
     "html2canvas": "^1.4.1",
     "js-cookie": "^3.0.5",
-    "jspdf-autotable": "^5.0.2",
+    "jspdf": "^2.5.1",
+    "jspdf-autotable": "^3.8.2",
     "lucide-react": "^0.475.0",
     "next": "^15.5.9",
     "next-themes": "^0.3.0",
@@ -71,7 +72,7 @@
   "devDependencies": {
     "@types/js-cookie": "^3.0.6",
     "@types/node": "^20.19.27",
-    "@types/pdfkit": "^0.17.4",
+    "@types/pdfkit": "^0.13.4",
     "@types/qrcode": "^1.5.5",
     "@types/react": "^18",
     "@types/react-dom": "^18",
