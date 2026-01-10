@@ -5,8 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
 import { useAuth } from '@/hooks/use-auth';
 import { BottomNavBar } from '@/components/bottom-nav-bar';
-import { Loader2, Home, Plus, FileSearch, Settings, Banknote, Calculator, ClipboardList, Receipt, Landmark } from 'lucide-react';
-import { initializeFCM } from '@/lib/init-fcm';
+import { Loader2, Home, Plus, FileSearch, Settings, Banknote, Landmark, ClipboardList } from 'lucide-react';
 
 const ownerNavItems: NavItem[] = [
   { href: "/owner/dashboard", icon: Home, label: "Inicio" },
@@ -52,11 +51,7 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
     }
   }, [role, loading, router]);
   
-  useEffect(() => {
-    if (typeof window !== 'undefined' && 'serviceWorker' in navigator && user) {
-        initializeFCM();
-    }
-  }, [user]);
+  // Se ha eliminado la llamada a initializeFCM para evitar errores de compilación
 
   if (loading || role !== 'propietario') {
     return (

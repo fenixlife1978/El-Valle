@@ -354,28 +354,37 @@
     },
     "AdminTask": {
       "title": "Admin Task",
-      "description": "A task created by an administrator to perform a backend operation, like changing a user's email.",
+      "description": "A task created by an administrator to be processed by a backend function.",
       "type": "object",
       "properties": {
+        "taskType": {
+          "type": "string",
+          "enum": ["changeEmail", "deleteUser"],
+          "description": "The type of task to be performed."
+        },
         "targetUID": {
           "type": "string",
-          "description": "The UID of the user to be updated."
+          "description": "The UID of the user to be updated or deleted."
         },
         "newEmail": {
           "type": "string",
-          "description": "The new email address to be assigned."
+          "description": "The new email address (only for 'changeEmail' tasks)."
         },
         "status": {
           "type": "string",
           "enum": ["pending", "processing", "completed", "error"],
           "description": "The status of the task."
         },
-        "adminUID": {
+        "requestedBy": {
           "type": "string",
           "description": "The UID of the administrator who initiated the task."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
         }
       },
-      "required": ["targetUID", "newEmail", "status", "adminUID"]
+      "required": ["taskType", "targetUID", "status", "requestedBy", "createdAt"]
     }
   },
   "firestore": {

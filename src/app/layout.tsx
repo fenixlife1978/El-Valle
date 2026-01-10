@@ -87,23 +87,7 @@ export default function RootLayout({
         <meta name="twitter:title" content="VALLECONDO" />
         <meta name="twitter:description" content="App de Autogestion de Condominio Conjunto Residencial El Valle" />
         <meta name="twitter:image" content="https://valle-condo.vercel.app/og-banner.png" />
-
-        {/* SDK de OneSignal */}
-        <script src="https://cdn.onesignal.com/sdks/OneSignalSDK.js" async></script>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              window.OneSignal = window.OneSignal || [];
-              OneSignal.push(function() {
-                OneSignal.init({
-                  appId: "4d13c648-04bc-4aa1-b50a-bbd4b9350c3c",
-                  notifyButton: { enable: true }
-                });
-                OneSignal.showNativePrompt();
-              });
-            `,
-          }}
-        />
+ 
       </head>
       <body className="font-body antialiased bg-background text-foreground">
         <AuthProvider>

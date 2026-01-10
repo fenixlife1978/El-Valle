@@ -16,7 +16,9 @@ import {
     deleteDoc, 
     writeBatch, 
     query,
-    where 
+    where,
+    addDoc,
+    serverTimestamp
 } from 'firebase/firestore';
 import { 
     createUserWithEmailAndPassword, 
@@ -124,6 +126,8 @@ export default function OwnersManagement() {
     const [admins, setAdmins] = useState<Owner[]>([]);
     const [loading, setLoading] = useState(true);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
+    const [userToDelete, setUserToDelete] = useState<Owner | null>(null);
     const [currentOwner, setCurrentOwner] = useState<Owner>(emptyOwner);
     const [isEditingAdmin, setIsEditingAdmin] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -193,33 +197,37 @@ export default function OwnersManagement() {
         setIsDialogOpen(true);
     };
 
-    const confirmDelete = async (owner: Owner) => {
-        try {
-            // 1. Eliminar documento de Firestore
-            await deleteDoc(doc(db, 'owners', owner.id!));
-
-            // 2. Intentar eliminar usuario de Authentication (NOTA: Requiere Admin SDK/Cloud Function)
-            if (owner.email) {
-                 console.warn("La eliminación de la cuenta de Firebase Auth para este usuario debe ser manejada por una Cloud Function o Admin SDK.");
+    const handleConfirmDelete = async () => {
+        if (!userToDelete || !currentUser) return;
+    
+        requestAuthorization(async () => {
+            try {
+                // Crear una tarea en la colección 'admin_tasks'
+                await addDoc(collection(db, "admin_tasks"), {
+                    taskType: 'deleteUser',
+                    targetUID: userToDelete.id,
+                    requestedBy: currentUser.uid,
+                    status: "pending",
+                    createdAt: serverTimestamp(),
+                });
+    
+                toast({
+                    title: 'Solicitud de Eliminación Enviada',
+                    description: `La solicitud para eliminar a ${userToDelete.name} ha sido creada. El proceso se completará en segundo plano.`,
+                });
+    
+            } catch (error) {
+                console.error("Error creating delete task: ", error);
+                toast({
+                    variant: 'destructive',
+                    title: 'Error al solicitar eliminación',
+                    description: 'No se pudo crear la tarea de eliminación.',
+                });
+            } finally {
+                setIsDeleteConfirmationOpen(false);
+                setUserToDelete(null);
             }
-
-            toast({
-                title: 'Usuario Eliminado',
-                description: `El registro de ${owner.name} ha sido eliminado.`,
-                variant: 'default',
-            });
-        } catch (error: any) {
-            console.error("Error deleting owner: ", error);
-            const authError = error.code && error.code.startsWith('auth/');
-            
-            toast({
-                variant: 'destructive',
-                title: 'Error al Eliminar',
-                description: authError 
-                    ? `Se eliminó el registro en la base de datos, pero hubo un error al interactuar con Firebase Auth. La eliminación de Auth debe hacerse desde el servidor.`
-                    : 'No se pudieron eliminar los datos.',
-            });
-        }
+        });
     };
 
 
@@ -228,10 +236,8 @@ export default function OwnersManagement() {
             toast({ variant: 'destructive', title: 'Acción no permitida', description: 'El administrador principal no puede ser eliminado.' });
             return;
         }
-
-        requestAuthorization(async () => {
-            await confirmDelete(owner);
-        });
+        setUserToDelete(owner);
+        setIsDeleteConfirmationOpen(true);
     };
 
     const handleSaveOwner = async () => {
@@ -831,8 +837,22 @@ export default function OwnersManagement() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            <Dialog open={isDeleteConfirmationOpen} onOpenChange={setIsDeleteConfirmationOpen}>
+                <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                        <DialogTitle>¿Está seguro?</DialogTitle>
+                        <DialogDescription>
+                            Esta acción es irreversible. Se creará una tarea para eliminar permanentemente al usuario '{userToDelete?.name}' y todos sus datos asociados.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsDeleteConfirmationOpen(false)}>Cancelar</Button>
+                        <Button variant="destructive" onClick={handleConfirmDelete}>Sí, solicitar eliminación</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
-
 
