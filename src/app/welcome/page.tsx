@@ -42,13 +42,11 @@ export default function WelcomePage() {
         {loading ? (
           <Skeleton className="w-32 h-32 rounded-full mx-auto mb-6" />
         ) : (
-          logoUrl ? (
+          logoUrl && (
             <img src={logoUrl} alt="Logo Empresa" className="w-32 h-32 object-contain mx-auto mb-6" />
-          ) : (
-            <div className="w-32 h-32 rounded-full bg-muted mx-auto mb-6" />
           )
         )}
-        <h1 className="text-4xl font-bold font-headline text-primary">Bienvenid@ a VALLECONDO</h1>
+        <h1 className="text-4xl font-bold font-headline text-primary">Bienvenid@ a tu portal de Autogestión de Condominio</h1>
         <p className="text-lg text-muted-foreground mt-2">Seleccione su rol para continuar</p>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-2xl">
