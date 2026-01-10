@@ -5,35 +5,62 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Plus } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import type { LucideIcon } from 'lucide-react';
 
-type BottomNavItem = {
+type SubMenuItem = {
+  href: string;
+  icon: LucideIcon;
+  label: string;
+};
+
+export type BottomNavItem = {
     href: string;
     icon: React.ElementType;
     label: string;
     isCentral?: boolean;
+    subMenu?: SubMenuItem[];
 };
 
 export function BottomNavBar({ items, pathname }: { items: BottomNavItem[], pathname: string }) {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 flex h-20 items-center justify-around border-t bg-card p-2 sm:hidden">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 flex h-16 items-center justify-around border-t bg-card p-2 sm:hidden">
       {items.map((item) => {
         const isActive = pathname === item.href;
         if (item.isCentral) {
           return (
-            <Link
-              href={item.href}
-              key={item.href}
-              prefetch={true}
-              className="-mt-12"
-            >
-               <Button
-                variant="default"
-                className="h-16 w-16 rounded-full shadow-lg border-none"
-              >
-                <item.icon className="h-8 w-8" />
-                <span className="sr-only">{item.label}</span>
-              </Button>
-            </Link>
+            <div key={item.href} className="relative">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="default"
+                    className="h-16 w-16 rounded-full shadow-lg border-2 border-background absolute bottom-4 left-1/2 -translate-x-1/2"
+                  >
+                    <item.icon className="h-8 w-8" />
+                    <span className="sr-only">{item.label}</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  side="top"
+                  align="center"
+                  className="w-56 mb-2"
+                >
+                  {item.subMenu?.map((subItem) => (
+                    <Link href={subItem.href} key={subItem.href} passHref>
+                        <DropdownMenuItem className="gap-2 cursor-pointer">
+                            <subItem.icon className="h-4 w-4" />
+                            <span>{subItem.label}</span>
+                        </DropdownMenuItem>
+                    </Link>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           );
         }
         return (

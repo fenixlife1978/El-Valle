@@ -20,7 +20,7 @@ import dynamic from 'next/dynamic';
 import { usePathname, useRouter } from 'next/navigation';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
 import { useAuth } from '@/hooks/use-auth';
-import { BottomNavBar } from '@/components/bottom-nav-bar';
+import { BottomNavBar, type BottomNavItem } from '@/components/bottom-nav-bar';
 import { Loader2 } from 'lucide-react';
 import { initFCM } from '@/lib/init-fcm';
 
@@ -58,10 +58,21 @@ const adminNavItems: NavItem[] = [
     { href: "/admin/validation", icon: ShieldCheck, label: "Validación" },
 ];
 
-const adminBottomNavItems = [
+const adminBottomNavItems: BottomNavItem[] = [
   { href: '/admin/dashboard', icon: Home, label: 'Inicio' },
   { href: '/admin/payments/verify', icon: Landmark, label: 'Verificar' },
-  { href: '/admin/payments/report', icon: Plus, label: 'Reportar', isCentral: true },
+  { 
+    href: '#', 
+    icon: Plus, 
+    label: 'Más', 
+    isCentral: true,
+    subMenu: [
+        { href: "/admin/payments/report", icon: Plus, label: "Reportar Pago" },
+        { href: "/admin/debts", icon: CircleDollarSign, label: "Deudas" },
+        { href: "/admin/people", icon: Users, label: "Personas" },
+        { href: "/admin/surveys", icon: ClipboardList, label: "Encuestas" },
+    ]
+  },
   { href: '/admin/reports', icon: FileSearch, label: 'Informes' },
   { href: '/admin/settings', icon: Settings, label: 'Ajustes' },
 ];
