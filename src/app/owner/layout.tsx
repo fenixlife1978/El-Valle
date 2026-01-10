@@ -1,11 +1,12 @@
+
 'use client';
 
 import { type ReactNode, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
 import { useAuth } from '@/hooks/use-auth';
-import { BottomNavBar } from '@/components/bottom-nav-bar';
-import { Loader2, Home, Plus, FileSearch, Settings, Banknote, Landmark, ClipboardList } from 'lucide-react';
+import { BottomNavBar, type BottomNavItem } from '@/components/bottom-nav-bar';
+import { Loader2, Home, Plus, FileSearch, Settings, Banknote, Landmark, ClipboardList, Calculator } from 'lucide-react';
 
 const ownerNavItems: NavItem[] = [
   { href: "/owner/dashboard", icon: Home, label: "Inicio" },
@@ -24,17 +25,20 @@ const ownerNavItems: NavItem[] = [
   { href: "/owner/settings", icon: Settings, label: "Configuración" },
 ];
 
-type BottomNavItem = {
-  href: string;
-  icon: React.ComponentType<any>;
-  label: string;
-  isCentral?: boolean;
-};
-
-const bottomNavItems: BottomNavItem[] = [
+const ownerBottomNavItems: BottomNavItem[] = [
   { href: '/owner/dashboard', icon: Home, label: 'Inicio' },
   { href: '/owner/payment-methods', icon: Banknote, label: 'Pagar' },
-  { href: '/owner/payments/report', icon: Plus, label: 'Reportar', isCentral: true },
+  { 
+    href: '#', 
+    icon: Plus, 
+    label: 'Reportar', 
+    isCentral: true,
+    subMenu: [
+        { href: "/owner/payments/report", icon: Plus, label: "Reportar Pago" },
+        { href: "/owner/payments/calculator", icon: Calculator, label: "Calculadora" },
+        { href: "/owner/surveys", icon: ClipboardList, label: "Encuestas" },
+    ]
+  },
   { href: '/owner/reports', icon: FileSearch, label: 'Publicaciones' },
   { href: '/owner/settings', icon: Settings, label: 'Ajustes' },
 ];
@@ -65,7 +69,7 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
   return (
     <DashboardLayout ownerData={ownerData} userRole={role} navItems={ownerNavItems}>
       <div className="pb-20 sm:pb-0">{children}</div>
-      <BottomNavBar items={bottomNavItems} pathname={pathname} />
+      <BottomNavBar items={ownerBottomNavItems} pathname={pathname} />
     </DashboardLayout>
   );
 }

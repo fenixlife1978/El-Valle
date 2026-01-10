@@ -39,9 +39,10 @@ export function BottomNavBar({ items, pathname }: { items: BottomNavItem[], path
                 <DropdownMenuTrigger asChild>
                   <Button
                     variant="default"
-                    className="h-16 w-16 rounded-full shadow-lg border-2 border-background absolute bottom-4 left-1/2 -translate-x-1/2"
+                    size="icon"
+                    className="h-16 w-16 rounded-full shadow-lg border-2 border-background absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center justify-center"
                   >
-                    <item.icon className="h-8 w-8" />
+                    <Plus className="h-8 w-8" />
                     <span className="sr-only">{item.label}</span>
                   </Button>
                 </DropdownMenuTrigger>
@@ -52,7 +53,7 @@ export function BottomNavBar({ items, pathname }: { items: BottomNavItem[], path
                 >
                   {item.subMenu?.map((subItem) => (
                     <Link href={subItem.href} key={subItem.href} passHref>
-                        <DropdownMenuItem className="gap-2 cursor-pointer">
+                       <DropdownMenuItem className="gap-2 cursor-pointer">
                             <subItem.icon className="h-4 w-4" />
                             <span>{subItem.label}</span>
                         </DropdownMenuItem>
