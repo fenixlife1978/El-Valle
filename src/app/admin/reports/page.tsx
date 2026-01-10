@@ -455,12 +455,12 @@ export default function ReportsPage() {
 
              // --- Delinquency Data Calculation ---
             const debtsByOwner = new Map<string, { totalUSD: number, count: number }>();
-            const delinquencyDebtsQuery = query(collection(db, 'debts'), where('role', '!=', 'administrador'));
+            const delinquencyDebtsQuery = query(collection(db, 'debts'));
             const delinquencyDebtsSnapshot = await getDocs(delinquencyDebtsQuery);
 
             delinquencyDebtsSnapshot.docs.forEach(doc => {
                 const debt = doc.data();
-                if (debt.status === 'pending' || debt.status === 'vencida') {
+                if (debt.ownerId && (debt.status === 'pending' || debt.status === 'vencida')) {
                     const ownerData = debtsByOwner.get(debt.ownerId) || { totalUSD: 0, count: 0 };
                     
                     ownerData.count += 1; // Count all pending/vencida debts
@@ -473,7 +473,7 @@ export default function ReportsPage() {
             const delinquentData: DelinquentOwner[] = [];
             debtsByOwner.forEach((debtInfo, ownerId) => {
                 const owner = ownersData.find(o => o.id === ownerId);
-                if (owner && debtInfo.count > 0) { // Only add if they owe at least one month
+                if (owner && debtInfo.count > 0 && owner.role !== 'administrador') { // Only add if they owe and are not an admin
                     delinquentData.push({
                         id: ownerId,
                         name: owner.name,
