@@ -202,26 +202,20 @@ export default function OwnersManagement() {
     
         requestAuthorization(async () => {
             try {
-                // Crear una tarea en la colección 'admin_tasks'
-                await addDoc(collection(db, "admin_tasks"), {
-                    taskType: 'deleteUser',
-                    targetUID: userToDelete.id,
-                    requestedBy: currentUser.uid,
-                    status: "pending",
-                    createdAt: serverTimestamp(),
-                });
+                // Eliminar el documento del propietario directamente de Firestore
+                await deleteDoc(doc(db, "owners", userToDelete.id));
     
                 toast({
-                    title: 'Solicitud de Eliminación Enviada',
-                    description: `La solicitud para eliminar a ${userToDelete.name} ha sido creada. El proceso se completará en segundo plano.`,
+                    title: 'Usuario Eliminado',
+                    description: `El perfil de ${userToDelete.name} ha sido eliminado de la base de datos.`,
                 });
     
             } catch (error) {
-                console.error("Error creating delete task: ", error);
+                console.error("Error deleting owner document: ", error);
                 toast({
                     variant: 'destructive',
-                    title: 'Error al solicitar eliminación',
-                    description: 'No se pudo crear la tarea de eliminación.',
+                    title: 'Error al Eliminar',
+                    description: 'No se pudo eliminar el perfil del usuario.',
                 });
             } finally {
                 setIsDeleteConfirmationOpen(false);
@@ -843,12 +837,12 @@ export default function OwnersManagement() {
                     <DialogHeader>
                         <DialogTitle>¿Está seguro?</DialogTitle>
                         <DialogDescription>
-                            Esta acción es irreversible. Se creará una tarea para eliminar permanentemente al usuario '{userToDelete?.name}' y todos sus datos asociados.
+                            Esta acción es irreversible. Se eliminará permanentemente el perfil de '{userToDelete?.name}' de la base de datos de la aplicación. La cuenta de autenticación no se verá afectada.
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setIsDeleteConfirmationOpen(false)}>Cancelar</Button>
-                        <Button variant="destructive" onClick={handleConfirmDelete}>Sí, solicitar eliminación</Button>
+                        <Button variant="destructive" onClick={handleConfirmDelete}>Sí, eliminar perfil</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
