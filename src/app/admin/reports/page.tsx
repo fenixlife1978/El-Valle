@@ -1,5 +1,4 @@
 
-
 // @ts-nocheck
 
 
@@ -455,15 +454,14 @@ export default function ReportsPage() {
 
              // --- Delinquency Data Calculation ---
             const debtsByOwner = new Map<string, { totalUSD: number, count: number }>();
-            const delinquencyDebtsQuery = query(collection(db, 'debts'));
+            const delinquencyDebtsQuery = query(collection(db, 'debts'), where('status', 'in', ['pending', 'vencida']));
             const delinquencyDebtsSnapshot = await getDocs(delinquencyDebtsQuery);
 
             delinquencyDebtsSnapshot.docs.forEach(doc => {
                 const debt = doc.data();
-                if (debt.ownerId && (debt.status === 'pending' || debt.status === 'vencida')) {
+                if (debt.ownerId) {
                     const ownerData = debtsByOwner.get(debt.ownerId) || { totalUSD: 0, count: 0 };
-                    
-                    ownerData.count += 1; // Count all pending/vencida debts
+                    ownerData.count += 1;
                     ownerData.totalUSD += debt.amountUSD;
                     debtsByOwner.set(debt.ownerId, ownerData);
                 }
