@@ -118,7 +118,7 @@ const formatToTwoDecimals = (num: number | string): string => {
 export default function OwnersManagement() {
     const { toast } = useToast();
     const { requestAuthorization } = useAuthorization();
-    const { user: currentUser } = useAuth();
+    const { user: currentUser, role: currentUserRole } = useAuth();
     const auth = getAuth();
 
     // Estados
@@ -620,7 +620,7 @@ export default function OwnersManagement() {
                                                     </Button>
                                                 </DropdownMenuTrigger>
                                                 <DropdownMenuContent align="end">
-                                                    {(isMainAdmin || !isAdminsTab || (user.id === currentUser?.uid && isAdminsTab)) && (
+                                                    {(currentUserRole === 'administrador') && (
                                                         <DropdownMenuItem onClick={() => handleEditOwner(user)}>
                                                             <Edit className="mr-2 h-4 w-4" />
                                                             Editar
@@ -630,7 +630,7 @@ export default function OwnersManagement() {
                                                         <KeyRound className="mr-2 h-4 w-4" />
                                                         Restablecer Contraseña
                                                     </DropdownMenuItem>
-                                                    {isMainAdmin && user.id !== ADMIN_USER_ID && (
+                                                    {currentUserRole === 'administrador' && user.id !== currentUser?.uid && user.id !== ADMIN_USER_ID && (
                                                         <DropdownMenuItem onClick={() => handleDeleteOwner(user)} className="text-destructive focus:text-destructive focus:bg-destructive/10">
                                                             <Trash2 className="mr-2 h-4 w-4" />
                                                             Eliminar
