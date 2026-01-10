@@ -273,7 +273,8 @@ const buildIntegralReportData = (
             }
         }
         
-        const hasAnyPendingDebt = ownerDebts.some(d => d.status === 'pending' || d.status === 'vencida');
+        const pendingDebts = ownerDebts.filter(d => d.status === 'pending' || d.status === 'vencida');
+        const hasAnyPendingDebt = pendingDebts.length > 0;
 
         const status: 'Solvente' | 'No Solvente' = !hasAnyPendingDebt ? 'Solvente' : 'No Solvente';
         let solvencyPeriod = '';
@@ -318,11 +319,12 @@ const buildIntegralReportData = (
             lastPaymentDate = format(lastPayment.paymentDate.toDate(), 'dd/MM/yyyy');
         }
         
-        const adjustmentDebtUSD = ownerDebts
-            .filter(d => d.status === 'pending' && d.description.toLowerCase().includes('ajuste'))
+        const adjustmentDebtUSD = pendingDebts
+            .filter(d => d.description.toLowerCase().includes('ajuste'))
             .reduce((sum, d) => sum + d.amountUSD, 0);
         
-        let monthsOwed = ownerDebts.filter(d => d.status === 'pending' || d.status === 'vencida').length;
+        const uniquePendingMonths = new Set(pendingDebts.map(d => `${d.year}-${d.month}`));
+        const monthsOwed = uniquePendingMonths.size;
 
         
         return {
@@ -452,16 +454,16 @@ export default function ReportsPage() {
             setAllHistoricalPayments(historicalPaymentsSnapshot.docs.map(d => d.data() as HistoricalPayment));
 
 
-             // --- Delinquency Data Calculation ---
-            const debtsByOwner = new Map<string, { totalUSD: number, count: number }>();
+            // --- Delinquency Data Calculation (Corrected Logic) ---
+            const debtsByOwner = new Map<string, { totalUSD: number, uniqueMonths: Set<string> }>();
             const delinquencyDebtsQuery = query(collection(db, 'debts'), where('status', 'in', ['pending', 'vencida']));
             const delinquencyDebtsSnapshot = await getDocs(delinquencyDebtsQuery);
 
             delinquencyDebtsSnapshot.docs.forEach(doc => {
-                const debt = doc.data();
+                const debt = doc.data() as Debt;
                 if (debt.ownerId) {
-                    const ownerData = debtsByOwner.get(debt.ownerId) || { totalUSD: 0, count: 0 };
-                    ownerData.count += 1;
+                    const ownerData = debtsByOwner.get(debt.ownerId) || { totalUSD: 0, uniqueMonths: new Set() };
+                    ownerData.uniqueMonths.add(`${debt.year}-${debt.month}`);
                     ownerData.totalUSD += debt.amountUSD;
                     debtsByOwner.set(debt.ownerId, ownerData);
                 }
@@ -471,13 +473,13 @@ export default function ReportsPage() {
             const delinquentData: DelinquentOwner[] = [];
             debtsByOwner.forEach((debtInfo, ownerId) => {
                 const owner = ownersData.find(o => o.id === ownerId);
-                if (owner && debtInfo.count > 0 && owner.role !== 'administrador') { // Only add if they owe and are not an admin
+                if (owner && debtInfo.uniqueMonths.size > 0 && owner.role !== 'administrador') { 
                     delinquentData.push({
                         id: ownerId,
                         name: owner.name,
                         properties: (owner.properties || []).map((p: any) => `${p.street} - ${p.house}`).join(', '),
                         debtAmountUSD: debtInfo.totalUSD,
-                        monthsOwed: debtInfo.count,
+                        monthsOwed: debtInfo.uniqueMonths.size,
                     });
                 }
             });
