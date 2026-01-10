@@ -164,10 +164,7 @@ export default function SettingsPage() {
                         <CardHeader><CardTitle>Información</CardTitle></CardHeader>
                         <CardContent className="space-y-4">
                             <div className="flex items-center gap-4">
-                                <Avatar className="w-20 h-20">
-                                    <AvatarImage src={settings.companyInfo.logo} />
-                                    <AvatarFallback><Building2 /></AvatarFallback>
-                                </Avatar>
+                                {settings.companyInfo.logo && <img src={settings.companyInfo.logo} alt="Logo" className="w-20 h-20 object-contain"/>}
                                 <Input id="logo" type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
                                 <Button variant="outline" onClick={() => document.getElementById('logo')?.click()}>
                                     <Upload className="mr-2 h-4 w-4"/>Subir Logo (PNG/JPG)

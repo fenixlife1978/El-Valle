@@ -42,13 +42,11 @@ export default function WelcomePage() {
         {loading ? (
           <Skeleton className="w-32 h-32 rounded-full mx-auto mb-6" />
         ) : (
-          <div className="w-32 h-32 flex items-center justify-center overflow-hidden mx-auto mb-6 rounded-full bg-white">
-            {logoUrl ? (
-              <img src={logoUrl} alt="Logo Empresa" className="w-full h-full object-contain" />
-            ) : (
-              <div className="w-full h-full rounded-full bg-muted" />
-            )}
-          </div>
+          logoUrl ? (
+            <img src={logoUrl} alt="Logo Empresa" className="w-32 h-32 object-contain mx-auto mb-6" />
+          ) : (
+            <div className="w-32 h-32 rounded-full bg-muted mx-auto mb-6" />
+          )
         )}
         <h1 className="text-4xl font-bold font-headline text-primary">Bienvenid@ a VALLECONDO</h1>
         <p className="text-lg text-muted-foreground mt-2">Seleccione su rol para continuar</p>
