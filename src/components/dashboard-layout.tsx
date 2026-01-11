@@ -135,9 +135,12 @@ const CustomHeader = ({ ownerData, userRole }: { ownerData: any, userRole: strin
                 </div>
             </div>
 
+            <div className="hidden sm:flex items-center justify-center flex-1">
+                <SidebarTrigger />
+            </div>
+
             <div className="flex items-center gap-2 flex-1 justify-end">
-                 <div className="hidden sm:flex items-center gap-2">
-                    <SidebarTrigger />
+                 <div className="flex items-center gap-2">
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                         <Button variant="ghost" className="relative h-10 w-10 rounded-full hover:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0">
