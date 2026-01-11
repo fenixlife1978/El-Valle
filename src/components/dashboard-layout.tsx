@@ -135,34 +135,33 @@ const CustomHeader = ({ ownerData, userRole }: { ownerData: any, userRole: strin
                 </div>
             </div>
 
-            <div className="hidden sm:flex justify-center flex-shrink-0">
-                <SidebarTrigger />
-            </div>
-
             <div className="flex items-center gap-2 flex-1 justify-end">
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="relative h-10 w-10 rounded-full hover:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0">
-                        <Avatar className="h-10 w-10">
-                        <AvatarImage src={avatarSrc || ''} alt={userName} />
-                        <AvatarFallback>{userName.charAt(0)}</AvatarFallback>
-                        </Avatar>
-                    </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                    <DropdownMenuLabel>
-                        <div className="flex flex-col space-y-1">
-                        <p className="text-sm font-medium leading-none font-headline">{userName}</p>
-                        <p className="text-xs leading-none text-muted-foreground">{userRole}</p>
-                        </div>
-                    </DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={handleLogout}>
-                        <LogOut className="mr-2 h-4 w-4" />
-                        <span>Cerrar Sesión</span>
-                    </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                 <div className="hidden sm:flex items-center gap-2">
+                    <SidebarTrigger />
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" className="relative h-10 w-10 rounded-full hover:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0">
+                            <Avatar className="h-10 w-10">
+                            <AvatarImage src={avatarSrc || ''} alt={userName} />
+                            <AvatarFallback>{userName.charAt(0)}</AvatarFallback>
+                            </Avatar>
+                        </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                        <DropdownMenuLabel>
+                            <div className="flex flex-col space-y-1">
+                            <p className="text-sm font-medium leading-none font-headline">{userName}</p>
+                            <p className="text-xs leading-none text-muted-foreground">{userRole}</p>
+                            </div>
+                        </DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={handleLogout}>
+                            <LogOut className="mr-2 h-4 w-4" />
+                            <span>Cerrar Sesión</span>
+                        </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
             </div>
         </header>
     );
@@ -258,7 +257,7 @@ function DashboardLayoutContent({
             )}
           </SidebarMenu>
         </SidebarContent>
-        {/* The desktop sidebar trigger has been moved to the header */}
+        
       </Sidebar>
       <SidebarInset>
         <CustomHeader ownerData={ownerData} userRole={userRole} />
