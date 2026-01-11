@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -271,15 +272,15 @@ const SidebarTrigger = React.forwardRef<
       ref={ref}
       data-sidebar="trigger"
       variant="ghost"
-      className={cn("h-10 px-3", className)}
+      className={cn("h-10 w-auto px-3 justify-center items-center gap-2", className)}
       onClick={(event) => {
         onClick?.(event)
         toggleSidebar()
       }}
       {...props}
     >
-      <span>Menu</span>
-      <PanelLeftClose className="h-5 w-5" />
+      <span className="text-base">Menu</span>
+      <PanelLeftClose className="h-6 w-6" />
       <span className="sr-only">Toggle Sidebar</span>
     </Button>
   )

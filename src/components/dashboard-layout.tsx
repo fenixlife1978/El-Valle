@@ -128,6 +128,7 @@ const CustomHeader = ({ ownerData, userRole }: { ownerData: any, userRole: strin
     return (
         <header className="sticky top-0 z-10 flex h-20 items-center justify-between gap-2 border-b bg-background/80 px-4 backdrop-blur-sm sm:px-6">
              <div className="flex items-center gap-2 sm:gap-4 flex-1">
+                 <SidebarTrigger className="sm:hidden" />
                 <div className="flex flex-col">
                     <h1 className="text-lg font-semibold text-foreground">Hola, {userName}</h1>
                     <p className="text-sm text-muted-foreground">Bienvenido a tu panel</p>
@@ -135,9 +136,6 @@ const CustomHeader = ({ ownerData, userRole }: { ownerData: any, userRole: strin
             </div>
 
             <div className="flex items-center gap-2 flex-1 justify-end">
-                <SidebarTrigger className="h-9 w-9 sm:flex">
-                    <PanelLeftClose />
-                 </SidebarTrigger>
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                     <Button variant="ghost" className="relative h-10 w-10 rounded-full hover:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0">
@@ -199,11 +197,11 @@ function DashboardLayoutContent({
   
   return (
     <>
-      <Sidebar className="hidden sm:block">
+      <Sidebar className="hidden sm:flex">
         <SidebarHeader>
-          <div className="flex items-center gap-2 p-2">
+          <div className="flex items-center gap-2 p-2 justify-center">
             {companyInfo?.logo ? <img src={companyInfo.logo} alt="Logo" className="w-8 h-8 object-contain" /> : <Building2 className="w-5 h-5 text-primary" />}
-            <span className="font-semibold text-lg font-headline truncate">{companyInfo?.name || 'Cargando...'}</span>
+            <span className="font-semibold text-lg font-headline truncate group-data-[state=collapsed]:hidden">{companyInfo?.name || 'Cargando...'}</span>
           </div>
         </SidebarHeader>
         <SidebarContent>
@@ -220,9 +218,9 @@ function DashboardLayoutContent({
                           >
                             <div className='flex gap-2 items-center'>
                               <item.icon />
-                              <span>{item.label}</span>
+                              <span className="group-data-[state=collapsed]:hidden">{item.label}</span>
                             </div>
-                            <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200 group-data-[state=open]:-rotate-180" />
+                            <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200 group-data-[state=open]:-rotate-180 group-data-[state=collapsed]:hidden" />
                           </SidebarMenuButton>
                       </CollapsibleTrigger>
                     </SidebarMenuItem>
@@ -248,7 +246,7 @@ function DashboardLayoutContent({
                         tooltip={{ children: item.label }}
                       >
                           <item.icon />
-                          <span>{item.label}</span>
+                          <span className="group-data-[state=collapsed]:hidden">{item.label}</span>
                       </SidebarMenuButton>
                     </Link>
                   </SidebarMenuItem>
@@ -256,7 +254,8 @@ function DashboardLayoutContent({
             )}
           </SidebarMenu>
         </SidebarContent>
-        <SidebarFooter>
+        <SidebarFooter className="hidden sm:flex">
+             <SidebarTrigger />
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>
