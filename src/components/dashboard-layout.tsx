@@ -135,6 +135,10 @@ const CustomHeader = ({ ownerData, userRole }: { ownerData: any, userRole: strin
                 </div>
             </div>
 
+            <div className="hidden sm:flex justify-center flex-shrink-0">
+                <SidebarTrigger />
+            </div>
+
             <div className="flex items-center gap-2 flex-1 justify-end">
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -254,9 +258,7 @@ function DashboardLayoutContent({
             )}
           </SidebarMenu>
         </SidebarContent>
-        <SidebarFooter className="hidden sm:flex">
-             <SidebarTrigger />
-        </SidebarFooter>
+        {/* The desktop sidebar trigger has been moved to the header */}
       </Sidebar>
       <SidebarInset>
         <CustomHeader ownerData={ownerData} userRole={userRole} />
