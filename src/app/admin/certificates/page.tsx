@@ -77,7 +77,7 @@ const templates: Template[] = [
     name: 'Constancia de Residencia',
     title: 'CONSTANCIA DE RESIDENCIA',
     generateBody: (person, property) =>
-      `Por medio de la presente, la Junta de Condominio del Conjunto Residencial El Valle, hace constar que el(la) ciudadano(a) ${person.name}, titular de la Cédula de Identidad N° ${person.cedula || '[Cédula no registrada]'}, reside en este conjunto residencial, en la propiedad identificada como ${property.street}, Casa N° ${property.house}.\n\nConstancia que se expide a petición de la parte interesada en la ciudad de Independencia, Estado Yaracuy, a los ${format(new Date(), 'dd')} días del mes de ${format(new Date(), 'MMMM', { locale: es })} de ${format(new Date(), 'yyyy')}.`
+      `Quien suscribe, en mis funciones de Presidente de la ASOCIACIÓN CIVIL RESIDENCIAL EL VALLE, en el Municipio Independencia, Estado Yaracuy, ubicado al final Av. Libertador, sector Cuatro Esquina por medio de la presente hace constar que la Ciudadana:\n\n${person.name}, portador(a) de la cedula de identidad Nº ${person.cedula || '[Cédula no registrada]'}, quien reside en el inmueble identificado con; Calle ${property.street}, Casa Nº ${property.house}, la cual ha demostrado una conducta de sana convivencia y respeto, apegado a las normas y leyes de nuestra sociedad.\n\nConstancia que se expide en la Ciudad de San Felipe, Municipio Independencia, del Estado Yaracuy a los ${format(new Date(), 'dd')} días del mes de ${format(new Date(), 'MMMM', { locale: es })} del año ${format(new Date(), 'yyyy')}.`
   },
   {
     id: 'solvencia',
