@@ -903,18 +903,64 @@ export default function VerifyPaymentsPage() {
 
         {/* Receipt Preview Dialog */}
         <Dialog open={isReceiptPreviewOpen} onOpenChange={setIsReceiptPreviewOpen}>
-            <DialogContent className="sm:max-w-3xl">
+            <DialogContent className="sm:max-w-2xl">
                 <DialogHeader>
                     <DialogTitle>Vista Previa del Recibo: {receiptData?.receiptNumber}</DialogTitle>
                     <DialogDescription>
                         Recibo de pago para {receiptData?.ownerName} ({receiptData?.ownerUnit}).
                     </DialogDescription>
                 </DialogHeader>
-                {receiptData && (
-                    <div className="space-y-4 max-h-[60vh] overflow-y-auto p-1">
-                        <div className="p-4 border rounded-lg bg-background">
-                            {/* PDF Content Here */}
+                {receiptData ? (
+                    <div className="space-y-4 max-h-[60vh] overflow-y-auto p-4 border rounded-lg">
+                        <div className="flex justify-between items-start">
+                            {companyInfo?.logo && <img src={companyInfo.logo} alt="Logo" className="w-20 h-20 object-contain rounded-md" />}
+                            <div className="text-right">
+                                <h3 className="font-bold text-lg">{companyInfo?.name}</h3>
+                                <p className="text-xs">{companyInfo?.rif}</p>
+                                <p className="text-xs">{companyInfo?.address}</p>
+                            </div>
                         </div>
+                        <Separator />
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div>
+                                <p><strong>Beneficiario:</strong> {receiptData.ownerName}</p>
+                                <p><strong>Propiedad:</strong> {receiptData.ownerUnit}</p>
+                            </div>
+                            <div className="text-right">
+                                <p><strong>Recibo N°:</strong> {receiptData.receiptNumber}</p>
+                                <p><strong>Fecha Emisión:</strong> {format(new Date(), 'dd/MM/yyyy')}</p>
+                            </div>
+                        </div>
+                        <div className="text-sm bg-muted/50 p-3 rounded-md">
+                            <p><strong>Fecha del Pago:</strong> {format(receiptData.payment.paymentDate.toDate(), 'dd/MM/yyyy')}</p>
+                            <p><strong>Monto Pagado:</strong> Bs. {formatToTwoDecimals(receiptData.beneficiary.amount)}</p>
+                            <p><strong>Referencia:</strong> {receiptData.payment.reference}</p>
+                        </div>
+                        <div>
+                            <h4 className="font-semibold mb-2">Conceptos Pagados</h4>
+                            {receiptData.paidDebts.length > 0 ? (
+                                <Table>
+                                    <TableHeader><TableRow><TableHead>Período</TableHead><TableHead>Descripción</TableHead><TableHead className="text-right">Monto (Bs)</TableHead></TableRow></TableHeader>
+                                    <TableBody>
+                                        {receiptData.paidDebts.map(debt => (
+                                            <TableRow key={debt.id}>
+                                                <TableCell>{monthsLocale[debt.month]} {debt.year}</TableCell>
+                                                <TableCell>{debt.description}</TableCell>
+                                                <TableCell className="text-right">{formatToTwoDecimals((debt.paidAmountUSD || debt.amountUSD) * receiptData.payment.exchangeRate)}</TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            ) : (<p className="text-xs italic text-muted-foreground">El pago fue abonado al saldo a favor.</p>)}
+                        </div>
+                        <div className="text-right text-sm space-y-1 p-3 bg-muted/50 rounded-md">
+                            <p>Saldo Anterior: Bs. {formatToTwoDecimals(receiptData.previousBalance)}</p>
+                            <p><strong>Saldo Actual: Bs. {formatToTwoDecimals(receiptData.currentBalance)}</strong></p>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="flex justify-center items-center h-40">
+                        <Loader2 className="h-8 w-8 animate-spin" />
                     </div>
                 )}
                 <DialogFooter className="sm:justify-end gap-2">

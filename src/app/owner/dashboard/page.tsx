@@ -584,7 +584,7 @@ export default function OwnerDashboardPage() {
                     </Table>
                 </CardContent>
                    <CardFooter>
-                    <Link href="/owner/payments" passHref>
+                    <Link href="/owner/payments/report" passHref>
                         <Button variant="link" className="px-0">Ver historial completo y reportar pago →</Button>
                     </Link>
                 </CardFooter>
@@ -624,8 +624,8 @@ export default function OwnerDashboardPage() {
 
             {/* --- Modal de Recibo --- */}
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent className="sm:max-w-lg">
-                    {receiptData && companyInfo ? (
+                 <DialogContent className="sm:max-w-2xl">
+                    {receiptData ? (
                         <>
                             <DialogHeader>
                                 <DialogTitle className="flex items-center gap-2">
@@ -635,26 +635,52 @@ export default function OwnerDashboardPage() {
                                     Emitido el {format(new Date(), 'dd MMMM, yyyy', {locale: es})}
                                 </DialogDescription>
                             </DialogHeader>
-                            <div className="max-h-[60vh] overflow-y-auto p-4 space-y-4 border rounded-md">
-                                <p><strong>Propietario:</strong> {receiptData.ownerName}</p>
-                                <p><strong>Propiedad:</strong> {receiptData.ownerUnit}</p>
-                                <p><strong>Fecha del Pago:</strong> {format(receiptData.payment.paymentDate.toDate(), 'dd/MM/yyyy')}</p>
-                                <p><strong>Monto Pagado:</strong> Bs. {formatToTwoDecimals(receiptData.beneficiary.amount)}</p>
-                                <h4 className="font-bold pt-2 border-t">Detalles Cubiertos</h4>
-                                {receiptData.paidDebts.length > 0 ? (
-                                    <ul className="list-disc pl-5 text-sm">
-                                        {receiptData.paidDebts.map((d, index) => <li key={`${d.id}-${index}`}>{d.description} ({monthsLocale[d.month]} {d.year})</li>)}
-                                    </ul>
-                                ) : (
-                                    <p className="text-sm italic">El pago fue abonado a su saldo a favor.</p>
-                                )}
+                            <div className="space-y-4 max-h-[60vh] overflow-y-auto p-4 border rounded-lg">
+                                <div className="flex justify-between items-start">
+                                    {companyInfo?.logo && <img src={companyInfo.logo} alt="Logo" className="w-20 h-20 object-contain rounded-md" />}
+                                    <div className="text-right">
+                                        <h3 className="font-bold text-lg">{companyInfo?.name}</h3>
+                                        <p className="text-xs">{companyInfo?.rif}</p>
+                                        <p className="text-xs">{companyInfo?.address}</p>
+                                    </div>
+                                </div>
                                 <Separator />
-                                <div className="text-right text-sm space-y-1">
+                                <div className="grid grid-cols-2 gap-4 text-sm">
+                                    <div>
+                                        <p><strong>Beneficiario:</strong> {receiptData.ownerName}</p>
+                                        <p><strong>Propiedad:</strong> {receiptData.ownerUnit}</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p><strong>Fecha del Pago:</strong> {format(receiptData.payment.paymentDate.toDate(), 'dd/MM/yyyy')}</p>
+                                        <p><strong>Referencia:</strong> {receiptData.payment.reference}</p>
+                                    </div>
+                                </div>
+                                <div className="text-sm bg-muted/50 p-3 rounded-md">
+                                    <p><strong>Monto Pagado:</strong> Bs. {formatToTwoDecimals(receiptData.beneficiary.amount)}</p>
+                                </div>
+                                <div>
+                                    <h4 className="font-semibold mb-2">Conceptos Pagados</h4>
+                                    {receiptData.paidDebts.length > 0 ? (
+                                        <Table>
+                                            <TableHeader><TableRow><TableHead>Período</TableHead><TableHead>Descripción</TableHead><TableHead className="text-right">Monto (Bs)</TableHead></TableRow></TableHeader>
+                                            <TableBody>
+                                                {receiptData.paidDebts.map(debt => (
+                                                    <TableRow key={debt.id}>
+                                                        <TableCell>{monthsLocale[debt.month]} {debt.year}</TableCell>
+                                                        <TableCell>{debt.description}</TableCell>
+                                                        <TableCell className="text-right">{formatToTwoDecimals((debt.paidAmountUSD || debt.amountUSD) * receiptData.payment.exchangeRate)}</TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    ) : (<p className="text-xs italic text-muted-foreground">El pago fue abonado al saldo a favor.</p>)}
+                                </div>
+                                <div className="text-right text-sm space-y-1 p-3 bg-muted/50 rounded-md">
                                     <p>Saldo Anterior: Bs. {formatToTwoDecimals(receiptData.previousBalance)}</p>
                                     <p className="font-bold">Saldo a Favor Actual: Bs. {formatToTwoDecimals(receiptData.currentBalance)}</p>
                                 </div>
                             </div>
-                              <DialogFooter className="flex-col sm:flex-row gap-2 pt-4">
+                            <DialogFooter className="flex-col sm:flex-row gap-2 pt-4">
                                 <Button className="w-full sm:w-auto" onClick={() => handleGenerateAndAct('download', receiptData)} disabled={isGenerating}>
                                     {isGenerating ? <Loader2 className="h-4 w-4 animate-spin mr-2"/> : <Download className="h-4 w-4 mr-2"/>}
                                     Descargar PDF
