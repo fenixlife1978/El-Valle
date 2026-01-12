@@ -83,7 +83,7 @@ export default function SettingsPage() {
     const { toast } = useToast();
     const { requestAuthorization } = useAuthorization();
     const [loading, setLoading] = useState(true);
-    const [saving, setSaving] = useState(false);
+    const [saving, setSaving] = useState<Record<string, boolean>>({});
     const [settings, setSettings] = useState<Settings>(defaultSettings);
     const [newRate, setNewRate] = useState({ date: format(new Date(), 'yyyy-MM-dd'), rate: '' });
     const [newAuthKey, setNewAuthKey] = useState('');
@@ -103,23 +103,38 @@ export default function SettingsPage() {
         fetchSettings();
     }, [toast]);
 
-    const handleSave = async (dataToSave: Partial<Settings>) => {
-        setSaving(true);
+    const handleSave = async (section: string, dataToSave: Partial<Settings>) => {
+        setSaving(prev => ({ ...prev, [section]: true }));
         try {
             await updateDoc(doc(db, 'config', 'mainSettings'), dataToSave);
             toast({ title: "Guardado correctamente" });
         } catch (error) {
             toast({ variant: "destructive", title: "Error al guardar" });
-        } finally { setSaving(false); }
+        } finally { 
+            setSaving(prev => ({ ...prev, [section]: false }));
+        }
+    };
+    
+    const handleSaveSecurity = async (key: string) => {
+        requestAuthorization(async () => {
+             setSaving(prev => ({ ...prev, security: true }));
+             try {
+                await updateDoc(doc(db, 'config', 'authorization'), { key });
+                toast({ title: "Clave de autorización actualizada" });
+                setNewAuthKey('');
+             } catch (error) {
+                toast({ variant: "destructive", title: "Error al guardar la clave" });
+             } finally {
+                setSaving(prev => ({ ...prev, security: false }));
+             }
+        });
     };
 
-    // --- NUEVO MANEJADOR CON COMPRESIÓN ---
     const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
             try {
-                setSaving(true);
-                // Comprimimos a 180x180 automáticamente
+                setSaving(prev => ({...prev, company: true }));
                 const compressedBase64 = await compressImage(file, 180, 180);
                 setSettings(prev => ({
                     ...prev, 
@@ -129,7 +144,7 @@ export default function SettingsPage() {
             } catch (error) {
                 toast({ variant: "destructive", title: "Error al procesar imagen" });
             } finally {
-                setSaving(false);
+                setSaving(prev => ({...prev, company: false }));
             }
         }
     };
@@ -142,8 +157,9 @@ export default function SettingsPage() {
         const newRateEntry = { id: `${newRate.date}-${Date.now()}`, date: newRate.date, rate: rateValue, active: true };
         updatedRates.push(newRateEntry);
         updatedRates.sort((a, b) => b.date.localeCompare(a.date));
-        handleSave({ exchangeRates: updatedRates });
+        handleSave('rates', { exchangeRates: updatedRates });
         setSettings(prev => ({...prev, exchangeRates: updatedRates}));
+        setNewRate({ date: format(new Date(), 'yyyy-MM-dd'), rate: '' });
     };
 
     if (loading) return <div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin" /></div>;
@@ -194,27 +210,42 @@ export default function SettingsPage() {
                             </div>
                         </CardContent>
                         <CardFooter>
-                            <Button onClick={() => handleSave({ companyInfo: settings.companyInfo })} disabled={saving}>Guardar</Button>
+                            <Button onClick={() => handleSave('company', { companyInfo: settings.companyInfo })} disabled={saving['company']}>
+                                {saving['company'] ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4"/>}
+                                Guardar Información
+                            </Button>
                         </CardFooter>
                     </Card>
                 </TabsContent>
 
                 <TabsContent value="rates">
                     <Card>
-                        <CardHeader><CardTitle>Tasas</CardTitle></CardHeader>
+                        <CardHeader>
+                            <CardTitle>Historial y Gestión de Tasas de Cambio</CardTitle>
+                            <CardDescription>Agregue la tasa de cambio del BCV para el día. La más reciente se usará como activa.</CardDescription>
+                        </CardHeader>
                         <CardContent>
-                            <div className="flex gap-4 mb-4">
-                                <Input type="date" value={newRate.date} onChange={e => setNewRate({...newRate, date: e.target.value})} />
-                                <Input type="number" placeholder="Tasa Bs" value={newRate.rate} onChange={e => setNewRate({...newRate, rate: e.target.value})} />
-                                <Button onClick={handleAddRate}><PlusCircle /></Button>
+                            <div className="flex gap-4 mb-4 items-end">
+                                <div className="space-y-2 flex-1">
+                                    <Label htmlFor="newRateDate">Fecha</Label>
+                                    <Input id="newRateDate" type="date" value={newRate.date} onChange={e => setNewRate({...newRate, date: e.target.value})} />
+                                </div>
+                                <div className="space-y-2 flex-1">
+                                    <Label htmlFor="newRateValue">Tasa (Bs.)</Label>
+                                    <Input id="newRateValue" type="number" placeholder="Ej: 36.33" value={newRate.rate} onChange={e => setNewRate({...newRate, rate: e.target.value})} />
+                                </div>
+                                <Button onClick={handleAddRate} disabled={saving['rates']}>
+                                    {saving['rates'] ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlusCircle className="h-4 w-4" />}
+                                    <span className="ml-2 hidden sm:inline">Agregar Tasa</span>
+                                </Button>
                             </div>
                             <Table>
                                 <TableHeader><TableRow><TableHead>Fecha</TableHead><TableHead>Tasa</TableHead><TableHead>Estado</TableHead></TableRow></TableHeader>
                                 <TableBody>
                                     {settings.exchangeRates.map((r: any) => (
                                         <TableRow key={r.id}>
-                                            <TableCell>{r.date}</TableCell>
-                                            <TableCell>{r.rate}</TableCell>
+                                            <TableCell>{format(parseISO(r.date), 'PPP', { locale: es })}</TableCell>
+                                            <TableCell>Bs. {r.rate}</TableCell>
                                             <TableCell>{r.active ? <Badge>Activa</Badge> : <Badge variant="outline">Histórica</Badge>}</TableCell>
                                         </TableRow>
                                     ))}
@@ -223,6 +254,92 @@ export default function SettingsPage() {
                         </CardContent>
                     </Card>
                 </TabsContent>
+                
+                <TabsContent value="fees">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Cuotas y Acceso</CardTitle>
+                            <CardDescription>Gestione los montos de cuotas y el acceso de los propietarios a la plataforma.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                            <div className="space-y-2">
+                                <Label htmlFor="condoFee">Cuota Condominial Mensual (USD)</Label>
+                                <div className="flex gap-2 items-center">
+                                    <DollarSign className="h-5 w-5 text-muted-foreground"/>
+                                    <Input
+                                        id="condoFee"
+                                        type="number"
+                                        className="max-w-xs"
+                                        value={settings.condoFee || ''}
+                                        onChange={e => setSettings({...settings, condoFee: parseFloat(e.target.value) || 0})}
+                                        placeholder="Ej: 25.00"
+                                    />
+                                </div>
+                            </div>
+                             <div className="space-y-4 rounded-lg border p-4">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <Label htmlFor="ownerLoginEnabled" className="text-base">Acceso de Propietarios</Label>
+                                        <p className="text-sm text-muted-foreground">Habilita o deshabilita el inicio de sesión para los propietarios.</p>
+                                    </div>
+                                    <Switch
+                                        id="ownerLoginEnabled"
+                                        checked={settings.loginSettings?.ownerLoginEnabled}
+                                        onCheckedChange={checked => setSettings({...settings, loginSettings: {...settings.loginSettings, ownerLoginEnabled: checked}})}
+                                    />
+                                </div>
+                                {!settings.loginSettings?.ownerLoginEnabled && (
+                                    <div className="space-y-2">
+                                        <Label htmlFor="disabledMessage">Mensaje de Deshabilitación</Label>
+                                        <Textarea
+                                            id="disabledMessage"
+                                            value={settings.loginSettings?.disabledMessage}
+                                            onChange={e => setSettings({...settings, loginSettings: {...settings.loginSettings, disabledMessage: e.target.value}})}
+                                            placeholder="Ej: El sistema está en mantenimiento. Intente más tarde."
+                                        />
+                                    </div>
+                                )}
+                            </div>
+                        </CardContent>
+                        <CardFooter>
+                             <Button onClick={() => handleSave('fees', { condoFee: settings.condoFee, loginSettings: settings.loginSettings })} disabled={saving['fees']}>
+                                {saving['fees'] ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4"/>}
+                                Guardar Ajustes de Acceso
+                            </Button>
+                        </CardFooter>
+                    </Card>
+                </TabsContent>
+                
+                <TabsContent value="security">
+                     <Card>
+                        <CardHeader>
+                            <CardTitle>Seguridad</CardTitle>
+                            <CardDescription>Gestione la clave de autorización para acciones críticas.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="authKey">Nueva Clave de Autorización</Label>
+                                <Input
+                                    id="authKey"
+                                    type="password"
+                                    value={newAuthKey}
+                                    onChange={e => setNewAuthKey(e.target.value)}
+                                    placeholder="Ingrese una nueva clave segura"
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    Esta clave se solicitará para realizar operaciones delicadas como eliminar datos o cambiar configuraciones importantes.
+                                </p>
+                            </div>
+                        </CardContent>
+                        <CardFooter>
+                             <Button onClick={() => handleSaveSecurity(newAuthKey)} disabled={!newAuthKey || saving['security']}>
+                                {saving['security'] ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <KeyRound className="mr-2 h-4 w-4"/>}
+                                Cambiar Clave
+                            </Button>
+                        </CardFooter>
+                    </Card>
+                </TabsContent>
+                
             </Tabs>
         </div>
     );
