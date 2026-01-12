@@ -1,6 +1,7 @@
 
 'use client';
 
+import { Separator } from "@/components/ui/separator";
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
@@ -964,11 +965,11 @@ export default function VerifyPaymentsPage() {
                     </div>
                 )}
                 <DialogFooter className="sm:justify-end gap-2">
-                    <Button variant="outline" onClick={() => handleGenerateAndAct('download', receiptData!)}>
+                    <Button variant="outline" onClick={() => generateAndAct('download', receiptData!)}>
                         <Download className="mr-2 h-4 w-4" /> Exportar PDF
                     </Button>
-                    <Button onClick={() => handleGenerateAndAct('share', receiptData!)}>
-                           <Share2 className="mr-2 h-4 w-4" /> Compartir
+                    <Button onClick={() => generateAndAct('share', receiptData!)}>
+                    <Share2 className="mr-2 h-4 w-4" /> Compartir
                     </Button>
                 </DialogFooter>
             </DialogContent>
