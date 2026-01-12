@@ -113,6 +113,17 @@ const formatToTwoDecimals = (num: number | string): string => {
     return isNaN(value) ? '0.00' : value.toFixed(2);
 }
 
+// --- Lógica de Ordenamiento ---
+const getSortKeys = (owner: Owner) => {
+    if (!owner.properties || owner.properties.length === 0) {
+        return { streetNum: 999, houseNum: 999 }; // Sin propiedad, al final
+    }
+    const prop = owner.properties[0];
+    const streetNum = parseInt(String(prop.street || '').replace(/\D/g, '') || '999');
+    const houseNum = parseInt(String(prop.house || '').replace(/\D/g, '') || '999');
+    return { streetNum, houseNum };
+};
+
 // --- COMPONENTE PRINCIPAL ---
 
 export default function OwnersManagement() {
@@ -162,7 +173,20 @@ export default function OwnersManagement() {
         const q = query(collection(db, 'owners'));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner));
-            setOwners(allUsers.filter(u => u.role === 'propietario'));
+            
+            const propietarios = allUsers.filter(u => u.role === 'propietario');
+            
+            // Aplicar el ordenamiento personalizado
+            propietarios.sort((a, b) => {
+                const aKeys = getSortKeys(a);
+                const bKeys = getSortKeys(b);
+                if (aKeys.streetNum !== bKeys.streetNum) {
+                    return aKeys.streetNum - bKeys.streetNum;
+                }
+                return aKeys.houseNum - bKeys.houseNum;
+            });
+
+            setOwners(propietarios);
             setAdmins(allUsers.filter(u => u.role === 'administrador'));
             setLoading(false);
         }, (error) => {
@@ -849,4 +873,3 @@ export default function OwnersManagement() {
         </div>
     );
 }
-
