@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -77,7 +78,7 @@ const templates: Template[] = [
     name: 'Constancia de Residencia',
     title: 'CONSTANCIA DE RESIDENCIA',
     generateBody: (person, property) =>
-      `Quien suscribe, en mis funciones de Presidente de la ASOCIACIÓN CIVIL RESIDENCIAL EL VALLE, en el Municipio Independencia, Estado Yaracuy, ubicado al final Av. Libertador, sector Cuatro Esquina por medio de la presente hace constar que la Ciudadana:\n\n${person.name}, portador(a) de la cedula de identidad Nº ${person.cedula || '[Cédula no registrada]'}, quien reside en el inmueble identificado con; Calle ${property.street}, Casa Nº ${property.house}, la cual ha demostrado una conducta de sana convivencia y respeto, apegado a las normas y leyes de nuestra sociedad.\n\nConstancia que se expide en la Ciudad de San Felipe, Municipio Independencia, del Estado Yaracuy a los ${format(new Date(), 'dd')} días del mes de ${format(new Date(), 'MMMM', { locale: es })} del año ${format(new Date(), 'yyyy')}.`
+      `Quien suscribe, en mis funciones de Presidente de la ASOCIACIÓN CIVIL RESIDENCIAL EL VALLE, en el Municipio Independencia, Estado Yaracuy, ubicado al final Av. Libertador, sector Cuatro Esquina por medio de la presente hace constar que el(la) Ciudadano(a):\n\n${person.name}, portador(a) de la cedula de identidad Nº ${person.cedula || '[Cédula no registrada]'}, reside en el inmueble identificado con; Calle ${property.street}, Casa ${property.house}, la cual ha demostrado una conducta de sana convivencia y respeto, apegado a las normas y leyes de nuestra sociedad.\n\nConstancia que se expide en la Ciudad de San Felipe, Municipio Independencia, del Estado Yaracuy a los ${format(new Date(), 'dd')} días del mes de ${format(new Date(), 'MMMM', { locale: es })} del año ${format(new Date(), 'yyyy')}.`
   },
   {
     id: 'solvencia',
@@ -113,6 +114,7 @@ export default function CertificatesPage() {
   const [entryMode, setEntryMode] = useState<'search' | 'manual'>('search');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedOwner, setSelectedOwner] = useState<Owner | null>(null);
+  const [manualCedulaForOwner, setManualCedulaForOwner] = useState('');
   const [selectedProperty, setSelectedProperty] = useState<{ street: string; house: string } | null>(null);
   const [manualData, setManualData] = useState<ManualPerson>({ name: '', cedula: '', street: '', house: '', estadoCivil: '', profesion: '' });
   const [selectedTemplateId, setSelectedTemplateId] = useState<Template['id'] | ''>('');
@@ -121,6 +123,7 @@ export default function CertificatesPage() {
   const [historySearchTerm, setHistorySearchTerm] = useState('');
   const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
   const [certificateToDelete, setCertificateToDelete] = useState<Certificate | null>(null);
+
   useEffect(() => {
     const ownersQuery = query(collection(db, 'owners'));
     const ownersUnsubscribe = onSnapshot(ownersQuery, (snapshot) => {
@@ -150,26 +153,28 @@ export default function CertificatesPage() {
   }, []);
 
   useEffect(() => {
-    let person: Partial<Owner & ManualPerson> | null = null;
+    let person: Partial<Owner & ManualPerson> = {};
     let property: { street: string; house: string } | null = null;
-
+  
     if (entryMode === 'search' && selectedOwner && selectedProperty) {
-      person = selectedOwner;
+      person = {
+        ...selectedOwner,
+        cedula: selectedOwner.cedula || manualCedulaForOwner, // Use manual cedula if original is missing
+      };
       property = selectedProperty;
     } else if (entryMode === 'manual' && manualData.name && manualData.street && manualData.house) {
       person = manualData;
       property = { street: manualData.street, house: manualData.house };
     }
-
-    if (person && property && selectedTemplateId) {
+  
+    if (Object.keys(person).length > 0 && property && selectedTemplateId) {
       const template = templates.find((t) => t.id === selectedTemplateId);
       if (template) {
-        // Reemplazo simple para placeholders en personalizada
         const raw = template.generateBody(person, property, additionalInfo);
         const withPlaceholders =
           raw
             .replaceAll('{{nombre}}', person.name || '')
-            .replaceAll('{{cedula}}', (person.cedula as string) || '')
+            .replaceAll('{{cedula}}', person.cedula || '[Cédula no registrada]')
             .replaceAll('{{calle}}', property.street)
             .replaceAll('{{casa}}', property.house);
         setCertificateBody(withPlaceholders);
@@ -177,8 +182,8 @@ export default function CertificatesPage() {
     } else {
       setCertificateBody('');
     }
-  }, [selectedOwner, selectedProperty, selectedTemplateId, additionalInfo, manualData, entryMode]);
-
+  }, [selectedOwner, manualCedulaForOwner, selectedProperty, selectedTemplateId, additionalInfo, manualData, entryMode]);
+  
   const filteredOwners = useMemo(() => {
     if (!searchTerm || searchTerm.length < 3) return [];
     return owners.filter((owner) => owner.name && owner.name.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -197,6 +202,7 @@ export default function CertificatesPage() {
     setIsDialogOpen(false);
     setSearchTerm('');
     setSelectedOwner(null);
+    setManualCedulaForOwner('');
     setSelectedProperty(null);
     setManualData({ name: '', cedula: '', street: '', house: '', estadoCivil: '', profesion: '' });
     setSelectedTemplateId('');
@@ -211,6 +217,9 @@ export default function CertificatesPage() {
     if (owner.properties && owner.properties.length > 0) {
       setSelectedProperty(owner.properties[0]);
     }
+    if (!owner.cedula) {
+      setManualCedulaForOwner('');
+    }
   };
 
   const handleManualDataChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -219,15 +228,21 @@ export default function CertificatesPage() {
 
   const handleGenerateAndSave = async () => {
     requestAuthorization(async () => {
-        let person: Partial<Owner & ManualPerson> | null = null;
+        let person: Partial<Owner & ManualPerson> = {};
         let property: { street: string; house: string } | null = null;
+        let finalCedula = '';
 
         if (entryMode === 'search') {
           if (!selectedOwner || !selectedProperty) {
             toast({ variant: 'destructive', title: 'Datos Incompletos', description: 'Debe seleccionar un propietario y una propiedad.' });
             return;
           }
-          person = selectedOwner;
+          finalCedula = selectedOwner.cedula || manualCedulaForOwner;
+          if (!finalCedula) {
+            toast({ variant: 'destructive', title: 'Cédula Requerida', description: 'Por favor, ingrese la cédula del propietario.' });
+            return;
+          }
+          person = { ...selectedOwner, cedula: finalCedula };
           property = selectedProperty;
         } else {
           if (!manualData.name || !manualData.cedula || !manualData.street || !manualData.house) {
@@ -239,6 +254,7 @@ export default function CertificatesPage() {
             return;
           }
           person = manualData;
+          finalCedula = manualData.cedula;
           property = { street: manualData.street, house: manualData.house };
         }
 
@@ -256,7 +272,7 @@ export default function CertificatesPage() {
             const docData = {
               ownerId: entryMode === 'search' ? (person as any).id : 'manual',
               ownerName: person!.name as string,
-              ownerCedula: (person!.cedula as string) || 'N/A',
+              ownerCedula: finalCedula,
               property: property!,
               type: selectedTemplateId,
               body: certificateBody,
@@ -418,21 +434,35 @@ export default function CertificatesPage() {
                         )}
                       </>
                     ) : (
-                      <div className="flex items-center justify-between p-3 bg-background rounded-md">
-                        <div>
-                          <p className="font-semibold text-primary">{selectedOwner.name}</p>
-                          <p className="text-sm text-muted-foreground">C.I: {selectedOwner.cedula || 'No registrada'}</p>
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between p-3 bg-background rounded-md">
+                          <div>
+                            <p className="font-semibold text-primary">{selectedOwner.name}</p>
+                            <p className="text-sm text-muted-foreground">C.I: {selectedOwner.cedula || 'No registrada'}</p>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              setSelectedOwner(null);
+                              setSelectedProperty(null);
+                              setManualCedulaForOwner('');
+                            }}
+                          >
+                            <XCircle className="h-5 w-5 text-destructive" />
+                          </Button>
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            setSelectedOwner(null);
-                            setSelectedProperty(null);
-                          }}
-                        >
-                          <XCircle className="h-5 w-5 text-destructive" />
-                        </Button>
+                        {!selectedOwner.cedula && (
+                          <div className="space-y-2">
+                            <Label htmlFor="manualCedulaForOwner">Cédula del Propietario</Label>
+                            <Input 
+                              id="manualCedulaForOwner" 
+                              value={manualCedulaForOwner} 
+                              onChange={(e) => setManualCedulaForOwner(e.target.value)}
+                              placeholder="Ingrese la cédula ya que no está registrada"
+                            />
+                          </div>
+                        )}
                       </div>
                     )}
                   </>
