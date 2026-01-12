@@ -33,10 +33,8 @@ const adminNavItems: NavItem[] = [
       label: "Pagos",
       items: [
         { href: "/admin/payments/report", label: "Reportar Pago" },
-        { href: "/admin/payments/advance", label: "Registrar Adelanto" },
         { href: "/admin/payments/verify", label: "Verificar Pagos" },
         { href: "/admin/payments/calculator", label: "Calculadora de Pagos" },
-        { href: "/admin/payments/history", label: "Pagos Históricos" },
       ]
     },
     { href: "/admin/debts", icon: CircleDollarSign, label: "Gestión de Deudas" },
