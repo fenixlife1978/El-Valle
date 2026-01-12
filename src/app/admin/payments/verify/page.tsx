@@ -595,16 +595,15 @@ export default function VerifyPaymentsPage() {
     
     doc.setFontSize(10).text(`Fecha de Emisión: ${format(new Date(), 'dd/MM/yyyy')}`, pageWidth - margin, margin + 8, { align: 'right' });
     
-    if(qrCodeUrl) {
-      const qrSize = 30;
-      doc.addImage(qrCodeUrl, 'PNG', pageWidth - margin - qrSize, margin + 12, qrSize, qrSize);
-    }
-    
     doc.setLineWidth(0.5).line(margin, margin + 32, pageWidth - margin, margin + 32);
     doc.setFontSize(16).setFont('helvetica', 'bold').text("RECIBO DE PAGO", pageWidth / 2, margin + 45, { align: 'center' });
     doc.setFontSize(10).setFont('helvetica', 'normal').text(`N° de recibo: ${receiptNumber}`, pageWidth - margin, margin + 45, { align: 'right' });
     
     let startY = margin + 60;
+    const qrSize = 30;
+    const qrX = pageWidth - margin - qrSize;
+    const detailsBlockY = startY;
+
     doc.setFontSize(10).text(`Beneficiario: ${beneficiary.ownerName} (${data.ownerUnit})`, margin, startY);
     startY += 6;
     doc.text(`Método de pago: ${payment.type}`, margin, startY);
@@ -616,6 +615,11 @@ export default function VerifyPaymentsPage() {
     doc.text(`Fecha del pago: ${format(payment.paymentDate.toDate(), 'dd/MM/yyyy')}`, margin, startY);
     startY += 6;
     doc.text(`Tasa de Cambio Aplicada: Bs. ${formatToTwoDecimals(payment.exchangeRate)} por USD`, margin, startY);
+
+    if(qrCodeUrl) {
+        doc.addImage(qrCodeUrl, 'PNG', qrX, detailsBlockY, qrSize, qrSize);
+    }
+    
     startY += 10;
     
     let totalPaidInConcepts = 0;
