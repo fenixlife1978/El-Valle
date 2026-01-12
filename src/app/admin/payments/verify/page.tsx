@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { Separator } from "@/components/ui/separator";
@@ -579,42 +580,42 @@ export default function VerifyPaymentsPage() {
 
     const { payment, beneficiary, paidDebts, previousBalance, currentBalance, qrCodeUrl, receiptNumber } = data;
     
-    const pdfDoc = new jsPDF();
-    const pageWidth = pdfDoc.internal.pageSize.getWidth();
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 14;
 
     if (companyInfo.logo) {
-        try { pdfDoc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25); }
+        try { doc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25); }
         catch(e) { console.error("Error adding logo to PDF", e); }
     }
-    pdfDoc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, margin + 30, margin + 8);
-    pdfDoc.setFontSize(9).setFont('helvetica', 'normal');
-    pdfDoc.text(`${companyInfo.rif} | ${companyInfo.phone}`, margin + 30, margin + 14);
-    pdfDoc.text(companyInfo.address, margin + 30, margin + 19);
+    doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, margin + 30, margin + 8);
+    doc.setFontSize(9).setFont('helvetica', 'normal');
+    doc.text(`${companyInfo.rif} | ${companyInfo.phone}`, margin + 30, margin + 14);
+    doc.text(companyInfo.address, margin + 30, margin + 19);
     
-    pdfDoc.setFontSize(10).text(`Fecha de Emisión: ${format(new Date(), 'dd/MM/yyyy')}`, pageWidth - margin, margin + 8, { align: 'right' });
+    doc.setFontSize(10).text(`Fecha de Emisión: ${format(new Date(), 'dd/MM/yyyy')}`, pageWidth - margin, margin + 8, { align: 'right' });
     
     if(qrCodeUrl) {
       const qrSize = 30;
-      pdfDoc.addImage(qrCodeUrl, 'PNG', pageWidth - margin - qrSize, margin + 12, qrSize, qrSize);
+      doc.addImage(qrCodeUrl, 'PNG', pageWidth - margin - qrSize, margin + 12, qrSize, qrSize);
     }
     
-    pdfDoc.setLineWidth(0.5).line(margin, margin + 32, pageWidth - margin, margin + 32);
-    pdfDoc.setFontSize(16).setFont('helvetica', 'bold').text("RECIBO DE PAGO", pageWidth / 2, margin + 45, { align: 'center' });
-    pdfDoc.setFontSize(10).setFont('helvetica', 'normal').text(`N° de recibo: ${receiptNumber}`, pageWidth - margin, margin + 45, { align: 'right' });
+    doc.setLineWidth(0.5).line(margin, margin + 32, pageWidth - margin, margin + 32);
+    doc.setFontSize(16).setFont('helvetica', 'bold').text("RECIBO DE PAGO", pageWidth / 2, margin + 45, { align: 'center' });
+    doc.setFontSize(10).setFont('helvetica', 'normal').text(`N° de recibo: ${receiptNumber}`, pageWidth - margin, margin + 45, { align: 'right' });
     
     let startY = margin + 60;
-    pdfDoc.setFontSize(10).text(`Beneficiario: ${beneficiary.ownerName} (${data.ownerUnit})`, margin, startY);
+    doc.setFontSize(10).text(`Beneficiario: ${beneficiary.ownerName} (${data.ownerUnit})`, margin, startY);
     startY += 6;
-    pdfDoc.text(`Método de pago: ${payment.type}`, margin, startY);
+    doc.text(`Método de pago: ${payment.type}`, margin, startY);
     startY += 6;
-    pdfDoc.text(`Banco Emisor: ${payment.bank}`, margin, startY);
+    doc.text(`Banco Emisor: ${payment.bank}`, margin, startY);
     startY += 6;
-    pdfDoc.text(`N° de Referencia Bancaria: ${payment.reference}`, margin, startY);
+    doc.text(`N° de Referencia Bancaria: ${payment.reference}`, margin, startY);
     startY += 6;
-    pdfDoc.text(`Fecha del pago: ${format(payment.paymentDate.toDate(), 'dd/MM/yyyy')}`, margin, startY);
+    doc.text(`Fecha del pago: ${format(payment.paymentDate.toDate(), 'dd/MM/yyyy')}`, margin, startY);
     startY += 6;
-    pdfDoc.text(`Tasa de Cambio Aplicada: Bs. ${formatToTwoDecimals(payment.exchangeRate)} por USD`, margin, startY);
+    doc.text(`Tasa de Cambio Aplicada: Bs. ${formatToTwoDecimals(payment.exchangeRate)} por USD`, margin, startY);
     startY += 10;
     
     let totalPaidInConcepts = 0;
@@ -628,56 +629,71 @@ export default function VerifyPaymentsPage() {
     });
 
     if (paidDebts.length > 0) {
-        autoTable(pdfDoc, { startY: startY, head: [['Período', 'Concepto (Propiedad)', 'Monto ($)', 'Monto Pagado (Bs)']], body: tableBody, theme: 'striped', headStyles: { fillColor: [44, 62, 80], textColor: 255 }, styles: { fontSize: 9, cellPadding: 2.5 } });
-        startY = (pdfDoc as any).lastAutoTable.finalY;
+        autoTable(doc, { startY: startY, head: [['Período', 'Concepto (Propiedad)', 'Monto ($)', 'Monto Pagado (Bs)']], body: tableBody, theme: 'striped', headStyles: { fillColor: [44, 62, 80], textColor: 255 }, styles: { fontSize: 9, cellPadding: 2.5 } });
+        startY = (doc as any).lastAutoTable.finalY;
     } else {
         totalPaidInConcepts = beneficiary.amount;
-        autoTable(pdfDoc, { startY: startY, head: [['Concepto', 'Monto Pagado (Bs)']], body: [['Abono a Saldo a Favor', `Bs. ${formatToTwoDecimals(beneficiary.amount)}`]], theme: 'striped', headStyles: { fillColor: [44, 62, 80], textColor: 255 }, styles: { fontSize: 9, cellPadding: 2.5 } });
-        startY = (pdfDoc as any).lastAutoTable.finalY;
+        autoTable(doc, { startY: startY, head: [['Concepto', 'Monto Pagado (Bs)']], body: [['Abono a Saldo a Favor', `Bs. ${formatToTwoDecimals(beneficiary.amount)}`]], theme: 'striped', headStyles: { fillColor: [44, 62, 80], textColor: 255 }, styles: { fontSize: 9, cellPadding: 2.5 } });
+        startY = (doc as any).lastAutoTable.finalY;
     }
-    startY += 8;
     
-    const summaryData = [
-        ['Saldo a Favor Anterior:', `Bs. ${formatToTwoDecimals(previousBalance)}`],
-        ['Monto del Pago Recibido:', `Bs. ${formatToTwoDecimals(beneficiary.amount)}`],
-        ['Total Abonado en Deudas:', `Bs. ${formatToTwoDecimals(totalPaidInConcepts)}`],
-        ['Saldo a Favor Actual:', `Bs. ${formatToTwoDecimals(currentBalance)}`],
-    ];
-    autoTable(pdfDoc, { startY: startY, body: summaryData, theme: 'plain', styles: { fontSize: 9, fontStyle: 'bold' }, columnStyles: { 0: { halign: 'right' }, 1: { halign: 'right'} } });
-    startY = (pdfDoc as any).lastAutoTable.finalY + 10;
+    startY += 8;
+
+    const summaryY = startY;
+    const rightColX = pageWidth - margin;
+    doc.setFontSize(9);
+
+    doc.setFont('helvetica', 'normal').text('Saldo a Favor Anterior:', rightColX - 50, summaryY, { align: 'right' });
+    doc.setFont('helvetica', 'bold').text(`Bs. ${formatToTwoDecimals(previousBalance)}`, rightColX, summaryY, { align: 'right' });
+    startY += 5;
+    
+    doc.setFont('helvetica', 'normal').text('Monto del Pago Recibido:', rightColX - 50, startY, { align: 'right' });
+    doc.setFont('helvetica', 'bold').text(`Bs. ${formatToTwoDecimals(beneficiary.amount)}`, rightColX, startY, { align: 'right' });
+    startY += 5;
+    
+    doc.setFont('helvetica', 'normal').text('Total Abonado en Deudas:', rightColX - 50, startY, { align: 'right' });
+    doc.setFont('helvetica', 'bold').text(`Bs. ${formatToTwoDecimals(totalPaidInConcepts)}`, rightColX, startY, { align: 'right' });
+    startY += 5;
+    
+    doc.setFont('helvetica', 'normal').text('Saldo a Favor Actual:', rightColX - 50, startY, { align: 'right' });
+    doc.setFont('helvetica', 'bold').text(`Bs. ${formatToTwoDecimals(currentBalance)}`, rightColX, startY, { align: 'right' });
+    startY += 8;
     
     const totalLabel = "TOTAL PAGADO:";
     const totalValue = `Bs. ${formatToTwoDecimals(beneficiary.amount)}`;
-    pdfDoc.setFontSize(11).setFont('helvetica', 'bold');
-    const totalValueWidth = pdfDoc.getStringUnitWidth(totalValue) * 11 / pdfDoc.internal.scaleFactor;
-    pdfDoc.text(totalValue, pageWidth - margin, startY, { align: 'right' });
-    pdfDoc.text(totalLabel, pageWidth - margin - totalValueWidth - 2, startY, { align: 'right' });
+    doc.setFontSize(11).setFont('helvetica', 'bold');
+    doc.text(totalLabel, rightColX - 50, startY, { align: 'right' });
+    doc.text(totalValue, rightColX, startY, { align: 'right' });
+    startY += 8;
 
-    const footerStartY = pdfDoc.internal.pageSize.getHeight() - 55;
-    startY = startY > footerStartY ? footerStartY : startY + 10;
+    const footerStartY = Math.max(startY, doc.internal.pageSize.getHeight() - 55);
+    startY = footerStartY;
+    
     if (payment.observations) {
-        pdfDoc.setFontSize(8).setFont('helvetica', 'italic');
-        const splitObservations = pdfDoc.splitTextToSize(`Observaciones: ${payment.observations}`, pageWidth - margin * 2);
-        pdfDoc.text(splitObservations, margin, startY);
+        doc.setFontSize(8).setFont('helvetica', 'italic');
+        const splitObservations = doc.splitTextToSize(`Observaciones: ${payment.observations}`, pageWidth - margin * 2);
+        doc.text(splitObservations, margin, startY);
         startY += (splitObservations.length * 3.5) + 4;
     }
+    
     const legalNote = 'Todo propietario que requiera de firma y sello húmedo deberá imprimir éste recibo y hacerlo llegar al condominio para su respectiva estampa.';
-    const splitLegalNote = pdfDoc.splitTextToSize(legalNote, pageWidth - (margin * 2));
-    pdfDoc.setFontSize(8).setFont('helvetica', 'bold').text(splitLegalNote, margin, startY);
-    let noteY = startY + (splitLegalNote.length * 3) + 2;
-    pdfDoc.setFontSize(8).setFont('helvetica', 'normal').text('Este recibo confirma que el pago ha sido validado para la(s) cuota(s) y propiedad(es) aquí detalladas.', margin, noteY);
-    noteY += 4;
-    pdfDoc.setFont('helvetica', 'bold').text(`Firma electrónica: '${companyInfo.name} - Condominio'`, margin, noteY);
-    noteY += 6;
-    pdfDoc.setLineWidth(0.2).line(margin, noteY, pageWidth - margin, noteY);
-    noteY += 4;
-    pdfDoc.setFontSize(7).setFont('helvetica', 'italic').text('Este recibo se generó de manera automática y es válido sin firma manuscrita.', pageWidth / 2, noteY, { align: 'center'});
+    const splitLegalNote = doc.splitTextToSize(legalNote, pageWidth - (margin * 2));
+    doc.setFontSize(8).setFont('helvetica', 'bold').text(splitLegalNote, margin, startY);
+    startY += (splitLegalNote.length * 3.5) + 2;
 
-    const pdfOutput = pdfDoc.output('blob');
+    doc.setFontSize(8).setFont('helvetica', 'normal').text('Este recibo confirma que el pago ha sido validado para la(s) cuota(s) y propiedad(es) aquí detalladas.', margin, startY);
+    startY += 4;
+    doc.setFont('helvetica', 'bold').text(`Firma electrónica: '${companyInfo.name} - Condominio'`, margin, startY);
+    startY += 6;
+    doc.setLineWidth(0.2).line(margin, startY, pageWidth - margin, startY);
+    startY += 4;
+    doc.setFontSize(7).setFont('helvetica', 'italic').text('Este recibo se generó de manera automática y es válido sin firma manuscrita.', pageWidth / 2, startY, { align: 'center'});
+
+    const pdfOutput = doc.output('blob');
     const pdfFile = new File([pdfOutput], `recibo_${receiptNumber}.pdf`, { type: 'application/pdf' });
 
     if (action === 'download') {
-      pdfDoc.save(`recibo_${receiptNumber}.pdf`);
+      doc.save(`recibo_${receiptNumber}.pdf`);
     } else if (navigator.share && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
         try {
           await navigator.share({
