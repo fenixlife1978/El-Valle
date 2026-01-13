@@ -60,7 +60,7 @@ export default function BillboardPage() {
     setIsSubmitting(true);
     toast({ title: 'Procesando imagen...', description: 'Optimizando el archivo para la cartelera.' });
     try {
-        const compressedBase64 = await compressImage(file, 1280, 720); // 16:9 aspect ratio
+        const compressedBase64 = await compressImage(file, 800, 800);
         setImagen(compressedBase64);
         toast({ title: 'Imagen lista', description: 'La imagen ha sido procesada y está lista para guardarse.' });
     } catch (error) {
@@ -139,7 +139,7 @@ export default function BillboardPage() {
                 <div className="space-y-2">
                     <Label>Vista Previa de la Imagen</Label>
                      <div className="relative w-full max-w-sm border p-2 rounded-md bg-muted/50">
-                        <Image src={imagen} alt="Vista previa" width={1280} height={720} className="w-full h-auto object-contain rounded" />
+                        <Image src={imagen} alt="Vista previa" width={800} height={800} className="w-full h-auto object-contain rounded" />
                         <Button variant="destructive" size="icon" className="absolute -top-2 -right-2 h-7 w-7 rounded-full" onClick={() => setImagen(null)} disabled={isSubmitting}>
                             <XCircle className="h-5 w-5" />
                         </Button>
@@ -169,7 +169,9 @@ export default function BillboardPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {anuncios.map((anuncio) => (
                         <Card key={anuncio.id} className="overflow-hidden">
-                            <Image src={anuncio.urlImagen} alt={anuncio.titulo} width={640} height={360} className="w-full h-32 object-cover" />
+                            <div className="aspect-square relative w-full">
+                                <Image src={anuncio.urlImagen} alt={anuncio.titulo} layout="fill" className="object-cover" />
+                            </div>
                             <div className="p-4">
                                 <h3 className="font-bold">{anuncio.titulo}</h3>
                                 <p className="text-sm text-muted-foreground truncate">{anuncio.descripcion || 'Sin descripción'}</p>
