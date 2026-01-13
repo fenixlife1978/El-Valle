@@ -18,9 +18,7 @@ function AuthGuard({ children }: { children: ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    if (loading) {
-      return;
-    }
+    if (loading) return;
 
     const isPublic = publicPaths.some(path => pathname.startsWith(path));
 
@@ -59,9 +57,29 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  
+  // Registro del Service Worker
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker
+        .register('/sw.js')
+        .then((reg) => console.log('SW registrado con éxito:', reg.scope))
+        .catch((err) => console.error('Error al registrar SW:', err));
+    }
+  }, []);
+
   return (
     <html lang="es" suppressHydrationWarning>
       <head>
+        {/* --- PWA Y MANIFEST --- */}
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#004D40" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-title" content="ValleCondo" />
+        <link rel="apple-touch-icon" href="/icon-192x192.png" />
+        
+        {/* --- FUENTES Y FAVICON --- */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
@@ -72,7 +90,7 @@ export default function RootLayout({
         <title>VALLECONDO</title>
         <meta name="description" content="App de Autogestion de Condominio Conjunto Residencial El Valle" />
 
-        {/* Open Graph para WhatsApp/Facebook */}
+        {/* --- OPEN GRAPH --- */}
         <meta property="og:title" content="VALLECONDO" />
         <meta property="og:description" content="App de Autogestion de Condominio Conjunto Residencial El Valle" />
         <meta property="og:type" content="website" />
@@ -80,14 +98,11 @@ export default function RootLayout({
         <meta property="og:image" content="https://valle-condo.vercel.app/og-banner.png" />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
-        <meta property="og:image:alt" content="VALLECONDO Banner" />
 
-        {/* Twitter Cards */}
+        {/* --- TWITTER --- */}
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="VALLECONDO" />
-        <meta name="twitter:description" content="App de Autogestion de Condominio Conjunto Residencial El Valle" />
         <meta name="twitter:image" content="https://valle-condo.vercel.app/og-banner.png" />
- 
       </head>
       <body className="font-body antialiased bg-background text-foreground">
         <AuthProvider>
