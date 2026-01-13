@@ -79,14 +79,14 @@ const templates: Template[] = [
     name: 'Constancia de Residencia',
     title: 'CONSTANCIA DE RESIDENCIA',
     generateBody: (person, property) => 
-    `Quien suscribe, en mis funciones de Presidente (a) de la JUNTA ADMINISTRADORA DE CONDOMINIO DEL CONJUNTO RESIDENCIAL EL VALLE, por medio de la presente hago constar que el (la) Ciudadano (a) ${person.name}, titular de la Cédula de Identidad ${person.cedula}, reside en el inmueble ${property.street}, ${property.house} y ha demostrado una conducta de sana convivencia y respeto, apegado a las normas y leyes de nuestra sociedad.\n\nConstancia que se expide en la Ciudad de Independencia, Municipio Independencia, Estado Yaracuy a los ${format(new Date(), 'dd')} días del mes de ${format(new Date(), 'MMMM', { locale: es })} del año ${format(new Date(), 'yyyy')}.`
+    `Quien suscribe, en mis funciones de Presidente (a) de la JUNTA ADMINISTRADORA DE CONDOMINIO DEL CONJUNTO RESIDENCIAL EL VALLE, por medio de la presente hago constar que el (la) Ciudadano (a) ${person.name}, titular de la Cédula de Identidad ${person.cedula}, reside en el inmueble ubicado en ${property.street}, ${property.house}, y ha demostrado una conducta de sana convivencia y respeto, apegado a las normas y leyes de nuestra sociedad.\n\nConstancia que se expide en la Ciudad de Independencia, Municipio Independencia, Estado Yaracuy a los ${format(new Date(), 'dd')} días del mes de ${format(new Date(), 'MMMM', { locale: es })} del año ${format(new Date(), 'yyyy')}.`
   },
   {
     id: 'solvencia',
     name: 'Constancia de Solvencia',
     title: 'CONSTANCIA DE SOLVENCIA',
     generateBody: (person, property) =>
-      `Por medio de la presente, la Junta de Condominio del Conjunto Residencial El Valle, hace constar que el(la) ciudadano(a) ${person.name}, titular de la Cédula de Identidad ${person.cedula || '[Cédula no registrada]'}, propietario(a) de la vivienda ubicada en la ${property.street}, Casa N° ${property.house}, se encuentra SOLVENTE con las obligaciones y cuotas de condominio hasta la presente fecha.\n\nConstancia que se expide a petición de la parte interesada en la ciudad de Independencia, Estado Yaracuy, a los ${format(new Date(), 'dd')} días del mes de ${format(new Date(), 'MMMM', { locale: es })} de ${format(new Date(), 'yyyy')}.`
+      `Por medio de la presente, la Junta de Condominio del Conjunto Residencial El Valle, hace constar que el(la) ciudadano(a) ${person.name}, titular de la Cédula de Identidad ${person.cedula || '[Cédula no registrada]'}, propietario(a) de la vivienda ubicada en la ${property.street}, ${property.house}, se encuentra SOLVENTE con las obligaciones y cuotas de condominio hasta la presente fecha.\n\nConstancia que se expide a petición de la parte interesada en la ciudad de Independencia, Estado Yaracuy, a los ${format(new Date(), 'dd')} días del mes de ${format(new Date(), 'MMMM', { locale: es })} de ${format(new Date(), 'yyyy')}.`
   },
   {
     id: 'remodelacion',
@@ -314,40 +314,34 @@ export default function CertificatesPage() {
         doc.setFontSize(16).setFont('helvetica', 'bold').text(title, pageWidth / 2, 70, { align: 'center' });
     
         // --- BODY TEXT ---
-        doc.setFontSize(12).setFont('helvetica', 'normal');
         let finalY = 90;
         const textOptions = { 
             align: 'justify' as const, 
             lineHeightFactor: 1.6,
             maxWidth: pageWidth - (margin * 2) 
         };
+        doc.setFontSize(12).setFont('helvetica', 'normal');
         doc.text(certificate.body, margin, finalY, textOptions);
-        const bodyTextLines = doc.splitTextToSize(certificate.body, textOptions.maxWidth);
-        const bodyTextHeight = bodyTextLines.length * (doc.getLineHeight() * 0.3527777778 * textOptions.lineHeightFactor);
-        finalY += bodyTextHeight;
-
+        
         // --- SIGNATURE AND QR CODE ---
-        const signatureY = finalY + 30; // Move signature block down
-        const qrSize = 30;
-        
-        const signatureWidth = 80;
-        const signatureX = (pageWidth - signatureWidth) / 2;
-        const qrX = signatureX + signatureWidth + 10; // Position QR to the right of the signature
+        const bodyTextHeight = doc.getTextDimensions(certificate.body, textOptions).h;
+        finalY += bodyTextHeight + 30; // Move signature block down
 
-        // Make sure QR and Signature don't go off page
-        const qrY = signatureY - qrSize / 2;
-        
+        const qrSize = 30;
         const qrContent = `ID:${certificate.id}\nFecha:${format(certificate.createdAt.toDate(), 'yyyy-MM-dd')}\nPropietario:${certificate.ownerName}`;
         try {
             const qrCodeUrl = await QRCode.toDataURL(qrContent, { errorCorrectionLevel: 'M', width: qrSize });
-            doc.addImage(qrCodeUrl, 'PNG', qrX, qrY, qrSize, qrSize);
+            doc.addImage(qrCodeUrl, 'PNG', pageWidth - margin - qrSize, finalY, qrSize, qrSize);
         } catch (err) {
             console.error('Error generating QR Code', err);
         }
+
+        const signatureWidth = 80;
+        const signatureX = (pageWidth / 2) - (signatureWidth / 2);
     
         doc.setLineWidth(0.5);
-        doc.line(signatureX, signatureY, signatureX + signatureWidth, signatureY); 
-        doc.setFontSize(10).setFont('helvetica', 'bold').text('Presidente de la Junta de Condominio', pageWidth / 2, signatureY + 8, { align: 'center' });
+        doc.line(signatureX, finalY, signatureX + signatureWidth, finalY); 
+        doc.setFontSize(10).setFont('helvetica', 'bold').text('Presidente de la Junta de Condominio', pageWidth / 2, finalY + 8, { align: 'center' });
     
         doc.save(`constancia_${certificate.type}_${certificate.ownerName.replace(/\s/g, '_')}.pdf`);
     };
