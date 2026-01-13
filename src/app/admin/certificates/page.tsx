@@ -86,14 +86,14 @@ const templates: Template[] = [
     name: 'Constancia de Solvencia',
     title: 'CONSTANCIA DE SOLVENCIA',
     generateBody: (person, property) =>
-      `Por medio de la presente, la Junta de Condominio del Conjunto Residencial El Valle, hace constar que el(la) ciudadano(a) ${person.name}, titular de la Cédula de Identidad N° ${person.cedula || '[Cédula no registrada]'}, propietario(a) de la vivienda ubicada en la ${property.street}, Casa N° ${property.house}, se encuentra SOLVENTE con las obligaciones y cuotas de condominio hasta la presente fecha.\n\nConstancia que se expide a petición de la parte interesada en la ciudad de Independencia, Estado Yaracuy, a los ${format(new Date(), 'dd')} días del mes de ${format(new Date(), 'MMMM', { locale: es })} de ${format(new Date(), 'yyyy')}.`
+      `Por medio de la presente, la Junta de Condominio del Conjunto Residencial El Valle, hace constar que el(la) ciudadano(a) ${person.name}, titular de la Cédula de Identidad ${person.cedula || '[Cédula no registrada]'}, propietario(a) de la vivienda ubicada en la ${property.street}, Casa N° ${property.house}, se encuentra SOLVENTE con las obligaciones y cuotas de condominio hasta la presente fecha.\n\nConstancia que se expide a petición de la parte interesada en la ciudad de Independencia, Estado Yaracuy, a los ${format(new Date(), 'dd')} días del mes de ${format(new Date(), 'MMMM', { locale: es })} de ${format(new Date(), 'yyyy')}.`
   },
   {
     id: 'remodelacion',
     name: 'Permiso de Remodelación',
     title: 'PERMISO DE REMODELACIÓN',
     generateBody: (person, property, description) =>
-      `Por medio de la presente, la Junta de Condominio del Conjunto Residencial El Valle, otorga el permiso al ciudadano(a) ${person.name}, titular de la Cédula de Identidad N° ${person.cedula || '[Cédula no registrada]'}, para realizar trabajos de remodelación en la propiedad ubicada en la ${property.street}, Casa N° ${property.house}.\n\nLos trabajos a realizar consisten en: ${description || '[Describir trabajos]'}\n\nEl propietario se compromete a cumplir con el horario establecido para trabajos (lunes a viernes de 8:00 a.m. a 5:00 p.m. y sábados de 9:00 a.m. a 2:00 p.m.), así como a mantener la limpieza de las áreas comunes y a reparar cualquier daño que pudiera ocasionar.\n\nPermiso válido desde la fecha de su emisión.`
+      `Por medio de la presente, la Junta de Condominio del Conjunto Residencial El Valle, otorga el permiso al ciudadano(a) ${person.name}, titular de la Cédula de Identidad ${person.cedula || '[Cédula no registrada]'}, para realizar trabajos de remodelación en la propiedad ubicada en la ${property.street}, Casa N° ${property.house}.\n\nLos trabajos a realizar consisten en: ${description || '[Describir trabajos]'}\n\nEl propietario se compromete a cumplir con el horario establecido para trabajos (lunes a viernes de 8:00 a.m. a 5:00 p.m. y sábados de 9:00 a.m. a 2:00 p.m.), así como a mantener la limpieza de las áreas comunes y a reparar cualquier daño que pudiera ocasionar.\n\nPermiso válido desde la fecha de su emisión.`
   },
   {
     id: 'personalizada',
@@ -171,14 +171,7 @@ export default function CertificatesPage() {
     if (Object.keys(person).length > 0 && property && selectedTemplateId) {
       const template = templates.find((t) => t.id === selectedTemplateId);
       if (template) {
-        const raw = template.generateBody(person, property, additionalInfo);
-        const withPlaceholders =
-          raw
-            .replaceAll('{{nombre}}', person.name || '')
-            .replaceAll('{{cedula}}', person.cedula || '[Cédula no registrada]')
-            .replaceAll('{{calle}}', property.street)
-            .replaceAll('{{casa}}', property.house);
-        setCertificateBody(withPlaceholders);
+        setCertificateBody(template.generateBody(person, property, additionalInfo));
       }
     } else {
       setCertificateBody('');
@@ -323,28 +316,27 @@ export default function CertificatesPage() {
         // --- BODY TEXT ---
         doc.setFontSize(12).setFont('helvetica', 'normal');
         let finalY = 90;
-        doc.text(certificate.body, margin, finalY, { 
-            align: 'justify', 
+        const textOptions = { 
+            align: 'justify' as const, 
             lineHeightFactor: 1.6,
             maxWidth: pageWidth - (margin * 2) 
-        });
-
-        // Calculate Y position after text
-        const bodyTextLines = doc.splitTextToSize(certificate.body, pageWidth - (margin * 2));
-        const bodyTextHeight = bodyTextLines.length * (doc.getLineHeight() * 0.3527777778 * 1.6); // Convert points to mm and apply line height factor
-        finalY += bodyTextHeight + 40;
+        };
+        doc.text(certificate.body, margin, finalY, textOptions);
+        const bodyTextLines = doc.splitTextToSize(certificate.body, textOptions.maxWidth);
+        const bodyTextHeight = bodyTextLines.length * (doc.getLineHeight() * 0.3527777778 * textOptions.lineHeightFactor);
+        finalY += bodyTextHeight;
 
         // --- SIGNATURE AND QR CODE ---
-        const qrSize = 40;
-        // Position QR Code at the bottom right
-        const qrY = doc.internal.pageSize.getHeight() - margin - qrSize;
-        const qrX = pageWidth - margin - qrSize;
+        const signatureY = finalY + 30; // Move signature block down
+        const qrSize = 30;
         
         const signatureWidth = 80;
         const signatureX = (pageWidth - signatureWidth) / 2;
-        // Position signature line level with the bottom of the QR code
-        const signatureY = qrY + qrSize;
+        const qrX = signatureX + signatureWidth + 10; // Position QR to the right of the signature
 
+        // Make sure QR and Signature don't go off page
+        const qrY = signatureY - qrSize / 2;
+        
         const qrContent = `ID:${certificate.id}\nFecha:${format(certificate.createdAt.toDate(), 'yyyy-MM-dd')}\nPropietario:${certificate.ownerName}`;
         try {
             const qrCodeUrl = await QRCode.toDataURL(qrContent, { errorCorrectionLevel: 'M', width: qrSize });
@@ -667,7 +659,7 @@ export default function CertificatesPage() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => {
-                            const person = owners.find(o => o.id === cert.ownerId) || {name: cert.ownerName, cedula: cert.ownerCedula};
+                            const person = owners.find(o => o.id === cert.ownerId) || {name: cert.ownerName, cedula: cert.ownerCedula, properties: [cert.property]};
                             generatePDF(cert, person);
                         }}>
                           <FileText className="mr-2 h-4 w-4" />
