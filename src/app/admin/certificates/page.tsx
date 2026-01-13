@@ -78,7 +78,7 @@ const templates: Template[] = [
     id: 'residencia',
     name: 'Constancia de Residencia',
     title: 'CONSTANCIA DE RESIDENCIA',
-    generateBody: (person, property) => `Quien suscribe, en mis funciones de Presidente de la ASOCIACIÓN CIVIL RESIDENCIAL EL VALLE, por medio de la presente hago constar que el(la) Ciudadano(a): ${person.name}, portador(a) de la Cédula de Identidad V-${person.cedula}, reside en el inmueble identificado en la ${property.street}, ${property.house}, la cual ha demostrado una conducta de sana convivencia y respeto, apegado a las normas y leyes de nuestra sociedad.\n\nConstancia que se expide en la Ciudad de San Felipe, Municipio Independencia, Estado Yaracuy a los ${format(new Date(), 'dd')} días del mes de ${format(new Date(), 'MMMM', { locale: es })} del año ${format(new Date(), 'yyyy')}.`
+    generateBody: (person, property) => `Quien suscribe, en mis funciones de Presidente (a) de la JUNTA ADMINISTRADORA DE CONDOMINIO DEL CONJUNTO RESIDENCIAL EL VALLE, por medio de la presente hago constar que el (la) Ciudadano (a) ${person.name}, titular de la Cédula de Identidad V-${person.cedula}, reside en el inmueble ${property.street}, ${property.house}, quien ha demostrado una conducta de sana convivencia y respeto, apegado a las normas y leyes de nuestra sociedad.\n\nConstancia que se expide en la Ciudad de Independencia, Municipio Independencia, Estado Yaracuy, a los ${format(new Date(), 'dd')} días del mes de ${format(new Date(), 'MMMM', { locale: es })} del año ${format(new Date(), 'yyyy')}.`
   },
   {
     id: 'solvencia',
@@ -299,7 +299,6 @@ export default function CertificatesPage() {
     
         const doc = new jsPDF();
         const pageWidth = doc.internal.pageSize.getWidth();
-        const pageHeight = doc.internal.pageSize.getHeight();
         const margin = 20;
     
         // --- HEADER ---
@@ -320,47 +319,31 @@ export default function CertificatesPage() {
         const title = template ? template.title : 'DOCUMENTO';
         doc.setFontSize(16).setFont('helvetica', 'bold').text(title, pageWidth / 2, 70, { align: 'center' });
     
-        let startY = 85;
-    
-        // --- PERSONAL DATA (LEFT SIDE) ---
-        doc.setFontSize(12).setFont('helvetica', 'normal');
-        const personalDataX = margin;
-        let dataY = startY + 5;
-    
-        const addDataLine = (label: string, value?: string) => {
-            if (value) {
-                doc.setFont('helvetica', 'bold').text(label, personalDataX, dataY);
-                doc.setFont('helvetica', 'normal').text(value, personalDataX + 50, dataY); // Increased offset
-                dataY += 8;
-            }
-        };
-    
-        addDataLine("Nombres y Apellidos:", certificate.ownerName);
-        addDataLine("Cédula de Identidad:", `V-${certificate.ownerCedula}`);
-        addDataLine("Propiedad:", `${certificate.property.street}, ${certificate.property.house}`);
-        addDataLine("Estado Civil:", personData.estadoCivil);
-        addDataLine("Profesión:", personData.profesion);
-        addDataLine("Otros:", personData.otros);
-    
         // --- BODY TEXT ---
-        startY = dataY + 15; // Space after personal data
+        let startY = 85;
         doc.setFontSize(12).setFont('helvetica', 'normal');
-        const bodyText = certificate.body;
-        doc.text(bodyText, margin, startY, {
+        doc.text(certificate.body, margin, startY, {
             align: 'justify',
             lineHeightFactor: 1.8,
             maxWidth: pageWidth - (margin * 2)
         });
+
+        // Calculate Y position after the body text
+        const bodyTextHeight = doc.getTextDimensions(certificate.body, {
+            maxWidth: pageWidth - (margin * 2),
+            lineHeightFactor: 1.8
+        }).h;
+        startY += bodyTextHeight + 40; // Add generous space after body
     
         // --- SIGNATURE AND QR CODE ---
-        const signatureY = pageHeight - 60;
+        const signatureY = startY;
         doc.setLineWidth(0.5);
         doc.line(pageWidth / 2 - 50, signatureY, pageWidth / 2 + 50, signatureY);
-        doc.setFontSize(10).setFont('helvetica', 'bold').text('Por la Junta Administradora del Condominio', pageWidth / 2, signatureY + 8, { align: 'center' });
+        doc.setFontSize(10).setFont('helvetica', 'bold').text('Presidente de la Junta de Condominio', pageWidth / 2, signatureY + 8, { align: 'center' });
         
         const qrContent = `ID:${certificate.id}\nFecha:${format(certificate.createdAt.toDate(), 'yyyy-MM-dd')}\nPropietario:${certificate.ownerName}`;
         const qrCodeUrl = await QRCode.toDataURL(qrContent, { errorCorrectionLevel: 'M', width: 40 });
-        doc.addImage(qrCodeUrl, 'PNG', pageWidth - margin - 40, signatureY - 10, 40, 40);
+        doc.addImage(qrCodeUrl, 'PNG', pageWidth - margin - 40, signatureY, 40, 40);
     
         doc.save(`constancia_${certificate.type}_${certificate.ownerName.replace(/\s/g, '_')}.pdf`);
     };
