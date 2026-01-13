@@ -1,3 +1,4 @@
+
 rules_version = '2';
 
 service cloud.firestore {
@@ -48,6 +49,13 @@ service cloud.firestore {
         allow update, delete: if false;
     }
 
+    // Billboard announcements collection.
+    match /billboard_announcements/{announcementId} {
+        // All authenticated users can read announcements.
+        allow read: if isSignedIn();
+        // Only admins can create, update, or delete them.
+        allow write: if isAdmin();
+    }
 
     // Payments collection: Where users report their payments.
     match /payments/{paymentId} {
@@ -71,12 +79,14 @@ service cloud.firestore {
     match /certificates/{certId} {
         // Only admins can manage certificates.
         allow read, write: if isAdmin();
+        // Owners can create their own certificate requests.
+        allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
     }
-
+    
     // Financial Statements collection: Monthly financial reports.
     match /financial_statements/{statementId} {
         // Only admins can create/edit financial statements.
-        allow write: isAdmin();
+        allow write: if isAdmin();
         // All authenticated users can read them (e.g., in published reports).
         allow read: isSignedIn();
     }

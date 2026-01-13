@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -9,6 +10,14 @@ import { db } from '@/lib/firebase';
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { Progress } from "@/components/ui/progress";
+import CarteleraDigital from "@/components/CarteleraDigital";
+
+type Anuncio = {
+  id: string;
+  urlImagen: string;
+  titulo: string;
+  descripcion?: string;
+};
 
 /**
  * Función auxiliar para formatear números a dos decimales y usar separador de miles.
@@ -47,8 +56,15 @@ export default function AdminDashboardPage() {
     });
     const [recentPayments, setRecentPayments] = useState<Payment[]>([]);
     const [feedbackData, setFeedbackData] = useState<Feedback[]>([]);
+    const [anuncios, setAnuncios] = useState<Anuncio[]>([]);
 
     useEffect(() => {
+        // Suscripción a anuncios
+        const anunciosQuery = query(collection(db, "billboard_announcements"), orderBy("createdAt", "desc"));
+        const unsubAnuncios = onSnapshot(anunciosQuery, (snapshot) => {
+          setAnuncios(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Anuncio)));
+        });
+
         // Inicializa la fecha de inicio del mes
         const startOfMonth = new Date();
         startOfMonth.setDate(1);
@@ -131,6 +147,7 @@ export default function AdminDashboardPage() {
         });
 
         return () => {
+            unsubAnuncios();
             unsubPayments();
             unsubPending();
             unsubOwners();
@@ -148,6 +165,8 @@ export default function AdminDashboardPage() {
         <div className="space-y-8 p-4 md:p-8">
             <h1 className="text-3xl font-bold tracking-tight">Panel de Administrador</h1>
             
+            <CarteleraDigital anuncios={anuncios} />
+
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
                 <Card className="bg-primary text-primary-foreground">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">

@@ -1,5 +1,4 @@
 
-
 'use client';
 
 // Imports de UI (MANTENER TODOS LOS IMPORTS EN LA PARTE SUPERIOR)
@@ -17,6 +16,7 @@ import {
     PopoverTrigger,
 } from "@/components/ui/popover"
 import { Separator } from '@/components/ui/separator';
+import CarteleraDigital from "@/components/CarteleraDigital";
 
 
 // Imports de Lógica y Librerías de Next/React
@@ -38,6 +38,12 @@ import QRCode from 'qrcode';
 // -------------------------------------------------------------------------
 // TIPOS Y CONSTANTES
 // -------------------------------------------------------------------------
+type Anuncio = {
+  id: string;
+  urlImagen: string;
+  titulo: string;
+  descripcion?: string;
+};
 
 type Debt = {
     id: string;
@@ -117,6 +123,7 @@ export default function OwnerDashboardPage() {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [feedbackSent, setFeedbackSent] = useState(false);
     const [lastFeedback, setLastFeedback] = useState<'liked' | 'disliked' | null>(null);
+    const [anuncios, setAnuncios] = useState<Anuncio[]>([]);
 
     const ownerId = user?.uid;
 
@@ -130,6 +137,13 @@ export default function OwnerDashboardPage() {
         const fetchData = async () => {
             setLoading(true);
             try {
+                 // Suscripción a anuncios
+                const anunciosQuery = query(collection(db, "billboard_announcements"), orderBy("createdAt", "desc"));
+                const unsubAnuncios = onSnapshot(anunciosQuery, (snapshot) => {
+                  setAnuncios(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Anuncio)));
+                });
+
+
                 // Fetch de información de la compañía
                 const configRef = doc(db, 'config', 'mainSettings');
                 const configSnap = await getDoc(configRef);
@@ -170,6 +184,7 @@ export default function OwnerDashboardPage() {
 
                 // Retornar funciones de limpieza
                 return () => {
+                    unsubAnuncios();
                     unsubDebts();
                     unsubPayments();
                     unsubFeedback();
@@ -493,6 +508,8 @@ export default function OwnerDashboardPage() {
         <div className="space-y-6 md:space-y-8 p-4 md:p-8">
             <h1 className="text-3xl font-bold font-headline">👋 ¡Hola, {ownerData.name?.split(' ')[0] || 'Propietario'}!</h1>
             
+            <CarteleraDigital anuncios={anuncios} />
+
             <Alert className="border-orange-300 bg-yellow-50 text-yellow-700 shadow-md">
                 <HelpCircle className="h-4 w-4 !text-orange-500" />
                 <AlertDescription className="font-semibold">
