@@ -79,7 +79,7 @@ const templates: Template[] = [
     name: 'Constancia de Residencia',
     title: 'CONSTANCIA DE RESIDENCIA',
     generateBody: (person, property) =>
-      `Quien suscribe, en mis funciones de Presidente de la ASOCIACIÓN CIVIL RESIDENCIAL EL VALLE, por medio de la presente hace constar que el(la) Ciudadano(a): ${person.name}, portador(a) de la Cédula de Identidad ${person.cedula || '[Cédula no registrada]'}, reside en el inmueble identificado en la ${property.street}, casa ${property.house}, la cual ha demostrado una conducta de sana convivencia y respeto, apegado a las normas y leyes de nuestra sociedad.\n\nConstancia que se expide en la Ciudad de San Felipe, Municipio Independencia, Estado Yaracuy a los ${format(new Date(), 'dd')} días del mes de ${format(new Date(), 'MMMM', { locale: es })} del año ${format(new Date(), 'yyyy')}.`
+      `Quien suscribe, en mis funciones de Presidente de la ASOCIACIÓN CIVIL RESIDENCIAL EL VALLE, por medio de la presente hace constar que el(la) Ciudadano(a): ${person.name}, portador(a) de la Cédula de Identidad V-${person.cedula || '[Cédula no registrada]'}, reside en el inmueble identificado en la ${property.street}, ${property.house}, la cual ha demostrado una conducta de sana convivencia y respeto, apegado a las normas y leyes de nuestra sociedad.\n\nConstancia que se expide en la Ciudad de San Felipe, Municipio Independencia, Estado Yaracuy a los ${format(new Date(), 'dd')} días del mes de ${format(new Date(), 'MMMM', { locale: es })} del año ${format(new Date(), 'yyyy')}.`
   },
   {
     id: 'solvencia',
@@ -590,8 +590,13 @@ export default function CertificatesPage() {
                     </div>
                   )}
                   <div className="p-4 border bg-background rounded-md">
-                    <h4 className="font-semibold mb-2">Vista Previa del Cuerpo</h4>
-                    <p className="text-sm whitespace-pre-wrap">{certificateBody}</p>
+                    <h4 className="font-semibold mb-2">Cuerpo del Documento (Editable)</h4>
+                    <Textarea 
+                      value={certificateBody}
+                      onChange={(e) => setCertificateBody(e.target.value)}
+                      rows={10}
+                      className="text-sm"
+                    />
                   </div>
                   <div className="p-3 bg-blue-100/50 border border-blue-300 rounded-md text-sm text-blue-800 flex items-start gap-2">
                     <Info className="h-4 w-4 mt-0.5 shrink-0" />
