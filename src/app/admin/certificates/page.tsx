@@ -23,6 +23,7 @@ import QRCode from 'qrcode';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { Badge } from '@/components/ui/badge';
 
 type Owner = {
   id: string;
@@ -51,6 +52,7 @@ type Certificate = {
   type: 'residencia' | 'solvencia' | 'remodelacion' | string;
   body: string;
   createdAt: Timestamp;
+  status?: 'solicitud';
 };
 
 type Template = {
@@ -79,7 +81,7 @@ const templates: Template[] = [
     name: 'Constancia de Residencia',
     title: 'CONSTANCIA DE RESIDENCIA',
     generateBody: (person, property) => 
-    `Quien suscribe, en mis funciones de Presidente (a) de la JUNTA ADMINISTRADORA DE CONDOMINIO DEL CONJUNTO RESIDENCIAL EL VALLE, por medio de la presente hago constar que el (la) Ciudadano (a) ${person.name}, titular de la Cédula de Identidad ${person.cedula}, reside en el inmueble ubicado en ${property.street}, ${property.house} y ha demostrado una conducta de sana convivencia y respeto, apegado a las normas y leyes de nuestra sociedad.\n\nConstancia que se expide en la Ciudad de Independencia, Municipio Independencia, Estado Yaracuy a los ${format(new Date(), 'dd')} días del mes de ${format(new Date(), 'MMMM', { locale: es })} del año ${format(new Date(), 'yyyy')}.`
+    `Quien suscribe, en mis funciones de Presidente (a) de la JUNTA ADMINISTRADORA DE CONDOMINIO DEL CONJUNTO RESIDENCIAL EL VALLE, por medio de la presente hago constar que el (la) Ciudadano (a) ${person.name}, titular de la Cédula de Identidad ${person.cedula}, reside en el inmueble ubicado en la ${property.street}, ${property.house} y ha demostrado una conducta de sana convivencia y respeto, apegado a las normas y leyes de nuestra sociedad.\n\nConstancia que se expide en la Ciudad de Independencia, Municipio Independencia, Estado Yaracuy a los ${format(new Date(), 'dd')} días del mes de ${format(new Date(), 'MMMM', { locale: es })} del año ${format(new Date(), 'yyyy')}.`
   },
   {
     id: 'solvencia',
@@ -317,11 +319,9 @@ export default function CertificatesPage() {
         };
         doc.setFontSize(12).setFont('helvetica', 'normal');
         
-        const textLines = doc.splitTextToSize(certificate.body, textOptions.maxWidth);
-        const textBlockHeight = doc.getTextDimensions(textLines).h;
-    
-        doc.text(textLines, margin, finalY, textOptions);
+        doc.text(certificate.body, margin, finalY, textOptions);
         
+        const textBlockHeight = doc.getTextDimensions(certificate.body, textOptions).h;
         finalY += textBlockHeight + 15; // finalY is now at the bottom of the text block
 
         // --- SIGNATURE AND QR CODE ---
@@ -623,6 +623,7 @@ export default function CertificatesPage() {
                 <TableHead>Propietario</TableHead>
                 <TableHead>Tipo</TableHead>
                 <TableHead>Fecha</TableHead>
+                <TableHead>Estado</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
               </TableRow>
             </TableHeader>
@@ -633,6 +634,13 @@ export default function CertificatesPage() {
                   <TableCell>{templates.find((t) => t.id === cert.type)?.name || cert.type}</TableCell>
                   <TableCell>
                     {cert.createdAt ? format(cert.createdAt.toDate(), 'dd MMMM, yyyy', { locale: es }) : '-'}
+                  </TableCell>
+                  <TableCell>
+                      {cert.status === 'solicitud' ? (
+                          <Badge variant="warning">Solicitud</Badge>
+                      ) : (
+                          <Badge variant="success">Generado</Badge>
+                      )}
                   </TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>

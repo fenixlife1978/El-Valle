@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
 import { useAuth } from '@/hooks/use-auth';
 import { BottomNavBar, type BottomNavItem } from '@/components/bottom-nav-bar';
-import { Loader2, Home, Plus, FileSearch, Settings, Banknote, Landmark, ClipboardList, Calculator } from 'lucide-react';
+import { Loader2, Home, Plus, FileSearch, Settings, Banknote, Landmark, ClipboardList, Calculator, Award } from 'lucide-react';
 
 const ownerNavItems: NavItem[] = [
   { href: "/owner/dashboard", icon: Home, label: "Inicio" },
@@ -20,6 +20,7 @@ const ownerNavItems: NavItem[] = [
       { href: "/owner/payments/calculator", label: "Calculadora de Pagos" },
     ]
   },
+  { href: "/owner/certificates", icon: Award, label: "Constancias" },
   { href: "/owner/reports", icon: FileSearch, label: "Publicaciones" },
   { href: "/owner/surveys", icon: ClipboardList, label: "Encuestas" },
   { href: "/owner/settings", icon: Settings, label: "Configuración" },
@@ -36,6 +37,7 @@ const ownerBottomNavItems: BottomNavItem[] = [
     subMenu: [
         { href: "/owner/payments/report", icon: Plus, label: "Reportar Pago" },
         { href: "/owner/payments/calculator", icon: Calculator, label: "Calculadora" },
+        { href: "/owner/certificates", icon: Award, label: "Constancias" },
         { href: "/owner/surveys", icon: ClipboardList, label: "Encuestas" },
     ]
   },
