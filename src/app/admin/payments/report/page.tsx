@@ -15,13 +15,12 @@ import { Calendar } from '@/components/ui/calendar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"; 
 import { useToast } from '@/hooks/use-toast';
 // IMPORTACIÓN DE ICONOS - Se agregó 'Info'
-import { CalendarIcon, CheckCircle2, Trash2, PlusCircle, Loader2, Search, XCircle, Wand2, UserPlus, Banknote, Info } from 'lucide-react';
+import { CalendarIcon, CheckCircle2, Trash2, PlusCircle, Loader2, Search, XCircle, Wand2, UserPlus, Banknote, Info, Upload, Paperclip } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { cn } from '@/lib/utils';
+import { cn, compressImage } from '@/lib/utils';
 import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc, where, getDocs, Timestamp, setDoc } from 'firebase/firestore';
 import { db, storage } from '@/lib/firebase';
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { inferPaymentDetails } from '@/ai/flows/infer-payment-details';
 import { Textarea } from '@/components/ui/textarea';
@@ -72,6 +71,8 @@ export default function UnifiedPaymentsPage() {
     const [reference, setReference] = useState('');
     const [beneficiaryType, setBeneficiaryType] = useState<BeneficiaryType>('propio');
     const [totalAmount, setTotalAmount] = useState<string>('');
+    const [receiptImage, setReceiptImage] = useState<string | null>(null);
+
     
     // State for the AI feature
     const [aiPrompt, setAiPrompt] = useState('');
@@ -106,9 +107,9 @@ export default function UnifiedPaymentsPage() {
     useEffect(() => {
         const fetchRateAndFee = async () => {
              try {
-               const settingsRef = doc(db, 'config', 'mainSettings');
-               const docSnap = await getDoc(settingsRef);
-               if (docSnap.exists()) {
+                const settingsRef = doc(db, 'config', 'mainSettings');
+                const docSnap = await getDoc(settingsRef);
+                if (docSnap.exists()) {
                     const settings = docSnap.data();
 
                     if (paymentDate) {
@@ -185,6 +186,7 @@ export default function UnifiedPaymentsPage() {
         setReference('');
         setBeneficiaryType('propio');
         setTotalAmount('');
+        setReceiptImage(null);
         setAiPrompt('');
         if (beneficiaryType === 'propio' && authOwnerData) {
             setBeneficiaryRows([{
@@ -246,6 +248,22 @@ export default function UnifiedPaymentsPage() {
         }
     };
     
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setLoading(true);
+        try {
+            const compressedBase64 = await compressImage(file, 800, 800);
+            setReceiptImage(compressedBase64);
+            toast({ title: 'Comprobante cargado', description: 'La imagen se ha optimizado y está lista para ser enviada.' });
+        } catch (error) {
+            toast({ variant: 'destructive', title: 'Error de imagen', description: 'No se pudo procesar la imagen.' });
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const validateForm = async (): Promise<{ isValid: boolean, error?: string }> => {
         // Level A: Required fields validation
         if (!paymentDate) return { isValid: false, error: 'La fecha del pago es obligatoria.' };
@@ -321,6 +339,7 @@ export default function UnifiedPaymentsPage() {
                 status: 'pendiente' as 'pendiente',
                 reportedAt: serverTimestamp(),
                 reportedBy: authUser?.uid || 'unknown',
+                receiptUrl: receiptImage || null,
             };
             
             await addDoc(collection(db, "payments"), paymentData);
@@ -448,6 +467,18 @@ export default function UnifiedPaymentsPage() {
                                 disabled={loading}
                              />
                              <p className="text-xs text-muted-foreground">La referencia debe tener 6 dígitos.</p>
+                        </div>
+                        <div className="space-y-2 md:col-span-2">
+                            <Label htmlFor="receipt">Comprobante de Pago (Opcional)</Label>
+                            <Input id="receipt" type="file" accept="image/png, image/jpeg" onChange={handleImageUpload} disabled={loading}/>
+                             {receiptImage && (
+                                <div className="mt-2 relative w-32 h-32 border p-1 rounded-md">
+                                    <img src={receiptImage} alt="Vista previa del comprobante" className="w-full h-full object-contain" />
+                                    <Button variant="destructive" size="icon" className="absolute -top-2 -right-2 h-6 w-6 rounded-full" onClick={() => setReceiptImage(null)}>
+                                        <XCircle className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                            )}
                         </div>
                     </CardContent>
                 </Card>

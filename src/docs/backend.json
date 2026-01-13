@@ -133,6 +133,7 @@
             "reference": {"type": "string"},
             "status": {"type": "string", "enum": ["pendiente", "aprobado", "rechazado"]},
             "observations": {"type": "string"},
+            "receiptUrl": {"type": "string", "format": "uri", "description": "Base64 encoded string of the receipt image."},
             "receiptNumbers": {
                 "type": "object",
                 "additionalProperties": { "type": "string" }

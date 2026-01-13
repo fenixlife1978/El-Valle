@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { CheckCircle2, XCircle, MoreHorizontal, Printer, Filter, Loader2, Trash2, Share2, FileText, Download, ArrowLeft, RefreshCw } from 'lucide-react';
+import { CheckCircle2, XCircle, MoreHorizontal, Printer, Filter, Loader2, Trash2, Share2, FileText, Download, ArrowLeft, RefreshCw, Paperclip } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -53,6 +53,7 @@ type FullPayment = {
   reference: string;
   receiptNumber?: string;
   receiptNumbers?: { [ownerId: string]: string };
+  receiptUrl?: string; // campo para la imagen del comprobante
   reportedBy: string;
   reportedAt?: Timestamp;
   observations?: string;
@@ -134,6 +135,8 @@ export default function VerifyPaymentsPage() {
 
   const [isReceiptPreviewOpen, setIsReceiptPreviewOpen] = useState(false);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
+  const [receiptImageToView, setReceiptImageToView] = useState<string | null>(null);
+
 
   useEffect(() => {
     const ownersQuery = query(collection(db, "owners"));
@@ -200,6 +203,7 @@ export default function VerifyPaymentsPage() {
                 reportedAt: data.reportedAt,
                 observations: data.observations,
                 isReconciled: data.isReconciled,
+                receiptUrl: data.receiptUrl,
             });
         });
 
@@ -865,6 +869,11 @@ export default function VerifyPaymentsPage() {
                                             </Button>
                                         </DropdownMenuTrigger>
                                         <DropdownMenuContent align="end">
+                                             {payment.receiptUrl && (
+                                                <DropdownMenuItem onClick={() => setReceiptImageToView(payment.receiptUrl!)}>
+                                                    <Paperclip className="mr-2 h-4 w-4" /> Ver Comprobante
+                                                </DropdownMenuItem>
+                                             )}
                                             {payment.status === 'pendiente' && (
                                                 <>
                                                     <DropdownMenuItem onClick={() => handleStatusChange(payment.id, 'aprobado')}>
@@ -1010,6 +1019,18 @@ export default function VerifyPaymentsPage() {
                 </DialogFooter>
             </DialogContent>
         </Dialog>
+        
+        <Dialog open={!!receiptImageToView} onOpenChange={() => setReceiptImageToView(null)}>
+            <DialogContent className="max-w-3xl">
+                <DialogHeader>
+                    <DialogTitle>Comprobante de Pago</DialogTitle>
+                </DialogHeader>
+                <div className="p-4 flex justify-center">
+                    <img src={receiptImageToView!} alt="Comprobante de pago" className="max-w-full max-h-[80vh] object-contain"/>
+                </div>
+            </DialogContent>
+        </Dialog>
+
     </div>
   );
 }
