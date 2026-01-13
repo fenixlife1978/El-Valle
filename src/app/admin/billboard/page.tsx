@@ -7,13 +7,14 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { collection, onSnapshot, addDoc, deleteDoc, doc, serverTimestamp, orderBy, query } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, deleteDoc, doc, serverTimestamp, orderBy, query, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { PlusCircle, Loader2, Image as ImageIcon, Trash2, Upload, XCircle, FileText } from 'lucide-react';
+import { PlusCircle, Loader2, Image as ImageIcon, Trash2, Upload, XCircle, FileText, Edit } from 'lucide-react';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { compressImage } from '@/lib/utils';
 import Image from 'next/image';
 import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 
 type Anuncio = {
   id: string;
@@ -36,6 +37,14 @@ export default function BillboardPage() {
   const [descripcion, setDescripcion] = useState('');
   const [imagen, setImagen] = useState<string | null>(null);
 
+  // Edit state
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editingAnuncio, setEditingAnuncio] = useState<Anuncio | null>(null);
+  const [editTitulo, setEditTitulo] = useState('');
+  const [editDescripcion, setEditDescripcion] = useState('');
+  const [editImagen, setEditImagen] = useState<string | null>(null);
+
+
   useEffect(() => {
     const q = query(collection(db, "billboard_announcements"), orderBy("createdAt", "desc"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -53,7 +62,7 @@ export default function BillboardPage() {
       setImagen(null);
   };
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, isEdit = false) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -61,7 +70,11 @@ export default function BillboardPage() {
     toast({ title: 'Procesando imagen...', description: 'Optimizando el archivo para la cartelera.' });
     try {
         const compressedBase64 = await compressImage(file, 800, 800);
-        setImagen(compressedBase64);
+        if (isEdit) {
+            setEditImagen(compressedBase64);
+        } else {
+            setImagen(compressedBase64);
+        }
         toast({ title: 'Imagen lista', description: 'La imagen ha sido procesada y está lista para guardarse.' });
     } catch (error) {
         toast({ variant: 'destructive', title: 'Error de imagen', description: 'No se pudo procesar la imagen.' });
@@ -89,6 +102,39 @@ export default function BillboardPage() {
         } catch (error) {
             console.error("Error saving announcement: ", error);
             toast({ variant: 'destructive', title: 'Error', description: 'No se pudo guardar el anuncio.' });
+        } finally {
+            setIsSubmitting(false);
+        }
+    });
+  };
+
+  const handleOpenEditDialog = (anuncio: Anuncio) => {
+    setEditingAnuncio(anuncio);
+    setEditTitulo(anuncio.titulo);
+    setEditDescripcion(anuncio.descripcion || '');
+    setEditImagen(anuncio.urlImagen);
+    setIsEditDialogOpen(true);
+  };
+
+  const handleUpdateAnuncio = () => {
+    if (!editingAnuncio || !editTitulo || !editImagen) {
+        toast({ variant: 'destructive', title: 'Datos incompletos', description: 'El título y la imagen son obligatorios.' });
+        return;
+    }
+    requestAuthorization(async () => {
+        setIsSubmitting(true);
+        try {
+            const anuncioRef = doc(db, 'billboard_announcements', editingAnuncio.id);
+            await updateDoc(anuncioRef, {
+                titulo: editTitulo,
+                descripcion: editDescripcion,
+                urlImagen: editImagen,
+            });
+            toast({ title: 'Anuncio Actualizado', description: 'Los cambios se han guardado correctamente.' });
+            setIsEditDialogOpen(false);
+        } catch (error) {
+            console.error("Error updating announcement: ", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo actualizar el anuncio.' });
         } finally {
             setIsSubmitting(false);
         }
@@ -133,7 +179,7 @@ export default function BillboardPage() {
             </div>
             <div className="space-y-2">
                 <Label htmlFor="imagen-upload">Imagen del Anuncio (JPG, PNG)</Label>
-                <Input id="imagen-upload" type="file" accept="image/png, image/jpeg" onChange={handleImageUpload} disabled={isSubmitting} />
+                <Input id="imagen-upload" type="file" accept="image/png, image/jpeg" onChange={(e) => handleImageUpload(e, false)} disabled={isSubmitting} />
             </div>
             {imagen && (
                 <div className="space-y-2">
@@ -168,16 +214,21 @@ export default function BillboardPage() {
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {anuncios.map((anuncio) => (
-                        <Card key={anuncio.id} className="overflow-hidden">
+                        <Card key={anuncio.id} className="overflow-hidden flex flex-col">
                             <div className="aspect-square relative w-full">
                                 <Image src={anuncio.urlImagen} alt={anuncio.titulo} layout="fill" className="object-cover" />
                             </div>
-                            <div className="p-4">
+                            <div className="p-4 flex flex-col flex-grow">
                                 <h3 className="font-bold">{anuncio.titulo}</h3>
-                                <p className="text-sm text-muted-foreground truncate">{anuncio.descripcion || 'Sin descripción'}</p>
-                                <Button variant="destructive" size="sm" className="mt-4 w-full" onClick={() => handleDeleteAnuncio(anuncio.id)}>
-                                    <Trash2 className="mr-2 h-4 w-4"/> Eliminar
-                                </Button>
+                                <p className="text-sm text-muted-foreground truncate flex-grow">{anuncio.descripcion || 'Sin descripción'}</p>
+                                <div className="flex gap-2 mt-4">
+                                     <Button variant="outline" size="sm" className="flex-1" onClick={() => handleOpenEditDialog(anuncio)}>
+                                        <Edit className="mr-2 h-4 w-4"/> Editar
+                                    </Button>
+                                    <Button variant="destructive" size="sm" className="flex-1" onClick={() => handleDeleteAnuncio(anuncio.id)}>
+                                        <Trash2 className="mr-2 h-4 w-4"/> Eliminar
+                                    </Button>
+                                </div>
                             </div>
                         </Card>
                     ))}
@@ -185,6 +236,49 @@ export default function BillboardPage() {
             )}
         </CardContent>
       </Card>
+
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+            <DialogContent className="sm:max-w-lg">
+                <DialogHeader>
+                    <DialogTitle>Editar Anuncio</DialogTitle>
+                    <DialogDescription>
+                        Modifica la información del anuncio. Los cambios se reflejarán inmediatamente.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-6 py-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="edit-titulo">Título del Anuncio</Label>
+                        <Input id="edit-titulo" value={editTitulo} onChange={(e) => setEditTitulo(e.target.value)} disabled={isSubmitting} />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="edit-descripcion">Descripción (Opcional)</Label>
+                        <Textarea id="edit-descripcion" value={editDescripcion} onChange={(e) => setEditDescripcion(e.target.value)} disabled={isSubmitting} />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="edit-imagen-upload">Cambiar Imagen (Opcional)</Label>
+                        <Input id="edit-imagen-upload" type="file" accept="image/png, image/jpeg" onChange={(e) => handleImageUpload(e, true)} disabled={isSubmitting} />
+                    </div>
+                    {editImagen && (
+                        <div className="space-y-2">
+                            <Label>Vista Previa de la Imagen</Label>
+                            <div className="relative w-full max-w-sm border p-2 rounded-md bg-muted/50">
+                                <Image src={editImagen} alt="Vista previa de edición" width={800} height={800} className="w-full h-auto object-contain rounded" />
+                                <Button variant="destructive" size="icon" className="absolute -top-2 -right-2 h-7 w-7 rounded-full" onClick={() => setEditImagen(null)} disabled={isSubmitting}>
+                                    <XCircle className="h-5 w-5" />
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>Cancelar</Button>
+                    <Button onClick={handleUpdateAnuncio} disabled={isSubmitting || !editTitulo || !editImagen}>
+                        {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                        Guardar Cambios
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
 
     </div>
   );
