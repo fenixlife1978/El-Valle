@@ -79,7 +79,7 @@ const templates: Template[] = [
     name: 'Constancia de Residencia',
     title: 'CONSTANCIA DE RESIDENCIA',
     generateBody: (person, property) => 
-    `Quien suscribe, en mis funciones de Presidente (a) de la JUNTA ADMINISTRADORA DE CONDOMINIO DEL CONJUNTO RESIDENCIAL EL VALLE, por medio de la presente hago constar que el (la) Ciudadano (a) ${person.name}, titular de la Cédula de Identidad ${person.cedula}, reside en el inmueble ubicado en ${property.street}, ${property.house}, y ha demostrado una conducta de sana convivencia y respeto, apegado a las normas y leyes de nuestra sociedad.\n\nConstancia que se expide en la Ciudad de Independencia, Municipio Independencia, Estado Yaracuy a los ${format(new Date(), 'dd')} días del mes de ${format(new Date(), 'MMMM', { locale: es })} del año ${format(new Date(), 'yyyy')}.`
+    `Quien suscribe, en mis funciones de Presidente (a) de la JUNTA ADMINISTRADORA DE CONDOMINIO DEL CONJUNTO RESIDENCIAL EL VALLE, por medio de la presente hago constar que el (la) Ciudadano (a) ${person.name}, titular de la Cédula de Identidad ${person.cedula}, reside en el inmueble ubicado en ${property.street}, ${property.house} y ha demostrado una conducta de sana convivencia y respeto, apegado a las normas y leyes de nuestra sociedad.\n\nConstancia que se expide en la Ciudad de Independencia, Municipio Independencia, Estado Yaracuy a los ${format(new Date(), 'dd')} días del mes de ${format(new Date(), 'MMMM', { locale: es })} del año ${format(new Date(), 'yyyy')}.`
   },
   {
     id: 'solvencia',
@@ -93,7 +93,7 @@ const templates: Template[] = [
     name: 'Permiso de Remodelación',
     title: 'PERMISO DE REMODELACIÓN',
     generateBody: (person, property, description) =>
-      `Por medio de la presente, la Junta de Condominio del Conjunto Residencial El Valle, otorga el permiso al ciudadano(a) ${person.name}, titular de la Cédula de Identidad ${person.cedula || '[Cédula no registrada]'}, para realizar trabajos de remodelación en la propiedad ubicada en la ${property.street}, Casa N° ${property.house}.\n\nLos trabajos a realizar consisten en: ${description || '[Describir trabajos]'}\n\nEl propietario se compromete a cumplir con el horario establecido para trabajos (lunes a viernes de 8:00 a.m. a 5:00 p.m. y sábados de 9:00 a.m. a 2:00 p.m.), así como a mantener la limpieza de las áreas comunes y a reparar cualquier daño que pudiera ocasionar.\n\nPermiso válido desde la fecha de su emisión.`
+      `Por medio de la presente, la Junta de Condominio del Conjunto Residencial El Valle, otorga el permiso al ciudadano(a) ${person.name}, titular de la Cédula de Identidad ${person.cedula || '[Cédula no registrada]'}, para realizar trabajos de remodelación en la propiedad ubicada en la ${property.street}, ${property.house}.\n\nLos trabajos a realizar consisten en: ${description || '[Describir trabajos]'}\n\nEl propietario se compromete a cumplir con el horario establecido para trabajos (lunes a viernes de 8:00 a.m. a 5:00 p.m. y sábados de 9:00 a.m. a 2:00 p.m.), así como a mantener la limpieza de las áreas comunes y a reparar cualquier daño que pudiera ocasionar.\n\nPermiso válido desde la fecha de su emisión.`
   },
   {
     id: 'personalizada',
@@ -313,8 +313,9 @@ export default function CertificatesPage() {
         const title = template ? template.title : 'DOCUMENTO';
         doc.setFontSize(16).setFont('helvetica', 'bold').text(title, pageWidth / 2, 70, { align: 'center' });
     
-        // --- BODY TEXT ---
         let finalY = 90;
+    
+        // --- BODY ---
         const textOptions = { 
             align: 'justify' as const, 
             lineHeightFactor: 1.6,
@@ -323,25 +324,29 @@ export default function CertificatesPage() {
         doc.setFontSize(12).setFont('helvetica', 'normal');
         doc.text(certificate.body, margin, finalY, textOptions);
         
-        // --- SIGNATURE AND QR CODE ---
         const bodyTextHeight = doc.getTextDimensions(certificate.body, textOptions).h;
-        finalY += bodyTextHeight + 30; // Move signature block down
-
+        finalY += bodyTextHeight; // finalY is now at the bottom of the text block
+    
+        // --- SIGNATURE AND QR CODE ---
+        const signatureY = finalY > 230 ? 250 : finalY + 40; // Logic to move signature down if text is long
         const qrSize = 30;
+        const qrX = pageWidth - margin - qrSize;
+        const qrY = signatureY - qrSize;
+    
         const qrContent = `ID:${certificate.id}\nFecha:${format(certificate.createdAt.toDate(), 'yyyy-MM-dd')}\nPropietario:${certificate.ownerName}`;
         try {
             const qrCodeUrl = await QRCode.toDataURL(qrContent, { errorCorrectionLevel: 'M', width: qrSize });
-            doc.addImage(qrCodeUrl, 'PNG', pageWidth - margin - qrSize, finalY, qrSize, qrSize);
+            doc.addImage(qrCodeUrl, 'PNG', qrX, qrY, qrSize, qrSize);
         } catch (err) {
             console.error('Error generating QR Code', err);
         }
-
+    
         const signatureWidth = 80;
         const signatureX = (pageWidth / 2) - (signatureWidth / 2);
     
         doc.setLineWidth(0.5);
-        doc.line(signatureX, finalY, signatureX + signatureWidth, finalY); 
-        doc.setFontSize(10).setFont('helvetica', 'bold').text('Presidente de la Junta de Condominio', pageWidth / 2, finalY + 8, { align: 'center' });
+        doc.line(signatureX, signatureY, signatureX + signatureWidth, signatureY); 
+        doc.setFontSize(10).setFont('helvetica', 'bold').text('Presidente de la Junta de Condominio', pageWidth / 2, signatureY + 8, { align: 'center' });
     
         doc.save(`constancia_${certificate.type}_${certificate.ownerName.replace(/\s/g, '_')}.pdf`);
     };
