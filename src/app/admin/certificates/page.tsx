@@ -79,7 +79,7 @@ const templates: Template[] = [
     name: 'Constancia de Residencia',
     title: 'CONSTANCIA DE RESIDENCIA',
     generateBody: (person, property) =>
-      `Quien suscribe, en mis funciones de Presidente de la ASOCIACIÓN CIVIL RESIDENCIAL EL VALLE, en el Municipio Independencia, Estado Yaracuy, ubicado al final Av. Libertador, sector Cuatro Esquina por medio de la presente hace constar que el(la) Ciudadano(a):\n\n${person.name}, portador(a) de la cedula de identidad ${person.cedula || '[Cédula no registrada]'}, reside en el inmueble identificado con; ${property.street}, ${property.house}, la cual ha demostrado una conducta de sana convivencia y respeto, apegado a las normas y leyes de nuestra sociedad.\n\nConstancia que se expide en la Ciudad de San Felipe, Municipio Independencia, Estado Yaracuy a los ${format(new Date(), 'dd')} días del mes de ${format(new Date(), 'MMMM', { locale: es })} del año ${format(new Date(), 'yyyy')}.`
+      `Quien suscribe, en mis funciones de Presidente de la ASOCIACIÓN CIVIL RESIDENCIAL EL VALLE, por medio de la presente hace constar que el(la) Ciudadano(a): ${person.name}, portador(a) de la Cédula de Identidad ${person.cedula || '[Cédula no registrada]'}, reside en el inmueble identificado en la ${property.street}, casa ${property.house}, la cual ha demostrado una conducta de sana convivencia y respeto, apegado a las normas y leyes de nuestra sociedad.\n\nConstancia que se expide en la Ciudad de San Felipe, Municipio Independencia, Estado Yaracuy a los ${format(new Date(), 'dd')} días del mes de ${format(new Date(), 'MMMM', { locale: es })} del año ${format(new Date(), 'yyyy')}.`
   },
   {
     id: 'solvencia',
@@ -330,8 +330,11 @@ export default function CertificatesPage() {
       doc.setFontSize(16).setFont('helvetica', 'bold').text(title, pageWidth / 2, 85, { align: 'center' });
   
       doc.setFontSize(12).setFont('helvetica', 'normal');
-      const splitBody = doc.splitTextToSize(certificate.body, pageWidth - margin * 2);
-      doc.text(splitBody, margin, 100, { align: 'justify', lineHeightFactor: 1.5 });
+      doc.text(certificate.body, margin, 100, { 
+        align: 'justify', 
+        lineHeightFactor: 1.5,
+        maxWidth: pageWidth - margin * 2 
+      });
   
       const qrContent = `ID:${certificate.id}\nFecha:${format(certificate.createdAt.toDate(), 'yyyy-MM-dd')}\nPropietario:${certificate.ownerName}`;
       const qrCodeUrl = await QRCode.toDataURL(qrContent, { errorCorrectionLevel: 'M' });
@@ -489,11 +492,11 @@ export default function CertificatesPage() {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="estadoCivil">Estado Civil (Opcional)</Label>
-                      <Input id="estadoCivil" value={manualData.estadoCivil} onChange={handleManualDataChange} />
+                      <Input id="estadoCivil" value={manualData.estadoCivil || ''} onChange={handleManualDataChange} />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="profesion">Profesión (Opcional)</Label>
-                      <Input id="profesion" value={manualData.profesion} onChange={handleManualDataChange} />
+                      <Input id="profesion" value={manualData.profesion || ''} onChange={handleManualDataChange} />
                     </div>
                   </div>
                 )}
