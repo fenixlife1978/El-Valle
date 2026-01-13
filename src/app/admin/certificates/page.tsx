@@ -299,6 +299,7 @@ export default function CertificatesPage() {
     
         const doc = new jsPDF();
         const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
         const margin = 20;
     
         // --- HEADER ---
@@ -321,11 +322,6 @@ export default function CertificatesPage() {
     
         let startY = 85;
     
-        // --- QR CODE (RIGHT SIDE) ---
-        const qrContent = `ID:${certificate.id}\nFecha:${format(certificate.createdAt.toDate(), 'yyyy-MM-dd')}\nPropietario:${certificate.ownerName}`;
-        const qrCodeUrl = await QRCode.toDataURL(qrContent, { errorCorrectionLevel: 'M' });
-        doc.addImage(qrCodeUrl, 'PNG', pageWidth - margin - 40, startY, 40, 40);
-    
         // --- PERSONAL DATA (LEFT SIDE) ---
         doc.setFontSize(12).setFont('helvetica', 'normal');
         const personalDataX = margin;
@@ -334,8 +330,8 @@ export default function CertificatesPage() {
         const addDataLine = (label: string, value?: string) => {
             if (value) {
                 doc.setFont('helvetica', 'bold').text(label, personalDataX, dataY);
-                doc.setFont('helvetica', 'normal').text(value, personalDataX + 35, dataY);
-                dataY += 7;
+                doc.setFont('helvetica', 'normal').text(value, personalDataX + 50, dataY); // Increased offset
+                dataY += 8;
             }
         };
     
@@ -352,15 +348,19 @@ export default function CertificatesPage() {
         const bodyText = certificate.body;
         doc.text(bodyText, margin, startY, {
             align: 'justify',
-            lineHeightFactor: 1.8, // Increased line spacing
+            lineHeightFactor: 1.8,
             maxWidth: pageWidth - (margin * 2)
         });
     
-        // --- SIGNATURE ---
-        const signatureY = doc.internal.pageSize.getHeight() - 60;
+        // --- SIGNATURE AND QR CODE ---
+        const signatureY = pageHeight - 60;
         doc.setLineWidth(0.5);
         doc.line(pageWidth / 2 - 50, signatureY, pageWidth / 2 + 50, signatureY);
         doc.setFontSize(10).setFont('helvetica', 'bold').text('Por la Junta Administradora del Condominio', pageWidth / 2, signatureY + 8, { align: 'center' });
+        
+        const qrContent = `ID:${certificate.id}\nFecha:${format(certificate.createdAt.toDate(), 'yyyy-MM-dd')}\nPropietario:${certificate.ownerName}`;
+        const qrCodeUrl = await QRCode.toDataURL(qrContent, { errorCorrectionLevel: 'M', width: 40 });
+        doc.addImage(qrCodeUrl, 'PNG', pageWidth - margin - 40, signatureY - 10, 40, 40);
     
         doc.save(`constancia_${certificate.type}_${certificate.ownerName.replace(/\s/g, '_')}.pdf`);
     };
