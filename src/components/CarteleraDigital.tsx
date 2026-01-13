@@ -28,7 +28,7 @@ export default function CarteleraDigital({ anuncios }: { anuncios: Anuncio[] }) 
   }
 
   return (
-    <div className="max-w-lg mx-auto relative group">
+    <div className="max-w-md mx-auto relative group">
       {/* Marco decorativo del "Televisor" con tamaño ajustado */}
       <div className="relative rounded-xl overflow-hidden shadow-lg border-2 md:border-4 border-card bg-card aspect-[16/9]">
         <Swiper
