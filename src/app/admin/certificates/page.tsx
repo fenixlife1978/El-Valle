@@ -322,20 +322,28 @@ export default function CertificatesPage() {
     
         // --- BODY TEXT ---
         doc.setFontSize(12).setFont('helvetica', 'normal');
-        const bodyText = doc.splitTextToSize(certificate.body, pageWidth - margin * 2);
-        doc.text(bodyText, margin, 90, { align: 'justify', lineHeightFactor: 1.6 });
-        
-        const bodyTextHeight = doc.getTextDimensions(bodyText).h;
-        let finalY = 90 + bodyTextHeight + 40; 
+        let finalY = 90;
+        doc.text(certificate.body, margin, finalY, { 
+            align: 'justify', 
+            lineHeightFactor: 1.6,
+            maxWidth: pageWidth - (margin * 2) 
+        });
+
+        // Calculate Y position after text
+        const bodyTextLines = doc.splitTextToSize(certificate.body, pageWidth - (margin * 2));
+        const bodyTextHeight = bodyTextLines.length * (doc.getLineHeight() * 0.3527777778 * 1.6); // Convert points to mm and apply line height factor
+        finalY += bodyTextHeight + 40;
 
         // --- SIGNATURE AND QR CODE ---
         const qrSize = 40;
+        // Position QR Code at the bottom right
+        const qrY = doc.internal.pageSize.getHeight() - margin - qrSize;
         const qrX = pageWidth - margin - qrSize;
-        const qrY = finalY - qrSize;
         
         const signatureWidth = 80;
         const signatureX = (pageWidth - signatureWidth) / 2;
-        const signatureY = finalY;
+        // Position signature line level with the bottom of the QR code
+        const signatureY = qrY + qrSize;
 
         const qrContent = `ID:${certificate.id}\nFecha:${format(certificate.createdAt.toDate(), 'yyyy-MM-dd')}\nPropietario:${certificate.ownerName}`;
         try {
