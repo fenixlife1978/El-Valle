@@ -78,8 +78,7 @@ const templates: Template[] = [
     id: 'residencia',
     name: 'Constancia de Residencia',
     title: 'CONSTANCIA DE RESIDENCIA',
-    generateBody: (person, property) =>
-      `Quien suscribe, en mis funciones de Presidente de la ASOCIACIÓN CIVIL RESIDENCIAL EL VALLE, por medio de la presente hace constar que el(la) Ciudadano(a): ${person.name}, portador(a) de la Cédula de Identidad V-${person.cedula || '[Cédula no registrada]'}, reside en el inmueble identificado en la ${property.street}, ${property.house}, la cual ha demostrado una conducta de sana convivencia y respeto, apegado a las normas y leyes de nuestra sociedad.\n\nConstancia que se expide en la Ciudad de San Felipe, Municipio Independencia, Estado Yaracuy a los ${format(new Date(), 'dd')} días del mes de ${format(new Date(), 'MMMM', { locale: es })} del año ${format(new Date(), 'yyyy')}.`
+    generateBody: (person, property) => `Quien suscribe, en mis funciones de Presidente de la ASOCIACIÓN CIVIL RESIDENCIAL EL VALLE, por medio de la presente hago constar que el(la) Ciudadano(a): ${person.name}, portador(a) de la Cédula de Identidad V-${person.cedula}, reside en el inmueble identificado en la ${property.street}, ${property.house}, la cual ha demostrado una conducta de sana convivencia y respeto, apegado a las normas y leyes de nuestra sociedad.\n\nConstancia que se expide en la Ciudad de San Felipe, Municipio Independencia, Estado Yaracuy a los ${format(new Date(), 'dd')} días del mes de ${format(new Date(), 'MMMM', { locale: es })} del año ${format(new Date(), 'yyyy')}.`
   },
   {
     id: 'solvencia',
@@ -280,7 +279,7 @@ export default function CertificatesPage() {
               createdAt: serverTimestamp() as Timestamp
             };
             const docRef = await addDoc(collection(db, 'certificates'), docData);
-            await generatePDF({ ...docData, id: docRef.id, createdAt: Timestamp.now() } as Certificate);
+            await generatePDF({ ...docData, id: docRef.id, createdAt: Timestamp.now() } as Certificate, person);
             toast({ title: 'Constancia Generada', description: 'El documento PDF ha sido creado y guardado en el historial.' });
             resetDialog();
           } catch (error) {
@@ -292,61 +291,78 @@ export default function CertificatesPage() {
     });
     };
   
-    const generatePDF = async (certificate: Certificate) => {
-      if (!companyInfo) {
-        toast({ variant: 'destructive', title: 'Error', description: 'No se ha cargado la información de la empresa.' });
-        return;
-      }
-  
-      const doc = new jsPDF();
-      const pageWidth = doc.internal.pageSize.getWidth();
-      const pageHeight = doc.internal.pageSize.getHeight();
-      const margin = 20;
-      const logoSize = 30;
-      const logoY = 15;
-      const infoX = margin + logoSize + 5;
-  
-      if (companyInfo.logo) {
-        try {
-          doc.addImage(companyInfo.logo, 'PNG', margin, logoY, logoSize, logoSize);
-        } catch (e) {
-          console.error('Error adding logo:', e);
+    const generatePDF = async (certificate: Certificate, personData: Partial<Owner & ManualPerson>) => {
+        if (!companyInfo) {
+            toast({ variant: 'destructive', title: 'Error', description: 'No se ha cargado la información de la empresa.' });
+            return;
         }
-      }
-  
-      doc.setFontSize(10).setFont('helvetica', 'normal');
-      let currentY = logoY + 5;
-      doc.text(companyInfo.name, infoX, currentY);
-      currentY += 5;
-      doc.text(companyInfo.rif, infoX, currentY);
-      currentY += 5;
-      const addressLines = doc.splitTextToSize(companyInfo.address, pageWidth - infoX - margin);
-      doc.text(addressLines, infoX, currentY);
-  
-      doc.text(`Fecha: ${format(new Date(), 'dd/MM/yyyy')}`, pageWidth - margin, 20, { align: 'right' });
-  
-      const template = templates.find((t) => t.id === certificate.type);
-      const title = template ? template.title : 'DOCUMENTO';
-      doc.setFontSize(16).setFont('helvetica', 'bold').text(title, pageWidth / 2, 85, { align: 'center' });
-  
-      doc.setFontSize(12).setFont('helvetica', 'normal');
-      doc.text(certificate.body, margin, 100, { 
-        align: 'justify', 
-        lineHeightFactor: 1.5,
-        maxWidth: pageWidth - margin * 2 
-      });
-  
-      const qrContent = `ID:${certificate.id}\nFecha:${format(certificate.createdAt.toDate(), 'yyyy-MM-dd')}\nPropietario:${certificate.ownerName}`;
-      const qrCodeUrl = await QRCode.toDataURL(qrContent, { errorCorrectionLevel: 'M' });
-  
-      const signatureY = pageHeight - 70;
-      doc.addImage(qrCodeUrl, 'PNG', margin, signatureY - 20, 30, 30);
-  
-      doc.setLineWidth(0.5);
-      doc.line(pageWidth / 2 - 40, signatureY, pageWidth / 2 + 40, signatureY);
-      doc.setFontSize(10).setFont('helvetica', 'bold').text('Junta de Condominio', pageWidth / 2, signatureY + 8, { align: 'center' });
-  
-      doc.save(`constancia_${certificate.type}_${certificate.ownerName.replace(/\s/g, '_')}.pdf`);
+    
+        const doc = new jsPDF();
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const margin = 20;
+    
+        // --- HEADER ---
+        if (companyInfo.logo) {
+            try { doc.addImage(companyInfo.logo, 'PNG', margin, 15, 30, 30); }
+            catch(e){ console.error("Error adding logo to PDF", e); }
+        }
+    
+        doc.setFontSize(10).setFont('helvetica', 'normal');
+        doc.text(companyInfo.name, margin + 35, 20);
+        doc.text(companyInfo.rif, margin + 35, 25);
+        const addressLines = doc.splitTextToSize(companyInfo.address, pageWidth - (margin + 40) - margin);
+        doc.text(addressLines, margin + 35, 30);
+        doc.text(`Fecha: ${format(new Date(), 'dd/MM/yyyy')}`, pageWidth - margin, 20, { align: 'right' });
+    
+        // --- TITLE ---
+        const template = templates.find((t) => t.id === certificate.type);
+        const title = template ? template.title : 'DOCUMENTO';
+        doc.setFontSize(16).setFont('helvetica', 'bold').text(title, pageWidth / 2, 70, { align: 'center' });
+    
+        let startY = 85;
+    
+        // --- QR CODE (RIGHT SIDE) ---
+        const qrContent = `ID:${certificate.id}\nFecha:${format(certificate.createdAt.toDate(), 'yyyy-MM-dd')}\nPropietario:${certificate.ownerName}`;
+        const qrCodeUrl = await QRCode.toDataURL(qrContent, { errorCorrectionLevel: 'M' });
+        doc.addImage(qrCodeUrl, 'PNG', pageWidth - margin - 40, startY, 40, 40);
+    
+        // --- PERSONAL DATA (LEFT SIDE) ---
+        doc.setFontSize(12).setFont('helvetica', 'normal');
+        const personalDataX = margin;
+        let dataY = startY + 5;
+    
+        const addDataLine = (label: string, value?: string) => {
+            if (value) {
+                doc.setFont('helvetica', 'bold').text(label, personalDataX, dataY);
+                doc.setFont('helvetica', 'normal').text(value, personalDataX + 35, dataY);
+                dataY += 7;
+            }
+        };
+    
+        addDataLine("Nombres y Apellidos:", certificate.ownerName);
+        addDataLine("Cédula de Identidad:", `V-${certificate.ownerCedula}`);
+        addDataLine("Propiedad:", `${certificate.property.street}, ${certificate.property.house}`);
+        addDataLine("Estado Civil:", personData.estadoCivil);
+        addDataLine("Profesión:", personData.profesion);
+        addDataLine("Otros:", personData.otros);
+    
+        // --- BODY TEXT ---
+        startY = dataY + 15; // Space after personal data
+        doc.setFontSize(12).setFont('helvetica', 'normal');
+        const bodyText = certificate.body;
+        doc.text(bodyText, margin, startY, {
+            align: 'justify',
+            lineHeightFactor: 1.8, // Increased line spacing
+            maxWidth: pageWidth - (margin * 2)
+        });
+    
+        // --- SIGNATURE ---
+        const signatureY = doc.internal.pageSize.getHeight() - 60;
+        doc.setLineWidth(0.5);
+        doc.line(pageWidth / 2 - 50, signatureY, pageWidth / 2 + 50, signatureY);
+        doc.setFontSize(10).setFont('helvetica', 'bold').text('Por la Junta Administradora del Condominio', pageWidth / 2, signatureY + 8, { align: 'center' });
+    
+        doc.save(`constancia_${certificate.type}_${certificate.ownerName.replace(/\s/g, '_')}.pdf`);
     };
   
     const handleDeleteCertificate = async () => {
@@ -655,7 +671,10 @@ export default function CertificatesPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => generatePDF(cert)}>
+                        <DropdownMenuItem onClick={() => {
+                            const person = owners.find(o => o.id === cert.ownerId) || {name: cert.ownerName, cedula: cert.ownerCedula};
+                            generatePDF(cert, person);
+                        }}>
                           <FileText className="mr-2 h-4 w-4" />
                           Regenerar PDF
                         </DropdownMenuItem>
