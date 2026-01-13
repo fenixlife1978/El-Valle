@@ -238,14 +238,14 @@ export default function BillboardPage() {
       </Card>
 
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-            <DialogContent className="sm:max-w-lg">
+            <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col">
                 <DialogHeader>
                     <DialogTitle>Editar Anuncio</DialogTitle>
                     <DialogDescription>
                         Modifica la información del anuncio. Los cambios se reflejarán inmediatamente.
                     </DialogDescription>
                 </DialogHeader>
-                <div className="space-y-6 py-4">
+                <div className="space-y-6 py-4 overflow-y-auto pr-6 -mr-6">
                     <div className="space-y-2">
                         <Label htmlFor="edit-titulo">Título del Anuncio</Label>
                         <Input id="edit-titulo" value={editTitulo} onChange={(e) => setEditTitulo(e.target.value)} disabled={isSubmitting} />
@@ -270,7 +270,7 @@ export default function BillboardPage() {
                         </div>
                     )}
                 </div>
-                <DialogFooter>
+                <DialogFooter className="mt-auto pt-4 border-t">
                     <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>Cancelar</Button>
                     <Button onClick={handleUpdateAnuncio} disabled={isSubmitting || !editTitulo || !editImagen}>
                         {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
