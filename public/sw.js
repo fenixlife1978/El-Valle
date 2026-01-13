@@ -4,8 +4,7 @@ const CACHE_NAME = 'valle-condo-v1';
 const ASSETS_TO_CACHE = [
   '/',
   '/manifest.json',
-  '/icon-192x192.png',
-  '/icon-512x512.png'
+  '/og-banner.png'
 ];
 
 // 1. EVENTO DE INSTALACIÓN: Guarda archivos básicos en caché
