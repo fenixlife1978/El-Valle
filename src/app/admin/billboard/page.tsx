@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { collection, onSnapshot, addDoc, deleteDoc, doc, serverTimestamp, orderBy, query, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { PlusCircle, Loader2, Image as ImageIcon, Trash2, Upload, XCircle, FileText, Edit } from 'lucide-react';
+import { PlusCircle, Loader2, Image as ImageIcon, Trash2, Upload, XCircle, FileText, Edit, Save } from 'lucide-react';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { compressImage } from '@/lib/utils';
 import Image from 'next/image';
