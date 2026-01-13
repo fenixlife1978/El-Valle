@@ -263,7 +263,7 @@ export default function ReportViewerPage() {
     if (companyInfo?.logo) doc.addImage(companyInfo.logo, 'PNG', 15, startY, 20, 20);
     if (companyInfo) doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, 40, startY + 5);
 
-    doc.setFontSize(16).setFont('helvetica', 'bold').text('Reporte Integral de Propietarios', doc.internal.pageSize.getWidth() / 2, startY + 15, { align: 'center' });
+    doc.setFontSize(16).setFont('helvetica', 'bold').text('Reporte Integral de Propietarios', doc.internal.pageSize.getWidth() / 2, startY + 15, { align: 'center'});
 
     startY += 25;
     doc.setFontSize(9).setFont('helvetica', 'normal');
