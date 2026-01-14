@@ -33,6 +33,7 @@ import { cn } from "@/lib/utils";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import QRCode from 'qrcode';
+import Marquee from "@/components/ui/marquee";
 
 
 // -------------------------------------------------------------------------
@@ -508,14 +509,15 @@ export default function OwnerDashboardPage() {
         <div className="space-y-6 md:space-y-8 p-4 md:p-8">
             <h1 className="text-3xl font-bold font-headline">👋 ¡Hola, {ownerData.name?.split(' ')[0] || 'Propietario'}!</h1>
             
-            <CarteleraDigital anuncios={anuncios} />
-
-            <Alert className="border-orange-300 bg-yellow-50 text-yellow-700 shadow-md">
-                <HelpCircle className="h-4 w-4 !text-orange-500" />
-                <AlertDescription className="font-semibold">
+            <div className="relative w-full overflow-hidden rounded-lg bg-yellow-400 text-black">
+                <Marquee pauseOnHover>
+                    <p className="px-4 text-sm font-semibold">
                     Recuerda que tú Cuota Condominial se Carga el día 1 y Vence los días 5 de cada Mes
-                </AlertDescription>
-            </Alert>
+                    </p>
+                </Marquee>
+            </div>
+            
+            <CarteleraDigital anuncios={anuncios} />
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* --- Tarjeta de Estado de Cuenta --- */}
