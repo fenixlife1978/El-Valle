@@ -443,7 +443,7 @@ export default function OwnersManagement() {
                                             </div>
                                             <div className="col-span-2 flex items-end justify-end h-full">
                                             {currentOwner.properties.length > 1 && (
-                                                <Button size="icon" variant="ghost" className="text-destructive" onClick={()={() => removeProperty(index)}}>
+                                                <Button size="icon" variant="ghost" className="text-destructive" onClick={() => removeProperty(index)}>
                                                     <MinusCircle className="h-5 w-5"/>
                                                 </Button>
                                             )}
@@ -490,5 +490,3 @@ export default function OwnersManagement() {
         </div>
     );
 }
-
-    
