@@ -11,11 +11,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
+// IMPORTACIÓN DE DIALOG COMPLETA
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"; 
 import { useToast } from '@/hooks/use-toast';
-import { CalendarIcon, CheckCircle2, Trash2, PlusCircle, Loader2, Search, XCircle, Wand2, UserPlus, Banknote, Info } from 'lucide-react';
+// IMPORTACIÓN DE ICONOS - Se agregó 'Info'
+import { CalendarIcon, CheckCircle2, Trash2, PlusCircle, Loader2, Search, XCircle, Wand2, UserPlus, Banknote, Info, Upload, Paperclip } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { cn } from '@/lib/utils';
+import { cn, compressImage } from '@/lib/utils';
 import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc, where, getDocs, Timestamp, setDoc } from 'firebase/firestore';
 import { db, storage } from '@/lib/firebase';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
@@ -24,7 +27,6 @@ import { inferPaymentDetails } from '@/ai/flows/infer-payment-details';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/hooks/use-auth';
 import { BankSelectionModal } from '@/components/bank-selection-modal';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 
 type Owner = {
@@ -70,6 +72,8 @@ export default function UnifiedPaymentsPage() {
     const [reference, setReference] = useState('');
     const [beneficiaryType, setBeneficiaryType] = useState<BeneficiaryType>('propio');
     const [totalAmount, setTotalAmount] = useState<string>('');
+    const [receiptImage, setReceiptImage] = useState<string | null>(null);
+
     
     // State for the AI feature
     const [aiPrompt, setAiPrompt] = useState('');
@@ -77,9 +81,12 @@ export default function UnifiedPaymentsPage() {
 
     // State for the new beneficiary selection flow
     const [beneficiaryRows, setBeneficiaryRows] = useState<BeneficiaryRow[]>([]);
+    
     const [isBankModalOpen, setIsBankModalOpen] = useState(false);
     
-    const [isInfoDialogOpen, setIsInfoDialogOpen] = useState(false);
+    // SOLUCIÓN Código 2304: Declaración del estado del Dialog de información
+    const [isInfoDialogOpen, setIsInfoDialogOpen] = useState(false); 
+
 
     // --- Data Fetching ---
     useEffect(() => {
@@ -180,6 +187,7 @@ export default function UnifiedPaymentsPage() {
         setReference('');
         setBeneficiaryType('propio');
         setTotalAmount('');
+        setReceiptImage(null);
         setAiPrompt('');
         if (beneficiaryType === 'propio' && authOwnerData) {
             setBeneficiaryRows([{
@@ -216,7 +224,8 @@ export default function UnifiedPaymentsPage() {
         }
     };
 
-     const handleInferDetails = async () => {
+
+    const handleInferDetails = async () => {
         if (!aiPrompt.trim()) {
             toast({ variant: 'destructive', title: 'Texto Vacío', description: 'Por favor, ingrese una descripción del pago.' });
             return;
@@ -240,6 +249,22 @@ export default function UnifiedPaymentsPage() {
         }
     };
     
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setLoading(true);
+        try {
+            const compressedBase64 = await compressImage(file, 800, 800);
+            setReceiptImage(compressedBase64);
+            toast({ title: 'Comprobante cargado', description: 'La imagen se ha optimizado y está lista para ser enviada.' });
+        } catch (error) {
+            toast({ variant: 'destructive', title: 'Error de imagen', description: 'No se pudo procesar la imagen.' });
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const validateForm = async (): Promise<{ isValid: boolean, error?: string }> => {
         // Level A: Required fields validation
         if (!paymentDate) return { isValid: false, error: 'La fecha del pago es obligatoria.' };
@@ -258,6 +283,10 @@ export default function UnifiedPaymentsPage() {
         
         if (reference.length !== 6) {
             return { isValid: false, error: 'La referencia debe tener exactamente 6 dígitos.' };
+        }
+        
+        if (!receiptImage) {
+            return { isValid: false, error: 'Debe adjuntar una imagen del comprobante de pago.' };
         }
         
         // Check for duplicate payment
@@ -315,6 +344,7 @@ export default function UnifiedPaymentsPage() {
                 status: 'pendiente' as 'pendiente',
                 reportedAt: serverTimestamp(),
                 reportedBy: authUser?.uid || 'unknown',
+                receiptUrl: receiptImage || null,
             };
             
             const paymentRef = await addDoc(collection(db, "payments"), paymentData);
@@ -465,16 +495,29 @@ export default function UnifiedPaymentsPage() {
                     <CardContent className="space-y-6">
                         <div className="grid md:grid-cols-2 gap-6">
                              <div className="space-y-2">
-                                <Label htmlFor="totalAmount">Monto Total del Pago (Bs.)</Label>
-                                <Input id="totalAmount" type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} placeholder="0.00" disabled={loading}/>
-                            </div>
-                            <div className="space-y-3">
-                                <Label>Tipo de Pago</Label>
-                                <RadioGroup value={beneficiaryType} onValueChange={(v) => setBeneficiaryType(v as BeneficiaryType)} className="flex gap-4" disabled={loading}>
-                                    <div className="flex items-center space-x-2"><RadioGroupItem value="propio" id="r-propio" /><Label htmlFor="r-propio">Pago Propio</Label></div>
-                                    <div className="flex items-center space-x-2"><RadioGroupItem value="terceros" id="r-terceros" /><Label htmlFor="r-terceros">Pago a Terceros</Label></div>
-                                </RadioGroup>
-                            </div>
+                                 <Label htmlFor="totalAmount">Monto Total del Pago (Bs.)</Label>
+                                 <Input id="totalAmount" type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} placeholder="0.00" disabled={loading}/>
+                             </div>
+                             <div className="space-y-3">
+                                 <Label>Tipo de Pago</Label>
+                                 <RadioGroup value={beneficiaryType} onValueChange={(v) => setBeneficiaryType(v as BeneficiaryType)} className="flex gap-4" disabled={loading}>
+                                     <div className="flex items-center space-x-2"><RadioGroupItem value="propio" id="r-propio" /><Label htmlFor="r-propio">Pago Propio</Label></div>
+                                     <div className="flex items-center space-x-2"><RadioGroupItem value="terceros" id="r-terceros" /><Label htmlFor="r-terceros">Pago a Terceros</Label></div>
+                                 </RadioGroup>
+                             </div>
+                        </div>
+                        
+                        <div className="space-y-2">
+                            <Label htmlFor="receipt">Comprobante de Pago (Obligatorio)</Label>
+                            <Input id="receipt" type="file" accept="image/png, image/jpeg" onChange={handleImageUpload} disabled={loading}/>
+                             {receiptImage && (
+                                <div className="mt-2 relative w-32 h-32 border p-1 rounded-md">
+                                    <img src={receiptImage} alt="Vista previa del comprobante" className="w-full h-full object-contain" />
+                                    <Button variant="destructive" size="icon" className="absolute -top-2 -right-2 h-6 w-6 rounded-full" onClick={() => setReceiptImage(null)}>
+                                        <XCircle className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                            )}
                         </div>
 
                         <div className="space-y-4">
@@ -498,6 +541,7 @@ export default function UnifiedPaymentsPage() {
                                                                 {getFilteredOwners(row.searchTerm).map(owner => (
                                                                     <div key={owner.id} onClick={() => handleOwnerSelect(row.id, owner)} className="p-2 hover:bg-muted cursor-pointer border-b last:border-b-0">
                                                                         <p className="font-medium text-sm">{owner.name}</p>
+                                                                        <p className="text-sm text-muted-foreground">{owner.properties?.map(p => `${p.street}-${p.house}`).join(', ')}</p>
                                                                     </div>
                                                                 ))}
                                                             </ScrollArea>
@@ -543,10 +587,10 @@ export default function UnifiedPaymentsPage() {
                                     )}
                                 </Card>
                             ))}
-                           
-                            {beneficiaryType === 'terceros' && (
-                                <Button type="button" variant="outline" size="sm" onClick={addBeneficiaryRow} disabled={loading}><UserPlus className="mr-2 h-4 w-4"/>Añadir Otro Beneficiario</Button>
-                            )}
+                            
+                             {beneficiaryType === 'terceros' && (
+                                 <Button type="button" variant="outline" size="sm" onClick={addBeneficiaryRow} disabled={loading}><UserPlus className="mr-2 h-4 w-4"/>Añadir Otro Beneficiario</Button>
+                             )}
 
                             <CardFooter className="p-4 bg-background/50 rounded-lg space-y-2 mt-4 flex-col items-stretch">
                                 <div className="flex justify-between text-sm font-medium"><span>Monto Total del Pago:</span><span>Bs. {Number(totalAmount || 0).toFixed(2)}</span></div>
@@ -557,10 +601,10 @@ export default function UnifiedPaymentsPage() {
                         </div>
                     </CardContent>
                     <CardFooter className='flex flex-col items-end gap-4'>
-                         <Button type="submit" className="w-full md:w-auto" disabled={loading}>
-                            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CheckCircle2 className="mr-2 h-4 w-4"/>}
-                            {loading ? 'Enviando...' : 'Enviar Reporte'}
-                        </Button>
+                           <Button type="submit" className="w-full md:w-auto" disabled={loading}>
+                                {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CheckCircle2 className="mr-2 h-4 w-4"/>}
+                                {loading ? 'Enviando...' : 'Enviar Reporte'}
+                            </Button>
                     </CardFooter>
                 </Card>
             </form>

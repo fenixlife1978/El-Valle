@@ -111,7 +111,6 @@ export default function OwnersManagement() {
     const [searchTerm, setSearchTerm] = useState('');
     const [showPassword, setShowPassword] = useState(false);
 
-    const importFileRef = useRef<HTMLInputElement>(null);
     const isMainAdmin = currentUser?.uid === ADMIN_USER_ID;
 
     const filterUsers = (users: Owner[], term: string) => {
@@ -205,8 +204,6 @@ export default function OwnersManagement() {
 
     const handleExportExcel = async () => { /* ... (export logic) */ };
     const handleExportPDF = () => { /* ... (pdf logic) */ };
-    const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => { /* ... (import logic) */ };
-    const handleImportClick = () => importFileRef.current?.click();
     const handleResetPassword = async (email: string) => { /* ... (password reset logic) */ };
 
     const UserCard = ({ user }: { user: Owner }) => (
@@ -262,8 +259,6 @@ export default function OwnersManagement() {
                     <p className="text-muted-foreground">Agrega, edita y consulta personas en la base de datos.</p>
                 </div>
                 <div className="flex gap-2 flex-wrap">
-                    <Button onClick={handleImportClick} variant="outline"><FileUp className="mr-2 h-4 w-4" />Importar</Button>
-                    <input type="file" ref={importFileRef} onChange={handleFileImport} accept=".xlsx, .xls" className="hidden"/>
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild><Button variant="outline"><FileDown className="mr-2 h-4 w-4" />Exportar</Button></DropdownMenuTrigger>
                         <DropdownMenuContent>
