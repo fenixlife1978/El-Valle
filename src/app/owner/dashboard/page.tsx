@@ -512,7 +512,7 @@ export default function OwnerDashboardPage() {
             <div className="relative w-full overflow-hidden rounded-lg bg-yellow-400 text-black">
                 <Marquee pauseOnHover>
                     <p className="px-4 text-sm font-semibold">
-                    Recuerda que tú Cuota Condominial se Carga el día 1 y Vence los días 5 de cada Mes
+                    Recuerda que tú Cuota Condominial se Carga el día 1 y Vence los días 5 de cada Mes. Utiliza la Calculadora de Pagos para estar siempre al día. La autogestión es responsabilidad de todos.
                     </p>
                 </Marquee>
             </div>
