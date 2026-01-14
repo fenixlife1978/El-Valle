@@ -39,11 +39,17 @@ const CustomHeader = ({ ownerData, userRole, navItems }: { ownerData: any, userR
     return (
         <header className="sticky top-4 z-10 mx-4 flex h-16 items-center justify-between gap-2 rounded-lg border bg-card/80 px-4 shadow-soft backdrop-blur-sm sm:px-6">
              <div className="flex items-center gap-4">
-                {companyInfo?.logo && <img src={companyInfo.logo} alt="Logo" className="w-8 h-8 object-contain" />}
+                {companyInfo?.logo && (
+                    <div className="w-8 h-8 rounded-full overflow-hidden bg-background flex items-center justify-center">
+                        <img src={companyInfo.logo} alt="Logo" className="w-full h-full object-cover" />
+                    </div>
+                )}
                 <span className="font-semibold text-lg font-headline truncate hidden sm:inline">{companyInfo?.name || 'ValleCondo'}</span>
                  {bcvLogoUrl && activeRate && (
                     <div className="hidden md:flex items-center gap-2 rounded-lg bg-secondary/50 px-3 py-1.5 border">
-                         <Image src={bcvLogoUrl} alt="BCV Logo" width={20} height={20} className="h-5 w-auto" />
+                         <div className="w-5 h-5 rounded-full overflow-hidden bg-white flex items-center justify-center">
+                            <Image src={bcvLogoUrl} alt="BCV Logo" width={20} height={20} className="h-full w-full object-contain" />
+                         </div>
                         <span className="font-bold text-sm text-foreground">
                             Bs. {activeRate.rate.toFixed(2)}
                         </span>
@@ -52,7 +58,7 @@ const CustomHeader = ({ ownerData, userRole, navItems }: { ownerData: any, userR
             </div>
 
             <nav className="hidden md:flex items-center gap-2">
-                 {navItems.map((item) => (
+                {navItems.map((item) => (
                     item.items ? (
                         <DropdownMenu key={item.label}>
                             <DropdownMenuTrigger asChild>
@@ -78,7 +84,7 @@ const CustomHeader = ({ ownerData, userRole, navItems }: { ownerData: any, userR
                             </Button>
                         </Link>
                     )
-                 ))}
+                ))}
             </nav>
 
             <div className="flex items-center gap-2">
