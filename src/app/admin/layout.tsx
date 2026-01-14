@@ -35,8 +35,6 @@ const adminNavItems: NavItem[] = [
         items: [
             { href: "/admin/payments/verify", label: "Verificar Pagos" },
             { href: "/admin/payments", label: "Reportar/Calcular" },
-            { href: "/admin/payments/advance", label: "Adelantos" },
-            { href: "/admin/payments/history", label: "Pagos Históricos" },
         ]
     },
     { 
