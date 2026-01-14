@@ -28,12 +28,22 @@ import { Loader2 } from 'lucide-react';
 
 const adminNavItems: NavItem[] = [
     { href: "/admin/dashboard", icon: Home, label: "Dashboard" },
+    {
+        href: "#",
+        icon: Landmark,
+        label: "Pagos",
+        items: [
+            { href: "/admin/payments/verify", label: "Verificar Pagos" },
+            { href: "/admin/payments", label: "Reportar/Calcular" },
+            { href: "/admin/payments/advance", label: "Adelantos" },
+            { href: "/admin/payments/history", label: "Pagos Históricos" },
+        ]
+    },
     { 
         href: "#", 
         icon: Grid3X3, 
         label: "Utilidades",
         items: [
-            { href: "/admin/payments/verify", label: "Pagos" },
             { href: "/admin/debts", label: "Gestión de Deudas" },
             { href: "/admin/financial-balance", label: "Balance Financiero" },
             { href: "/admin/petty-cash", label: "Caja Chica" },
