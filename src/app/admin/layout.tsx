@@ -14,7 +14,8 @@ import {
     ShieldCheck,
     ClipboardList,
     Plus,
-    Megaphone, // Icono añadido
+    Megaphone,
+    Grid3X3, // Importado para "Utilidades"
 } from 'lucide-react';
 import { type ReactNode, useEffect } from 'react';
 import dynamic from 'next/dynamic';
@@ -29,33 +30,23 @@ import { initFCM } from '@/lib/init-fcm';
 const adminNavItems: NavItem[] = [
     { href: "/admin/dashboard", icon: Home, label: "Dashboard" },
     { 
-      href: "/admin/payments/verify", 
-      icon: Landmark, 
-      label: "Pagos",
-      items: [
-        { href: "/admin/payments/report", label: "Reportar Pago" },
-        { href: "/admin/payments/verify", label: "Verificar Pagos" },
-        { href: "/admin/payments/calculator", label: "Calculadora de Pagos" },
-      ]
+        href: "#", 
+        icon: Grid3X3, 
+        label: "Utilidades",
+        items: [
+            { href: "/admin/payments/verify", label: "Pagos" },
+            { href: "/admin/debts", label: "Gestión de Deudas" },
+            { href: "/admin/financial-balance", label: "Balance Financiero" },
+            { href: "/admin/petty-cash", label: "Caja Chica" },
+            { href: "/admin/reports", label: "Informes" },
+            { href: "/admin/billboard", label: "Cartelera" },
+            { href: "/admin/surveys", label: "Encuestas" },
+            { href: "/admin/certificates", label: "Constancias" },
+            { href: "/admin/people", label: "Personas" },
+            { href: "/admin/settings", label: "Configuración" },
+            { href: "/admin/validation", label: "Validación" },
+        ]
     },
-    { href: "/admin/debts", icon: CircleDollarSign, label: "Gestión de Deudas" },
-    { href: "/admin/financial-balance", icon: TrendingUp, label: "Balance Financiero" },
-    { href: "/admin/petty-cash", icon: Wallet, label: "Caja Chica" },
-    { href: "/admin/reports", icon: FileSearch, label: "Informes" },
-    { href: "/admin/billboard", icon: Megaphone, label: "Cartelera" }, // Nuevo item
-    { href: "/admin/surveys", icon: ClipboardList, label: "Encuestas" },
-    { href: "/admin/certificates", icon: Award, label: "Constancias" },
-    { href: "/admin/people", icon: Users, label: "Personas" },
-    { 
-      href: "/admin/settings", 
-      icon: Settings, 
-      label: "Configuración",
-      items: [
-        { href: "/admin/settings", label: "General" },
-        { href: "/admin/settings/sync", label: "Sincronizar Perfiles" },
-      ]
-    },
-    { href: "/admin/validation", icon: ShieldCheck, label: "Validación" },
 ];
 
 const adminBottomNavItems: BottomNavItem[] = [
