@@ -1,9 +1,8 @@
-
 'use client';
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Building2, LogOut, type LucideIcon, ChevronDown, Bell, Check, PanelLeftClose, Menu, TrendingUp } from 'lucide-react';
+import { Building2, LogOut, type LucideIcon, ChevronDown, Bell, Check, PanelLeftClose, Menu, TrendingUp, Loader2 } from 'lucide-react';
 import * as React from 'react';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
@@ -60,7 +59,7 @@ const CustomHeader = ({ ownerData, userRole, navItems }: { ownerData: any, userR
                     item.items ? (
                         <DropdownMenu key={item.label}>
                             <DropdownMenuTrigger asChild>
-                                <Button variant={item.items.some(sub => pathname.startsWith(sub.href)) ? "secondary" : "ghost"} size="sm" className="flex items-center gap-1">
+                                <Button variant={item.items.some(sub => pathname?.startsWith(sub.href)) ? "secondary" : "ghost"} size="sm" className="flex items-center gap-1">
                                     {item.label}
                                     <ChevronDown className="h-4 w-4" />
                                 </Button>
@@ -77,7 +76,7 @@ const CustomHeader = ({ ownerData, userRole, navItems }: { ownerData: any, userR
                         </DropdownMenu>
                     ) : (
                         <Link key={item.label} href={item.href}>
-                            <Button variant={pathname.startsWith(item.href) ? "secondary" : "ghost"} size="sm">
+                            <Button variant={pathname?.startsWith(item.href) ? "secondary" : "ghost"} size="sm">
                                 {item.label}
                             </Button>
                         </Link>
@@ -138,7 +137,7 @@ const CustomHeader = ({ ownerData, userRole, navItems }: { ownerData: any, userR
                         <nav className="mt-8 flex flex-col gap-2">
                              {navItems.map((item) => (
                                  <Link key={item.label} href={item.href}>
-                                     <Button variant={pathname.startsWith(item.href) ? "secondary" : "ghost"} className="w-full justify-start text-base py-6">
+                                     <Button variant={pathname?.startsWith(item.href) ? "secondary" : "ghost"} className="w-full justify-start text-base py-6">
                                          <item.icon className="mr-3 h-5 w-5"/>
                                          {item.label}
                                      </Button>
@@ -177,7 +176,7 @@ export function DashboardLayout({
             {children}
         </main>
          <footer className="bg-transparent text-muted-foreground p-4 text-center text-xs mt-8">
-           © {new Date().getFullYear()} {companyInfo?.name || 'ValleCondo'}. Todos los derechos reservados.
+            © {new Date().getFullYear()} {companyInfo?.name || 'ValleCondo'}. Todos los derechos reservados.
         </footer>
     </div>
   );

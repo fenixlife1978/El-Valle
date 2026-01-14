@@ -21,7 +21,7 @@ function AuthGuard({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (loading) return;
 
-    const isPublic = publicPaths.some(path => pathname === path || (path !== '/' && pathname.startsWith(path)));
+    const isPublic = publicPaths.includes(pathname);
 
     if (user) {
       if (isPublic) {
@@ -32,7 +32,7 @@ function AuthGuard({ children }: { children: ReactNode }) {
     }
   }, [user, role, loading, pathname, router]);
 
-  if (loading || (!user && !publicPaths.some(path => pathname.startsWith(path)))) {
+  if (loading || (!user && !publicPaths.includes(pathname))) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -41,7 +41,7 @@ function AuthGuard({ children }: { children: ReactNode }) {
     );
   }
 
-  if (user && publicPaths.some(path => pathname.startsWith(path))) {
+  if (user && publicPaths.includes(pathname)) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -61,11 +61,9 @@ export default function RootLayout({
   return (
     <html lang="es" suppressHydrationWarning>
       <head>
-        {/* --- PWA AND META TAGS --- */}
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#006241" />
         <link rel="apple-touch-icon" href="/icon-192x192.png" />
-        {/* --- FUENTES Y FAVICON --- */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
@@ -76,7 +74,6 @@ export default function RootLayout({
         <title>VALLECONDO</title>
         <meta name="description" content="App de Autogestion de Condominio Conjunto Residencial El Valle" />
 
-        {/* --- OPEN GRAPH --- */}
         <meta property="og:title" content="VALLECONDO" />
         <meta property="og:description" content="App de Autogestion de Condominio Conjunto Residencial El Valle" />
         <meta property="og:type" content="website" />
@@ -85,7 +82,6 @@ export default function RootLayout({
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
 
-        {/* --- TWITTER --- */}
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="VALLECONDO" />
         <meta name="twitter:image" content="https://valle-condo.vercel.app/og-banner.png" />
