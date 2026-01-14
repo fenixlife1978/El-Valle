@@ -8,7 +8,6 @@ import { doc, onSnapshot } from 'firebase/firestore';
 import { useToast } from './use-toast';
 import { db, auth } from '@/lib/firebase';
 import { ensureOwnerProfile, ensureAdminProfile } from '@/lib/user-sync';
-import { initFCM } from '@/lib/init-fcm';
 
 
 type CompanyInfo = {
@@ -76,11 +75,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     await ensureOwnerProfile(firebaseUser);
                 }
                 
-                // Call initFCM() only after user is authenticated and profile is ensured
-                if (typeof window !== 'undefined') {
-                    initFCM(firebaseUser);
-                }
-
                 const userDocRef = doc(db, 'owners', userDocId);
                 ownerUnsubscribe = onSnapshot(userDocRef, (snapshot) => {
                     if (snapshot.exists()) {

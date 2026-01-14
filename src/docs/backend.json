@@ -42,11 +42,6 @@
         },
         "passwordChanged": {
             "type": "boolean"
-        },
-        "fcmTokens": {
-            "type": "array",
-            "items": { "type": "string" },
-            "description": "Array of Firebase Cloud Messaging tokens for push notifications."
         }
       },
       "required": ["uid", "name", "email", "role"]

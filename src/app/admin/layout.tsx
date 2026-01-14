@@ -24,7 +24,6 @@ import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
 import { useAuth } from '@/hooks/use-auth';
 import { BottomNavBar, type BottomNavItem } from '@/components/bottom-nav-bar';
 import { Loader2 } from 'lucide-react';
-import { initFCM } from '@/lib/init-fcm';
 
 
 const adminNavItems: NavItem[] = [
@@ -80,12 +79,6 @@ function AdminLayoutContent({ children }: { children: ReactNode }) {
             router.replace('/welcome');
         }
     }, [role, loading, router]);
-
-    useEffect(() => {
-        if (typeof window !== 'undefined' && 'serviceWorker' in navigator && user) {
-            initFCM(user);
-        }
-    }, [user]);
 
     if (loading || role !== 'administrador') {
         return (

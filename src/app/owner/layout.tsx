@@ -25,8 +25,8 @@ const ownerNavItems: NavItem[] = [
     icon: Grid3X3, 
     label: "Utilidades",
     items: [
-        { href: "/owner/certificates", label: "Constancias" },
         { href: "/owner/reports", label: "Publicaciones" },
+        { href: "/owner/certificates", label: "Constancias" },
         { href: "/owner/surveys", label: "Encuestas" },
     ]
   },
@@ -64,8 +64,6 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
     }
   }, [role, loading, router]);
   
-  // Se ha eliminado la llamada a initializeFCM para evitar errores de compilación
-
   if (loading || role !== 'propietario') {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background">
