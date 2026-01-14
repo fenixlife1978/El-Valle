@@ -35,20 +35,12 @@ import { Loader2 } from 'lucide-react';
 
 const adminNavItems: NavItem[] = [
     { href: "/admin/dashboard", icon: Home, label: "Dashboard" },
-    {
-        href: "/admin/payments",
-        icon: Landmark,
-        label: "Pagos",
-        items: [
-            { href: "/admin/payments/verify", label: "Verificar Pagos" },
-            { href: "/admin/payments", label: "Reportar/Calcular" },
-        ]
-    },
     { 
         href: "/admin/utils", 
         icon: Grid3X3, 
         label: "Utilidades",
         items: [
+            { href: "/admin/payments", label: "Gestión de Pagos" },
             { href: "/admin/debts", label: "Gestión de Deudas" },
             { href: "/admin/financial-balance", label: "Balance Financiero" },
             { href: "/admin/petty-cash", label: "Caja Chica" },
@@ -73,14 +65,13 @@ const adminNavItems: NavItem[] = [
 
 const adminBottomNavItems: BottomNavItem[] = [
   { href: '/admin/dashboard', icon: Home, label: 'Inicio' },
-  { href: '/admin/payments/verify', icon: Landmark, label: 'Verificar' },
+  { href: '/admin/payments', icon: Landmark, label: 'Pagos' },
   { 
     href: '#', 
     icon: Plus, 
     label: 'Más', 
     isCentral: true,
     subMenu: [
-        { href: "/admin/payments", icon: Plus, label: "Reportar Pago" },
         { href: "/admin/debts", icon: CircleDollarSign, label: "Deudas" },
         { href: "/admin/people", icon: Users, label: "Personas" },
         { href: "/admin/surveys", icon: ClipboardList, label: "Encuestas" },
