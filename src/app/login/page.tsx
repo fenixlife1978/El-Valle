@@ -157,7 +157,11 @@ function LoginPage() {
                 {loadingLogo ? (
                     <Skeleton className="w-24 h-24 rounded-full mx-auto" />
                 ) : (
-                    logoUrl && <img src={logoUrl} alt="Company Logo" className="w-24 h-24 object-contain mx-auto" />
+                    logoUrl && (
+                        <div className="w-24 h-24 rounded-full mx-auto overflow-hidden bg-card border flex items-center justify-center">
+                            <img src={logoUrl} alt="Company Logo" className="w-full h-full object-cover" />
+                        </div>
+                    )
                 )}
             </div>
             <Card className="w-full max-w-sm">
