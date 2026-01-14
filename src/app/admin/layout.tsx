@@ -15,7 +15,10 @@ import {
     ClipboardList,
     Plus,
     Megaphone,
-    Grid3X3, // Importado para "Utilidades"
+    Grid3X3,
+    FileSignature,
+    WalletCards,
+    Receipt, // Importado para "Pagos"
 } from 'lucide-react';
 import { type ReactNode, useEffect } from 'react';
 import dynamic from 'next/dynamic';
