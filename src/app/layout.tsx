@@ -59,9 +59,25 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
 
+   useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').then(registration => {
+          console.log('SW registered: ', registration);
+        }).catch(registrationError => {
+          console.log('SW registration failed: ', registrationError);
+        });
+      });
+    }
+  }, []);
+
   return (
     <html lang="es" suppressHydrationWarning>
       <head>
+        {/* --- PWA AND META TAGS --- */}
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#006241" />
+        <link rel="apple-touch-icon" href="/icon-192x192.png" />
         {/* --- FUENTES Y FAVICON --- */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
