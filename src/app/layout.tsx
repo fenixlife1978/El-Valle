@@ -1,3 +1,4 @@
+
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
@@ -57,28 +58,10 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  
-  // Registro del Service Worker
-  useEffect(() => {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker
-        .register('/sw.js')
-        .then((reg) => console.log('SW registrado con éxito:', reg.scope))
-        .catch((err) => console.error('Error al registrar SW:', err));
-    }
-  }, []);
 
   return (
     <html lang="es" suppressHydrationWarning>
       <head>
-        {/* --- PWA Y MANIFEST --- */}
-        <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#004D40" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title" content="ValleCondo" />
-        <link rel="apple-touch-icon" href="/icon-192x192.png" />
-        
         {/* --- FUENTES Y FAVICON --- */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
