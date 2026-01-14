@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -43,7 +42,9 @@ export default function WelcomePage() {
           <Skeleton className="w-32 h-32 rounded-full mx-auto mb-6" />
         ) : (
           logoUrl && (
-            <img src={logoUrl} alt="Logo Empresa" className="w-32 h-32 object-contain mx-auto mb-6" />
+            <div className="w-32 h-32 rounded-full mx-auto mb-6 overflow-hidden bg-card border flex items-center justify-center">
+              <img src={logoUrl} alt="Logo Empresa" className="w-full h-full object-cover" />
+            </div>
           )
         )}
         <h1 className="text-4xl font-bold font-headline text-primary">Bienvenid@ a tu portal de Autogestión de Condominio</h1>
