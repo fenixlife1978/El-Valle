@@ -18,10 +18,14 @@ import {
     Grid3X3,
     FileSignature,
     WalletCards,
-    Receipt, // Importado para "Pagos"
+    Receipt,
+    Calculator,
+    BarChart3,
+    FileImage,
+    Palette,
+    Server,
 } from 'lucide-react';
 import { type ReactNode, useEffect } from 'react';
-import dynamic from 'next/dynamic';
 import { usePathname, useRouter } from 'next/navigation';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
 import { useAuth } from '@/hooks/use-auth';
@@ -32,7 +36,7 @@ import { Loader2 } from 'lucide-react';
 const adminNavItems: NavItem[] = [
     { href: "/admin/dashboard", icon: Home, label: "Dashboard" },
     {
-        href: "#",
+        href: "/admin/payments",
         icon: Landmark,
         label: "Pagos",
         items: [
@@ -41,7 +45,7 @@ const adminNavItems: NavItem[] = [
         ]
     },
     { 
-        href: "#", 
+        href: "/admin/utils", 
         icon: Grid3X3, 
         label: "Utilidades",
         items: [
@@ -53,8 +57,16 @@ const adminNavItems: NavItem[] = [
             { href: "/admin/surveys", label: "Encuestas" },
             { href: "/admin/certificates", label: "Constancias" },
             { href: "/admin/people", label: "Personas" },
-            { href: "/admin/settings", label: "Configuración" },
-            { href: "/admin/validation", label: "Validación" },
+        ]
+    },
+     { 
+        href: "/admin/settings", 
+        icon: Settings, 
+        label: "Configuración",
+        items: [
+           { href: "/admin/settings", label: "General" },
+           { href: "/admin/settings/sync", label: "Sincronización" },
+           { href: "/admin/validation", label: "Validación de Datos" },
         ]
     },
 ];
@@ -68,7 +80,7 @@ const adminBottomNavItems: BottomNavItem[] = [
     label: 'Más', 
     isCentral: true,
     subMenu: [
-        { href: "/admin/payments/report", icon: Plus, label: "Reportar Pago" },
+        { href: "/admin/payments", icon: Plus, label: "Reportar Pago" },
         { href: "/admin/debts", icon: CircleDollarSign, label: "Deudas" },
         { href: "/admin/people", icon: Users, label: "Personas" },
         { href: "/admin/surveys", icon: ClipboardList, label: "Encuestas" },
@@ -79,7 +91,7 @@ const adminBottomNavItems: BottomNavItem[] = [
 ];
 
 
-function AdminLayoutContent({ children }: { children: ReactNode }) {
+export default function AdminLayout({ children }: { children: ReactNode }) {
     const { ownerData, role, loading, user } = useAuth();
     const rawPathname = usePathname();
     const pathname: string = rawPathname ?? '';
@@ -106,19 +118,4 @@ function AdminLayoutContent({ children }: { children: ReactNode }) {
             <BottomNavBar items={adminBottomNavItems} pathname={pathname} />
         </DashboardLayout>
     );
-}
-
-const DynamicAdminLayout = dynamic(() => Promise.resolve(AdminLayoutContent), {
-  loading: () => (
-    <div className="flex h-screen w-full items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="ml-2">Cargando módulo...</p>
-    </div>
-  ),
-  ssr: false,
-});
-
-
-export default function AdminLayout({ children }: { children: ReactNode }) {
-    return <DynamicAdminLayout>{children}</DynamicAdminLayout>
 }
