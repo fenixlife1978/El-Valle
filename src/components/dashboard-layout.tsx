@@ -1,10 +1,9 @@
 
-
 'use client';
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Building2, LogOut, type LucideIcon, ChevronDown, Bell, Check, PanelLeftClose, Menu } from 'lucide-react';
+import { Building2, LogOut, type LucideIcon, ChevronDown, Bell, Check, PanelLeftClose, Menu, TrendingUp } from 'lucide-react';
 import * as React from 'react';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
@@ -14,6 +13,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { useAuth } from '@/hooks/use-auth';
 import { cn } from '@/lib/utils';
+import Image from 'next/image';
 
 
 export type NavItem = {
@@ -26,7 +26,7 @@ export type NavItem = {
 const CustomHeader = ({ ownerData, userRole, navItems }: { ownerData: any, userRole: string | null, navItems: NavItem[] }) => {
     const router = useRouter();
     const pathname = usePathname();
-    const { companyInfo } = useAuth();
+    const { companyInfo, activeRate, bcvLogoUrl } = useAuth();
     
     const handleLogout = async () => {
         await signOut(auth);
@@ -36,12 +36,19 @@ const CustomHeader = ({ ownerData, userRole, navItems }: { ownerData: any, userR
     const userName = ownerData?.name || 'Usuario';
     const avatarSrc = userRole === 'administrador' ? companyInfo?.logo : ownerData?.avatar;
 
-
     return (
         <header className="sticky top-4 z-10 mx-4 flex h-16 items-center justify-between gap-2 rounded-lg border bg-card/80 px-4 shadow-soft backdrop-blur-sm sm:px-6">
-             <div className="flex items-center gap-2">
+             <div className="flex items-center gap-4">
                 {companyInfo?.logo && <img src={companyInfo.logo} alt="Logo" className="w-8 h-8 object-contain" />}
                 <span className="font-semibold text-lg font-headline truncate hidden sm:inline">{companyInfo?.name || 'ValleCondo'}</span>
+                 {bcvLogoUrl && activeRate && (
+                    <div className="hidden md:flex items-center gap-2 rounded-lg bg-secondary/50 px-3 py-1.5 border">
+                         <Image src={bcvLogoUrl} alt="BCV Logo" width={20} height={20} className="h-5 w-auto" />
+                        <span className="font-bold text-sm text-foreground">
+                            Bs. {activeRate.rate.toFixed(2)}
+                        </span>
+                    </div>
+                 )}
             </div>
 
             <nav className="hidden md:flex items-center gap-2">
@@ -96,6 +103,14 @@ const CustomHeader = ({ ownerData, userRole, navItems }: { ownerData: any, userR
                                  </div>
                              </SheetTitle>
                         </SheetHeader>
+                         {bcvLogoUrl && activeRate && (
+                            <div className="flex items-center gap-2 rounded-lg bg-secondary/50 px-3 py-1.5 border my-4">
+                                 <Image src={bcvLogoUrl} alt="BCV Logo" width={20} height={20} className="h-5 w-auto" />
+                                <span className="font-bold text-sm text-foreground">
+                                    Tasa BCV: Bs. {activeRate.rate.toFixed(2)}
+                                </span>
+                            </div>
+                         )}
                         <nav className="mt-8 flex flex-col gap-2">
                              {navItems.map((item) => (
                                  <Link key={item.label} href={item.href}>
