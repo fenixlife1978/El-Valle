@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { 
@@ -37,7 +36,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { PlusCircle, Edit, Trash2, Loader2, KeyRound, Search, FileDown, FileUp, MoreHorizontal, Eye, EyeOff, MinusCircle, Building, User } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Loader2, KeyRound, Search, FileDown, MoreHorizontal, Eye, EyeOff, MinusCircle, Building, User } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as ExcelJS from 'exceljs';
@@ -189,8 +188,61 @@ export default function OwnersManagement() {
     };
     
     const handleSaveOwner = async () => {
-        // ... (rest of the function is the same, just removed for brevity)
+        const { id, name, email, role, balance, properties, password } = currentOwner;
+        if (!name || !email) {
+            toast({ variant: 'destructive', title: 'Campos requeridos', description: 'Nombre y correo son obligatorios.' });
+            return;
+        }
+
+        if (role === 'propietario' && properties.some(p => !p.street || !p.house)) {
+            toast({ variant: 'destructive', title: 'Propiedad incompleta', description: 'Debe seleccionar calle y casa para cada propiedad.' });
+            return;
+        }
+        
+        requestAuthorization(async () => {
+            setLoading(true);
+            try {
+                if (id) { // --- EDITING ---
+                    const userRef = doc(db, "owners", id);
+                    await setDoc(userRef, {
+                        name, role, balance: Number(balance), properties
+                    }, { merge: true });
+                    toast({ title: "Usuario actualizado" });
+                } else { // --- CREATING ---
+                    if (!password || password.length < 6) {
+                        toast({ variant: 'destructive', title: 'Contraseña inválida', description: 'La contraseña debe tener al menos 6 caracteres.' });
+                        setLoading(false);
+                        return;
+                    }
+                    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                    const user = userCredential.user;
+                    
+                    const userRef = doc(db, 'owners', user.uid);
+                    await setDoc(userRef, {
+                        uid: user.uid,
+                        name, email, role, balance: Number(balance), properties,
+                        passwordChanged: false,
+                        createdAt: serverTimestamp()
+                    });
+                    toast({ title: "Usuario creado exitosamente", description: `${name} ha sido agregado al sistema.` });
+                }
+                setIsDialogOpen(false);
+                setCurrentOwner(emptyOwner);
+            } catch (error: any) {
+                console.error("Error saving owner:", error);
+                let description = 'Ocurrió un error inesperado.';
+                if (error.code === 'auth/email-already-in-use') {
+                    description = 'Este correo electrónico ya está en uso por otra cuenta.';
+                } else if (error.code === 'auth/invalid-email') {
+                    description = 'El formato del correo electrónico no es válido.';
+                }
+                toast({ variant: 'destructive', title: 'Error al Guardar', description });
+            } finally {
+                setLoading(false);
+            }
+        });
     };
+
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => setCurrentOwner({ ...currentOwner, [e.target.id]: e.target.value });
     const handleRoleChange = (value: string) => setCurrentOwner({ ...currentOwner, role: value as Role, properties: value === 'administrador' ? [] : [{ street: '', house: '' }] });
     const addProperty = () => setCurrentOwner({ ...currentOwner, properties: [...currentOwner.properties, { street: '', house: '' }] });
@@ -204,7 +256,21 @@ export default function OwnersManagement() {
 
     const handleExportExcel = async () => { /* ... (export logic) */ };
     const handleExportPDF = () => { /* ... (pdf logic) */ };
-    const handleResetPassword = async (email: string) => { /* ... (password reset logic) */ };
+    const handleResetPassword = async (email: string) => {
+        if (!email) {
+            toast({ variant: "destructive", title: "No hay correo" });
+            return;
+        }
+        requestAuthorization(async () => {
+            try {
+                await sendPasswordResetEmail(auth, email);
+                toast({ title: 'Correo enviado', description: `Se ha enviado un enlace de restablecimiento a ${email}.` });
+            } catch (error) {
+                console.error("Error sending password reset email:", error);
+                toast({ variant: "destructive", title: "Error al enviar correo" });
+            }
+        });
+    };
 
     const UserCard = ({ user }: { user: Owner }) => (
         <Card className="flex flex-col">
@@ -377,7 +443,7 @@ export default function OwnersManagement() {
                                             </div>
                                             <div className="col-span-2 flex items-end justify-end h-full">
                                             {currentOwner.properties.length > 1 && (
-                                                <Button size="icon" variant="ghost" className="text-destructive" onClick={() => removeProperty(index)}>
+                                                <Button size="icon" variant="ghost" className="text-destructive" onClick={()={() => removeProperty(index)}}>
                                                     <MinusCircle className="h-5 w-5"/>
                                                 </Button>
                                             )}
@@ -399,7 +465,10 @@ export default function OwnersManagement() {
                     </div>
                     <DialogFooter className="mt-auto pt-4 border-t">
                         <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
-                        <Button onClick={handleSaveOwner}>Guardar Cambios</Button>
+                        <Button onClick={handleSaveOwner} disabled={loading}>
+                           {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4"/>}
+                           Guardar Cambios
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
@@ -421,3 +490,5 @@ export default function OwnersManagement() {
         </div>
     );
 }
+
+    
