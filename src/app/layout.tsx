@@ -10,7 +10,7 @@ import { AuthProvider, useAuth } from '@/hooks/use-auth';
 import { AuthorizationProvider } from '@/hooks/use-authorization';
 import { Loader2 } from 'lucide-react';
 
-const publicPaths = ['/welcome', '/login', '/forgot-password', '/register'];
+const publicPaths = ['/', '/welcome', '/login', '/forgot-password', '/register'];
 
 function AuthGuard({ children }: { children: ReactNode }) {
   const { user, role, loading } = useAuth();
@@ -21,14 +21,14 @@ function AuthGuard({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (loading) return;
 
-    const isPublic = publicPaths.some(path => pathname.startsWith(path));
+    const isPublic = publicPaths.some(path => pathname === path || (path !== '/' && pathname.startsWith(path)));
 
     if (user) {
       if (isPublic) {
         router.replace(role === 'administrador' ? '/admin/dashboard' : '/owner/dashboard');
       }
     } else if (!isPublic) {
-      router.replace('/welcome');
+      router.replace('/');
     }
   }, [user, role, loading, pathname, router]);
 
