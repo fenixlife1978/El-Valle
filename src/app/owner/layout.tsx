@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
 import { useAuth } from '@/hooks/use-auth';
 import { BottomNavBar, type BottomNavItem } from '@/components/bottom-nav-bar';
-import { Loader2, Home, Plus, FileSearch, Settings, Banknote, Landmark, ClipboardList, Calculator, Award } from 'lucide-react';
+import { Loader2, Home, Plus, FileSearch, Settings, Banknote, Landmark, ClipboardList, Calculator, Award, Grid3X3 } from 'lucide-react';
 
 const ownerNavItems: NavItem[] = [
   { href: "/owner/dashboard", icon: Home, label: "Inicio" },
@@ -20,9 +20,16 @@ const ownerNavItems: NavItem[] = [
       { href: "/owner/payments/calculator", label: "Calculadora de Pagos" },
     ]
   },
-  { href: "/owner/certificates", icon: Award, label: "Constancias" },
-  { href: "/owner/reports", icon: FileSearch, label: "Publicaciones" },
-  { href: "/owner/surveys", icon: ClipboardList, label: "Encuestas" },
+  { 
+    href: "#", 
+    icon: Grid3X3, 
+    label: "Utilidades",
+    items: [
+        { href: "/owner/certificates", label: "Constancias" },
+        { href: "/owner/reports", label: "Publicaciones" },
+        { href: "/owner/surveys", label: "Encuestas" },
+    ]
+  },
   { href: "/owner/settings", icon: Settings, label: "Configuración" },
 ];
 
