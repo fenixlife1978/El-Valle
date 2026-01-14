@@ -53,11 +53,31 @@ const CustomHeader = ({ ownerData, userRole, navItems }: { ownerData: any, userR
 
             <nav className="hidden md:flex items-center gap-2">
                  {navItems.map((item) => (
-                    <Link key={item.label} href={item.href}>
-                         <Button variant={pathname.startsWith(item.href) ? "secondary" : "ghost"} size="sm">
-                             {item.label}
-                         </Button>
-                    </Link>
+                    item.items ? (
+                        <DropdownMenu key={item.label}>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant={item.items.some(sub => pathname.startsWith(sub.href)) ? "secondary" : "ghost"} size="sm" className="flex items-center gap-1">
+                                    {item.label}
+                                    <ChevronDown className="h-4 w-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start">
+                                {item.items.map(subItem => (
+                                     <Link key={subItem.label} href={subItem.href} passHref>
+                                        <DropdownMenuItem className="cursor-pointer">
+                                            {subItem.label}
+                                        </DropdownMenuItem>
+                                    </Link>
+                                ))}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    ) : (
+                        <Link key={item.label} href={item.href}>
+                            <Button variant={pathname.startsWith(item.href) ? "secondary" : "ghost"} size="sm">
+                                {item.label}
+                            </Button>
+                        </Link>
+                    )
                  ))}
             </nav>
 
