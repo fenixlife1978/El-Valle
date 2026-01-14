@@ -2,44 +2,28 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ✅ BLOQUE LEGACY + TOKENS (SE AGREGA ARRIBA) */
-:root {
-  --color-primary-legacy: #004D40;
-  --color-secondary-legacy: #0074d9;
-  --color-neutral-legacy: #676767;
-  --color-warning-legacy: #F0A703;
-  --color-danger-legacy: #ff5757;
-
-  --color-primary: var(--color-primary-legacy);
-  --color-secondary: var(--color-secondary-legacy);
-  --color-neutral: var(--color-neutral-legacy);
-  --color-warning: var(--color-warning-legacy);
-  --color-danger: var(--color-danger-legacy);
-}
-
 @layer base {
   :root, .light {
-    /* Paleta Starbucks - Modo Claro */
-    --background: 210 20% 98%; /* Blanco Hueso (Cream) */
-    --foreground: 224 76% 12%; /* Negro Tinta (Rich Black) */
+    --background: 210 20% 97%; /* #F7F7F7 Gris ultra claro */
+    --foreground: 158 28% 15%; /* #1E3932 Texto de títulos */
     
-    --card: 0 0% 100%; /* Blanco Puro */
-    --card-foreground: 224 76% 12%;
+    --card: 0 0% 100%; /* #FFFFFF Blanco puro */
+    --card-foreground: 158 28% 15%;
     
     --popover: 0 0% 100%;
-    --popover-foreground: 224 76% 12%;
+    --popover-foreground: 158 28% 15%;
     
-    --primary: 142 71% 31%; /* Verde Starbucks (#00704A) */
+    --primary: 158 100% 19%; /* #006241 Verde Starbucks */
     --primary-foreground: 0 0% 100%; 
     
-    --secondary: 224 76% 12%; /* Negro Tinta */
-    --secondary-foreground: 0 0% 100%;
+    --secondary: 157 15% 95%; /* #E0E9E5 Gris/Beige muy claro para acentos */
+    --secondary-foreground: 158 28% 15%;
     
     --muted: 210 20% 94%;
     --muted-foreground: 215 20% 45%;
     
-    --accent: 210 20% 90%;
-    --accent-foreground: 224 76% 12%;
+    --accent: 157 15% 95%; /* Mismo que secondary para hovers sutiles */
+    --accent-foreground: 158 28% 15%;
     
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 100%;
@@ -50,62 +34,65 @@
     --warning: 45 100% 51%;
     --warning-foreground: 215 25% 27%;
     
-    --border: 210 20% 88%;
+    --border: 210 20% 88%; /* #E0E0E0 Borde de tarjeta */
     --input: 210 20% 92%;
-    --ring: 142 71% 31%;
-    --radius: 0.5rem;
+    --ring: 158 100% 19%; /* Verde Starbucks para focus rings */
 
-    /* Colores específicos para la barra lateral */
-    --sidebar-background: 224 76% 10%; /* Casi negro */
+    --radius: 1.5rem; /* 24px */
+
+    /* Colores para modo oscuro, manteniendo la estética */
+    --sidebar-background: 224 76% 10%;
     --sidebar-foreground: 0 0% 98%; 
-    --sidebar-accent: 142 71% 25%; /* Verde oscuro para hover */
+    --sidebar-accent: 158 100% 19%;
     --sidebar-accent-foreground: 0 0% 98%;
     --sidebar-border: 224 76% 15%;
   }
 
   .dark {
-    /* Paleta Starbucks - Modo Oscuro (Principal) */
-    --background: 222 47% 11%; /* rich-black (Negro intenso) */
-    --foreground: 48 33% 94%; /* cream (Crema) */
+    --background: 222 47% 11%;
+    --foreground: 48 33% 94%;
     
-    --card: 25 25% 15%; /* dark-roast (Marrón oscuro tostado) */
+    --card: 222 47% 13%;
     --card-foreground: 48 33% 94%;
     
     --popover: 222 47% 11%;
     --popover-foreground: 48 33% 94%;
     
-    --primary: 151 55% 42%; /* starbucks-green */
+    --primary: 158 100% 29%;
     --primary-foreground: 0 0% 100%;
     
-    --secondary: 48 33% 94%;
-    --secondary-foreground: 222 47% 11%;
+    --secondary: 222 47% 18%;
+    --secondary-foreground: 48 33% 94%;
     
-    --muted: 25 25% 18%;
+    --muted: 222 47% 18%;
     --muted-foreground: 48 33% 88%;
     
-    --accent: 25 25% 22%;
+    --accent: 222 47% 22%;
     --accent-foreground: 48 33% 98%;
     
     --destructive: 0 63% 51%;
     --destructive-foreground: 0 0% 100%;
     
-    --success: 142 71% 41%;
+    --success: 142 71% 31%;
     --success-foreground: 0 0% 100%;
     
     --warning: 45 100% 51%;
     --warning-foreground: 215 25% 27%;
     
-    --border: 29 53% 33%; /* bronze (Bronce) */
-    --input: 25 25% 20%;
-    --ring: 29 53% 43%;
-    --radius: 0.5rem;
+    --border: 222 47% 20%;
+    --input: 222 47% 18%;
+    --ring: 158 100% 29%;
+    --radius: 1.5rem; /* 24px */
 
-    /* Colores específicos para la barra lateral */
     --sidebar-background: 222 47% 9%;
     --sidebar-foreground: 48 33% 94%;
-    --sidebar-accent: 25 25% 15%;
+    --sidebar-accent: 222 47% 15%;
     --sidebar-accent-foreground: 48 33% 98%;
-    --sidebar-border: 25 25% 18%;
+    --sidebar-border: 222 47% 18%;
+  }
+
+  body {
+    color: #000000;
   }
 }
 
@@ -115,8 +102,5 @@
   }
   body {
     @apply bg-background text-foreground;
-  }
-  .bg-delinquent {
-    background-color: hsl(var(--destructive) / 0.1);
   }
 }

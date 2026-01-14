@@ -15,25 +15,12 @@ export default {
     },
     borderRadius: {
       lg: 'var(--radius)',
-      md: 'calc(var(--radius) - 2px)',
-      sm: 'calc(var(--radius) - 4px)',
+      md: 'calc(var(--radius) - 8px)',
+      sm: 'calc(var(--radius) - 16px)',
+      full: '9999px',
     },
     extend: {
       colors: {
-        legacy: {
-          primary: '#004D40',
-          secondary: '#0074d9',
-          neutral: '#676767',
-          warning: '#F0A703',
-          danger: '#ff5757',
-        },
-        token: {
-          primary: 'var(--color-primary)',
-          secondary: 'var(--color-secondary)',
-          neutral: 'var(--color-neutral)',
-          warning: 'var(--color-warning)',
-          danger: 'var(--color-danger)',
-        },
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
         card: {
@@ -75,41 +62,17 @@ export default {
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
-        brand: {
-          'rich-black': '#081018',
-          'dark-roast': '#2E2522',
-          'cream': '#F0EBE0',
-          'starbucks-green': '#00754A',
-          'bronze': '#A06B52',
-        },
-        lemon: '#FFF44F',
-        mustard: '#FFC72C',
-
-        chart: {
-          '1': 'hsl(var(--chart-1))',
-          '2': 'hsl(var(--chart-2))',
-          '3': 'hsl(var(--chart-3))',
-          '4': 'hsl(var(--chart-4))',
-          '5': 'hsl(var(--chart-5))',
-        },
-
         sidebar: {
           DEFAULT: 'hsl(var(--sidebar-background))',
           foreground: 'hsl(var(--sidebar-foreground))',
-          primary: 'hsl(var(--sidebar-primary))',
-          'primary-foreground': 'hsl(var(--sidebar-primary-foreground))',
           accent: 'hsl(var(--sidebar-accent))',
           'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
           border: 'hsl(var(--sidebar-border))',
-          ring: 'hsl(var(--sidebar-ring))',
-        },
-
-        'starbucks-dark-roast': {
-          DEFAULT: '#1E3932',
-          foreground: '#FFFFFF',
         },
       },
-
+      boxShadow: {
+        'soft': '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05)',
+      },
       keyframes: {
         'accordion-down': {
           from: { height: '0' },
@@ -128,7 +91,6 @@ export default {
           to: { transform: 'translateY(-100%)' },
         },
       },
-
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
