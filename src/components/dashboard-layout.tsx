@@ -39,11 +39,9 @@ const CustomHeader = ({ ownerData, userRole, navItems }: { ownerData: any, userR
     return (
         <header className="sticky top-4 z-10 mx-4 flex h-16 items-center justify-between gap-2 rounded-lg border bg-card/80 px-4 shadow-soft backdrop-blur-sm sm:px-6">
              <div className="flex items-center gap-4">
-                {companyInfo?.logo && (
-                    <div className="w-8 h-8 rounded-full overflow-hidden bg-background flex items-center justify-center">
-                        <img src={companyInfo.logo} alt="Logo" className="w-full h-full object-cover" />
-                    </div>
-                )}
+                <div className="w-10 h-10 rounded-full overflow-hidden bg-background border flex items-center justify-center">
+                    {companyInfo?.logo && <img src={companyInfo.logo} alt="Logo" className="w-full h-full object-cover" />}
+                </div>
                 <span className="font-semibold text-lg font-headline truncate hidden sm:inline">{companyInfo?.name || 'ValleCondo'}</span>
                  {bcvLogoUrl && activeRate && (
                     <div className="hidden md:flex items-center gap-2 rounded-lg bg-secondary/50 px-3 py-1.5 border">
