@@ -1,4 +1,3 @@
-
 'use client';
 
 import {
@@ -6,47 +5,31 @@ import {
     Users,
     Settings,
     FileSearch,
-    CircleDollarSign,
-    Wallet,
-    Award,
-    ShieldCheck,
-    ClipboardList,
-    Plus,
-    Megaphone,
+    Landmark,
     Grid3X3,
-    FileSignature,
     WalletCards,
-    Receipt,
-    Calculator,
     BarChart3,
     FileImage,
-    Palette,
-    Server,
-    Landmark
+    ClipboardList,
+    Award,
+    Megaphone,
+    Save,
 } from 'lucide-react';
 import { type ReactNode, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
 import { useAuth } from '@/hooks/use-auth';
 import { BottomNavBar, type BottomNavItem } from '@/components/bottom-nav-bar';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Plus } from 'lucide-react';
 
 const adminNavItems: NavItem[] = [
     { href: "/admin/dashboard", icon: Home, label: "Dashboard" },
-    { 
-        href: "/admin/payments", 
-        icon: Landmark, 
-        label: "Pagos",
-        items: [
-            { href: "/admin/payments", label: "Verificar Pagos" },
-            { href: "/admin/payments?tab=report", label: "Reportar/Calcular" },
-        ]
-    },
     { 
         href: "#", 
         icon: Grid3X3, 
         label: "Utilidades",
         items: [
+            { href: "/admin/payments", label: "Pagos" },
             { href: "/admin/debts", label: "Gestión de Deudas" },
             { href: "/admin/financial-balance", label: "Balance Financiero" },
             { href: "/admin/petty-cash", label: "Caja Chica" },
@@ -78,7 +61,7 @@ const adminBottomNavItems: BottomNavItem[] = [
     label: 'Más', 
     isCentral: true,
     subMenu: [
-        { href: "/admin/debts", icon: CircleDollarSign, label: "Deudas" },
+        { href: "/admin/debts", icon: WalletCards, label: "Deudas" },
         { href: "/admin/people", icon: Users, label: "Personas" },
         { href: "/admin/surveys", icon: ClipboardList, label: "Encuestas" },
     ]

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -600,7 +599,7 @@ function CalculatorTab() {
             const querySnapshot = await getDocs(q);
             const debtsData: Debt[] = [];
             querySnapshot.forEach((doc) => debtsData.push({ id: doc.id, ...doc.data() } as Debt));
-            setOwnerDebts(debtsData.sort((a, b) => a.year - b.year || a.month - b.month));
+            setOwnerDebts(debtsData.sort((a, b) => a.year - a.year || a.month - b.month));
         } catch (error) { toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron cargar las deudas.' });
         } finally { setLoadingDebts(false); }
     };
@@ -706,19 +705,26 @@ export default function AdminPaymentsPage() {
                 <p className="text-muted-foreground">Verifique, reporte o calcule pagos para los propietarios.</p>
             </div>
             <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-                <TabsList className="grid w-full grid-cols-3">
+                <TabsList className="grid w-full grid-cols-1">
                     <TabsTrigger value="verify">Verificar Pagos</TabsTrigger>
-                    <TabsTrigger value="report">Reportar Pago</TabsTrigger>
-                    <TabsTrigger value="calculator">Calculadora de Pagos</TabsTrigger>
                 </TabsList>
                 <TabsContent value="verify" className="mt-6">
-                    <VerifyPaymentsTab />
-                </TabsContent>
-                <TabsContent value="report" className="mt-6">
-                    <ReportPaymentTab />
-                </TabsContent>
-                <TabsContent value="calculator" className="mt-6">
-                    <CalculatorTab />
+                     <Tabs defaultValue="verify" className="w-full">
+                        <TabsList className="grid w-full grid-cols-3">
+                            <TabsTrigger value="verify">Verificar Pagos</TabsTrigger>
+                            <TabsTrigger value="report">Reportar Pago</TabsTrigger>
+                            <TabsTrigger value="calculator">Calculadora de Pagos</TabsTrigger>
+                        </TabsList>
+                        <TabsContent value="verify" className="mt-6">
+                            <VerifyPaymentsTab />
+                        </TabsContent>
+                        <TabsContent value="report" className="mt-6">
+                            <ReportPaymentTab />
+                        </TabsContent>
+                        <TabsContent value="calculator" className="mt-6">
+                            <CalculatorTab />
+                        </TabsContent>
+                    </Tabs>
                 </TabsContent>
             </Tabs>
         </div>
