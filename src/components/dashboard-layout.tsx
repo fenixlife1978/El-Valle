@@ -22,7 +22,7 @@ export type NavItem = {
   items?: Omit<NavItem, 'icon' | 'items'>[];
 };
 
-const CustomHeader = ({ ownerData, userRole, navItems }: { ownerData: any, userRole: string | null, navItems: NavItem[] }) => {
+const CustomHeader = ({ ownerData, userRole, navItems, mobileNavItems }: { ownerData: any, userRole: string | null, navItems: NavItem[], mobileNavItems: NavItem[] }) => {
     const router = useRouter();
     const pathname = usePathname();
     const { companyInfo, activeRate, bcvLogoUrl } = useAuth();
@@ -135,13 +135,26 @@ const CustomHeader = ({ ownerData, userRole, navItems }: { ownerData: any, userR
                             </div>
                          )}
                         <nav className="mt-8 flex flex-col gap-2">
-                             {navItems.map((item) => (
-                                 <Link key={item.label} href={item.href}>
-                                     <Button variant={pathname?.startsWith(item.href) ? "secondary" : "ghost"} className="w-full justify-start text-base py-6">
-                                         <item.icon className="mr-3 h-5 w-5"/>
-                                         {item.label}
-                                     </Button>
-                                 </Link>
+                             {mobileNavItems.map((item) => (
+                                item.items ? (
+                                    <div key={item.label}>
+                                        <h3 className="px-4 py-2 text-sm font-semibold text-muted-foreground">{item.label}</h3>
+                                        {item.items.map(subItem => (
+                                            <Link key={subItem.label} href={subItem.href}>
+                                                <Button variant={pathname?.startsWith(subItem.href) ? "secondary" : "ghost"} className="w-full justify-start text-base py-6">
+                                                    {subItem.label}
+                                                </Button>
+                                            </Link>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <Link key={item.label} href={item.href}>
+                                        <Button variant={pathname?.startsWith(item.href) ? "secondary" : "ghost"} className="w-full justify-start text-base py-6">
+                                            <item.icon className="mr-3 h-5 w-5"/>
+                                            {item.label}
+                                        </Button>
+                                    </Link>
+                                )
                              ))}
                         </nav>
                     </SheetContent>
@@ -157,11 +170,13 @@ export function DashboardLayout({
   ownerData,
   userRole,
   navItems,
+  mobileNavItems,
 }: {
   children: React.ReactNode;
   ownerData: any;
   userRole: string | null;
   navItems: NavItem[];
+  mobileNavItems?: NavItem[];
 }) {
   const { companyInfo, loading } = useAuth();
   
@@ -171,7 +186,7 @@ export function DashboardLayout({
 
   return (
     <div className="min-h-screen w-full bg-background">
-        <CustomHeader ownerData={ownerData} userRole={userRole} navItems={navItems} />
+        <CustomHeader ownerData={ownerData} userRole={userRole} navItems={navItems} mobileNavItems={mobileNavItems || navItems} />
         <main className="p-4 md:p-8">
             {children}
         </main>

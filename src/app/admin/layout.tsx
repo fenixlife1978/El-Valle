@@ -13,7 +13,6 @@ import {
     ClipboardList,
     Award,
     Megaphone,
-    Save,
 } from 'lucide-react';
 import { type ReactNode, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
@@ -92,8 +91,12 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         );
     }
     
+    // Filtramos "Utilidades" del menú móvil, pero no del de escritorio.
+    const mobileNavItems = adminNavItems.filter(item => item.label !== "Utilidades");
+
+
     return (
-        <DashboardLayout ownerData={ownerData} userRole={role} navItems={adminNavItems}>
+        <DashboardLayout ownerData={ownerData} userRole={role} navItems={adminNavItems} mobileNavItems={mobileNavItems}>
             <div className="pb-20 sm:pb-0">{children}</div>
             <BottomNavBar items={adminBottomNavItems} pathname={pathname} />
         </DashboardLayout>
