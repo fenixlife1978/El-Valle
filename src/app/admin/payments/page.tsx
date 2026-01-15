@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useEffect, useMemo, useCallback, Suspense } from 'react';
@@ -342,7 +341,7 @@ function VerifyPaymentsTab() {
                                                     <DropdownMenuSeparator />
                                                 </>
                                             )}
-                                             <DropdownMenuItem onClick={() => setPaymentToDelete(payment)} className="text-destructive"><Trash2 className="mr-2 h-4 w-4" />Eliminar</DropdownMenuItem>
+                                             <DropdownMenuItem onClick={() => {setPaymentToDelete(payment); setIsDeleteConfirmationOpen(true);}} className="text-destructive"><Trash2 className="mr-2 h-4 w-4" />Eliminar</DropdownMenuItem>
                                         </DropdownMenuContent>
                                     </DropdownMenu>
                                 </TableCell>
@@ -607,7 +606,7 @@ function CalculatorTab() {
         } finally { setLoadingDebts(false); }
     };
     
-    const pendingDebts = useMemo(() => ownerDebts.filter(d => d.status === 'pending' || d.status === 'vencida').sort((a, b) => a.year - b.year || a.month - b.month), [ownerDebts]);
+    const pendingDebts = useMemo(() => ownerDebts.filter(d => d.status === 'pending' || d.status === 'vencida').sort((a, b) => a.year - a.year || a.month - b.month), [ownerDebts]);
     const handlePendingDebtSelection = (debtId: string) => {
         setSelectedPendingDebts(prev => prev.includes(debtId) ? prev.filter(id => id !== debtId) : [...prev, debtId]);
     };
@@ -695,7 +694,7 @@ function AdminPaymentsPage() {
     const [activeTab, setActiveTab] = useState('verify');
 
     useEffect(() => {
-        const tab = searchParams.get('tab');
+        const tab = searchParams?.get('tab');
         if (tab === 'report' || tab === 'calculator') {
             setActiveTab(tab);
         } else {
@@ -741,3 +740,5 @@ export default function AdminPaymentsPageWithSuspense() {
         </Suspense>
     );
 }
+
+    
