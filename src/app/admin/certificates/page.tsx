@@ -131,30 +131,38 @@ const CertificateForm = ({
   useEffect(() => {
     let person: Partial<Owner & ManualPerson> = {};
     let property: { street: string; house: string } | null = null;
-  
+
     if (entryMode === 'search' && selectedOwner && selectedProperty) {
       person = {
         ...selectedOwner,
         cedula: selectedOwner.cedula || manualCedulaForOwner,
       };
       property = selectedProperty;
-    } else if (entryMode === 'manual' && manualData.name && manualData.street && manualData.house) {
+    } else if (entryMode === 'manual' && manualData.name && manualData.street && manualData.house && manualData.cedula) {
       person = manualData;
       property = { street: manualData.street, house: manualData.house };
     }
-  
+
     if (Object.keys(person).length > 0 && property) {
-      setCertificateBody(template.generateBody(person, property, additionalInfo));
+      // @ts-ignore
+      if (person.cedula || template.id === 'remodelacion') {
+        setCertificateBody(template.generateBody(person, property, additionalInfo));
+      } else {
+        setCertificateBody('');
+      }
     } else {
       setCertificateBody('');
     }
   }, [selectedOwner, manualCedulaForOwner, selectedProperty, additionalInfo, manualData, entryMode, template]);
+
 
   const handleSelectOwner = (owner: Owner) => {
     setSelectedOwner(owner);
     setSearchTerm('');
     if (owner.properties && owner.properties.length > 0) {
       setSelectedProperty(owner.properties[0]);
+    } else {
+      setSelectedProperty(null);
     }
     if (!owner.cedula) {
       setManualCedulaForOwner('');
@@ -530,4 +538,3 @@ export default function CertificatesPage() {
     </div>
   );
 }
-
