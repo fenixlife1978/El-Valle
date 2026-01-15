@@ -1,6 +1,7 @@
+
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, Suspense } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
 import { Input } from '@/components/ui/input';
@@ -540,7 +541,7 @@ function ReportPaymentTab() {
                         </CardContent>
                     </Card>
                 </CardContent>
-                <CardFooter><Button type="submit" className="w-full md:w-auto ml-auto" disabled={loading}>{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CheckCircle2 className="mr-2 h-4 w-4"/>}{loading ? 'Enviando...' : 'Enviar Reporte'}</Button></CardFooter>
+                <CardFooter><Button type="submit" className="w-full md:w-auto ml-auto" onClick={() => router.push('/admin/payments?tab=report')} disabled={loading}>{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CheckCircle2 className="mr-2 h-4 w-4"/>}{loading ? 'Enviando...' : 'Enviar Reporte'}</Button></CardFooter>
                 <BankSelectionModal isOpen={isBankModalOpen} onOpenChange={setIsBankModalOpen} selectedValue={bank} onSelect={(value) => { setBank(value); if (value !== 'Otro') setOtherBank(''); setIsBankModalOpen(false); }} />
                 <Dialog open={isInfoDialogOpen} onOpenChange={setIsInfoDialogOpen}><DialogContent><DialogHeader><DialogTitle className="flex items-center gap-2"><Info className="h-6 w-6 text-blue-500" />Reporte Enviado para Revisión</DialogTitle><div className="pt-4 text-sm text-muted-foreground space-y-4"><p>¡Gracias! Hemos recibido el reporte de pago. Será procesado en un máximo de <strong>24 horas</strong>.</p></div></DialogHeader><DialogFooter><Button onClick={() => setIsInfoDialogOpen(false)}>Entendido</Button></DialogFooter></DialogContent></Dialog>
             </form>
@@ -608,7 +609,7 @@ function CalculatorTab() {
     const handlePendingDebtSelection = (debtId: string) => setSelectedPendingDebts(prev => prev.includes(debtId) ? prev.filter(id => id !== debtId) : [...prev, debtId]);
     const handleAdvanceMonthSelection = (monthValue: string) => setSelectedAdvanceMonths(prev => prev.includes(monthValue) ? prev.filter(m => m !== monthValue) : [...prev, monthValue]);
     const futureMonths = useMemo(() => {
-        const paidAdvanceMonths = ownerDebts.filter(d => d.status === 'paid' && d.description.includes('Adelantado')).map(d => `${d.year}-${String(d.month).padStart(2, '0')}`);
+        const paidAdvanceMonths = ownerDebts.filter(d => d.status === 'paid' && d.description.includes('Adelantado')).map(d => `${d.year}-${String(d.month).padStart(2, '0')}`;
         return Array.from({ length: 12 }, (_, i) => { const date = addMonths(new Date(), i); const value = format(date, 'yyyy-MM'); return { value, label: format(date, 'MMMM yyyy', { locale: es }), disabled: paidAdvanceMonths.includes(value) }; });
     }, [ownerDebts]);
     const paymentCalculator = useMemo(() => {
@@ -679,7 +680,7 @@ function CalculatorTab() {
 // ===================================================================================
 // MAIN PAGE COMPONENT
 // ===================================================================================
-export default function AdminPaymentsPage() {
+function AdminPaymentsPage() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const [activeTab, setActiveTab] = useState('verify');
@@ -705,28 +706,29 @@ export default function AdminPaymentsPage() {
                 <p className="text-muted-foreground">Verifique, reporte o calcule pagos para los propietarios.</p>
             </div>
             <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-                <TabsList className="grid w-full grid-cols-1">
+                <TabsList className="grid w-full grid-cols-3">
                     <TabsTrigger value="verify">Verificar Pagos</TabsTrigger>
+                    <TabsTrigger value="report">Reportar Pago</TabsTrigger>
+                    <TabsTrigger value="calculator">Calculadora de Pagos</TabsTrigger>
                 </TabsList>
                 <TabsContent value="verify" className="mt-6">
-                     <Tabs defaultValue="verify" className="w-full">
-                        <TabsList className="grid w-full grid-cols-3">
-                            <TabsTrigger value="verify">Verificar Pagos</TabsTrigger>
-                            <TabsTrigger value="report">Reportar Pago</TabsTrigger>
-                            <TabsTrigger value="calculator">Calculadora de Pagos</TabsTrigger>
-                        </TabsList>
-                        <TabsContent value="verify" className="mt-6">
-                            <VerifyPaymentsTab />
-                        </TabsContent>
-                        <TabsContent value="report" className="mt-6">
-                            <ReportPaymentTab />
-                        </TabsContent>
-                        <TabsContent value="calculator" className="mt-6">
-                            <CalculatorTab />
-                        </TabsContent>
-                    </Tabs>
+                    <VerifyPaymentsTab />
+                </TabsContent>
+                <TabsContent value="report" className="mt-6">
+                    <ReportPaymentTab />
+                </TabsContent>
+                <TabsContent value="calculator" className="mt-6">
+                    <CalculatorTab />
                 </TabsContent>
             </Tabs>
         </div>
+    );
+}
+
+export default function AdminPaymentsPageWithSuspense() {
+    return (
+        <Suspense fallback={<div className="flex h-64 w-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>}>
+            <AdminPaymentsPage />
+        </Suspense>
     );
 }
