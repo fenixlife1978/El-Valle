@@ -29,7 +29,7 @@ const adminNavItems: NavItem[] = [
         icon: Grid3X3, 
         label: "Utilidades",
         items: [
-            { href: "/admin/payments", label: "Pagos" },
+            { href: "/admin/payments", label: "Gestion de Pagos" },
             { href: "/admin/debts", label: "Gestión de Deudas" },
             { href: "/admin/financial-balance", label: "Balance Financiero" },
             { href: "/admin/petty-cash", label: "Caja Chica" },
@@ -54,7 +54,7 @@ const adminNavItems: NavItem[] = [
 
 const adminBottomNavItems: BottomNavItem[] = [
   { href: '/admin/dashboard', icon: Home, label: 'Inicio' },
-  { href: '/admin/payments', icon: Landmark, label: 'Pagos' },
+  { href: '/admin/payments', icon: Landmark, label: 'Gestion de Pagos' },
   { 
     href: '#', 
     icon: Plus, 
