@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, useMemo, useCallback, Suspense } from 'react';
@@ -609,7 +610,7 @@ function CalculatorTab() {
     const handlePendingDebtSelection = (debtId: string) => setSelectedPendingDebts(prev => prev.includes(debtId) ? prev.filter(id => id !== debtId) : [...prev, debtId]);
     const handleAdvanceMonthSelection = (monthValue: string) => setSelectedAdvanceMonths(prev => prev.includes(monthValue) ? prev.filter(m => m !== monthValue) : [...prev, monthValue]);
     const futureMonths = useMemo(() => {
-        const paidAdvanceMonths = ownerDebts.filter(d => d.status === 'paid' && d.description.includes('Adelantado')).map(d => `${d.year}-${String(d.month).padStart(2, '0')}`;
+        const paidAdvanceMonths = ownerDebts.filter(d => d.status === 'paid' && d.description.includes('Adelantado')).map(d => `${d.year}-${String(d.month).padStart(2, '0')}`)
         return Array.from({ length: 12 }, (_, i) => { const date = addMonths(new Date(), i); const value = format(date, 'yyyy-MM'); return { value, label: format(date, 'MMMM yyyy', { locale: es }), disabled: paidAdvanceMonths.includes(value) }; });
     }, [ownerDebts]);
     const paymentCalculator = useMemo(() => {
