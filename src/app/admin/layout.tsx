@@ -30,7 +30,7 @@ import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
 import { useAuth } from '@/hooks/use-auth';
 import { BottomNavBar, type BottomNavItem } from '@/components/bottom-nav-bar';
 import { Loader2 } from 'lucide-react';
-import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuSub, SidebarMenuSubButton, SidebarMenuButton, SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
+import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuSub, SidebarMenuSubButton, SidebarMenuButton, SidebarProvider, SidebarInset, SidebarMenuSubItem } from '@/components/ui/sidebar';
 
 const adminNavItems: NavItem[] = [
     { href: "/admin/dashboard", icon: Home, label: "Dashboard" },
@@ -127,7 +127,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                     
                     <SidebarGroup>
                         <SidebarGroupLabel>Gestión Principal</SidebarGroupLabel>
-                        <SidebarMenuItem>
+                         <SidebarMenuItem>
                              <SidebarMenuButton isActive={pathname.startsWith('/admin/payments')}>
                                 <Landmark />
                                 Pagos
@@ -200,10 +200,10 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                             </SidebarMenuButton>
                         </SidebarMenuItem>
                          <SidebarMenuItem>
-                             <SidebarMenuButton isActive={pathname.startsWith('/admin/certificates')}>
+                             <SidebarMenuSubButton href="/admin/certificates" isActive={pathname === '/admin/certificates'}>
                                 <Award />
                                 Constancias
-                            </SidebarMenuButton>
+                            </SidebarMenuSubButton>
                         </SidebarMenuItem>
                     </SidebarGroup>
 
