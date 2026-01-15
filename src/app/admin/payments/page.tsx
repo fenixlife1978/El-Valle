@@ -7,15 +7,14 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
-import { CalendarIcon, CheckCircle2, Trash2, PlusCircle, Loader2, Search, XCircle, Wand2, UserPlus, Banknote, Info, Receipt, Calculator, Minus, Equal, Check, MoreHorizontal, Printer, Filter, Share2, Download, RefreshCw, Paperclip, Eye, AlertTriangle } from 'lucide-react';
+import { CalendarIcon, CheckCircle2, Trash2, PlusCircle, Loader2, Search, XCircle, Wand2, UserPlus, Banknote, Info, Receipt, Calculator, Minus, Equal, Check, MoreHorizontal, Filter, Eye, AlertTriangle, Paperclip, Upload } from 'lucide-react';
 import { format, parseISO, isBefore, startOfMonth, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { cn } from '@/lib/utils';
+import { cn, compressImage } from '@/lib/utils';
 import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc, where, getDocs, Timestamp, setDoc, writeBatch, updateDoc, deleteDoc, runTransaction, limit, orderBy, deleteField } from 'firebase/firestore';
 import { db, storage } from '@/lib/firebase';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -33,6 +32,7 @@ import autoTable from 'jspdf-autotable';
 import QRCode from 'qrcode';
 import Decimal from 'decimal.js';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useRouter, useSearchParams } from 'next/navigation';
 
 
 // --- Type Definitions (Shared) ---
@@ -388,6 +388,8 @@ function ReportPaymentTab() {
     const [beneficiaryRows, setBeneficiaryRows] = useState<BeneficiaryRow[]>([]);
     const [isBankModalOpen, setIsBankModalOpen] = useState(false);
     const [isInfoDialogOpen, setIsInfoDialogOpen] = useState(false);
+    const [receiptImage, setReceiptImage] = useState<string | null>(null);
+
 
     useEffect(() => {
         const q = query(collection(db, "owners"));
@@ -425,6 +427,23 @@ function ReportPaymentTab() {
     useEffect(() => {
         setBeneficiaryRows([{ id: Date.now().toString(), owner: null, searchTerm: '', amount: '', selectedProperty: null }]);
     }, []);
+    
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setLoading(true);
+        try {
+            const compressedBase64 = await compressImage(file, 800, 800);
+            setReceiptImage(compressedBase64);
+            toast({ title: 'Comprobante cargado', description: 'La imagen se ha optimizado y está lista para ser enviada.' });
+        } catch (error) {
+            toast({ variant: 'destructive', title: 'Error de imagen', description: 'No se pudo procesar la imagen.' });
+        } finally {
+            setLoading(false);
+        }
+    };
+
 
     const assignedTotal = useMemo(() => beneficiaryRows.reduce((acc, row) => acc + (Number(row.amount) || 0), 0), [beneficiaryRows]);
     const balance = useMemo(() => (Number(totalAmount) || 0) - assignedTotal, [totalAmount, assignedTotal]);
@@ -432,6 +451,7 @@ function ReportPaymentTab() {
     const resetForm = () => {
         setPaymentDate(undefined); setExchangeRate(null); setExchangeRateMessage(''); setPaymentMethod(''); setBank(''); setOtherBank(''); setReference(''); setTotalAmount('');
         setBeneficiaryRows([{ id: Date.now().toString(), owner: null, searchTerm: '', amount: '', selectedProperty: null }]);
+        setReceiptImage(null);
     }
 
     const updateBeneficiaryRow = (id: string, updates: Partial<BeneficiaryRow>) => setBeneficiaryRows(rows => rows.map(row => (row.id === id ? { ...row, ...updates } : row)));
@@ -451,7 +471,7 @@ function ReportPaymentTab() {
         if (!validationResult.isValid) { toast({ variant: 'destructive', title: 'Error de Validación', description: validationResult.error, duration: 6000 }); setLoading(false); return; }
         try {
             const beneficiaries = beneficiaryRows.map(row => ({ ownerId: row.owner!.id, ownerName: row.owner!.name, ...(row.selectedProperty || {}), amount: Number(row.amount) }));
-            const paymentData = { paymentDate: Timestamp.fromDate(paymentDate!), exchangeRate, paymentMethod, bank: bank === 'Otro' ? otherBank : bank, reference, totalAmount: Number(totalAmount), beneficiaries, beneficiaryIds: Array.from(new Set(beneficiaries.map(b => b.ownerId))), status: 'pendiente', reportedAt: serverTimestamp(), reportedBy: authUser?.uid || 'unknown_admin' };
+            const paymentData = { paymentDate: Timestamp.fromDate(paymentDate!), exchangeRate, paymentMethod, bank: bank === 'Otro' ? otherBank : bank, reference, totalAmount: Number(totalAmount), beneficiaries, beneficiaryIds: Array.from(new Set(beneficiaries.map(b => b.ownerId))), status: 'pendiente', reportedAt: serverTimestamp(), reportedBy: authUser?.uid || 'unknown_admin', receiptUrl: receiptImage };
             await addDoc(collection(db, "payments"), paymentData);
             resetForm(); setIsInfoDialogOpen(true);
         } catch (error) { console.error("Error submitting payment:", error); toast({ variant: "destructive", title: "Error Inesperado", description: "No se pudo enviar el reporte." });
@@ -481,6 +501,18 @@ function ReportPaymentTab() {
                             <div className="space-y-2"><Label htmlFor="bank">Banco Emisor</Label><Button type="button" id="bank" variant="outline" className="w-full justify-start text-left font-normal" onClick={() => setIsBankModalOpen(true)} disabled={loading}>{bank ? <><Banknote className="mr-2 h-4 w-4" />{bank}</> : <span>Seleccione un banco...</span>}</Button></div>
                             {bank === 'Otro' && <div className="space-y-2 md:col-span-2"><Label htmlFor="otherBank">Nombre del Otro Banco</Label><Input id="otherBank" value={otherBank} onChange={(e) => setOtherBank(e.target.value)} disabled={loading}/></div>}
                             <div className="space-y-2"><Label htmlFor="reference">Últimos 6 dígitos de la Referencia</Label><Input id="reference" value={reference} onChange={(e) => setReference(e.target.value.replace(/\D/g, '').slice(0, 6))} maxLength={6} disabled={loading} /><p className="text-xs text-muted-foreground">La referencia debe tener al menos 4 dígitos.</p></div>
+                             <div className="space-y-2 md:col-span-2">
+                                <Label htmlFor="receipt">Comprobante de Pago (Opcional)</Label>
+                                <Input id="receipt" type="file" accept="image/png, image/jpeg" onChange={handleImageUpload} disabled={loading}/>
+                                {receiptImage && (
+                                    <div className="mt-2 relative w-32 h-32 border p-1 rounded-md">
+                                        <img src={receiptImage} alt="Vista previa del comprobante" className="w-full h-full object-contain" />
+                                        <Button variant="destructive" size="icon" className="absolute -top-2 -right-2 h-6 w-6 rounded-full" onClick={() => setReceiptImage(null)}>
+                                            <XCircle className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                )}
+                            </div>
                         </CardContent>
                     </Card>
                     <Card><CardHeader><CardTitle>2. Detalles de los Beneficiarios</CardTitle><CardDescription>Asigne el monto total del pago entre uno o más beneficiarios.</CardDescription></CardHeader>
@@ -521,6 +553,8 @@ function ReportPaymentTab() {
 // CALCULATOR COMPONENT
 // ===================================================================================
 function CalculatorTab() {
+    const { toast } = useToast();
+    const router = useRouter();
     const [owners, setOwners] = useState<Owner[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -531,11 +565,7 @@ function CalculatorTab() {
     const [loadingDebts, setLoadingDebts] = useState(false);
     const [selectedPendingDebts, setSelectedPendingDebts] = useState<string[]>([]);
     const [selectedAdvanceMonths, setSelectedAdvanceMonths] = useState<string[]>([]);
-    const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
-    const [processingPayment, setProcessingPayment] = useState(false);
-    const [paymentDetails, setPaymentDetails] = useState<PaymentDetails>({ paymentMethod: '', bank: '', otherBank: '', reference: '' });
-    const { toast } = useToast();
-
+    
     useEffect(() => {
         const fetchPrerequisites = async () => {
             setLoading(true);
@@ -632,28 +662,50 @@ function CalculatorTab() {
                                     <div className="flex justify-between"><span>Saldo a Favor:</span><span>- Bs. {formatToTwoDecimals(paymentCalculator.balanceInFavor)}</span></div><hr/>
                                     <div className="flex justify-between font-bold text-lg"><span>TOTAL A PAGAR:</span><span>Bs. {formatToTwoDecimals(paymentCalculator.totalToPay)}</span></div>
                                 </CardContent>
-                                <CardFooter><Button className="w-full" onClick={() => setIsPaymentDialogOpen(true)}>Registrar Pago</Button></CardFooter>
+                                <CardFooter>
+                                    <Button className="w-full" onClick={() => router.push('/admin/payments?tab=report')} disabled={!paymentCalculator.hasSelection || paymentCalculator.totalToPay <= 0}>
+                                        Reportar Pago
+                                    </Button>
+                                </CardFooter>
                             </Card>
                         )}
                     </div>
                 </div>
             </CardContent>
-            <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}></Dialog>
         </Card>
     );
 }
+
 
 // ===================================================================================
 // MAIN PAGE COMPONENT
 // ===================================================================================
 export default function AdminPaymentsPage() {
+    const router = useRouter();
+    const searchParams = useSearchParams();
+    const [activeTab, setActiveTab] = useState('verify');
+
+    useEffect(() => {
+        const tab = searchParams.get('tab');
+        if (tab === 'report' || tab === 'calculator') {
+            setActiveTab(tab);
+        } else {
+            setActiveTab('verify');
+        }
+    }, [searchParams]);
+
+    const handleTabChange = (value: string) => {
+        setActiveTab(value);
+        router.push(`/admin/payments?tab=${value}`, { scroll: false });
+    };
+
     return (
         <div className="space-y-8">
             <div>
                 <h1 className="text-3xl font-bold font-headline">Gestión de Pagos</h1>
                 <p className="text-muted-foreground">Verifique, reporte o calcule pagos para los propietarios.</p>
             </div>
-            <Tabs defaultValue="verify">
+            <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
                 <TabsList className="grid w-full grid-cols-3">
                     <TabsTrigger value="verify">Verificar Pagos</TabsTrigger>
                     <TabsTrigger value="report">Reportar Pago</TabsTrigger>

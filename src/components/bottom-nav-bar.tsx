@@ -40,9 +40,9 @@ export function BottomNavBar({ items, pathname }: { items: BottomNavItem[], path
                   <Button
                     variant="default"
                     size="icon"
-                    className="h-16 w-16 rounded-full shadow-lg border-2 border-background absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center justify-center"
+                    className="h-14 w-14 rounded-full shadow-lg border-2 border-background absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center justify-center"
                   >
-                    <Plus className="h-8 w-8" />
+                    <Plus className="h-7 w-7" />
                     <span className="sr-only">{item.label}</span>
                   </Button>
                 </DropdownMenuTrigger>

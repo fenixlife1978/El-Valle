@@ -3,12 +3,10 @@
 
 import {
     Home,
-    Landmark,
     Users,
     Settings,
     FileSearch,
     CircleDollarSign,
-    TrendingUp,
     Wallet,
     Award,
     ShieldCheck,
@@ -24,6 +22,7 @@ import {
     FileImage,
     Palette,
     Server,
+    Landmark
 } from 'lucide-react';
 import { type ReactNode, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
@@ -31,16 +30,24 @@ import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
 import { useAuth } from '@/hooks/use-auth';
 import { BottomNavBar, type BottomNavItem } from '@/components/bottom-nav-bar';
 import { Loader2 } from 'lucide-react';
-
+import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuSub, SidebarMenuSubButton, SidebarMenuButton, SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 
 const adminNavItems: NavItem[] = [
     { href: "/admin/dashboard", icon: Home, label: "Dashboard" },
+    { 
+        href: "/admin/payments", 
+        icon: Landmark, 
+        label: "Pagos",
+        items: [
+            { href: "/admin/payments", label: "Verificar Pagos" },
+            { href: "/admin/payments?tab=report", label: "Reportar/Calcular" },
+        ]
+    },
     { 
         href: "/admin/utils", 
         icon: Grid3X3, 
         label: "Utilidades",
         items: [
-            { href: "/admin/payments", label: "Gestión de Pagos" },
             { href: "/admin/debts", label: "Gestión de Deudas" },
             { href: "/admin/financial-balance", label: "Balance Financiero" },
             { href: "/admin/petty-cash", label: "Caja Chica" },
@@ -104,9 +111,125 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     }
     
     return (
-        <DashboardLayout ownerData={ownerData} userRole={role} navItems={adminNavItems}>
+      <SidebarProvider>
+        <Sidebar>
+            <SidebarHeader>
+                {/* Puedes poner un logo o título aquí si quieres */}
+            </SidebarHeader>
+            <SidebarContent>
+                <SidebarMenu>
+                    <SidebarMenuItem>
+                        <SidebarMenuButton href="/admin/dashboard" isActive={pathname === '/admin/dashboard'}>
+                            <Home />
+                            Dashboard
+                        </SidebarMenuButton>
+                    </SidebarMenuItem>
+                    
+                    <SidebarGroup>
+                        <SidebarGroupLabel>Gestión Principal</SidebarGroupLabel>
+                        <SidebarMenuItem>
+                             <SidebarMenuButton isActive={pathname.startsWith('/admin/payments')}>
+                                <Landmark />
+                                Pagos
+                            </SidebarMenuButton>
+                            <SidebarMenuSub>
+                                <SidebarMenuSubItem>
+                                     <SidebarMenuSubButton href="/admin/payments" isActive={pathname === '/admin/payments' && !pathname.includes('tab=')}>Verificar Pagos</SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                                <SidebarMenuSubItem>
+                                     <SidebarMenuSubButton href="/admin/payments?tab=report" isActive={pathname.includes('tab=report')}>Reportar/Calcular</SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                            </SidebarMenuSub>
+                        </SidebarMenuItem>
+
+                        <SidebarMenuItem>
+                             <SidebarMenuButton isActive={pathname.startsWith('/admin/debts')}>
+                                <WalletCards />
+                                Deudas
+                            </SidebarMenuButton>
+                             <SidebarMenuSub>
+                                <SidebarMenuSubItem>
+                                     <SidebarMenuSubButton href="/admin/debts" isActive={pathname === '/admin/debts'}>Gestionar Deudas</SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                            </SidebarMenuSub>
+                        </SidebarMenuItem>
+                        
+                         <SidebarMenuItem>
+                             <SidebarMenuButton isActive={pathname.startsWith('/admin/people')}>
+                                <Users />
+                                Personas
+                            </SidebarMenuButton>
+                              <SidebarMenuSub>
+                                <SidebarMenuSubItem>
+                                     <SidebarMenuSubButton href="/admin/people" isActive={pathname === '/admin/people'}>Gestionar Personas</SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                            </SidebarMenuSub>
+                        </SidebarMenuItem>
+                    </SidebarGroup>
+
+                    <SidebarGroup>
+                        <SidebarGroupLabel>Utilidades</SidebarGroupLabel>
+                         <SidebarMenuItem>
+                             <SidebarMenuButton isActive={pathname.startsWith('/admin/financial-balance')}>
+                                <BarChart3 />
+                                Balance Financiero
+                            </SidebarMenuButton>
+                        </SidebarMenuItem>
+                         <SidebarMenuItem>
+                             <SidebarMenuButton isActive={pathname.startsWith('/admin/petty-cash')}>
+                                <Wallet />
+                                Caja Chica
+                            </SidebarMenuButton>
+                        </SidebarMenuItem>
+                         <SidebarMenuItem>
+                             <SidebarMenuButton isActive={pathname.startsWith('/admin/reports')}>
+                                <FileSearch />
+                                Informes
+                            </SidebarMenuButton>
+                        </SidebarMenuItem>
+                         <SidebarMenuItem>
+                             <SidebarMenuButton isActive={pathname.startsWith('/admin/billboard')}>
+                                <Megaphone />
+                                Cartelera
+                            </SidebarMenuButton>
+                        </SidebarMenuItem>
+                         <SidebarMenuItem>
+                             <SidebarMenuButton isActive={pathname.startsWith('/admin/surveys')}>
+                                <ClipboardList />
+                                Encuestas
+                            </SidebarMenuButton>
+                        </SidebarMenuItem>
+                         <SidebarMenuItem>
+                             <SidebarMenuButton isActive={pathname.startsWith('/admin/certificates')}>
+                                <Award />
+                                Constancias
+                            </SidebarMenuButton>
+                        </SidebarMenuItem>
+                    </SidebarGroup>
+
+                     <SidebarGroup>
+                        <SidebarGroupLabel>Sistema</SidebarGroupLabel>
+                         <SidebarMenuItem>
+                             <SidebarMenuButton isActive={pathname.startsWith('/admin/settings')}>
+                                <Settings />
+                                Configuración
+                            </SidebarMenuButton>
+                            <SidebarMenuSub>
+                                <SidebarMenuSubItem><SidebarMenuSubButton href="/admin/settings" isActive={pathname === '/admin/settings'}>General</SidebarMenuSubButton></SidebarMenuSubItem>
+                                <SidebarMenuSubItem><SidebarMenuSubButton href="/admin/settings/sync" isActive={pathname === '/admin/settings/sync'}>Sincronización</SidebarMenuSubButton></SidebarMenuSubItem>
+                                <SidebarMenuSubItem><SidebarMenuSubButton href="/admin/validation" isActive={pathname === '/admin/validation'}>Validación</SidebarMenuSubButton></SidebarMenuSubItem>
+                            </SidebarMenuSub>
+                        </SidebarMenuItem>
+                    </SidebarGroup>
+                </SidebarMenu>
+            </SidebarContent>
+        </Sidebar>
+
+        <DashboardLayout ownerData={ownerData} userRole={role} navItems={[]}>
             <div className="pb-20 sm:pb-0">{children}</div>
             <BottomNavBar items={adminBottomNavItems} pathname={pathname} />
         </DashboardLayout>
+
+      </SidebarProvider>
     );
 }
