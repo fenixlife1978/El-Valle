@@ -375,6 +375,7 @@ function VerifyPaymentsTab() {
 // ===================================================================================
 function ReportPaymentTab() {
     const { toast } = useToast();
+    const router = useRouter();
     const { user: authUser } = useAuth();
     const [allOwners, setAllOwners] = useState<Owner[]>([]);
     const [loading, setLoading] = useState(false);
@@ -607,12 +608,19 @@ function CalculatorTab() {
     };
     
     const pendingDebts = useMemo(() => ownerDebts.filter(d => d.status === 'pending' || d.status === 'vencida').sort((a, b) => a.year - b.year || a.month - b.month), [ownerDebts]);
-    const handlePendingDebtSelection = (debtId: string) => setSelectedPendingDebts(prev => prev.includes(debtId) ? prev.filter(id => id !== debtId) : [...prev, debtId]);
-    const handleAdvanceMonthSelection = (monthValue: string) => setSelectedAdvanceMonths(prev => prev.includes(monthValue) ? prev.filter(m => m !== monthValue) : [...prev, monthValue]);
+    const handlePendingDebtSelection = (debtId: string) => {
+        setSelectedPendingDebts(prev => prev.includes(debtId) ? prev.filter(id => id !== debtId) : [...prev, debtId]);
+    };
+    
+    const handleAdvanceMonthSelection = (monthValue: string) => {
+        setSelectedAdvanceMonths(prev => prev.includes(monthValue) ? prev.filter(m => m !== monthValue) : [...prev, monthValue]);
+    };
+    
     const futureMonths = useMemo(() => {
-        const paidAdvanceMonths = ownerDebts.filter(d => d.status === 'paid' && d.description.includes('Adelantado')).map(d => `${d.year}-${String(d.month).padStart(2, '0')}`)
+        const paidAdvanceMonths = ownerDebts.filter(d => d.status === 'paid' && d.description.includes('Adelantado')).map(d => `${d.year}-${String(d.month).padStart(2, '0')}`);
         return Array.from({ length: 12 }, (_, i) => { const date = addMonths(new Date(), i); const value = format(date, 'yyyy-MM'); return { value, label: format(date, 'MMMM yyyy', { locale: es }), disabled: paidAdvanceMonths.includes(value) }; });
     }, [ownerDebts]);
+    
     const paymentCalculator = useMemo(() => {
         if (!selectedOwner) return { totalToPay: 0, hasSelection: false, dueMonthsCount: 0, advanceMonthsCount: 0, totalDebtBs: 0, balanceInFavor: 0 };
         const dueMonthsTotalUSD = pendingDebts.filter(debt => selectedPendingDebts.includes(debt.id)).reduce((sum, debt) => sum + debt.amountUSD, 0);
