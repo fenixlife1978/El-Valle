@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, useMemo, useCallback, Suspense } from 'react';
@@ -11,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
-import { CalendarIcon, CheckCircle2, Trash2, PlusCircle, Loader2, Search, XCircle, Wand2, UserPlus, Banknote, Info, Receipt, Calculator, Minus, Equal, Check, MoreHorizontal, Filter, Eye, AlertTriangle, Paperclip, Upload } from 'lucide-react';
+import { CalendarIcon, CheckCircle2, Trash2, PlusCircle, Loader2, Search, XCircle, Wand2, UserPlus, Banknote, Info, Receipt, Calculator, Minus, Equal, Check, MoreHorizontal, Filter, Eye, AlertTriangle, Paperclip, Upload, DollarSign } from 'lucide-react';
 import { format, parseISO, isBefore, startOfMonth, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn, compressImage } from '@/lib/utils';
@@ -378,7 +379,7 @@ function ReportPaymentTab() {
     const { user: authUser } = useAuth();
     const [allOwners, setAllOwners] = useState<Owner[]>([]);
     const [loading, setLoading] = useState(false);
-    const [paymentDate, setPaymentDate] = useState<Date | undefined>();
+    const [paymentDate, setPaymentDate] = useState<Date | undefined>(new Date());
     const [exchangeRate, setExchangeRate] = useState<number | null>(null);
     const [exchangeRateMessage, setExchangeRateMessage] = useState('');
     const [paymentMethod, setPaymentMethod] = useState<any>('');
@@ -386,6 +387,7 @@ function ReportPaymentTab() {
     const [otherBank, setOtherBank] = useState('');
     const [reference, setReference] = useState('');
     const [totalAmount, setTotalAmount] = useState<string>('');
+    const [amountUSD, setAmountUSD] = useState<string>('');
     const [beneficiaryRows, setBeneficiaryRows] = useState<BeneficiaryRow[]>([]);
     const [isBankModalOpen, setIsBankModalOpen] = useState(false);
     const [isInfoDialogOpen, setIsInfoDialogOpen] = useState(false);
@@ -427,6 +429,17 @@ function ReportPaymentTab() {
     }, [paymentDate]);
 
     useEffect(() => {
+        if (exchangeRate && exchangeRate > 0) {
+            const bs = parseFloat(totalAmount);
+            if (!isNaN(bs) && bs > 0) {
+                setAmountUSD((bs / exchangeRate).toFixed(2));
+            } else {
+                setAmountUSD('');
+            }
+        }
+    }, [totalAmount, exchangeRate]);
+
+    useEffect(() => {
         setBeneficiaryRows([{ id: Date.now().toString(), owner: null, searchTerm: '', amount: '', selectedProperty: null }]);
     }, []);
     
@@ -451,7 +464,7 @@ function ReportPaymentTab() {
     const balance = useMemo(() => (Number(totalAmount) || 0) - assignedTotal, [totalAmount, assignedTotal]);
 
     const resetForm = () => {
-        setPaymentDate(new Date()); setExchangeRate(null); setExchangeRateMessage(''); setPaymentMethod(''); setBank(''); setOtherBank(''); setReference(''); setTotalAmount('');
+        setPaymentDate(new Date()); setExchangeRate(null); setExchangeRateMessage(''); setPaymentMethod(''); setBank(''); setOtherBank(''); setReference(''); setTotalAmount(''); setAmountUSD('');
         setBeneficiaryRows([{ id: Date.now().toString(), owner: null, searchTerm: '', amount: '', selectedProperty: null }]);
         setReceiptImage(null);
     }
@@ -519,7 +532,19 @@ function ReportPaymentTab() {
                     </Card>
                     <Card><CardHeader><CardTitle>2. Detalles de los Beneficiarios</CardTitle><CardDescription>Asigne el monto total del pago entre uno o más beneficiarios.</CardDescription></CardHeader>
                         <CardContent className="space-y-6">
-                            <div className="grid md:grid-cols-2 gap-6"><div className="space-y-2"><Label htmlFor="totalAmount">Monto Total del Pago (Bs.)</Label><Input id="totalAmount" type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} placeholder="0.00" disabled={loading}/></div></div>
+                            <div className="grid md:grid-cols-2 gap-6">
+                                <div className="space-y-2">
+                                    <Label htmlFor="totalAmount">Monto Total del Pago (Bs.)</Label>
+                                    <Input id="totalAmount" type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} placeholder="0.00" disabled={loading}/>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Monto Equivalente (USD)</Label>
+                                    <div className="relative">
+                                        <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                        <Input type="text" value={amountUSD} readOnly className="pl-9 bg-muted/50" placeholder="0.00" />
+                                    </div>
+                                </div>
+                            </div>
                             <div className="space-y-4"><Label className="font-semibold">Asignación de Montos</Label>
                                 {beneficiaryRows.map((row, index) => (
                                     <Card key={row.id} className="p-4 bg-muted/50 relative">
@@ -543,7 +568,7 @@ function ReportPaymentTab() {
                         </CardContent>
                     </Card>
                 </CardContent>
-                <CardFooter><Button type="submit" className="w-full md:w-auto ml-auto" onClick={() => router.push('/admin/payments?tab=report')} disabled={loading}>{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CheckCircle2 className="mr-2 h-4 w-4"/>}{loading ? 'Enviando...' : 'Enviar Reporte'}</Button></CardFooter>
+                <CardFooter><Button type="submit" className="w-full md:w-auto ml-auto" disabled={loading}>{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CheckCircle2 className="mr-2 h-4 w-4"/>}{loading ? 'Enviando...' : 'Enviar Reporte'}</Button></CardFooter>
                 <BankSelectionModal isOpen={isBankModalOpen} onOpenChange={setIsBankModalOpen} selectedValue={bank} onSelect={(value) => { setBank(value); if (value !== 'Otro') setOtherBank(''); setIsBankModalOpen(false); }} />
                 <Dialog open={isInfoDialogOpen} onOpenChange={setIsInfoDialogOpen}><DialogContent><DialogHeader><DialogTitle className="flex items-center gap-2"><Info className="h-6 w-6 text-blue-500" />Reporte Enviado para Revisión</DialogTitle><div className="pt-4 text-sm text-muted-foreground space-y-4"><p>¡Gracias! Hemos recibido el reporte de pago. Será procesado en un máximo de <strong>24 horas</strong>.</p></div></DialogHeader><DialogFooter><Button onClick={() => setIsInfoDialogOpen(false)}>Entendido</Button></DialogFooter></DialogContent></Dialog>
             </form>
