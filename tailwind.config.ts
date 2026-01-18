@@ -9,14 +9,14 @@ export default {
   ],
   theme: {
     fontFamily: {
-      body: ['Inter', 'sans-serif'],
-      headline: ['Inter', 'sans-serif'],
+      body: ['Montserrat', 'sans-serif'],
+      headline: ['Montserrat', 'sans-serif'],
       code: ['monospace'],
     },
     borderRadius: {
       lg: 'var(--radius)',
-      md: 'calc(var(--radius) - 8px)',
-      sm: 'calc(var(--radius) - 16px)',
+      md: 'calc(var(--radius) - 4px)',
+      sm: 'calc(var(--radius) - 8px)',
       full: '9999px',
     },
     extend: {

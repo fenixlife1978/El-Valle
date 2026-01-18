@@ -38,7 +38,7 @@
     --input: 210 20% 92%;
     --ring: 158 100% 19%; /* Verde Starbucks para focus rings */
 
-    --radius: 1.5rem; /* 24px */
+    --radius: 0.75rem;
 
     /* Colores para modo oscuro, manteniendo la estética */
     --sidebar-background: 224 76% 10%;
@@ -49,26 +49,26 @@
   }
 
   .dark {
-    --background: 222 47% 11%;
-    --foreground: 48 33% 94%;
+    --background: 158 28% 12%;
+    --foreground: 45 10% 95%;
     
-    --card: 222 47% 13%;
-    --card-foreground: 48 33% 94%;
+    --card: 158 28% 17%;
+    --card-foreground: 45 10% 95%;
     
-    --popover: 222 47% 11%;
-    --popover-foreground: 48 33% 94%;
+    --popover: 158 28% 10%;
+    --popover-foreground: 45 10% 95%;
     
-    --primary: 158 100% 29%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 43 89% 63%; /* Gold */
+    --primary-foreground: 158 28% 10%;
     
-    --secondary: 222 47% 18%;
-    --secondary-foreground: 48 33% 94%;
+    --secondary: 158 28% 10%;
+    --secondary-foreground: 45 10% 95%;
     
-    --muted: 222 47% 18%;
-    --muted-foreground: 48 33% 88%;
+    --muted: 158 28% 22%;
+    --muted-foreground: 158 10% 60%;
     
-    --accent: 222 47% 22%;
-    --accent-foreground: 48 33% 98%;
+    --accent: 158 28% 22%;
+    --accent-foreground: 43 89% 63%; /* Gold text on hover */
     
     --destructive: 0 63% 51%;
     --destructive-foreground: 0 0% 100%;
@@ -76,23 +76,19 @@
     --success: 142 71% 31%;
     --success-foreground: 0 0% 100%;
     
-    --warning: 45 100% 51%;
-    --warning-foreground: 215 25% 27%;
+    --warning: 45 93% 58%;
+    --warning-foreground: 158 28% 10%;
     
-    --border: 222 47% 20%;
-    --input: 222 47% 18%;
-    --ring: 158 100% 29%;
-    --radius: 1.5rem; /* 24px */
+    --border: 158 28% 25%;
+    --input: 158 28% 22%;
+    --ring: 43 89% 70%;
+    --radius: 0.75rem;
 
-    --sidebar-background: 222 47% 9%;
-    --sidebar-foreground: 48 33% 94%;
-    --sidebar-accent: 222 47% 15%;
-    --sidebar-accent-foreground: 48 33% 98%;
-    --sidebar-border: 222 47% 18%;
-  }
-
-  body {
-    color: #000000;
+    --sidebar-background: 158 28% 10%;
+    --sidebar-foreground: 45 10% 95%;
+    --sidebar-accent: 158 28% 17%;
+    --sidebar-accent-foreground: 43 89% 63%;
+    --sidebar-border: 158 28% 15%;
   }
 }
 
