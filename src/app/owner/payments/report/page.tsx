@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -8,23 +7,16 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-// IMPORTACIÓN DE DIALOG COMPLETA
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"; 
 import { useToast } from '@/hooks/use-toast';
-// IMPORTACIÓN DE ICONOS - Se agregó 'Info'
-import { CalendarIcon, CheckCircle2, Trash2, PlusCircle, Loader2, Search, XCircle, Wand2, UserPlus, Banknote, Info, Upload, Paperclip } from 'lucide-react';
+import { CalendarIcon, CheckCircle2, DollarSign, FileText, Hash, Loader2, Upload, Banknote, Info, X, Save, FileUp } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn, compressImage } from '@/lib/utils';
 import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc, where, getDocs, Timestamp, setDoc } from 'firebase/firestore';
-import { db, storage } from '@/lib/firebase';
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { inferPaymentDetails } from '@/ai/flows/infer-payment-details';
-import { Textarea } from '@/components/ui/textarea';
+import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { BankSelectionModal } from '@/components/bank-selection-modal';
 
@@ -42,68 +34,39 @@ type ExchangeRate = {
     active: boolean;
 };
 
-// --- Type Definitions ---
-type BeneficiaryType = 'propio' | 'terceros';
-type PaymentMethod = 'movil' | 'transferencia' | 'pago-historico' | '';
-type BeneficiaryRow = {
-    id: string;
-    owner: Owner | null;
-    searchTerm: string;
-    amount: string;
-    selectedProperty: { street: string, house: string } | null;
-};
-
+type PaymentMethod = 'movil' | 'transferencia' | '';
 
 const ADMIN_USER_ID = 'valle-admin-main-account';
 
-export default function UnifiedPaymentsPage() {
+export default function ReportPaymentPage() {
     const { toast } = useToast();
     const { user: authUser, ownerData: authOwnerData } = useAuth();
     const [allOwners, setAllOwners] = useState<Owner[]>([]);
     const [loading, setLoading] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     // --- Form State ---
-    const [paymentDate, setPaymentDate] = useState<Date | undefined>();
+    const [paymentDate, setPaymentDate] = useState<Date | undefined>(new Date());
     const [exchangeRate, setExchangeRate] = useState<number | null>(null);
     const [exchangeRateMessage, setExchangeRateMessage] = useState('');
-    const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('');
+    const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('movil');
     const [bank, setBank] = useState('');
     const [otherBank, setOtherBank] = useState('');
     const [reference, setReference] = useState('');
-    const [beneficiaryType, setBeneficiaryType] = useState<BeneficiaryType>('propio');
     const [totalAmount, setTotalAmount] = useState<string>('');
     const [receiptImage, setReceiptImage] = useState<string | null>(null);
+    const [selectedProperty, setSelectedProperty] = useState<{ street: string, house: string } | null>(null);
+    const [amountUSD, setAmountUSD] = useState<string>('');
 
-    
-    // State for the AI feature
-    const [aiPrompt, setAiPrompt] = useState('');
-    const [isInferring, setIsInferring] = useState(false);
-
-    // State for the new beneficiary selection flow
-    const [beneficiaryRows, setBeneficiaryRows] = useState<BeneficiaryRow[]>([]);
-    
     const [isBankModalOpen, setIsBankModalOpen] = useState(false);
-    
-    // SOLUCIÓN Código 2304: Declaración del estado del Dialog de información
     const [isInfoDialogOpen, setIsInfoDialogOpen] = useState(false); 
-
 
     // --- Data Fetching ---
     useEffect(() => {
-        const q = query(collection(db, "owners"));
-        const unsubscribe = onSnapshot(q, (querySnapshot) => {
-            const ownersData: Owner[] = [];
-            querySnapshot.forEach((doc) => {
-                ownersData.push({ id: doc.id, ...doc.data() } as Owner);
-            });
-            setAllOwners(ownersData.sort((a, b) => (a.name || '').localeCompare(b.name || '')));
-        }, (error) => {
-            console.error("Error fetching owners: ", error);
-            toast({ variant: 'destructive', title: 'Error de Conexión', description: 'No se pudieron cargar los propietarios.' });
-        });
-
-        return () => unsubscribe();
-    }, [toast]);
+        if (authOwnerData && authOwnerData.properties && authOwnerData.properties.length > 0) {
+            setSelectedProperty(authOwnerData.properties[0]);
+        }
+    }, [authOwnerData]);
     
     useEffect(() => {
         const fetchRateAndFee = async () => {
@@ -135,7 +98,7 @@ export default function UnifiedPaymentsPage() {
                     }
 
                 } else {
-                     setExchangeRateMessage('No hay configuraciones. Contacte al administrador.');
+                     setExchangeRateMessage('No hay configuraciones.');
                 }
             } catch (e) {
                  setExchangeRateMessage('Error al buscar tasa.');
@@ -144,110 +107,31 @@ export default function UnifiedPaymentsPage() {
         }
         fetchRateAndFee();
     }, [paymentDate]);
-    
-    // Reset beneficiaries when type changes
+
     useEffect(() => {
-        if(beneficiaryType === 'propio' && authOwnerData) {
-            setBeneficiaryRows([{
-                id: Date.now().toString(),
-                owner: authOwnerData,
-                searchTerm: '',
-                amount: '',
-                selectedProperty: authOwnerData.properties?.[0] || null
-            }]);
+        const usd = parseFloat(amountUSD);
+        if (!isNaN(usd) && exchangeRate && usd > 0) {
+            setTotalAmount((usd * exchangeRate).toFixed(2));
         } else {
-            setBeneficiaryRows([{
-                id: Date.now().toString(),
-                owner: null,
-                searchTerm: '',
-                amount: '',
-                selectedProperty: null
-            }]);
+            setTotalAmount('');
         }
-    }, [beneficiaryType, authOwnerData]);
-
-    // --- Derived State & Calculations ---
-    const assignedTotal = useMemo(() => {
-        return beneficiaryRows.reduce((acc, row) => acc + (Number(row.amount) || 0), 0);
-    }, [beneficiaryRows]);
-
-    const balance = useMemo(() => {
-        return (Number(totalAmount) || 0) - assignedTotal;
-    }, [totalAmount, assignedTotal]);
-
-
-    // --- Handlers & Effects ---
+    }, [amountUSD, exchangeRate]);
+    
     const resetForm = () => {
-        setPaymentDate(undefined);
+        setPaymentDate(new Date());
         setExchangeRate(null);
         setExchangeRateMessage('');
-        setPaymentMethod('');
+        setPaymentMethod('movil');
         setBank('');
         setOtherBank('');
         setReference('');
-        setBeneficiaryType('propio');
         setTotalAmount('');
         setReceiptImage(null);
-        setAiPrompt('');
-        if (beneficiaryType === 'propio' && authOwnerData) {
-            setBeneficiaryRows([{
-                id: Date.now().toString(),
-                owner: authOwnerData,
-                searchTerm: '',
-                amount: '',
-                selectedProperty: authOwnerData.properties?.[0] || null
-            }]);
-        } else {
-             setBeneficiaryRows([{ id: Date.now().toString(), owner: null, searchTerm: '', amount: '', selectedProperty: null }]);
+        setAmountUSD('');
+        if (authOwnerData && authOwnerData.properties && authOwnerData.properties.length > 0) {
+            setSelectedProperty(authOwnerData.properties[0]);
         }
     }
-    
-    // --- Beneficiary Row Management ---
-    const updateBeneficiaryRow = (id: string, updates: Partial<BeneficiaryRow>) => {
-        setBeneficiaryRows(rows => rows.map(row => (row.id === id ? { ...row, ...updates } : row)));
-    };
-    
-    const handleOwnerSelect = (rowId: string, owner: Owner) => {
-        const firstProperty = owner.properties && owner.properties.length > 0 ? owner.properties[0] : null;
-        updateBeneficiaryRow(rowId, { owner, searchTerm: '', selectedProperty: firstProperty });
-    };
-    
-    const addBeneficiaryRow = () => {
-        setBeneficiaryRows(rows => [...rows, { id: Date.now().toString(), owner: null, searchTerm: '', amount: '', selectedProperty: null }]);
-    };
-
-    const removeBeneficiaryRow = (id: string) => {
-        if (beneficiaryRows.length > 1) {
-            setBeneficiaryRows(rows => rows.filter(row => row.id !== id));
-        } else {
-             setBeneficiaryRows([{ id: Date.now().toString(), owner: null, searchTerm: '', amount: '', selectedProperty: null }]);
-        }
-    };
-
-
-    const handleInferDetails = async () => {
-        if (!aiPrompt.trim()) {
-            toast({ variant: 'destructive', title: 'Texto Vacío', description: 'Por favor, ingrese una descripción del pago.' });
-            return;
-        }
-        setIsInferring(true);
-        try {
-            const result = await inferPaymentDetails({ text: aiPrompt });
-            setTotalAmount(String(result.totalAmount));
-            setReference(result.reference);
-            setPaymentMethod(result.paymentMethod as PaymentMethod);
-            setBank(result.bank);
-            // Dates from AI are 'yyyy-MM-dd', parseISO handles this without timezone shifts.
-            setPaymentDate(parseISO(result.paymentDate));
-
-            toast({ title: 'Datos Extraídos', description: 'Los campos del formulario han sido actualizados.', className: 'bg-green-100 border-green-400 text-green-800' });
-        } catch (error) {
-            console.error("Error inferring payment details:", error);
-            toast({ variant: 'destructive', title: 'Error de IA', description: 'No se pudieron extraer los detalles. Por favor, llene los campos manualmente.' });
-        } finally {
-            setIsInferring(false);
-        }
-    };
     
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -266,72 +150,47 @@ export default function UnifiedPaymentsPage() {
     };
 
     const validateForm = async (): Promise<{ isValid: boolean, error?: string }> => {
-        // Level A: Required fields validation
-        if (!paymentDate) return { isValid: false, error: 'La fecha del pago es obligatoria.' };
-        if (!exchangeRate || exchangeRate <= 0) return { isValid: false, error: 'Se requiere una tasa de cambio válida para la fecha seleccionada.' };
-        if (!paymentMethod) return { isValid: false, error: 'Debe seleccionar un tipo de pago.' };
-        if (!bank) return { isValid: false, error: 'Debe seleccionar un banco.' };
-        if (bank === 'Otro' && !otherBank.trim()) return { isValid: false, error: 'Debe especificar el nombre del otro banco.' };
-        if (!totalAmount || Number(totalAmount) <= 0) return { isValid: false, error: 'El monto total debe ser mayor a cero.' };
-        if (beneficiaryRows.some(row => !row.owner)) return { isValid: false, error: 'Debe seleccionar un beneficiario para cada fila.' };
-        if (beneficiaryRows.some(row => !row.amount || Number(row.amount) <= 0)) return { isValid: false, error: 'Debe completar un monto válido para cada beneficiario.' };
-        if (beneficiaryType === 'propio' && beneficiaryRows.some(row => !row.selectedProperty)) return { isValid: false, error: 'Debe seleccionar una propiedad para cada monto.' };
-        
-        if (Math.abs(balance) > 0.01) {
-             return { isValid: false, error: `El monto total (Bs. ${Number(totalAmount).toFixed(2)}) no coincide con la suma de los montos asignados (Bs. ${assignedTotal.toFixed(2)}).` };
+        if (!paymentDate || !exchangeRate || !paymentMethod || !bank || !totalAmount || Number(totalAmount) <= 0 || !reference) {
+             return { isValid: false, error: 'Por favor, complete todos los campos de la transacción.' };
         }
-        
-        if (reference.length !== 6) {
-            return { isValid: false, error: 'La referencia debe tener exactamente 6 dígitos.' };
+        if (reference.length < 4) {
+            return { isValid: false, error: 'La referencia debe tener al menos 4 dígitos.' };
         }
-        
         if (!receiptImage) {
             return { isValid: false, error: 'Debe adjuntar una imagen del comprobante de pago.' };
         }
         
-        // Check for duplicate payment
         try {
-            const q = query(collection(db, "payments"), 
-                where("reference", "==", reference),
-                where("totalAmount", "==", Number(totalAmount)),
-                where("paymentDate", "==", Timestamp.fromDate(paymentDate))
-            );
+            const q = query(collection(db, "payments"), where("reference", "==", reference), where("totalAmount", "==", Number(totalAmount)), where("paymentDate", "==", Timestamp.fromDate(paymentDate)));
             const querySnapshot = await getDocs(q);
             if (!querySnapshot.empty) {
                 return { isValid: false, error: 'Ya existe un reporte de pago con esta misma referencia, monto y fecha.' };
             }
         } catch (dbError) {
-             console.error("Error checking for duplicates:", dbError);
              return { isValid: false, error: "No se pudo verificar si el pago ya existe. Intente de nuevo." };
         }
 
         return { isValid: true };
     };
 
-
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setLoading(true);
+        setIsSubmitting(true);
 
         const validation = await validateForm();
         if (!validation.isValid) {
             toast({ variant: 'destructive', title: 'Error de Validación', description: validation.error, duration: 6000 });
-            setLoading(false);
+            setIsSubmitting(false);
+            return;
+        }
+
+        if (!authUser || !authOwnerData) {
+            toast({ variant: 'destructive', title: 'Error de Autenticación'});
+            setIsSubmitting(false);
             return;
         }
 
         try {
-            const beneficiaries = beneficiaryRows.map(row => {
-                const owner = row.owner!;
-                const property = beneficiaryType === 'propio' ? row.selectedProperty : (owner.properties && owner.properties[0]);
-                 return {
-                    ownerId: owner.id,
-                    ownerName: owner.name,
-                    ...(property ? { street: property.street, house: property.house } : {}),
-                    amount: Number(row.amount)
-                };
-            });
-
             const paymentData: any = {
                 paymentDate: Timestamp.fromDate(paymentDate!),
                 exchangeRate: exchangeRate,
@@ -339,17 +198,21 @@ export default function UnifiedPaymentsPage() {
                 bank: bank === 'Otro' ? otherBank : bank,
                 reference: reference,
                 totalAmount: Number(totalAmount),
-                beneficiaries: beneficiaries,
-                beneficiaryIds: Array.from(new Set(beneficiaries.map(b => b.ownerId))),
+                beneficiaries: [{ 
+                    ownerId: authUser.uid,
+                    ownerName: authOwnerData.name,
+                    ...(selectedProperty && { street: selectedProperty.street, house: selectedProperty.house }),
+                    amount: Number(totalAmount)
+                }],
+                beneficiaryIds: [authUser.uid],
                 status: 'pendiente' as 'pendiente',
                 reportedAt: serverTimestamp(),
-                reportedBy: authUser?.uid || 'unknown',
-                receiptUrl: receiptImage || null,
+                reportedBy: authUser.uid,
+                receiptUrl: receiptImage,
             };
             
             const paymentRef = await addDoc(collection(db, "payments"), paymentData);
             
-            // Create notification for admin
             const adminDocRef = doc(db, 'owners', ADMIN_USER_ID);
             const notificationsRef = doc(collection(adminDocRef, "notifications"));
             await setDoc(notificationsRef, {
@@ -357,7 +220,7 @@ export default function UnifiedPaymentsPage() {
               body: `${authOwnerData?.name || 'Un propietario'} ha reportado un nuevo pago de Bs. ${totalAmount}.`,
               createdAt: serverTimestamp(),
               read: false,
-              href: `/admin/payments/verify`,
+              href: `/admin/payments?tab=verify`,
               paymentId: paymentRef.id
             });
 
@@ -366,260 +229,142 @@ export default function UnifiedPaymentsPage() {
 
         } catch (error) {
             console.error("Error submitting payment: ", error);
-            const errorMessage = typeof error === 'string' ? error : "No se pudo enviar el reporte. Por favor, intente de nuevo.";
+            const errorMessage = "No se pudo enviar el reporte. Por favor, intente de nuevo.";
             toast({ variant: "destructive", title: "Error Inesperado", description: errorMessage });
         } finally {
-            setLoading(false);
+            setIsSubmitting(false);
         }
     };
     
-    // Filtered owners for a specific search term in a row
-    const getFilteredOwners = (searchTerm: string) => {
-        if (!searchTerm || searchTerm.length < 3) return [];
-        return allOwners.filter(owner =>
-            owner.name && owner.name.toLowerCase().includes(searchTerm.toLowerCase())
-        );
-    };
 
     return (
-        <div className="space-y-8">
-            <div>
-                <h1 className="text-3xl font-bold font-headline">Reportar un Pago</h1>
-                <p className="text-muted-foreground">Formulario para registrar pagos propios o a terceros.</p>
-            </div>
-            
-             <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <Wand2 />
-                        Asistente de IA para Llenado Rápido
-                    </CardTitle>
-                    <CardDescription>
-                        Pega aquí los detalles de un pago (ej. de un capture o mensaje de WhatsApp) y la IA llenará los campos por ti.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                     <Textarea
-                        placeholder="Ej: Pago móvil Banesco por 4500 Bs con ref 012345 del día de ayer."
-                        value={aiPrompt}
-                        onChange={(e) => setAiPrompt(e.target.value)}
-                        className="mb-4"
-                        rows={3}
-                        disabled={isInferring || loading}
-                    />
-                    <Button onClick={handleInferDetails} disabled={isInferring || loading}>
-                        {isInferring ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Wand2 className="mr-2 h-4 w-4"/>}
-                        Analizar con IA
+        <div className="flex items-center justify-center p-4">
+            <Card className="w-full max-w-4xl bg-background border-none rounded-3xl overflow-hidden shadow-2xl">
+                <CardHeader className="bg-primary text-primary-foreground p-4 flex flex-row items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <Banknote className="w-7 h-7" />
+                        <CardTitle className="text-2xl font-bold tracking-wider">REPORTAR PAGO</CardTitle>
+                    </div>
+                    <Button variant="ghost" size="icon" className="text-primary-foreground/70 hover:text-primary-foreground hover:bg-white/20">
+                        <X className="w-6 h-6" />
                     </Button>
-                </CardContent>
-            </Card>
-
-            <form onSubmit={handleSubmit}>
-                <Card className="mb-6">
-                    <CardHeader><CardTitle>1. Detalles de la Transacción</CardTitle></CardHeader>
-                    <CardContent className="grid md:grid-cols-2 gap-6">
-                        <div className="space-y-2">
-                             <Label htmlFor="paymentDate">Fecha del Pago</Label>
-                             <Popover>
-                                <PopoverTrigger asChild>
-                                    <Button id="paymentDate" variant={"outline"} className={cn("w-full justify-start", !paymentDate && "text-muted-foreground")} disabled={loading}>
-                                        <CalendarIcon className="mr-2 h-4 w-4" />
-                                        {paymentDate ? format(paymentDate, "PPP", { locale: es }) : <span>Seleccione una fecha</span>}
-                                    </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={paymentDate} onSelect={setPaymentDate} initialFocus locale={es} disabled={(date) => date > new Date()} /></PopoverContent>
-                            </Popover>
-                        </div>
-                        <div className="space-y-2">
-                            <Label>Tasa de Cambio (Bs. por USD)</Label>
-                            <Input type="text" value={exchangeRate ? `Bs. ${exchangeRate.toFixed(2)}` : exchangeRateMessage || 'Seleccione una fecha'} readOnly className={cn("bg-muted/50")} />
-                        </div>
-                        <div className="space-y-2">
-                           <Label htmlFor="paymentMethod">Tipo de Pago</Label>
-                           <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as PaymentMethod)} disabled={loading}>
-                                <SelectTrigger id="paymentMethod"><SelectValue placeholder="Seleccione..." /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="transferencia">Transferencia</SelectItem>
-                                    <SelectItem value="movil">Pago Móvil</SelectItem>
-                                </SelectContent>
-                           </Select>
-                        </div>
-                         <div className="space-y-2">
-                            <Label htmlFor="bank">Banco Emisor</Label>
-                            <Button
-                                type="button"
-                                id="bank"
-                                variant="outline"
-                                className="w-full justify-start text-left font-normal"
-                                onClick={() => setIsBankModalOpen(true)}
-                                disabled={loading}
-                            >
-                                {bank ? (
-                                    <>
-                                     <Banknote className="mr-2 h-4 w-4" />
-                                     {bank}
-                                    </>
-                                ) : (
-                                    <span>Seleccione un banco...</span>
-                                )}
-                            </Button>
-                        </div>
-                        {bank === 'Otro' && (
-                            <div className="space-y-2 md:col-span-2">
-                                <Label htmlFor="otherBank">Nombre del Otro Banco</Label>
-                                <Input id="otherBank" value={otherBank} onChange={(e) => setOtherBank(e.target.value)} disabled={loading}/>
-                            </div>
-                        )}
-                        <div className="space-y-2">
-                             <Label htmlFor="reference">Últimos 6 dígitos de la Referencia</Label>
-                             <Input 
-                                id="reference" 
-                                value={reference} 
-                                onChange={(e) => {
-                                    const digitsOnly = e.target.value.replace(/\D/g, '');
-                                    setReference(digitsOnly.slice(0, 6));
-                                }}
-                                maxLength={6} 
-                                disabled={loading}
-                             />
-                             <p className="text-xs text-muted-foreground">La referencia debe tener 6 dígitos.</p>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader>
-                        <CardTitle>2. Detalles de los Beneficiarios</CardTitle>
-                        <CardDescription>Asigne el monto total del pago entre uno o más beneficiarios.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                        <div className="grid md:grid-cols-2 gap-6">
+                </CardHeader>
+                <form onSubmit={handleSubmit}>
+                    <CardContent className="p-8 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
+                        {/* Columna Izquierda */}
+                        <div className="space-y-6">
                              <div className="space-y-2">
-                                 <Label htmlFor="totalAmount">Monto Total del Pago (Bs.)</Label>
-                                 <Input id="totalAmount" type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} placeholder="0.00" disabled={loading}/>
-                             </div>
-                             <div className="space-y-3">
-                                 <Label>Tipo de Pago</Label>
-                                 <RadioGroup value={beneficiaryType} onValueChange={(v) => setBeneficiaryType(v as BeneficiaryType)} className="flex gap-4" disabled={loading}>
-                                     <div className="flex items-center space-x-2"><RadioGroupItem value="propio" id="r-propio" /><Label htmlFor="r-propio">Pago Propio</Label></div>
-                                     <div className="flex items-center space-x-2"><RadioGroupItem value="terceros" id="r-terceros" /><Label htmlFor="r-terceros">Pago a Terceros</Label></div>
-                                 </RadioGroup>
-                             </div>
+                                <Label className="text-primary uppercase text-xs font-bold tracking-wider">Método de Pago</Label>
+                                <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as PaymentMethod)} disabled={isSubmitting}>
+                                    <SelectTrigger className="pl-12 pr-4 py-6 bg-input border-border rounded-2xl text-base focus:ring-primary">
+                                        <FileText className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                                        <SelectValue placeholder="Seleccione un método..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="transferencia">Transferencia</SelectItem>
+                                        <SelectItem value="movil">Pago Móvil</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                             <div className="space-y-2">
+                                <Label className="text-primary uppercase text-xs font-bold tracking-wider">Referencia</Label>
+                                <div className="relative flex items-center">
+                                    <Hash className="absolute left-4 h-5 w-5 text-muted-foreground" />
+                                    <Input
+                                        value={reference}
+                                        onChange={(e) => setReference(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                                        maxLength={6}
+                                        className="pl-12 pr-4 py-6 bg-input border-border rounded-2xl text-base"
+                                        placeholder="Últimos 6 dígitos"
+                                        disabled={isSubmitting}
+                                    />
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <Label className="text-primary uppercase text-xs font-bold tracking-wider">Fecha del Pago</Label>
+                                 <Popover>
+                                    <PopoverTrigger asChild>
+                                        <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal pl-12 pr-4 py-6 bg-input border-border rounded-2xl text-base hover:bg-input", !paymentDate && "text-muted-foreground")} disabled={isSubmitting}>
+                                            <CalendarIcon className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                                            {paymentDate ? format(paymentDate, "PPP", { locale: es }) : <span>Seleccione una fecha</span>}
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={paymentDate} onSelect={setPaymentDate} initialFocus locale={es} disabled={(date) => date > new Date()} /></PopoverContent>
+                                </Popover>
+                            </div>
                         </div>
-                        
-                        <div className="space-y-2">
-                            <Label htmlFor="receipt">Comprobante de Pago (Obligatorio)</Label>
-                            <Input id="receipt" type="file" accept="image/png, image/jpeg" onChange={handleImageUpload} disabled={loading}/>
-                             {receiptImage && (
-                                <div className="mt-2 relative w-32 h-32 border p-1 rounded-md">
-                                    <img src={receiptImage} alt="Vista previa del comprobante" className="w-full h-full object-contain" />
-                                    <Button variant="destructive" size="icon" className="absolute -top-2 -right-2 h-6 w-6 rounded-full" onClick={() => setReceiptImage(null)}>
-                                        <XCircle className="h-4 w-4" />
-                                    </Button>
+
+                        {/* Columna Derecha */}
+                        <div className="space-y-6">
+                           <div className="space-y-2">
+                                <Label className="text-primary uppercase text-xs font-bold tracking-wider">Banco Emisor</Label>
+                                 <Button type="button" variant="outline" className="w-full justify-start text-left font-normal pl-12 pr-4 py-6 bg-input border-border rounded-2xl text-base hover:bg-input" onClick={() => setIsBankModalOpen(true)} disabled={isSubmitting}>
+                                     <Banknote className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                                     {bank || "Seleccione un banco..."}
+                                </Button>
+                            </div>
+                             {bank === 'Otro' && (
+                                <div className="space-y-2">
+                                    <Label className="text-primary uppercase text-xs font-bold tracking-wider">Nombre del Otro Banco</Label>
+                                    <div className="relative flex items-center">
+                                       <Banknote className="absolute left-4 h-5 w-5 text-muted-foreground" />
+                                       <Input value={otherBank} onChange={(e) => setOtherBank(e.target.value)} className="pl-12 pr-4 py-6 bg-input border-border rounded-2xl text-base" placeholder="Especifique el banco" disabled={isSubmitting}/>
+                                    </div>
                                 </div>
                             )}
+
+                            <div className="space-y-2">
+                                <Label className="text-primary uppercase text-xs font-bold tracking-wider">Adjuntar Comprobante</Label>
+                                <div className="relative flex items-center">
+                                    <FileUp className="absolute left-4 h-5 w-5 text-muted-foreground" />
+                                    <Input id="receipt" type="file" onChange={handleImageUpload} className="pl-12 pr-4 py-4 bg-input border-border rounded-2xl text-base file:text-muted-foreground file:text-sm" disabled={isSubmitting} />
+                                </div>
+                                 {receiptImage && <p className="text-xs text-green-400 flex items-center gap-1"><CheckCircle2 className="h-3 w-3"/>Comprobante cargado.</p>}
+                            </div>
                         </div>
 
-                        <div className="space-y-4">
-                            <Label className="font-semibold">Asignación de Montos</Label>
-                             {beneficiaryRows.map((row, index) => (
-                                <Card key={row.id} className="p-4 bg-muted/50 relative">
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div className="space-y-2">
-                                            <Label htmlFor={`search-${row.id}`}>
-                                                {beneficiaryType === 'propio' ? 'Beneficiario' : `Beneficiario ${index + 1}`}
-                                            </Label>
-                                            {!row.owner ? (
-                                                <>
-                                                    <div className="relative">
-                                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                                        <Input id={`search-${row.id}`} placeholder="Buscar por nombre (mín. 3 caracteres)..." className="pl-9" value={row.searchTerm} onChange={(e) => updateBeneficiaryRow(row.id, { searchTerm: e.target.value })} disabled={loading || (beneficiaryType === 'propio' && index > 0)} />
-                                                    </div>
-                                                    {row.searchTerm.length >= 3 && getFilteredOwners(row.searchTerm).length > 0 && (
-                                                        <Card className="border rounded-md">
-                                                            <ScrollArea className="h-32">
-                                                                {getFilteredOwners(row.searchTerm).map(owner => (
-                                                                    <div key={owner.id} onClick={() => handleOwnerSelect(row.id, owner)} className="p-2 hover:bg-muted cursor-pointer border-b last:border-b-0">
-                                                                        <p className="font-medium text-sm">{owner.name}</p>
-                                                                        <p className="text-sm text-muted-foreground">{owner.properties?.map(p => `${p.street}-${p.house}`).join(', ')}</p>
-                                                                    </div>
-                                                                ))}
-                                                            </ScrollArea>
-                                                        </Card>
-                                                    )}
-                                                </>
-                                            ) : (
-                                                <div className="p-3 bg-background rounded-md flex items-center justify-between">
-                                                    <div>
-                                                        <p className="font-semibold text-primary">{row.owner.name}</p>
-                                                        <p className="text-sm text-muted-foreground">{row.owner.properties?.map(p => `${p.street}-${p.house}`).join(', ')}</p>
-                                                    </div>
-                                                    <Button variant="ghost" size="icon" onClick={() => updateBeneficiaryRow(row.id, { owner: null, selectedProperty: null })} disabled={loading || (beneficiaryType === 'propio' && index > 0)}>
-                                                        <XCircle className="h-5 w-5 text-destructive" />
-                                                    </Button>
-                                                </div>
-                                            )}
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label htmlFor={`amount-${row.id}`}>Monto Asignado (Bs.)</Label>
-                                            <Input id={`amount-${row.id}`} type="number" placeholder="0.00" value={row.amount} onChange={(e) => updateBeneficiaryRow(row.id, { amount: e.target.value })} disabled={loading || !row.owner} />
-                                        </div>
+                        {/* Sección de Montos */}
+                        <div className="md:col-span-2 space-y-4 bg-input/50 rounded-2xl p-4">
+                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="space-y-2">
+                                    <Label className="text-primary uppercase text-xs font-bold tracking-wider">Monto en USD</Label>
+                                    <div className="relative flex items-center">
+                                        <DollarSign className="absolute left-4 h-5 w-5 text-muted-foreground" />
+                                        <Input type="number" value={amountUSD} onChange={(e) => setAmountUSD(e.target.value)} className="pl-12 pr-4 py-6 bg-input border-border rounded-2xl text-base font-bold" placeholder="0.00" disabled={isSubmitting} />
                                     </div>
-                                    {beneficiaryType === 'propio' && row.owner && (
-                                        <div className="mt-4 space-y-2">
-                                            <Label>Asignar a Propiedad</Label>
-                                             <Select 
-                                                onValueChange={(v) => updateBeneficiaryRow(row.id, { selectedProperty: row.owner!.properties.find(p => `${p.street}-${p.house}` === v) || null })} 
-                                                value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''}
-                                                disabled={loading || !row.owner}
-                                             >
-                                                <SelectTrigger><SelectValue placeholder="Seleccione una propiedad..." /></SelectTrigger>
-                                                <SelectContent>
-                                                    {row.owner.properties.map(p => (
-                                                        <SelectItem key={`${p.street}-${p.house}`} value={`${p.street}-${p.house}`}>{`${p.street} - ${p.house}`}</SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                    )}
-                                    {beneficiaryType === 'terceros' && (
-                                        <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive" onClick={() => removeBeneficiaryRow(row.id)} disabled={loading}><Trash2 className="h-4 w-4"/></Button>
-                                    )}
-                                </Card>
-                            ))}
-                            
-                             {beneficiaryType === 'terceros' && (
-                                 <Button type="button" variant="outline" size="sm" onClick={addBeneficiaryRow} disabled={loading}><UserPlus className="mr-2 h-4 w-4"/>Añadir Otro Beneficiario</Button>
-                             )}
-
-                            <CardFooter className="p-4 bg-background/50 rounded-lg space-y-2 mt-4 flex-col items-stretch">
-                                <div className="flex justify-between text-sm font-medium"><span>Monto Total del Pago:</span><span>Bs. {Number(totalAmount || 0).toFixed(2)}</span></div>
-                                <div className="flex justify-between text-sm"><span>Total Asignado:</span><span>Bs. {assignedTotal.toFixed(2)}</span></div>
-                                <hr className="my-1 border-border"/>
-                                <div className={cn("flex justify-between text-base font-bold", balance !== 0 ? 'text-destructive' : 'text-green-600')}><span>Balance:</span><span>Bs. {balance.toFixed(2)}</span></div>
-                            </CardFooter>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label className="text-primary uppercase text-xs font-bold tracking-wider">Tasa de Cambio (BCV)</Label>
+                                     <div className="relative flex items-center">
+                                        <span className="absolute left-4 font-bold text-muted-foreground">Bs</span>
+                                        <Input type="text" value={exchangeRate ? exchangeRate.toFixed(2) : exchangeRateMessage || 'N/A'} readOnly className="pl-12 pr-4 py-6 bg-input border-border rounded-2xl text-base font-bold" />
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label className="text-primary uppercase text-xs font-bold tracking-wider">Monto Total en Bs</Label>
+                                    <div className="relative flex items-center">
+                                        <span className="absolute left-4 font-bold text-background bg-white/90 text-black px-1 py-0.5 rounded-md">Bs</span>
+                                        <Input type="text" value={totalAmount} readOnly className="pl-12 pr-4 py-6 bg-white/90 border-transparent rounded-2xl text-base font-extrabold text-black" placeholder="0.00" />
+                                    </div>
+                                </div>
+                             </div>
                         </div>
                     </CardContent>
-                    <CardFooter className='flex flex-col items-end gap-4'>
-                           <Button type="submit" className="w-full md:w-auto" disabled={loading}>
-                                {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CheckCircle2 className="mr-2 h-4 w-4"/>}
-                                {loading ? 'Enviando...' : 'Enviar Reporte'}
-                            </Button>
+
+                    <CardFooter className="bg-background/10 p-6 flex justify-end gap-4">
+                        <Button type="button" variant="ghost" className="text-muted-foreground hover:text-white" onClick={resetForm} disabled={isSubmitting}>
+                            CANCELAR
+                        </Button>
+                        <Button type="submit" className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl px-6 py-6 text-base font-bold" disabled={isSubmitting}>
+                            {isSubmitting ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Save className="mr-2 h-5 w-5" />}
+                            GUARDAR PAGO
+                        </Button>
                     </CardFooter>
-                </Card>
-            </form>
-            <BankSelectionModal
-                isOpen={isBankModalOpen}
-                onOpenChange={setIsBankModalOpen}
-                selectedValue={bank}
-                onSelect={(value) => {
-                    setBank(value);
-                    if (value !== 'Otro') {
-                        setOtherBank('');
-                    }
-                    setIsBankModalOpen(false);
-                }}
-            />
+                </form>
+            </Card>
+
+            <BankSelectionModal isOpen={isBankModalOpen} onOpenChange={setIsBankModalOpen} selectedValue={bank} onSelect={(value) => { setBank(value); if (value !== 'Otro') setOtherBank(''); setIsBankModalOpen(false); }} />
+            
             <Dialog open={isInfoDialogOpen} onOpenChange={setIsInfoDialogOpen}>
                 <DialogContent>
                     <DialogHeader>

@@ -15,9 +15,11 @@ export default {
     },
     borderRadius: {
       lg: 'var(--radius)',
-      md: 'calc(var(--radius) - 4px)',
-      sm: 'calc(var(--radius) - 8px)',
+      md: 'calc(var(--radius) - 8px)',
+      sm: 'calc(var(--radius) - 12px)',
       full: '9999px',
+      '2xl': 'calc(var(--radius) + 4px)',
+      '3xl': 'calc(var(--radius) + 12px)',
     },
     extend: {
       colors: {

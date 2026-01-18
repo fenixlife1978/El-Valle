@@ -49,40 +49,41 @@
   }
 
   .dark {
-    --background: 158 28% 12%;
-    --foreground: 45 10% 95%;
+    --background: 148 30% 25%; /* #2b5040 */
+    --foreground: 0 0% 100%;
     
-    --card: 158 28% 17%;
-    --card-foreground: 45 10% 95%;
+    --card: 148 30% 25%;
+    --card-foreground: 0 0% 100%;
     
-    --popover: 158 28% 10%;
-    --popover-foreground: 45 10% 95%;
+    --popover: 148 30% 20%;
+    --popover-foreground: 0 0% 100%;
     
-    --primary: 43 89% 63%; /* Gold */
-    --primary-foreground: 158 28% 10%;
+    --primary: 43 74% 56%; /* #e4b335 */
+    --primary-foreground: 0 0% 0%; /* Black */
     
-    --secondary: 158 28% 10%;
-    --secondary-foreground: 45 10% 95%;
+    --secondary: 148 20% 35%;
+    --secondary-foreground: 0 0% 100%;
     
-    --muted: 158 28% 22%;
-    --muted-foreground: 158 10% 60%;
+    --muted: 148 20% 30%;
+    --muted-foreground: 148 10% 70%;
     
-    --accent: 158 28% 22%;
-    --accent-foreground: 43 89% 63%; /* Gold text on hover */
+    --accent: 148 20% 35%;
+    --accent-foreground: 0 0% 100%;
     
-    --destructive: 0 63% 51%;
+    --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 100%;
     
-    --success: 142 71% 31%;
+    --success: 142 71% 41%;
     --success-foreground: 0 0% 100%;
     
-    --warning: 45 93% 58%;
-    --warning-foreground: 158 28% 10%;
+    --warning: 45 100% 51%;
+    --warning-foreground: 215 25% 27%;
     
-    --border: 158 28% 25%;
-    --input: 158 28% 22%;
-    --ring: 43 89% 70%;
-    --radius: 0.75rem;
+    --border: 148 20% 35%;
+    --input: 148 30% 18%; /* Very dark green */
+    --ring: 43 74% 56%; /* Gold */
+
+    --radius: 1.5rem;
 
     --sidebar-background: 158 28% 10%;
     --sidebar-foreground: 45 10% 95%;
