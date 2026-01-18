@@ -504,7 +504,7 @@ function ReportPaymentTab() {
     };
 
     return (
-        <Card>
+        <Card className="border-4 border-white">
             <CardHeader><CardTitle>Reportar Pago por Propietario</CardTitle><CardDescription>Use este formulario para registrar pagos en nombre de los propietarios.</CardDescription></CardHeader>
             <form onSubmit={handleSubmit}>
                 <CardContent className="space-y-8">
@@ -568,7 +568,7 @@ function ReportPaymentTab() {
                         </CardContent>
                     </Card>
                 </CardContent>
-                <CardFooter><Button type="submit" className="w-full md:w-auto ml-auto" disabled={loading}>{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CheckCircle2 className="mr-2 h-4 w-4"/>}{loading ? 'Enviando...' : 'Enviar Reporte'}</Button></CardFooter>
+                <CardFooter><Button type="submit" className="w-full md:w-auto ml-auto" disabled={loading}>{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CheckCircle2 className="mr-2 h-4 w-4"/>}Emviar Reporte</Button></CardFooter>
                 <BankSelectionModal isOpen={isBankModalOpen} onOpenChange={setIsBankModalOpen} selectedValue={bank} onSelect={(value) => { setBank(value); if (value !== 'Otro') setOtherBank(''); setIsBankModalOpen(false); }} />
                 <Dialog open={isInfoDialogOpen} onOpenChange={setIsInfoDialogOpen}><DialogContent><DialogHeader><DialogTitle className="flex items-center gap-2"><Info className="h-6 w-6 text-blue-500" />Reporte Enviado para Revisión</DialogTitle><div className="pt-4 text-sm text-muted-foreground space-y-4"><p>¡Gracias! Hemos recibido el reporte de pago. Será procesado en un máximo de <strong>24 horas</strong>.</p></div></DialogHeader><DialogFooter><Button onClick={() => setIsInfoDialogOpen(false)}>Entendido</Button></DialogFooter></DialogContent></Dialog>
             </form>
@@ -769,7 +769,3 @@ export default function AdminPaymentsPageWithSuspense() {
         </Suspense>
     );
 }
-
-    
-
-    
