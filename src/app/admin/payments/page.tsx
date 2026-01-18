@@ -12,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
-import { CalendarIcon, CheckCircle2, Trash2, PlusCircle, Loader2, Search, XCircle, Wand2, UserPlus, Banknote, Info, Receipt, Calculator, Minus, Equal, Check, MoreHorizontal, Filter, Eye, AlertTriangle, Paperclip, Upload, DollarSign } from 'lucide-react';
+import { CalendarIcon, CheckCircle2, Trash2, PlusCircle, Loader2, Search, XCircle, Wand2, UserPlus, Banknote, Info, Receipt, Calculator, Minus, Equal, Check, MoreHorizontal, Filter, Eye, AlertTriangle, Paperclip, Upload, DollarSign, ChevronDown, Save } from 'lucide-react';
 import { format, parseISO, isBefore, startOfMonth, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn, compressImage } from '@/lib/utils';
@@ -34,6 +34,7 @@ import QRCode from 'qrcode';
 import Decimal from 'decimal.js';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useRouter, useSearchParams } from 'next/navigation';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
 
 
 // --- Type Definitions (Shared) ---
@@ -392,6 +393,9 @@ function ReportPaymentTab() {
     const [isBankModalOpen, setIsBankModalOpen] = useState(false);
     const [isInfoDialogOpen, setIsInfoDialogOpen] = useState(false);
     const [receiptImage, setReceiptImage] = useState<string | null>(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const [openSections, setOpenSections] = useState({ details: true, beneficiaries: true });
 
 
     useEffect(() => {
@@ -505,70 +509,101 @@ function ReportPaymentTab() {
 
     return (
         <Card className="border-4 border-white">
-            <CardHeader><CardTitle>Reportar Pago por Propietario</CardTitle><CardDescription>Use este formulario para registrar pagos en nombre de los propietarios.</CardDescription></CardHeader>
+            <CardHeader className="bg-primary text-primary-foreground">
+                <CardTitle>Reportar Pago por Propietario</CardTitle>
+                <CardDescription className="text-primary-foreground/80">Use este formulario para registrar pagos en nombre de los propietarios.</CardDescription>
+            </CardHeader>
             <form onSubmit={handleSubmit}>
-                <CardContent className="space-y-8">
-                    <Card><CardHeader><CardTitle>1. Detalles de la Transacción</CardTitle></CardHeader>
-                        <CardContent className="grid md:grid-cols-2 gap-6">
-                            <div className="space-y-2"><Label htmlFor="paymentDate">Fecha del Pago</Label><Popover><PopoverTrigger asChild><Button id="paymentDate" variant={"outline"} className={cn("w-full justify-start", !paymentDate && "text-muted-foreground")} disabled={loading}><CalendarIcon className="mr-2 h-4 w-4" />{paymentDate ? format(paymentDate, "PPP", { locale: es }) : <span>Seleccione una fecha</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar mode="single" selected={paymentDate} onSelect={setPaymentDate} initialFocus locale={es} disabled={(date) => date > new Date()} /></PopoverContent></Popover></div>
-                            <div className="space-y-2"><Label>Tasa de Cambio (Bs. por USD)</Label><Input type="text" value={exchangeRate ? `Bs. ${exchangeRate.toFixed(2)}` : exchangeRateMessage || 'Seleccione una fecha'} readOnly className={cn("bg-muted/50")} /></div>
-                            <div className="space-y-2"><Label htmlFor="paymentMethod">Tipo de Pago</Label><Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as any)} disabled={loading}><SelectTrigger id="paymentMethod"><SelectValue placeholder="Seleccione..." /></SelectTrigger><SelectContent><SelectItem value="transferencia">Transferencia</SelectItem><SelectItem value="movil">Pago Móvil</SelectItem></SelectContent></Select></div>
-                            <div className="space-y-2"><Label htmlFor="bank">Banco Emisor</Label><Button type="button" id="bank" variant="outline" className="w-full justify-start text-left font-normal" onClick={() => setIsBankModalOpen(true)} disabled={loading}>{bank ? <><Banknote className="mr-2 h-4 w-4" />{bank}</> : <span>Seleccione un banco...</span>}</Button></div>
-                            {bank === 'Otro' && <div className="space-y-2 md:col-span-2"><Label htmlFor="otherBank">Nombre del Otro Banco</Label><Input id="otherBank" value={otherBank} onChange={(e) => setOtherBank(e.target.value)} disabled={loading}/></div>}
-                            <div className="space-y-2"><Label htmlFor="reference">Últimos 6 dígitos de la Referencia</Label><Input id="reference" value={reference} onChange={(e) => setReference(e.target.value.replace(/\D/g, '').slice(0, 6))} maxLength={6} disabled={loading} /><p className="text-xs text-muted-foreground">La referencia debe tener al menos 4 dígitos.</p></div>
-                             <div className="space-y-2 md:col-span-2">
-                                <Label htmlFor="receipt">Comprobante de Pago (Opcional)</Label>
-                                <Input id="receipt" type="file" accept="image/png, image/jpeg" onChange={handleImageUpload} disabled={loading}/>
-                                {receiptImage && (
-                                    <div className="mt-2 relative w-32 h-32 border p-1 rounded-md">
-                                        <img src={receiptImage} alt="Vista previa del comprobante" className="w-full h-full object-contain" />
-                                        <Button variant="destructive" size="icon" className="absolute -top-2 -right-2 h-6 w-6 rounded-full" onClick={() => setReceiptImage(null)}>
-                                            <XCircle className="h-4 w-4" />
-                                        </Button>
-                                    </div>
-                                )}
-                            </div>
-                        </CardContent>
-                    </Card>
-                    <Card><CardHeader><CardTitle>2. Detalles de los Beneficiarios</CardTitle><CardDescription>Asigne el monto total del pago entre uno o más beneficiarios.</CardDescription></CardHeader>
-                        <CardContent className="space-y-6">
-                            <div className="grid md:grid-cols-2 gap-6">
-                                <div className="space-y-2">
-                                    <Label htmlFor="totalAmount">Monto Total del Pago (Bs.)</Label>
-                                    <Input id="totalAmount" type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} placeholder="0.00" disabled={loading}/>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Monto Equivalente (USD)</Label>
-                                    <div className="relative">
-                                        <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                        <Input type="text" value={amountUSD} readOnly className="pl-9 bg-muted/50" placeholder="0.00" />
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="space-y-4"><Label className="font-semibold">Asignación de Montos</Label>
-                                {beneficiaryRows.map((row, index) => (
-                                    <Card key={row.id} className="p-4 bg-muted/50 relative">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div className="space-y-2"><Label htmlFor={`search-${row.id}`}>Beneficiario {index + 1}</Label>
-                                                {!row.owner ? (<><div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input id={`search-${row.id}`} placeholder="Buscar por nombre..." className="pl-9" value={row.searchTerm} onChange={(e) => updateBeneficiaryRow(row.id, { searchTerm: e.target.value })} disabled={loading} /></div>{row.searchTerm.length >= 3 && getFilteredOwners(row.searchTerm).length > 0 && <Card className="border rounded-md"><ScrollArea className="h-32">{getFilteredOwners(row.searchTerm).map(owner => (<div key={owner.id} onClick={() => handleOwnerSelect(row.id, owner)} className="p-2 hover:bg-muted cursor-pointer border-b last:border-b-0"><p className="font-medium text-sm">{owner.name}</p></div>))}</ScrollArea></Card>}</>)
-                                                : (<div className="p-3 bg-background rounded-md flex items-center justify-between"><div><p className="font-semibold text-primary">{row.owner.name}</p></div><Button variant="ghost" size="icon" onClick={() => updateBeneficiaryRow(row.id, { owner: null, selectedProperty: null })} disabled={loading}><XCircle className="h-5 w-5 text-destructive" /></Button></div>)}
+                <CardContent className="space-y-4 p-4">
+                    <Collapsible open={openSections.details} onOpenChange={(isOpen) => setOpenSections(prev => ({...prev, details: isOpen}))}>
+                        <Card className="border-none bg-background/5">
+                            <CollapsibleTrigger className="w-full">
+                                <CardHeader className="flex flex-row items-center justify-between cursor-pointer">
+                                    <CardTitle>1. Detalles de la Transacción</CardTitle>
+                                    <ChevronDown className={`h-5 w-5 transition-transform ${openSections.details ? 'rotate-180' : ''}`} />
+                                </CardHeader>
+                            </CollapsibleTrigger>
+                            <CollapsibleContent>
+                                <CardContent className="grid md:grid-cols-2 gap-6">
+                                    <div className="space-y-2"><Label htmlFor="paymentDate">Fecha del Pago</Label><Popover><PopoverTrigger asChild><Button id="paymentDate" variant={"outline"} className={cn("w-full justify-start", !paymentDate && "text-muted-foreground")} disabled={loading}><CalendarIcon className="mr-2 h-4 w-4" />{paymentDate ? format(paymentDate, "PPP", { locale: es }) : <span>Seleccione una fecha</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar mode="single" selected={paymentDate} onSelect={setPaymentDate} initialFocus locale={es} disabled={(date) => date > new Date()} /></PopoverContent></Popover></div>
+                                    <div className="space-y-2"><Label>Tasa de Cambio (Bs. por USD)</Label><Input type="text" value={exchangeRate ? `Bs. ${exchangeRate.toFixed(2)}` : exchangeRateMessage || 'Seleccione una fecha'} readOnly className={cn("bg-muted/50")} /></div>
+                                    <div className="space-y-2"><Label htmlFor="paymentMethod">Tipo de Pago</Label><Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as any)} disabled={loading}><SelectTrigger id="paymentMethod"><SelectValue placeholder="Seleccione..." /></SelectTrigger><SelectContent><SelectItem value="transferencia">Transferencia</SelectItem><SelectItem value="movil">Pago Móvil</SelectItem></SelectContent></Select></div>
+                                    <div className="space-y-2"><Label htmlFor="bank">Banco Emisor</Label><Button type="button" id="bank" variant="outline" className="w-full justify-start text-left font-normal" onClick={() => setIsBankModalOpen(true)} disabled={loading}>{bank ? <><Banknote className="mr-2 h-4 w-4" />{bank}</> : <span>Seleccione un banco...</span>}</Button></div>
+                                    {bank === 'Otro' && <div className="space-y-2 md:col-span-2"><Label htmlFor="otherBank">Nombre del Otro Banco</Label><Input id="otherBank" value={otherBank} onChange={(e) => setOtherBank(e.target.value)} disabled={loading}/></div>}
+                                    <div className="space-y-2"><Label htmlFor="reference">Últimos 6 dígitos de la Referencia</Label><Input id="reference" value={reference} onChange={(e) => setReference(e.target.value.replace(/\D/g, '').slice(0, 6))} maxLength={6} disabled={loading} /><p className="text-xs text-muted-foreground">La referencia debe tener al menos 4 dígitos.</p></div>
+                                    <div className="space-y-2 md:col-span-2">
+                                        <Label htmlFor="receipt">Comprobante de Pago (Opcional)</Label>
+                                        <Input id="receipt" type="file" accept="image/png, image/jpeg" onChange={handleImageUpload} disabled={loading}/>
+                                        {receiptImage && (
+                                            <div className="mt-2 relative w-32 h-32 border p-1 rounded-md">
+                                                <img src={receiptImage} alt="Vista previa del comprobante" className="w-full h-full object-contain" />
+                                                <Button variant="destructive" size="icon" className="absolute -top-2 -right-2 h-6 w-6 rounded-full" onClick={() => setReceiptImage(null)}>
+                                                    <XCircle className="h-4 w-4" />
+                                                </Button>
                                             </div>
-                                            <div className="space-y-2"><Label htmlFor={`amount-${row.id}`}>Monto Asignado (Bs.)</Label><Input id={`amount-${row.id}`} type="number" placeholder="0.00" value={row.amount} onChange={(e) => updateBeneficiaryRow(row.id, { amount: e.target.value })} disabled={loading || !row.owner} /></div>
+                                        )}
+                                    </div>
+                                </CardContent>
+                            </CollapsibleContent>
+                        </Card>
+                    </Collapsible>
+                    <Collapsible open={openSections.beneficiaries} onOpenChange={(isOpen) => setOpenSections(prev => ({...prev, beneficiaries: isOpen}))}>
+                        <Card className="border-none bg-background/5">
+                             <CollapsibleTrigger className="w-full">
+                                <CardHeader className="flex flex-row items-center justify-between cursor-pointer">
+                                    <CardTitle>2. Detalles de los Beneficiarios</CardTitle>
+                                    <ChevronDown className={`h-5 w-5 transition-transform ${openSections.beneficiaries ? 'rotate-180' : ''}`} />
+                                </CardHeader>
+                            </CollapsibleTrigger>
+                            <CollapsibleContent>
+                                <CardContent className="space-y-6">
+                                    <div className="grid md:grid-cols-2 gap-6">
+                                        <div className="space-y-2">
+                                            <Label htmlFor="totalAmount">Monto Total del Pago (Bs.)</Label>
+                                            <Input id="totalAmount" type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} placeholder="0.00" disabled={loading}/>
                                         </div>
-                                        {row.owner && <div className="mt-4 space-y-2"><Label>Asignar a Propiedad</Label><Select onValueChange={(v) => updateBeneficiaryRow(row.id, { selectedProperty: row.owner!.properties.find(p => `${p.street}-${p.house}` === v) || null })} value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''} disabled={loading || !row.owner}><SelectTrigger><SelectValue placeholder="Seleccione una propiedad..." /></SelectTrigger><SelectContent>{row.owner.properties.map(p => (<SelectItem key={`${p.street}-${p.house}`} value={`${p.street}-${p.house}`}>{`${p.street} - ${p.house}`}</SelectItem>))}</SelectContent></Select></div>}
-                                        <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive" onClick={() => removeBeneficiaryRow(row.id)} disabled={loading}><Trash2 className="h-4 w-4"/></Button>
-                                    </Card>
-                                ))}
-                                <Button type="button" variant="outline" size="sm" onClick={addBeneficiaryRow} disabled={loading}><UserPlus className="mr-2 h-4 w-4"/>Añadir Otro Beneficiario</Button>
-                                <CardFooter className="p-4 bg-background/50 rounded-lg space-y-2 mt-4 flex-col items-stretch">
-                                    <div className="flex justify-between text-sm font-medium"><span>Monto Total del Pago:</span><span>Bs. {Number(totalAmount || 0).toFixed(2)}</span></div>
-                                    <div className="flex justify-between text-sm"><span>Total Asignado:</span><span>Bs. {assignedTotal.toFixed(2)}</span></div><hr className="my-1 border-border"/><div className={cn("flex justify-between text-base font-bold", balance !== 0 ? 'text-destructive' : 'text-green-600')}><span>Balance:</span><span>Bs. {balance.toFixed(2)}</span></div>
-                                </CardFooter>
-                            </div>
-                        </CardContent>
-                    </Card>
+                                        <div className="space-y-2">
+                                            <Label>Monto Equivalente (USD)</Label>
+                                            <div className="relative">
+                                                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                                <Input type="text" value={amountUSD} readOnly className="pl-9 bg-muted/50" placeholder="0.00" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-4"><Label className="font-semibold">Asignación de Montos</Label>
+                                        {beneficiaryRows.map((row, index) => (
+                                            <Card key={row.id} className="p-4 bg-muted/50 relative">
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div className="space-y-2"><Label htmlFor={`search-${row.id}`}>Beneficiario {index + 1}</Label>
+                                                        {!row.owner ? (<><div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input id={`search-${row.id}`} placeholder="Buscar por nombre..." className="pl-9" value={row.searchTerm} onChange={(e) => updateBeneficiaryRow(row.id, { searchTerm: e.target.value })} disabled={loading} /></div>{row.searchTerm.length >= 3 && getFilteredOwners(row.searchTerm).length > 0 && <Card className="border rounded-md"><ScrollArea className="h-32">{getFilteredOwners(row.searchTerm).map(owner => (<div key={owner.id} onClick={() => handleOwnerSelect(row.id, owner)} className="p-2 hover:bg-muted cursor-pointer border-b last:border-b-0"><p className="font-medium text-sm">{owner.name}</p></div>))}</ScrollArea></Card>}</>)
+                                                        : (<div className="p-3 bg-background rounded-md flex items-center justify-between"><div><p className="font-semibold text-primary">{row.owner.name}</p></div><Button variant="ghost" size="icon" onClick={() => updateBeneficiaryRow(row.id, { owner: null, selectedProperty: null })} disabled={loading}><XCircle className="h-5 w-5 text-destructive" /></Button></div>)}
+                                                    </div>
+                                                    <div className="space-y-2"><Label htmlFor={`amount-${row.id}`}>Monto Asignado (Bs.)</Label><Input id={`amount-${row.id}`} type="number" placeholder="0.00" value={row.amount} onChange={(e) => updateBeneficiaryRow(row.id, { amount: e.target.value })} disabled={loading || !row.owner} /></div>
+                                                </div>
+                                                {row.owner && <div className="mt-4 space-y-2"><Label>Asignar a Propiedad</Label><Select onValueChange={(v) => updateBeneficiaryRow(row.id, { selectedProperty: row.owner!.properties.find(p => `${p.street}-${p.house}` === v) || null })} value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''} disabled={loading || !row.owner}><SelectTrigger><SelectValue placeholder="Seleccione una propiedad..." /></SelectTrigger><SelectContent>{row.owner.properties.map(p => (<SelectItem key={`${p.street}-${p.house}`} value={`${p.street}-${p.house}`}>{`${p.street} - ${p.house}`}</SelectItem>))}</SelectContent></Select></div>}
+                                                <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive" onClick={() => removeBeneficiaryRow(row.id)} disabled={loading}><Trash2 className="h-4 w-4"/></Button>
+                                            </Card>
+                                        ))}
+                                        <Button type="button" variant="outline" size="sm" onClick={addBeneficiaryRow} disabled={loading}><UserPlus className="mr-2 h-4 w-4"/>Añadir Otro Beneficiario</Button>
+                                        <CardFooter className="p-4 bg-background/50 rounded-lg space-y-2 mt-4 flex-col items-stretch">
+                                            <div className="flex justify-between text-sm font-medium"><span>Monto Total del Pago:</span><span>Bs. {Number(totalAmount || 0).toFixed(2)}</span></div>
+                                            <div className="flex justify-between text-sm"><span>Total Asignado:</span><span>Bs. {assignedTotal.toFixed(2)}</span></div><hr className="my-1 border-border"/><div className={cn("flex justify-between text-base font-bold", balance !== 0 ? 'text-destructive' : 'text-green-600')}><span>Balance:</span><span>Bs. {balance.toFixed(2)}</span></div>
+                                        </CardFooter>
+                                    </div>
+                                </CardContent>
+                            </CollapsibleContent>
+                        </Card>
+                    </Collapsible>
                 </CardContent>
-                <CardFooter><Button type="submit" className="w-full md:w-auto ml-auto" disabled={loading}>{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CheckCircle2 className="mr-2 h-4 w-4"/>}Emviar Reporte</Button></CardFooter>
+                <CardFooter className="bg-background/10 p-6 flex justify-end gap-4">
+                    <Button type="button" variant="ghost" className="text-muted-foreground hover:text-white" onClick={resetForm} disabled={isSubmitting}>
+                        CANCELAR
+                    </Button>
+                    <Button type="submit" className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl px-6 py-6 text-base font-bold" disabled={isSubmitting}>
+                        {isSubmitting ? <Loader2 className="mr-2 h-5 w-5 animate-spin"/> : <Save className="mr-2 h-5 w-5" />}
+                        Enviar Reporte
+                    </Button>
+                </CardFooter>
                 <BankSelectionModal isOpen={isBankModalOpen} onOpenChange={setIsBankModalOpen} selectedValue={bank} onSelect={(value) => { setBank(value); if (value !== 'Otro') setOtherBank(''); setIsBankModalOpen(false); }} />
                 <Dialog open={isInfoDialogOpen} onOpenChange={setIsInfoDialogOpen}><DialogContent><DialogHeader><DialogTitle className="flex items-center gap-2"><Info className="h-6 w-6 text-blue-500" />Reporte Enviado para Revisión</DialogTitle><div className="pt-4 text-sm text-muted-foreground space-y-4"><p>¡Gracias! Hemos recibido el reporte de pago. Será procesado en un máximo de <strong>24 horas</strong>.</p></div></DialogHeader><DialogFooter><Button onClick={() => setIsInfoDialogOpen(false)}>Entendido</Button></DialogFooter></DialogContent></Dialog>
             </form>

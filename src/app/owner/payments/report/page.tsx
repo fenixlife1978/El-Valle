@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -11,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
-import { CalendarIcon, CheckCircle2, DollarSign, FileText, Hash, Loader2, Upload, Banknote, Info, X, Save, FileUp, UserPlus, Trash2, XCircle, Search } from 'lucide-react';
+import { CalendarIcon, CheckCircle2, DollarSign, FileText, Hash, Loader2, Upload, Banknote, Info, X, Save, FileUp, UserPlus, Trash2, XCircle, Search, ChevronDown } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn, compressImage } from '@/lib/utils';
@@ -20,6 +21,8 @@ import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { BankSelectionModal } from '@/components/bank-selection-modal';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
+
 
 type Owner = {
     id: string;
@@ -68,6 +71,9 @@ export default function ReportPaymentPage() {
 
     const [isBankModalOpen, setIsBankModalOpen] = useState(false);
     const [isInfoDialogOpen, setIsInfoDialogOpen] = useState(false);
+
+    const [openSections, setOpenSections] = useState({ details: true, beneficiaries: true });
+
 
     // --- Data Fetching ---
     useEffect(() => {
@@ -289,107 +295,125 @@ export default function ReportPaymentPage() {
                 </CardHeader>
                 <form onSubmit={handleSubmit}>
                     <CardContent className="p-8 grid grid-cols-1 gap-y-6">
-                        <Card className="border-none bg-background/5">
-                            <CardHeader><CardTitle>1. Detalles de la Transacción</CardTitle></CardHeader>
-                            <CardContent className="grid md:grid-cols-2 gap-x-8 gap-y-6">
-                                <div className="space-y-2">
-                                    <Label className="text-primary uppercase text-xs font-bold tracking-wider">Método de Pago</Label>
-                                    <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as PaymentMethod)} disabled={isSubmitting}>
-                                        <SelectTrigger className="pl-12 pr-4 py-6 bg-input border-border rounded-2xl text-base focus:ring-primary">
-                                            <FileText className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                                            <SelectValue placeholder="Seleccione un método..." />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="transferencia">Transferencia</SelectItem>
-                                            <SelectItem value="movil">Pago Móvil</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label className="text-primary uppercase text-xs font-bold tracking-wider">Banco Emisor</Label>
-                                    <Button type="button" variant="outline" className="w-full justify-start text-left font-normal pl-12 pr-4 py-6 bg-input border-border rounded-2xl text-base hover:bg-input" onClick={() => setIsBankModalOpen(true)} disabled={isSubmitting}>
-                                        <Banknote className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                                        {bank || "Seleccione un banco..."}
-                                    </Button>
-                                </div>
-                                {bank === 'Otro' && (
-                                    <div className="space-y-2">
-                                        <Label className="text-primary uppercase text-xs font-bold tracking-wider">Nombre del Otro Banco</Label>
-                                        <div className="relative flex items-center">
-                                        <Banknote className="absolute left-4 h-5 w-5 text-muted-foreground" />
-                                        <Input value={otherBank} onChange={(e) => setOtherBank(e.target.value)} className="pl-12 pr-4 py-6 bg-input border-border rounded-2xl text-base" placeholder="Especifique el banco" disabled={isSubmitting}/>
+                        <Collapsible open={openSections.details} onOpenChange={(isOpen) => setOpenSections(prev => ({...prev, details: isOpen}))}>
+                            <Card className="border-none bg-background/5">
+                                <CollapsibleTrigger className="w-full">
+                                    <CardHeader className="flex flex-row items-center justify-between cursor-pointer">
+                                        <CardTitle>1. Detalles de la Transacción</CardTitle>
+                                        <ChevronDown className={`h-5 w-5 transition-transform ${openSections.details ? 'rotate-180' : ''}`} />
+                                    </CardHeader>
+                                </CollapsibleTrigger>
+                                <CollapsibleContent>
+                                    <CardContent className="grid md:grid-cols-2 gap-x-8 gap-y-6 pt-4">
+                                        <div className="space-y-2">
+                                            <Label className="text-primary uppercase text-xs font-bold tracking-wider">Método de Pago</Label>
+                                            <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as PaymentMethod)} disabled={isSubmitting}>
+                                                <SelectTrigger className="pl-12 pr-4 py-6 bg-input border-border rounded-2xl text-base focus:ring-primary">
+                                                    <FileText className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                                                    <SelectValue placeholder="Seleccione un método..." />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="transferencia">Transferencia</SelectItem>
+                                                    <SelectItem value="movil">Pago Móvil</SelectItem>
+                                                </SelectContent>
+                                            </Select>
                                         </div>
-                                    </div>
-                                )}
-                                <div className="space-y-2">
-                                    <Label className="text-primary uppercase text-xs font-bold tracking-wider">Referencia</Label>
-                                    <div className="relative flex items-center">
-                                        <Hash className="absolute left-4 h-5 w-5 text-muted-foreground" />
-                                        <Input value={reference} onChange={(e) => setReference(e.target.value.replace(/\D/g, '').slice(0, 6))} maxLength={6} className="pl-12 pr-4 py-6 bg-input border-border rounded-2xl text-base" placeholder="Últimos 6 dígitos" disabled={isSubmitting}/>
-                                    </div>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label className="text-primary uppercase text-xs font-bold tracking-wider">Fecha del Pago</Label>
-                                    <Popover>
-                                        <PopoverTrigger asChild>
-                                            <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal pl-12 pr-4 py-6 bg-input border-border rounded-2xl text-base hover:bg-input", !paymentDate && "text-muted-foreground")} disabled={isSubmitting}>
-                                                <CalendarIcon className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                                                {paymentDate ? format(paymentDate, "PPP", { locale: es }) : <span>Seleccione una fecha</span>}
+                                        <div className="space-y-2">
+                                            <Label className="text-primary uppercase text-xs font-bold tracking-wider">Banco Emisor</Label>
+                                            <Button type="button" variant="outline" className="w-full justify-start text-left font-normal pl-12 pr-4 py-6 bg-input border-border rounded-2xl text-base hover:bg-input" onClick={() => setIsBankModalOpen(true)} disabled={isSubmitting}>
+                                                <Banknote className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                                                {bank || "Seleccione un banco..."}
                                             </Button>
-                                        </PopoverTrigger>
-                                        <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={paymentDate} onSelect={setPaymentDate} initialFocus locale={es} disabled={(date) => date > new Date()} /></PopoverContent>
-                                    </Popover>
-                                </div>
-                                 <div className="space-y-2 md:col-span-2">
-                                    <Label className="text-primary uppercase text-xs font-bold tracking-wider">Adjuntar Comprobante</Label>
-                                    <div className="relative flex items-center">
-                                        <FileUp className="absolute left-4 h-5 w-5 text-muted-foreground" />
-                                        <Input id="receipt" type="file" onChange={handleImageUpload} className="pl-12 pr-4 py-4 bg-input border-border rounded-2xl text-base file:text-muted-foreground file:text-sm" disabled={isSubmitting} />
-                                    </div>
-                                    {receiptImage && <p className="text-xs text-green-400 flex items-center gap-1"><CheckCircle2 className="h-3 w-3"/>Comprobante cargado.</p>}
-                                </div>
-                            </CardContent>
-                        </Card>
-                        
-                        <Card className="border-none bg-background/5">
-                            <CardHeader><CardTitle>2. Monto y Beneficiarios</CardTitle></CardHeader>
-                            <CardContent className="space-y-6">
-                                <div className="grid md:grid-cols-2 gap-6">
-                                    <div className="space-y-2">
-                                        <Label className="text-primary uppercase text-xs font-bold tracking-wider">Monto Total del Pago (Bs.)</Label>
-                                        <Input id="totalAmount" type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} placeholder="0.00" disabled={loading} className="py-6 bg-input/80 rounded-2xl"/>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label className="text-primary uppercase text-xs font-bold tracking-wider">Monto Equivalente (USD)</Label>
-                                        <div className="relative">
-                                            <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                            <Input type="text" value={amountUSD} readOnly className="pl-9 bg-muted/50 py-6 rounded-2xl" placeholder="0.00" />
                                         </div>
-                                    </div>
-                                </div>
-                                <div className="space-y-4">
-                                    <Label className="font-semibold">Asignación de Montos</Label>
-                                    {beneficiaryRows.map((row, index) => (
-                                        <Card key={row.id} className="p-4 bg-muted/50 relative">
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                <div className="space-y-2"><Label htmlFor={`search-${row.id}`}>Beneficiario {index + 1}</Label>
-                                                    {!row.owner ? (<><div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input id={`search-${row.id}`} placeholder="Buscar por nombre..." className="pl-9" value={row.searchTerm} onChange={(e) => updateBeneficiaryRow(row.id, { searchTerm: e.target.value })} disabled={loading} /></div>{row.searchTerm.length >= 2 && getFilteredOwners(row.searchTerm).length > 0 && <Card className="border rounded-md"><ScrollArea className="h-32">{getFilteredOwners(row.searchTerm).map(owner => (<div key={owner.id} onClick={() => handleOwnerSelect(row.id, owner)} className="p-2 hover:bg-muted cursor-pointer border-b last:border-b-0"><p className="font-medium text-sm">{owner.name}</p></div>))}</ScrollArea></Card>}</>)
-                                                    : (<div className="p-3 bg-background rounded-md flex items-center justify-between"><div><p className="font-semibold text-primary">{row.owner.name}</p></div><Button variant="ghost" size="icon" onClick={() => updateBeneficiaryRow(row.id, { owner: null, selectedProperty: null })} disabled={loading}><XCircle className="h-5 w-5 text-destructive" /></Button></div>)}
+                                        {bank === 'Otro' && (
+                                            <div className="space-y-2">
+                                                <Label className="text-primary uppercase text-xs font-bold tracking-wider">Nombre del Otro Banco</Label>
+                                                <div className="relative flex items-center">
+                                                <Banknote className="absolute left-4 h-5 w-5 text-muted-foreground" />
+                                                <Input value={otherBank} onChange={(e) => setOtherBank(e.target.value)} className="pl-12 pr-4 py-6 bg-input border-border rounded-2xl text-base" placeholder="Especifique el banco" disabled={isSubmitting}/>
                                                 </div>
-                                                <div className="space-y-2"><Label htmlFor={`amount-${row.id}`}>Monto Asignado (Bs.)</Label><Input id={`amount-${row.id}`} type="number" placeholder="0.00" value={row.amount} onChange={(e) => updateBeneficiaryRow(row.id, { amount: e.target.value })} disabled={loading || !row.owner} /></div>
                                             </div>
-                                            {row.owner && <div className="mt-4 space-y-2"><Label>Asignar a Propiedad</Label><Select onValueChange={(v) => updateBeneficiaryRow(row.id, { selectedProperty: row.owner!.properties.find(p => `${p.street}-${p.house}` === v) || null })} value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''} disabled={loading || !row.owner}><SelectTrigger><SelectValue placeholder="Seleccione una propiedad..." /></SelectTrigger><SelectContent>{row.owner.properties.map(p => (<SelectItem key={`${p.street}-${p.house}`} value={`${p.street}-${p.house}`}>{`${p.street} - ${p.house}`}</SelectItem>))}</SelectContent></Select></div>}
-                                            {index > 0 && <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive" onClick={() => removeBeneficiaryRow(row.id)} disabled={loading}><Trash2 className="h-4 w-4"/></Button>}
-                                        </Card>
-                                    ))}
-                                    <Button type="button" variant="outline" size="sm" onClick={addBeneficiaryRow} disabled={loading}><UserPlus className="mr-2 h-4 w-4"/>Añadir Otro Beneficiario</Button>
-                                    <CardFooter className="p-4 bg-background/50 rounded-lg space-y-2 mt-4 flex-col items-stretch">
-                                        <div className="flex justify-between text-sm font-medium"><span>Monto Total del Pago:</span><span>Bs. {Number(totalAmount || 0).toFixed(2)}</span></div>
-                                        <div className="flex justify-between text-sm"><span>Total Asignado:</span><span>Bs. {assignedTotal.toFixed(2)}</span></div><hr className="my-1 border-border"/><div className={cn("flex justify-between text-base font-bold", balance !== 0 ? 'text-destructive' : 'text-green-600')}><span>Balance:</span><span>Bs. {balance.toFixed(2)}</span></div>
-                                    </CardFooter>
-                                </div>
-                            </CardContent>
-                        </Card>
+                                        )}
+                                        <div className="space-y-2">
+                                            <Label className="text-primary uppercase text-xs font-bold tracking-wider">Referencia</Label>
+                                            <div className="relative flex items-center">
+                                                <Hash className="absolute left-4 h-5 w-5 text-muted-foreground" />
+                                                <Input value={reference} onChange={(e) => setReference(e.target.value.replace(/\D/g, '').slice(0, 6))} maxLength={6} className="pl-12 pr-4 py-6 bg-input border-border rounded-2xl text-base" placeholder="Últimos 6 dígitos" disabled={isSubmitting}/>
+                                            </div>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label className="text-primary uppercase text-xs font-bold tracking-wider">Fecha del Pago</Label>
+                                            <Popover>
+                                                <PopoverTrigger asChild>
+                                                    <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal pl-12 pr-4 py-6 bg-input border-border rounded-2xl text-base hover:bg-input", !paymentDate && "text-muted-foreground")} disabled={isSubmitting}>
+                                                        <CalendarIcon className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                                                        {paymentDate ? format(paymentDate, "PPP", { locale: es }) : <span>Seleccione una fecha</span>}
+                                                    </Button>
+                                                </PopoverTrigger>
+                                                <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={paymentDate} onSelect={setPaymentDate} initialFocus locale={es} disabled={(date) => date > new Date()} /></PopoverContent>
+                                            </Popover>
+                                        </div>
+                                        <div className="space-y-2 md:col-span-2">
+                                            <Label className="text-primary uppercase text-xs font-bold tracking-wider">Adjuntar Comprobante</Label>
+                                            <div className="relative flex items-center">
+                                                <FileUp className="absolute left-4 h-5 w-5 text-muted-foreground" />
+                                                <Input id="receipt" type="file" onChange={handleImageUpload} className="pl-12 pr-4 py-4 bg-input border-border rounded-2xl text-base file:text-muted-foreground file:text-sm" disabled={isSubmitting} />
+                                            </div>
+                                            {receiptImage && <p className="text-xs text-green-400 flex items-center gap-1"><CheckCircle2 className="h-3 w-3"/>Comprobante cargado.</p>}
+                                        </div>
+                                    </CardContent>
+                                </CollapsibleContent>
+                            </Card>
+                        </Collapsible>
+                        
+                        <Collapsible open={openSections.beneficiaries} onOpenChange={(isOpen) => setOpenSections(prev => ({...prev, beneficiaries: isOpen}))}>
+                             <Card className="border-none bg-background/5">
+                                <CollapsibleTrigger className="w-full">
+                                    <CardHeader className="flex flex-row items-center justify-between cursor-pointer">
+                                        <CardTitle>2. Monto y Beneficiarios</CardTitle>
+                                        <ChevronDown className={`h-5 w-5 transition-transform ${openSections.beneficiaries ? 'rotate-180' : ''}`} />
+                                    </CardHeader>
+                                </CollapsibleTrigger>
+                               <CollapsibleContent>
+                                    <CardContent className="space-y-6 pt-4">
+                                        <div className="grid md:grid-cols-2 gap-6">
+                                            <div className="space-y-2">
+                                                <Label className="text-primary uppercase text-xs font-bold tracking-wider">Monto Total del Pago (Bs.)</Label>
+                                                <Input id="totalAmount" type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} placeholder="0.00" disabled={loading} className="py-6 bg-input/80 rounded-2xl"/>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label className="text-primary uppercase text-xs font-bold tracking-wider">Monto Equivalente (USD)</Label>
+                                                <div className="relative">
+                                                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                                    <Input type="text" value={amountUSD} readOnly className="pl-9 bg-muted/50 py-6 rounded-2xl" placeholder="0.00" />
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="space-y-4">
+                                            <Label className="font-semibold">Asignación de Montos</Label>
+                                            {beneficiaryRows.map((row, index) => (
+                                                <Card key={row.id} className="p-4 bg-muted/50 relative">
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                        <div className="space-y-2"><Label htmlFor={`search-${row.id}`}>Beneficiario {index + 1}</Label>
+                                                            {!row.owner ? (<><div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input id={`search-${row.id}`} placeholder="Buscar por nombre..." className="pl-9" value={row.searchTerm} onChange={(e) => updateBeneficiaryRow(row.id, { searchTerm: e.target.value })} disabled={loading} /></div>{row.searchTerm.length >= 2 && getFilteredOwners(row.searchTerm).length > 0 && <Card className="border rounded-md"><ScrollArea className="h-32">{getFilteredOwners(row.searchTerm).map(owner => (<div key={owner.id} onClick={() => handleOwnerSelect(row.id, owner)} className="p-2 hover:bg-muted cursor-pointer border-b last:border-b-0"><p className="font-medium text-sm">{owner.name}</p></div>))}</ScrollArea></Card>}</>)
+                                                            : (<div className="p-3 bg-background rounded-md flex items-center justify-between"><div><p className="font-semibold text-primary">{row.owner.name}</p></div><Button variant="ghost" size="icon" onClick={() => updateBeneficiaryRow(row.id, { owner: null, selectedProperty: null })} disabled={loading}><XCircle className="h-5 w-5 text-destructive" /></Button></div>)}
+                                                        </div>
+                                                        <div className="space-y-2"><Label htmlFor={`amount-${row.id}`}>Monto Asignado (Bs.)</Label><Input id={`amount-${row.id}`} type="number" placeholder="0.00" value={row.amount} onChange={(e) => updateBeneficiaryRow(row.id, { amount: e.target.value })} disabled={loading || !row.owner} /></div>
+                                                    </div>
+                                                    {row.owner && <div className="mt-4 space-y-2"><Label>Asignar a Propiedad</Label><Select onValueChange={(v) => updateBeneficiaryRow(row.id, { selectedProperty: row.owner!.properties.find(p => `${p.street}-${p.house}` === v) || null })} value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''} disabled={loading || !row.owner}><SelectTrigger><SelectValue placeholder="Seleccione una propiedad..." /></SelectTrigger><SelectContent>{row.owner.properties.map(p => (<SelectItem key={`${p.street}-${p.house}`} value={`${p.street}-${p.house}`}>{`${p.street} - ${p.house}`}</SelectItem>))}</SelectContent></Select></div>}
+                                                    {index > 0 && <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive" onClick={() => removeBeneficiaryRow(row.id)} disabled={loading}><Trash2 className="h-4 w-4"/></Button>}
+                                                </Card>
+                                            ))}
+                                            <Button type="button" variant="outline" size="sm" onClick={addBeneficiaryRow} disabled={loading}><UserPlus className="mr-2 h-4 w-4"/>Añadir Otro Beneficiario</Button>
+                                            <CardFooter className="p-4 bg-background/50 rounded-lg space-y-2 mt-4 flex-col items-stretch">
+                                                <div className="flex justify-between text-sm font-medium"><span>Monto Total del Pago:</span><span>Bs. {Number(totalAmount || 0).toFixed(2)}</span></div>
+                                                <div className="flex justify-between text-sm"><span>Total Asignado:</span><span>Bs. {assignedTotal.toFixed(2)}</span></div><hr className="my-1 border-border"/><div className={cn("flex justify-between text-base font-bold", balance !== 0 ? 'text-destructive' : 'text-green-600')}><span>Balance:</span><span>Bs. {balance.toFixed(2)}</span></div>
+                                            </CardFooter>
+                                        </div>
+                                    </CardContent>
+                                </CollapsibleContent>
+                            </Card>
+                        </Collapsible>
                     </CardContent>
 
                     <CardFooter className="bg-background/10 p-6 flex justify-end gap-4">
