@@ -393,6 +393,7 @@ function ReportPaymentTab() {
 
 
     useEffect(() => {
+        setPaymentDate(new Date());
         const q = query(collection(db, "owners"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const ownersData: Owner[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner));
@@ -450,7 +451,7 @@ function ReportPaymentTab() {
     const balance = useMemo(() => (Number(totalAmount) || 0) - assignedTotal, [totalAmount, assignedTotal]);
 
     const resetForm = () => {
-        setPaymentDate(undefined); setExchangeRate(null); setExchangeRateMessage(''); setPaymentMethod(''); setBank(''); setOtherBank(''); setReference(''); setTotalAmount('');
+        setPaymentDate(new Date()); setExchangeRate(null); setExchangeRateMessage(''); setPaymentMethod(''); setBank(''); setOtherBank(''); setReference(''); setTotalAmount('');
         setBeneficiaryRows([{ id: Date.now().toString(), owner: null, searchTerm: '', amount: '', selectedProperty: null }]);
         setReceiptImage(null);
     }
@@ -566,8 +567,10 @@ function CalculatorTab() {
     const [loadingDebts, setLoadingDebts] = useState(false);
     const [selectedPendingDebts, setSelectedPendingDebts] = useState<string[]>([]);
     const [selectedAdvanceMonths, setSelectedAdvanceMonths] = useState<string[]>([]);
+    const [now, setNow] = useState<Date | null>(null);
     
     useEffect(() => {
+        setNow(new Date());
         const fetchPrerequisites = async () => {
             setLoading(true);
             try {
@@ -616,9 +619,10 @@ function CalculatorTab() {
     };
     
     const futureMonths = useMemo(() => {
+        if (!now) return [];
         const paidAdvanceMonths = ownerDebts.filter(d => d.status === 'paid' && d.description.includes('Adelantado')).map(d => `${d.year}-${String(d.month).padStart(2, '0')}`);
-        return Array.from({ length: 12 }, (_, i) => { const date = addMonths(new Date(), i); const value = format(date, 'yyyy-MM'); return { value, label: format(date, 'MMMM yyyy', { locale: es }), disabled: paidAdvanceMonths.includes(value) }; });
-    }, [ownerDebts]);
+        return Array.from({ length: 12 }, (_, i) => { const date = addMonths(now, i); const value = format(date, 'yyyy-MM'); return { value, label: format(date, 'MMMM yyyy', { locale: es }), disabled: paidAdvanceMonths.includes(value) }; });
+    }, [ownerDebts, now]);
     
     const paymentCalculator = useMemo(() => {
         if (!selectedOwner) return { totalToPay: 0, hasSelection: false, dueMonthsCount: 0, advanceMonthsCount: 0, totalDebtBs: 0, balanceInFavor: 0 };
@@ -740,5 +744,7 @@ export default function AdminPaymentsPageWithSuspense() {
         </Suspense>
     );
 }
+
+    
 
     
