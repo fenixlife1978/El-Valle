@@ -109,13 +109,13 @@ export default function ReportPaymentPage() {
     }, [paymentDate]);
 
     useEffect(() => {
-        const usd = parseFloat(amountUSD);
-        if (!isNaN(usd) && exchangeRate && usd > 0) {
-            setTotalAmount((usd * exchangeRate).toFixed(2));
+        const bs = parseFloat(totalAmount);
+        if (!isNaN(bs) && exchangeRate && exchangeRate > 0) {
+            setAmountUSD((bs / exchangeRate).toFixed(2));
         } else {
-            setTotalAmount('');
+            setAmountUSD('');
         }
-    }, [amountUSD, exchangeRate]);
+    }, [totalAmount, exchangeRate]);
     
     const resetForm = () => {
         setPaymentDate(new Date());
@@ -326,11 +326,18 @@ export default function ReportPaymentPage() {
                         {/* Sección de Montos */}
                         <div className="md:col-span-2 space-y-4 bg-input/50 rounded-2xl p-4">
                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div className="space-y-2">
-                                    <Label className="text-primary uppercase text-xs font-bold tracking-wider">Monto en USD</Label>
+                               <div className="space-y-2">
+                                    <Label className="text-primary uppercase text-xs font-bold tracking-wider">Monto Total en Bs</Label>
                                     <div className="relative flex items-center">
-                                        <DollarSign className="absolute left-4 h-5 w-5 text-muted-foreground" />
-                                        <Input type="number" value={amountUSD} onChange={(e) => setAmountUSD(e.target.value)} className="pl-12 pr-4 py-6 bg-input border-border rounded-2xl text-base font-bold" placeholder="0.00" disabled={isSubmitting} />
+                                        <span className="absolute left-4 font-bold text-background bg-white/90 text-black px-1 py-0.5 rounded-md">Bs</span>
+                                        <Input
+                                            type="number"
+                                            value={totalAmount}
+                                            onChange={(e) => setTotalAmount(e.target.value)}
+                                            className="pl-12 pr-4 py-6 bg-white/90 border-transparent rounded-2xl text-base font-extrabold text-black"
+                                            placeholder="0.00"
+                                            disabled={isSubmitting}
+                                        />
                                     </div>
                                 </div>
                                 <div className="space-y-2">
@@ -340,11 +347,17 @@ export default function ReportPaymentPage() {
                                         <Input type="text" value={exchangeRate ? exchangeRate.toFixed(2) : exchangeRateMessage || 'N/A'} readOnly className="pl-12 pr-4 py-6 bg-input border-border rounded-2xl text-base font-bold" />
                                     </div>
                                 </div>
-                                <div className="space-y-2">
-                                    <Label className="text-primary uppercase text-xs font-bold tracking-wider">Monto Total en Bs</Label>
+                               <div className="space-y-2">
+                                    <Label className="text-primary uppercase text-xs font-bold tracking-wider">Monto Equivalente (USD)</Label>
                                     <div className="relative flex items-center">
-                                        <span className="absolute left-4 font-bold text-background bg-white/90 text-black px-1 py-0.5 rounded-md">Bs</span>
-                                        <Input type="text" value={totalAmount} readOnly className="pl-12 pr-4 py-6 bg-white/90 border-transparent rounded-2xl text-base font-extrabold text-black" placeholder="0.00" />
+                                        <DollarSign className="absolute left-4 h-5 w-5 text-muted-foreground" />
+                                        <Input
+                                            type="text"
+                                            value={amountUSD}
+                                            readOnly
+                                            className="pl-12 pr-4 py-6 bg-input border-border rounded-2xl text-base font-bold"
+                                            placeholder="0.00"
+                                        />
                                     </div>
                                 </div>
                              </div>
@@ -357,7 +370,7 @@ export default function ReportPaymentPage() {
                         </Button>
                         <Button type="submit" className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl px-6 py-6 text-base font-bold" disabled={isSubmitting}>
                             {isSubmitting ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Save className="mr-2 h-5 w-5" />}
-                            GUARDAR PAGO
+                            ENVIAR REPORTE
                         </Button>
                     </CardFooter>
                 </form>

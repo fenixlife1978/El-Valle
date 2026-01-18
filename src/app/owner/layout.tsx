@@ -28,9 +28,9 @@ const ownerNavItems: NavItem[] = [
         { href: "/owner/reports", label: "Publicaciones" },
         { href: "/owner/certificates", label: "Constancias" },
         { href: "/owner/surveys", label: "Encuestas" },
+        { href: "/owner/settings", label: "Configuración" },
     ]
   },
-  { href: "/owner/settings", icon: Settings, label: "Configuración" },
 ];
 
 const ownerBottomNavItems: BottomNavItem[] = [
