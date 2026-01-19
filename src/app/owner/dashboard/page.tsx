@@ -290,115 +290,141 @@ const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptD
         const doc = new jsPDF();
         const pageWidth = doc.internal.pageSize.getWidth();
         const margin = 14;
+        let startY = margin;
 
+        // 1. Header
         if (companyInfo.logo) {
-            try { doc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25); }
+            try { doc.addImage(companyInfo.logo, 'PNG', margin, startY, 25, 25); }
             catch(e) { console.error("Error adding logo to PDF", e); }
         }
-        doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, margin + 30, margin + 8);
+        
+        const infoX = margin + 30;
+        doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, infoX, startY + 5);
         doc.setFontSize(9).setFont('helvetica', 'normal');
-        doc.text(`${companyInfo.rif} | ${companyInfo.phone}`, margin + 30, margin + 14);
-        doc.text(companyInfo.address, margin + 30, margin + 19);
+        const addressLines = doc.splitTextToSize(companyInfo.address, 90);
+        doc.text(`${companyInfo.rif}`, infoX, startY + 11);
+        doc.text(addressLines, infoX, startY + 16);
+        const addressHeight = addressLines.length * 4;
+        doc.text(`Teléfono: ${companyInfo.phone}`, infoX, startY + 16 + addressHeight);
         
-        doc.setFontSize(10).text(`Fecha de Emisión: ${format(new Date(), 'dd/MM/yyyy')}`, pageWidth - margin, margin + 8, { align: 'right' });
+        doc.setFontSize(9).text(`Fecha de Emisión: ${format(new Date(), 'dd/MM/yyyy')}`, pageWidth - margin, startY + 5, { align: 'right' });
         
-        doc.setLineWidth(0.5).line(margin, margin + 32, pageWidth - margin, margin + 32);
-        doc.setFontSize(16).setFont('helvetica', 'bold').text("RECIBO DE PAGO", pageWidth / 2, margin + 45, { align: 'center' });
-        doc.setFontSize(10).setFont('helvetica', 'normal').text(`N° de recibo: ${receiptNumber}`, pageWidth - margin, margin + 45, { align: 'right' });
+        startY += 32;
+        doc.setLineWidth(0.5).line(margin, startY, pageWidth - margin, startY);
+        startY += 12;
+
+        // 2. Title Section
+        doc.setFontSize(16).setFont('helvetica', 'bold').text("RECIBO DE PAGO", pageWidth / 2, startY, { align: 'center' });
         
-        let startY = margin + 60;
         const qrSize = 30;
         const qrX = pageWidth - margin - qrSize;
-        const detailsBlockY = startY;
-
-        doc.setFontSize(10).text(`Beneficiario: ${beneficiary.ownerName} (${data.ownerUnit})`, margin, startY);
-        startY += 6;
-        doc.text(`Método de pago: ${payment.type}`, margin, startY);
-        startY += 6;
-        doc.text(`Banco Emisor: ${payment.bank}`, margin, startY);
-        startY += 6;
-        doc.text(`N° de Referencia Bancaria: ${payment.reference}`, margin, startY);
-        startY += 6;
-        doc.text(`Fecha del pago: ${format(payment.paymentDate.toDate(), 'dd/MM/yyyy')}`, margin, startY);
-        startY += 6;
-        doc.text(`Tasa de Cambio Aplicada: Bs. ${formatToTwoDecimals(payment.exchangeRate)} por USD`, margin, startY);
-
+        doc.setFontSize(9).setFont('helvetica', 'normal').text(`N° de recibo: ${receiptNumber}`, qrX + qrSize, startY + 8, { align: 'right' });
         if(qrCodeUrl) {
-            doc.addImage(qrCodeUrl, 'PNG', qrX, detailsBlockY, qrSize, qrSize);
+            doc.addImage(qrCodeUrl, 'PNG', qrX, startY + 10, qrSize, qrSize);
         }
         
-        startY += 10;
+        startY += 8;
+
+        // 3. Details Section
+        doc.setFontSize(9);
+        const detailsX = margin;
+        doc.text(`Beneficiario: ${beneficiary.ownerName} (${data.ownerUnit})`, detailsX, startY);
+        startY += 5;
+        doc.text(`Método de pago: ${payment.type}`, detailsX, startY);
+        startY += 5;
+        doc.text(`Banco Emisor: ${payment.bank}`, detailsX, startY);
+        startY += 5;
+        doc.text(`N° de Referencia Bancaria: ${payment.reference}`, detailsX, startY);
+        startY += 5;
+        doc.text(`Fecha del pago: ${format(payment.paymentDate.toDate(), 'dd/MM/yyyy')}`, detailsX, startY);
+        startY += 5;
+        doc.text(`Tasa de Cambio Aplicada: Bs. ${formatToTwoDecimals(payment.exchangeRate)} por USD`, detailsX, startY);
         
+        startY += 15;
+
+        // 4. Main Table
         let totalPaidInConcepts = 0;
         const tableBody = paidDebts.map(debt => {
             const debtAmountBs = (debt.paidAmountUSD || debt.amountUSD) * payment.exchangeRate;
             totalPaidInConcepts += debtAmountBs;
             const propertyLabel = debt.property ? `${debt.property.street} - ${debt.property.house}` : 'N/A';
-            const periodLabel = `${monthsLocale[debt.month]} ${debt.year}`;
             const concept = `${debt.description} (${propertyLabel})`;
-            return [ periodLabel, concept, `$${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}`, `Bs. ${formatToTwoDecimals(debtAmountBs)}` ];
+            return [ 
+                `${monthsLocale[debt.month]} ${debt.year}`,
+                concept, 
+                `$${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}`, 
+                `Bs. ${formatToTwoDecimals(debtAmountBs)}` 
+            ];
         });
 
-        if (paidDebts.length > 0) {
-            autoTable(doc, { startY: startY, head: [['Período', 'Concepto (Propiedad)', 'Monto ($)', 'Monto Pagado (Bs)']], body: tableBody, theme: 'striped', headStyles: { fillColor: [44, 62, 80], textColor: 255 }, styles: { fontSize: 9, cellPadding: 2.5 } });
-            startY = (doc as any).lastAutoTable.finalY;
-        } else {
+        if (paidDebts.length === 0) {
             totalPaidInConcepts = beneficiary.amount;
-            autoTable(doc, { startY: startY, head: [['Concepto', 'Monto Pagado (Bs)']], body: [['Abono a Saldo a Favor', `Bs. ${formatToTwoDecimals(beneficiary.amount)}`]], theme: 'striped', headStyles: { fillColor: [44, 62, 80], textColor: 255 }, styles: { fontSize: 9, cellPadding: 2.5 } });
-            startY = (doc as any).lastAutoTable.finalY;
+            tableBody.push(['', 'Abono a Saldo a Favor', '', `Bs. ${formatToTwoDecimals(beneficiary.amount)}`]);
         }
-        
-        startY += 8;
 
-        const summaryY = startY;
+        autoTable(doc, { 
+            startY: startY, 
+            head: [['Período', 'Concepto (Propiedad)', 'Monto ($)', 'Monto Pagado (Bs)']], 
+            body: tableBody, 
+            theme: 'striped', 
+            headStyles: { fillColor: [44, 62, 80], textColor: 255 }, 
+            styles: { fontSize: 9, cellPadding: 2.5 },
+            columnStyles: {
+                2: { halign: 'right' },
+                3: { halign: 'right' },
+            }
+        });
+        startY = (doc as any).lastAutoTable.finalY + 10;
+        
+        // 5. Summary and Total
         const rightColX = pageWidth - margin;
         doc.setFontSize(9);
+        
+        doc.text('Saldo a Favor Anterior:', rightColX - 50, startY, { align: 'right' });
+        doc.text(`Bs. ${formatToTwoDecimals(previousBalance)}`, rightColX, startY, { align: 'right' });
+        startY += 5;
+        
+        doc.text('Monto del Pago Recibido:', rightColX - 50, startY, { align: 'right' });
+        doc.text(`Bs. ${formatToTwoDecimals(beneficiary.amount)}`, rightColX, startY, { align: 'right' });
+        startY += 5;
 
-        doc.setFont('helvetica', 'normal').text('Saldo a Favor Anterior:', rightColX - 50, summaryY, { align: 'right' });
-        doc.setFont('helvetica', 'bold').text(`Bs. ${formatToTwoDecimals(previousBalance)}`, rightColX, summaryY, { align: 'right' });
+        doc.text('Total Abonado en Deudas:', rightColX - 50, startY, { align: 'right' });
+        doc.text(`Bs. ${formatToTwoDecimals(totalPaidInConcepts)}`, rightColX, startY, { align: 'right' });
         startY += 5;
-        
-        doc.setFont('helvetica', 'normal').text('Monto del Pago Recibido:', rightColX - 50, startY, { align: 'right' });
-        doc.setFont('helvetica', 'bold').text(`Bs. ${formatToTwoDecimals(beneficiary.amount)}`, rightColX, startY, { align: 'right' });
-        startY += 5;
-        
-        doc.setFont('helvetica', 'normal').text('Total Abonado en Deudas:', rightColX - 50, startY, { align: 'right' });
-        doc.setFont('helvetica', 'bold').text(`Bs. ${formatToTwoDecimals(totalPaidInConcepts)}`, rightColX, startY, { align: 'right' });
-        startY += 5;
-        
-        doc.setFont('helvetica', 'normal').text('Saldo a Favor Actual:', rightColX - 50, startY, { align: 'right' });
-        doc.setFont('helvetica', 'bold').text(`Bs. ${formatToTwoDecimals(currentBalance)}`, rightColX, startY, { align: 'right' });
-        startY += 8;
-        
-        const totalLabel = "TOTAL PAGADO:";
-        const totalValue = `Bs. ${formatToTwoDecimals(beneficiary.amount)}`;
-        doc.setFontSize(11).setFont('helvetica', 'bold');
-        doc.text(totalLabel, rightColX - 50, startY, { align: 'right' });
-        doc.text(totalValue, rightColX, startY, { align: 'right' });
+
+        doc.text('Saldo a Favor Actual:', rightColX - 50, startY, { align: 'right' });
+        doc.text(`Bs. ${formatToTwoDecimals(currentBalance)}`, rightColX, startY, { align: 'right' });
         startY += 8;
 
-        const footerStartY = Math.max(startY, doc.internal.pageSize.getHeight() - 55);
-        startY = footerStartY;
-        
+        doc.setFont('helvetica', 'bold');
+        doc.text('TOTAL PAGADO:', rightColX - 50, startY, { align: 'right' });
+        doc.text(`Bs. ${formatToTwoDecimals(beneficiary.amount)}`, rightColX, startY, { align: 'right' });
+        startY += 10;
+
+        // 6. Footer Notes
+        startY = Math.max(startY, 220); 
+        doc.setFontSize(8).setFont('helvetica', 'normal');
+
         if (payment.observations) {
-            doc.setFontSize(8).setFont('helvetica', 'italic');
-            const splitObservations = doc.splitTextToSize(`Observaciones: ${payment.observations}`, pageWidth - margin * 2);
-            doc.text(splitObservations, margin, startY);
-            startY += (splitObservations.length * 3.5) + 4;
+            const obsText = `Observaciones: ${payment.observations}`;
+            doc.text(obsText, margin, startY);
+            startY += 5;
         }
-        
-        const legalNote = 'Todo propietario que requiera de firma y sello húmedo deberá imprimir éste recibo y hacerlo llegar al condominio para su respectiva estampa.';
-        const splitLegalNote = doc.splitTextToSize(legalNote, pageWidth - (margin * 2));
-        doc.setFontSize(8).setFont('helvetica', 'bold').text(splitLegalNote, margin, startY);
-        startY += (splitLegalNote.length * 3.5) + 2;
 
-        doc.setFontSize(8).setFont('helvetica', 'normal').text('Este recibo confirma que el pago ha sido validado para la(s) cuota(s) y propiedad(es) aquí detalladas.', margin, startY);
+        const note1 = 'Todo propietario que requiera de firma y sello húmedo deberá imprimir éste recibo y hacerlo llegar al condominio para su respectiva estampa.';
+        const note2 = "Este recibo confirma que el pago ha sido validado para la(s) cuota(s) y propiedad(es) aquí detalladas.";
+        const note3 = `Firma electrónica: '${companyInfo.name} - Condominio'`;
+
+        doc.text(note1, margin, startY);
         startY += 4;
-        doc.setFont('helvetica', 'bold').text(`Firma electrónica: '${companyInfo.name} - Condominio'`, margin, startY);
-        startY += 6;
+        doc.text(note2, margin, startY);
+        startY += 4;
+        doc.text(note3, margin, startY);
+        startY += 8;
+
         doc.setLineWidth(0.2).line(margin, startY, pageWidth - margin, startY);
         startY += 4;
-        doc.setFontSize(7).setFont('helvetica', 'italic').text('Este recibo se generó de manera automática y es válido sin firma manuscrita.', pageWidth / 2, startY, { align: 'center'});
+        doc.setFont('helvetica', 'italic').text('Este recibo se generó de manera automatica y es válido sin firma manuscrita.', pageWidth / 2, startY, { align: 'center'});
         
         const pdfOutput = doc.output('blob');
         const pdfFile = new File([pdfOutput], `recibo_${receiptNumber}.pdf`, { type: 'application/pdf' });
@@ -406,21 +432,21 @@ const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptD
         if (action === 'download') {
             doc.save(`recibo_${receiptNumber}.pdf`);
         } else if (navigator.share && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
-            try {
-                await navigator.share({
-                    title: `Recibo de Pago ${data.receiptNumber}`, 
-                    text: `Recibo de pago para ${data.ownerName}.`,
-                    files: [pdfFile],
-                });
-            } catch (error) {
-              console.error('Error al compartir:', error);
-              const url = URL.createObjectURL(pdfFile);
-              window.open(url, '_blank');
-            }
-          } else {
+          try {
+              await navigator.share({
+                  title: `Recibo de Pago ${data.receiptNumber}`, 
+                  text: `Recibo de pago para ${data.ownerName}.`,
+                  files: [pdfFile],
+              });
+          } catch (error) {
+            console.error('Error al compartir:', error);
             const url = URL.createObjectURL(pdfFile);
             window.open(url, '_blank');
           }
+        } else {
+          const url = URL.createObjectURL(pdfFile);
+          window.open(url, '_blank');
+        }
     } catch(error) {
         console.error("Error generating PDF:", error);
         toast({ variant: "destructive", title: "Error", description: "No se pudo generar el documento PDF." });
