@@ -1010,7 +1010,8 @@ function CalculatorTab() {
                     </div>
                     <div className="lg:sticky lg:top-20">
                          {paymentCalculator.hasSelection && (
-                            <Card><CardHeader><CardTitle>4. Resumen de Pago</CardTitle></CardHeader>
+                            <Card>
+                                <CardHeader><CardTitle>4. Resumen de Pago</CardTitle></CardHeader>
                                 <CardContent className="space-y-3">
                                     <div className="flex justify-between"><span>Sub-Total:</span><span>Bs. {formatToTwoDecimals(paymentCalculator.totalDebtBs)}</span></div>
                                     <div className="flex justify-between"><span>Saldo a Favor:</span><span>- Bs. {formatToTwoDecimals(paymentCalculator.balanceInFavor)}</span></div><hr/>
@@ -1018,7 +1019,7 @@ function CalculatorTab() {
                                 </CardContent>
                                 <CardFooter>
                                     <Button className="w-full" onClick={() => router.push('/admin/payments?tab=report')} disabled={!paymentCalculator.hasSelection || paymentCalculator.totalToPay <= 0}>
-                                        Enviar Reporte
+                                        Reportar Pago
                                     </Button>
                                 </CardFooter>
                             </Card>
