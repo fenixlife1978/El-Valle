@@ -126,11 +126,14 @@ export default function OwnerDashboardPage() {
     const [feedbackSent, setFeedbackSent] = useState(false);
     const [lastFeedback, setLastFeedback] = useState<'liked' | 'disliked' | null>(null);
     const [anuncios, setAnuncios] = useState<Anuncio[]>([]);
+    const [now, setNow] = useState<Date | null>(null);
 
     const ownerId = user?.uid;
 
     // Efecto para cargar todos los datos de Firestore
     useEffect(() => {
+        setNow(new Date());
+
         if (authLoading || !ownerId) {
             if (!authLoading) setLoading(false);
             return;
@@ -223,7 +226,18 @@ export default function OwnerDashboardPage() {
             oldestDebtDate = `${monthsLocale[oldest.month]} ${oldest.year}`;
         }
         
-        const today = new Date();
+        if (!now) {
+            return {
+                totalPendingUSD,
+                pendingDebtsCount: pendingDebts.length,
+                lastPayment,
+                isSolvente,
+                oldestDebtDate,
+                isVencida: false
+            };
+        }
+
+        const today = now;
         const firstOfCurrentMonth = startOfMonth(today);
         
         const isVencida = pendingDebts.some(d => {
@@ -245,7 +259,7 @@ export default function OwnerDashboardPage() {
             oldestDebtDate,
             isVencida
         };
-    }, [debts, payments]);
+    }, [debts, payments, now]);
 
     
     // -------------------------------------------------------------------------
