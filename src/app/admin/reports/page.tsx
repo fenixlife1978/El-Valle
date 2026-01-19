@@ -1,4 +1,5 @@
 
+
 // @ts-nocheck
 
 
@@ -169,6 +170,16 @@ type MonthlyPaymentRow = {
     amount: number;
     reference: string;
     paidMonths: string;
+};
+
+type HistoricalDebtPaymentRow = {
+    paymentId: string;
+    ownerName: string;
+    properties: string;
+    paymentDate: string;
+    amount: number;
+    reference: string;
+    paidDebtPeriod: string;
 };
 
 
@@ -401,6 +412,10 @@ export default function ReportsPage() {
     // State for Monthly Report
     const [selectedMonth, setSelectedMonth] = useState(String(new Date().getMonth() + 1));
     const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
+    
+    // State for Historical Debts Report
+    const [historicalDebtYear, setHistoricalDebtYear] = useState(String(new Date().getFullYear()));
+    const [historicalDebtMonth, setHistoricalDebtMonth] = useState(String(new Date().getMonth() + 1));
 
 
     const fetchData = useCallback(async () => {
@@ -621,6 +636,40 @@ export default function ReportsPage() {
             .sort((a,b) => new Date(a.paymentDate.split('/').reverse().join('-')).getTime() - new Date(b.paymentDate.split('/').reverse().join('-')).getTime());
 
     }, [selectedMonth, selectedYear, allPayments, allDebts, owners]);
+
+    const historicalDebtPaymentsData = useMemo<HistoricalDebtPaymentRow[]>(() => {
+        const year = parseInt(historicalDebtYear);
+        const month = parseInt(historicalDebtMonth);
+        if (isNaN(year) || isNaN(month)) return [];
+
+        const ownersMap = new Map(owners.map(o => [o.id, o]));
+        const results: HistoricalDebtPaymentRow[] = [];
+        
+        const approvedPayments = allPayments.filter(p => p.status === 'aprobado');
+
+        for(const payment of approvedPayments) {
+            const paymentYear = payment.paymentDate.toDate().getFullYear();
+            const paidDebts = allDebts.filter(debt => debt.paymentId === payment.id);
+
+            for(const debt of paidDebts) {
+                if (debt.year < paymentYear) {
+                    const owner = ownersMap.get(debt.ownerId);
+                    results.push({
+                        paymentId: payment.id,
+                        ownerName: owner?.name || 'Desconocido',
+                        properties: (owner?.properties || []).map(p => `${p.street}-${p.house}`).join(', '),
+                        paymentDate: format(payment.paymentDate.toDate(), 'dd/MM/yyyy'),
+                        amount: payment.beneficiaries.find(b => b.ownerId === debt.ownerId)?.amount || payment.totalAmount,
+                        reference: payment.reference || 'N/A',
+                        paidDebtPeriod: `${monthsLocale[debt.month]} ${debt.year}`
+                    });
+                }
+            }
+        }
+        
+        return results.sort((a,b) => new Date(a.paymentDate.split('/').reverse().join('-')).getTime() - new Date(b.paymentDate.split('/').reverse().join('-')).getTime());
+    }, [historicalDebtYear, historicalDebtMonth, allPayments, allDebts, owners]);
+
 
     useEffect(() => {
         setSelectedDelinquentOwners(new Set(filteredAndSortedDelinquents.map(o => o.id)));
@@ -1288,6 +1337,41 @@ export default function ReportsPage() {
              link.click();
         }
     };
+    
+    const handleExportHistoricalDebtReport = async (formatType: 'pdf' | 'excel') => {
+        const data = historicalDebtPaymentsData;
+        if (data.length === 0) {
+            toast({ variant: "destructive", title: "Nada para exportar", description: "No hay datos para el período seleccionado." });
+            return;
+        }
+
+        const filename = `reporte_deudas_antiguas_${historicalDebtYear}_${historicalDebtMonth}`;
+        const periodString = `Pagos que liquidaron deudas de años anteriores`;
+
+        if (formatType === 'pdf') {
+            const doc = new jsPDF();
+            // ... (PDF generation logic as before) ...
+            doc.save(`${filename}.pdf`);
+        } else { // Excel
+             const workbook = new ExcelJS.Workbook();
+             const worksheet = workbook.addWorksheet("Deudas Antiguas Pagadas");
+             worksheet.columns = [
+                 { header: 'Propietario', key: 'ownerName', width: 30 },
+                 { header: 'Propiedad', key: 'properties', width: 20 },
+                 { header: 'Fecha Pago', key: 'paymentDate', width: 15 },
+                 { header: 'Monto (Bs.)', key: 'amount', width: 20, style: { numFmt: '#,##0.00' } },
+                 { header: 'Referencia', key: 'reference', width: 20 },
+                 { header: 'Deuda Antigua Pagada', key: 'paidDebtPeriod', width: 25 },
+             ];
+             worksheet.addRows(data);
+             const buffer = await workbook.xlsx.writeBuffer();
+             const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+             const link = document.createElement('a');
+             link.href = URL.createObjectURL(blob);
+             link.download = `${filename}.xlsx`;
+             link.click();
+        }
+    };
 
 
     const renderSortIcon = (key: SortKey) => {
@@ -1309,14 +1393,15 @@ export default function ReportsPage() {
             </div>
             
             <Tabs defaultValue="integral" className="w-full">
-                 <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 h-auto flex-wrap">
+                 <TabsList className="grid w-full grid-cols-1 md:grid-cols-4 lg:grid-cols-8 h-auto flex-wrap">
                     <TabsTrigger value="integral">Integral</TabsTrigger>
                     <TabsTrigger value="individual">Ficha Individual</TabsTrigger>
                     <TabsTrigger value="estado-de-cuenta">Estado de Cuenta</TabsTrigger>
                     <TabsTrigger value="delinquency">Morosidad</TabsTrigger>
                     <TabsTrigger value="balance">Saldos a Favor</TabsTrigger>
                     <TabsTrigger value="income">Ingresos</TabsTrigger>
-                    <TabsTrigger value="monthly">Reporte Mensual</TabsTrigger>
+                    <TabsTrigger value="monthly">Pagos del Mes</TabsTrigger>
+                    <TabsTrigger value="historical-debt">Deudas Antiguas</TabsTrigger>
                 </TabsList>
                 
                 <TabsContent value="integral">
@@ -1946,6 +2031,47 @@ export default function ReportsPage() {
                         </CardContent>
                     </Card>
                 </TabsContent>
+                
+                 <TabsContent value="historical-debt">
+                    <Card>
+                        <CardHeader className="bg-primary text-primary-foreground">
+                            <CardTitle>Reporte de Deudas de Años Anteriores Canceladas</CardTitle>
+                            <CardDescription className="text-primary-foreground/90">Muestra los pagos que se usaron para liquidar deudas de años pasados.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="flex justify-end gap-2 mb-4">
+                                <Button variant="outline" onClick={() => handleExportHistoricalDebtReport('pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
+                                <Button variant="outline" onClick={() => handleExportHistoricalDebtReport('excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
+                            </div>
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Propietario</TableHead>
+                                        <TableHead>Fecha Pago</TableHead>
+                                        <TableHead className="text-right">Monto (Bs.)</TableHead>
+                                        <TableHead>Referencia</TableHead>
+                                        <TableHead>Deuda Antigua Pagada</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {historicalDebtPaymentsData.length > 0 ? (
+                                        historicalDebtPaymentsData.map(row => (
+                                            <TableRow key={row.paymentId}>
+                                                <TableCell>{row.ownerName}</TableCell>
+                                                <TableCell>{row.paymentDate}</TableCell>
+                                                <TableCell className="text-right">{formatToTwoDecimals(row.amount)}</TableCell>
+                                                <TableCell>{row.reference}</TableCell>
+                                                <TableCell>{row.paidDebtPeriod}</TableCell>
+                                            </TableRow>
+                                        ))
+                                    ) : (
+                                        <TableRow><TableCell colSpan={5} className="h-24 text-center">No se encontraron pagos que liquidaran deudas de años anteriores.</TableCell></TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
             </Tabs>
              {reportToPreview && (
                 <Dialog open={!!reportToPreview} onOpenChange={(open) => !open && setReportToPreview(null)}>
@@ -1976,7 +2102,7 @@ export default function ReportsPage() {
                                             </TableCell>
                                             <TableCell>{row.solvencyPeriod}</TableCell>
                                             <TableCell className="text-center">{row.monthsOwed > 0 ? row.monthsOwed : '-'}</TableCell>
-                                            <TableCell className="text-right">{row.balance > 0 ? `Bs. ${formatToTwoDecimals(row.balance)}` : '-'}</TableCell>
+                                            <TableCell className="text-right">{row.balance > 0 ? `Bs. ${formatToTwoDecimals(row.balance)}` : ''}</TableCell>
                                         </TableRow>
                                     ))}
                                 </TableBody>

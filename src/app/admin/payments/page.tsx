@@ -12,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
-import { CalendarIcon, CheckCircle2, Trash2, PlusCircle, Loader2, Search, XCircle, Wand2, UserPlus, Banknote, Info, Receipt, Calculator, Minus, Equal, Check, MoreHorizontal, Filter, Eye, AlertTriangle, Paperclip, Upload, DollarSign, ChevronDown, Save, FileUp, Hash } from 'lucide-react';
+import { CalendarIcon, CheckCircle2, Trash2, PlusCircle, Loader2, Search, XCircle, Wand2, UserPlus, Banknote, Info, Receipt, Calculator, Minus, Equal, Check, MoreHorizontal, Filter, Eye, AlertTriangle, Paperclip, Upload, DollarSign, ChevronDown, Save, FileUp, Hash, Share2, Download } from 'lucide-react';
 import { format, parseISO, isBefore, startOfMonth, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn, compressImage } from '@/lib/utils';
@@ -35,6 +35,7 @@ import Decimal from 'decimal.js';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
+import { Separator } from '@/components/ui/separator';
 
 
 // --- Type Definitions (Shared) ---
@@ -59,7 +60,7 @@ type ReceiptData = { payment: FullPayment; beneficiary: Beneficiary; ownerName: 
 // --- Constants ---
 const ADMIN_USER_ID = 'valle-admin-main-account';
 const monthsLocale: { [key: number]: string } = { 1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril', 5: 'Mayo', 6: 'Junio', 7: 'Julio', 8: 'Agosto', 9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre' };
-const venezuelanBanks = [ { value: 'banesco', label: 'Banesco' }, { value: 'mercantil', label: 'Mercantil' }, { value: 'provincial', label: 'Provincial' }, { value: 'bdv', label: 'Banco de Venezuela' }, { value: 'bnc', label: 'Banco Nacional de Crédito (BNC)' }, { value: 'tesoro', label: 'Banco del Tesoro' }, { value: 'otro', label: 'Otro' }];
+const venezuelanBanks = [ { value: 'banesco', label: 'Banesco' }, { value: 'mercantil', label: 'Mercantil' }, { value: 'provincial', label: 'Provincial' }, { value: 'bdv', label: 'Banco de Venezuela' }, { value: 'bnc', label: 'Banco Nacional de Crédito (BNC)' }, { value: 'otro', label: 'Otro' }];
 const statusVariantMap: { [key in PaymentStatus]: 'warning' | 'success' | 'destructive' } = { pendiente: 'warning', aprobado: 'success', rechazado: 'destructive' };
 const statusTextMap: { [key in PaymentStatus]: string } = { pendiente: 'Pendiente', aprobado: 'Aprobado', rechazado: 'Rechazado' };
 const formatToTwoDecimals = (num: number) => { if (typeof num !== 'number' || isNaN(num)) return '0,00'; const truncated = Math.trunc(num * 100) / 100; return truncated.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
@@ -299,6 +300,48 @@ function VerifyPaymentsTab() {
             }
         });
     };
+    
+    const handlePreviewReceipt = async (payment: FullPayment) => {
+        if (!companyInfo) {
+            toast({ variant: "destructive", title: "Error", description: "Datos de la compañía no cargados." });
+            return;
+        }
+
+        // For simplicity in admin preview, we only show for single beneficiary payments
+        if (payment.beneficiaries.length > 1) {
+            toast({ variant: "info", title: "Función no disponible", description: "La vista previa de recibos es para pagos con un solo beneficiario." });
+            return;
+        }
+        const beneficiary = payment.beneficiaries[0];
+        const owner = ownersMap.get(beneficiary.ownerId);
+        if (!owner) {
+            toast({ variant: "destructive", title: "Error", description: "No se encontró al propietario." });
+            return;
+        }
+
+        try {
+            const paidDebtsSnapshot = await getDocs(
+                query(collection(db, 'debts'), where('paymentId', '==', payment.id), where('ownerId', '==', beneficiary.ownerId))
+            );
+            const paidDebts = paidDebtsSnapshot.docs.map(d => d.data() as Debt);
+            const totalDebtPaidWithPayment = paidDebts.reduce((sum, debt) => sum + ((debt.paidAmountUSD || debt.amountUSD) * payment.exchangeRate), 0);
+            const previousBalance = (owner.balance || 0) - (beneficiary.amount - totalDebtPaidWithPayment);
+            const receiptNumber = payment.receiptNumbers?.[beneficiary.ownerId] || `N/A-${payment.id.slice(-5)}`;
+            const qrCodeUrl = await QRCode.toDataURL(JSON.stringify({ receiptNumber, date: format(new Date(), 'yyyy-MM-dd'), ownerId: beneficiary.ownerId }), { errorCorrectionLevel: 'M', margin: 2, scale: 4 });
+
+            setReceiptData({
+                payment, beneficiary, ownerName: owner.name,
+                ownerUnit: `${owner.properties?.[0]?.street} - ${owner.properties?.[0]?.house}`,
+                paidDebts: paidDebts.sort((a,b) => a.year - b.year || a.month - b.month),
+                previousBalance, currentBalance: owner.balance || 0,
+                receiptNumber, qrCodeUrl
+            });
+            setIsReceiptPreviewOpen(true);
+        } catch (error) {
+            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo generar la vista previa del recibo.' });
+        }
+    };
+
 
     const filteredPayments = payments.filter(p => filter === 'todos' || p.status === filter);
     
@@ -335,7 +378,8 @@ function VerifyPaymentsTab() {
                                     <DropdownMenu>
                                         <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                                         <DropdownMenuContent align="end">
-                                             {payment.receiptUrl && <DropdownMenuItem onClick={() => setReceiptImageToView(payment.receiptUrl!)}><Paperclip className="mr-2 h-4 w-4" /> Ver Comprobante</DropdownMenuItem>}
+                                             {payment.status === 'aprobado' && <DropdownMenuItem onClick={() => handlePreviewReceipt(payment)}><Eye className="mr-2 h-4 w-4" />Ver Recibo</DropdownMenuItem>}
+                                             {payment.receiptUrl && <DropdownMenuItem onClick={() => setReceiptImageToView(payment.receiptUrl!)}><Paperclip className="mr-2 h-4 w-4" /> Ver Comprobante Adjunto</DropdownMenuItem>}
                                             {payment.status === 'pendiente' && (
                                                 <>
                                                     <DropdownMenuItem onClick={() => handleStatusChange(payment.id, 'aprobado')}><CheckCircle2 className="mr-2 h-4 w-4 text-green-500" />Aprobar</DropdownMenuItem>
@@ -366,6 +410,52 @@ function VerifyPaymentsTab() {
             </Dialog>
             <Dialog open={!!receiptImageToView} onOpenChange={() => setReceiptImageToView(null)}>
                 <DialogContent className="max-w-3xl"><DialogHeader><DialogTitle>Comprobante de Pago</DialogTitle></DialogHeader><div className="p-4 flex justify-center"><img src={receiptImageToView!} alt="Comprobante de pago" className="max-w-full max-h-[80vh] object-contain"/></div></DialogContent>
+            </Dialog>
+            <Dialog open={isReceiptPreviewOpen} onOpenChange={setIsReceiptPreviewOpen}>
+                 <DialogContent className="sm:max-w-2xl">
+                    {receiptData ? (
+                        <>
+                            <DialogHeader>
+                                <DialogTitle className="flex items-center gap-2">
+                                    <Receipt className="text-primary"/> Recibo de Pago N°: {receiptData.receiptNumber}
+                                </DialogTitle>
+                            </DialogHeader>
+                            <div className="space-y-4 max-h-[60vh] overflow-y-auto p-4 border rounded-lg">
+                                <div className="text-sm">
+                                    <p><strong>Beneficiario:</strong> {receiptData.ownerName}</p>
+                                    <p><strong>Propiedad:</strong> {receiptData.ownerUnit}</p>
+                                    <p><strong>Fecha del Pago:</strong> {format(receiptData.payment.paymentDate.toDate(), 'dd/MM/yyyy')}</p>
+                                </div>
+                                <Separator/>
+                                <h4 className="font-semibold mb-2">Conceptos Pagados</h4>
+                                    {receiptData.paidDebts.length > 0 ? (
+                                        <Table>
+                                            <TableHeader><TableRow><TableHead>Período</TableHead><TableHead>Descripción</TableHead><TableHead className="text-right">Monto (Bs)</TableHead></TableRow></TableHeader>
+                                            <TableBody>
+                                                {receiptData.paidDebts.map(debt => (
+                                                    <TableRow key={debt.id}>
+                                                        <TableCell>{monthsLocale[debt.month]} {debt.year}</TableCell>
+                                                        <TableCell>{debt.description}</TableCell>
+                                                        <TableCell className="text-right">{formatToTwoDecimals((debt.paidAmountUSD || debt.amountUSD) * receiptData.payment.exchangeRate)}</TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    ) : (<p className="text-xs italic text-muted-foreground">El pago fue abonado al saldo a favor.</p>)}
+                            </div>
+                            <DialogFooter>
+                                <Button className="w-full sm:w-auto" onClick={() => {}}>
+                                    <Download className="h-4 w-4 mr-2"/>
+                                    Descargar PDF
+                                </Button>
+                            </DialogFooter>
+                        </>
+                    ) : (
+                          <div className="flex items-center justify-center p-8">
+                                <Loader2 className="h-8 w-8 animate-spin" />
+                          </div>
+                    )}
+                </DialogContent>
             </Dialog>
         </Card>
     );
@@ -514,7 +604,7 @@ function ReportPaymentTab() {
     };
 
     return (
-         <Card className="w-full max-w-4xl rounded-3xl overflow-hidden shadow-2xl border-2 border-white">
+         <Card className="w-full max-w-4xl rounded-lg border-2 border-white overflow-hidden shadow-2xl">
             <CardHeader className="bg-primary text-primary-foreground p-4 flex flex-row items-center justify-between">
                  <div className="flex items-center gap-3">
                     <Banknote className="w-7 h-7" />
