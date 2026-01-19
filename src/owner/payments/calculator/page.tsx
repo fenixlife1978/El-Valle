@@ -1,3 +1,5 @@
+
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -63,7 +65,12 @@ export default function OwnerPaymentCalculatorPage() {
     const [processingPayment, setProcessingPayment] = useState(false);
     const [paymentDetails, setPaymentDetails] = useState<PaymentDetails>({ paymentMethod: '', bank: '', otherBank: '', reference: '' });
 
+    const [now, setNow] = useState<Date | null>(null);
     const { toast } = useToast();
+    
+    useEffect(() => {
+        setNow(new Date());
+    }, []);
 
     useEffect(() => {
         if (authLoading || !user || !ownerData) return;
@@ -87,7 +94,7 @@ export default function OwnerPaymentCalculatorPage() {
         const debtsUnsubscribe = onSnapshot(debtsQuery, (snapshot) => {
             const debtsData: Debt[] = [];
             snapshot.forEach(d => debtsData.push({ id: d.id, ...d.data() } as Debt));
-            setOwnerDebts(debtsData.sort((a, b) => a.year - a.year || a.month - b.month));
+            setOwnerDebts(debtsData.sort((a, b) => a.year - b.year || a.month - b.month));
             setLoadingDebts(false);
         });
 
@@ -113,12 +120,13 @@ export default function OwnerPaymentCalculatorPage() {
     };
     
     const futureMonths = useMemo(() => {
+        if (!now) return [];
         const paidAdvanceMonths = ownerDebts
             .filter(d => d.status === 'paid' && d.description.includes('Adelantado'))
             .map(d => `${d.year}-${String(d.month).padStart(2, '0')}`);
 
         return Array.from({ length: 12 }, (_, i) => {
-            const date = addMonths(new Date(), i);
+            const date = addMonths(now, i);
             const value = format(date, 'yyyy-MM');
             return {
                 value,
@@ -126,7 +134,7 @@ export default function OwnerPaymentCalculatorPage() {
                 disabled: paidAdvanceMonths.includes(value),
             };
         });
-    }, [ownerDebts]);
+    }, [ownerDebts, now]);
 
 
     const paymentCalculator = useMemo(() => {

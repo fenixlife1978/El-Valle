@@ -12,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
-import { CalendarIcon, CheckCircle2, Trash2, PlusCircle, Loader2, Search, XCircle, Wand2, UserPlus, Banknote, Info, Receipt, Calculator, Minus, Equal, Check, MoreHorizontal, Filter, Eye, AlertTriangle, Paperclip, Upload, DollarSign, ChevronDown, Save } from 'lucide-react';
+import { CalendarIcon, CheckCircle2, Trash2, PlusCircle, Loader2, Search, XCircle, Wand2, UserPlus, Banknote, Info, Receipt, Calculator, Minus, Equal, Check, MoreHorizontal, Filter, Eye, AlertTriangle, Paperclip, Upload, DollarSign, ChevronDown, Save, FileUp, Hash } from 'lucide-react';
 import { format, parseISO, isBefore, startOfMonth, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn, compressImage } from '@/lib/utils';
@@ -375,10 +375,12 @@ function VerifyPaymentsTab() {
 // REPORT PAYMENT COMPONENT
 // ===================================================================================
 function ReportPaymentTab() {
+    const router = useRouter();
     const { toast } = useToast();
-    const { user: authUser } = useAuth();
+    const { user: authUser, ownerData: authOwnerData } = useAuth();
     const [allOwners, setAllOwners] = useState<Owner[]>([]);
     const [loading, setLoading] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const [paymentDate, setPaymentDate] = useState<Date | undefined>(new Date());
     const [exchangeRate, setExchangeRate] = useState<number | null>(null);
     const [exchangeRateMessage, setExchangeRateMessage] = useState('');
@@ -392,14 +394,10 @@ function ReportPaymentTab() {
     const [isBankModalOpen, setIsBankModalOpen] = useState(false);
     const [isInfoDialogOpen, setIsInfoDialogOpen] = useState(false);
     const [receiptImage, setReceiptImage] = useState<string | null>(null);
-    const [isSubmitting, setIsSubmitting] = useState(false);
-
     const [openSections, setOpenSections] = useState({ details: true, beneficiaries: true });
 
-
     useEffect(() => {
-        setPaymentDate(new Date());
-        const q = query(collection(db, "owners"));
+        const q = query(collection(db, "owners"), where("role", "==", "propietario"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const ownersData: Owner[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner));
             setAllOwners(ownersData.sort((a, b) => (a.name || '').localeCompare(b.name || '')));
@@ -407,6 +405,19 @@ function ReportPaymentTab() {
         return () => unsubscribe();
     }, []);
 
+    useEffect(() => {
+        setPaymentDate(new Date());
+        if (authOwnerData) {
+            setBeneficiaryRows([{
+                id: Date.now().toString(),
+                owner: { id: authUser!.uid, name: authOwnerData.name, properties: authOwnerData.properties },
+                searchTerm: '',
+                amount: '',
+                selectedProperty: authOwnerData.properties?.[0] || null
+            }]);
+        }
+    }, [authOwnerData, authUser]);
+    
     useEffect(() => {
         const fetchRate = async () => {
              try {
@@ -442,10 +453,6 @@ function ReportPaymentTab() {
         }
     }, [totalAmount, exchangeRate]);
 
-    useEffect(() => {
-        setBeneficiaryRows([{ id: Date.now().toString(), owner: null, searchTerm: '', amount: '', selectedProperty: null }]);
-    }, []);
-    
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -484,16 +491,16 @@ function ReportPaymentTab() {
         return allOwners.filter(owner => owner.name?.toLowerCase().includes(searchTerm.toLowerCase()));
     };
     const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault(); setLoading(true);
+        e.preventDefault(); setIsSubmitting(true);
         const validationResult = await validateForm();
-        if (!validationResult.isValid) { toast({ variant: 'destructive', title: 'Error de Validación', description: validationResult.error, duration: 6000 }); setLoading(false); return; }
+        if (!validationResult.isValid) { toast({ variant: 'destructive', title: 'Error de Validación', description: validationResult.error, duration: 6000 }); setIsSubmitting(false); return; }
         try {
             const beneficiaries = beneficiaryRows.map(row => ({ ownerId: row.owner!.id, ownerName: row.owner!.name, ...(row.selectedProperty || {}), amount: Number(row.amount) }));
             const paymentData = { paymentDate: Timestamp.fromDate(paymentDate!), exchangeRate, paymentMethod, bank: bank === 'Otro' ? otherBank : bank, reference, totalAmount: Number(totalAmount), beneficiaries, beneficiaryIds: Array.from(new Set(beneficiaries.map(b => b.ownerId))), status: 'pendiente', reportedAt: serverTimestamp(), reportedBy: authUser?.uid || 'unknown_admin', receiptUrl: receiptImage };
             await addDoc(collection(db, "payments"), paymentData);
             resetForm(); setIsInfoDialogOpen(true);
         } catch (error) { console.error("Error submitting payment:", error); toast({ variant: "destructive", title: "Error Inesperado", description: "No se pudo enviar el reporte." });
-        } finally { setLoading(false); }
+        } finally { setIsSubmitting(false); }
     };
     const validateForm = async (): Promise<{ isValid: boolean, error?: string }> => {
         if (!paymentDate || !exchangeRate || !paymentMethod || !bank || !totalAmount || Number(totalAmount) <= 0 || reference.length < 4) return { isValid: false, error: 'Por favor, complete todos los campos de la transacción (referencia min. 4 dígitos).' };
@@ -507,11 +514,11 @@ function ReportPaymentTab() {
     };
 
     return (
-        <Card className="w-full max-w-4xl bg-background border-4 border-white rounded-3xl overflow-hidden shadow-2xl">
+         <Card className="w-full max-w-4xl border-4 border-white rounded-3xl overflow-hidden shadow-2xl">
             <CardHeader className="bg-primary text-primary-foreground p-4 flex flex-row items-center justify-between">
                  <div className="flex items-center gap-3">
                     <Banknote className="w-7 h-7" />
-                    <CardTitle>Reportar Pago por Propietario</CardTitle>
+                    <CardTitle>Reportar Pago</CardTitle>
                 </div>
             </CardHeader>
             <form onSubmit={handleSubmit}>
@@ -536,7 +543,7 @@ function ReportPaymentTab() {
                                         <Label htmlFor="receipt">Comprobante de Pago (Opcional)</Label>
                                         <Input id="receipt" type="file" accept="image/png, image/jpeg" onChange={handleImageUpload} disabled={loading}/>
                                         {receiptImage && (
-                                            <div className="mt-2 relative w-32 h-32 border p-1 rounded-md">
+                                            <div className="mt-2 relative w-32 h-32 border p-1 rounded-lg">
                                                 <img src={receiptImage} alt="Vista previa del comprobante" className="w-full h-full object-contain" />
                                                 <Button variant="destructive" size="icon" className="absolute -top-2 -right-2 h-6 w-6 rounded-full" onClick={() => setReceiptImage(null)}>
                                                     <XCircle className="h-4 w-4" />
@@ -576,8 +583,8 @@ function ReportPaymentTab() {
                                             <Card key={row.id} className="p-4 bg-muted/50 relative">
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                     <div className="space-y-2"><Label htmlFor={`search-${row.id}`}>Beneficiario {index + 1}</Label>
-                                                        {!row.owner ? (<><div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input id={`search-${row.id}`} placeholder="Buscar por nombre..." className="pl-9" value={row.searchTerm} onChange={(e) => updateBeneficiaryRow(row.id, { searchTerm: e.target.value })} disabled={loading} /></div>{row.searchTerm.length >= 3 && getFilteredOwners(row.searchTerm).length > 0 && <Card className="border rounded-md"><ScrollArea className="h-32">{getFilteredOwners(row.searchTerm).map(owner => (<div key={owner.id} onClick={() => handleOwnerSelect(row.id, owner)} className="p-2 hover:bg-muted cursor-pointer border-b last:border-b-0"><p className="font-medium text-sm">{owner.name}</p></div>))}</ScrollArea></Card>}</>)
-                                                        : (<div className="p-3 bg-background rounded-md flex items-center justify-between"><div><p className="font-semibold text-primary">{row.owner.name}</p></div><Button variant="ghost" size="icon" onClick={() => updateBeneficiaryRow(row.id, { owner: null, selectedProperty: null })} disabled={loading}><XCircle className="h-5 w-5 text-destructive" /></Button></div>)}
+                                                        {!row.owner ? (<><div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input id={`search-${row.id}`} placeholder="Buscar por nombre..." className="pl-9" value={row.searchTerm} onChange={(e) => updateBeneficiaryRow(row.id, { searchTerm: e.target.value })} disabled={loading} /></div>{row.searchTerm.length >= 3 && getFilteredOwners(row.searchTerm).length > 0 && <Card className="border rounded-lg"><ScrollArea className="h-32">{getFilteredOwners(row.searchTerm).map(owner => (<div key={owner.id} onClick={() => handleOwnerSelect(row.id, owner)} className="p-2 hover:bg-muted cursor-pointer border-b last:border-b-0"><p className="font-medium text-sm">{owner.name}</p></div>))}</ScrollArea></Card>}</>)
+                                                        : (<div className="p-3 bg-background rounded-lg flex items-center justify-between"><div><p className="font-semibold text-primary">{row.owner.name}</p></div><Button variant="ghost" size="icon" onClick={() => updateBeneficiaryRow(row.id, { owner: null, selectedProperty: null })} disabled={loading}><XCircle className="h-5 w-5 text-destructive" /></Button></div>)}
                                                     </div>
                                                     <div className="space-y-2"><Label htmlFor={`amount-${row.id}`}>Monto Asignado (Bs.)</Label><Input id={`amount-${row.id}`} type="number" placeholder="0.00" value={row.amount} onChange={(e) => updateBeneficiaryRow(row.id, { amount: e.target.value })} disabled={loading || !row.owner} /></div>
                                                 </div>
@@ -600,7 +607,7 @@ function ReportPaymentTab() {
                     <Button type="button" variant="ghost" className="text-muted-foreground hover:text-white" onClick={resetForm} disabled={isSubmitting}>
                         CANCELAR
                     </Button>
-                    <Button type="submit" className="bg-primary hover:bg-primary/90 text-primary-foreground px-6 py-6 text-base font-bold" disabled={isSubmitting}>
+                    <Button type="submit" className="bg-primary hover:bg-primary/90 text-primary-foreground px-6 py-6 text-base font-bold rounded-xl" disabled={isSubmitting}>
                         {isSubmitting ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Save className="mr-2 h-5 w-5" />}
                         Enviar Reporte
                     </Button>
@@ -651,7 +658,7 @@ function CalculatorTab() {
             } finally { setLoading(false); }
         };
         fetchPrerequisites();
-    }, [toast]);
+    }, []);
 
     const filteredOwners = useMemo(() => {
         if (!searchTerm || searchTerm.length < 3) return [];
@@ -665,7 +672,7 @@ function CalculatorTab() {
             const querySnapshot = await getDocs(q);
             const debtsData: Debt[] = [];
             querySnapshot.forEach((doc) => debtsData.push({ id: doc.id, ...doc.data() } as Debt));
-            setOwnerDebts(debtsData.sort((a, b) => a.year - a.year || a.month - b.month));
+            setOwnerDebts(debtsData.sort((a, b) => a.year - b.year || a.month - b.month));
         } catch (error) { toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron cargar las deudas.' });
         } finally { setLoadingDebts(false); }
     };
@@ -706,7 +713,7 @@ function CalculatorTab() {
                         <Card><CardHeader><CardTitle>1. Buscar Propietario</CardTitle></CardHeader>
                             <CardContent>
                                 <div className="relative mt-2"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Buscar por nombre..." className="pl-9" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
-                                 {searchTerm.length >= 3 && filteredOwners.length > 0 && <Card className="border rounded-md mt-2"><ScrollArea className="h-48">{filteredOwners.map(owner => (<div key={owner.id} onClick={() => handleSelectOwner(owner)} className="p-3 hover:bg-muted cursor-pointer border-b last:border-b-0"><p className="font-medium">{owner.name}</p></div>))}</ScrollArea></Card>}
+                                 {searchTerm.length >= 3 && filteredOwners.length > 0 && <Card className="border rounded-lg mt-2"><ScrollArea className="h-48">{filteredOwners.map(owner => (<div key={owner.id} onClick={() => handleSelectOwner(owner)} className="p-3 hover:bg-muted cursor-pointer border-b last:border-b-0"><p className="font-medium">{owner.name}</p></div>))}</ScrollArea></Card>}
                                 {selectedOwner && <Card className="bg-muted/50 p-4 mt-4"><p className="font-semibold text-primary">{selectedOwner.name}</p></Card>}
                             </CardContent>
                         </Card>
