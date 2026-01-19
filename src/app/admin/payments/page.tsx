@@ -410,7 +410,7 @@ function ReportPaymentTab() {
         if (authOwnerData) {
             setBeneficiaryRows([{
                 id: Date.now().toString(),
-                owner: { id: authUser!.uid, name: authOwnerData.name, properties: authOwnerData.properties },
+                owner: { id: authUser!.uid, name: authOwnerData.name, properties: authOwnerData.properties, balance: authOwnerData.balance },
                 searchTerm: '',
                 amount: '',
                 selectedProperty: authOwnerData.properties?.[0] || null
@@ -658,7 +658,7 @@ function CalculatorTab() {
             } finally { setLoading(false); }
         };
         fetchPrerequisites();
-    }, []);
+    }, [toast]);
 
     const filteredOwners = useMemo(() => {
         if (!searchTerm || searchTerm.length < 3) return [];
@@ -677,7 +677,7 @@ function CalculatorTab() {
         } finally { setLoadingDebts(false); }
     };
     
-    const pendingDebts = useMemo(() => ownerDebts.filter(d => d.status === 'pending' || d.status === 'vencida').sort((a, b) => a.year - a.year || a.month - b.month), [ownerDebts]);
+    const pendingDebts = useMemo(() => ownerDebts.filter(d => d.status === 'pending' || d.status === 'vencida').sort((a, b) => a.year - b.year || a.month - b.month), [ownerDebts]);
     const handlePendingDebtSelection = (debtId: string) => {
         setSelectedPendingDebts(prev => prev.includes(debtId) ? prev.filter(id => id !== debtId) : [...prev, debtId]);
     };
@@ -702,7 +702,7 @@ function CalculatorTab() {
         return { totalToPay, hasSelection: selectedPendingDebts.length > 0 || selectedAdvanceMonths.length > 0, dueMonthsCount: selectedPendingDebts.length, advanceMonthsCount: selectedAdvanceMonths.length, totalDebtBs, balanceInFavor: selectedOwner.balance, condoFee };
     }, [selectedPendingDebts, selectedAdvanceMonths, pendingDebts, activeRate, condoFee, selectedOwner]);
     
-    if (loading) return <div className="flex justify-center items-center h-64"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>;
+    if (loading || !now) return <div className="flex justify-center items-center h-64"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>;
 
     return (
         <Card>
