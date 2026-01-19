@@ -222,7 +222,7 @@ const CertificateForm = ({
   return (
     <div className="space-y-6">
       <Card className="bg-muted/50">
-        <CardHeader className="bg-primary text-primary-foreground"><CardTitle className="text-lg flex items-center gap-2"><User className="h-5 w-5" />1. Destinatario</CardTitle></CardHeader>
+        <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl"><CardTitle className="text-lg flex items-center gap-2"><User className="h-5 w-5" />1. Destinatario</CardTitle></CardHeader>
         <CardContent>
           <RadioGroup defaultValue="search" value={entryMode} onValueChange={(v) => setEntryMode(v as 'search' | 'manual')} className="mb-4 flex gap-4">
             <div className="flex items-center space-x-2"><RadioGroupItem value="search" id={`r1-${template.id}`} /><Label htmlFor={`r1-${template.id}`}>Buscar Propietario</Label></div>
@@ -236,11 +236,11 @@ const CertificateForm = ({
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input placeholder="Buscar por nombre..." className="pl-9" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
                   </div>
-                  {filteredOwners.length > 0 && <Card className="mt-2 border rounded-md"><ScrollArea className="h-40">{filteredOwners.map((owner) => <div key={owner.id} onClick={() => handleSelectOwner(owner)} className="p-3 hover:bg-background cursor-pointer border-b last:border-b-0"><p className="font-medium">{owner.name}</p></div>)}</ScrollArea></Card>}
+                  {filteredOwners.length > 0 && <Card className="mt-2 border rounded-lg"><ScrollArea className="h-40">{filteredOwners.map((owner) => <div key={owner.id} onClick={() => handleSelectOwner(owner)} className="p-3 hover:bg-background cursor-pointer border-b last:border-b-0"><p className="font-medium">{owner.name}</p></div>)}</ScrollArea></Card>}
                 </>
               ) : (
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between p-3 bg-background rounded-md">
+                  <div className="flex items-center justify-between p-3 bg-background rounded-lg">
                     <div><p className="font-semibold text-primary">{selectedOwner.name}</p><p className="text-sm text-muted-foreground">C.I: {selectedOwner.cedula || 'No registrada'}</p></div>
                     <Button variant="ghost" size="icon" onClick={() => { setSelectedOwner(null); setSelectedProperty(null); setManualCedulaForOwner(''); }}><XCircle className="h-5 w-5 text-destructive" /></Button>
                   </div>
@@ -260,14 +260,14 @@ const CertificateForm = ({
         </CardContent>
       </Card>
       <Card className="bg-muted/50">
-        <CardHeader className="bg-primary text-primary-foreground"><CardTitle className="text-lg flex items-center gap-2"><Stamp className="h-5 w-5" />2. Contenido</CardTitle></CardHeader>
+        <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl"><CardTitle className="text-lg flex items-center gap-2"><Stamp className="h-5 w-5" />2. Contenido</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           {template.id === 'remodelacion' && <div className="space-y-2"><Label htmlFor="additional-info">Descripción de los Trabajos</Label><Textarea id="additional-info" value={additionalInfo} onChange={(e) => setAdditionalInfo(e.target.value)} placeholder="Ej: Cambio de cerámica en el baño principal..." /></div>}
-          <div className="p-4 border bg-background rounded-md">
+          <div className="p-4 border bg-background rounded-lg">
             <h4 className="font-semibold mb-2">Cuerpo del Documento (Editable)</h4>
             <Textarea value={certificateBody} onChange={(e) => setCertificateBody(e.target.value)} rows={10} className="text-sm" />
           </div>
-          <div className="p-3 bg-blue-100/50 border border-blue-300 rounded-md text-sm text-blue-800 flex items-start gap-2"><Info className="h-4 w-4 mt-0.5 shrink-0" /><span>El documento final incluirá el encabezado oficial, título y firma.</span></div>
+          <div className="p-3 bg-blue-100/50 border border-blue-300 rounded-lg text-sm text-blue-800 flex items-start gap-2"><Info className="h-4 w-4 mt-0.5 shrink-0" /><span>El documento final incluirá el encabezado oficial, título y firma.</span></div>
         </CardContent>
         <CardFooter>
             <Button onClick={handleGenerateClick} disabled={isSubmitting || !certificateBody}>
@@ -449,7 +449,7 @@ export default function CertificatesPage() {
         </TabsList>
         <TabsContent value="history" className="mt-4">
             <Card>
-                <CardHeader className="bg-primary text-primary-foreground">
+                <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl">
                     <CardTitle>Historial de Constancias</CardTitle>
                     <CardDescription className="text-primary-foreground/90">Busque y gestione todas las constancias y solicitudes.</CardDescription>
                 </CardHeader>

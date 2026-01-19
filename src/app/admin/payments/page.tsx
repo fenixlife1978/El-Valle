@@ -524,7 +524,7 @@ function VerifyPaymentsTab() {
     
     return (
         <Card>
-            <CardHeader className="bg-primary text-primary-foreground">
+            <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl">
                 <div className="flex justify-between items-center">
                     <CardTitle>Pagos Registrados</CardTitle>
                     <DropdownMenu>
@@ -785,8 +785,8 @@ function ReportPaymentTab() {
     };
 
     return (
-         <Card className="w-full max-w-4xl border-2 border-white overflow-hidden shadow-2xl">
-            <CardHeader className="bg-primary text-primary-foreground p-4 flex flex-row items-center justify-between">
+         <Card className="w-full max-w-4xl border-2 border-white overflow-hidden shadow-2xl rounded-2xl">
+            <CardHeader className="bg-primary text-primary-foreground p-4 flex flex-row items-center justify-between rounded-t-2xl">
                  <div className="flex items-center gap-3">
                     <Banknote className="w-7 h-7" />
                     <CardTitle>Reportar Pago</CardTitle>
@@ -909,7 +909,9 @@ function CalculatorTab() {
     const [selectedAdvanceMonths, setSelectedAdvanceMonths] = useState<string[]>([]);
     
     useEffect(() => {
-        setNow(new Date());
+        const today = new Date();
+        setNow(today);
+
         const fetchPrerequisites = async () => {
             setLoading(true);
             try {
@@ -977,7 +979,7 @@ function CalculatorTab() {
 
     return (
         <Card>
-            <CardHeader className="bg-primary text-primary-foreground">
+            <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl">
                 <CardTitle>Calculadora de Pagos de Propietarios</CardTitle>
                 <CardDescription className="text-primary-foreground/90">Calcule y registre pagos de deudas y adelantos.</CardDescription>
             </CardHeader>

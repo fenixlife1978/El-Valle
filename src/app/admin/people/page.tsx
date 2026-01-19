@@ -338,7 +338,7 @@ export default function OwnersManagement() {
             </div>
             
             <Card>
-                <CardHeader className="bg-primary text-primary-foreground">
+                <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl">
                     <CardTitle>Listas de Usuarios</CardTitle>
                     <div className="flex justify-between items-center gap-4">
                         <CardDescription className="text-primary-foreground/90">Filtre y gestione propietarios y administradores por separado.</CardDescription>

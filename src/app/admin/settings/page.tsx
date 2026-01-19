@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -177,7 +178,7 @@ export default function SettingsPage() {
 
                 <TabsContent value="company">
                     <Card>
-                        <CardHeader className="bg-primary text-primary-foreground"><CardTitle>Información</CardTitle></CardHeader>
+                        <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl"><CardTitle>Información</CardTitle></CardHeader>
                         <CardContent className="space-y-4">
                             <div className="flex items-center gap-4">
                                 {settings.companyInfo.logo && <img src={settings.companyInfo.logo} alt="Logo" className="w-20 h-20 object-contain"/>}
@@ -220,7 +221,7 @@ export default function SettingsPage() {
 
                 <TabsContent value="rates">
                     <Card>
-                        <CardHeader className="bg-primary text-primary-foreground">
+                        <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl">
                             <CardTitle>Historial y Gestión de Tasas de Cambio</CardTitle>
                             <CardDescription className="text-primary-foreground/90">Agregue la tasa de cambio del BCV para el día. La más reciente se usará como activa.</CardDescription>
                         </CardHeader>
@@ -257,7 +258,7 @@ export default function SettingsPage() {
                 
                 <TabsContent value="fees">
                     <Card>
-                        <CardHeader className="bg-primary text-primary-foreground">
+                        <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl">
                             <CardTitle>Cuotas y Acceso</CardTitle>
                             <CardDescription className="text-primary-foreground/90">Gestione los montos de cuotas y el acceso de los propietarios a la plataforma.</CardDescription>
                         </CardHeader>
@@ -312,7 +313,7 @@ export default function SettingsPage() {
                 
                 <TabsContent value="security">
                      <Card>
-                        <CardHeader className="bg-primary text-primary-foreground">
+                        <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl">
                             <CardTitle>Seguridad</CardTitle>
                             <CardDescription className="text-primary-foreground/90">Gestione la clave de autorización para acciones críticas.</CardDescription>
                         </CardHeader>

@@ -1401,12 +1401,12 @@ export default function ReportsPage() {
                     <TabsTrigger value="balance">Saldos a Favor</TabsTrigger>
                     <TabsTrigger value="income">Ingresos</TabsTrigger>
                     <TabsTrigger value="monthly">Pagos del Mes</TabsTrigger>
-                    <TabsTrigger value="historical-debt">Deudas Antiguas</TabsTrigger>
+                    <TabsTrigger value="historical-debt">Ingreso Anual</TabsTrigger>
                 </TabsList>
                 
                 <TabsContent value="integral">
                     <Card>
-                        <CardHeader className="bg-primary text-primary-foreground">
+                        <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl">
                             <CardTitle>Reporte Integral de Propietarios</CardTitle>
                             <CardDescription className="text-primary-foreground/90">Genere, guarde y publique una vista consolidada del estado de todos los propietarios.</CardDescription>
                              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-4">
@@ -1504,7 +1504,7 @@ export default function ReportsPage() {
 
                  <TabsContent value="individual">
                      <Card>
-                        <CardHeader className="bg-primary text-primary-foreground">
+                        <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl">
                             <CardTitle>Ficha Individual de Pagos</CardTitle>
                             <CardDescription className="text-primary-foreground/90">Busque un propietario para ver su historial detallado de pagos y los meses que liquida cada uno.</CardDescription>
                         </CardHeader>
@@ -1514,7 +1514,7 @@ export default function ReportsPage() {
                                 <Input placeholder="Buscar por nombre..." className="pl-9" value={individualSearchTerm} onChange={e => setIndividualSearchTerm(e.target.value)} />
                             </div>
                             {individualSearchTerm && filteredIndividualOwners.length > 0 && (
-                                <Card className="border rounded-md">
+                                <Card className="border rounded-lg">
                                     <ScrollArea className="h-48">
                                         {filteredIndividualOwners.map(owner => (
                                             <div key={owner.id} onClick={() => handleSelectIndividual(owner)} className="p-3 hover:bg-muted cursor-pointer border-b last:border-b-0">
@@ -1562,7 +1562,7 @@ export default function ReportsPage() {
                                         </div>
                                         <div>
                                             <h3 className="text-lg font-semibold mb-2 flex items-center"><History className="mr-2 h-5 w-5"/> Historial de Pagos Aprobados</h3>
-                                            <ScrollArea className="h-[28rem] border rounded-md">
+                                            <ScrollArea className="h-[28rem] border rounded-lg">
                                                  {individualPayments.length > 0 ? (
                                                     <div className="p-2 space-y-2">
                                                         {individualPayments.map((payment) => (
@@ -1625,7 +1625,7 @@ export default function ReportsPage() {
 
                 <TabsContent value="estado-de-cuenta">
                      <Card>
-                        <CardHeader className="bg-primary text-primary-foreground">
+                        <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl">
                             <CardTitle>Estado de Cuenta</CardTitle>
                             <CardDescription className="text-primary-foreground/90">Busque un propietario para ver su estado de cuenta.</CardDescription>
                         </CardHeader>
@@ -1635,7 +1635,7 @@ export default function ReportsPage() {
                                 <Input placeholder="Buscar por nombre..." className="pl-9" value={statementSearchTerm} onChange={e => setStatementSearchTerm(e.target.value)} />
                             </div>
                             {statementSearchTerm && filteredStatementOwners.length > 0 && (
-                                <Card className="border rounded-md">
+                                <Card className="border rounded-lg">
                                     <ScrollArea className="h-48">
                                         {filteredStatementOwners.map(owner => (
                                             <div key={owner.id} onClick={() => handleSelectStatementOwner(owner)} className="p-3 hover:bg-muted cursor-pointer border-b last:border-b-0">
@@ -1652,7 +1652,7 @@ export default function ReportsPage() {
                                     <CardHeader>
                                         <div className="flex justify-between items-center">
                                             <div className="flex items-center gap-4">
-                                                {companyInfo?.logo && <img src={companyInfo.logo} alt="Logo" className="w-16 h-16 rounded-md"/>}
+                                                {companyInfo?.logo && <img src={companyInfo.logo} alt="Logo" className="w-16 h-16 rounded-lg"/>}
                                                 <div>
                                                     <p className="font-bold">{companyInfo?.name} | {companyInfo?.rif}</p>
                                                     <p className="text-sm">Propietario: {selectedStatementOwner.name}</p>
@@ -1738,7 +1738,7 @@ export default function ReportsPage() {
 
                  <TabsContent value="delinquency">
                      <Card>
-                        <CardHeader className="bg-primary text-primary-foreground">
+                        <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl">
                             <CardTitle>Reporte Interactivo de Morosidad</CardTitle>
                             <CardDescription className="text-primary-foreground/90">Filtre, seleccione y exporte la lista de propietarios con deudas pendientes.</CardDescription>
                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-4 items-end">
@@ -1855,7 +1855,7 @@ export default function ReportsPage() {
 
                  <TabsContent value="balance">
                      <Card>
-                        <CardHeader className="bg-primary text-primary-foreground">
+                        <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl">
                             <CardTitle>Consulta de Saldos a Favor</CardTitle>
                             <CardDescription className="text-primary-foreground/90">Lista de todos los propietarios con saldo positivo en sus cuentas.</CardDescription>
                              <div className="flex items-center justify-between mt-4">
@@ -1898,7 +1898,7 @@ export default function ReportsPage() {
                  
                 <TabsContent value="income">
                      <Card>
-                        <CardHeader className="bg-primary text-primary-foreground">
+                        <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl">
                             <CardTitle>Informe de Ingresos</CardTitle>
                             <CardDescription className="text-primary-foreground/90">Consulta los pagos aprobados en un período específico.</CardDescription>
                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 items-end">
@@ -1975,7 +1975,7 @@ export default function ReportsPage() {
 
                 <TabsContent value="monthly">
                     <Card>
-                        <CardHeader className="bg-primary text-primary-foreground">
+                        <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl">
                             <CardTitle>Reporte de Pagos Mensual</CardTitle>
                             <CardDescription className="text-primary-foreground/90">Revisa todos los pagos aprobados en un mes específico y los meses que liquidaron.</CardDescription>
                             <div className="flex gap-4 pt-4">
@@ -2034,9 +2034,9 @@ export default function ReportsPage() {
                 
                  <TabsContent value="historical-debt">
                     <Card>
-                        <CardHeader className="bg-primary text-primary-foreground">
-                            <CardTitle>Reporte de Deudas de Años Anteriores Canceladas</CardTitle>
-                            <CardDescription className="text-primary-foreground/90">Muestra los pagos que se usaron para liquidar deudas de años pasados.</CardDescription>
+                        <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl">
+                            <CardTitle>Reporte de Ingreso Anual</CardTitle>
+                            <CardDescription className="text-primary-foreground/90">Muestra los pagos que se usaron para liquidar deudas de años anteriores.</CardDescription>
                         </CardHeader>
                         <CardContent>
                             <div className="flex justify-end gap-2 mb-4">
