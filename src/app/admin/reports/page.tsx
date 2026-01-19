@@ -333,6 +333,13 @@ type MonthlyPaymentRow = {
     paidMonths: string;
 };
 
+type IncomeReportRow = {
+    period: string;
+    totalBs: number;
+    totalUsd: number;
+    paymentCount: number;
+};
+
 export default function ReportsPage() {
     const { toast } = useToast();
     const { requestAuthorization } = useAuthorization();
@@ -387,6 +394,9 @@ export default function ReportsPage() {
     // State for Monthly Report
     const [selectedMonth, setSelectedMonth] = useState(String(new Date().getMonth() + 1));
     const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
+
+    // State for Income Report
+    const [incomeDateRange, setIncomeDateRange] = useState<{ from?: Date; to?: Date }>({});
     
 
 
@@ -608,6 +618,36 @@ export default function ReportsPage() {
             .sort((a,b) => new Date(a.paymentDate.split('/').reverse().join('-')).getTime() - new Date(b.paymentDate.split('/').reverse().join('-')).getTime());
 
     }, [selectedMonth, selectedYear, allPayments, allDebts, owners]);
+
+    const incomeReportData = useMemo<IncomeReportRow[]>(() => {
+        const filteredPayments = allPayments.filter(p => {
+            if (p.status !== 'aprobado') return false;
+            const paymentDate = p.paymentDate.toDate();
+            if (incomeDateRange.from && paymentDate < incomeDateRange.from) return false;
+            if (incomeDateRange.to && paymentDate > incomeDateRange.to) return false;
+            return true;
+        });
+    
+        const groupedByMonth = filteredPayments.reduce((acc, p) => {
+            const monthKey = format(p.paymentDate.toDate(), 'yyyy-MM');
+            if (!acc[monthKey]) {
+                acc[monthKey] = {
+                    period: format(p.paymentDate.toDate(), 'MMMM yyyy', { locale: es }),
+                    sortKey: monthKey,
+                    totalBs: 0,
+                    totalUsd: 0,
+                    paymentCount: 0
+                };
+            }
+            const amountBs = p.totalAmount;
+            acc[monthKey].totalBs += amountBs;
+            acc[monthKey].totalUsd += amountBs / (p.exchangeRate || activeRate || 1);
+            acc[monthKey].paymentCount++;
+            return acc;
+        }, {} as Record<string, any>);
+    
+        return Object.values(groupedByMonth).sort((a:any, b:any) => b.sortKey.localeCompare(a.sortKey));
+    }, [allPayments, incomeDateRange, activeRate]);
 
     useEffect(() => {
         setSelectedDelinquentOwners(new Set(filteredAndSortedDelinquents.map(o => o.id)));
@@ -962,8 +1002,8 @@ export default function ReportsPage() {
 
                 doc.setFontSize(10).setFont('helvetica', 'bold');
                 doc.setFillColor(230, 230, 230); // Light grey background for payment header
-                doc.rect(margin, startY-4, pageWidth - (margin*2), 18, 'F');
-                doc.text(`Fecha de Pago: ${paymentDate}`, margin + 2, startY);
+                doc.rect(margin, startY-4, pageWidth - (margin*2), 10, 'F');
+                doc.text(`Fecha: ${paymentDate}`, margin + 2, startY);
                 doc.text(`Monto: ${paymentAmount}`, margin + 70, startY);
                 doc.text(`Ref: ${paymentRef}`, margin + 125, startY);
                 doc.text(`Tasa: ${rate}`, pageWidth - margin - 2, startY, { align: 'right' });
@@ -1186,6 +1226,74 @@ export default function ReportsPage() {
              link.click();
         }
     };
+    
+    const handleExportIncomeReport = async (formatType: 'pdf' | 'excel') => {
+        const data = incomeReportData;
+        if (data.length === 0) {
+            toast({ variant: "destructive", title: "Nada para exportar", description: "No hay ingresos en el período seleccionado." });
+            return;
+        }
+    
+        const filename = `reporte_ingresos_${format(new Date(), 'yyyy-MM-dd')}`;
+        const totalBs = data.reduce((sum, row) => sum + row.totalBs, 0);
+        const totalUsd = data.reduce((sum, row) => sum + row.totalUsd, 0);
+    
+        if (formatType === 'pdf') {
+            const doc = new jsPDF();
+            let startY = 15;
+            if (companyInfo?.logo) doc.addImage(companyInfo.logo, 'PNG', 15, startY, 20, 20);
+            if (companyInfo) doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, 40, startY + 5);
+    
+            doc.setFontSize(16).setFont('helvetica', 'bold').text('Reporte de Ingresos', doc.internal.pageSize.getWidth() / 2, startY + 15, { align: 'center' });
+            startY += 25;
+            doc.setFontSize(9).setFont('helvetica', 'normal');
+            doc.text(`Fecha de Emisión: ${format(new Date(), "dd/MM/yyyy")}`, doc.internal.pageSize.getWidth() - 15, startY, { align: 'right' });
+            startY += 10;
+            
+            autoTable(doc, {
+                head: [['Período', 'Ingresos (Bs)', 'Ingresos (USD Aprox.)', 'Nº de Pagos']],
+                body: data.map(row => [
+                    row.period,
+                    formatToTwoDecimals(row.totalBs),
+                    `$${formatToTwoDecimals(row.totalUsd)}`,
+                    row.paymentCount
+                ]),
+                foot: [[
+                    'TOTAL',
+                    formatToTwoDecimals(totalBs),
+                    `$${formatToTwoDecimals(totalUsd)}`,
+                    ''
+                ]],
+                startY,
+                headStyles: { fillColor: [30, 80, 180] },
+                footStyles: { fillColor: [30, 80, 180], textColor: 255, fontStyle: 'bold' },
+                styles: { fontSize: 9, cellPadding: 2.5 },
+                columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'center' } }
+            });
+            doc.save(`${filename}.pdf`);
+        } else { // Excel
+             const workbook = new ExcelJS.Workbook();
+             const worksheet = workbook.addWorksheet("Ingresos");
+             worksheet.columns = [
+                 { header: 'Período', key: 'period', width: 20 },
+                 { header: 'Ingresos (Bs)', key: 'totalBs', width: 20, style: { numFmt: '#,##0.00' } },
+                 { header: 'Ingresos (USD Aprox.)', key: 'totalUsd', width: 25, style: { numFmt: '"$"#,##0.00' } },
+                 { header: 'Nº de Pagos', key: 'paymentCount', width: 15 },
+             ];
+             worksheet.addRows(data);
+             // Add footer row
+             worksheet.addRow([]);
+             const footerRow = worksheet.addRow(['TOTAL', totalBs, totalUsd, '']);
+             footerRow.font = { bold: true };
+             
+             const buffer = await workbook.xlsx.writeBuffer();
+             const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+             const link = document.createElement('a');
+             link.href = URL.createObjectURL(blob);
+             link.download = `${filename}.xlsx`;
+             link.click();
+        }
+    };
 
     const renderSortIcon = (key: SortKey) => {
         if (delinquencySortConfig.key !== key) {
@@ -1206,13 +1314,14 @@ export default function ReportsPage() {
             </div>
             
             <Tabs defaultValue="integral" className="w-full">
-                 <TabsList className="grid w-full grid-cols-1 md:grid-cols-4 lg:grid-cols-5 h-auto flex-wrap">
+                 <TabsList className="grid w-full grid-cols-1 md:grid-cols-4 lg:grid-cols-7 h-auto flex-wrap">
                     <TabsTrigger value="integral">Integral</TabsTrigger>
                     <TabsTrigger value="individual">Ficha Individual</TabsTrigger>
                     <TabsTrigger value="estado-de-cuenta">Estado de Cuenta</TabsTrigger>
                     <TabsTrigger value="delinquency">Morosidad</TabsTrigger>
                     <TabsTrigger value="balance">Saldos a Favor</TabsTrigger>
-                    
+                    <TabsTrigger value="monthly">Reporte Mensual</TabsTrigger>
+                    <TabsTrigger value="income">Ingresos</TabsTrigger>
                 </TabsList>
                 
                 <TabsContent value="integral">
@@ -1706,8 +1815,137 @@ export default function ReportsPage() {
                         </CardContent>
                      </Card>
                  </TabsContent>
-                 
-                
+                 <TabsContent value="monthly">
+                    <Card>
+                        <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl">
+                            <CardTitle>Reporte de Pagos Mensual</CardTitle>
+                            <CardDescription className="text-primary-foreground/90">Ver los pagos aprobados para un período específico.</CardDescription>
+                            <div className="flex gap-4 pt-4">
+                                <div className="space-y-2">
+                                    <Label>Año</Label>
+                                    <Select value={selectedYear} onValueChange={setSelectedYear}>
+                                        <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
+                                        <SelectContent>{years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Mes</Label>
+                                    <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                                        <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
+                                        <SelectContent>{monthOptions.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="flex justify-end gap-2 mb-4">
+                                <Button variant="outline" onClick={() => handleExportMonthlyReport('pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
+                                <Button variant="outline" onClick={() => handleExportMonthlyReport('excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
+                            </div>
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Propietario</TableHead>
+                                        <TableHead>Propiedad</TableHead>
+                                        <TableHead>Fecha Pago</TableHead>
+                                        <TableHead>Monto (Bs.)</TableHead>
+                                        <TableHead>Referencia</TableHead>
+                                        <TableHead>Meses Pagados</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {monthlyReportData.length > 0 ? (
+                                        monthlyReportData.map(row => (
+                                            <TableRow key={row.paymentId}>
+                                                <TableCell>{row.ownerName}</TableCell>
+                                                <TableCell>{row.properties}</TableCell>
+                                                <TableCell>{row.paymentDate}</TableCell>
+                                                <TableCell>{formatToTwoDecimals(row.amount)}</TableCell>
+                                                <TableCell>{row.reference}</TableCell>
+                                                <TableCell>{row.paidMonths}</TableCell>
+                                            </TableRow>
+                                        ))
+                                    ) : (
+                                        <TableRow><TableCell colSpan={6} className="h-24 text-center">No hay pagos aprobados en este período.</TableCell></TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </CardContent>
+                    </Card>
+                 </TabsContent>
+
+                <TabsContent value="income">
+                    <Card>
+                        <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl">
+                            <CardTitle>Reporte de Ingresos</CardTitle>
+                            <CardDescription className="text-primary-foreground/90">Analice los ingresos totales por período.</CardDescription>
+                            <div className="flex gap-4 pt-4">
+                                <div className="space-y-2">
+                                    <Label>Desde</Label>
+                                    <Popover>
+                                        <PopoverTrigger asChild>
+                                            <Button variant="outline" className={cn("w-[240px] justify-start text-left font-normal", !incomeDateRange.from && "text-muted-foreground")}>
+                                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                                {incomeDateRange.from ? format(incomeDateRange.from, "PPP", { locale: es }) : <span>Seleccione fecha</span>}
+                                            </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={incomeDateRange.from} onSelect={date => setIncomeDateRange(prev => ({...prev, from: date}))} initialFocus /></PopoverContent>
+                                    </Popover>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Hasta</Label>
+                                    <Popover>
+                                        <PopoverTrigger asChild>
+                                            <Button variant="outline" className={cn("w-[240px] justify-start text-left font-normal", !incomeDateRange.to && "text-muted-foreground")}>
+                                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                                {incomeDateRange.to ? format(incomeDateRange.to, "PPP", { locale: es }) : <span>Seleccione fecha</span>}
+                                            </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={incomeDateRange.to} onSelect={date => setIncomeDateRange(prev => ({...prev, to: date}))} initialFocus /></PopoverContent>
+                                    </Popover>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="flex justify-end gap-2 mb-4">
+                                <Button variant="outline" onClick={() => handleExportIncomeReport('pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
+                                <Button variant="outline" onClick={() => handleExportIncomeReport('excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
+                            </div>
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Período</TableHead>
+                                        <TableHead className="text-right">Ingresos (Bs)</TableHead>
+                                        <TableHead className="text-right">Ingresos (USD Aprox.)</TableHead>
+                                        <TableHead className="text-center">Nº de Pagos</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {incomeReportData.length > 0 ? (
+                                        incomeReportData.map(row => (
+                                            <TableRow key={row.period}>
+                                                <TableCell className="font-medium capitalize">{row.period}</TableCell>
+                                                <TableCell className="text-right">{formatToTwoDecimals(row.totalBs)}</TableCell>
+                                                <TableCell className="text-right">${formatToTwoDecimals(row.totalUsd)}</TableCell>
+                                                <TableCell className="text-center">{row.paymentCount}</TableCell>
+                                            </TableRow>
+                                        ))
+                                    ) : (
+                                        <TableRow><TableCell colSpan={4} className="h-24 text-center">No hay ingresos en el período seleccionado.</TableCell></TableRow>
+                                    )}
+                                </TableBody>
+                                <TableFooter>
+                                    <TableRow>
+                                        <TableCell className="font-bold">TOTAL</TableCell>
+                                        <TableCell className="text-right font-bold">{formatToTwoDecimals(incomeReportData.reduce((acc, row) => acc + row.totalBs, 0))}</TableCell>
+                                        <TableCell className="text-right font-bold">${formatToTwoDecimals(incomeReportData.reduce((acc, row) => acc + row.totalUsd, 0))}</TableCell>
+                                        <TableCell></TableCell>
+                                    </TableRow>
+                                </TableFooter>
+                            </Table>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
                 
             </Tabs>
              {reportToPreview && (
@@ -1753,4 +1991,3 @@ export default function ReportsPage() {
         </div>
     );
 }
-
