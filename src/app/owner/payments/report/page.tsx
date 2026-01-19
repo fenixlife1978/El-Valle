@@ -286,7 +286,7 @@ export default function ReportPaymentPage() {
 
     return (
         <div className="flex items-center justify-center p-4">
-            <Card className="w-full max-w-4xl bg-background border-4 border-white rounded-3xl overflow-hidden shadow-2xl">
+            <Card className="w-full max-w-4xl rounded-3xl overflow-hidden shadow-2xl">
                 <CardHeader className="bg-primary text-primary-foreground p-4 flex flex-row items-center justify-between">
                     <div className="flex items-center gap-3">
                         <Banknote className="w-7 h-7" />
@@ -419,7 +419,7 @@ export default function ReportPaymentPage() {
                         <Button type="button" variant="ghost" className="text-muted-foreground hover:text-white" onClick={resetForm} disabled={isSubmitting}>
                             CANCELAR
                         </Button>
-                        <Button type="submit" className="bg-primary hover:bg-primary/90 text-primary-foreground px-6 py-6 text-base font-bold" disabled={isSubmitting}>
+                        <Button type="submit" className="bg-primary hover:bg-primary/90 text-primary-foreground px-6 py-6 text-base font-bold rounded-xl" disabled={isSubmitting}>
                             {isSubmitting ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Save className="mr-2 h-5 w-5" />}
                             Enviar Reporte
                         </Button>

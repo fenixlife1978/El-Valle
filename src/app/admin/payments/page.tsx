@@ -514,7 +514,7 @@ function ReportPaymentTab() {
     };
 
     return (
-         <Card className="w-full max-w-4xl border-4 border-white rounded-3xl overflow-hidden shadow-2xl">
+         <Card className="w-full max-w-4xl rounded-3xl overflow-hidden shadow-2xl">
             <CardHeader className="bg-primary text-primary-foreground p-4 flex flex-row items-center justify-between">
                  <div className="flex items-center gap-3">
                     <Banknote className="w-7 h-7" />
@@ -755,7 +755,6 @@ function CalculatorTab() {
         </Card>
     );
 }
-
 
 // ===================================================================================
 // MAIN PAGE COMPONENT

@@ -87,6 +87,7 @@ export default function RootLayout({
         <meta name="twitter:image" content="https://valle-condo.vercel.app/og-banner.png" />
       </head>
       <body className="font-body antialiased bg-background text-foreground">
+        <div className="w-full h-2 bg-primary" />
         <AuthProvider>
           <AuthorizationProvider>
             <ThemeProvider
