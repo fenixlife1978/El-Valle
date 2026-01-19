@@ -1321,9 +1321,9 @@ export default function ReportsPage() {
                 
                 <TabsContent value="integral">
                     <Card>
-                        <CardHeader>
+                        <CardHeader className="bg-primary text-primary-foreground">
                             <CardTitle>Reporte Integral de Propietarios</CardTitle>
-                            <CardDescription>Genere, guarde y publique una vista consolidada del estado de todos los propietarios.</CardDescription>
+                            <CardDescription className="text-primary-foreground/90">Genere, guarde y publique una vista consolidada del estado de todos los propietarios.</CardDescription>
                              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-4">
                                 <div className="space-y-2">
                                     <Label>Buscar Propietario</Label>
@@ -1419,9 +1419,9 @@ export default function ReportsPage() {
 
                  <TabsContent value="individual">
                      <Card>
-                        <CardHeader>
+                        <CardHeader className="bg-primary text-primary-foreground">
                             <CardTitle>Ficha Individual de Pagos</CardTitle>
-                            <CardDescription>Busque un propietario para ver su historial detallado de pagos y los meses que liquida cada uno.</CardDescription>
+                            <CardDescription className="text-primary-foreground/90">Busque un propietario para ver su historial detallado de pagos y los meses que liquida cada uno.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div className="relative max-w-sm">
@@ -1540,9 +1540,9 @@ export default function ReportsPage() {
 
                 <TabsContent value="estado-de-cuenta">
                      <Card>
-                        <CardHeader>
+                        <CardHeader className="bg-primary text-primary-foreground">
                             <CardTitle>Estado de Cuenta</CardTitle>
-                            <CardDescription>Busque un propietario para ver su estado de cuenta.</CardDescription>
+                            <CardDescription className="text-primary-foreground/90">Busque un propietario para ver su estado de cuenta.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div className="relative max-w-sm">
@@ -1653,9 +1653,9 @@ export default function ReportsPage() {
 
                  <TabsContent value="delinquency">
                      <Card>
-                        <CardHeader>
+                        <CardHeader className="bg-primary text-primary-foreground">
                             <CardTitle>Reporte Interactivo de Morosidad</CardTitle>
-                            <CardDescription>Filtre, seleccione y exporte la lista de propietarios con deudas pendientes.</CardDescription>
+                            <CardDescription className="text-primary-foreground/90">Filtre, seleccione y exporte la lista de propietarios con deudas pendientes.</CardDescription>
                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-4 items-end">
                                 <div className="space-y-2">
                                     <Label>Antigüedad de Deuda</Label>
@@ -1770,9 +1770,9 @@ export default function ReportsPage() {
 
                  <TabsContent value="balance">
                      <Card>
-                        <CardHeader>
+                        <CardHeader className="bg-primary text-primary-foreground">
                             <CardTitle>Consulta de Saldos a Favor</CardTitle>
-                            <CardDescription>Lista de todos los propietarios con saldo positivo en sus cuentas.</CardDescription>
+                            <CardDescription className="text-primary-foreground/90">Lista de todos los propietarios con saldo positivo en sus cuentas.</CardDescription>
                              <div className="flex items-center justify-between mt-4">
                                 <div className="relative max-w-sm">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -1813,9 +1813,9 @@ export default function ReportsPage() {
                  
                 <TabsContent value="income">
                      <Card>
-                        <CardHeader>
+                        <CardHeader className="bg-primary text-primary-foreground">
                             <CardTitle>Informe de Ingresos</CardTitle>
-                            <CardDescription>Consulta los pagos aprobados en un período específico.</CardDescription>
+                            <CardDescription className="text-primary-foreground/90">Consulta los pagos aprobados en un período específico.</CardDescription>
                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 items-end">
                                 <div className="space-y-2">
                                     <Label>Buscar Propietario/Propiedad</Label>
@@ -1890,9 +1890,9 @@ export default function ReportsPage() {
 
                 <TabsContent value="monthly">
                     <Card>
-                        <CardHeader>
+                        <CardHeader className="bg-primary text-primary-foreground">
                             <CardTitle>Reporte de Pagos Mensual</CardTitle>
-                            <CardDescription>Revisa todos los pagos aprobados en un mes específico y los meses que liquidaron.</CardDescription>
+                            <CardDescription className="text-primary-foreground/90">Revisa todos los pagos aprobados en un mes específico y los meses que liquidaron.</CardDescription>
                             <div className="flex gap-4 pt-4">
                                 <div className="space-y-2">
                                     <Label>Mes</Label>

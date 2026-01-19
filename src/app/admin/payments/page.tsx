@@ -304,7 +304,7 @@ function VerifyPaymentsTab() {
     
     return (
         <Card>
-            <CardHeader>
+            <CardHeader className="bg-primary text-primary-foreground">
                 <div className="flex justify-between items-center">
                     <CardTitle>Pagos Registrados</CardTitle>
                     <DropdownMenu>
@@ -514,7 +514,7 @@ function ReportPaymentTab() {
     };
 
     return (
-         <Card className="w-full max-w-4xl rounded-3xl overflow-hidden shadow-2xl">
+         <Card className="w-full max-w-4xl rounded-3xl overflow-hidden shadow-2xl border-2 border-white">
             <CardHeader className="bg-primary text-primary-foreground p-4 flex flex-row items-center justify-between">
                  <div className="flex items-center gap-3">
                     <Banknote className="w-7 h-7" />
@@ -607,7 +607,7 @@ function ReportPaymentTab() {
                     <Button type="button" variant="ghost" className="text-muted-foreground hover:text-white" onClick={resetForm} disabled={isSubmitting}>
                         CANCELAR
                     </Button>
-                    <Button type="submit" className="bg-primary hover:bg-primary/90 text-primary-foreground px-6 py-6 text-base font-bold rounded-xl" disabled={isSubmitting}>
+                    <Button type="submit" className="rounded-lg" disabled={isSubmitting}>
                         {isSubmitting ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Save className="mr-2 h-5 w-5" />}
                         Enviar Reporte
                     </Button>
@@ -626,6 +626,7 @@ function CalculatorTab() {
     const { toast } = useToast();
     const router = useRouter();
     const [owners, setOwners] = useState<Owner[]>([]);
+    const [now, setNow] = useState<Date | null>(null);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [activeRate, setActiveRate] = useState(0);
@@ -635,7 +636,6 @@ function CalculatorTab() {
     const [loadingDebts, setLoadingDebts] = useState(false);
     const [selectedPendingDebts, setSelectedPendingDebts] = useState<string[]>([]);
     const [selectedAdvanceMonths, setSelectedAdvanceMonths] = useState<string[]>([]);
-    const [now, setNow] = useState<Date | null>(null);
     
     useEffect(() => {
         setNow(new Date());
@@ -706,7 +706,10 @@ function CalculatorTab() {
 
     return (
         <Card>
-            <CardHeader><CardTitle>Calculadora de Pagos de Propietarios</CardTitle><CardDescription>Calcule y registre pagos de deudas y adelantos.</CardDescription></CardHeader>
+            <CardHeader className="bg-primary text-primary-foreground">
+                <CardTitle>Calculadora de Pagos de Propietarios</CardTitle>
+                <CardDescription className="text-primary-foreground/90">Calcule y registre pagos de deudas y adelantos.</CardDescription>
+            </CardHeader>
             <CardContent className="space-y-4">
                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
                     <div className="lg:col-span-2 space-y-4">

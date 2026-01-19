@@ -177,7 +177,7 @@ export default function SettingsPage() {
 
                 <TabsContent value="company">
                     <Card>
-                        <CardHeader><CardTitle>Información</CardTitle></CardHeader>
+                        <CardHeader className="bg-primary text-primary-foreground"><CardTitle>Información</CardTitle></CardHeader>
                         <CardContent className="space-y-4">
                             <div className="flex items-center gap-4">
                                 {settings.companyInfo.logo && <img src={settings.companyInfo.logo} alt="Logo" className="w-20 h-20 object-contain"/>}
@@ -220,9 +220,9 @@ export default function SettingsPage() {
 
                 <TabsContent value="rates">
                     <Card>
-                        <CardHeader>
+                        <CardHeader className="bg-primary text-primary-foreground">
                             <CardTitle>Historial y Gestión de Tasas de Cambio</CardTitle>
-                            <CardDescription>Agregue la tasa de cambio del BCV para el día. La más reciente se usará como activa.</CardDescription>
+                            <CardDescription className="text-primary-foreground/90">Agregue la tasa de cambio del BCV para el día. La más reciente se usará como activa.</CardDescription>
                         </CardHeader>
                         <CardContent>
                             <div className="flex gap-4 mb-4 items-end">
@@ -257,9 +257,9 @@ export default function SettingsPage() {
                 
                 <TabsContent value="fees">
                     <Card>
-                        <CardHeader>
+                        <CardHeader className="bg-primary text-primary-foreground">
                             <CardTitle>Cuotas y Acceso</CardTitle>
-                            <CardDescription>Gestione los montos de cuotas y el acceso de los propietarios a la plataforma.</CardDescription>
+                            <CardDescription className="text-primary-foreground/90">Gestione los montos de cuotas y el acceso de los propietarios a la plataforma.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-6">
                             <div className="space-y-2">
@@ -312,9 +312,9 @@ export default function SettingsPage() {
                 
                 <TabsContent value="security">
                      <Card>
-                        <CardHeader>
+                        <CardHeader className="bg-primary text-primary-foreground">
                             <CardTitle>Seguridad</CardTitle>
-                            <CardDescription>Gestione la clave de autorización para acciones críticas.</CardDescription>
+                            <CardDescription className="text-primary-foreground/90">Gestione la clave de autorización para acciones críticas.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div className="space-y-2">
