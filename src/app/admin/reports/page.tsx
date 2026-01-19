@@ -964,9 +964,9 @@ export default function ReportsPage() {
                 doc.setFillColor(230, 230, 230); // Light grey background for payment header
                 doc.rect(margin, startY-4, pageWidth - (margin*2), 18, 'F');
                 doc.text(`Fecha de Pago: ${paymentDate}`, margin + 2, startY);
-                doc.text(`Monto: ${paymentAmount}`, margin + 60, startY);
-                doc.text(`Ref: ${paymentRef}`, margin + 110, startY);
-                doc.text(`Tasa: ${rate}`, margin + 160, startY);
+                doc.text(`Monto: ${paymentAmount}`, margin + 70, startY);
+                doc.text(`Ref: ${paymentRef}`, margin + 125, startY);
+                doc.text(`Tasa: ${rate}`, pageWidth - margin - 2, startY, { align: 'right' });
                 startY += 8;
 
                 if (payment.liquidatedDebts.length > 0) {
@@ -1206,13 +1206,13 @@ export default function ReportsPage() {
             </div>
             
             <Tabs defaultValue="integral" className="w-full">
-                 <TabsList className="grid w-full grid-cols-1 md:grid-cols-4 lg:grid-cols-6 h-auto flex-wrap">
+                 <TabsList className="grid w-full grid-cols-1 md:grid-cols-4 lg:grid-cols-5 h-auto flex-wrap">
                     <TabsTrigger value="integral">Integral</TabsTrigger>
                     <TabsTrigger value="individual">Ficha Individual</TabsTrigger>
                     <TabsTrigger value="estado-de-cuenta">Estado de Cuenta</TabsTrigger>
                     <TabsTrigger value="delinquency">Morosidad</TabsTrigger>
                     <TabsTrigger value="balance">Saldos a Favor</TabsTrigger>
-                    <TabsTrigger value="monthly">Pagos del Mes</TabsTrigger>
+                    
                 </TabsList>
                 
                 <TabsContent value="integral">
@@ -1707,64 +1707,7 @@ export default function ReportsPage() {
                      </Card>
                  </TabsContent>
                  
-                <TabsContent value="monthly">
-                    <Card>
-                        <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl">
-                            <CardTitle>Reporte de Pagos Mensual</CardTitle>
-                            <CardDescription className="text-primary-foreground/90">Revisa todos los pagos aprobados en un mes específico y los meses que liquidaron.</CardDescription>
-                            <div className="flex gap-4 pt-4">
-                                <div className="space-y-2">
-                                    <Label>Mes</Label>
-                                    <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                                        <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
-                                        <SelectContent>{monthOptions.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Año</Label>
-                                    <Select value={selectedYear} onValueChange={setSelectedYear}>
-                                        <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
-                                        <SelectContent>{years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="flex justify-end gap-2 mb-4">
-                                <Button variant="outline" onClick={() => handleExportMonthlyReport('pdf')}><FileText className="mr-2 h-4 w-4" /> PDF</Button>
-                                <Button variant="outline" onClick={() => handleExportMonthlyReport('excel')}><FileSpreadsheet className="mr-2 h-4 w-4" /> Excel</Button>
-                            </div>
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Propietario</TableHead>
-                                        <TableHead>Propiedad</TableHead>
-                                        <TableHead>Fecha Pago</TableHead>
-                                        <TableHead className="text-right">Monto (Bs.)</TableHead>
-                                        <TableHead className="text-right">Referencia</TableHead>
-                                        <TableHead>Meses Pagados</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {monthlyReportData.length > 0 ? (
-                                        monthlyReportData.map(row => (
-                                            <TableRow key={row.paymentId}>
-                                                <TableCell>{row.ownerName}</TableCell>
-                                                <TableCell>{row.properties}</TableCell>
-                                                <TableCell>{row.paymentDate}</TableCell>
-                                                <TableCell className="text-right">{formatToTwoDecimals(row.amount)}</TableCell>
-                                                <TableCell className="text-right">{row.reference}</TableCell>
-                                                <TableCell>{row.paidMonths}</TableCell>
-                                            </TableRow>
-                                        ))
-                                    ) : (
-                                        <TableRow><TableCell colSpan={6} className="h-24 text-center">No hay pagos aprobados para el mes seleccionado.</TableCell></TableRow>
-                                    )}
-                                </TableBody>
-                            </Table>
-                        </CardContent>
-                    </Card>
-                </TabsContent>
+                
                 
             </Tabs>
              {reportToPreview && (
@@ -1810,3 +1753,4 @@ export default function ReportsPage() {
         </div>
     );
 }
+
