@@ -83,6 +83,8 @@ function VerifyPaymentsTab() {
     const [isReceiptPreviewOpen, setIsReceiptPreviewOpen] = useState(false);
     const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
     const [receiptImageToView, setReceiptImageToView] = useState<string | null>(null);
+    const [isGenerating, setIsGenerating] = useState(false);
+
 
     useEffect(() => {
         const unsub = onSnapshot(query(collection(db, "owners")), (snapshot) => {
@@ -301,6 +303,108 @@ function VerifyPaymentsTab() {
         });
     };
     
+    const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptData) => {
+        if (!data || !companyInfo) return;
+        setIsGenerating(true);
+
+        const { payment, beneficiary, paidDebts, previousBalance, currentBalance, qrCodeUrl, receiptNumber } = data;
+        
+        try {
+            const doc = new jsPDF();
+            const pageWidth = doc.internal.pageSize.getWidth();
+            const margin = 14;
+
+            if (companyInfo.logo) {
+                try { doc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25); }
+                catch(e) { console.error("Error adding logo to PDF", e); }
+            }
+            doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, margin + 30, margin + 8);
+            doc.setFontSize(9).setFont('helvetica', 'normal');
+            doc.text(`${companyInfo.rif} | ${companyInfo.phone}`, margin + 30, margin + 14);
+            doc.text(companyInfo.address, margin + 30, margin + 19);
+            
+            doc.setFontSize(10).text(`Fecha de Emisión: ${format(new Date(), 'dd/MM/yyyy')}`, pageWidth - margin, margin + 8, { align: 'right' });
+            
+            doc.setLineWidth(0.5).line(margin, margin + 32, pageWidth - margin, margin + 32);
+            doc.setFontSize(16).setFont('helvetica', 'bold').text("RECIBO DE PAGO", pageWidth / 2, margin + 45, { align: 'center' });
+            doc.setFontSize(10).setFont('helvetica', 'normal').text(`N° de recibo: ${receiptNumber}`, pageWidth - margin, margin + 45, { align: 'right' });
+            
+            let startY = margin + 60;
+            const qrSize = 30;
+            const qrX = pageWidth - margin - qrSize;
+            const detailsBlockY = startY;
+
+            doc.setFontSize(10).text(`Beneficiario: ${beneficiary.ownerName} (${data.ownerUnit})`, margin, startY);
+            startY += 6;
+            doc.text(`Método de pago: ${payment.type}`, margin, startY);
+            startY += 6;
+            doc.text(`Banco Emisor: ${payment.bank}`, margin, startY);
+            startY += 6;
+            doc.text(`N° de Referencia Bancaria: ${payment.reference}`, margin, startY);
+            startY += 6;
+            doc.text(`Fecha del pago: ${format(payment.paymentDate.toDate(), 'dd/MM/yyyy')}`, margin, startY);
+            startY += 6;
+            doc.text(`Tasa de Cambio Aplicada: Bs. ${formatToTwoDecimals(payment.exchangeRate)} por USD`, margin, startY);
+
+            if(qrCodeUrl) {
+                doc.addImage(qrCodeUrl, 'PNG', qrX, detailsBlockY, qrSize, qrSize);
+            }
+            
+            startY += 10;
+            
+            let totalPaidInConcepts = 0;
+            const tableBody = paidDebts.map(debt => {
+                const debtAmountBs = (debt.paidAmountUSD || debt.amountUSD) * payment.exchangeRate;
+                totalPaidInConcepts += debtAmountBs;
+                const propertyLabel = debt.property ? `${debt.property.street} - ${debt.property.house}` : 'N/A';
+                const periodLabel = `${monthsLocale[debt.month]} ${debt.year}`;
+                const concept = `${debt.description} (${propertyLabel})`;
+                return [ periodLabel, concept, `$${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}`, `Bs. ${formatToTwoDecimals(debtAmountBs)}` ];
+            });
+
+            if (paidDebts.length > 0) {
+                autoTable(doc, { startY: startY, head: [['Período', 'Concepto (Propiedad)', 'Monto ($)', 'Monto Pagado (Bs)']], body: tableBody, theme: 'striped', headStyles: { fillColor: [44, 62, 80], textColor: 255 }, styles: { fontSize: 9, cellPadding: 2.5 } });
+                startY = (doc as any).lastAutoTable.finalY;
+            } else {
+                totalPaidInConcepts = beneficiary.amount;
+                autoTable(doc, { startY: startY, head: [['Concepto', 'Monto Pagado (Bs)']], body: [['Abono a Saldo a Favor', `Bs. ${formatToTwoDecimals(beneficiary.amount)}`]], theme: 'striped', headStyles: { fillColor: [44, 62, 80], textColor: 255 }, styles: { fontSize: 9, cellPadding: 2.5 } });
+                startY = (doc as any).lastAutoTable.finalY;
+            }
+            
+            startY += 8;
+            doc.setFontSize(9);
+            doc.text(`Saldo a Favor Anterior: Bs. ${formatToTwoDecimals(previousBalance)}`, pageWidth - margin, startY, { align: 'right' });
+            startY += 5;
+            doc.text(`Monto del Pago Recibido: Bs. ${formatToTwoDecimals(beneficiary.amount)}`, pageWidth - margin, startY, { align: 'right' });
+            startY += 5;
+            doc.text(`Total Abonado en Deudas: Bs. ${formatToTwoDecimals(totalPaidInConcepts)}`, pageWidth - margin, startY, { align: 'right' });
+            startY += 5;
+            doc.setFontSize(10).setFont('helvetica', 'bold');
+            doc.text(`Saldo a Favor Actual: Bs. ${formatToTwoDecimals(currentBalance)}`, pageWidth - margin, startY, { align: 'right' });
+            
+            const pdfOutput = doc.output('blob');
+            const pdfFile = new File([pdfOutput], `recibo_${receiptNumber}.pdf`, { type: 'application/pdf' });
+
+            if (action === 'download') {
+                doc.save(`recibo_${receiptNumber}.pdf`);
+            } else if (navigator.share && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+                await navigator.share({
+                    title: `Recibo de Pago ${data.receiptNumber}`, 
+                    text: `Recibo de pago para ${data.ownerName}.`,
+                    files: [pdfFile],
+                });
+            } else {
+                const url = URL.createObjectURL(pdfFile);
+                window.open(url, '_blank');
+            }
+        } catch(error) {
+            console.error("Error generating PDF:", error);
+            toast({ variant: "destructive", title: "Error", description: "No se pudo generar el documento PDF." });
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+
     const handlePreviewReceipt = async (payment: FullPayment) => {
         if (!companyInfo) {
             toast({ variant: "destructive", title: "Error", description: "Datos de la compañía no cargados." });
@@ -319,6 +423,7 @@ function VerifyPaymentsTab() {
             return;
         }
 
+        setIsGenerating(true);
         try {
             const paidDebtsSnapshot = await getDocs(
                 query(collection(db, 'debts'), where('paymentId', '==', payment.id), where('ownerId', '==', beneficiary.ownerId))
@@ -327,7 +432,10 @@ function VerifyPaymentsTab() {
             const totalDebtPaidWithPayment = paidDebts.reduce((sum, debt) => sum + ((debt.paidAmountUSD || debt.amountUSD) * payment.exchangeRate), 0);
             const previousBalance = (owner.balance || 0) - (beneficiary.amount - totalDebtPaidWithPayment);
             const receiptNumber = payment.receiptNumbers?.[beneficiary.ownerId] || `N/A-${payment.id.slice(-5)}`;
-            const qrCodeUrl = await QRCode.toDataURL(JSON.stringify({ receiptNumber, date: format(new Date(), 'yyyy-MM-dd'), ownerId: beneficiary.ownerId }), { errorCorrectionLevel: 'M', margin: 2, scale: 4 });
+            const receiptUrl = `${window.location.origin}/receipt/${payment.id}/${beneficiary.ownerId}`;
+            const qrDataContent = JSON.stringify({ receiptNumber, date: format(new Date(), 'yyyy-MM-dd'), amount: beneficiary.amount, ownerId: beneficiary.ownerId, url: receiptUrl });
+            const qrCodeUrl = await QRCode.toDataURL(qrDataContent, { errorCorrectionLevel: 'M', margin: 2, scale: 4, color: { dark: '#000000', light: '#FFFFFF' } });
+
 
             setReceiptData({
                 payment, beneficiary, ownerName: owner.name,
@@ -339,6 +447,8 @@ function VerifyPaymentsTab() {
             setIsReceiptPreviewOpen(true);
         } catch (error) {
             toast({ variant: 'destructive', title: 'Error', description: 'No se pudo generar la vista previa del recibo.' });
+        } finally {
+            setIsGenerating(false);
         }
     };
 
@@ -443,10 +553,14 @@ function VerifyPaymentsTab() {
                                         </Table>
                                     ) : (<p className="text-xs italic text-muted-foreground">El pago fue abonado al saldo a favor.</p>)}
                             </div>
-                            <DialogFooter>
-                                <Button className="w-full sm:w-auto" onClick={() => {}}>
-                                    <Download className="h-4 w-4 mr-2"/>
+                           <DialogFooter className="flex-col sm:flex-row gap-2 pt-4">
+                                <Button className="w-full sm:w-auto" onClick={() => handleGenerateAndAct('download', receiptData)} disabled={isGenerating}>
+                                    {isGenerating ? <Loader2 className="h-4 w-4 animate-spin mr-2"/> : <Download className="h-4 w-4 mr-2"/>}
                                     Descargar PDF
+                                </Button>
+                                <Button className="w-full sm:w-auto" variant="secondary" onClick={() => handleGenerateAndAct('share', receiptData)} disabled={isGenerating}>
+                                    <Share2 className="h-4 w-4 mr-2"/>
+                                    Compartir
                                 </Button>
                             </DialogFooter>
                         </>

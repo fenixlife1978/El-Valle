@@ -1,4 +1,5 @@
 
+
 'use client';
 
 // Imports de UI (MANTENER TODOS LOS IMPORTS EN LA PARTE SUPERIOR)
@@ -279,11 +280,13 @@ export default function OwnerDashboardPage() {
         }
     };
     
-    const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptData) => {
-        if (!data || !companyInfo) return;
+const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptData) => {
+    if (!data || !companyInfo) return;
+    setIsGenerating(true);
 
-        const { payment, beneficiary, paidDebts, previousBalance, currentBalance, qrCodeUrl, receiptNumber } = data;
-        
+    const { payment, beneficiary, paidDebts, previousBalance, currentBalance, qrCodeUrl, receiptNumber } = data;
+    
+    try {
         const doc = new jsPDF();
         const pageWidth = doc.internal.pageSize.getWidth();
         const margin = 14;
@@ -418,7 +421,13 @@ export default function OwnerDashboardPage() {
             const url = URL.createObjectURL(pdfFile);
             window.open(url, '_blank');
           }
-    };
+    } catch(error) {
+        console.error("Error generating PDF:", error);
+        toast({ variant: "destructive", title: "Error", description: "No se pudo generar el documento PDF." });
+    } finally {
+        setIsGenerating(false);
+    }
+};
 
 
     const openReceipt = async (payment: Payment) => {
@@ -719,7 +728,7 @@ export default function OwnerDashboardPage() {
                                     <p className="font-bold">Saldo a Favor Actual: Bs. {formatToTwoDecimals(receiptData.currentBalance)}</p>
                                 </div>
                             </div>
-                            <DialogFooter className="flex-col sm:flex-row gap-2 pt-4">
+                             <DialogFooter className="flex-col sm:flex-row gap-2 pt-4">
                                 <Button className="w-full sm:w-auto" onClick={() => handleGenerateAndAct('download', receiptData)} disabled={isGenerating}>
                                     {isGenerating ? <Loader2 className="h-4 w-4 animate-spin mr-2"/> : <Download className="h-4 w-4 mr-2"/>}
                                     Descargar PDF
