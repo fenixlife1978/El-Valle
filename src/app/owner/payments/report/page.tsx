@@ -389,8 +389,7 @@ export default function ReportPaymentPage() {
                                                 </div>
                                             </div>
                                         </div>
-                                        <div className="space-y-4">
-                                            <Label className="font-semibold">Asignación de Montos</Label>
+                                        <div className="space-y-4"><Label className="font-semibold">Asignación de Montos</Label>
                                             {beneficiaryRows.map((row, index) => (
                                                 <Card key={row.id} className="p-4 bg-muted/50 relative">
                                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -420,7 +419,7 @@ export default function ReportPaymentPage() {
                         <Button type="button" variant="ghost" className="text-muted-foreground hover:text-white" onClick={resetForm} disabled={isSubmitting}>
                             CANCELAR
                         </Button>
-                        <Button type="submit" className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl px-6 py-6 text-base font-bold" disabled={isSubmitting}>
+                        <Button type="submit" className="bg-primary hover:bg-primary/90 text-primary-foreground px-6 py-6 text-base font-bold" disabled={isSubmitting}>
                             {isSubmitting ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Save className="mr-2 h-5 w-5" />}
                             Enviar Reporte
                         </Button>

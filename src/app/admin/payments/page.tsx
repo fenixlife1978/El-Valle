@@ -376,7 +376,6 @@ function VerifyPaymentsTab() {
 // ===================================================================================
 function ReportPaymentTab() {
     const { toast } = useToast();
-    const router = useRouter();
     const { user: authUser } = useAuth();
     const [allOwners, setAllOwners] = useState<Owner[]>([]);
     const [loading, setLoading] = useState(false);
@@ -508,10 +507,12 @@ function ReportPaymentTab() {
     };
 
     return (
-        <Card className="border-4 border-white">
-            <CardHeader className="bg-primary text-primary-foreground">
-                <CardTitle>Reportar Pago por Propietario</CardTitle>
-                <CardDescription className="text-primary-foreground/80">Use este formulario para registrar pagos en nombre de los propietarios.</CardDescription>
+        <Card className="w-full max-w-4xl bg-background border-4 border-white rounded-3xl overflow-hidden shadow-2xl">
+            <CardHeader className="bg-primary text-primary-foreground p-4 flex flex-row items-center justify-between">
+                 <div className="flex items-center gap-3">
+                    <Banknote className="w-7 h-7" />
+                    <CardTitle>Reportar Pago por Propietario</CardTitle>
+                </div>
             </CardHeader>
             <form onSubmit={handleSubmit}>
                 <CardContent className="space-y-4 p-4">
@@ -551,12 +552,12 @@ function ReportPaymentTab() {
                         <Card className="border-none bg-background/5">
                              <CollapsibleTrigger className="w-full">
                                 <CardHeader className="flex flex-row items-center justify-between cursor-pointer">
-                                    <CardTitle>2. Detalles de los Beneficiarios</CardTitle>
+                                    <CardTitle>2. Monto y Beneficiarios</CardTitle>
                                     <ChevronDown className={`h-5 w-5 transition-transform ${openSections.beneficiaries ? 'rotate-180' : ''}`} />
                                 </CardHeader>
                             </CollapsibleTrigger>
                             <CollapsibleContent>
-                                <CardContent className="space-y-6">
+                                <CardContent className="space-y-6 pt-4">
                                     <div className="grid md:grid-cols-2 gap-6">
                                         <div className="space-y-2">
                                             <Label htmlFor="totalAmount">Monto Total del Pago (Bs.)</Label>
@@ -599,8 +600,8 @@ function ReportPaymentTab() {
                     <Button type="button" variant="ghost" className="text-muted-foreground hover:text-white" onClick={resetForm} disabled={isSubmitting}>
                         CANCELAR
                     </Button>
-                    <Button type="submit" className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl px-6 py-6 text-base font-bold" disabled={isSubmitting}>
-                        {isSubmitting ? <Loader2 className="mr-2 h-5 w-5 animate-spin"/> : <Save className="mr-2 h-5 w-5" />}
+                    <Button type="submit" className="bg-primary hover:bg-primary/90 text-primary-foreground px-6 py-6 text-base font-bold" disabled={isSubmitting}>
+                        {isSubmitting ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Save className="mr-2 h-5 w-5" />}
                         Enviar Reporte
                     </Button>
                 </CardFooter>
@@ -736,7 +737,7 @@ function CalculatorTab() {
                                 </CardContent>
                                 <CardFooter>
                                     <Button className="w-full" onClick={() => router.push('/admin/payments?tab=report')} disabled={!paymentCalculator.hasSelection || paymentCalculator.totalToPay <= 0}>
-                                        Reportar Pago
+                                        Enviar Reporte
                                     </Button>
                                 </CardFooter>
                             </Card>
@@ -752,6 +753,14 @@ function CalculatorTab() {
 // ===================================================================================
 // MAIN PAGE COMPONENT
 // ===================================================================================
+export default function AdminPaymentsPageWithSuspense() {
+    return (
+        <Suspense fallback={<div className="flex h-64 w-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>}>
+            <AdminPaymentsPage />
+        </Suspense>
+    );
+}
+
 function AdminPaymentsPage() {
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -794,13 +803,5 @@ function AdminPaymentsPage() {
                 </TabsContent>
             </Tabs>
         </div>
-    );
-}
-
-export default function AdminPaymentsPageWithSuspense() {
-    return (
-        <Suspense fallback={<div className="flex h-64 w-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>}>
-            <AdminPaymentsPage />
-        </Suspense>
     );
 }
