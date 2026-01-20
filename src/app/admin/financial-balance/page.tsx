@@ -25,7 +25,7 @@ type FinancialItem = {
     dia: string;
     concepto: string;
     monto: number;
-    category: 'cuotas_ordinarias' | 'cuotas_especiales' | 'fondo_reserva' | 'otros';
+    category: 'cuotas_ordinarias' | 'cuotas_especiales' | 'fondo_reserva' | 'deposito_en_transito' | 'otros';
     date?: Timestamp;
 };
 
@@ -58,6 +58,7 @@ const incomeCategories = [
     { value: 'cuotas_ordinarias', label: 'Cuotas Ordinarias' },
     { value: 'cuotas_especiales', label: 'Cuotas Especiales' },
     { value: 'fondo_reserva', label: 'Fondo de Reserva' },
+    { value: 'deposito_en_transito', label: 'Deposito en transito' },
     { value: 'otros', label: 'Otros Ingresos' },
 ];
 
@@ -288,7 +289,7 @@ export default function FinancialBalancePage() {
     };
     
     const handleExport = async (formatType: 'pdf' | 'excel', statement: FinancialStatement) => {
-        const QRCode = await import('qrcode');
+        const { default: QRCode } = await import('qrcode');
         const qrCodeUrl = await QRCode.toDataURL(`${window.location.origin}/balance/${statement.id}`, { errorCorrectionLevel: 'M', margin: 2, scale: 4 });
         
         const totalIngresos = statement.ingresos.reduce((sum, item) => sum + item.monto, 0);
@@ -391,7 +392,7 @@ export default function FinancialBalancePage() {
             doc.save(`Balance_Financiero_${statement.id}.pdf`);
 
         } else { // Excel
-            const ExcelJS = await import('exceljs');
+            const { default: ExcelJS } = await import('exceljs');
             const workbook = new ExcelJS.Workbook();
             const worksheet = workbook.addWorksheet(`Balance ${statement.id}`);
 

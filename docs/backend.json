@@ -220,7 +220,7 @@
             "monto": {"type": "number"},
             "category": {
                 "type": "string",
-                "enum": ["cuotas_ordinarias", "cuotas_especiales", "fondo_reserva", "otros"]
+                "enum": ["cuotas_ordinarias", "cuotas_especiales", "fondo_reserva", "deposito_en_transito", "otros"]
             },
             "date": {"type": "string", "format": "date-time"}
         }
