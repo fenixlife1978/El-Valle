@@ -18,7 +18,7 @@ type Expense = {
     id: string;
     description: string;
     amount: number;
-    category: 'Servicios' | 'Mantenimiento' | 'Nomina' | 'Administracion' | 'Otros';
+    category: 'Servicios' | 'Mantenimiento' | 'Nomina' | 'Administracion' | 'Telefonia e Internet' | 'Gastos ExtraOrdinarios' | 'Reparaciones Generales' | 'Otros Gastos';
     date: Timestamp;
     reference: string;
     createdAt: Timestamp;
@@ -88,7 +88,10 @@ function RegisterExpenseForm({ onSave }: { onSave: () => void }) {
                     <SelectItem value="Mantenimiento">Mantenimiento</SelectItem>
                     <SelectItem value="Nomina">Nómina / Sueldos</SelectItem>
                     <SelectItem value="Administracion">Gastos Administrativos</SelectItem>
-                    <SelectItem value="Otros">Otros</SelectItem>
+                    <SelectItem value="Telefonia e Internet">Telefonia e Internet</SelectItem>
+                    <SelectItem value="Gastos ExtraOrdinarios">Gastos ExtraOrdinarios</SelectItem>
+                    <SelectItem value="Reparaciones Generales">Reparaciones Generales</SelectItem>
+                    <SelectItem value="Otros Gastos">Otros Gastos</SelectItem>
                 </SelectContent>
                 </Select>
                 <Input name="date" type="date" defaultValue={format(new Date(), 'yyyy-MM-dd')} required />
