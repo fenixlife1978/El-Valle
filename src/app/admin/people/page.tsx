@@ -37,7 +37,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { PlusCircle, Edit, Trash2, Loader2, KeyRound, Search, FileDown, MoreHorizontal, Eye, EyeOff, MinusCircle, Building, User, Save, FileSpreadsheet } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Loader2, KeyRound, Search, FileDown, MoreHorizontal, Eye, EyeOff, MinusCircle, Building, User, Save, FileSpreadsheet, FileText } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 
