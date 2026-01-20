@@ -12,12 +12,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { PlusCircle, MinusCircle, Loader2, FileText, FileSpreadsheet, Eye, Save, Trash2, ArrowLeft, MoreHorizontal, Megaphone, DollarSign } from 'lucide-react';
-import { collection, doc, getDoc, setDoc, onSnapshot, orderBy, query, deleteDoc, Timestamp, where } from 'firebase/firestore';
+import { collection, doc, getDoc, setDoc, onSnapshot, orderBy, query, deleteDoc, Timestamp, where, getDocs, endOfMonth } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 
 
 type FinancialItem = {
@@ -65,7 +66,7 @@ const incomeCategories = [
 const initialItem: FinancialItem = { id: Date.now().toString(), dia: '', concepto: '', monto: 0, category: 'cuotas_ordinarias' };
 const initialFinancialState: FinancialState = { saldoEfectivo: 0 };
 
-const months = Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: format(new Date(2000, i), 'MMMM', { locale: es }) }));
+const months = Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1).padStart(2, '0'), label: format(new Date(2000, i), 'MMMM', { locale: es }) }));
 const years = Array.from({ length: 10 }, (_, i) => String(new Date().getFullYear() + 1 - i));
 
 const formatToTwoDecimals = (num: number) => {
@@ -82,9 +83,16 @@ export default function FinancialBalancePage() {
     const [isEditing, setIsEditing] = useState(false);
     
     // Form State
-    const [selectedMonth, setSelectedMonth] = useState<string>(String(new Date().getMonth() + 1));
+    const [selectedMonth, setSelectedMonth] = useState<string>(String(new Date().getMonth() + 1).padStart(2, '0'));
     const [selectedYear, setSelectedYear] = useState<string>(String(new Date().getFullYear()));
-    const [ingresos, setIngresos] = useState<FinancialItem[]>([initialItem]);
+    
+    // Automatic Fields
+    const [editablePreviousMonthBalance, setEditablePreviousMonthBalance] = useState(0);
+    const [currentMonthPayments, setCurrentMonthPayments] = useState(0);
+    const [loadingPeriodData, setLoadingPeriodData] = useState(false);
+
+    // Manual Fields
+    const [manualIngresos, setManualIngresos] = useState<FinancialItem[]>([initialItem]);
     const [allExpenses, setAllExpenses] = useState<FinancialItem[]>([]);
     const [estadoFinanciero, setEstadoFinanciero] = useState<FinancialState>(initialFinancialState);
     const [notas, setNotas] = useState('');
@@ -153,6 +161,78 @@ export default function FinancialBalancePage() {
         }
     }, []);
 
+    useEffect(() => {
+        if (isEditing) return; // Don't auto-calculate if we are viewing/editing an existing report
+    
+        const fetchPeriodData = async () => {
+            if (!selectedMonth || !selectedYear) return;
+            setLoadingPeriodData(true);
+    
+            const year = parseInt(selectedYear);
+            const month = parseInt(selectedMonth);
+    
+            // --- Fetch Previous Month's Balance ---
+            let prevMonth = month - 1;
+            let prevYear = year;
+            if (prevMonth === 0) {
+                prevMonth = 12;
+                prevYear = year - 1;
+            }
+            const prevStatementId = `${prevYear}-${String(prevMonth).padStart(2, '0')}`;
+            const prevStatementRef = doc(db, "financial_statements", prevStatementId);
+            
+            try {
+                const prevStatementSnap = await getDoc(prevStatementRef);
+        
+                let calculatedPreviousBalance = 0;
+                if (prevStatementSnap.exists()) {
+                    const prevData = prevStatementSnap.data() as FinancialStatement;
+                    const prevIngresos = prevData.ingresos.reduce((sum, item) => sum + item.monto, 0);
+                    const prevEgresos = prevData.egresos.reduce((sum, item) => sum + item.monto, 0);
+                    const prevSaldoNetoBanco = prevIngresos - prevEgresos;
+                    
+                    const prevEndOfMonthDate = endOfMonth(new Date(prevYear, prevMonth - 1));
+                    
+                    const prevRelevantReplenishments = allPettyCash.filter(rep => rep.date.toDate() <= prevEndOfMonthDate);
+                    const prevTotalReplenished = prevRelevantReplenishments.reduce((sum, rep) => sum + rep.amount, 0);
+                    const prevTotalPettyCashExpenses = prevRelevantReplenishments.flatMap(rep => rep.expenses)
+                        .filter(exp => exp.date.toDate() <= prevEndOfMonthDate)
+                        .reduce((sum, exp) => sum + exp.amount, 0);
+                    const prevSaldoCajaChica = prevTotalReplenished - prevTotalPettyCashExpenses;
+                    const prevSaldoEfectivo = prevData.estadoFinanciero?.saldoEfectivo || 0;
+                    
+                    calculatedPreviousBalance = prevSaldoNetoBanco + prevSaldoCajaChica + prevSaldoEfectivo;
+                }
+                setEditablePreviousMonthBalance(calculatedPreviousBalance);
+        
+                // --- Fetch Current Month's Payments ---
+                const startDate = new Date(year, month - 1, 1);
+                const endDate = new Date(year, month, 1);
+                
+                const paymentsQuery = query(
+                    collection(db, "payments"),
+                    where("status", "==", "aprobado"),
+                    where("paymentDate", ">=", Timestamp.fromDate(startDate)),
+                    where("paymentDate", "<", Timestamp.fromDate(endDate))
+                );
+                
+                const paymentsSnap = await getDocs(paymentsQuery);
+                const totalPayments = paymentsSnap.docs.reduce((sum, doc) => sum + doc.data().totalAmount, 0);
+                setCurrentMonthPayments(totalPayments);
+            } catch (error) {
+                console.error("Error fetching period data:", error);
+                toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron cargar los datos automáticos para el período.' });
+            } finally {
+                setLoadingPeriodData(false);
+            }
+        };
+    
+        if (!loading) { // Ensure initial data like petty cash is loaded before running
+            fetchPeriodData();
+        }
+    }, [selectedMonth, selectedYear, allPettyCash, loading, isEditing, toast]);
+
+
     const egresos = useMemo(() => {
         if (!selectedMonth || !selectedYear) return [];
         const month = parseInt(selectedMonth);
@@ -166,7 +246,8 @@ export default function FinancialBalancePage() {
     }, [allExpenses, selectedMonth, selectedYear]);
 
     const totals = useMemo(() => {
-        const totalIngresos = ingresos.reduce((sum, item) => sum + Number(item.monto), 0);
+        const totalManualIngresos = manualIngresos.reduce((sum, item) => sum + Number(item.monto), 0);
+        const totalIngresos = editablePreviousMonthBalance + currentMonthPayments + totalManualIngresos;
         const totalEgresos = egresos.reduce((sum, item) => sum + Number(item.monto), 0);
         const saldoNetoBanco = totalIngresos - totalEgresos;
 
@@ -188,16 +269,19 @@ export default function FinancialBalancePage() {
         const usdEquivalent = activeRate > 0 ? totalLiquidez / activeRate : 0;
 
         return { totalIngresos, totalEgresos, saldoNetoBanco, saldoCajaChica, totalLiquidez, usdEquivalent };
-    }, [ingresos, egresos, allPettyCash, selectedYear, selectedMonth, estadoFinanciero, activeRate]);
+    }, [manualIngresos, editablePreviousMonthBalance, currentMonthPayments, egresos, allPettyCash, selectedYear, selectedMonth, estadoFinanciero, activeRate]);
 
 
     const resetForm = () => {
         setIsEditing(false);
-        setSelectedMonth(String(new Date().getMonth() + 1));
+        setCurrentStatement(null);
+        setSelectedMonth(String(new Date().getMonth() + 1).padStart(2, '0'));
         setSelectedYear(String(new Date().getFullYear()));
-        setIngresos([{ ...initialItem, id: Date.now().toString() }]);
+        setManualIngresos([{ ...initialItem, id: Date.now().toString() }]);
         setEstadoFinanciero(initialFinancialState);
         setNotas('');
+        setEditablePreviousMonthBalance(0);
+        setCurrentMonthPayments(0);
     };
 
     const handleNewStatement = () => {
@@ -206,17 +290,27 @@ export default function FinancialBalancePage() {
     };
 
     const handleViewStatement = (statement: FinancialStatement) => {
-        setCurrentStatement(statement);
         setView('form');
         setIsEditing(true);
-
+        setCurrentStatement(statement);
+    
         setSelectedYear(statement.id.split('-')[0]);
         setSelectedMonth(statement.id.split('-')[1]);
-        setIngresos(statement.ingresos.map(i => ({...i, id: Math.random().toString(), dia: i.dia || '', category: i.category || 'cuotas_ordinarias' })));
+        
+        const saldoAnteriorItem = statement.ingresos.find(i => i.concepto === 'Saldo en Banco Mes Anterior');
+        const pagosMesItem = statement.ingresos.find(i => i.concepto === 'Ingresos por Pagos del Mes');
+        const manualItems = statement.ingresos.filter(i => 
+            i.concepto !== 'Saldo en Banco Mes Anterior' && i.concepto !== 'Ingresos por Pagos del Mes'
+        );
+    
+        setEditablePreviousMonthBalance(saldoAnteriorItem?.monto || 0);
+        setCurrentMonthPayments(pagosMesItem?.monto || 0);
+        setManualIngresos(manualItems.length > 0 ? manualItems.map(i => ({...i, id: Math.random().toString(), dia: i.dia || '', category: i.category || 'cuotas_ordinarias' })) : [initialItem]);
+        
         setEstadoFinanciero({ saldoEfectivo: statement.estadoFinanciero?.saldoEfectivo || 0 });
         setNotas(statement.notas);
     };
-
+    
     const handleDeleteStatement = async (statementId: string) => {
         if (window.confirm('¿Está seguro de que desea eliminar este balance? Esta acción no se puede deshacer.')) {
             await deleteDoc(doc(db, "financial_statements", statementId));
@@ -259,15 +353,35 @@ export default function FinancialBalancePage() {
     const handleSaveStatement = async () => {
         const statementId = `${selectedYear}-${selectedMonth}`;
         
-        const finalIngresos = ingresos.filter(i => i.concepto && Number(i.monto) > 0).map(i => ({...i, monto: Number(i.monto), dia: i.dia || '', category: i.category || 'cuotas_ordinarias'}));
+        const finalManualIngresos = manualIngresos
+            .filter(i => i.concepto && Number(i.monto) > 0)
+            .map(i => ({...i, monto: Number(i.monto), dia: i.dia || '', category: i.category || 'cuotas_ordinarias'}));
+            
+        const fullIngresos: FinancialItem[] = [
+            {
+                id: 'saldo-anterior',
+                dia: '01',
+                concepto: 'Saldo en Banco Mes Anterior',
+                monto: editablePreviousMonthBalance,
+                category: 'otros'
+            },
+            {
+                id: 'pagos-mes',
+                dia: 'Varios',
+                concepto: 'Ingresos por Pagos del Mes',
+                monto: currentMonthPayments,
+                category: 'cuotas_ordinarias'
+            },
+            ...finalManualIngresos
+        ];
 
-        if (finalIngresos.length === 0) {
+        if (fullIngresos.length === 0) {
             toast({ variant: 'destructive', title: 'Datos incompletos', description: 'Debe haber al menos un ingreso.' });
             return;
         }
 
         const data: Omit<FinancialStatement, 'id'> & { estadoFinanciero: any } = {
-            ingresos: finalIngresos,
+            ingresos: fullIngresos,
             egresos: egresos,
             estadoFinanciero: {
                 saldoNeto: totals.saldoNetoBanco,
@@ -435,9 +549,9 @@ export default function FinancialBalancePage() {
         }
     });
 
-    const ingresosManager = createItemManager(ingresos, setIngresos);
+    const manualIngresosManager = createItemManager(manualIngresos, setManualIngresos);
 
-    const renderFinancialItemsTable = (title: string, items: FinancialItem[], manager: any, total: number) => (
+    const renderManualFinancialItemsTable = (title: string, items: FinancialItem[], manager: any, total: number) => (
         <Card>
             <CardHeader><CardTitle>{title}</CardTitle></CardHeader>
             <CardContent>
@@ -555,7 +669,41 @@ export default function FinancialBalancePage() {
             </Card>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {renderFinancialItemsTable('Ingresos', ingresos, ingresosManager, totals.totalIngresos)}
+                 <Card>
+                    <CardHeader><CardTitle>Ingresos</CardTitle></CardHeader>
+                    <CardContent className="space-y-4">
+                        {loadingPeriodData && <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /><span>Cargando datos automáticos...</span></div>}
+                        <div className="p-4 border rounded-md bg-muted/30">
+                            <Label>Saldo en Banco (Mes Anterior)</Label>
+                            <Input 
+                                type="number"
+                                value={editablePreviousMonthBalance}
+                                onChange={e => setEditablePreviousMonthBalance(Number(e.target.value))}
+                                placeholder="0.00"
+                            />
+                            <p className="text-xs text-muted-foreground mt-1">Calculado del balance anterior. Puedes ajustarlo si es necesario.</p>
+                        </div>
+                        <div className="p-4 border rounded-md bg-muted/30">
+                            <Label>Ingresos por Pagos del Mes</Label>
+                            <Input 
+                                type="text"
+                                value={`Bs. ${formatToTwoDecimals(currentMonthPayments)}`}
+                                readOnly
+                                className="font-semibold bg-background"
+                            />
+                            <p className="text-xs text-muted-foreground mt-1">Suma de todos los pagos aprobados en el período.</p>
+                        </div>
+                        
+                        <Separator className="my-6"/>
+                        
+                        <h4 className="font-semibold">Otros Ingresos (Manual)</h4>
+                        {renderManualFinancialItemsTable("", manualIngresos, manualIngresosManager, totals.totalIngresos)}
+
+                    </CardContent>
+                    <CardFooter className="justify-end bg-muted/50 p-4">
+                        <p className="font-bold">Total Ingresos: Bs. {formatToTwoDecimals(totals.totalIngresos)}</p>
+                    </CardFooter>
+                </Card>
                 <Card>
                     <CardHeader>
                         <CardTitle>Egresos (Automático)</CardTitle>
