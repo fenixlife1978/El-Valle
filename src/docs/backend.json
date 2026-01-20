@@ -199,7 +199,13 @@
         "properties": {
             "ingresos": {"type": "array", "items": {"$ref": "#/entities/FinancialItem"}},
             "egresos": {"type": "array", "items": {"$ref": "#/entities/FinancialItem"}},
-            "estadoFinanciero": {"type": "object"},
+            "estadoFinanciero": {
+                "type": "object",
+                "properties": {
+                    "saldoNeto": {"type": "number"},
+                    "saldoEfectivo": {"type": "number"}
+                }
+            },
             "notas": {"type": "string"},
             "createdAt": {"type": "string", "format": "date-time"}
         }
@@ -212,7 +218,10 @@
             "dia": {"type": "string"},
             "concepto": {"type": "string"},
             "monto": {"type": "number"},
-            "category": {"type": "string"},
+            "category": {
+                "type": "string",
+                "enum": ["cuotas_ordinarias", "cuotas_especiales", "fondo_reserva", "otros"]
+            },
             "date": {"type": "string", "format": "date-time"}
         }
     },
