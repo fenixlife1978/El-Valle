@@ -191,15 +191,15 @@ export default function ReportViewerPage() {
 
     doc.text(`Emitido: ${format(new Date(), 'dd/MM/yyyy')}`, pageWidth - margin, margin + 8, { align: 'right' });
     
-    doc.setFontSize(16).setFont('helvetica', 'bold').text('Balance Financiero', pageWidth / 2, margin + 45, { align: 'center' });
-    doc.setFontSize(12).setFont('helvetica', 'normal').text(`Correspondiente al período de ${period}`, pageWidth / 2, margin + 52, { align: 'center' });
+    doc.setFontSize(16).setFont('helvetica', 'bold').text('Balance Financiero', pageWidth / 2, margin + 52, { align: 'center' });
+    doc.setFontSize(12).setFont('helvetica', 'normal').text(`Correspondiente al período de ${period}`, pageWidth / 2, margin + 59, { align: 'center' });
     
     if (qrCodeUrl) {
         const qrSize = 30;
-        doc.addImage(qrCodeUrl, 'PNG', pageWidth - margin - qrSize, margin + 35, qrSize, qrSize);
+        doc.addImage(qrCodeUrl, 'PNG', pageWidth - margin - qrSize, margin + 50, qrSize, qrSize);
     }
 
-    let startY = margin + 70;
+    let startY = margin + 85;
 
     autoTable(doc, {
       head: [['DÍA', 'INGRESOS', 'MONTO (Bs.)']],

@@ -331,10 +331,10 @@ export default function FinancialBalancePage() {
             
             if (qrCodeUrl) {
                 const qrSize = 30;
-                doc.addImage(qrCodeUrl, 'PNG', pageWidth - margin - qrSize, margin + 45, qrSize, qrSize);
+                doc.addImage(qrCodeUrl, 'PNG', pageWidth - margin - qrSize, margin + 50, qrSize, qrSize);
             }
 
-            let startY = margin + 70;
+            let startY = margin + 85;
             
             autoTable(doc, {
                 head: [['DÍA', 'INGRESOS', 'CATEGORÍA', 'MONTO (Bs.)']],
