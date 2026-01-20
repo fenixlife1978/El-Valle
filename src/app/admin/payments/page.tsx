@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useEffect, useMemo, useCallback, Suspense } from 'react';
@@ -931,5 +930,44 @@ function ReportPaymentTab() {
                 <Dialog open={isInfoDialogOpen} onOpenChange={setIsInfoDialogOpen}><DialogContent><DialogHeader><DialogTitle className="flex items-center gap-2"><Info className="h-6 w-6 text-blue-500" />Reporte Enviado para Revisión</DialogTitle><div className="pt-4 text-sm text-muted-foreground space-y-4"><p>¡Gracias! Hemos recibido el reporte de pago. Será procesado en un máximo de <strong>24 horas</strong>.</p></div></DialogHeader><DialogFooter><Button onClick={() => setIsInfoDialogOpen(false)}>Entendido</Button></DialogFooter></DialogContent></Dialog>
             </form>
         </Card>
+    );
+}
+
+function AdminPaymentsPageContent() {
+    const searchParams = useSearchParams();
+    const defaultTab = searchParams.get('tab') || 'verify';
+    const router = useRouter();
+
+    const onTabChange = (value: string) => {
+        router.push(`/admin/payments?tab=${value}`);
+    };
+    
+    return (
+         <div className="space-y-8">
+            <div>
+                <h1 className="text-3xl font-bold font-headline">Gestión de Pagos</h1>
+                <p className="text-muted-foreground">Registre, verifique y gestione los pagos de los propietarios.</p>
+            </div>
+            <Tabs defaultValue={defaultTab} onValueChange={onTabChange} className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="verify">Verificar Pagos</TabsTrigger>
+                    <TabsTrigger value="report">Reportar Pago (Admin)</TabsTrigger>
+                </TabsList>
+                <TabsContent value="verify">
+                    <VerifyPaymentsTab />
+                </TabsContent>
+                <TabsContent value="report">
+                    <ReportPaymentTab />
+                </TabsContent>
+            </Tabs>
+        </div>
+    );
+}
+
+export default function AdminPaymentsPage() {
+    return (
+        <Suspense fallback={<div className="flex justify-center items-center h-full"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>}>
+            <AdminPaymentsPageContent />
+        </Suspense>
     );
 }
