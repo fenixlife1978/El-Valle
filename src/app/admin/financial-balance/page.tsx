@@ -2,7 +2,7 @@
 
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -12,12 +12,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { PlusCircle, MinusCircle, Loader2, FileText, FileSpreadsheet, Eye, Save, Trash2, ArrowLeft, MoreHorizontal, Megaphone } from 'lucide-react';
-import { collection, doc, getDoc, setDoc, onSnapshot, orderBy, query, deleteDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, setDoc, onSnapshot, orderBy, query, deleteDoc, Timestamp, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { useRouter } from 'next/navigation';
+import { Badge } from '@/components/ui/badge';
 
 
 type FinancialItem = {
@@ -25,6 +25,8 @@ type FinancialItem = {
     dia: string;
     concepto: string;
     monto: number;
+    category?: string;
+    date?: Timestamp;
 };
 
 type FinancialState = {
@@ -68,7 +70,6 @@ const formatToTwoDecimals = (num: number) => {
 
 export default function FinancialBalancePage() {
     const { toast } = useToast();
-    const router = useRouter();
     const [view, setView] = useState<'list' | 'form'>('list');
     const [isEditing, setIsEditing] = useState(false);
     
@@ -76,7 +77,7 @@ export default function FinancialBalancePage() {
     const [selectedMonth, setSelectedMonth] = useState<string>(String(new Date().getMonth() + 1));
     const [selectedYear, setSelectedYear] = useState<string>(String(new Date().getFullYear()));
     const [ingresos, setIngresos] = useState<FinancialItem[]>([initialItem]);
-    const [egresos, setEgresos] = useState<FinancialItem[]>([initialItem]);
+    const [allExpenses, setAllExpenses] = useState<FinancialItem[]>([]);
     const [estadoFinanciero, setEstadoFinanciero] = useState<FinancialState>(initialFinancialState);
     const [notas, setNotas] = useState('');
     
@@ -102,8 +103,39 @@ export default function FinancialBalancePage() {
         };
         fetchCompanyInfo();
 
-        return () => unsubscribe();
+        const expensesQuery = query(collection(db, "expenses"), orderBy("date", "desc"));
+        const unsubscribeExpenses = onSnapshot(expensesQuery, (snapshot) => {
+            const expensesData = snapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    dia: data.date ? format(data.date.toDate(), 'dd') : '',
+                    concepto: data.description,
+                    monto: data.amount,
+                    category: data.category,
+                    date: data.date
+                } as FinancialItem;
+            });
+            setAllExpenses(expensesData);
+        });
+
+        return () => {
+            unsubscribe();
+            unsubscribeExpenses();
+        }
     }, []);
+
+    const egresos = useMemo(() => {
+        if (!selectedMonth || !selectedYear) return [];
+        const month = parseInt(selectedMonth);
+        const year = parseInt(selectedYear);
+
+        return allExpenses.filter(expense => {
+            if (!expense.date) return false;
+            const expenseDate = expense.date.toDate();
+            return expenseDate.getMonth() + 1 === month && expenseDate.getFullYear() === year;
+        });
+    }, [allExpenses, selectedMonth, selectedYear]);
 
     const totals = useMemo(() => {
         const totalIngresos = ingresos.reduce((sum, item) => sum + Number(item.monto), 0);
@@ -119,7 +151,6 @@ export default function FinancialBalancePage() {
         setSelectedMonth(String(new Date().getMonth() + 1));
         setSelectedYear(String(new Date().getFullYear()));
         setIngresos([{ id: Date.now().toString(), dia: '', concepto: '', monto: 0 }]);
-        setEgresos([{ id: Date.now().toString(), dia: '', concepto: '', monto: 0 }]);
         setEstadoFinanciero(initialFinancialState);
         setNotas('');
     };
@@ -137,10 +168,7 @@ export default function FinancialBalancePage() {
         setSelectedYear(statement.id.split('-')[0]);
         setSelectedMonth(statement.id.split('-')[1]);
         setIngresos(statement.ingresos.map(i => ({...i, id: Math.random().toString(), dia: i.dia || '' })));
-        setEgresos(statement.egresos.map(e => ({...e, id: Math.random().toString(), dia: e.dia || '' })));
-        setEstadoFinanciero({
-            // No fields to set here anymore
-        });
+        setEstadoFinanciero({});
         setNotas(statement.notas);
     };
 
@@ -187,17 +215,15 @@ export default function FinancialBalancePage() {
         const statementId = `${selectedYear}-${selectedMonth}`;
         
         const finalIngresos = ingresos.filter(i => i.concepto && Number(i.monto) > 0).map(i => ({...i, monto: Number(i.monto), dia: i.dia || ''}));
-        const finalEgresos = egresos.filter(e => e.concepto && Number(e.monto) > 0).map(e => ({...e, monto: Number(e.monto), dia: e.dia || ''}));
 
-
-        if (finalIngresos.length === 0 || finalEgresos.length === 0) {
-            toast({ variant: 'destructive', title: 'Datos incompletos', description: 'Debe haber al menos un ingreso y un egreso.' });
+        if (finalIngresos.length === 0) {
+            toast({ variant: 'destructive', title: 'Datos incompletos', description: 'Debe haber al menos un ingreso.' });
             return;
         }
 
         const data: Omit<FinancialStatement, 'id' | 'estadoFinanciero'> & { estadoFinanciero: any } = {
             ingresos: finalIngresos,
-            egresos: finalEgresos,
+            egresos: egresos,
             estadoFinanciero: {
                 saldoNeto: totals.saldoNeto,
             },
@@ -236,7 +262,6 @@ export default function FinancialBalancePage() {
             const pageWidth = doc.internal.pageSize.getWidth();
             const margin = 14;
             
-            // Header
             if (companyInfo?.logo) doc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25);
             doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo?.name || '', margin + 30, margin + 8);
             doc.setFontSize(9).setFont('helvetica', 'normal');
@@ -246,18 +271,16 @@ export default function FinancialBalancePage() {
 
             doc.text(`Emitido: ${format(new Date(), 'dd/MM/yyyy')}`, pageWidth - margin, margin + 8, { align: 'right' });
             
-            // Title
-            doc.setFontSize(16).setFont('helvetica', 'bold').text('Balance Financiero', pageWidth / 2, margin + 45, { align: 'center'});
-            doc.setFontSize(12).setFont('helvetica', 'normal').text(`Correspondiente al período de ${period}`, pageWidth / 2, margin + 52, { align: 'center'});
+            doc.setFontSize(16).setFont('helvetica', 'bold').text('Balance Financiero', pageWidth / 2, margin + 52, { align: 'center'});
+            doc.setFontSize(12).setFont('helvetica', 'normal').text(`Correspondiente al período de ${period}`, pageWidth / 2, margin + 59, { align: 'center'});
             
             if (qrCodeUrl) {
                 const qrSize = 30;
-                doc.addImage(qrCodeUrl, 'PNG', pageWidth - margin - qrSize, margin + 35, qrSize, qrSize);
+                doc.addImage(qrCodeUrl, 'PNG', pageWidth - margin - qrSize, margin + 45, qrSize, qrSize);
             }
 
             let startY = margin + 70;
             
-            // Ingresos
             autoTable(doc, {
                 head: [['DÍA', 'INGRESOS', 'MONTO (Bs.)']],
                 body: statement.ingresos.map(i => [i.dia || '', i.concepto, { content: formatToTwoDecimals(i.monto), styles: { halign: 'right' } }]),
@@ -266,21 +289,36 @@ export default function FinancialBalancePage() {
             });
             startY = (doc as any).lastAutoTable.finalY + 10;
             
-            // Egresos
             autoTable(doc, {
-                head: [['DÍA', 'EGRESOS', 'MONTO (Bs.)']],
-                body: statement.egresos.map(e => [e.dia || '', e.concepto, { content: formatToTwoDecimals(e.monto), styles: { halign: 'right' } }]),
-                foot: [[{ content: '', styles: { halign: 'right' } }, { content: 'TOTAL EGRESOS', styles: { halign: 'right' } }, { content: formatToTwoDecimals(totalEgresos), styles: { halign: 'right' } }]],
-                startY: startY,
-                theme: 'striped',
-                showHead: 'firstPage',
-                showFoot: 'lastPage',
-                headStyles: { fillColor: [220, 53, 69], halign: 'center' },
-                footStyles: { fillColor: [220, 53, 69], textColor: 255, fontStyle: 'bold' },
+                head: [['DÍA', 'EGRESOS', 'CATEGORÍA', 'MONTO (Bs.)']],
+                body: statement.egresos.map(e => [e.dia || '', e.concepto, e.category || 'N/A', { content: formatToTwoDecimals(e.monto), styles: { halign: 'right' } }]),
+                foot: [[{ content: '', colSpan: 2, styles: { halign: 'right' } }, { content: 'TOTAL EGRESOS', styles: { halign: 'right' } }, { content: formatToTwoDecimals(totalEgresos), styles: { halign: 'right' } }]],
+                startY: startY, theme: 'striped', headStyles: { fillColor: [220, 53, 69], halign: 'center' }, footStyles: { fillColor: [220, 53, 69], textColor: 255, fontStyle: 'bold' },
+            });
+            startY = (doc as any).lastAutoTable.finalY + 10;
+            
+            const egresosPorCategoria = statement.egresos.reduce((acc: Record<string, number>, egreso: FinancialItem) => {
+                const category = egreso.category || 'Otros';
+                acc[category] = (acc[category] || 0) + egreso.monto;
+                return acc;
+            }, {});
+
+            doc.setFontSize(11).setFont('helvetica', 'bold').text('Resumen de Egresos por Categoría', margin, startY);
+            startY += 6;
+            
+            autoTable(doc, {
+                startY,
+                head: [['Categoría', 'Monto Total (Bs.)']],
+                body: Object.entries(egresosPorCategoria).map(([categoria, monto]) => [
+                    categoria,
+                    { content: formatToTwoDecimals(monto), styles: { halign: 'right' }}
+                ]),
+                theme: 'grid',
+                headStyles: { fillColor: [110, 110, 110] },
             });
             startY = (doc as any).lastAutoTable.finalY + 10;
 
-            // Total Efectivo Disponible
+
             doc.setFontSize(11).setFont('helvetica', 'bold');
             const totalEfectivoY = startY + 10;
             doc.setFillColor(232, 255, 236); // Light green background
@@ -289,9 +327,8 @@ export default function FinancialBalancePage() {
             doc.text('SALDO NETO O SALDO FINAL DEL MES EN BANCO (Ingresos - Egresos)', margin + 2, totalEfectivoY);
             doc.text(formatToTwoDecimals(saldoNeto), pageWidth - margin - 2, totalEfectivoY, { align: 'right' });
             startY = totalEfectivoY + 10;
-            doc.setTextColor(0, 0, 0); // Reset text color
+            doc.setTextColor(0, 0, 0);
 
-            // Footer
             startY += 10;
             doc.setFontSize(10).text('Notas:', margin, startY);
             doc.setFontSize(10).setFont('helvetica', 'normal').text(statement.notas, margin, startY + 5, { maxWidth: 180 });
@@ -309,11 +346,11 @@ export default function FinancialBalancePage() {
             statement.ingresos.forEach(i => worksheet.addRow([i.dia || '', i.concepto, i.monto]));
             worksheet.addRow(['', 'TOTAL INGRESOS', totalIngresos]);
             worksheet.addRow([]);
-            worksheet.addRow(['DÍA', 'EGRESOS', 'MONTO']);
-            statement.egresos.forEach(e => worksheet.addRow([e.dia || '', e.concepto, e.monto]));
-            worksheet.addRow(['', 'TOTAL EGRESOS', totalEgresos]);
+            worksheet.addRow(['DÍA', 'EGRESOS', 'CATEGORIA', 'MONTO']);
+            statement.egresos.forEach(e => worksheet.addRow([e.dia || '', e.concepto, e.category, e.monto]));
+            worksheet.addRow(['', '', 'TOTAL EGRESOS', totalEgresos]);
             worksheet.addRow([]);
-            worksheet.addRow(['', 'SALDO NETO O SALDO FINAL DEL MES EN BANCO', saldoNeto]);
+            worksheet.addRow(['', '', 'SALDO NETO', saldoNeto]);
             worksheet.addRow([]);
             worksheet.addRow(['Notas', statement.notas]);
             
@@ -339,7 +376,6 @@ export default function FinancialBalancePage() {
     });
 
     const ingresosManager = createItemManager(ingresos, setIngresos);
-    const egresosManager = createItemManager(egresos, setEgresos);
 
     const renderFinancialItemsTable = (title: string, items: FinancialItem[], manager: any, total: number) => (
         <Card>
@@ -453,7 +489,41 @@ export default function FinancialBalancePage() {
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 {renderFinancialItemsTable('Ingresos', ingresos, ingresosManager, totals.totalIngresos)}
-                {renderFinancialItemsTable('Egresos', egresos, egresosManager, totals.totalEgresos)}
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Egresos (Automático)</CardTitle>
+                        <CardDescription>Estos son los gastos registrados para el período seleccionado. Se gestionan desde la página de "Gestión de Egresos".</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Día</TableHead>
+                                    <TableHead>Concepto</TableHead>
+                                    <TableHead>Categoría</TableHead>
+                                    <TableHead className="text-right">Monto (Bs.)</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {egresos.length === 0 ? (
+                                    <TableRow><TableCell colSpan={4} className="h-24 text-center">No hay egresos registrados para este período.</TableCell></TableRow>
+                                ) : (
+                                    egresos.map((item) => (
+                                        <TableRow key={item.id}>
+                                            <TableCell>{item.dia}</TableCell>
+                                            <TableCell>{item.concepto}</TableCell>
+                                            <TableCell><Badge variant="outline">{item.category}</Badge></TableCell>
+                                            <TableCell className="text-right">{formatToTwoDecimals(item.monto)}</TableCell>
+                                        </TableRow>
+                                    ))
+                                )}
+                            </TableBody>
+                        </Table>
+                    </CardContent>
+                    <CardFooter className="justify-end bg-muted/50 p-4">
+                        <p className="font-bold">Total Egresos: Bs. {formatToTwoDecimals(totals.totalEgresos)}</p>
+                    </CardFooter>
+                </Card>
             </div>
 
             <Card>

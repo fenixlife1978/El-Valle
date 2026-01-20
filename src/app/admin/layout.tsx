@@ -14,6 +14,7 @@ import {
     ClipboardList,
     Award,
     Megaphone,
+    TrendingDown,
 } from 'lucide-react';
 import { type ReactNode, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
@@ -32,6 +33,7 @@ const adminNavItems: NavItem[] = [
             { href: "/admin/payments", label: "Gestion de Pagos" },
             { href: "/admin/debts", label: "Gestión de Deudas" },
             { href: "/admin/financial-balance", label: "Balance Financiero" },
+            { href: "/admin/expenses", label: "Gestión de Egresos" },
             { href: "/admin/petty-cash", label: "Caja Chica" },
             { href: "/admin/reports", label: "Informes" },
             { href: "/admin/billboard", label: "Cartelera" },
@@ -56,6 +58,7 @@ const adminBottomNavItems: BottomNavItem[] = [
     subMenu: [
         { href: "/admin/debts", icon: WalletCards, label: "Deudas" },
         { href: "/admin/surveys", icon: ClipboardList, label: "Encuestas" },
+        { href: "/admin/people", icon: Users, label: "Personas" },
         { href: "/admin/settings", icon: Settings, label: "Ajustes" },
     ]
   },

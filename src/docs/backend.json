@@ -158,6 +158,20 @@
             "paymentId": {"type": "string"}
         }
     },
+     "Expense": {
+        "title": "Expense",
+        "description": "Represents an expense record for the condominium.",
+        "type": "object",
+        "properties": {
+            "description": { "type": "string" },
+            "amount": { "type": "number" },
+            "category": { "type": "string", "enum": ["Servicios", "Mantenimiento", "Nomina", "Administracion", "Otros"] },
+            "date": { "type": "string", "format": "date-time" },
+            "createdAt": { "type": "string", "format": "date-time" },
+            "reference": { "type": "string" }
+        },
+        "required": ["description", "amount", "category", "date"]
+    },
     "Certificate": {
         "title": "Certificate",
         "description": "A residence or solvency certificate.",
@@ -197,7 +211,9 @@
             "id": {"type": "string"},
             "dia": {"type": "string"},
             "concepto": {"type": "string"},
-            "monto": {"type": "number"}
+            "monto": {"type": "number"},
+            "category": {"type": "string"},
+            "date": {"type": "string", "format": "date-time"}
         }
     },
      "IntegralReport": {
@@ -407,6 +423,10 @@
     "/debts/{debtId}": {
         "schema": { "$ref": "#/entities/Debt" },
         "description": "Tracks debts owed by each owner."
+    },
+    "/expenses/{expenseId}": {
+        "schema": { "$ref": "#/entities/Expense" },
+        "description": "Stores individual expense records."
     },
     "/certificates/{certId}": {
         "schema": { "$ref": "#/entities/Certificate" },
