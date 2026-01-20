@@ -18,7 +18,7 @@ type Expense = {
     id: string;
     description: string;
     amount: number;
-    category: 'Servicios' | 'Mantenimiento' | 'Nomina' | 'Administracion' | 'Telefonia e Internet' | 'Gastos ExtraOrdinarios' | 'Reparaciones Generales' | 'Otros Gastos';
+    category: 'Servicios' | 'Mantenimientos y Servicios' | 'Nomina' | 'Administracion' | 'Telefonia e Internet' | 'Gastos ExtraOrdinarios' | 'Reparaciones Generales' | 'Otros Gastos';
     date: Timestamp;
     reference: string;
     createdAt: Timestamp;
@@ -85,7 +85,7 @@ function RegisterExpenseForm({ onSave }: { onSave: () => void }) {
                 </SelectTrigger>
                 <SelectContent>
                     <SelectItem value="Servicios">Servicios (Luz, Agua, Aseo)</SelectItem>
-                    <SelectItem value="Mantenimiento">Mantenimiento</SelectItem>
+                    <SelectItem value="Mantenimientos y Servicios">Mantenimientos y Servicios</SelectItem>
                     <SelectItem value="Nomina">Nómina / Sueldos</SelectItem>
                     <SelectItem value="Administracion">Gastos Administrativos</SelectItem>
                     <SelectItem value="Telefonia e Internet">Telefonia e Internet</SelectItem>
