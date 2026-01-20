@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -189,13 +190,14 @@ export default function ReportViewerPage() {
     doc.text(`Teléfono: ${companyInfo?.phone || ''}`, margin + 30, margin + 24);
 
     doc.text(`Emitido: ${format(new Date(), 'dd/MM/yyyy')}`, pageWidth - margin, margin + 8, { align: 'right' });
-    if (qrCodeUrl) {
-      const qrSize = 25;
-      doc.addImage(qrCodeUrl, 'PNG', pageWidth - margin - qrSize, margin + 12, qrSize, qrSize);
-    }
-
+    
     doc.setFontSize(16).setFont('helvetica', 'bold').text('Balance Financiero', pageWidth / 2, margin + 45, { align: 'center' });
     doc.setFontSize(12).setFont('helvetica', 'normal').text(`Correspondiente al período de ${period}`, pageWidth / 2, margin + 52, { align: 'center' });
+    
+    if (qrCodeUrl) {
+        const qrSize = 30;
+        doc.addImage(qrCodeUrl, 'PNG', pageWidth - margin - qrSize, margin + 35, qrSize, qrSize);
+    }
 
     let startY = margin + 70;
 
