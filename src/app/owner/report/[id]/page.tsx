@@ -13,9 +13,6 @@ import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import QRCode from 'qrcode';
 import { Label } from '@/components/ui/label';
 
 // --- Type Definitions ---
@@ -162,6 +159,9 @@ export default function ReportViewerPage() {
   
   const generateBalancePdf = async () => {
     if (!reportData || !companyInfo) return;
+    const { default: jsPDF } = await import('jspdf');
+    const { default: autoTable } = await import('jspdf-autotable');
+    const QRCode = await import('qrcode');
     const statement = reportData as FinancialStatement;
 
     const qrCodeUrl = await QRCode.toDataURL(`${window.location.href}`, {
@@ -256,8 +256,10 @@ export default function ReportViewerPage() {
     doc.save(`Balance_Financiero_${statement.id}.pdf`);
   };
 
-  const generateIntegralPdf = () => {
+  const generateIntegralPdf = async () => {
     if (!reportData || !companyInfo) return;
+    const { default: jsPDF } = await import('jspdf');
+    const { default: autoTable } = await import('jspdf-autotable');
     const data = reportData.data as IntegralReportRow[];
     const doc = new jsPDF({ orientation: 'landscape' });
     let startY = 15;

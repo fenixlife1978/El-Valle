@@ -17,8 +17,6 @@ import { collection, query, onSnapshot, where, doc, getDoc, writeBatch, updateDo
 import { db } from '@/lib/firebase';
 import { Badge } from '@/components/ui/badge';
 import { differenceInCalendarMonths, format, addMonths, startOfMonth, isBefore } from 'date-fns';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import Decimal from 'decimal.js';
 
@@ -811,7 +809,9 @@ export default function DebtManagementPage() {
         return `Se generarán ${monthsCount} deuda(s) para los meses sin registro previo desde ${fromDateStr} hasta ${toDateStr}.`;
     }, [currentMassDebt]);
 
-    const handleExportPDF = () => {
+    const handleExportPDF = async () => {
+        const { default: jsPDF } = await import('jspdf');
+        const { default: autoTable } = await import('jspdf-autotable');
         const doc = new jsPDF();
         const pageHeight = doc.internal.pageSize.getHeight();
         const pageWidth = doc.internal.pageSize.getWidth();

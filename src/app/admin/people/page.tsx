@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { 
@@ -37,9 +38,6 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PlusCircle, Edit, Trash2, Loader2, KeyRound, Search, FileDown, MoreHorizontal, Eye, EyeOff, MinusCircle, Building, User, Save } from 'lucide-react';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import * as ExcelJS from 'exceljs';
 import { Badge } from '@/components/ui/badge';
 
 // --- DEFINICIÓN DE TIPOS Y CONSTANTES ---
@@ -137,7 +135,7 @@ export default function OwnersManagement() {
                     const aKeys = getSortKeys(a);
                     const bKeys = getSortKeys(b);
                     if (aKeys.streetNum !== bKeys.streetNum) return aKeys.streetNum - bKeys.streetNum;
-                    return aKeys.houseNum - bKeys.houseNum;
+                    return bKeys.houseNum - bKeys.houseNum;
                 });
             setOwners(propietarios);
             setAdmins(allUsers.filter(u => u.role === 'administrador'));

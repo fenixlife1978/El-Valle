@@ -16,10 +16,6 @@ import { collection, doc, getDoc, setDoc, onSnapshot, orderBy, query, deleteDoc 
 import { db } from '@/lib/firebase';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import * as ExcelJS from 'exceljs';
-import QRCode from 'qrcode';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useRouter } from 'next/navigation';
 
@@ -221,6 +217,7 @@ export default function FinancialBalancePage() {
     };
     
     const handleExport = async (formatType: 'pdf' | 'excel', statement: FinancialStatement) => {
+        const QRCode = await import('qrcode');
         const qrCodeUrl = await QRCode.toDataURL(`${window.location.origin}/balance/${statement.id}`, { errorCorrectionLevel: 'M', margin: 2, scale: 4 });
         
         const totalIngresos = statement.ingresos.reduce((sum, item) => sum + item.monto, 0);
@@ -233,6 +230,8 @@ export default function FinancialBalancePage() {
         const period = `${monthLabel} ${yearLabel}`;
 
         if (formatType === 'pdf') {
+            const { default: jsPDF } = await import('jspdf');
+            const { default: autoTable } = await import('jspdf-autotable');
             const doc = new jsPDF();
             const pageWidth = doc.internal.pageSize.getWidth();
             const margin = 14;
@@ -300,6 +299,7 @@ export default function FinancialBalancePage() {
             doc.save(`Balance_Financiero_${statement.id}.pdf`);
 
         } else { // Excel
+            const ExcelJS = await import('exceljs');
             const workbook = new ExcelJS.Workbook();
             const worksheet = workbook.addWorksheet(`Balance ${statement.id}`);
 
