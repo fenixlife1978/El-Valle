@@ -163,60 +163,30 @@ export default function FinancialBalancePage() {
     }, []);
 
     useEffect(() => {
-        if (isEditing) return; // Don't auto-calculate if we are viewing/editing an existing report
+        if (isEditing) return;
     
         const fetchPeriodData = async () => {
             if (!selectedMonth || !selectedYear) return;
             setLoadingPeriodData(true);
     
+            // Set previous balance to 0, making it a manual field.
+            setEditablePreviousMonthBalance(0);
+    
             const year = parseInt(selectedYear);
             const month = parseInt(selectedMonth);
     
-            // --- Fetch Previous Month's Balance ---
-            let prevMonth = month - 1;
-            let prevYear = year;
-            if (prevMonth === 0) {
-                prevMonth = 12;
-                prevYear = year - 1;
-            }
-            const prevStatementId = `${prevYear}-${String(prevMonth).padStart(2, '0')}`;
-            const prevStatementRef = doc(db, "financial_statements", prevStatementId);
-            
             try {
-                const prevStatementSnap = await getDoc(prevStatementRef);
-        
-                let calculatedPreviousBalance = 0;
-                if (prevStatementSnap.exists()) {
-                    const prevData = prevStatementSnap.data() as FinancialStatement;
-                    const prevIngresos = prevData.ingresos.reduce((sum, item) => sum + item.monto, 0);
-                    const prevEgresos = prevData.egresos.reduce((sum, item) => sum + item.monto, 0);
-                    const prevSaldoNetoBanco = prevIngresos - prevEgresos;
-                    
-                    const prevEndOfMonthDate = endOfMonth(new Date(prevYear, prevMonth - 1));
-                    
-                    const prevRelevantReplenishments = allPettyCash.filter(rep => rep.date.toDate() <= prevEndOfMonthDate);
-                    const prevTotalReplenished = prevRelevantReplenishments.reduce((sum, rep) => sum + rep.amount, 0);
-                    const prevTotalPettyCashExpenses = prevRelevantReplenishments.flatMap(rep => rep.expenses)
-                        .filter(exp => exp.date.toDate() <= prevEndOfMonthDate)
-                        .reduce((sum, exp) => sum + exp.amount, 0);
-                    const prevSaldoCajaChica = prevTotalReplenished - prevTotalPettyCashExpenses;
-                    const prevSaldoEfectivo = prevData.estadoFinanciero?.saldoEfectivo || 0;
-                    
-                    calculatedPreviousBalance = prevSaldoNetoBanco + prevSaldoCajaChica + prevSaldoEfectivo;
-                }
-                setEditablePreviousMonthBalance(calculatedPreviousBalance);
-        
-                // --- Fetch Current Month's Payments ---
+                // Fetch Current Month's Payments
                 const startDate = new Date(year, month - 1, 1);
-                const endDate = new Date(year, month, 1);
-                
+                const endDate = new Date(year, month, 0, 23, 59, 59);
+    
                 const paymentsQuery = query(
                     collection(db, "payments"),
                     where("status", "==", "aprobado"),
                     where("paymentDate", ">=", Timestamp.fromDate(startDate)),
-                    where("paymentDate", "<", Timestamp.fromDate(endDate))
+                    where("paymentDate", "<=", Timestamp.fromDate(endDate))
                 );
-                
+    
                 const paymentsSnap = await getDocs(paymentsQuery);
                 const totalPayments = paymentsSnap.docs.reduce((sum, doc) => sum + doc.data().totalAmount, 0);
                 setCurrentMonthPayments(totalPayments);
@@ -229,10 +199,10 @@ export default function FinancialBalancePage() {
             }
         };
     
-        if (!loading) { // Ensure initial data like petty cash is loaded before running
+        if (!loading) {
             fetchPeriodData();
         }
-    }, [selectedMonth, selectedYear, allPettyCash, loading, isEditing, toast]);
+    }, [selectedMonth, selectedYear, isEditing, loading, toast]);
 
 
     const egresos = useMemo(() => {
@@ -301,9 +271,9 @@ export default function FinancialBalancePage() {
         setSelectedMonth(statement.id.split('-')[1]);
         
         const saldoAnteriorItem = statement.ingresos.find(i => i.concepto === 'Saldo en Banco Mes Anterior');
-        const pagosMesItem = statement.ingresos.find(i => i.concepto === 'Ingresos por Pagos del Mes' || i.concepto === 'Ingresos Ordinarios del Mes');
+        const pagosMesItem = statement.ingresos.find(i => i.concepto === 'Ingresos Ordinarios del Mes');
         const manualItems = statement.ingresos.filter(i => 
-            i.concepto !== 'Saldo en Banco Mes Anterior' && i.concepto !== 'Ingresos por Pagos del Mes' && i.concepto !== 'Ingresos Ordinarios del Mes'
+            i.concepto !== 'Saldo en Banco Mes Anterior' && i.concepto !== 'Ingresos Ordinarios del Mes'
         );
     
         setEditablePreviousMonthBalance(saldoAnteriorItem?.monto || 0);
@@ -684,7 +654,7 @@ export default function FinancialBalancePage() {
                                 onChange={e => setEditablePreviousMonthBalance(Number(e.target.value))}
                                 placeholder="0.00"
                             />
-                            <p className="text-xs text-muted-foreground mt-1">Calculado del balance anterior. Puedes ajustarlo si es necesario.</p>
+                            <p className="text-xs text-muted-foreground mt-1">Este monto es manual. Ingrese el saldo final del mes anterior.</p>
                         </div>
                         <div className="p-4 border rounded-md bg-muted/30">
                             <Label>Ingresos Ordinarios del Mes</Label>
