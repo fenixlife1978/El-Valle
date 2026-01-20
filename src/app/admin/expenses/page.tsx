@@ -78,7 +78,7 @@ function RegisterExpenseForm({ onSave }: { onSave: () => void }) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Input name="description" placeholder="Descripción del gasto" required />
                 <Input name="reference" placeholder="Nº Factura o Referencia" required />
-                <Input name="amount" type="number" step="0.01" placeholder="Monto $" required />
+                <Input name="amount" type="number" step="0.01" placeholder="Monto Bs." required />
                 <Select name="category" required>
                 <SelectTrigger>
                     <SelectValue placeholder="Categoría" />
@@ -153,7 +153,7 @@ export default function ExpensesPage() {
                                     <TableHead>Descripción</TableHead>
                                     <TableHead>Referencia</TableHead>
                                     <TableHead>Categoría</TableHead>
-                                    <TableHead className="text-right">Monto ($)</TableHead>
+                                    <TableHead className="text-right">Monto (Bs.)</TableHead>
                                     <TableHead className="text-right">Acción</TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -164,7 +164,7 @@ export default function ExpensesPage() {
                                         <TableCell>{expense.description}</TableCell>
                                         <TableCell>{expense.reference}</TableCell>
                                         <TableCell><Badge variant="secondary">{expense.category}</Badge></TableCell>
-                                        <TableCell className="text-right font-medium">${formatToTwoDecimals(expense.amount)}</TableCell>
+                                        <TableCell className="text-right font-medium">Bs. {formatToTwoDecimals(expense.amount)}</TableCell>
                                         <TableCell className="text-right">
                                             <Button variant="ghost" size="icon" onClick={() => handleDelete(expense.id)}>
                                                 <Trash2 className="h-4 w-4 text-destructive"/>
