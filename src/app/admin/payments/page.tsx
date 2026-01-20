@@ -85,6 +85,9 @@ function VerifyPaymentsTab() {
     const [receiptImageToView, setReceiptImageToView] = useState<string | null>(null);
     const [isGenerating, setIsGenerating] = useState(false);
 
+    const [isBeneficiarySelectionOpen, setIsBeneficiarySelectionOpen] = useState(false);
+    const [paymentForBeneficiarySelection, setPaymentForBeneficiarySelection] = useState<FullPayment | null>(null);
+
 
     useEffect(() => {
         const unsub = onSnapshot(query(collection(db, "owners")), (snapshot) => {
@@ -262,7 +265,6 @@ function VerifyPaymentsTab() {
         });
       };
     
-    // ... Other handlers from verify/page.tsx ...
     const confirmDelete = async () => {
         if (!paymentToDelete) return;
         requestAuthorization(async () => {
@@ -315,7 +317,6 @@ function VerifyPaymentsTab() {
             const margin = 14;
             let startY = margin;
     
-            // 1. Header
             if (companyInfo.logo) {
                 try { doc.addImage(companyInfo.logo, 'PNG', margin, startY, 25, 25); }
                 catch(e) { console.error("Error adding logo to PDF", e); }
@@ -336,7 +337,6 @@ function VerifyPaymentsTab() {
             doc.setLineWidth(0.5).line(margin, startY, pageWidth - margin, startY);
             startY += 12;
     
-            // 2. Title Section
             doc.setFontSize(16).setFont('helvetica', 'bold').text("RECIBO DE PAGO", pageWidth / 2, startY, { align: 'center' });
             
             const qrSize = 30;
@@ -348,7 +348,6 @@ function VerifyPaymentsTab() {
             
             startY += 8;
     
-            // 3. Details Section
             doc.setFontSize(9);
             const detailsX = margin;
             doc.text(`Beneficiario: ${beneficiary.ownerName} (${data.ownerUnit})`, detailsX, startY);
@@ -365,7 +364,6 @@ function VerifyPaymentsTab() {
             
             startY += 15;
     
-            // 4. Main Table
             let totalPaidInConcepts = 0;
             const tableBody = paidDebts.map(debt => {
                 const debtAmountBs = (debt.paidAmountUSD || debt.amountUSD) * payment.exchangeRate;
@@ -399,7 +397,6 @@ function VerifyPaymentsTab() {
             });
             startY = (doc as any).lastAutoTable.finalY + 10;
             
-            // 5. Summary and Total
             const rightColX = pageWidth - margin;
             doc.setFontSize(9);
             
@@ -424,7 +421,6 @@ function VerifyPaymentsTab() {
             doc.text(`Bs. ${formatToTwoDecimals(beneficiary.amount)}`, rightColX, startY, { align: 'right' });
             startY += 10;
     
-            // 6. Footer Notes
             startY = Math.max(startY, 220); 
             doc.setFontSize(8).setFont('helvetica', 'normal');
     
@@ -472,18 +468,12 @@ function VerifyPaymentsTab() {
         }
     };
 
-    const handlePreviewReceipt = async (payment: FullPayment) => {
+    const openReceiptForBeneficiary = async (payment: FullPayment, beneficiary: Beneficiary) => {
         if (!companyInfo) {
             toast({ variant: "destructive", title: "Error", description: "Datos de la compañía no cargados." });
             return;
         }
 
-        // For simplicity in admin preview, we only show for single beneficiary payments
-        if (payment.beneficiaries.length > 1) {
-            toast({ variant: "info", title: "Función no disponible", description: "La vista previa de recibos es para pagos con un solo beneficiario." });
-            return;
-        }
-        const beneficiary = payment.beneficiaries[0];
         const owner = ownersMap.get(beneficiary.ownerId);
         if (!owner) {
             toast({ variant: "destructive", title: "Error", description: "No se encontró al propietario." });
@@ -496,26 +486,45 @@ function VerifyPaymentsTab() {
                 query(collection(db, 'debts'), where('paymentId', '==', payment.id), where('ownerId', '==', beneficiary.ownerId))
             );
             const paidDebts = paidDebtsSnapshot.docs.map(d => d.data() as Debt);
+            
             const totalDebtPaidWithPayment = paidDebts.reduce((sum, debt) => sum + ((debt.paidAmountUSD || debt.amountUSD) * payment.exchangeRate), 0);
-            const previousBalance = (owner.balance || 0) - (beneficiary.amount - totalDebtPaidWithPayment);
+            
+            const ownerDoc = await getDoc(doc(db, 'owners', beneficiary.ownerId));
+            const currentBalance = ownerDoc.exists() ? (ownerDoc.data().balance || 0) : 0;
+            const previousBalance = currentBalance - (beneficiary.amount - totalDebtPaidWithPayment);
+
             const receiptNumber = payment.receiptNumbers?.[beneficiary.ownerId] || `N/A-${payment.id.slice(-5)}`;
             const receiptUrl = `${window.location.origin}/receipt/${payment.id}/${beneficiary.ownerId}`;
             const qrDataContent = JSON.stringify({ receiptNumber, date: format(new Date(), 'yyyy-MM-dd'), amount: beneficiary.amount, ownerId: beneficiary.ownerId, url: receiptUrl });
             const qrCodeUrl = await QRCode.toDataURL(qrDataContent, { errorCorrectionLevel: 'M', margin: 2, scale: 4, color: { dark: '#000000', light: '#FFFFFF' } });
 
+            const ownerUnit = (beneficiary.street && beneficiary.house) 
+                ? `${beneficiary.street} - ${beneficiary.house}` 
+                : (owner.properties?.[0] ? `${owner.properties[0].street} - ${owner.properties[0].house}`: 'N/A');
 
             setReceiptData({
                 payment, beneficiary, ownerName: owner.name,
-                ownerUnit: `${owner.properties?.[0]?.street} - ${owner.properties?.[0]?.house}`,
+                ownerUnit: ownerUnit,
                 paidDebts: paidDebts.sort((a,b) => a.year - b.year || a.month - b.month),
-                previousBalance, currentBalance: owner.balance || 0,
+                previousBalance, currentBalance: currentBalance,
                 receiptNumber, qrCodeUrl
             });
             setIsReceiptPreviewOpen(true);
         } catch (error) {
+            console.error("Error preparing receipt preview:", error);
             toast({ variant: 'destructive', title: 'Error', description: 'No se pudo generar la vista previa del recibo.' });
         } finally {
             setIsGenerating(false);
+        }
+    };
+
+    const handlePreviewReceipt = async (payment: FullPayment) => {
+        if (payment.beneficiaries.length > 1) {
+            setPaymentForBeneficiarySelection(payment);
+            setIsBeneficiarySelectionOpen(true);
+        } else {
+            const beneficiary = payment.beneficiaries[0];
+            await openReceiptForBeneficiary(payment, beneficiary);
         }
     };
 
@@ -583,6 +592,39 @@ function VerifyPaymentsTab() {
                         <Button variant="outline" onClick={() => setIsDeleteConfirmationOpen(false)}>Cancelar</Button>
                         <Button variant="destructive" onClick={confirmDelete}>Sí, eliminar pago</Button>
                     </DialogFooter>
+                </DialogContent>
+            </Dialog>
+            <Dialog open={isBeneficiarySelectionOpen} onOpenChange={setIsBeneficiarySelectionOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Seleccionar Beneficiario</DialogTitle>
+                        <DialogDescription>
+                            Este pago fue asignado a múltiples propietarios. Por favor, seleccione el recibo que desea ver.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-2 py-4">
+                        {paymentForBeneficiarySelection?.beneficiaries.map((beneficiary, index) => (
+                            <Button
+                                key={index}
+                                variant="outline"
+                                className="w-full justify-start text-left h-auto"
+                                onClick={async () => {
+                                    setIsBeneficiarySelectionOpen(false);
+                                    if(paymentForBeneficiarySelection) {
+                                      await openReceiptForBeneficiary(paymentForBeneficiarySelection, beneficiary);
+                                    }
+                                }}
+                            >
+                                <div>
+                                    <p className="font-semibold">{beneficiary.ownerName}</p>
+                                    <p className="text-sm text-muted-foreground">
+                                        Monto: Bs. {formatToTwoDecimals(beneficiary.amount)}
+                                        {beneficiary.street && ` | Propiedad: ${beneficiary.street} - ${beneficiary.house}`}
+                                    </p>
+                                </div>
+                            </Button>
+                        ))}
+                    </div>
                 </DialogContent>
             </Dialog>
             <Dialog open={!!receiptImageToView} onOpenChange={() => setReceiptImageToView(null)}>
@@ -878,7 +920,7 @@ function ReportPaymentTab() {
                     <Button type="button" variant="ghost" className="text-muted-foreground hover:text-white" onClick={resetForm} disabled={isSubmitting}>
                         CANCELAR
                     </Button>
-                    <Button type="submit" className="rounded-lg" disabled={isSubmitting}>
+                    <Button type="submit" className="rounded-xl" disabled={isSubmitting}>
                         {isSubmitting ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Save className="mr-2 h-5 w-5" />}
                         Enviar Reporte
                     </Button>
