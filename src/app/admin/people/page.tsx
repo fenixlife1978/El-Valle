@@ -253,7 +253,67 @@ export default function OwnersManagement() {
     };
 
     const handleExportExcel = async () => { /* ... (export logic) */ };
-    const handleExportPDF = () => { /* ... (pdf logic) */ };
+    const handleExportPDF = async () => {
+        if (!companyInfo) {
+            toast({ variant: "destructive", title: "Falta información", description: "No se pueden cargar los datos de la empresa." });
+            return;
+        }
+        
+        const { default: jsPDF } = await import('jspdf');
+        const { default: autoTable } = await import('jspdf-autotable');
+        
+        const doc = new jsPDF();
+        const pageHeight = doc.internal.pageSize.getHeight();
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const margin = 14;
+
+        if (companyInfo?.logo) {
+            doc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25);
+        }
+        if (companyInfo) {
+            doc.setFontSize(12);
+            doc.setFont('helvetica', 'bold');
+            doc.text(companyInfo.name, margin + 30, margin + 8);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+            doc.text(`${companyInfo.rif} | ${companyInfo.phone}`, margin + 30, margin + 14);
+        }
+        doc.setFontSize(10);
+        doc.text(`Fecha de Emisión: ${new Date().toLocaleDateString('es-VE')}`, pageWidth - margin, margin + 8, { align: 'right' });
+        
+        doc.setFontSize(16);
+        doc.setFont('helvetica', 'bold');
+        doc.text("Lista de Personas Registradas", pageWidth / 2, margin + 45, { align: 'center' });
+
+        let startY = margin + 55;
+
+        if (filteredOwners.length > 0) {
+            autoTable(doc, {
+                head: [['Propietarios', 'Propiedades', 'Email']],
+                body: filteredOwners.map(o => [
+                    o.name, 
+                    (o.properties || []).map(p => `${p.street} - ${p.house}`).join(', '),
+                    o.email || 'N/A'
+                ]),
+                startY: startY,
+                headStyles: { fillColor: [30, 80, 180] },
+                styles: { cellPadding: 2, fontSize: 8 },
+            });
+            startY = (doc as any).lastAutoTable.finalY + 10;
+        }
+
+        if (filteredAdmins.length > 0) {
+            autoTable(doc, {
+                head: [['Administradores', 'Email']],
+                body: filteredAdmins.map(a => [a.name, a.email || 'N/A']),
+                startY: startY,
+                headStyles: { fillColor: [22, 163, 74] }, // Green
+                styles: { cellPadding: 2, fontSize: 8 },
+            });
+        }
+        
+        doc.save('lista_de_personas.pdf');
+    };
     const handleResetPassword = async (email: string) => {
         if (!email) {
             toast({ variant: "destructive", title: "No hay correo" });

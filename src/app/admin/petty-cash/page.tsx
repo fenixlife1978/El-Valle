@@ -20,9 +20,6 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import QRCode from 'qrcode';
 import { useRouter } from 'next/navigation';
 import { useAuthorization } from '@/hooks/use-authorization';
 
@@ -247,6 +244,10 @@ export default function PettyCashPage() {
             toast({ variant: 'destructive', title: 'Falta información', description: 'No se pudo cargar la información de la empresa.' });
             return;
         }
+
+        const { default: jsPDF } = await import('jspdf');
+        const { default: autoTable } = await import('jspdf-autotable');
+        const QRCode = await import('qrcode');
     
         const doc = new jsPDF();
         const pageWidth = doc.internal.pageSize.getWidth();

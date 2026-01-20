@@ -17,9 +17,6 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from "@/lib/utils";
 import { es } from "date-fns/locale";
 import { Calendar as CalendarIcon, Download, Search, Loader2, FileText, FileSpreadsheet, ArrowUpDown, Building, BadgeInfo, BadgeCheck, BadgeX, History, ChevronDown, ChevronRight, TrendingUp, TrendingDown, DollarSign, Receipt, Wand2, Megaphone, ArrowLeft, Trash2, MoreHorizontal, Eye } from "lucide-react";
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import * as ExcelJS from 'exceljs';
 import { collection, getDocs, query, where, doc, getDoc, orderBy, Timestamp, addDoc, setDoc, writeBatch, deleteDoc, limit, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
@@ -624,7 +621,7 @@ export default function ReportsPage() {
             if (p.status !== 'aprobado') return false;
             const paymentDate = p.paymentDate.toDate();
             if (incomeDateRange.from && paymentDate < incomeDateRange.from) return false;
-            if (incomeDateRange.to && paymentDate > incomeDateRange.to) return false;
+            if (incomeDateRange.to && paymentDate > toDate) return false;
             return true;
         });
     
@@ -830,8 +827,10 @@ export default function ReportsPage() {
         setReportToPreview(report);
     };
 
-    const handleExportIntegralPdf = (report: SavedIntegralReport) => {
+    const handleExportIntegralPdf = async (report: SavedIntegralReport) => {
         if (!report || !companyInfo) return;
+        const { default: jsPDF } = await import('jspdf');
+        const { default: autoTable } = await import('jspdf-autotable');
         const data = report.data;
         const doc = new jsPDF({ orientation: 'landscape' });
         let startY = 15;
@@ -897,6 +896,8 @@ export default function ReportsPage() {
         });
 
         if (formatType === 'pdf') {
+            const { default: jsPDF } = await import('jspdf');
+            const { default: autoTable } = await import('jspdf-autotable');
             const doc = new jsPDF();
             const pageWidth = doc.internal.pageSize.getWidth();
             const margin = 14;
@@ -916,6 +917,7 @@ export default function ReportsPage() {
             });
             doc.save(`reporte_morosidad_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
         } else {
+             const ExcelJS = await import('exceljs');
              const workbook = new ExcelJS.Workbook();
              const worksheet = workbook.addWorksheet("Morosidad");
 
@@ -965,8 +967,11 @@ export default function ReportsPage() {
         setDelinquencySortConfig({ key, direction });
     };
 
-    const handleExportIndividual = (formatType: 'pdf' | 'excel') => {
+    const handleExportIndividual = async (formatType: 'pdf' | 'excel') => {
         if (!selectedIndividual || !companyInfo) return;
+
+        const { default: jsPDF } = await import('jspdf');
+        const { default: autoTable } = await import('jspdf-autotable');
     
         const filename = `reporte_pagos_${selectedIndividual.name.replace(/\s/g, '_')}`;
         const doc = new jsPDF();
@@ -1049,6 +1054,9 @@ export default function ReportsPage() {
     const handleExportAccountStatement = async (formatType: 'pdf' | 'excel') => {
         if (!selectedStatementOwner || !companyInfo || !accountStatementData) return;
 
+        const { default: jsPDF } = await import('jspdf');
+        const { default: autoTable } = await import('jspdf-autotable');
+
         const filename = `estado_de_cuenta_${selectedStatementOwner.name.replace(/\s/g, '_')}`;
         const doc = new jsPDF();
         const pageWidth = doc.internal.pageSize.getWidth();
@@ -1126,6 +1134,8 @@ export default function ReportsPage() {
         const filename = `reporte_saldos_favor_${format(new Date(), 'yyyy-MM-dd')}`;
         
         if (formatType === 'pdf') {
+            const { default: jsPDF } = await import('jspdf');
+            const { default: autoTable } = await import('jspdf-autotable');
             const doc = new jsPDF();
     
             const pageWidth = doc.internal.pageSize.getWidth();
@@ -1155,6 +1165,7 @@ export default function ReportsPage() {
             });
             doc.save(`${filename}.pdf`);
         } else { // excel
+             const ExcelJS = await import('exceljs');
              const workbook = new ExcelJS.Workbook();
              const worksheet = workbook.addWorksheet("Saldos a Favor");
              worksheet.columns = [
@@ -1183,6 +1194,8 @@ export default function ReportsPage() {
         const periodString = `Período: ${monthOptions.find(m => m.value === selectedMonth)?.label} ${selectedYear}`;
 
         if (formatType === 'pdf') {
+            const { default: jsPDF } = await import('jspdf');
+            const { default: autoTable } = await import('jspdf-autotable');
             const doc = new jsPDF();
             let startY = 15;
             if (companyInfo?.logo) doc.addImage(companyInfo.logo, 'PNG', 15, startY, 20, 20);
@@ -1207,6 +1220,7 @@ export default function ReportsPage() {
             });
             doc.save(`${filename}.pdf`);
         } else { // Excel
+             const ExcelJS = await import('exceljs');
              const workbook = new ExcelJS.Workbook();
              const worksheet = workbook.addWorksheet("Pagos Mensuales");
              worksheet.columns = [
@@ -1239,6 +1253,8 @@ export default function ReportsPage() {
         const totalUsd = data.reduce((sum, row) => sum + row.totalUsd, 0);
     
         if (formatType === 'pdf') {
+            const { default: jsPDF } = await import('jspdf');
+            const { default: autoTable } = await import('jspdf-autotable');
             const doc = new jsPDF();
             let startY = 15;
             if (companyInfo?.logo) doc.addImage(companyInfo.logo, 'PNG', 15, startY, 20, 20);
@@ -1272,6 +1288,7 @@ export default function ReportsPage() {
             });
             doc.save(`${filename}.pdf`);
         } else { // Excel
+             const ExcelJS = await import('exceljs');
              const workbook = new ExcelJS.Workbook();
              const worksheet = workbook.addWorksheet("Ingresos");
              worksheet.columns = [
@@ -1314,14 +1331,13 @@ export default function ReportsPage() {
             </div>
             
             <Tabs defaultValue="integral" className="w-full">
-                 <TabsList className="grid w-full grid-cols-1 md:grid-cols-4 lg:grid-cols-7 h-auto flex-wrap">
+                 <TabsList className="grid w-full grid-cols-1 md:grid-cols-4 lg:grid-cols-6 h-auto flex-wrap">
                     <TabsTrigger value="integral">Integral</TabsTrigger>
                     <TabsTrigger value="individual">Ficha Individual</TabsTrigger>
                     <TabsTrigger value="estado-de-cuenta">Estado de Cuenta</TabsTrigger>
                     <TabsTrigger value="delinquency">Morosidad</TabsTrigger>
                     <TabsTrigger value="balance">Saldos a Favor</TabsTrigger>
                     <TabsTrigger value="monthly">Reporte Mensual</TabsTrigger>
-                    <TabsTrigger value="income">Ingresos</TabsTrigger>
                 </TabsList>
                 
                 <TabsContent value="integral">

@@ -28,9 +28,6 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from '@/components/ui/dropdown-menu';
 import { useAuthorization } from '@/hooks/use-authorization';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import QRCode from 'qrcode';
 import Decimal from 'decimal.js';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -312,6 +309,9 @@ function VerifyPaymentsTab() {
         const { payment, beneficiary, paidDebts, previousBalance, currentBalance, qrCodeUrl, receiptNumber } = data;
         
         try {
+            const { default: jsPDF } = await import('jspdf');
+            const { default: autoTable } = await import('jspdf-autotable');
+
             const doc = new jsPDF();
             const pageWidth = doc.internal.pageSize.getWidth();
             const margin = 14;
@@ -482,6 +482,8 @@ function VerifyPaymentsTab() {
 
         setIsGenerating(true);
         try {
+            const { default: QRCode } = await import('qrcode');
+
             const paidDebtsSnapshot = await getDocs(
                 query(collection(db, 'debts'), where('paymentId', '==', payment.id), where('ownerId', '==', beneficiary.ownerId))
             );
@@ -929,204 +931,5 @@ function ReportPaymentTab() {
                 <Dialog open={isInfoDialogOpen} onOpenChange={setIsInfoDialogOpen}><DialogContent><DialogHeader><DialogTitle className="flex items-center gap-2"><Info className="h-6 w-6 text-blue-500" />Reporte Enviado para Revisión</DialogTitle><div className="pt-4 text-sm text-muted-foreground space-y-4"><p>¡Gracias! Hemos recibido el reporte de pago. Será procesado en un máximo de <strong>24 horas</strong>.</p></div></DialogHeader><DialogFooter><Button onClick={() => setIsInfoDialogOpen(false)}>Entendido</Button></DialogFooter></DialogContent></Dialog>
             </form>
         </Card>
-    );
-}
-
-// ===================================================================================
-// CALCULATOR COMPONENT
-// ===================================================================================
-function CalculatorTab() {
-    const { toast } = useToast();
-    const router = useRouter();
-    const [owners, setOwners] = useState<Owner[]>([]);
-    const [now, setNow] = useState<Date | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [activeRate, setActiveRate] = useState(0);
-    const [condoFee, setCondoFee] = useState(0);
-    const [selectedOwner, setSelectedOwner] = useState<Owner | null>(null);
-    const [ownerDebts, setOwnerDebts] = useState<Debt[]>([]);
-    const [loadingDebts, setLoadingDebts] = useState(false);
-    const [selectedPendingDebts, setSelectedPendingDebts] = useState<string[]>([]);
-    const [selectedAdvanceMonths, setSelectedAdvanceMonths] = useState<string[]>([]);
-    
-    useEffect(() => {
-        const today = new Date();
-        setNow(today);
-
-        const fetchPrerequisites = async () => {
-            setLoading(true);
-            try {
-                const settingsRef = doc(db, 'config', 'mainSettings');
-                const settingsSnap = await getDoc(settingsRef);
-                if (settingsSnap.exists()) {
-                    const settings = settingsSnap.data();
-                    setCondoFee(settings.condoFee || 0);
-                    const rates = settings.exchangeRates || [];
-                    const activeRateObj = rates.find((r: any) => r.active);
-                    if (activeRateObj) setActiveRate(activeRateObj.rate);
-                    else if (rates.length > 0) setActiveRate([...rates].sort((a:any, b:any) => new Date(b.date).getTime() - new Date(a.date).getTime())[0].rate);
-                }
-                const ownersSnapshot = await getDocs(query(collection(db, "owners")));
-                setOwners(ownersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner)));
-            } catch (error) { toast({ variant: 'destructive', title: 'Error de Carga' });
-            } finally { setLoading(false); }
-        };
-        fetchPrerequisites();
-    }, [toast]);
-
-    const filteredOwners = useMemo(() => {
-        if (!searchTerm || searchTerm.length < 3) return [];
-        return owners.filter(o => o.name?.toLowerCase().includes(searchTerm.toLowerCase()));
-    }, [searchTerm, owners]);
-
-    const handleSelectOwner = async (owner: Owner) => {
-        setSelectedOwner(owner); setSearchTerm(''); setLoadingDebts(true); setSelectedPendingDebts([]); setSelectedAdvanceMonths([]);
-        try {
-            const q = query(collection(db, "debts"), where("ownerId", "==", owner.id));
-            const querySnapshot = await getDocs(q);
-            const debtsData: Debt[] = [];
-            querySnapshot.forEach((doc) => debtsData.push({ id: doc.id, ...doc.data() } as Debt));
-            setOwnerDebts(debtsData.sort((a, b) => a.year - b.year || a.month - b.month));
-        } catch (error) { toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron cargar las deudas.' });
-        } finally { setLoadingDebts(false); }
-    };
-    
-    const pendingDebts = useMemo(() => ownerDebts.filter(d => d.status === 'pending' || d.status === 'vencida').sort((a, b) => a.year - b.year || a.month - b.month), [ownerDebts]);
-    const handlePendingDebtSelection = (debtId: string) => {
-        setSelectedPendingDebts(prev => prev.includes(debtId) ? prev.filter(id => id !== debtId) : [...prev, debtId]);
-    };
-    
-    const handleAdvanceMonthSelection = (monthValue: string) => {
-        setSelectedAdvanceMonths(prev => prev.includes(monthValue) ? prev.filter(m => m !== monthValue) : [...prev, monthValue]);
-    };
-    
-    const futureMonths = useMemo(() => {
-        if (!now) return [];
-        const paidAdvanceMonths = ownerDebts.filter(d => d.status === 'paid' && d.description.includes('Adelantado')).map(d => `${d.year}-${String(d.month).padStart(2, '0')}`);
-        return Array.from({ length: 12 }, (_, i) => { const date = addMonths(now, i); const value = format(date, 'yyyy-MM'); return { value, label: format(date, 'MMMM yyyy', { locale: es }), disabled: paidAdvanceMonths.includes(value) }; });
-    }, [ownerDebts, now]);
-    
-    const paymentCalculator = useMemo(() => {
-        if (!selectedOwner) return { totalToPay: 0, hasSelection: false, dueMonthsCount: 0, advanceMonthsCount: 0, totalDebtBs: 0, balanceInFavor: 0 };
-        const dueMonthsTotalUSD = pendingDebts.filter(debt => selectedPendingDebts.includes(debt.id)).reduce((sum, debt) => sum + debt.amountUSD, 0);
-        const advanceMonthsTotalUSD = selectedAdvanceMonths.length * condoFee;
-        const totalDebtUSD = dueMonthsTotalUSD + advanceMonthsTotalUSD;
-        const totalDebtBs = totalDebtUSD * activeRate;
-        const totalToPay = Math.max(0, totalDebtBs - selectedOwner.balance);
-        return { totalToPay, hasSelection: selectedPendingDebts.length > 0 || selectedAdvanceMonths.length > 0, dueMonthsCount: selectedPendingDebts.length, advanceMonthsCount: selectedAdvanceMonths.length, totalDebtBs, balanceInFavor: selectedOwner.balance, condoFee };
-    }, [selectedPendingDebts, selectedAdvanceMonths, pendingDebts, activeRate, condoFee, selectedOwner]);
-    
-    if (loading || !now) return <div className="flex justify-center items-center h-64"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>;
-
-    return (
-        <Card>
-            <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl">
-                <CardTitle>Calculadora de Pagos de Propietarios</CardTitle>
-                <CardDescription className="text-primary-foreground/90">Calcule y registre pagos de deudas y adelantos.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-                    <div className="lg:col-span-2 space-y-4">
-                        <Card><CardHeader><CardTitle>1. Buscar Propietario</CardTitle></CardHeader>
-                            <CardContent>
-                                <div className="relative mt-2"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Buscar por nombre..." className="pl-9" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
-                                 {searchTerm.length >= 3 && filteredOwners.length > 0 && <Card className="border rounded-lg mt-2"><ScrollArea className="h-48">{filteredOwners.map(owner => (<div key={owner.id} onClick={() => handleSelectOwner(owner)} className="p-3 hover:bg-muted cursor-pointer border-b last:border-b-0"><p className="font-medium">{owner.name}</p></div>))}</ScrollArea></Card>}
-                                {selectedOwner && <Card className="bg-muted/50 p-4 mt-4"><p className="font-semibold text-primary">{selectedOwner.name}</p></Card>}
-                            </CardContent>
-                        </Card>
-                        {selectedOwner && (<>
-                            <Card><CardHeader><CardTitle>2. Deudas Pendientes</CardTitle></CardHeader>
-                                <CardContent className="p-0">
-                                    <Table><TableHeader><TableRow><TableHead>Pagar</TableHead><TableHead>Período</TableHead><TableHead>Estado</TableHead><TableHead className="text-right">Monto (Bs.)</TableHead></TableRow></TableHeader>
-                                        <TableBody>
-                                            {loadingDebts ? <TableRow><TableCell colSpan={4} className="h-24 text-center"><Loader2/></TableCell></TableRow>
-                                            : pendingDebts.length === 0 ? <TableRow><TableCell colSpan={4} className="h-24 text-center">No tiene deudas.</TableCell></TableRow>
-                                            : pendingDebts.map((debt) => { const isOverdue = isBefore(startOfMonth(new Date(debt.year, debt.month - 1)), startOfMonth(new Date())); return (<TableRow key={debt.id} data-state={selectedPendingDebts.includes(debt.id) ? 'selected' : ''}><TableCell><Checkbox onCheckedChange={() => handlePendingDebtSelection(debt.id)} checked={selectedPendingDebts.includes(debt.id)} /></TableCell><TableCell>{monthsLocale[debt.month]} {debt.year}</TableCell><TableCell><Badge variant={isOverdue ? 'destructive' : 'warning'}>{isOverdue ? 'Vencida' : 'Pendiente'}</Badge></TableCell><TableCell className="text-right">Bs. {formatToTwoDecimals(debt.amountUSD * activeRate)}</TableCell></TableRow>) })}
-                                        </TableBody>
-                                    </Table>
-                                </CardContent>
-                            </Card>
-                            <Card><CardHeader><CardTitle>3. Pagar Meses por Adelantado</CardTitle></CardHeader>
-                                <CardContent><div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">{futureMonths.map(month => (<Button key={month.value} type="button" variant={selectedAdvanceMonths.includes(month.value) ? 'default' : 'outline'} onClick={() => handleAdvanceMonthSelection(month.value)} disabled={month.disabled}>{selectedAdvanceMonths.includes(month.value) && <Check />} {month.label}</Button>))}</div></CardContent>
-                            </Card>
-                        </>)}
-                    </div>
-                    <div className="lg:sticky lg:top-20">
-                         {paymentCalculator.hasSelection && (
-                            <Card>
-                                <CardHeader><CardTitle>4. Resumen de Pago</CardTitle></CardHeader>
-                                <CardContent className="space-y-3">
-                                    <div className="flex justify-between"><span>Sub-Total:</span><span>Bs. {formatToTwoDecimals(paymentCalculator.totalDebtBs)}</span></div>
-                                    <div className="flex justify-between"><span>Saldo a Favor:</span><span>- Bs. {formatToTwoDecimals(paymentCalculator.balanceInFavor)}</span></div><hr/>
-                                    <div className="flex justify-between font-bold text-lg"><span>TOTAL A PAGAR:</span><span>Bs. {formatToTwoDecimals(paymentCalculator.totalToPay)}</span></div>
-                                </CardContent>
-                                <CardFooter>
-                                    <Button className="w-full" onClick={() => router.push('/admin/payments?tab=report')} disabled={!paymentCalculator.hasSelection || paymentCalculator.totalToPay <= 0}>
-                                        Reportar Pago
-                                    </Button>
-                                </CardFooter>
-                            </Card>
-                        )}
-                    </div>
-                </div>
-            </CardContent>
-        </Card>
-    );
-}
-
-// ===================================================================================
-// MAIN PAGE COMPONENT
-// ===================================================================================
-export default function AdminPaymentsPageWithSuspense() {
-    return (
-        <Suspense fallback={<div className="flex h-64 w-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>}>
-            <AdminPaymentsPage />
-        </Suspense>
-    );
-}
-
-function AdminPaymentsPage() {
-    const router = useRouter();
-    const searchParams = useSearchParams();
-    const [activeTab, setActiveTab] = useState('verify');
-
-    useEffect(() => {
-        const tab = searchParams?.get('tab');
-        if (tab === 'report' || tab === 'calculator') {
-            setActiveTab(tab);
-        } else {
-            setActiveTab('verify');
-        }
-    }, [searchParams]);
-
-    const handleTabChange = (value: string) => {
-        setActiveTab(value);
-        router.push(`/admin/payments?tab=${value}`, { scroll: false });
-    };
-
-    return (
-        <div className="space-y-8">
-            <div>
-                <h1 className="text-3xl font-bold font-headline">Gestión de Pagos</h1>
-                <p className="text-muted-foreground">Verifique, reporte o calcule pagos para los propietarios.</p>
-            </div>
-            <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-                <TabsList className="grid w-full grid-cols-3">
-                    <TabsTrigger value="verify">Verificar Pagos</TabsTrigger>
-                    <TabsTrigger value="report">Reportar Pago</TabsTrigger>
-                    <TabsTrigger value="calculator">Calculadora de Pagos</TabsTrigger>
-                </TabsList>
-                <TabsContent value="verify" className="mt-6">
-                    <VerifyPaymentsTab />
-                </TabsContent>
-                <TabsContent value="report" className="mt-6">
-                    <ReportPaymentTab />
-                </TabsContent>
-                <TabsContent value="calculator" className="mt-6">
-                    <CalculatorTab />
-                </TabsContent>
-            </Tabs>
-        </div>
     );
 }

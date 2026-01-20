@@ -31,9 +31,6 @@ import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import QRCode from 'qrcode';
 import Marquee from "@/components/ui/marquee";
 
 
@@ -301,6 +298,9 @@ const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptD
     const { payment, beneficiary, paidDebts, previousBalance, currentBalance, qrCodeUrl, receiptNumber } = data;
     
     try {
+        const { default: jsPDF } = await import('jspdf');
+        const { default: autoTable } = await import('jspdf-autotable');
+
         const doc = new jsPDF();
         const pageWidth = doc.internal.pageSize.getWidth();
         const margin = 14;
@@ -484,6 +484,7 @@ const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptD
 
         setIsGenerating(true);
         try {
+            const QRCode = await import('qrcode');
             const paidDebtsSnapshot = await getDocs(
                 query(collection(db, 'debts'), where('paymentId', '==', payment.id), where('ownerId', '==', ownerId))
             );
