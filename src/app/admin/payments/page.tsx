@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo, useCallback, Suspense } from 'react';
@@ -305,11 +304,10 @@ function VerifyPaymentsTab() {
         if (!data || !companyInfo) return;
         setIsGenerating(true);
     
-        const { payment, beneficiary, paidDebts, previousBalance, currentBalance, qrCodeUrl, receiptNumber } = data;
-        
         try {
             const { default: jsPDF } = await import('jspdf');
             const { default: autoTable } = await import('jspdf-autotable');
+            const { payment, beneficiary, paidDebts, previousBalance, currentBalance, qrCodeUrl, receiptNumber } = data;
 
             const doc = new jsPDF();
             const pageWidth = doc.internal.pageSize.getWidth();
@@ -935,7 +933,7 @@ function ReportPaymentTab() {
 
 function AdminPaymentsPageContent() {
     const searchParams = useSearchParams();
-    const defaultTab = searchParams.get('tab') || 'verify';
+    const defaultTab = searchParams?.get('tab') || 'verify';
     const router = useRouter();
 
     const onTabChange = (value: string) => {
