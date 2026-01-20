@@ -89,6 +89,7 @@ export default function FinancialBalancePage() {
     // Automatic Fields
     const [editablePreviousMonthBalance, setEditablePreviousMonthBalance] = useState(0);
     const [currentMonthPayments, setCurrentMonthPayments] = useState(0);
+    const [editableCurrentMonthPayments, setEditableCurrentMonthPayments] = useState(0);
     const [loadingPeriodData, setLoadingPeriodData] = useState(false);
 
     // Manual Fields
@@ -219,6 +220,7 @@ export default function FinancialBalancePage() {
                 const paymentsSnap = await getDocs(paymentsQuery);
                 const totalPayments = paymentsSnap.docs.reduce((sum, doc) => sum + doc.data().totalAmount, 0);
                 setCurrentMonthPayments(totalPayments);
+                setEditableCurrentMonthPayments(totalPayments);
             } catch (error) {
                 console.error("Error fetching period data:", error);
                 toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron cargar los datos automáticos para el período.' });
@@ -247,7 +249,7 @@ export default function FinancialBalancePage() {
 
     const totals = useMemo(() => {
         const totalManualIngresos = manualIngresos.reduce((sum, item) => sum + Number(item.monto), 0);
-        const totalIngresos = editablePreviousMonthBalance + currentMonthPayments + totalManualIngresos;
+        const totalIngresos = editablePreviousMonthBalance + editableCurrentMonthPayments + totalManualIngresos;
         const totalEgresos = egresos.reduce((sum, item) => sum + Number(item.monto), 0);
         const saldoNetoBanco = totalIngresos - totalEgresos;
 
@@ -269,7 +271,7 @@ export default function FinancialBalancePage() {
         const usdEquivalent = activeRate > 0 ? totalLiquidez / activeRate : 0;
 
         return { totalIngresos, totalEgresos, saldoNetoBanco, saldoCajaChica, totalLiquidez, usdEquivalent };
-    }, [manualIngresos, editablePreviousMonthBalance, currentMonthPayments, egresos, allPettyCash, selectedYear, selectedMonth, estadoFinanciero, activeRate]);
+    }, [manualIngresos, editablePreviousMonthBalance, editableCurrentMonthPayments, egresos, allPettyCash, selectedYear, selectedMonth, estadoFinanciero, activeRate]);
 
 
     const resetForm = () => {
@@ -282,6 +284,7 @@ export default function FinancialBalancePage() {
         setNotas('');
         setEditablePreviousMonthBalance(0);
         setCurrentMonthPayments(0);
+        setEditableCurrentMonthPayments(0);
     };
 
     const handleNewStatement = () => {
@@ -298,13 +301,13 @@ export default function FinancialBalancePage() {
         setSelectedMonth(statement.id.split('-')[1]);
         
         const saldoAnteriorItem = statement.ingresos.find(i => i.concepto === 'Saldo en Banco Mes Anterior');
-        const pagosMesItem = statement.ingresos.find(i => i.concepto === 'Ingresos por Pagos del Mes');
+        const pagosMesItem = statement.ingresos.find(i => i.concepto === 'Ingresos por Pagos del Mes' || i.concepto === 'Ingresos Ordinarios del Mes');
         const manualItems = statement.ingresos.filter(i => 
-            i.concepto !== 'Saldo en Banco Mes Anterior' && i.concepto !== 'Ingresos por Pagos del Mes'
+            i.concepto !== 'Saldo en Banco Mes Anterior' && i.concepto !== 'Ingresos por Pagos del Mes' && i.concepto !== 'Ingresos Ordinarios del Mes'
         );
     
         setEditablePreviousMonthBalance(saldoAnteriorItem?.monto || 0);
-        setCurrentMonthPayments(pagosMesItem?.monto || 0);
+        setEditableCurrentMonthPayments(pagosMesItem?.monto || 0);
         setManualIngresos(manualItems.length > 0 ? manualItems.map(i => ({...i, id: Math.random().toString(), dia: i.dia || '', category: i.category || 'cuotas_ordinarias' })) : [initialItem]);
         
         setEstadoFinanciero({ saldoEfectivo: statement.estadoFinanciero?.saldoEfectivo || 0 });
@@ -368,8 +371,8 @@ export default function FinancialBalancePage() {
             {
                 id: 'pagos-mes',
                 dia: 'Varios',
-                concepto: 'Ingresos por Pagos del Mes',
-                monto: currentMonthPayments,
+                concepto: 'Ingresos Ordinarios del Mes',
+                monto: editableCurrentMonthPayments,
                 category: 'cuotas_ordinarias'
             },
             ...finalManualIngresos
@@ -684,14 +687,14 @@ export default function FinancialBalancePage() {
                             <p className="text-xs text-muted-foreground mt-1">Calculado del balance anterior. Puedes ajustarlo si es necesario.</p>
                         </div>
                         <div className="p-4 border rounded-md bg-muted/30">
-                            <Label>Ingresos por Pagos del Mes</Label>
-                            <Input 
-                                type="text"
-                                value={`Bs. ${formatToTwoDecimals(currentMonthPayments)}`}
-                                readOnly
-                                className="font-semibold bg-background"
+                            <Label>Ingresos Ordinarios del Mes</Label>
+                            <Input
+                                type="number"
+                                value={editableCurrentMonthPayments}
+                                onChange={(e) => setEditableCurrentMonthPayments(Number(e.target.value))}
+                                placeholder="0.00"
                             />
-                            <p className="text-xs text-muted-foreground mt-1">Suma de todos los pagos aprobados en el período.</p>
+                            <p className="text-xs text-muted-foreground mt-1">Suma de todos los pagos aprobados en el período. Puedes ajustarlo si es necesario.</p>
                         </div>
                         
                         <Separator className="my-6"/>
