@@ -266,19 +266,21 @@ export default function PettyCashPage() {
         doc.text(companyInfo.rif, infoX, margin + 14);
         doc.text(companyInfo.address, infoX, margin + 19);
         
-        const qrContent = JSON.stringify({ repId: rep.id, date: format(new Date(), 'yyyy-MM-dd') });
-        const qrCodeUrl = await QRCode.toDataURL(qrContent, { errorCorrectionLevel: 'M' });
-        doc.addImage(qrCodeUrl, 'PNG', pageWidth - margin - 30, margin, 30, 30);
-    
         let startY = margin + 40;
         doc.setFontSize(16).setFont('helvetica', 'bold').text('Reporte de Gastos de Caja Chica', pageWidth / 2, startY, { align: 'center'});
+
+        // --- QR Code ---
+        const qrContent = JSON.stringify({ repId: rep.id, date: format(new Date(), 'yyyy-MM-dd') });
+        const qrCodeUrl = await QRCode.toDataURL(qrContent, { errorCorrectionLevel: 'M' });
+        // Position QR code as requested. A little above the title line, on the right.
+        doc.addImage(qrCodeUrl, 'PNG', pageWidth - margin - 30, startY - 15, 30, 30);
         
         startY += 15;
         doc.setFontSize(10);
         doc.text(`Fecha de Emisión: ${format(new Date(), "dd/MM/yyyy")}`, margin, startY);
         doc.text(`Reposición: ${rep.description}`, pageWidth - margin, startY, { align: 'right' });
         startY += 8;
-        
+    
         doc.text(`Fecha de Reposición: ${format(rep.date.toDate(), 'dd/MM/yyyy', { locale: es })}`, margin, startY);
         startY += 8;
     
