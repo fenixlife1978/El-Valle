@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -37,16 +38,9 @@ const adminNavItems: NavItem[] = [
             { href: "/admin/surveys", label: "Encuestas" },
             { href: "/admin/certificates", label: "Constancias" },
             { href: "/admin/people", label: "Personas" },
-        ]
-    },
-     { 
-        href: "/admin/settings", 
-        icon: Settings, 
-        label: "Configuración",
-        items: [
-           { href: "/admin/settings", label: "General" },
-           { href: "/admin/settings/sync", label: "Sincronización" },
-           { href: "/admin/validation", label: "Validación de Datos" },
+            { href: "/admin/settings", label: "Config. General" },
+            { href: "/admin/settings/sync", label: "Sincronización" },
+            { href: "/admin/validation", label: "Validación de Datos" },
         ]
     },
 ];
@@ -61,12 +55,12 @@ const adminBottomNavItems: BottomNavItem[] = [
     isCentral: true,
     subMenu: [
         { href: "/admin/debts", icon: WalletCards, label: "Deudas" },
-        { href: "/admin/people", icon: Users, label: "Personas" },
         { href: "/admin/surveys", icon: ClipboardList, label: "Encuestas" },
+        { href: "/admin/settings", icon: Settings, label: "Ajustes" },
     ]
   },
   { href: '/admin/reports', icon: FileSearch, label: 'Informes' },
-  { href: '/admin/settings', icon: Settings, label: 'Ajustes' },
+  { href: '/admin/people', icon: Users, label: 'Personas' },
 ];
 
 
@@ -91,8 +85,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         );
     }
     
-    // Filtramos "Utilidades" del menú móvil, pero no del de escritorio.
-    const mobileNavItems = adminNavItems.filter(item => item.label !== "Utilidades");
+    // Los items de navegación móvil ahora son los mismos que los de escritorio
+    // para mantener la consistencia en el menú desplegable (sheet).
+    const mobileNavItems = adminNavItems;
 
 
     return (
