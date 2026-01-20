@@ -621,7 +621,7 @@ export default function ReportsPage() {
             if (p.status !== 'aprobado') return false;
             const paymentDate = p.paymentDate.toDate();
             if (incomeDateRange.from && paymentDate < incomeDateRange.from) return false;
-            if (incomeDateRange.to && paymentDate > toDate) return false;
+            if (incomeDateRange.to && paymentDate > incomeDateRange.to) return false;
             return true;
         });
     
@@ -958,6 +958,7 @@ export default function ReportsPage() {
              link.href = URL.createObjectURL(blob);
              link.download = `reporte_morosidad_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
              link.click();
+             window.URL.revokeObjectURL(link.href);
         }
     };
     
@@ -1180,6 +1181,7 @@ export default function ReportsPage() {
              link.href = URL.createObjectURL(blob);
              link.download = `${filename}.xlsx`;
              link.click();
+             window.URL.revokeObjectURL(link.href);
         }
     };
     
@@ -1238,6 +1240,7 @@ export default function ReportsPage() {
              link.href = URL.createObjectURL(blob);
              link.download = `${filename}.xlsx`;
              link.click();
+             window.URL.revokeObjectURL(link.href);
         }
     };
     
@@ -1309,6 +1312,7 @@ export default function ReportsPage() {
              link.href = URL.createObjectURL(blob);
              link.download = `${filename}.xlsx`;
              link.click();
+             window.URL.revokeObjectURL(link.href);
         }
     };
 
@@ -1338,6 +1342,7 @@ export default function ReportsPage() {
                     <TabsTrigger value="delinquency">Morosidad</TabsTrigger>
                     <TabsTrigger value="balance">Saldos a Favor</TabsTrigger>
                     <TabsTrigger value="monthly">Reporte Mensual</TabsTrigger>
+                    <TabsTrigger value="income">Ingresos</TabsTrigger>
                 </TabsList>
                 
                 <TabsContent value="integral">

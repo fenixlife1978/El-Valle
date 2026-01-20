@@ -317,15 +317,14 @@ export default function FinancialBalancePage() {
             worksheet.addRow([]);
             worksheet.addRow(['Notas', statement.notas]);
             
-            workbook.xlsx.writeBuffer().then((buffer) => {
-                const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `Balance_Financiero_${statement.id}.xlsx`;
-                a.click();
-                window.URL.revokeObjectURL(url);
-            });
+            const buffer = await workbook.xlsx.writeBuffer();
+            const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `Balance_Financiero_${statement.id}.xlsx`;
+            a.click();
+            window.URL.revokeObjectURL(url);
         }
     };
 
@@ -392,7 +391,7 @@ export default function FinancialBalancePage() {
                     <Button onClick={handleNewStatement}><PlusCircle className="mr-2 h-4 w-4"/> Nuevo Balance</Button>
                 </div>
                 <Card>
-                    <CardHeader><CardTitle>Balances Guardados</CardTitle></CardHeader>
+                    <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl"><CardTitle>Balances Guardados</CardTitle></CardHeader>
                     <CardContent>
                         <Table>
                             <TableHeader><TableRow><TableHead>Período</TableHead><TableHead className="text-right">Saldo Neto (Bs.)</TableHead><TableHead className="text-right">Acciones</TableHead></TableRow></TableHeader>
@@ -436,9 +435,9 @@ export default function FinancialBalancePage() {
         <div className="space-y-8">
             <Button variant="outline" onClick={() => setView('list')}><ArrowLeft className="mr-2 h-4 w-4"/> Volver a la lista</Button>
             <Card>
-                <CardHeader>
+                <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl">
                     <CardTitle>{isEditing ? 'Editando' : 'Creando'} Balance Financiero</CardTitle>
-                    <CardDescription>Selecciona el período y completa los campos.</CardDescription>
+                    <CardDescription className="text-primary-foreground/90">Selecciona el período y completa los campos.</CardDescription>
                 </CardHeader>
                 <CardContent className="grid md:grid-cols-2 gap-4">
                      <div className="space-y-2">

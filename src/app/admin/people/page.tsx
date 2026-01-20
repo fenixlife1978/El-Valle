@@ -37,8 +37,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { PlusCircle, Edit, Trash2, Loader2, KeyRound, Search, FileDown, MoreHorizontal, Eye, EyeOff, MinusCircle, Building, User, Save } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Loader2, KeyRound, Search, FileDown, MoreHorizontal, Eye, EyeOff, MinusCircle, Building, User, Save, FileSpreadsheet } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { format } from 'date-fns';
 
 // --- DEFINICIÓN DE TIPOS Y CONSTANTES ---
 type Role = 'propietario' | 'administrador';
@@ -252,7 +253,48 @@ export default function OwnersManagement() {
         setCurrentOwner({ ...currentOwner, properties: newProperties });
     };
 
-    const handleExportExcel = async () => { /* ... (export logic) */ };
+    const handleExportExcel = async () => {
+        const ExcelJS = await import('exceljs');
+        const workbook = new ExcelJS.Workbook();
+
+        // Owners sheet
+        const ownersWorksheet = workbook.addWorksheet('Propietarios');
+        ownersWorksheet.columns = [
+            { header: 'Nombre', key: 'name', width: 30 },
+            { header: 'Email', key: 'email', width: 30 },
+            { header: 'Propiedades', key: 'properties', width: 40 },
+            { header: 'Saldo a Favor (Bs.)', key: 'balance', width: 20, style: { numFmt: '#,##0.00' } },
+        ];
+        filteredOwners.forEach(owner => {
+            ownersWorksheet.addRow({
+                name: owner.name,
+                email: owner.email,
+                properties: (owner.properties || []).map(p => `${p.street} - ${p.house}`).join(', '),
+                balance: owner.balance
+            });
+        });
+
+        // Admins sheet
+        const adminsWorksheet = workbook.addWorksheet('Administradores');
+        adminsWorksheet.columns = [
+            { header: 'Nombre', key: 'name', width: 30 },
+            { header: 'Email', key: 'email', width: 30 },
+        ];
+        filteredAdmins.forEach(admin => {
+            adminsWorksheet.addRow({
+                name: admin.name,
+                email: admin.email
+            });
+        });
+        
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `lista_de_personas_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+        link.click();
+        window.URL.revokeObjectURL(link.href);
+    };
     const handleExportPDF = async () => {
         if (!companyInfo) {
             toast({ variant: "destructive", title: "Falta información", description: "No se pueden cargar los datos de la empresa." });
@@ -386,8 +428,8 @@ export default function OwnersManagement() {
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild><Button variant="outline"><FileDown className="mr-2 h-4 w-4" />Exportar</Button></DropdownMenuTrigger>
                         <DropdownMenuContent>
-                            <DropdownMenuItem onClick={handleExportExcel}>Excel</DropdownMenuItem>
-                            <DropdownMenuItem onClick={handleExportPDF}>PDF</DropdownMenuItem>
+                            <DropdownMenuItem onClick={handleExportExcel}><FileSpreadsheet className="mr-2 h-4 w-4" />Excel</DropdownMenuItem>
+                            <DropdownMenuItem onClick={handleExportPDF}><FileText className="mr-2 h-4 w-4" />PDF</DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
                     <Button onClick={() => handleAddUser('propietario')}><PlusCircle className="mr-2 h-4 w-4" />Propietario</Button>
