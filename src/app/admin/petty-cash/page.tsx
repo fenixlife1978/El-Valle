@@ -12,11 +12,12 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { useToast } from '@/hooks/use-toast';
 import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, arrayUnion, arrayRemove, Timestamp, orderBy, query, serverTimestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db, storage } from '@/lib/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { PlusCircle, Trash2, Loader2, CalendarIcon, Wallet, TrendingDown, TrendingUp, DollarSign, Download, Paperclip, Upload } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { cn, compressImage } from '@/lib/utils';
+import { cn, compressImageAsBlob } from '@/lib/utils';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -137,15 +138,21 @@ export default function PettyCashPage() {
     const handleReceiptImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
-        
+    
         setIsSubmitting(true);
-        toast({ title: 'Procesando imagen...', description: 'Optimizando el archivo del soporte.' });
+        toast({ title: 'Procesando y subiendo imagen...', description: 'Optimizando y guardando el archivo del soporte.' });
         try {
-            const compressedBase64 = await compressImage(file, 600, 800); // Optimize for receipts
-            setDialogReceiptImage(compressedBase64);
-            toast({ title: 'Soporte listo', description: 'La imagen ha sido procesada.' });
+            const compressedBlob = await compressImageAsBlob(file, 800, 1200);
+            const storageRef = ref(storage, `petty_cash_receipts/${Date.now()}_${file.name}`);
+            
+            const snapshot = await uploadBytes(storageRef, compressedBlob);
+            const downloadURL = await getDownloadURL(snapshot.ref);
+    
+            setDialogReceiptImage(downloadURL);
+            toast({ title: 'Soporte listo', description: 'La imagen ha sido procesada y subida correctamente.' });
         } catch (error) {
-            toast({ variant: 'destructive', title: 'Error de imagen', description: 'No se pudo procesar la imagen.' });
+            console.error("Error uploading receipt image:", error);
+            toast({ variant: 'destructive', title: 'Error de subida', description: 'No se pudo subir la imagen del soporte.' });
         } finally {
             setIsSubmitting(false);
         }
@@ -424,4 +431,3 @@ export default function PettyCashPage() {
         </div>
     );
 }
-
