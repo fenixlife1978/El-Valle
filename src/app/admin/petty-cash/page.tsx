@@ -14,8 +14,8 @@ import { useToast } from '@/hooks/use-toast';
 import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, arrayUnion, arrayRemove, Timestamp, orderBy, query, serverTimestamp } from 'firebase/firestore';
 import { db, storage } from '@/lib/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { PlusCircle, Trash2, Loader2, CalendarIcon, Wallet, TrendingDown, TrendingUp, DollarSign, Download, Paperclip, Upload } from 'lucide-react';
-import { format } from 'date-fns';
+import { PlusCircle, Trash2, Loader2, CalendarIcon, Wallet, TrendingDown, TrendingUp, DollarSign, Download, Paperclip, Upload, FileText } from 'lucide-react';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn, compressImageAsBlob } from '@/lib/utils';
 import { useAuthorization } from '@/hooks/use-authorization';
@@ -59,6 +59,10 @@ const formatToTwoDecimals = (num: number) => {
     return truncated.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
+const monthOptions = Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: format(new Date(2000, i), 'MMMM', { locale: es }) }));
+const yearOptions = Array.from({ length: 10 }, (_, i) => String(new Date().getFullYear() + 1 - i));
+
+
 export default function PettyCashPage() {
     const [replenishments, setReplenishments] = useState<Replenishment[]>([]);
     const [loading, setLoading] = useState(true);
@@ -77,6 +81,14 @@ export default function PettyCashPage() {
 
     const { toast } = useToast();
     const { requestAuthorization } = useAuthorization();
+    
+    const [filterDateRange, setFilterDateRange] = useState({
+        fromMonth: String(new Date().getMonth() + 1),
+        fromYear: String(new Date().getFullYear()),
+        toMonth: String(new Date().getMonth() + 1),
+        toYear: String(new Date().getFullYear()),
+    });
+
 
     useEffect(() => {
         const q = query(collection(db, "petty_cash_replenishments"), orderBy("date", "desc"));
@@ -116,8 +128,33 @@ export default function PettyCashPage() {
                 });
             });
         });
-        return transactions.sort((a, b) => b.date.toMillis() - a.date.toMillis());
+        return transactions.sort((a, b) => a.date.toMillis() - b.date.toMillis());
     }, [replenishments]);
+    
+    const { filteredTransactions, periodTotals } = useMemo(() => {
+        const { fromMonth, fromYear, toMonth, toYear } = filterDateRange;
+        const startDate = startOfMonth(new Date(parseInt(fromYear), parseInt(fromMonth) - 1));
+        const endDate = endOfMonth(new Date(parseInt(toYear), parseInt(toMonth) - 1));
+
+        const saldoInicial = allTransactions
+            .filter(tx => tx.date.toDate() < startDate)
+            .reduce((balance, tx) => balance + (tx.type === 'ingreso' ? tx.amount : -tx.amount), 0);
+        
+        const transactionsInPeriod = allTransactions.filter(tx => {
+            const txDate = tx.date.toDate();
+            return txDate >= startDate && txDate <= endDate;
+        });
+
+        const totalIngresos = transactionsInPeriod.filter(tx => tx.type === 'ingreso').reduce((sum, tx) => sum + tx.amount, 0);
+        const totalEgresos = transactionsInPeriod.filter(tx => tx.type === 'egreso').reduce((sum, tx) => sum + tx.amount, 0);
+        const saldoFinal = saldoInicial + totalIngresos - totalEgresos;
+
+        return {
+            filteredTransactions: transactionsInPeriod,
+            periodTotals: { saldoInicial, totalIngresos, totalEgresos, saldoFinal }
+        };
+    }, [allTransactions, filterDateRange]);
+
 
     const totals = useMemo(() => {
         const totalIngresos = allTransactions.filter(t => t.type === 'ingreso').reduce((sum, t) => sum + t.amount, 0);
@@ -276,6 +313,56 @@ export default function PettyCashPage() {
 
         doc.save(`relacion_gastos_${rep.description.replace(/\s/g, '_')}.pdf`);
     };
+
+    const handleExportLedgerPdf = () => {
+        if (!companyInfo) {
+            toast({ variant: 'destructive', title: 'Error', description: 'No se ha cargado la información de la empresa.' });
+            return;
+        }
+
+        const doc = new jsPDF();
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const margin = 14;
+
+        const periodString = `Desde ${monthOptions.find(m => m.value === filterDateRange.fromMonth)?.label} ${filterDateRange.fromYear} hasta ${monthOptions.find(m => m.value === filterDateRange.toMonth)?.label} ${filterDateRange.toYear}`;
+
+        if (companyInfo.logo) doc.addImage(companyInfo.logo, 'PNG', margin, 15, 25, 25);
+        
+        doc.setFontSize(10).setFont('helvetica', 'normal');
+        doc.text(companyInfo.name, margin + 30, 20);
+        doc.text(companyInfo.rif, margin + 30, 25);
+        doc.text(`Fecha: ${format(new Date(), 'dd/MM/yyyy')}`, pageWidth - margin, 20, { align: 'right' });
+        
+        doc.setFontSize(14).setFont('helvetica', 'bold').text('Libro Contable de Caja Chica', pageWidth / 2, 45, { align: 'center' });
+        doc.setFontSize(10).setFont('helvetica', 'normal').text(periodString, pageWidth / 2, 52, { align: 'center' });
+
+        const body = filteredTransactions.map(tx => [
+            format(tx.date.toDate(), 'dd/MM/yyyy'),
+            tx.description,
+            tx.type === 'ingreso' ? formatToTwoDecimals(tx.amount) : '',
+            tx.type === 'egreso' ? formatToTwoDecimals(tx.amount) : '',
+        ]);
+
+        autoTable(doc, {
+            startY: 65,
+            head: [['Fecha', 'Descripción', 'Ingreso (Haber)', 'Egreso (Debe)']],
+            body: body,
+            foot: [
+                [{ content: `Saldo Inicial: Bs. ${formatToTwoDecimals(periodTotals.saldoInicial)}`, colSpan: 2, styles: { halign: 'left', fontStyle: 'bold', fillColor: [240, 240, 240] } },
+                 { content: `Bs. ${formatToTwoDecimals(periodTotals.totalIngresos)}`, styles: { halign: 'right', fontStyle: 'bold' } },
+                 { content: `Bs. ${formatToTwoDecimals(periodTotals.totalEgresos)}`, styles: { halign: 'right', fontStyle: 'bold' } }],
+                [{ content: `Saldo Final del Período: Bs. ${formatToTwoDecimals(periodTotals.saldoFinal)}`, colSpan: 4, styles: { halign: 'right', fontStyle: 'bold', fillColor: [220, 220, 220] } }]
+            ],
+            headStyles: { fillColor: [30, 80, 180] },
+            columnStyles: {
+                2: { halign: 'right' },
+                3: { halign: 'right' }
+            },
+        });
+
+        doc.save(`libro_caja_chica_${filterDateRange.fromYear}_${filterDateRange.fromMonth}.pdf`);
+    };
+
     
     return (
         <div className="space-y-8">
@@ -318,14 +405,26 @@ export default function PettyCashPage() {
                 <TabsContent value="ledger">
                     <Card>
                         <CardHeader>
-                            <CardTitle>Historial de Movimientos</CardTitle>
+                             <div className="flex justify-between items-center">
+                                <CardTitle>Historial de Movimientos</CardTitle>
+                                <Button onClick={handleExportLedgerPdf} variant="outline">
+                                    <FileText className="mr-2 h-4 w-4" /> Exportar PDF
+                                </Button>
+                            </div>
+                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4">
+                                 <div className="space-y-1"><Label className="text-xs">Desde Mes</Label><Select value={filterDateRange.fromMonth} onValueChange={(v) => setFilterDateRange(p => ({...p, fromMonth: v}))}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{monthOptions.map(m=><SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent></Select></div>
+                                 <div className="space-y-1"><Label className="text-xs">Desde Año</Label><Select value={filterDateRange.fromYear} onValueChange={(v) => setFilterDateRange(p => ({...p, fromYear: v}))}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{yearOptions.map(y=><SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent></Select></div>
+                                 <div className="space-y-1"><Label className="text-xs">Hasta Mes</Label><Select value={filterDateRange.toMonth} onValueChange={(v) => setFilterDateRange(p => ({...p, toMonth: v}))}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{monthOptions.map(m=><SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent></Select></div>
+                                 <div className="space-y-1"><Label className="text-xs">Hasta Año</Label><Select value={filterDateRange.toYear} onValueChange={(v) => setFilterDateRange(p => ({...p, toYear: v}))}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{yearOptions.map(y=><SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent></Select></div>
+                             </div>
                         </CardHeader>
                         <CardContent>
                             <Table>
                                 <TableHeader><TableRow><TableHead>Fecha</TableHead><TableHead>Descripción / Concepto</TableHead><TableHead className="text-right">Ingreso (Haber)</TableHead><TableHead className="text-right">Egreso (Debe)</TableHead><TableHead className="text-right">Acción</TableHead></TableRow></TableHeader>
                                 <TableBody>
+                                    <TableRow className="bg-muted/30 font-semibold"><TableCell colSpan={2}>Saldo Inicial del Período</TableCell><TableCell colSpan={3} className="text-right">Bs. {formatToTwoDecimals(periodTotals.saldoInicial)}</TableCell></TableRow>
                                     {loading ? <TableRow><TableCell colSpan={5} className="h-24 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto"/></TableCell></TableRow> :
-                                    allTransactions.map(tx => (
+                                    filteredTransactions.map(tx => (
                                         <TableRow key={tx.id}>
                                             <TableCell>{format(tx.date.toDate(), 'dd/MM/yyyy', { locale: es })}</TableCell>
                                             <TableCell>{tx.description}</TableCell>
@@ -336,8 +435,8 @@ export default function PettyCashPage() {
                                     ))}
                                 </TableBody>
                                 <TableFooter>
-                                    <TableRow className="font-bold bg-muted/50"><TableCell colSpan={2} className="text-right">Totales</TableCell><TableCell className="text-right text-green-600">Bs. {formatToTwoDecimals(totals.totalIngresos)}</TableCell><TableCell className="text-right text-red-600">Bs. {formatToTwoDecimals(totals.totalEgresos)}</TableCell><TableCell></TableCell></TableRow>
-                                    <TableRow className="font-bold text-lg"><TableCell colSpan={3} className="text-right">Saldo Final</TableCell><TableCell className="text-right text-blue-600" colSpan={2}>Bs. {formatToTwoDecimals(totals.saldo)}</TableCell></TableRow>
+                                    <TableRow className="font-bold bg-muted/50"><TableCell colSpan={2} className="text-right">Totales del Período</TableCell><TableCell className="text-right text-green-600">Bs. {formatToTwoDecimals(periodTotals.totalIngresos)}</TableCell><TableCell className="text-right text-red-600">Bs. {formatToTwoDecimals(periodTotals.totalEgresos)}</TableCell><TableCell></TableCell></TableRow>
+                                    <TableRow className="font-bold text-lg"><TableCell colSpan={3} className="text-right">Saldo Final</TableCell><TableCell className="text-right text-blue-600" colSpan={2}>Bs. {formatToTwoDecimals(periodTotals.saldoFinal)}</TableCell></TableRow>
                                 </TableFooter>
                             </Table>
                         </CardContent>
