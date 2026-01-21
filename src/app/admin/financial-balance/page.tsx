@@ -225,13 +225,10 @@ export default function FinancialBalancePage() {
 
         const endOfMonthDate = new Date(Number(selectedYear), Number(selectedMonth), 0, 23, 59, 59);
 
-        // Sum all "Reposición Caja Chica" from the main expenses list up to the selected date.
-        const totalReplenished = allExpenses
-            .filter(exp => 
-                exp.category === 'Reposición Caja Chica' && 
-                exp.date && exp.date.toDate() <= endOfMonthDate
-            )
-            .reduce((sum, exp) => sum + exp.monto, 0);
+        // Sum all replenishment amounts from the petty cash module itself.
+        const totalReplenished = allPettyCash
+            .filter(rep => rep.date.toDate() <= endOfMonthDate)
+            .reduce((sum, rep) => sum + rep.amount, 0);
 
         // Sum all expenses made from the petty cash replenishments.
         const totalPettyCashExpenses = allPettyCash
