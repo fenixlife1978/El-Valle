@@ -11,9 +11,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { PlusCircle, MinusCircle, Loader2, FileText, FileSpreadsheet, Eye, Save, Trash2, ArrowLeft, MoreHorizontal, Megaphone, DollarSign } from 'lucide-react';
-import { collection, doc, getDoc, setDoc, onSnapshot, orderBy, query, deleteDoc, Timestamp, where, getDocs, endOfMonth } from 'firebase/firestore';
+import { collection, doc, getDoc, setDoc, onSnapshot, orderBy, query, deleteDoc, Timestamp, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { format } from 'date-fns';
+import { format, endOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
