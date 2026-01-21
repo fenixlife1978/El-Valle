@@ -87,7 +87,6 @@ export default function FinancialBalancePage() {
     
     // Automatic Fields
     const [editablePreviousMonthBalance, setEditablePreviousMonthBalance] = useState(0);
-    const [currentMonthPayments, setCurrentMonthPayments] = useState(0);
     const [editableCurrentMonthPayments, setEditableCurrentMonthPayments] = useState(0);
     const [loadingPeriodData, setLoadingPeriodData] = useState(false);
 
@@ -188,7 +187,6 @@ export default function FinancialBalancePage() {
     
                 const paymentsSnap = await getDocs(paymentsQuery);
                 const totalPayments = paymentsSnap.docs.reduce((sum, doc) => sum + doc.data().totalAmount, 0);
-                setCurrentMonthPayments(totalPayments);
                 setEditableCurrentMonthPayments(totalPayments);
             } catch (error) {
                 console.error("Error fetching period data:", error);
@@ -256,7 +254,6 @@ export default function FinancialBalancePage() {
         setEstadoFinanciero(initialFinancialState);
         setNotas('');
         setEditablePreviousMonthBalance(0);
-        setCurrentMonthPayments(0);
         setEditableCurrentMonthPayments(0);
     };
 
@@ -772,5 +769,3 @@ export default function FinancialBalancePage() {
         </div>
     );
 }
-
-    
