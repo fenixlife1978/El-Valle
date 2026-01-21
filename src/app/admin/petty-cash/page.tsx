@@ -25,6 +25,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { useAuth } from '@/hooks/use-auth';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { Separator } from '@/components/ui/separator';
 
 
 type Expense = {
@@ -163,6 +164,22 @@ export default function PettyCashPage() {
         return { totalIngresos, totalEgresos, saldo };
     }, [allTransactions]);
     
+    const replenishmentsWithRunningBalance = useMemo(() => {
+        const chronological = [...replenishments].sort((a, b) => a.date.toMillis() - b.date.toMillis());
+        let runningBalance = 0;
+        return chronological.map(rep => {
+            const previousBalance = runningBalance;
+            const totalRepExpenses = rep.expenses.reduce((sum, exp) => sum + exp.amount, 0);
+            runningBalance += rep.amount - totalRepExpenses;
+            return {
+                ...rep,
+                previousBalance,
+                totalRepExpenses,
+                currentCycleEndBalance: runningBalance,
+            };
+        }).reverse(); // reverse back to show newest first
+    }, [replenishments]);
+
     const resetDialog = () => {
         setIsDialogOpen(false);
         setDialogDate(new Date());
@@ -487,10 +504,7 @@ export default function PettyCashPage() {
                 </TabsContent>
                 <TabsContent value="replenishments">
                     <div className="space-y-4">
-                        {replenishments.map(rep => {
-                            const totalRepExpenses = rep.expenses.reduce((sum, exp) => sum + exp.amount, 0);
-                            const repBalance = rep.amount - totalRepExpenses;
-                            return (
+                        {replenishmentsWithRunningBalance.map(rep => (
                             <Card key={rep.id}>
                                 <Collapsible>
                                     <CollapsibleTrigger className="w-full p-4 hover:bg-muted/50 rounded-t-lg">
@@ -519,27 +533,26 @@ export default function PettyCashPage() {
                                                         </TableRow>
                                                     ))}
                                                 </TableBody>
-                                                <TableFooter>
-                                                    <TableRow>
-                                                        <TableCell colSpan={3} className="text-right font-bold">Total Gastado</TableCell>
-                                                        <TableCell className="text-right font-bold">Bs. {formatToTwoDecimals(totalRepExpenses)}</TableCell>
-                                                    </TableRow>
-                                                     <TableRow>
-                                                        <TableCell colSpan={3} className="text-right font-bold">Saldo Restante</TableCell>
-                                                        <TableCell className="text-right font-bold text-primary">Bs. {formatToTwoDecimals(repBalance)}</TableCell>
-                                                    </TableRow>
-                                                </TableFooter>
                                             </Table>
+                                            <div className="mt-4 p-4 border-t space-y-2">
+                                                <div className="flex justify-between text-sm"><span className="text-muted-foreground">Saldo Anterior</span><span>Bs. {formatToTwoDecimals(rep.previousBalance)}</span></div>
+                                                <div className="flex justify-between text-sm"><span className="text-muted-foreground">(+) Reposición de este ciclo</span><span className="text-green-600 font-medium">Bs. {formatToTwoDecimals(rep.amount)}</span></div>
+                                                <Separator />
+                                                <div className="flex justify-between font-medium"><span className="text-muted-foreground">Subtotal Disponible</span><span>Bs. {formatToTwoDecimals(rep.previousBalance + rep.amount)}</span></div>
+                                                <div className="flex justify-between text-sm"><span className="text-muted-foreground">(-) Gastos de este ciclo</span><span className="text-red-600 font-medium">Bs. {formatToTwoDecimals(rep.totalRepExpenses)}</span></div>
+                                                <Separator />
+                                                <div className="flex justify-between font-bold text-lg"><span className="text-primary">Saldo Final de este Ciclo</span><span className="text-primary">Bs. {formatToTwoDecimals(rep.currentCycleEndBalance)}</span></div>
+                                            </div>
                                         </CardContent>
                                         <CardFooter className="flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                                             <Button variant="secondary" onClick={() => handleGenerateReplenishmentPdf(rep)}><Download className="mr-2 h-4 w-4"/> Generar Relación de Gastos</Button>
                                             <Button
                                                 onClick={() => handleReplenish(rep)}
-                                                disabled={totalRepExpenses <= 0 || isSubmitting}
-                                                title={totalRepExpenses <= 0 ? "No hay gastos que reponer" : "Reponer el monto total gastado"}
+                                                disabled={rep.totalRepExpenses <= 0 || isSubmitting}
+                                                title={rep.totalRepExpenses <= 0 ? "No hay gastos que reponer" : "Reponer el monto total gastado"}
                                             >
                                                 {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <RefreshCw className="mr-2 h-4 w-4"/>}
-                                                Reponer Caja Chica (Bs. {formatToTwoDecimals(totalRepExpenses)})
+                                                Reponer Caja Chica (Bs. {formatToTwoDecimals(rep.totalRepExpenses)})
                                             </Button>
                                         </CardFooter>
                                     </CollapsibleContent>
