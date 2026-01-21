@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { useToast } from '@/hooks/use-toast';
-import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, arrayUnion, arrayRemove, Timestamp, orderBy, query, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, arrayUnion, arrayRemove, Timestamp, orderBy, query, serverTimestamp, writeBatch, getDoc, getDocs } from 'firebase/firestore';
 import { db, storage } from '@/lib/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { PlusCircle, Trash2, Loader2, CalendarIcon, Wallet, TrendingDown, TrendingUp, DollarSign, Download, Paperclip, Upload, FileText, RefreshCw } from 'lucide-react';
@@ -42,6 +42,7 @@ type Replenishment = {
     amount: number;
     description: string;
     expenses: Expense[];
+    sourceExpenseId?: string;
 };
 
 type Transaction = {
@@ -79,6 +80,9 @@ export default function PettyCashPage() {
     const [dialogDescription, setDialogDescription] = useState('');
     const [dialogSelectedRepId, setDialogSelectedRepId] = useState<string>('');
     const [dialogReceiptImage, setDialogReceiptImage] = useState<string | null>(null);
+    const [replenishmentToDelete, setReplenishmentToDelete] = useState<Replenishment | null>(null);
+    const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
+
 
     const { toast } = useToast();
     const { requestAuthorization } = useAuthorization();
@@ -229,23 +233,30 @@ export default function PettyCashPage() {
             }
             setIsSubmitting(true);
             try {
-                if (type === 'ingreso') {
-                     await addDoc(collection(db, "petty_cash_replenishments"), {
-                        date: Timestamp.fromDate(dialogDate),
-                        amount: parseFloat(dialogAmount),
-                        description: dialogDescription,
-                        expenses: [],
-                    });
-                     // We also register this as a main expense for accounting consistency
-                    await addDoc(collection(db, "expenses"), {
+                 if (type === 'ingreso') {
+                    const expenseRef = doc(collection(db, "expenses"));
+                    const replenishmentRef = doc(collection(db, "petty_cash_replenishments"));
+                    
+                    const batch = writeBatch(db);
+    
+                    batch.set(expenseRef, {
                         description: `Reposición Caja Chica: ${dialogDescription}`,
                         amount: parseFloat(dialogAmount),
                         category: "Reposición Caja Chica",
                         date: Timestamp.fromDate(dialogDate),
-                        reference: `CCH-${Date.now()}`,
+                        reference: `CCH-${replenishmentRef.id}`, // Link to replenishment
                         createdAt: serverTimestamp(),
                     });
-
+                    
+                    batch.set(replenishmentRef, {
+                        date: Timestamp.fromDate(dialogDate),
+                        amount: parseFloat(dialogAmount),
+                        description: dialogDescription,
+                        expenses: [],
+                        sourceExpenseId: expenseRef.id // Link to expense
+                    });
+    
+                    await batch.commit();
                     toast({ title: 'Reposición Guardada', description: 'El nuevo fondo y el egreso correspondiente han sido registrados.' });
                 } else { // Egreso
                     if (!dialogSelectedRepId) {
@@ -288,6 +299,34 @@ export default function PettyCashPage() {
             } catch (error) {
                 console.error(error);
                 toast({ variant: 'destructive', title: 'Error', description: 'No se pudo eliminar el movimiento.' });
+            }
+        });
+    };
+
+    const confirmDeleteReplenishment = async () => {
+        if (!replenishmentToDelete) return;
+        requestAuthorization(async () => {
+            setIsSubmitting(true);
+            try {
+                const batch = writeBatch(db);
+
+                const repRef = doc(db, 'petty_cash_replenishments', replenishmentToDelete.id);
+                batch.delete(repRef);
+
+                if (replenishmentToDelete.sourceExpenseId) {
+                    const expenseRef = doc(db, 'expenses', replenishmentToDelete.sourceExpenseId);
+                    batch.delete(expenseRef);
+                }
+
+                await batch.commit();
+                toast({ title: 'Ciclo de Reposición Eliminado', description: 'El ciclo y sus gastos asociados han sido eliminados.' });
+            } catch (error) {
+                console.error("Error deleting replenishment cycle:", error);
+                toast({ variant: 'destructive', title: 'Error al Eliminar', description: 'No se pudo eliminar el ciclo de reposición.' });
+            } finally {
+                setIsDeleteConfirmationOpen(false);
+                setReplenishmentToDelete(null);
+                setIsSubmitting(false);
             }
         });
     };
@@ -552,7 +591,19 @@ export default function PettyCashPage() {
                                             </div>
                                         </CardContent>
                                         <CardFooter className="flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                                            <Button variant="secondary" onClick={() => handleGenerateReplenishmentPdf(rep)}><Download className="mr-2 h-4 w-4"/> Generar Relación de Gastos</Button>
+                                            <div className="flex gap-2">
+                                                <Button variant="secondary" onClick={() => handleGenerateReplenishmentPdf(rep)}><Download className="mr-2 h-4 w-4"/> Generar Relación de Gastos</Button>
+                                                <Button
+                                                    variant="destructive"
+                                                    onClick={() => {
+                                                        setReplenishmentToDelete(rep);
+                                                        setIsDeleteConfirmationOpen(true);
+                                                    }}
+                                                    disabled={isSubmitting}
+                                                >
+                                                    <Trash2 className="mr-2 h-4 w-4"/> Eliminar Ciclo
+                                                </Button>
+                                            </div>
                                             <Button
                                                 onClick={() => handleReplenish(rep)}
                                                 disabled={rep.totalRepExpenses <= 0 || isSubmitting}
@@ -597,6 +648,23 @@ export default function PettyCashPage() {
             </Dialog>
             <Dialog open={!!receiptToView} onOpenChange={() => setReceiptToView(null)}>
                 <DialogContent className="max-w-lg"><DialogHeader><DialogTitle>Soporte de Gasto</DialogTitle></DialogHeader><div className="p-4 flex justify-center"><img src={receiptToView || ''} alt="Soporte de gasto" className="max-w-full max-h-[80vh] object-contain"/></div></DialogContent>
+            </Dialog>
+             <Dialog open={isDeleteConfirmationOpen} onOpenChange={setIsDeleteConfirmationOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Confirmar Eliminación</DialogTitle>
+                        <DialogDescription>
+                            ¿Está seguro de que desea eliminar este ciclo de reposición? Se borrará el ingreso y todos los gastos asociados, incluyendo el egreso principal en la contabilidad. Esta acción no se puede deshacer.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsDeleteConfirmationOpen(false)}>Cancelar</Button>
+                        <Button variant="destructive" onClick={confirmDeleteReplenishment} disabled={isSubmitting}>
+                             {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                            Sí, eliminar
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
             </Dialog>
         </div>
     );

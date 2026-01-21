@@ -282,6 +282,7 @@
             "date": {"type": "string", "format": "date-time"},
             "amount": {"type": "number"},
             "description": {"type": "string"},
+            "sourceExpenseId": { "type": "string"},
             "expenses": {
                 "type": "array",
                 "items": {
@@ -483,3 +484,4 @@
     "providers": ["password", "google.com"]
   }
 }
+
