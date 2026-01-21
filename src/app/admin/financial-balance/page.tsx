@@ -202,37 +202,33 @@ export default function FinancialBalancePage() {
     }, [selectedMonth, selectedYear, isEditing, loading, toast]);
 
 
-    const egresos = useMemo(() => {
-        if (!selectedMonth || !selectedYear) return [];
-        const month = parseInt(selectedMonth);
-        const year = parseInt(selectedYear);
-
-        return allExpenses.filter(expense => {
-            if (!expense.date) return false;
-            const expenseDate = expense.date.toDate();
-            return expenseDate.getMonth() + 1 === month && expenseDate.getFullYear() === year;
-        });
-    }, [allExpenses, selectedMonth, selectedYear]);
-
     const totals = useMemo(() => {
         const totalManualIngresos = manualIngresos.reduce((sum, item) => sum + Number(item.monto), 0);
         const totalIngresos = editablePreviousMonthBalance + editableCurrentMonthPayments + totalManualIngresos;
+        
+        const egresos = allExpenses.filter(expense => {
+            if (!expense.date) return false;
+            const expenseDate = expense.date.toDate();
+            return expenseDate.getMonth() + 1 === parseInt(selectedMonth) && expenseDate.getFullYear() === parseInt(selectedYear);
+        });
+
         const totalEgresos = egresos.reduce((sum, item) => sum + Number(item.monto), 0);
         const saldoNetoBanco = totalIngresos - totalEgresos;
 
         const endOfMonthDate = new Date(Number(selectedYear), Number(selectedMonth), 0, 23, 59, 59);
 
-        // Sum all replenishment amounts from the petty cash module itself, up to the end of the period.
+        // (+) Suma todas las reposiciones que se han hecho a la caja chica
         const totalReplenished = allPettyCash
             .filter(rep => rep.date.toDate() <= endOfMonthDate)
             .reduce((sum, rep) => sum + rep.amount, 0);
 
-        // Sum all expenses made from the petty cash replenishments, up to the end of the period.
+        // (-) Suma todos los gastos que se han pagado DESDE la caja chica
         const totalPettyCashExpenses = allPettyCash
             .flatMap(rep => rep.expenses)
             .filter(exp => exp.date.toDate() <= endOfMonthDate)
             .reduce((sum, exp) => sum + exp.amount, 0);
-
+        
+        // El saldo actual es la diferencia acumulada
         const saldoCajaChica = totalReplenished - totalPettyCashExpenses;
         
         const saldoEfectivoNum = Number(estadoFinanciero?.saldoEfectivo) || 0;
@@ -241,8 +237,8 @@ export default function FinancialBalancePage() {
 
         const usdEquivalent = activeRate > 0 ? totalLiquidez / activeRate : 0;
 
-        return { totalIngresos, totalEgresos, saldoNetoBanco, saldoCajaChica, totalLiquidez, usdEquivalent };
-    }, [manualIngresos, editablePreviousMonthBalance, editableCurrentMonthPayments, egresos, allPettyCash, selectedYear, selectedMonth, estadoFinanciero, activeRate]);
+        return { totalIngresos, totalEgresos, egresos, saldoNetoBanco, saldoCajaChica, totalLiquidez, usdEquivalent };
+    }, [manualIngresos, editablePreviousMonthBalance, editableCurrentMonthPayments, allExpenses, selectedMonth, selectedYear, allPettyCash, estadoFinanciero, activeRate]);
 
 
     const resetForm = () => {
@@ -355,7 +351,7 @@ export default function FinancialBalancePage() {
 
         const data: Omit<FinancialStatement, 'id'> & { estadoFinanciero: any } = {
             ingresos: fullIngresos,
-            egresos: egresos,
+            egresos: totals.egresos,
             estadoFinanciero: {
                 saldoNeto: totals.saldoNetoBanco,
                 saldoEfectivo: Number(estadoFinanciero.saldoEfectivo) || 0,
@@ -693,10 +689,10 @@ export default function FinancialBalancePage() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {egresos.length === 0 ? (
+                                {totals.egresos.length === 0 ? (
                                     <TableRow><TableCell colSpan={4} className="h-24 text-center">No hay egresos registrados para este período.</TableCell></TableRow>
                                 ) : (
-                                    egresos.map((item) => (
+                                    totals.egresos.map((item) => (
                                         <TableRow key={item.id}>
                                             <TableCell>{item.dia}</TableCell>
                                             <TableCell>{item.concepto}</TableCell>
