@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -225,12 +224,12 @@ export default function FinancialBalancePage() {
 
         const endOfMonthDate = new Date(Number(selectedYear), Number(selectedMonth), 0, 23, 59, 59);
 
-        // Sum all replenishment amounts from the petty cash module itself.
+        // Sum all replenishment amounts from the petty cash module itself, up to the end of the period.
         const totalReplenished = allPettyCash
             .filter(rep => rep.date.toDate() <= endOfMonthDate)
             .reduce((sum, rep) => sum + rep.amount, 0);
 
-        // Sum all expenses made from the petty cash replenishments.
+        // Sum all expenses made from the petty cash replenishments, up to the end of the period.
         const totalPettyCashExpenses = allPettyCash
             .flatMap(rep => rep.expenses)
             .filter(exp => exp.date.toDate() <= endOfMonthDate)
@@ -245,7 +244,7 @@ export default function FinancialBalancePage() {
         const usdEquivalent = activeRate > 0 ? totalLiquidez / activeRate : 0;
 
         return { totalIngresos, totalEgresos, saldoNetoBanco, saldoCajaChica, totalLiquidez, usdEquivalent };
-    }, [manualIngresos, editablePreviousMonthBalance, editableCurrentMonthPayments, egresos, allExpenses, allPettyCash, selectedYear, selectedMonth, estadoFinanciero, activeRate]);
+    }, [manualIngresos, editablePreviousMonthBalance, editableCurrentMonthPayments, egresos, allPettyCash, selectedYear, selectedMonth, estadoFinanciero, activeRate]);
 
 
     const resetForm = () => {
@@ -773,3 +772,5 @@ export default function FinancialBalancePage() {
         </div>
     );
 }
+
+    
