@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -18,7 +19,7 @@ type Expense = {
     id: string;
     description: string;
     amount: number;
-    category: 'Servicios' | 'Mantenimientos y Servicios' | 'Nomina' | 'Administracion' | 'Telefonia e Internet' | 'Gastos ExtraOrdinarios' | 'Reparaciones Generales' | 'Otros Gastos';
+    category: 'Servicios' | 'Mantenimientos y Servicios' | 'Nomina' | 'Administracion' | 'Telefonia e Internet' | 'Gastos ExtraOrdinarios' | 'Reparaciones Generales' | 'Otros Gastos' | 'Reposición Caja Chica';
     date: Timestamp;
     reference: string;
     createdAt: Timestamp;
@@ -91,6 +92,7 @@ function RegisterExpenseForm({ onSave }: { onSave: () => void }) {
                     <SelectItem value="Telefonia e Internet">Telefonia e Internet</SelectItem>
                     <SelectItem value="Gastos ExtraOrdinarios">Gastos ExtraOrdinarios</SelectItem>
                     <SelectItem value="Reparaciones Generales">Reparaciones Generales</SelectItem>
+                    <SelectItem value="Reposición Caja Chica">Reposición Caja Chica</SelectItem>
                     <SelectItem value="Otros Gastos">Otros Gastos</SelectItem>
                 </SelectContent>
                 </Select>

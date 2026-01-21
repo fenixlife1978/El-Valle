@@ -165,7 +165,7 @@
         "properties": {
             "description": { "type": "string" },
             "amount": { "type": "number" },
-            "category": { "type": "string", "enum": ["Servicios", "Mantenimiento", "Nomina", "Administracion", "Otros"] },
+            "category": { "type": "string", "enum": ["Servicios", "Mantenimientos y Servicios", "Nomina", "Administracion", "Telefonia e Internet", "Gastos ExtraOrdinarios", "Reparaciones Generales", "Reposición Caja Chica", "Otros Gastos"] },
             "date": { "type": "string", "format": "date-time" },
             "createdAt": { "type": "string", "format": "date-time" },
             "reference": { "type": "string" }
@@ -220,7 +220,7 @@
             "monto": {"type": "number"},
             "category": {
                 "type": "string",
-                "enum": ["cuotas_ordinarias", "cuotas_especiales", "fondo_reserva", "otros"]
+                "enum": ["cuotas_ordinarias", "cuotas_especiales", "fondo_reserva", "deposito_en_transito", "otros"]
             },
             "date": {"type": "string", "format": "date-time"}
         }

@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
@@ -12,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { useToast } from '@/hooks/use-toast';
-import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, arrayUnion, arrayRemove, Timestamp, orderBy, query, getDoc } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, arrayUnion, arrayRemove, Timestamp, orderBy, query, getDoc, serverTimestamp } from 'firebase/firestore';
 import { db, storage } from '@/lib/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { PlusCircle, Trash2, Loader2, CalendarIcon, ChevronDown, ChevronRight, Wallet, TrendingDown, TrendingUp, BadgeEuro, FileText, Paperclip, Eye, Upload, ArrowLeft } from 'lucide-react';
@@ -131,13 +130,25 @@ export default function PettyCashPage() {
             }
             setIsSubmitting(true);
             try {
+                // 1. Create the replenishment record for the petty cash module
                 await addDoc(collection(db, "petty_cash_replenishments"), {
                     date: Timestamp.fromDate(repDate),
                     amount: parseFloat(repAmount),
                     description: repDescription,
                     expenses: [],
                 });
-                toast({ title: 'Reposición Guardada', description: 'El nuevo fondo de caja chica ha sido registrado.' });
+
+                // 2. Create a corresponding expense record for the main financial balance
+                await addDoc(collection(db, "expenses"), {
+                    description: `Reposición Caja Chica: ${repDescription}`,
+                    amount: parseFloat(repAmount),
+                    category: "Reposición Caja Chica",
+                    date: Timestamp.fromDate(repDate),
+                    reference: `CCH-${Date.now()}`,
+                    createdAt: serverTimestamp(),
+                });
+
+                toast({ title: 'Reposición Guardada', description: 'El nuevo fondo y el egreso correspondiente han sido registrados.' });
                 resetRepDialog();
             } catch (error) {
                 console.error(error);
@@ -272,7 +283,6 @@ export default function PettyCashPage() {
         // --- QR Code ---
         const qrContent = JSON.stringify({ repId: rep.id, date: format(new Date(), 'yyyy-MM-dd') });
         const qrCodeUrl = await QRCode.toDataURL(qrContent, { errorCorrectionLevel: 'M' });
-        // Position QR code as requested. A little above the title line, on the right.
         doc.addImage(qrCodeUrl, 'PNG', pageWidth - margin - 30, startY - 15, 30, 30);
         
         startY += 15;
