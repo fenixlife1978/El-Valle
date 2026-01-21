@@ -11,10 +11,10 @@ import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { useToast } from '@/hooks/use-toast';
-import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, arrayUnion, arrayRemove, Timestamp, orderBy, query, serverTimestamp } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, arrayUnion, arrayRemove, Timestamp, orderBy, query, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { db, storage } from '@/lib/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { PlusCircle, Trash2, Loader2, CalendarIcon, Wallet, TrendingDown, TrendingUp, DollarSign, Download, Paperclip, Upload, FileText } from 'lucide-react';
+import { PlusCircle, Trash2, Loader2, CalendarIcon, Wallet, TrendingDown, TrendingUp, DollarSign, Download, Paperclip, Upload, FileText, RefreshCw } from 'lucide-react';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn, compressImageAsBlob } from '@/lib/utils';
@@ -363,6 +363,49 @@ export default function PettyCashPage() {
         doc.save(`libro_caja_chica_${filterDateRange.fromYear}_${filterDateRange.fromMonth}.pdf`);
     };
 
+    const handleReplenish = async (rep: Replenishment) => {
+        const totalExpenses = rep.expenses.reduce((sum, exp) => sum + exp.amount, 0);
+        if (totalExpenses <= 0) {
+            toast({ variant: 'destructive', title: 'Sin gastos', description: 'No hay gastos que reponer para este ciclo.' });
+            return;
+        }
+    
+        requestAuthorization(async () => {
+            setIsSubmitting(true);
+            try {
+                const batch = writeBatch(db);
+    
+                const expenseRef = doc(collection(db, "expenses"));
+                batch.set(expenseRef, {
+                    description: `Reposición de Caja Chica por gastos del ciclo: "${rep.description}"`,
+                    amount: totalExpenses,
+                    category: "Reposición Caja Chica",
+                    date: Timestamp.now(),
+                    reference: `CCH-REP-${rep.id.slice(0, 5)}`,
+                    createdAt: serverTimestamp(),
+                });
+    
+                const newRepRef = doc(collection(db, "petty_cash_replenishments"));
+                batch.set(newRepRef, {
+                    date: Timestamp.now(),
+                    amount: totalExpenses,
+                    description: `Reposición de gastos del ${format(new Date(), 'dd/MM/yyyy')}`,
+                    expenses: [],
+                });
+    
+                await batch.commit();
+                
+                toast({ title: 'Reposición Registrada', description: `Se ha creado un egreso de Bs. ${formatToTwoDecimals(totalExpenses)} y se ha repuesto el fondo de caja chica.`, className: "bg-green-100 border-green-400" });
+    
+            } catch (error) {
+                console.error("Error replenishing petty cash:", error);
+                toast({ variant: 'destructive', title: 'Error', description: 'No se pudo completar la reposición.' });
+            } finally {
+                setIsSubmitting(false);
+            }
+        });
+    };
+
     
     return (
         <div className="space-y-8">
@@ -488,8 +531,16 @@ export default function PettyCashPage() {
                                                 </TableFooter>
                                             </Table>
                                         </CardContent>
-                                        <CardFooter>
+                                        <CardFooter className="flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                                             <Button variant="secondary" onClick={() => handleGenerateReplenishmentPdf(rep)}><Download className="mr-2 h-4 w-4"/> Generar Relación de Gastos</Button>
+                                            <Button
+                                                onClick={() => handleReplenish(rep)}
+                                                disabled={totalRepExpenses <= 0 || isSubmitting}
+                                                title={totalRepExpenses <= 0 ? "No hay gastos que reponer" : "Reponer el monto total gastado"}
+                                            >
+                                                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <RefreshCw className="mr-2 h-4 w-4"/>}
+                                                Reponer Caja Chica (Bs. {formatToTwoDecimals(totalRepExpenses)})
+                                            </Button>
                                         </CardFooter>
                                     </CollapsibleContent>
                                 </Collapsible>
