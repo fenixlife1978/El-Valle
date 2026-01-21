@@ -225,10 +225,17 @@ export default function FinancialBalancePage() {
 
         const endOfMonthDate = new Date(Number(selectedYear), Number(selectedMonth), 0, 23, 59, 59);
 
-        const relevantReplenishments = allPettyCash.filter(rep => rep.date.toDate() <= endOfMonthDate);
-        const totalReplenished = relevantReplenishments.reduce((sum, rep) => sum + rep.amount, 0);
+        // Sum all "Reposición Caja Chica" from the main expenses list up to the selected date.
+        const totalReplenished = allExpenses
+            .filter(exp => 
+                exp.category === 'Reposición Caja Chica' && 
+                exp.date && exp.date.toDate() <= endOfMonthDate
+            )
+            .reduce((sum, exp) => sum + exp.monto, 0);
 
-        const totalPettyCashExpenses = relevantReplenishments.flatMap(rep => rep.expenses)
+        // Sum all expenses made from the petty cash replenishments.
+        const totalPettyCashExpenses = allPettyCash
+            .flatMap(rep => rep.expenses)
             .filter(exp => exp.date.toDate() <= endOfMonthDate)
             .reduce((sum, exp) => sum + exp.amount, 0);
 
@@ -241,7 +248,7 @@ export default function FinancialBalancePage() {
         const usdEquivalent = activeRate > 0 ? totalLiquidez / activeRate : 0;
 
         return { totalIngresos, totalEgresos, saldoNetoBanco, saldoCajaChica, totalLiquidez, usdEquivalent };
-    }, [manualIngresos, editablePreviousMonthBalance, editableCurrentMonthPayments, egresos, allPettyCash, selectedYear, selectedMonth, estadoFinanciero, activeRate]);
+    }, [manualIngresos, editablePreviousMonthBalance, editableCurrentMonthPayments, egresos, allExpenses, allPettyCash, selectedYear, selectedMonth, estadoFinanciero, activeRate]);
 
 
     const resetForm = () => {
