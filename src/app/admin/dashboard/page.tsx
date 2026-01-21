@@ -228,7 +228,7 @@ export default function AdminDashboardPage() {
                 </Card>
             </div>
 
-            <Card shadow-sm>
+            <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-xl">
                         <CheckCircle className="text-green-500 w-5 h-5" />

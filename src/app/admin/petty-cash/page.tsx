@@ -270,7 +270,7 @@ export default function PettyCashPage() {
                         date: Timestamp.fromDate(dialogDate),
                         description: dialogDescription,
                         amount: parseFloat(dialogAmount),
-                        receiptUrl: dialogReceiptImage,
+                        receiptUrl: dialogReceiptImage ?? undefined,
                     };
                     await updateDoc(repRef, { expenses: arrayUnion(newExpense) });
                     toast({ title: 'Gasto Guardado', description: 'El gasto ha sido añadido al fondo seleccionado.' });
@@ -669,3 +669,5 @@ export default function PettyCashPage() {
         </div>
     );
 }
+
+    
