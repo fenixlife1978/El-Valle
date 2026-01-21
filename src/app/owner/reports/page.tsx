@@ -49,7 +49,7 @@ export default function OwnerHistoryPage() {
                         createdAtDate = new Date(); // Fallback
                     }
                     return { ...data, id: doc.id, createdAt: createdAtDate } as PublishedReport;
-                });
+                }).filter(report => report.type === 'balance'); // Filter to show only balance reports
                 setReports(reportsData);
             } catch (error) {
                 console.error("Error fetching published reports:", error);
