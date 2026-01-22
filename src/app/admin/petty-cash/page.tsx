@@ -348,7 +348,7 @@ export default function PettyCashPage() {
 
         doc.setFontSize(10).setFont('helvetica', 'normal');
         doc.text(companyInfo.name, margin + 30, 20);
-        doc.text(companyInfo.rif, margin + 30, 25);
+        doc.text(companyInfo.rif || '', margin + 30, 25);
         doc.text(`Fecha: ${format(new Date(), 'dd/MM/yyyy')}`, pageWidth - margin, 20, { align: 'right' });
 
         doc.setFontSize(14).setFont('helvetica', 'bold').text('Relación de Gastos de Caja Chica', pageWidth / 2, 45, { align: 'center' });
@@ -394,7 +394,7 @@ export default function PettyCashPage() {
         
         doc.setFontSize(10).setFont('helvetica', 'normal');
         doc.text(companyInfo.name, margin + 30, 20);
-        doc.text(companyInfo.rif, margin + 30, 25);
+        doc.text(companyInfo.rif || '', margin + 30, 25);
         doc.text(`Fecha: ${format(new Date(), 'dd/MM/yyyy')}`, pageWidth - margin, 20, { align: 'right' });
         
         doc.setFontSize(14).setFont('helvetica', 'bold').text('Libro Contable de Caja Chica', pageWidth / 2, 45, { align: 'center' });
@@ -669,5 +669,3 @@ export default function PettyCashPage() {
         </div>
     );
 }
-
-    
