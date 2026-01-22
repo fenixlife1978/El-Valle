@@ -23,8 +23,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useAuth } from '@/hooks/use-auth';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { Separator } from '@/components/ui/separator';
 
 
@@ -331,11 +329,14 @@ export default function PettyCashPage() {
         });
     };
     
-     const handleGenerateReplenishmentPdf = (rep: Replenishment) => {
+    const handleGenerateReplenishmentPdf = async (rep: Replenishment) => {
         if (!companyInfo) {
             toast({ variant: 'destructive', title: 'Error', description: 'No se ha cargado la información de la empresa.' });
             return;
         }
+
+        const { default: jsPDF } = await import('jspdf');
+        const { default: autoTable } = await import('jspdf-autotable');
 
         const doc = new jsPDF();
         const pageWidth = doc.internal.pageSize.getWidth();
@@ -369,7 +370,7 @@ export default function PettyCashPage() {
             headStyles: { fillColor: [30, 80, 180] },
             footStyles: { fillColor: [30, 80, 180], textColor: 255, fontStyle: 'bold' },
             didDrawPage: (data) => {
-                let str = 'Página ' + doc.internal.pages.length;
+                let str = 'Página ' + (doc as any).internal.pages.length;
                 doc.setFontSize(10);
                 doc.text(str, data.settings.margin.left, doc.internal.pageSize.getHeight() - 10);
             }
@@ -378,11 +379,14 @@ export default function PettyCashPage() {
         doc.save(`relacion_gastos_${rep.description.replace(/\s/g, '_')}.pdf`);
     };
 
-    const handleExportLedgerPdf = () => {
+    const handleExportLedgerPdf = async () => {
         if (!companyInfo) {
             toast({ variant: 'destructive', title: 'Error', description: 'No se ha cargado la información de la empresa.' });
             return;
         }
+
+        const { default: jsPDF } = await import('jspdf');
+        const { default: autoTable } = await import('jspdf-autotable');
 
         const doc = new jsPDF();
         const pageWidth = doc.internal.pageSize.getWidth();
