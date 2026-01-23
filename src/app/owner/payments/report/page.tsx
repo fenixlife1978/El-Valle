@@ -359,7 +359,7 @@ export default function ReportPaymentPage() {
                                                 <FileUp className="absolute left-4 h-5 w-5 text-muted-foreground" />
                                                 <Input id="receipt" type="file" onChange={handleImageUpload} className="pl-12 pr-4 py-4 bg-input border-border rounded-2xl text-base file:text-muted-foreground file:text-sm" disabled={isSubmitting} />
                                             </div>
-                                            {receiptImage && <p className="text-xs text-green-400 flex items-center gap-1"><CheckCircle2 className="h-3 w-3"/>Comprobante cargado.</p>}
+                                            {receiptImage && <p className="text-xs text-primary flex items-center gap-1"><CheckCircle2 className="h-3 w-3"/>Comprobante cargado.</p>}
                                         </div>
                                     </CardContent>
                                 </CollapsibleContent>
@@ -433,7 +433,7 @@ export default function ReportPaymentPage() {
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
-                            <Info className="h-6 w-6 text-blue-500" />
+                            <Info className="h-6 w-6 text-primary" />
                             Reporte Enviado para Revisión
                         </DialogTitle>
                          <div className="pt-4 text-sm text-muted-foreground space-y-4">

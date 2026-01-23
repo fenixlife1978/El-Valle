@@ -111,7 +111,7 @@ export default function OwnerSettingsPage() {
             toast({
                 title: 'Perfil Actualizado',
                 description: 'Tu foto de perfil ha sido guardada.',
-                className: 'bg-green-100 border-green-400 text-green-800'
+                className: 'bg-blue-100 border-blue-400 text-blue-800'
             });
 
         } catch(error) {

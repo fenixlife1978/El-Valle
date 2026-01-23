@@ -37,7 +37,7 @@ export default function ForgotPasswordPage() {
             toast({
                 title: 'Correo Enviado',
                 description: 'Se ha enviado un enlace para restablecer su contraseña a su correo electrónico.',
-                className: 'bg-green-100 border-green-400 text-green-800'
+                className: 'bg-blue-100 border-blue-400 text-blue-800'
             });
             router.push('/login');
         } catch (error: any) {

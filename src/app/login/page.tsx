@@ -124,7 +124,7 @@ function LoginPage() {
             toast({
                 title: 'Inicio de sesión exitoso',
                 description: 'Bienvenido de nuevo. Redirigiendo...',
-                className: 'bg-green-100 border-green-400 text-green-800'
+                className: 'bg-blue-100 border-blue-400 text-blue-800'
             });
             
         } catch (error: any) {

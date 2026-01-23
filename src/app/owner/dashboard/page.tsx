@@ -559,7 +559,7 @@ const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptD
         <div className="space-y-6 md:space-y-8 p-4 md:p-8">
             <h1 className="text-3xl font-bold font-headline">👋 ¡Hola, {ownerData.name?.split(' ')[0] || 'Propietario'}!</h1>
             
-            <div className="relative w-full overflow-hidden rounded-lg bg-yellow-400 text-black">
+            <div className="relative w-full overflow-hidden rounded-lg bg-blue-100 text-blue-800">
                 <Marquee pauseOnHover>
                     <p className="px-4 text-sm font-semibold">
                     Recuerda que tú Cuota Condominial se Carga el día 1 y Vence los días 5 de cada Mes. Utiliza la Calculadora de Pagos para estar siempre al día. La autogestión es responsabilidad de todos.
@@ -579,7 +579,7 @@ const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptD
                     <CardHeader>
                         <div className="flex justify-between items-start">
                             <CardTitle className="flex items-center gap-2">
-                                {stats.isSolvente ? <ShieldCheck className="h-6 w-6 text-green-500"/> : <AlertCircle className="h-6 w-6 text-red-500"/>}
+                                {stats.isSolvente ? <ShieldCheck className="h-6 w-6 text-primary"/> : <AlertCircle className="h-6 w-6 text-red-500"/>}
                                 Estado de Cuenta
                             </CardTitle>
                             <Badge variant={statusVariant} className="text-sm px-3 py-1">
@@ -591,7 +591,7 @@ const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptD
                     <CardContent className="flex flex-col items-center justify-between gap-4">
                         <div className="text-center">
                             <p className="text-sm text-muted-foreground">Deuda Pendiente (USD)</p>
-                            <p className={cn("text-5xl font-extrabold", stats.isSolvente ? 'text-green-500' : 'text-destructive')}>
+                            <p className={cn("text-5xl font-extrabold", stats.isSolvente ? 'text-primary' : 'text-destructive')}>
                                 ${formatToTwoDecimals(stats.totalPendingUSD)}
                             </p>
                             {!stats.isSolvente && <p className="text-xs text-muted-foreground mt-1">Deuda más antigua: {stats.oldestDebtDate}</p>}

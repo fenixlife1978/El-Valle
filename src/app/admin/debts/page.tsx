@@ -162,7 +162,7 @@ export default function DebtManagementPage() {
                 pendingDebtUSD: debtsByOwner[owner.id] || 0
             }));
         });
-        if(showToast) toast({ title: "Saldos Sincronizados", description: "Las deudas pendientes se han actualizado.", className: "bg-green-100 border-green-400 text-green-800" });
+        if(showToast) toast({ title: "Saldos Sincronizados", description: "Las deudas pendientes se han actualizado.", className: "bg-blue-100 border-blue-400 text-blue-800" });
 
     }, [toast]);
 
@@ -395,7 +395,7 @@ export default function DebtManagementPage() {
             toast({
                 title: 'Conciliación Completada',
                 description: `Se procesaron las cuentas de ${reconciledCount} de ${processedOwners} propietarios con saldo.`,
-                className: 'bg-green-100 border-green-400 text-green-800'
+                className: 'bg-blue-100 border-blue-400 text-blue-800'
             });
         } else {
              toast({ title: 'Sin Conciliaciones Necesarias', description: 'Ningún propietario tiene saldo suficiente para cubrir deudas pendientes o adelantar cuotas.' });
@@ -478,7 +478,7 @@ export default function DebtManagementPage() {
             toast({
                 title: 'Deudas Generadas Exitosamente',
                 description: `Se han generado ${newDebtsCount} nuevas deudas para el mes de ${months.find(m => m.value === month)?.label} ${year}.`,
-                className: 'bg-green-100 border-green-400 text-green-800'
+                className: 'bg-blue-100 border-blue-400 text-blue-800'
             });
 
         } catch (error) {
@@ -957,7 +957,7 @@ export default function DebtManagementPage() {
                                             </TableCell>
                                             <TableCell>
                                                {Number(owner.balance) > 0 ? (
-                                                    <Badge variant="success">
+                                                    <Badge variant="default">
                                                         Bs. {formatToTwoDecimals(Number(owner.balance))}
                                                     </Badge>
                                                 ) : (
@@ -1103,7 +1103,7 @@ export default function DebtManagementPage() {
                                                         </div>
                                                         <div className="flex justify-between items-center text-sm">
                                                             <span className="text-muted-foreground flex items-center"><Minus className="mr-2 h-4 w-4"/> Saldo a Favor del Propietario:</span>
-                                                            <span className="font-medium">Bs. {formatToTwoDecimals(calc.balanceInFavor)}</span>
+                                                            <span className="font-medium text-primary">Bs. {formatToTwoDecimals(calc.balanceInFavor)}</span>
                                                         </div>
                                                         <hr className="my-1"/>
                                                         <div className="flex justify-between items-center text-lg">

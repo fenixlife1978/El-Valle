@@ -196,7 +196,7 @@ export default function AdminDashboardPage() {
                     </CardContent>
                 </Card>
                 
-                <Card className="bg-green-600 text-white">
+                <Card className="bg-primary text-primary-foreground">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Unidades Registradas</CardTitle>
                         <Users className="h-4 w-4" />
@@ -231,7 +231,7 @@ export default function AdminDashboardPage() {
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-xl">
-                        <CheckCircle className="text-green-500 w-5 h-5" />
+                        <CheckCircle className="text-primary w-5 h-5" />
                         Últimos Pagos Aprobados
                     </CardTitle>
                 </CardHeader>
