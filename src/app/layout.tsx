@@ -8,6 +8,13 @@ import { ThemeProvider } from '@/components/theme-provider';
 import { AuthProvider, useAuth } from '@/hooks/use-auth';
 import { AuthorizationProvider } from '@/hooks/use-authorization';
 import { Loader2 } from 'lucide-react';
+import { Montserrat } from 'next/font/google';
+import { cn } from '@/lib/utils';
+
+const montserrat = Montserrat({
+  subsets: ['latin'],
+  variable: '--font-montserrat',
+});
 
 const publicPaths = ['/', '/welcome', '/login', '/forgot-password', '/register'];
 
@@ -60,7 +67,10 @@ export default function RootLayout({
         <link rel="icon" href="/og-banner.png" type="image/png" />
         <title>VALLECONDO</title>
       </head>
-      <body className="antialiased selection:bg-[#006241] selection:text-white">
+      <body className={cn(
+          "antialiased selection:bg-[#006241] selection:text-white font-body",
+          montserrat.variable
+        )}>
         {/* Barra de acento superior con el verde del logo */}
         <div className="w-full h-1 bg-[#006241] fixed top-0 z-50" />
         
