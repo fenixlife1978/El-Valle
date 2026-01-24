@@ -1,119 +1,169 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Button } from "@/components/ui/button";
+import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { useToast } from '@/hooks/use-toast';
+import { Loader2, Eye, EyeOff } from 'lucide-react';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
 import Link from 'next/link';
-import { Mail, Lock, ArrowRight, ShieldCheck, Loader2 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 
-export default function LoginPage() {
-  const [isLoading, setIsLoading] = useState(false);
+const ADMIN_EMAIL = 'vallecondo@gmail.com';
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    // Simulación de carga
-    setTimeout(() => setIsLoading(false), 2000);
-  };
+function LoginPage() {
+    const router = useRouter();
+    const searchParams = useSearchParams();
+    const { toast } = useToast();
 
-  return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 selection:bg-[#0081c9]/20">
-      {/* Importamos Montserrat para coherencia de marca */}
-      <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,900;1,900&family=Inter:wght@400;500;600;700&display=swap');
-        .font-montserrat { font-family: 'Montserrat', sans-serif; }
-        .font-inter { font-family: 'Inter', sans-serif; }
-      `}</style>
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [role, setRole] = useState<'owner' | 'admin' | null>(null);
+    const [showPassword, setShowPassword] = useState(false);
 
-      <div className="w-full max-w-[450px]">
-        {/* LOGO Y TÍTULO */}
-        <div className="text-center mb-10">
-          <Link href="/welcome" className="inline-block group transition-transform hover:scale-105 duration-300">
-            <div className="bg-white p-4 rounded-[2rem] shadow-xl border border-slate-100 mb-6 inline-block">
-              <img src="/og-banner.png" alt="EFAS Logo" className="w-20 h-20 object-contain" />
+    useEffect(() => {
+        const roleParam = searchParams?.get('role') ?? null;
+        if (roleParam === 'admin' || roleParam === 'owner') {
+            setRole(roleParam);
+        } else {
+            router.replace('/welcome');
+        }
+    }, [searchParams, router]);
+
+    const handleLogin = async (e: React.FormEvent) => {
+        e.preventDefault();
+        const cleanEmail = email.trim().toLowerCase();
+
+        if (!email || !password || !role) {
+            toast({ variant: 'destructive', title: 'Campos incompletos' });
+            return;
+        }
+
+        setLoading(true);
+
+        try {
+            await signInWithEmailAndPassword(auth, cleanEmail, password);
+            toast({ title: 'Sesión Iniciada', description: 'Redirigiendo...' });
+            
+            // La redirección ahora es manejada por el AuthGuard en el layout
+            // para evitar bucles y asegurar que los datos del usuario estén cargados.
+            
+        } catch (error: any) {
+            console.error("Login error:", error);
+            let description = 'Ocurrió un error. Verifique sus credenciales.';
+            
+            if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+                description = 'Correo o contraseña incorrectos.';
+            } else if (error.code === 'auth/too-many-requests') {
+                description = 'Cuenta temporalmente bloqueada. Intente más tarde.';
+            }
+
+            toast({
+                variant: 'destructive',
+                title: 'Error de Acceso',
+                description: description,
+            });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    if (!role) {
+        return (
+             <div className="min-h-screen flex items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
-          </Link>
-          <h1 className="font-montserrat text-3xl font-black italic tracking-tighter leading-none mb-2">
-            <span className="text-[#f59e0b]">EFAS</span><span className="text-[#0081c9]">CondoSys</span>
-          </h1>
-          <p className="font-inter text-slate-500 font-semibold text-sm uppercase tracking-widest">
-            Panel Administrativo
-          </p>
-        </div>
+        );
+    }
 
-        {/* CARD DE LOGIN */}
-        <div className="bg-white p-10 rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.04)] border border-white">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-2">
-                Correo Electrónico
-              </label>
-              <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <Mail className="h-5 w-5 text-slate-300 group-focus-within:text-[#0081c9] transition-colors" />
+    return (
+        <main className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
+            <div className="text-center mb-6">
+                <div className="w-24 h-24 rounded-full mx-auto overflow-hidden bg-card border flex items-center justify-center">
+                    <img src={'/logo-efas.png'} alt="Company Logo" className="w-full h-full object-cover" />
                 </div>
-                <input
-                  type="email"
-                  placeholder="admin@vallecondo.com"
-                  className="block w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-slate-700 font-inter font-medium placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0081c9]/10 focus:border-[#0081c9] transition-all"
-                  required
-                />
-              </div>
             </div>
+            
+            <Card className="w-full max-w-sm">
+                <CardHeader className="text-center">
+                    <CardTitle>ValleCondo</CardTitle>
+                    <CardDescription>
+                        Entrar como {role === 'admin' ? 'Administrador' : 'Propietario'}
+                    </CardDescription>
+                </CardHeader>
+                <form onSubmit={handleLogin}>
+                    <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="email">Correo Electrónico</Label>
+                            <Input 
+                                id="email" 
+                                type="email" 
+                                placeholder="tu@email.com" 
+                                value={email} 
+                                onChange={(e) => setEmail(e.target.value)} 
+                                required 
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                                <Label htmlFor="password">Contraseña</Label>
+                                <Button variant="link" size="sm" asChild className="p-0 h-auto text-xs">
+                                    <Link href="/forgot-password">¿Olvidaste tu contraseña?</Link>
+                                </Button>
+                            </div>
+                            <div className="relative">
+                                <Input
+                                    id="password"
+                                    type={showPassword ? "text" : "password"}
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    required
+                                    className="pr-10"
+                                />
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                >
+                                    {showPassword ? <EyeOff className="h-4 w-4"/> : <Eye className="h-4 w-4"/>}
+                                </Button>
+                            </div>
+                        </div>
+                    </CardContent>
+                    <CardFooter className="flex flex-col gap-4">
+                        <Button type="submit" className="w-full" disabled={loading}>
+                            {loading ? (
+                                <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Verificando...
+                                </>
+                            ) : 'Ingresar'}
+                        </Button>
+                        <Button variant="link" size="sm" asChild className="text-xs">
+                            <Link href="/welcome">Cambiar de rol</Link>
+                        </Button>
+                    </CardFooter>
+                </form>
+            </Card>
+        </main>
+    );
+}
 
-            <div>
-              <div className="flex items-center justify-between mb-2 ml-1">
-                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">
-                  Contraseña
-                </label>
-                <Link
-                  href="/forgot-password"
-                  className="text-[11px] font-bold text-[#0081c9] hover:underline uppercase tracking-widest"
-                >
-                  ¿Olvidaste tu clave?
-                </Link>
-              </div>
-              <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <Lock className="h-5 w-5 text-slate-300 group-focus-within:text-[#0081c9] transition-colors" />
-                </div>
-                <input
-                  type="password"
-                  placeholder="••••••••"
-                  className="block w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-slate-700 font-inter font-medium placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0081c9]/10 focus:border-[#0081c9] transition-all"
-                  required
-                />
-              </div>
+export default function LoginPageWithSuspense() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen flex items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
-
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full bg-[#0081c9] hover:bg-[#006da8] text-white font-inter font-bold py-4 rounded-2xl shadow-lg shadow-blue-500/20 transition-all flex items-center justify-center gap-3 group active:scale-[0.98]"
-            >
-              {isLoading ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                <>
-                  Ingresar al Sistema
-                  <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
-                </>
-              )}
-            </button>
-          </form>
-        </div>
-
-        {/* FOOTER DEL LOGIN */}
-        <div className="mt-10 text-center">
-          <p className="font-inter text-slate-400 text-sm font-medium">
-            ¿No tienes cuenta administrativa? <br />
-            <Link href="/contact" className="text-[#0081c9] font-bold hover:underline">Contacta a soporte técnico</Link>
-          </p>
-          
-          <div className="mt-8 flex items-center justify-center gap-2 text-slate-300">
-            <ShieldCheck className="w-4 h-4" />
-            <span className="text-[10px] font-bold uppercase tracking-[0.2em]">Acceso Seguro SSL Encriptado</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+        }>
+            <LoginPage />
+        </Suspense>
+    );
 }

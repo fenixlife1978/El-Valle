@@ -34,12 +34,12 @@ export default function WelcomePage() {
         </div>
         
         <div className="flex items-center gap-3">
-          <Link href="/auth/login?role=owner">
+          <Link href="/login?role=owner">
             <Button variant="ghost" className="hidden md:flex font-bold text-slate-600 hover:text-sky-600">
               Propietarios
             </Button>
           </Link>
-          <Link href="/auth/login?role=admin">
+          <Link href="/login?role=admin">
             <Button className="bg-sky-600 hover:bg-sky-700 font-bold shadow-md shadow-sky-100 text-white px-6">
               Acceso Admin
             </Button>
@@ -79,15 +79,13 @@ export default function WelcomePage() {
           </p>
 
           <div className="flex flex-col sm:flex-row gap-5 justify-center items-center">
-            {/* ACCESO ADMIN CON PARÁMETRO CORRECTO */}
-            <Link href="/auth/login?role=admin">
+            <Link href="/login?role=admin">
               <Button className="bg-sky-600 hover:bg-sky-700 h-16 px-10 text-xl font-black rounded-2xl shadow-xl shadow-sky-200 gap-3 group transition-all text-white w-full sm:w-auto">
                 Panel Administrativo <ChevronRight className="w-6 h-6 group-hover:translate-x-1 transition-transform" />
               </Button>
             </Link>
             
-            {/* ACCESO PROPIETARIO CON PARÁMETRO CORRECTO */}
-            <Link href="/auth/login?role=owner">
+            <Link href="/login?role=owner">
               <Button variant="outline" className="h-16 px-10 text-xl font-bold rounded-2xl border-2 border-slate-200 hover:bg-slate-50 text-slate-700 w-full sm:w-auto">
                 Acceso Propietario
               </Button>
