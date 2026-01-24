@@ -1,99 +1,117 @@
 'use client';
 
 import { useState } from 'react';
-import { auth } from '@/lib/firebase';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { useRouter } from 'next/navigation';
-import { ArrowLeft, Lock, Mail, Loader2, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
+import { Mail, Lock, ArrowRight, ShieldCheck, Loader2 } from 'lucide-react';
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const router = useRouter();
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    try {
-      await signInWithEmailAndPassword(auth, email, password);
-      router.push('/admin');
-    } catch (error) {
-      alert('Credenciales incorrectas');
-    } finally {
-      setLoading(false);
-    }
+    setIsLoading(true);
+    // Simulación de carga
+    setTimeout(() => setIsLoading(false), 2000);
   };
 
   return (
-    <div className="min-h-screen bg-[#020617] flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Efectos de Iluminación de Fondo (El diseño "Hermoso") */}
-      <div className="absolute top-[-20%] left-[-10%] w-[70%] h-[70%] bg-[#006241]/20 blur-[150px] rounded-full"></div>
-      <div className="absolute bottom-[-20%] right-[-10%] w-[70%] h-[70%] bg-blue-900/15 blur-[150px] rounded-full"></div>
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 selection:bg-[#0081c9]/20">
+      {/* Importamos Montserrat para coherencia de marca */}
+      <style jsx global>{`
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,900;1,900&family=Inter:wght@400;500;600;700&display=swap');
+        .font-montserrat { font-family: 'Montserrat', sans-serif; }
+        .font-inter { font-family: 'Inter', sans-serif; }
+      `}</style>
 
-      {/* Botón de Retroceso Elegante */}
-      <Link 
-        href="/welcome" 
-        className="absolute top-10 left-10 flex items-center gap-3 text-slate-500 hover:text-slate-200 transition-all z-20 group"
-      >
-        <div className="w-10 h-10 rounded-full bg-slate-900/50 border border-slate-800 flex items-center justify-center group-hover:border-[#006241] transition-all">
-          <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
+      <div className="w-full max-w-[450px]">
+        {/* LOGO Y TÍTULO */}
+        <div className="text-center mb-10">
+          <Link href="/welcome" className="inline-block group transition-transform hover:scale-105 duration-300">
+            <div className="bg-white p-4 rounded-[2rem] shadow-xl border border-slate-100 mb-6 inline-block">
+              <img src="/og-banner.png" alt="EFAS Logo" className="w-20 h-20 object-contain" />
+            </div>
+          </Link>
+          <h1 className="font-montserrat text-3xl font-black italic tracking-tighter leading-none mb-2">
+            <span className="text-[#f59e0b]">EFAS</span><span className="text-[#0081c9]">CondoSys</span>
+          </h1>
+          <p className="font-inter text-slate-500 font-semibold text-sm uppercase tracking-widest">
+            Panel Administrativo
+          </p>
         </div>
-        <span className="text-xs font-black uppercase tracking-[0.2em]">Volver</span>
-      </Link>
 
-      <div className="w-full max-w-[440px] z-10">
-        <div className="bg-slate-900/40 border border-slate-800/60 p-12 rounded-[3rem] shadow-2xl backdrop-blur-xl relative">
-          <div className="text-center mb-12">
-            <div className="inline-flex p-5 bg-gradient-to-br from-[#006241] to-[#004d33] rounded-3xl mb-6 shadow-lg shadow-[#006241]/20">
-              <ShieldCheck className="w-10 h-10 text-white" />
-            </div>
-            <h1 className="text-4xl font-black text-white tracking-tighter uppercase italic leading-none">
-              Admin<span className="text-[#006241]">Panel</span>
-            </h1>
-            <p className="text-slate-500 text-sm mt-3 font-bold tracking-wide uppercase">Gestión de Condominios</p>
-          </div>
-
-          <form onSubmit={handleLogin} className="space-y-6">
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-500 uppercase ml-2 tracking-widest">Email Corporativo</label>
+        {/* CARD DE LOGIN */}
+        <div className="bg-white p-10 rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.04)] border border-white">
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div>
+              <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-2">
+                Correo Electrónico
+              </label>
               <div className="relative group">
-                <Mail className="absolute left-4 top-4 w-5 h-5 text-slate-600 group-focus-within:text-[#006241] transition-colors" />
-                <input 
-                  type="email" 
-                  required 
-                  className="w-full bg-slate-950/50 border border-slate-800 rounded-2xl py-4 pl-12 pr-4 text-slate-200 focus:outline-none focus:border-[#006241] focus:ring-4 focus:ring-[#006241]/10 transition-all transition-all placeholder:text-slate-800"
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                  <Mail className="h-5 w-5 text-slate-300 group-focus-within:text-[#0081c9] transition-colors" />
+                </div>
+                <input
+                  type="email"
                   placeholder="admin@vallecondo.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  className="block w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-slate-700 font-inter font-medium placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0081c9]/10 focus:border-[#0081c9] transition-all"
+                  required
                 />
               </div>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-500 uppercase ml-2 tracking-widest">Contraseña</label>
+            <div>
+              <div className="flex items-center justify-between mb-2 ml-1">
+                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">
+                  Contraseña
+                </label>
+                <Link
+                  href="/forgot-password"
+                  className="text-[11px] font-bold text-[#0081c9] hover:underline uppercase tracking-widest"
+                >
+                  ¿Olvidaste tu clave?
+                </Link>
+              </div>
               <div className="relative group">
-                <Lock className="absolute left-4 top-4 w-5 h-5 text-slate-600 group-focus-within:text-[#006241] transition-colors" />
-                <input 
-                  type="password" 
-                  required 
-                  className="w-full bg-slate-950/50 border border-slate-800 rounded-2xl py-4 pl-12 pr-4 text-slate-200 focus:outline-none focus:border-[#006241] focus:ring-4 focus:ring-[#006241]/10 transition-all placeholder:text-slate-800"
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                  <Lock className="h-5 w-5 text-slate-300 group-focus-within:text-[#0081c9] transition-colors" />
+                </div>
+                <input
+                  type="password"
                   placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  className="block w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-slate-700 font-inter font-medium placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0081c9]/10 focus:border-[#0081c9] transition-all"
+                  required
                 />
               </div>
             </div>
 
-            <button 
-              type="submit" 
-              disabled={loading}
-              className="w-full bg-[#006241] hover:bg-[#007a51] text-white font-black py-5 rounded-2xl transition-all shadow-2xl shadow-[#006241]/30 flex items-center justify-center gap-3 mt-10 active:scale-[0.98] tracking-widest text-sm"
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full bg-[#0081c9] hover:bg-[#006da8] text-white font-inter font-bold py-4 rounded-2xl shadow-lg shadow-blue-500/20 transition-all flex items-center justify-center gap-3 group active:scale-[0.98]"
             >
-              {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : 'ACCEDER AL SISTEMA'}
+              {isLoading ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <>
+                  Ingresar al Sistema
+                  <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                </>
+              )}
             </button>
           </form>
+        </div>
+
+        {/* FOOTER DEL LOGIN */}
+        <div className="mt-10 text-center">
+          <p className="font-inter text-slate-400 text-sm font-medium">
+            ¿No tienes cuenta administrativa? <br />
+            <Link href="/contact" className="text-[#0081c9] font-bold hover:underline">Contacta a soporte técnico</Link>
+          </p>
+          
+          <div className="mt-8 flex items-center justify-center gap-2 text-slate-300">
+            <ShieldCheck className="w-4 h-4" />
+            <span className="text-[10px] font-bold uppercase tracking-[0.2em]">Acceso Seguro SSL Encriptado</span>
+          </div>
         </div>
       </div>
     </div>
