@@ -1,3 +1,4 @@
+
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
@@ -80,7 +81,7 @@ export default function RootLayout({
         
         <title>EFAS CondoSys | Autogestión de Condominios</title>
       </head>
-      <body className={cn(
+      <body suppressHydrationWarning className={cn(
           "antialiased selection:bg-[#0081c9] selection:text-white font-body",
           montserrat.className
         )}>

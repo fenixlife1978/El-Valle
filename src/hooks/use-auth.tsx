@@ -1,8 +1,9 @@
+
 'use client';
 
 import React, { useState, useEffect, createContext, useContext, ReactNode } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
 
 export interface AuthContextType {
@@ -23,9 +24,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [ownerData, setOwnerData] = useState<any | null>(null);
     const [companyInfo, setCompanyInfo] = useState<any | null>(null);
     const [loading, setLoading] = useState(true);
-
+    
     useEffect(() => {
         setMounted(true);
+
         const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
             setUser(firebaseUser);
             if (!firebaseUser) {
@@ -33,12 +35,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 setLoading(false);
             }
         });
-        return () => unsubscribeAuth();
+
+        const configRef = doc(db, 'config', 'mainSettings');
+        const unsubscribeConfig = onSnapshot(configRef, (docSnap) => {
+            if (docSnap.exists()) {
+                setCompanyInfo(docSnap.data().companyInfo || null);
+            }
+        }, (error) => {
+            console.warn("Could not fetch company info:", error);
+        });
+
+        return () => {
+            unsubscribeAuth();
+            unsubscribeConfig();
+        };
     }, []);
 
     useEffect(() => {
         if (!user) {
-            setLoading(false); // No user, stop loading
+            setLoading(false); // Ensure loading is false if there's no user
             return;
         }
 
@@ -46,7 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (isSuper) {
             setOwnerData({ role: 'super-admin' });
-            setLoading(false); // Super admin role is set, stop loading
+            setLoading(false);
             return;
         }
 
@@ -55,10 +70,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (docSnap.exists()) {
                 setOwnerData(docSnap.data());
             } else {
-                console.warn(`User ${user.uid} authenticated but no owner profile found.`);
                 setOwnerData(null);
             }
-            setLoading(false); // Data loaded (or not found), stop loading
+            setLoading(false);
         }, (error) => {
              console.error("Error fetching owner profile:", error);
              setOwnerData(null);
@@ -66,24 +80,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
 
         return () => unsubscribeOwner();
-
     }, [user]);
-    
-    // Listen to general config separately
-    useEffect(() => {
-      const configRef = doc(db, 'config', 'mainSettings');
-      const unsubscribeConfig = onSnapshot(configRef, (docSnap) => {
-        if(docSnap.exists()) {
-          setCompanyInfo(docSnap.data().companyInfo || null);
-        }
-      }, (error) => {
-          console.warn("Could not fetch company info:", error);
-      });
-      return () => unsubscribeConfig();
-    }, []);
-    
+
+    // This is the key to fixing the hydration error.
+    // On the server, this will be false, so it will render null.
+    // On the client, it will become true after the first render, and then render the children.
     if (!mounted) {
-        return null; // Avoid hydration mismatch by not rendering on server
+        return null;
     }
 
     const value: AuthContextType = {
