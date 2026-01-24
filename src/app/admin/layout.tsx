@@ -1,4 +1,3 @@
-
 'use client';
 
 import {
@@ -74,12 +73,17 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     const router = useRouter();
 
     useEffect(() => {
-        if (!loading && role !== 'administrador') {
-            router.replace('/welcome');
+        if (!loading) {
+            const hasAccess = role === 'administrador' || role === 'super-admin';
+            if (!user || !hasAccess) {
+                router.replace('/welcome');
+            }
         }
-    }, [role, loading, router]);
+    }, [role, loading, user, router]);
+    
+    const hasAccess = role === 'administrador' || role === 'super-admin';
 
-    if (loading || role !== 'administrador') {
+    if (loading || !user || !hasAccess) {
         return (
             <div className="flex h-screen w-full items-center justify-center bg-background">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
