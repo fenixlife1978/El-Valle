@@ -381,7 +381,7 @@ const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptD
             head: [['Período', 'Concepto (Propiedad)', 'Monto ($)', 'Monto Pagado (Bs)']], 
             body: tableBody, 
             theme: 'striped', 
-            headStyles: { fillColor: [44, 62, 80], textColor: 255 }, 
+            headStyles: { fillColor: [30, 80, 180], textColor: 255 }, 
             styles: { fontSize: 9, cellPadding: 2.5 },
             columnStyles: {
                 2: { halign: 'right' },
@@ -572,7 +572,7 @@ const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptD
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* --- Tarjeta de Estado de Cuenta --- */}
                 <Card className={cn("border-2 shadow-lg col-span-1", 
-                    statusVariant === 'success' && 'border-green-500',
+                    statusVariant === 'success' && 'border-primary',
                     statusVariant === 'warning' && 'border-yellow-500',
                     statusVariant === 'destructive' && 'border-red-500'
                 )}>

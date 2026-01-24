@@ -215,8 +215,8 @@ export default function ReportViewerPage() {
       ]],
       startY,
       theme: 'striped',
-      headStyles: { fillColor: [22, 163, 74], halign: 'center' },
-      footStyles: { fillColor: [22, 163, 74], textColor: 255, fontStyle: 'bold' },
+      headStyles: { fillColor: [30, 80, 180], halign: 'center' },
+      footStyles: { fillColor: [30, 80, 180], textColor: 255, fontStyle: 'bold' },
     });
     startY = (doc as any).lastAutoTable.finalY + 10;
 
@@ -241,9 +241,9 @@ export default function ReportViewerPage() {
 
     doc.setFontSize(11).setFont('helvetica', 'bold');
     const totalEfectivoY = startY + 10;
-    doc.setFillColor(232, 255, 236);
+    doc.setFillColor(230, 240, 255);
     doc.rect(margin, totalEfectivoY - 5, pageWidth - margin * 2, 10, 'F');
-    doc.setTextColor(34, 139, 34);
+    doc.setTextColor(30, 80, 180);
     doc.text('SALDO NETO O SALDO FINAL DEL MES EN BANCO (Ingresos - Egresos)', margin + 2, totalEfectivoY);
     doc.text(formatToTwoDecimals(saldoNeto), pageWidth - margin - 2, totalEfectivoY, { align: 'right' });
     startY = totalEfectivoY + 10;
@@ -354,7 +354,7 @@ export default function ReportViewerPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <Card>
             <CardHeader>
-              <CardTitle className="text-green-500">Ingresos</CardTitle>
+              <CardTitle className="text-primary">Ingresos</CardTitle>
             </CardHeader>
             <CardContent>
               <Table>
@@ -479,7 +479,7 @@ export default function ReportViewerPage() {
                     <TableCell>
                       <span
                         className={`font-semibold ${
-                          row.status === 'No Solvente' ? 'text-destructive' : 'text-green-600'
+                          row.status === 'No Solvente' ? 'text-destructive' : 'text-primary'
                         }`}
                       >
                         {row.status}

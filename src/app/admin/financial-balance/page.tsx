@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -424,7 +425,7 @@ export default function FinancialBalancePage() {
                 head: [['DÍA', 'INGRESOS', 'CATEGORÍA', 'MONTO (Bs.)']],
                 body: statement.ingresos.map(i => [i.dia || '', i.concepto, incomeCategories.find(c=>c.value === i.category)?.label || i.category, { content: formatToTwoDecimals(i.monto), styles: { halign: 'right' } }]),
                 foot: [[{ content: '', colSpan: 2, styles: { halign: 'right' } }, { content: 'TOTAL INGRESOS', styles: { halign: 'right' } }, { content: formatToTwoDecimals(totalIngresos), styles: { halign: 'right' } }]],
-                startY: startY, theme: 'striped', headStyles: { fillColor: [22, 163, 74], halign: 'center' }, footStyles: { fillColor: [22, 163, 74], textColor: 255, fontStyle: 'bold' },
+                startY: startY, theme: 'striped', headStyles: { fillColor: [30, 80, 180], halign: 'center' }, footStyles: { fillColor: [30, 80, 180], textColor: 255, fontStyle: 'bold' },
             });
             startY = (doc as any).lastAutoTable.finalY + 10;
             
@@ -461,9 +462,9 @@ export default function FinancialBalancePage() {
 
             doc.setFontSize(12).setFont('helvetica', 'bold');
             const totalEfectivoY = startY + 8;
-            doc.setFillColor(232, 255, 236); // Light green background
+            doc.setFillColor(230, 240, 255);
             doc.rect(margin, totalEfectivoY - 5, pageWidth - margin * 2, 10, 'F');
-            doc.setTextColor(34, 139, 34); // Forest green text
+            doc.setTextColor(30, 80, 180);
             doc.text('TOTAL LIQUIDEZ', margin + 2, totalEfectivoY);
             doc.text(`Bs. ${formatToTwoDecimals(totalLiquidez)}`, pageWidth - margin - 2, totalEfectivoY, { align: 'right' });
 
@@ -592,7 +593,7 @@ export default function FinancialBalancePage() {
                                         return (
                                         <TableRow key={s.id}>
                                             <TableCell className="font-medium">{months.find(m => m.value === s.id.split('-')[1])?.label} {s.id.split('-')[0]}</TableCell>
-                                            <TableCell className={`text-right font-bold ${saldoNeto >= 0 ? 'text-green-500' : 'text-destructive'}`}>{formatToTwoDecimals(saldoNeto)}</TableCell>
+                                            <TableCell className={`text-right font-bold ${saldoNeto >= 0 ? 'text-primary' : 'text-destructive'}`}>{formatToTwoDecimals(saldoNeto)}</TableCell>
                                             <TableCell className="text-right">
                                                 <DropdownMenu>
                                                     <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
@@ -716,7 +717,7 @@ export default function FinancialBalancePage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-muted/50 rounded-lg">
                         <div className="space-y-1 border-b pb-4">
                             <p className="text-sm text-muted-foreground">Total Ingresos</p>
-                            <p className="text-xl font-bold text-green-500 text-right">Bs. {formatToTwoDecimals(totals.totalIngresos)}</p>
+                            <p className="text-xl font-bold text-primary text-right">Bs. {formatToTwoDecimals(totals.totalIngresos)}</p>
                         </div>
                          <div className="space-y-1 border-b pb-4">
                             <p className="text-sm text-muted-foreground">Total Egresos</p>

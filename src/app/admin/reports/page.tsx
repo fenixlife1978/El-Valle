@@ -1090,8 +1090,8 @@ export default function ReportsPage() {
             ]),
             startY: startY,
             theme: 'striped',
-            headStyles: { fillColor: [0, 77, 64] }, // Dark teal
-            footStyles: { fillColor: [0, 77, 64], textColor: 255, fontStyle: 'bold' },
+            headStyles: { fillColor: [30, 80, 180] },
+            footStyles: { fillColor: [30, 80, 180], textColor: 255, fontStyle: 'bold' },
             styles: { fontSize: 9 },
             foot: [['Total Pagado', '', '', `Bs. ${formatToTwoDecimals(accountStatementData.totalPaidBs)}`]]
         });
@@ -1110,8 +1110,8 @@ export default function ReportsPage() {
             ]),
             startY: startY,
             theme: 'striped',
-            headStyles: { fillColor: [0, 77, 64] },
-            footStyles: { fillColor: [0, 77, 64], textColor: 255, fontStyle: 'bold' },
+            headStyles: { fillColor: [30, 80, 180] },
+            footStyles: { fillColor: [30, 80, 180], textColor: 255, fontStyle: 'bold' },
             styles: { fontSize: 9, cellPadding: 2 },
             columnStyles: { 3: { halign: 'right' } },
             foot: [['Total Adeudado', '', `$${accountStatementData.totalDebtUSD.toFixed(2)}`, '']]
@@ -1158,7 +1158,7 @@ export default function ReportsPage() {
                 head: [['Propietario', 'Propiedades', 'Saldo a Favor (Bs.)']],
                 body: data.map(o => [o.name, o.properties, `Bs. ${formatToTwoDecimals(o.balance)}`]),
                 startY: margin + 40,
-                headStyles: { fillColor: [22, 163, 74] }, // Green color
+                headStyles: { fillColor: [30, 80, 180] },
                 styles: { fontSize: 10, cellPadding: 2.5 },
                 columnStyles: {
                     2: { halign: 'right' }
@@ -1494,10 +1494,10 @@ export default function ReportsPage() {
                                              <Card>
                                                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                                                     <CardTitle className="text-sm font-medium">Saldo a Favor (Bs)</CardTitle>
-                                                    <BadgeCheck className="h-4 w-4 text-green-500" />
+                                                    <BadgeCheck className="h-4 w-4 text-primary" />
                                                 </CardHeader>
                                                 <CardContent>
-                                                    <div className="text-2xl font-bold text-green-500">Bs. {formatToTwoDecimals(selectedIndividual.balance)}</div>
+                                                    <div className="text-2xl font-bold text-primary">Bs. {formatToTwoDecimals(selectedIndividual.balance)}</div>
                                                 </CardContent>
                                             </Card>
                                         </div>
@@ -1612,11 +1612,11 @@ export default function ReportsPage() {
                                             <h3 className="font-bold mb-2">Resumen de Pagos</h3>
                                             <Table>
                                                 <TableHeader>
-                                                    <TableRow className="bg-[#004D40] hover:bg-[#00382e] text-white">
-                                                        <TableHead className="text-white">Fecha</TableHead>
-                                                        <TableHead className="text-white">Concepto</TableHead>
-                                                        <TableHead className="text-white">Pagado por</TableHead>
-                                                        <TableHead className="text-white text-right">Monto (Bs)</TableHead>
+                                                    <TableRow className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                                                        <TableHead className="text-primary-foreground">Fecha</TableHead>
+                                                        <TableHead className="text-primary-foreground">Concepto</TableHead>
+                                                        <TableHead className="text-primary-foreground">Pagado por</TableHead>
+                                                        <TableHead className="text-primary-foreground text-right">Monto (Bs)</TableHead>
                                                     </TableRow>
                                                 </TableHeader>
                                                 <TableBody>
@@ -1630,7 +1630,7 @@ export default function ReportsPage() {
                                                     ))}
                                                 </TableBody>
                                                 <TableFooter>
-                                                     <TableRow className="bg-[#004D40] hover:bg-[#00382e] text-white font-bold">
+                                                     <TableRow className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold">
                                                         <TableCell colSpan={3}>Total Pagado</TableCell>
                                                         <TableCell className="text-right">Bs. {formatToTwoDecimals(accountStatementData.totalPaidBs)}</TableCell>
                                                     </TableRow>
@@ -1641,11 +1641,11 @@ export default function ReportsPage() {
                                             <h3 className="font-bold mb-2">Resumen de Deudas</h3>
                                             <Table>
                                                 <TableHeader>
-                                                    <TableRow className="bg-[#004D40] hover:bg-[#00382e] text-white">
-                                                        <TableHead className="text-white">Periodo</TableHead>
-                                                        <TableHead className="text-white">Concepto</TableHead>
-                                                        <TableHead className="text-white text-right">Monto ($)</TableHead>
-                                                        <TableHead className="text-white text-right">Estado</TableHead>
+                                                    <TableRow className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                                                        <TableHead className="text-primary-foreground">Periodo</TableHead>
+                                                        <TableHead className="text-primary-foreground">Concepto</TableHead>
+                                                        <TableHead className="text-primary-foreground text-right">Monto ($)</TableHead>
+                                                        <TableHead className="text-primary-foreground text-right">Estado</TableHead>
                                                     </TableRow>
                                                 </TableHeader>
                                                 <TableBody>
@@ -1659,7 +1659,7 @@ export default function ReportsPage() {
                                                      ))}
                                                 </TableBody>
                                                 <TableFooter>
-                                                    <TableRow className="bg-[#004D40] hover:bg-[#00382e] text-white font-bold">
+                                                    <TableRow className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold">
                                                         <TableCell colSpan={2}>Total Adeudado</TableCell>
                                                         <TableCell className="text-right">$${accountStatementData.totalDebtUSD.toFixed(2)}</TableCell>
                                                         <TableCell></TableCell>
@@ -1825,7 +1825,7 @@ export default function ReportsPage() {
                                             <TableRow key={owner.id}>
                                                 <TableCell className="font-medium">{owner.name}</TableCell>
                                                 <TableCell>{owner.properties}</TableCell>
-                                                <TableCell className="text-right font-bold text-green-500">Bs. {formatToTwoDecimals(owner.balance)}</TableCell>
+                                                <TableCell className="text-right font-bold text-primary">Bs. {formatToTwoDecimals(owner.balance)}</TableCell>
                                             </TableRow>
                                         ))
                                     ) : (

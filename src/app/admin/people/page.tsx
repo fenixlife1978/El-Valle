@@ -349,7 +349,7 @@ export default function OwnersManagement() {
                 head: [['Administradores', 'Email']],
                 body: filteredAdmins.map(a => [a.name, a.email || 'N/A']),
                 startY: startY,
-                headStyles: { fillColor: [22, 163, 74] }, // Green
+                headStyles: { fillColor: [30, 80, 180] },
                 styles: { cellPadding: 2, fontSize: 8 },
             });
         }
