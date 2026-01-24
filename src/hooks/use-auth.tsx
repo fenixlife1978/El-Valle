@@ -21,6 +21,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const ADMIN_EMAIL = 'vallecondo@gmail.com';
 const BCV_LOGO_URL = 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/36/BCV_logo.svg/2048px-BCV_logo.svg.png';
 
+
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [ownerData, setOwnerData] = useState<any>(null);
@@ -29,7 +30,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Subscribe to company settings changes
+        const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
+            setLoading(true);
+            try {
+                if (firebaseUser) {
+                    setUser(firebaseUser);
+                    const isSuper = firebaseUser.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+
+                    // For Super Admin, bypass Firestore read for profile
+                    if (isSuper) {
+                        setOwnerData({ role: 'super-admin', email: ADMIN_EMAIL, name: 'Super Administrador' });
+                    } else {
+                        // For regular users, fetch profile from Firestore
+                        const snap = await getDoc(doc(db, 'owners', firebaseUser.uid));
+                        if (snap.exists()) {
+                            setOwnerData(snap.data());
+                        } else {
+                            setOwnerData(null); // Explicitly set to null if not found
+                        }
+                    }
+                } else {
+                    setUser(null);
+                    setOwnerData(null);
+                }
+            } catch (error) {
+                console.error("Auth State Change Error:", error);
+                // In case of error, ensure state is clean
+                setUser(null);
+                setOwnerData(null);
+            } finally {
+                setLoading(false);
+            }
+        });
+        
+        // General config listener (publicly readable)
         const settingsRef = doc(db, 'config', 'mainSettings');
         const unsubscribeSettings = onSnapshot(settingsRef, (docSnap) => {
             if (docSnap.exists()) {
@@ -43,34 +77,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 } else if (rates.length > 0) {
                     const sortedRates = [...rates].sort((a:any,b:any) => new Date(b.date).getTime() - new Date(a.date).getTime());
                     setActiveRate(sortedRates[0]);
+                } else {
+                    setActiveRate(null);
                 }
             }
         }, (error) => {
             console.error("Error fetching company settings:", error);
-        });
-
-        const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
-            setLoading(true);
-            if (firebaseUser) {
-                setUser(firebaseUser);
-                const isSuper = firebaseUser.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
-
-                try {
-                    const snap = await getDoc(doc(db, 'owners', firebaseUser.uid));
-                    if (snap.exists()) {
-                        setOwnerData(snap.data());
-                    } else if (isSuper) {
-                        setOwnerData({ role: 'super-admin', email: ADMIN_EMAIL, name: 'Administrador Maestro' });
-                    }
-                } catch (e) {
-                    console.error("Error fetching owner data:", e);
-                    if (isSuper) setOwnerData({ role: 'super-admin' });
-                }
-            } else {
-                setUser(null);
-                setOwnerData(null);
-            }
-            setLoading(false);
         });
 
         return () => {
@@ -82,7 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const value: AuthContextType = {
         user,
         ownerData,
-        role: ownerData?.role || (user?.email === ADMIN_EMAIL ? 'super-admin' : null),
+        role: ownerData?.role || null,
         loading,
         isSuperAdmin: user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase(),
         companyInfo,

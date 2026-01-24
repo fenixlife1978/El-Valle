@@ -25,7 +25,11 @@ function AuthGuard({ children }: { children: ReactNode }) {
 
     if (user) {
       if (isPublic) {
-        router.replace(role === 'administrador' ? '/admin/dashboard' : '/owner/dashboard');
+        if (role === 'super-admin' || role === 'administrador') {
+          router.replace('/admin/dashboard');
+        } else {
+          router.replace('/owner/dashboard');
+        }
       }
     } else if (!isPublic) {
       router.replace('/');
@@ -86,7 +90,7 @@ export default function RootLayout({
         <meta name="twitter:title" content="VALLECONDO" />
         <meta name="twitter:image" content="https://valle-condo.vercel.app/og-banner.png" />
       </head>
-      <body className="font-body antialiased bg-background text-foreground">
+      <body>
         <div className="w-full h-2 bg-primary" />
         <AuthProvider>
           <AuthorizationProvider>

@@ -51,17 +51,15 @@ function LoginPage() {
         setLoading(true);
 
         try {
-            // 1. --- CASO ESPECIAL: SUPER ADMIN ---
+            // --- BYPASS FOR SUPER ADMIN ---
             if (cleanEmail === ADMIN_EMAIL) {
                 await signInWithEmailAndPassword(auth, cleanEmail, password);
-                toast({ title: 'Acceso Maestro', description: 'Redirigiendo al Panel Global...' });
-                
-                // Redirección forzada al panel de Super Admin
-                return router.push('/admin/dashboard'); 
+                toast({ title: 'Acceso Maestro Concedido', description: 'Redirigiendo al panel global...' });
+                router.push('/admin/dashboard'); 
+                return;
             }
 
-            // 2. --- VERIFICACIÓN PARA OTROS ROLES ---
-            // Intentamos obtener la configuración de login
+            // --- NORMAL LOGIC FOR OTHER USERS ---
             const settingsRef = doc(db, 'config', 'mainSettings');
             const settingsSnap = await getDoc(settingsRef);
             
@@ -71,14 +69,13 @@ function LoginPage() {
                     toast({
                         variant: 'destructive',
                         title: 'Acceso Deshabilitado',
-                        description: settings.loginSettings.disabledMessage || 'El acceso para propietarios está deshabilitado.',
+                        description: settings.loginSettings.disabledMessage || 'Acceso deshabilitado temporalmente.',
                     });
                     setLoading(false);
                     return;
                 }
             }
 
-            // Verificar rol en Firestore antes de autenticar
             let userRoleFromDB: string | null = null;
             const q = query(collection(db, "owners"), where("email", "==", cleanEmail));
             const querySnapshot = await getDocs(q);
@@ -93,32 +90,24 @@ function LoginPage() {
                 throw new Error("role-mismatch");
             }
 
-            // 3. --- AUTENTICACIÓN EXITOSA ---
             await signInWithEmailAndPassword(auth, cleanEmail, password);
-            
             toast({ title: 'Sesión Iniciada', description: 'Redirigiendo...' });
 
-            if (role === 'admin') {
-                router.push('/admin/dashboard');
-            } else {
-                router.push('/owner/dashboard');
-            }
+            // Redirection is handled by AuthGuard in layout.tsx
             
         } catch (error: any) {
             console.error("Login error:", error);
-            let description = 'Ocurrió un error. Verifique sus credenciales.';
+            let description = 'Error de autenticación. Verifique sus datos.';
             
             if (error.message === "role-mismatch") {
-                description = `No tienes permisos de ${role === 'admin' ? 'Administrador' : 'Propietario'}.`;
+                description = `No tienes permisos para entrar como ${role === 'admin' ? 'Administrador' : 'Propietario'}.`;
             } else if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
                 description = 'Correo o contraseña incorrectos.';
-            } else if (error.code === 'auth/too-many-requests') {
-                description = 'Cuenta temporalmente bloqueada por muchos intentos. Intente más tarde.';
             }
 
             toast({
                 variant: 'destructive',
-                title: 'Error de Acceso',
+                title: 'Error al iniciar sesión',
                 description: description,
             });
         } finally {
@@ -126,8 +115,14 @@ function LoginPage() {
         }
     };
 
-    if (!role) return null;
-
+    if (!role) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-background">
+          <Loader2 className="h-8 w-8 animate-spin" />
+        </div>
+      );
+    }
+    
     return (
         <main className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
             <div className="text-center mb-6">
