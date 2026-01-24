@@ -10,7 +10,7 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { Progress } from "@/components/ui/progress";
 import CarteleraDigital from "@/components/CarteleraDigital";
-import { useAuth } from "@/hooks/use-auth"; // IMPORTANTE: Para saber qué condominio filtrar
+import { useAuth } from "@/hooks/use-auth";
 
 type Anuncio = {
     id: string;
@@ -44,7 +44,7 @@ type Feedback = {
 };
 
 export default function AdminDashboardPage() {
-    const { ownerData } = useAuth(); // Obtenemos el ID del condominio del admin
+    const { ownerData, isSuperAdmin } = useAuth();
     const [loading, setLoading] = useState(true);
     const [activeRate, setActiveRate] = useState(0);
     const [stats, setStats] = useState({
@@ -58,11 +58,18 @@ export default function AdminDashboardPage() {
     const [anuncios, setAnuncios] = useState<Anuncio[]>([]);
 
     useEffect(() => {
-        if (!ownerData?.condominioId) return;
+        // Lógica de bypass para Super Admin
+        const condoId = ownerData?.condominioId;
 
-        const condoId = ownerData.condominioId;
+        if (!condoId) {
+            // Si eres Super Admin pero no hay ID de condominio, dejamos de cargar para mostrar el dashboard vacío o global
+            if (isSuperAdmin || ownerData?.role === 'super-admin') {
+                setLoading(false);
+            }
+            return;
+        }
 
-        // 1. Suscripción a anuncios (Filtrado por Condominio)
+        // 1. Suscripción a anuncios
         const anunciosQuery = query(
             collection(db, "billboard_announcements"), 
             where("condominioId", "==", condoId),
@@ -70,24 +77,18 @@ export default function AdminDashboardPage() {
         );
         const unsubAnuncios = onSnapshot(anunciosQuery, (snapshot) => {
             setAnuncios(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Anuncio)));
-        });
+        }, (err) => console.warn("Error anuncios:", err));
 
-        // 2. Obtener Tasa de Cambio (Desde la nueva ubicación migrada)
+        // 2. Tasa de Cambio
         const fetchSettings = async () => {
-            const settingsRef = doc(db, 'condominios', condoId, 'config', 'settings');
             try {
+                const settingsRef = doc(db, 'condominios', condoId, 'config', 'settings');
                 const settingsSnap = await getDoc(settingsRef);
                 if (settingsSnap.exists()) {
                     const settings = settingsSnap.data();
                     const rates = (settings.exchangeRates || []);
                     const activeRateObj = rates.find((r: any) => r.active);
-                    
-                    if (activeRateObj) {
-                        setActiveRate(activeRateObj.rate);
-                    } else if (rates.length > 0) {
-                        const sortedRates = [...rates].sort((a:any,b:any) => new Date(b.date).getTime() - new Date(a.date).getTime());
-                        setActiveRate(sortedRates[0].rate);
-                    }
+                    if (activeRateObj) setActiveRate(activeRateObj.rate);
                 }
             } catch (error) {
                 console.error("Error fetching settings:", error);
@@ -95,7 +96,7 @@ export default function AdminDashboardPage() {
         };
         fetchSettings();
 
-        // 3. Cálculos del Mes (Filtrado por Condominio)
+        // 3. Cálculos del Mes
         const startOfMonth = new Date();
         startOfMonth.setDate(1);
         startOfMonth.setHours(0, 0, 0, 0);
@@ -120,26 +121,29 @@ export default function AdminDashboardPage() {
             });
             setStats(prev => ({ ...prev, monthlyIncome: totalBs, monthlyIncomeUSD: totalUsd }));
             setLoading(false);
+        }, (err) => {
+            console.error("Error pagos mes:", err);
+            setLoading(false);
         });
 
-        // 4. Pagos Pendientes (Filtrado por Condominio)
+        // 4. Pagos Pendientes
         const unsubPending = onSnapshot(query(
             collection(db, 'payments'), 
             where('condominioId', '==', condoId),
             where('status', '==', 'pendiente')
         ), (snapshot) => {
             setStats(prev => ({ ...prev, pendingPayments: snapshot.size }));
-        });
+        }, (err) => console.warn("Error pendientes:", err));
 
-        // 5. Unidades / Propietarios (Filtrado por Condominio)
+        // 5. Unidades / Propietarios
         const unsubOwners = onSnapshot(query(
             collection(db, 'owners'),
             where('condominioId', '==', condoId)
         ), (snapshot) => {
             setStats(prev => ({ ...prev, totalOwners: snapshot.size })); 
-        });
+        }, (err) => console.warn("Error propietarios:", err));
 
-        // 6. Últimos Pagos (Filtrado por Condominio)
+        // 6. Últimos Pagos
         const unsubRecent = onSnapshot(query(
             collection(db, 'payments'), 
             where('condominioId', '==', condoId),
@@ -147,18 +151,16 @@ export default function AdminDashboardPage() {
             orderBy('paymentDate', 'desc'),
             limit(5)
         ), (snapshot) => {
-            const approvedPayments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Payment[];
-            setRecentPayments(approvedPayments);
-        });
+            setRecentPayments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Payment[]);
+        }, (err) => console.warn("Error recientes:", err));
         
-        // 7. Feedback (Filtrado por Condominio si aplica)
+        // 7. Feedback
         const unsubFeedback = onSnapshot(query(
             collection(db, 'app_feedback'),
             where('condominioId', '==', condoId)
         ), (snapshot) => {
-            const feedbackList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Feedback));
-            setFeedbackData(feedbackList);
-        });
+            setFeedbackData(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Feedback)));
+        }, (err) => console.warn("Error feedback:", err));
 
         return () => {
             unsubAnuncios();
@@ -168,7 +170,7 @@ export default function AdminDashboardPage() {
             unsubRecent();
             unsubFeedback();
         }
-    }, [ownerData, activeRate]);
+    }, [ownerData, activeRate, isSuperAdmin]);
 
     const likes = feedbackData.filter(f => f.response === 'liked').length;
     const dislikes = feedbackData.filter(f => f.response === 'disliked').length;
@@ -177,7 +179,10 @@ export default function AdminDashboardPage() {
 
     return (
         <div className="space-y-8 p-4 md:p-8">
-            <h1 className="text-3xl font-bold tracking-tight">Panel de Administrador</h1>
+            <div className="flex flex-col gap-2">
+                <h1 className="text-3xl font-bold tracking-tight">Panel de Administrador</h1>
+                {isSuperAdmin && <p className="text-sm text-blue-600 font-medium">Modo Super Admin Activo</p>}
+            </div>
             
             <CarteleraDigital anuncios={anuncios} />
 
@@ -215,7 +220,7 @@ export default function AdminDashboardPage() {
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">{stats.totalOwners}</div>
-                        <p className="text-xs opacity-80">Unidades en este condominio</p>
+                        <p className="text-xs opacity-80">Unidades registradas</p>
                     </CardContent>
                 </Card>
                 
@@ -253,7 +258,7 @@ export default function AdminDashboardPage() {
                                 {loading ? (
                                     <TableRow><TableCell colSpan={4} className="h-24 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto"/></TableCell></TableRow>
                                 ) : recentPayments.length === 0 ? (
-                                    <TableRow><TableCell colSpan={4} className="h-24 text-center text-muted-foreground">No hay pagos registrados aún.</TableCell></TableRow>
+                                    <TableRow><TableCell colSpan={4} className="h-24 text-center text-muted-foreground">No hay cobros en este condominio.</TableCell></TableRow>
                                 ) : (
                                     recentPayments.map(payment => (
                                         <TableRow key={payment.id}>
