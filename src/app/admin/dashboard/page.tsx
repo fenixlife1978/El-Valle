@@ -4,7 +4,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertCircle, Loader2, Users, Receipt, CheckCircle, Smile } from "lucide-react";
 import { useEffect, useState } from "react";
-import { collection, query, where, onSnapshot, Timestamp, orderBy, limit, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, Timestamp, doc, getDoc, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -12,39 +12,13 @@ import { Progress } from "@/components/ui/progress";
 import CarteleraDigital from "@/components/CarteleraDigital";
 import { useAuth } from "@/hooks/use-auth";
 
-type Anuncio = {
-    id: string;
-    urlImagen: string;
-    titulo: string;
-    descripcion?: string;
-};
-
 const formatToTwoDecimals = (num: number) => {
     if (typeof num !== 'number' || isNaN(num)) return '0,00';
-    const truncated = Math.trunc(num * 100) / 100;
-    return truncated.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-};
-
-type Payment = {
-    id: string;
-    beneficiaries?: { ownerName: string }[];
-    totalAmount: number;
-    paymentDate: Timestamp;
-    reference: string;
-    exchangeRate?: number;
-    paymentMethod?: string;
-    status: string;
-    condominioId: string;
-};
-
-type Feedback = {
-    id: string;
-    response: 'liked' | 'disliked';
-    condominioId: string;
+    return num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
 export default function AdminDashboardPage() {
-    const { ownerData, isSuperAdmin } = useAuth();
+    const { ownerData } = useAuth();
     const [loading, setLoading] = useState(true);
     const [activeRate, setActiveRate] = useState(0);
     const [stats, setStats] = useState({
@@ -53,229 +27,124 @@ export default function AdminDashboardPage() {
         pendingPayments: 0,
         totalOwners: 0
     });
-    const [recentPayments, setRecentPayments] = useState<Payment[]>([]);
-    const [feedbackData, setFeedbackData] = useState<Feedback[]>([]);
-    const [anuncios, setAnuncios] = useState<Anuncio[]>([]);
+    const [recentPayments, setRecentPayments] = useState<any[]>([]);
+    const [anuncios, setAnuncios] = useState<any[]>([]);
 
     useEffect(() => {
-        // Lógica de bypass para Super Admin
-        const condoId = ownerData?.condominioId;
+        // ID Maestro para tu administración
+        const condoId = ownerData?.condominioId || 'condo_01';
 
-        if (!condoId) {
-            // Si eres Super Admin pero no hay ID de condominio, dejamos de cargar para mostrar el dashboard vacío o global
-            if (isSuperAdmin || ownerData?.role === 'super-admin') {
-                setLoading(false);
-            }
-            return;
-        }
-
-        // 1. Suscripción a anuncios
-        const anunciosQuery = query(
-            collection(db, "billboard_announcements"), 
-            where("condominioId", "==", condoId),
-            orderBy("createdAt", "desc")
-        );
-        const unsubAnuncios = onSnapshot(anunciosQuery, (snapshot) => {
-            setAnuncios(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Anuncio)));
-        }, (err) => console.warn("Error anuncios:", err));
-
-        // 2. Tasa de Cambio
-        const fetchSettings = async () => {
+        // 1. Tasa de Cambio
+        const fetchRate = async () => {
             try {
-                const settingsRef = doc(db, 'condominios', condoId, 'config', 'settings');
-                const settingsSnap = await getDoc(settingsRef);
-                if (settingsSnap.exists()) {
-                    const settings = settingsSnap.data();
-                    const rates = (settings.exchangeRates || []);
-                    const activeRateObj = rates.find((r: any) => r.active);
-                    if (activeRateObj) setActiveRate(activeRateObj.rate);
+                const snap = await getDoc(doc(db, 'condominios', condoId, 'config', 'settings'));
+                if (snap.exists()) {
+                    const rates = snap.data().exchangeRates || [];
+                    const active = rates.find((r: any) => r.active);
+                    if (active) setActiveRate(active.rate);
                 }
-            } catch (error) {
-                console.error("Error fetching settings:", error);
-            }
+            } catch (e) { console.error("Error tasa:", e); }
         };
-        fetchSettings();
+        fetchRate();
 
-        // 3. Cálculos del Mes
-        const startOfMonth = new Date();
-        startOfMonth.setDate(1);
-        startOfMonth.setHours(0, 0, 0, 0);
-        const startOfMonthTimestamp = Timestamp.fromDate(startOfMonth);
-
-        const paymentsQuery = query(
-            collection(db, 'payments'),
-            where('condominioId', '==', condoId),
-            where('status', '==', 'aprobado'),
-            where('paymentDate', '>=', startOfMonthTimestamp)
+        // 2. Anuncios
+        const unsubAnuncios = onSnapshot(query(collection(db, "billboard_announcements"), where("condominioId", "==", condoId)), 
+            (snap) => setAnuncios(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+            (err) => console.warn(err)
         );
 
-        const unsubPayments = onSnapshot(paymentsQuery, (snapshot) => {
-            let totalBs = 0;
-            let totalUsd = 0;
-            snapshot.docs.forEach(doc => {
-                const data = doc.data() as Payment;
-                const amountBs = data.totalAmount || 0;
-                totalBs += amountBs;
-                const rate = data.exchangeRate || activeRate || 1; 
-                if (rate > 0) totalUsd += amountBs / rate;
-            });
-            setStats(prev => ({ ...prev, monthlyIncome: totalBs, monthlyIncomeUSD: totalUsd }));
-            setLoading(false);
-        }, (err) => {
-            console.error("Error pagos mes:", err);
-            setLoading(false);
-        });
+        // 3. Pagos y Estadísticas (Mes Actual)
+        const start = new Date();
+        start.setDate(1);
+        start.setHours(0,0,0,0);
 
-        // 4. Pagos Pendientes
-        const unsubPending = onSnapshot(query(
-            collection(db, 'payments'), 
-            where('condominioId', '==', condoId),
-            where('status', '==', 'pendiente')
-        ), (snapshot) => {
-            setStats(prev => ({ ...prev, pendingPayments: snapshot.size }));
-        }, (err) => console.warn("Error pendientes:", err));
+        const unsubPayments = onSnapshot(query(collection(db, 'payments'), where('condominioId', '==', condoId)), 
+            (snap) => {
+                let bs = 0; let usd = 0; let pending = 0;
+                const paymentsList: any[] = [];
 
-        // 5. Unidades / Propietarios
-        const unsubOwners = onSnapshot(query(
-            collection(db, 'owners'),
-            where('condominioId', '==', condoId)
-        ), (snapshot) => {
-            setStats(prev => ({ ...prev, totalOwners: snapshot.size })); 
-        }, (err) => console.warn("Error propietarios:", err));
+                snap.docs.forEach(d => {
+                    const data = d.data();
+                    const status = data.status?.toLowerCase();
+                    const date = data.paymentDate?.toDate();
 
-        // 6. Últimos Pagos
-        const unsubRecent = onSnapshot(query(
-            collection(db, 'payments'), 
-            where('condominioId', '==', condoId),
-            where('status', '==', 'aprobado'),
-            orderBy('paymentDate', 'desc'),
-            limit(5)
-        ), (snapshot) => {
-            setRecentPayments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Payment[]);
-        }, (err) => console.warn("Error recientes:", err));
-        
-        // 7. Feedback
-        const unsubFeedback = onSnapshot(query(
-            collection(db, 'app_feedback'),
-            where('condominioId', '==', condoId)
-        ), (snapshot) => {
-            setFeedbackData(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Feedback)));
-        }, (err) => console.warn("Error feedback:", err));
+                    if (status === 'pendiente') pending++;
+                    
+                    if (status === 'aprobado' && date >= start) {
+                        const amount = data.totalAmount || 0;
+                        bs += amount;
+                        const rate = data.exchangeRate || activeRate || 1;
+                        usd += amount / rate;
+                        paymentsList.push({ id: d.id, ...data });
+                    }
+                });
 
-        return () => {
-            unsubAnuncios();
-            unsubPayments();
-            unsubPending();
-            unsubOwners();
-            unsubRecent();
-            unsubFeedback();
-        }
-    }, [ownerData, activeRate, isSuperAdmin]);
+                setStats(prev => ({ ...prev, monthlyIncome: bs, monthlyIncomeUSD: usd, pendingPayments: pending }));
+                setRecentPayments(paymentsList.sort((a,b) => b.paymentDate - a.paymentDate).slice(0, 5));
+                setLoading(false);
+            },
+            (err) => { console.error(err); setLoading(false); }
+        );
 
-    const likes = feedbackData.filter(f => f.response === 'liked').length;
-    const dislikes = feedbackData.filter(f => f.response === 'disliked').length;
-    const totalFeedback = likes + dislikes;
-    const satisfactionRate = totalFeedback > 0 ? (likes / totalFeedback) * 100 : 0;
+        // 4. Censo
+        const unsubOwners = onSnapshot(query(collection(db, 'owners'), where('condominioId', '==', condoId)), 
+            (snap) => setStats(prev => ({ ...prev, totalOwners: snap.size }))
+        );
+
+        return () => { unsubAnuncios(); unsubPayments(); unsubOwners(); };
+    }, [ownerData, activeRate]);
 
     return (
-        <div className="space-y-8 p-4 md:p-8">
-            <div className="flex flex-col gap-2">
-                <h1 className="text-3xl font-bold tracking-tight">Panel de Administrador</h1>
-                {isSuperAdmin && <p className="text-sm text-blue-600 font-medium">Modo Super Admin Activo</p>}
-            </div>
+        <div className="space-y-6">
+            <h1 className="text-2xl font-black text-slate-800">Panel de Control</h1>
             
             <CarteleraDigital anuncios={anuncios} />
 
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-                <Card className="bg-primary text-primary-foreground">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Cobrado este Mes</CardTitle>
-                        <Receipt className="h-4 w-4 opacity-70" />
-                    </CardHeader>
+            <div className="grid gap-4 md:grid-cols-3">
+                <Card className="bg-sky-600 text-white">
+                    <CardHeader className="pb-2"><CardTitle className="text-xs uppercase">Cobrado (Mes)</CardTitle></CardHeader>
                     <CardContent>
-                        {loading ? <Loader2 className="h-6 w-6 animate-spin"/> :
-                            <>
-                                <div className="text-2xl font-bold">Bs. {formatToTwoDecimals(stats.monthlyIncome)}</div>
-                                <p className="text-xs opacity-80">aprox. ${formatToTwoDecimals(stats.monthlyIncomeUSD)}</p>
-                            </>
-                        }
+                        <div className="text-2xl font-bold">Bs. {formatToTwoDecimals(stats.monthlyIncome)}</div>
+                        <p className="text-xs opacity-70">${formatToTwoDecimals(stats.monthlyIncomeUSD)}</p>
                     </CardContent>
                 </Card>
-                
-                <Card className="bg-orange-500 text-white">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Por Validar</CardTitle>
-                        <AlertCircle className="h-4 w-4" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{stats.pendingPayments}</div>
-                        <p className="text-xs opacity-80">Pagos pendientes</p>
-                    </CardContent>
+                <Card className="bg-amber-500 text-white">
+                    <CardHeader className="pb-2"><CardTitle className="text-xs uppercase">Por Validar</CardTitle></CardHeader>
+                    <CardContent><div className="text-2xl font-bold">{stats.pendingPayments}</div></CardContent>
                 </Card>
-                
-                <Card className="bg-slate-900 text-white">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Censo Propietarios</CardTitle>
-                        <Users className="h-4 w-4" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{stats.totalOwners}</div>
-                        <p className="text-xs opacity-80">Unidades registradas</p>
-                    </CardContent>
-                </Card>
-                
-                <Card className="border-2">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Satisfacción</CardTitle>
-                        <Smile className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{satisfactionRate.toFixed(0)}%</div>
-                        <Progress value={satisfactionRate} className="mt-2 h-2" />
-                    </CardContent>
+                <Card className="bg-slate-800 text-white">
+                    <CardHeader className="pb-2"><CardTitle className="text-xs uppercase">Residentes</CardTitle></CardHeader>
+                    <CardContent><div className="text-2xl font-bold">{stats.totalOwners}</div></CardContent>
                 </Card>
             </div>
 
             <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-xl">
-                        <CheckCircle className="text-primary w-5 h-5" />
-                        Cobranza Reciente
-                    </CardTitle>
-                </CardHeader>
+                <CardHeader><CardTitle className="text-sm font-bold">Cobranza Reciente</CardTitle></CardHeader>
                 <CardContent>
-                    <div className="rounded-md border">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Propietario</TableHead>
-                                    <TableHead>Monto (Bs.)</TableHead>
-                                    <TableHead>Fecha</TableHead>
-                                    <TableHead>Referencia</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {loading ? (
-                                    <TableRow><TableCell colSpan={4} className="h-24 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto"/></TableCell></TableRow>
-                                ) : recentPayments.length === 0 ? (
-                                    <TableRow><TableCell colSpan={4} className="h-24 text-center text-muted-foreground">No hay cobros en este condominio.</TableCell></TableRow>
-                                ) : (
-                                    recentPayments.map(payment => (
-                                        <TableRow key={payment.id}>
-                                            <TableCell className="font-medium">
-                                                {payment.beneficiaries?.[0]?.ownerName || 'Residente'}
-                                            </TableCell>
-                                            <TableCell>Bs. {formatToTwoDecimals(payment.totalAmount)}</TableCell>
-                                            <TableCell>
-                                                {payment.paymentDate ? format(payment.paymentDate.toDate(), 'dd/MM/yyyy', { locale: es }) : '---'}
-                                            </TableCell>
-                                            <TableCell className="font-mono text-xs">{payment.reference}</TableCell>
-                                        </TableRow>
-                                    ))
-                                )}
-                            </TableBody>
-                        </Table>
-                    </div>
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Propietario</TableHead>
+                                <TableHead>Monto</TableHead>
+                                <TableHead>Fecha</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {loading ? (
+                                <TableRow><TableCell colSpan={3} className="text-center py-10"><Loader2 className="animate-spin mx-auto"/></TableCell></TableRow>
+                            ) : recentPayments.length === 0 ? (
+                                <TableRow><TableCell colSpan={3} className="text-center py-10 text-slate-400">No hay pagos aprobados este mes</TableCell></TableRow>
+                            ) : (
+                                recentPayments.map(p => (
+                                    <TableRow key={p.id}>
+                                        <TableCell className="font-medium">{p.beneficiaries?.[0]?.ownerName || 'Residente'}</TableCell>
+                                        <TableCell className="text-sky-600 font-bold">Bs. {formatToTwoDecimals(p.totalAmount)}</TableCell>
+                                        <TableCell>{p.paymentDate ? format(p.paymentDate.toDate(), 'dd/MM/yyyy') : '---'}</TableCell>
+                                    </TableRow>
+                                ))
+                            )}
+                        </TableBody>
+                    </Table>
                 </CardContent>
             </Card>
         </div>

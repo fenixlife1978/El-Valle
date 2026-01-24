@@ -1,4 +1,3 @@
-
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
@@ -14,42 +13,32 @@ const publicPaths = ['/', '/welcome', '/login', '/forgot-password', '/register']
 
 function AuthGuard({ children }: { children: ReactNode }) {
   const { user, role, loading } = useAuth();
-  const rawPathname = usePathname();
-  const pathname = rawPathname ?? '';
+  const pathname = usePathname() ?? '';
   const router = useRouter();
 
   useEffect(() => {
     if (loading) return;
-
     const isPublic = publicPaths.includes(pathname);
 
-    if (user) {
-      if (isPublic) {
-        if (role === 'super-admin' || role === 'administrador') {
-          router.replace('/admin/dashboard');
-        } else {
-          router.replace('/owner/dashboard');
-        }
+    if (user && isPublic) {
+      if (role === 'super-admin' || role === 'administrador') {
+        router.replace('/admin/dashboard');
+      } else if (role) {
+        router.replace('/owner/dashboard');
       }
-    } else if (!isPublic) {
-      router.replace('/');
+    } 
+    if (!user && !isPublic) {
+      router.replace('/login');
     }
   }, [user, role, loading, pathname, router]);
 
-  if (loading || (!user && !publicPaths.includes(pathname))) {
+  if (loading) {
     return (
-      <div className="flex h-screen w-full items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="ml-2">Cargando...</p>
-      </div>
-    );
-  }
-
-  if (user && publicPaths.includes(pathname)) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="ml-2">Redirigiendo...</p>
+      <div className="flex h-screen w-full items-center justify-center bg-[#020617]">
+        <div className="text-center">
+            <Loader2 className="h-10 w-10 animate-spin text-[#006241] mx-auto" />
+            <p className="mt-4 text-slate-400 font-medium tracking-widest text-xs">VALLECONDO</p>
+        </div>
       </div>
     );
   }
@@ -68,30 +57,13 @@ export default function RootLayout({
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#006241" />
         <link rel="apple-touch-icon" href="/icon-192x192.png" />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;900&display=swap"
-          rel="stylesheet"
-        />
-        <link rel="icon" href="/og-banner.png" type="image/png" sizes="any" />
+        <link rel="icon" href="/og-banner.png" type="image/png" />
         <title>VALLECONDO</title>
-        <meta name="description" content="App de Autogestion de Condominio Conjunto Residencial El Valle" />
-
-        <meta property="og:title" content="VALLECONDO" />
-        <meta property="og:description" content="App de Autogestion de Condominio Conjunto Residencial El Valle" />
-        <meta property="og:type" content="website" />
-        <meta property="og:url" content="https://valle-condo.vercel.app" />
-        <meta property="og:image" content="https://valle-condo.vercel.app/og-banner.png" />
-        <meta property="og:image:width" content="1200" />
-        <meta property="og:image:height" content="630" />
-
-        <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="VALLECONDO" />
-        <meta name="twitter:image" content="https://valle-condo.vercel.app/og-banner.png" />
       </head>
-      <body>
-        <div className="w-full h-2 bg-primary" />
+      <body className="antialiased selection:bg-[#006241] selection:text-white">
+        {/* Barra de acento superior con el verde del logo */}
+        <div className="w-full h-1 bg-[#006241] fixed top-0 z-50" />
+        
         <AuthProvider>
           <AuthorizationProvider>
             <ThemeProvider
@@ -101,7 +73,10 @@ export default function RootLayout({
               disableTransitionOnChange
             >
               <AuthGuard>
-                {children}
+                {/* Contenedor principal con fondo relajante para la vista */}
+                <div className="min-h-screen bg-[#020617] text-slate-200">
+                    {children}
+                </div>
               </AuthGuard>
               <Toaster />
             </ThemeProvider>

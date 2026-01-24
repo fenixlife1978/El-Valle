@@ -2,15 +2,39 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Building2, LogOut, type LucideIcon, ChevronDown, Bell, Check, PanelLeftClose, Menu, TrendingUp, Loader2 } from 'lucide-react';
+import { 
+  Building2, 
+  LogOut, 
+  type LucideIcon, 
+  ChevronDown, 
+  Bell, 
+  Check, 
+  PanelLeftClose, 
+  Menu, 
+  TrendingUp, 
+  Loader2 
+} from 'lucide-react';
 import * as React from 'react';
 import { useState, useEffect } from 'react';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuLabel, 
+  DropdownMenuSeparator, 
+  DropdownMenuTrigger 
+} from '@/components/ui/dropdown-menu';
+import { 
+  Sheet, 
+  SheetContent, 
+  SheetHeader, 
+  SheetTitle, 
+  SheetTrigger 
+} from '@/components/ui/sheet';
 import { useAuth } from '@/hooks/use-auth';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
@@ -22,7 +46,17 @@ export type NavItem = {
   items?: Omit<NavItem, 'icon' | 'items'>[];
 };
 
-const CustomHeader = ({ ownerData, userRole, navItems, mobileNavItems }: { ownerData: any, userRole: string | null, navItems: NavItem[], mobileNavItems: NavItem[] }) => {
+const CustomHeader = ({ 
+  ownerData, 
+  userRole, 
+  navItems, 
+  mobileNavItems 
+}: { 
+  ownerData: any, 
+  userRole: string | null, 
+  navItems: NavItem[], 
+  mobileNavItems: NavItem[] 
+}) => {
   const router = useRouter();
   const pathname = usePathname();
   const authContext = useAuth() as any;
@@ -39,28 +73,26 @@ const CustomHeader = ({ ownerData, userRole, navItems, mobileNavItems }: { owner
   const avatarSrc = userRole === 'administrador' ? companyInfo?.logo : ownerData?.avatar;
 
   return (
-    <header className="sticky top-4 z-10 mx-4 flex h-20 items-center justify-between gap-2 rounded-lg border bg-card/80 px-4 shadow-soft backdrop-blur-sm sm:px-6 text-card-foreground">
+    <header className="sticky top-4 z-10 mx-4 flex h-20 items-center justify-between gap-2 rounded-xl border bg-card/80 px-4 shadow-lg backdrop-blur-sm sm:px-6 text-card-foreground">
       <div className="flex items-center gap-4">
-        {/* LOGO OPTIMIZADO - MÁS GRANDE */}
-        <div className="w-14 h-14 rounded-xl overflow-hidden bg-white border flex items-center justify-center shadow-md">
+        {/* LOGO REDONDO OPTIMIZADO */}
+        <div className="w-14 h-14 rounded-full overflow-hidden bg-white border-2 border-sky-500/20 flex items-center justify-center shadow-md shrink-0">
           <img 
             src={companyInfo?.logo || "/logo-efas.png"} 
-            alt="EFAS Logo" 
-            className="w-full h-full object-cover scale-105" // scale-105 elimina bordes blancos si la imagen tiene márgenes
+            alt="Logo" 
+            className="w-full h-full object-contain p-1.5" 
           />
         </div>
 
-        {/* NOMBRE DE LA MARCA CON EFAS EN AMARILLO */}
         <div className="flex flex-col">
           <div className="flex items-center gap-1 leading-none">
-            <span className="font-black text-2xl tracking-tighter text-amber-400 drop-shadow-sm">EFAS</span>
+            <span className="font-black text-2xl tracking-tighter text-amber-500">EFAS</span>
             <span className="font-bold text-2xl tracking-tighter text-sky-500">CondoSys</span>
           </div>
-          {companyInfo?.name && (
-            <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground opacity-70 leading-tight">
-              {companyInfo.name}
-            </span>
-          )}
+          {/* FRASE DESCRIPTIVA ACTUALIZADA */}
+          <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-80 leading-tight">
+            Sistema de Autogestión de Condominios
+          </span>
         </div>
 
         {bcvLogoUrl && activeRate && (
@@ -140,12 +172,14 @@ const CustomHeader = ({ ownerData, userRole, navItems, mobileNavItems }: { owner
             <SheetHeader className="text-left border-b pb-6">
               <SheetTitle>
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-lg bg-white border p-0.5 shadow-sm">
+                  <div className="w-12 h-12 rounded-full overflow-hidden bg-white border p-1 shadow-sm flex items-center justify-center">
                     <img src={companyInfo?.logo || "/logo-efas.png"} alt="Logo" className="w-full h-full object-contain" />
                   </div>
-                  <div className="flex items-center gap-0.5">
-                    <span className="font-black text-xl text-amber-400">EFAS</span>
-                    <span className="font-bold text-xl text-sky-500">CondoSys</span>
+                  <div className="flex flex-col leading-none">
+                    <div className="flex items-center gap-0.5">
+                      <span className="font-black text-xl text-amber-500">EFAS</span>
+                      <span className="font-bold text-xl text-sky-500">CondoSys</span>
+                    </div>
                   </div>
                 </div>
               </SheetTitle>
@@ -200,7 +234,7 @@ export function DashboardLayout({
       <div className="h-screen w-screen bg-background flex flex-col items-center justify-center gap-4">
         <Loader2 className="animate-spin h-12 w-12 text-sky-500"/>
         <div className="flex items-center gap-1 text-lg font-black uppercase tracking-widest animate-pulse">
-            <span className="text-amber-400">EFAS</span>
+            <span className="text-amber-500">EFAS</span>
             <span className="text-sky-500">CondoSys</span>
         </div>
       </div>
@@ -209,7 +243,12 @@ export function DashboardLayout({
 
   return (
     <div className="min-h-screen w-full bg-slate-50/40 flex flex-col">
-      <CustomHeader ownerData={ownerData} userRole={userRole} navItems={navItems} mobileNavItems={mobileNavItems || navItems} />
+      <CustomHeader 
+        ownerData={ownerData} 
+        userRole={userRole} 
+        navItems={navItems} 
+        mobileNavItems={mobileNavItems || navItems} 
+      />
       <main className="flex-1 p-4 md:p-8 max-w-7xl mx-auto w-full">
         {children}
       </main>
@@ -221,7 +260,7 @@ export function DashboardLayout({
             <span className="text-muted-foreground ml-1 text-xs">© {new Date().getFullYear()}</span>
           </div>
           <p className="text-[10px] text-muted-foreground uppercase tracking-[0.25em] font-black">
-            Sistema de Autogestión Residencial
+            Sistema de Autogestión de Condominios
           </p>
         </div>
       </footer>

@@ -8,19 +8,16 @@ import {
     Landmark,
     Grid3X3,
     WalletCards,
-    BarChart3,
-    FileImage,
     ClipboardList,
-    Award,
-    Megaphone,
-    TrendingDown,
+    Plus,
+    Loader2
 } from 'lucide-react';
 import { type ReactNode, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
 import { useAuth } from '@/hooks/use-auth';
 import { BottomNavBar, type BottomNavItem } from '@/components/bottom-nav-bar';
-import { Loader2, Plus } from 'lucide-react';
+import Header from '@/components/Header'; // Importamos el nuevo Header
 
 const adminNavItems: NavItem[] = [
     { href: "/admin/dashboard", icon: Home, label: "Dashboard" },
@@ -29,7 +26,7 @@ const adminNavItems: NavItem[] = [
         icon: Grid3X3, 
         label: "Utilidades",
         items: [
-            { href: "/admin/payments", label: "Gestion de Pagos" },
+            { href: "/admin/payments", label: "Gestión de Pagos" },
             { href: "/admin/debts", label: "Gestión de Deudas" },
             { href: "/admin/financial-balance", label: "Balance Financiero" },
             { href: "/admin/expenses", label: "Gestión de Egresos" },
@@ -48,7 +45,7 @@ const adminNavItems: NavItem[] = [
 
 const adminBottomNavItems: BottomNavItem[] = [
   { href: '/admin/dashboard', icon: Home, label: 'Inicio' },
-  { href: '/admin/payments', icon: Landmark, label: 'Gestion de Pagos' },
+  { href: '/admin/payments', icon: Landmark, label: 'Pagos' },
   { 
     href: '#', 
     icon: Plus, 
@@ -65,42 +62,56 @@ const adminBottomNavItems: BottomNavItem[] = [
   { href: '/admin/people', icon: Users, label: 'Personas' },
 ];
 
-
 export default function AdminLayout({ children }: { children: ReactNode }) {
     const { ownerData, role, loading, user } = useAuth();
-    const rawPathname = usePathname();
-    const pathname: string = rawPathname ?? '';
+    const pathname = usePathname() ?? '';
     const router = useRouter();
 
     useEffect(() => {
         if (!loading) {
+            // Verificamos si es administrador o super-admin (tu cuenta vallecondo@gmail.com)
             const hasAccess = role === 'administrador' || role === 'super-admin';
             if (!user || !hasAccess) {
-                router.replace('/welcome');
+                router.replace('/login');
             }
         }
     }, [role, loading, user, router]);
     
     const hasAccess = role === 'administrador' || role === 'super-admin';
 
+    // Pantalla de carga con diseño de salud visual
     if (loading || !user || !hasAccess) {
         return (
-            <div className="flex h-screen w-full items-center justify-center bg-background">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <p className="ml-2">Verificando acceso...</p>
+            <div className="flex h-screen w-full flex-col items-center justify-center bg-[#020617]">
+                <Loader2 className="h-10 w-10 animate-spin text-[#006241]" />
+                <p className="ml-2 mt-4 text-slate-400 font-bold text-xs uppercase tracking-widest">
+                    Verificando Credenciales...
+                </p>
             </div>
         );
     }
-    
-    // Los items de navegación móvil ahora son los mismos que los de escritorio
-    // para mantener la consistencia en el menú desplegable (sheet).
-    const mobileNavItems = adminNavItems;
-
 
     return (
-        <DashboardLayout ownerData={ownerData} userRole={role} navItems={adminNavItems} mobileNavItems={mobileNavItems}>
-            <div className="pb-20 sm:pb-0">{children}</div>
-            <BottomNavBar items={adminBottomNavItems} pathname={pathname} />
-        </DashboardLayout>
+        <div className="flex flex-col min-h-screen bg-[#020617]">
+            {/* Header con Tasa BCV y Logo */}
+            <Header />
+
+            <div className="flex flex-1 overflow-hidden">
+                <DashboardLayout 
+                    ownerData={ownerData} 
+                    userRole={role} 
+                    navItems={adminNavItems} 
+                    mobileNavItems={adminNavItems}
+                >
+                    {/* El padding-bottom evita que el contenido se tape con la barra móvil */}
+                    <div className="pb-24 sm:pb-8 px-4 sm:px-6 pt-6">
+                        {children}
+                    </div>
+                    
+                    {/* Barra de navegación inferior para móviles */}
+                    <BottomNavBar items={adminBottomNavItems} pathname={pathname} />
+                </DashboardLayout>
+            </div>
+        </div>
     );
 }

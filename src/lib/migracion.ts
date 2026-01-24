@@ -1,29 +1,24 @@
-import { db } from './firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { collection, getDocs, updateDoc, doc, writeBatch } from 'firebase/firestore';
 
-export const migrarConfiguracionCompleta = async () => {
-  try {
-    console.log("Iniciando copia de configuración...");
+export const migrateDataToCondo = async (targetCondoId: string) => {
+  const collectionsToMigrate = ['payments', 'owners', 'billboard_announcements', 'app_feedback'];
+  
+  for (const colName of collectionsToMigrate) {
+    const colRef = collection(db, colName);
+    const snapshot = await getDocs(colRef);
+    const batch = writeBatch(db);
     
-    // 1. Referencia a la fuente (lo viejo)
-    const viejaRef = doc(db, 'config', 'mainSettings');
-    const docSnap = await getDoc(viejaRef);
-
-    if (docSnap.exists()) {
-      const todaLaData = docSnap.data();
-
-      // 2. Referencia al destino (lo nuevo)
-      const nuevaRef = doc(db, 'condominios', 'condo_01', 'config', 'settings');
-      
-      // 3. Copiamos TODO sin dejarnos nada
-      await setDoc(nuevaRef, todaLaData);
-      
-      alert("¡Éxito! Se han migrado todas las tasas BCV, cuentas bancarias y datos de empresa al condo_01.");
-    } else {
-      alert("No se encontró el documento original en config/mainSettings");
-    }
-  } catch (error) {
-    console.error("Error migrando configuración:", error);
-    alert("Hubo un error al copiar los datos.");
+    snapshot.docs.forEach((document) => {
+      const data = document.data();
+      // Si el documento no tiene condominioId, lo asignamos a condo_01
+      if (!data.condominioId) {
+        const docRef = doc(db, colName, document.id);
+        batch.update(docRef, { condominioId: targetCondoId });
+      }
+    });
+    
+    await batch.commit();
+    console.log(`Migración completada para: ${colName}`);
   }
 };
