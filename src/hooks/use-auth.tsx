@@ -10,6 +10,7 @@ export interface AuthContextType {
     role: string | null;
     loading: boolean;
     isSuperAdmin: boolean;
+    companyInfo: any | null; // Añadido para resolver el error TS
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -24,7 +25,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setMounted(true);
         const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
             setUser(firebaseUser);
-            setLoading(false); // Detenemos la carga pase lo que pase
+            setLoading(false);
         });
         return () => unsubscribe();
     }, []);
@@ -34,12 +35,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const value: AuthContextType = {
         user,
         ownerData: isSuper ? { role: 'super-admin' } : null,
-        role: isSuper ? 'super-admin' : null, // IMPORTANTE: Super Admin es un rol válido
+        role: isSuper ? 'super-admin' : null,
         loading: !mounted ? true : loading,
-        isSuperAdmin: isSuper
+        isSuperAdmin: isSuper,
+        companyInfo: { name: "ValleCondo", logo: "" } // Valor por defecto
     };
 
-    // Evitamos errores de hidratación
     if (!mounted) return null;
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

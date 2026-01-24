@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo, useCallback, Suspense } from 'react';
@@ -418,6 +419,7 @@ function VerifyPaymentsTab() {
             doc.text(`Bs. ${formatToTwoDecimals(beneficiary.amount)}`, rightColX, startY, { align: 'right' });
             startY += 10;
     
+            // 6. Footer Notes
             startY = Math.max(startY, 220); 
             doc.setFontSize(8).setFont('helvetica', 'normal');
     
@@ -900,7 +902,7 @@ function ReportPaymentTab() {
                                                     </div>
                                                     <div className="space-y-2"><Label htmlFor={`amount-${row.id}`}>Monto Asignado (Bs.)</Label><Input id={`amount-${row.id}`} type="number" placeholder="0.00" value={row.amount} onChange={(e) => updateBeneficiaryRow(row.id, { amount: e.target.value })} disabled={loading || !row.owner} /></div>
                                                 </div>
-                                                {row.owner && <div className="mt-4 space-y-2"><Label>Asignar a Propiedad</Label><Select onValueChange={(v) => updateBeneficiaryRow(row.id, { selectedProperty: row.owner!.properties.find(p => `${p.street}-${p.house}` === v) || null })} value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''} disabled={loading || !row.owner}><SelectTrigger><SelectValue placeholder="Seleccione una propiedad..." /></SelectTrigger><SelectContent>{row.owner.properties.map(p => (<SelectItem key={`${p.street}-${p.house}`} value={`${p.street}-${p.house}`}>{`${p.street} - ${p.house}`}</SelectItem>))}</SelectContent></Select></div>}
+                                                {row.owner && <div className="mt-4 space-y-2"><Label>Asignar a Propiedad</Label><Select onValueChange={(v) => updateBeneficiaryRow(row.id, { selectedProperty: row.owner!.properties.find(p => `${p.street}-${p.house}` === v) || null })} value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''} disabled={loading || !row.owner}><SelectTrigger><SelectValue placeholder="Seleccione una propiedad..." /></SelectTrigger><SelectContent>{row.owner?.properties && row.owner.properties.length > 0 ? ( row.owner.properties.map((p: any) => (<SelectItem key={`${p.street}-${p.house}`} value={`${p.street}-${p.house}`}>{`${p.street} - ${p.house}`}</SelectItem>)) ) : ( <SelectItem value="no-property" disabled>Sin propiedades registradas</SelectItem> )}</SelectContent></Select></div>}
                                                 <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive" onClick={() => removeBeneficiaryRow(row.id)} disabled={loading}><Trash2 className="h-4 w-4"/></Button>
                                             </Card>
                                         ))}
