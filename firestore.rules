@@ -34,7 +34,7 @@ service cloud.firestore {
     // Config collection: General app settings like company info and rates.
     match /config/{docId} {
       // Everyone can read it (needed for company logo, etc.).
-      allow read: if isSignedIn();
+      allow read: if true;
       // Only admins can change settings.
       allow write: if isAdmin();
     }

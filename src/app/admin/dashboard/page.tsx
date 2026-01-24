@@ -1,9 +1,8 @@
-
 'use client';
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { AlertCircle, Eye, Loader2, Users, Receipt, CheckCircle, Smile } from "lucide-react";
+import { AlertCircle, Loader2, Users, Receipt, CheckCircle, Smile } from "lucide-react";
 import { useEffect, useState } from "react";
 import { collection, query, where, onSnapshot, Timestamp, orderBy, limit, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -11,24 +10,21 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { Progress } from "@/components/ui/progress";
 import CarteleraDigital from "@/components/CarteleraDigital";
+import { useAuth } from "@/hooks/use-auth"; // IMPORTANTE: Para saber qué condominio filtrar
 
 type Anuncio = {
-  id: string;
-  urlImagen: string;
-  titulo: string;
-  descripcion?: string;
+    id: string;
+    urlImagen: string;
+    titulo: string;
+    descripcion?: string;
 };
 
-/**
- * Función auxiliar para formatear números a dos decimales y usar separador de miles.
- */
 const formatToTwoDecimals = (num: number) => {
     if (typeof num !== 'number' || isNaN(num)) return '0,00';
     const truncated = Math.trunc(num * 100) / 100;
     return truncated.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-// Definiciones de tipos
 type Payment = {
     id: string;
     beneficiaries?: { ownerName: string }[];
@@ -38,14 +34,17 @@ type Payment = {
     exchangeRate?: number;
     paymentMethod?: string;
     status: string;
+    condominioId: string;
 };
 
 type Feedback = {
     id: string;
     response: 'liked' | 'disliked';
+    condominioId: string;
 };
 
 export default function AdminDashboardPage() {
+    const { ownerData } = useAuth(); // Obtenemos el ID del condominio del admin
     const [loading, setLoading] = useState(true);
     const [activeRate, setActiveRate] = useState(0);
     const [stats, setStats] = useState({
@@ -59,21 +58,23 @@ export default function AdminDashboardPage() {
     const [anuncios, setAnuncios] = useState<Anuncio[]>([]);
 
     useEffect(() => {
-        // Suscripción a anuncios
-        const anunciosQuery = query(collection(db, "billboard_announcements"), orderBy("createdAt", "desc"));
+        if (!ownerData?.condominioId) return;
+
+        const condoId = ownerData.condominioId;
+
+        // 1. Suscripción a anuncios (Filtrado por Condominio)
+        const anunciosQuery = query(
+            collection(db, "billboard_announcements"), 
+            where("condominioId", "==", condoId),
+            orderBy("createdAt", "desc")
+        );
         const unsubAnuncios = onSnapshot(anunciosQuery, (snapshot) => {
-          setAnuncios(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Anuncio)));
+            setAnuncios(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Anuncio)));
         });
 
-        // Inicializa la fecha de inicio del mes
-        const startOfMonth = new Date();
-        startOfMonth.setDate(1);
-        startOfMonth.setHours(0, 0, 0, 0);
-        const startOfMonthTimestamp = Timestamp.fromDate(startOfMonth);
-
-        // 1. Obtener Tasa de Cambio
+        // 2. Obtener Tasa de Cambio (Desde la nueva ubicación migrada)
         const fetchSettings = async () => {
-            const settingsRef = doc(db, 'config', 'mainSettings');
+            const settingsRef = doc(db, 'condominios', condoId, 'config', 'settings');
             try {
                 const settingsSnap = await getDoc(settingsRef);
                 if (settingsSnap.exists()) {
@@ -94,9 +95,15 @@ export default function AdminDashboardPage() {
         };
         fetchSettings();
 
-        // 2. Suscripciones en tiempo real
+        // 3. Cálculos del Mes (Filtrado por Condominio)
+        const startOfMonth = new Date();
+        startOfMonth.setDate(1);
+        startOfMonth.setHours(0, 0, 0, 0);
+        const startOfMonthTimestamp = Timestamp.fromDate(startOfMonth);
+
         const paymentsQuery = query(
             collection(db, 'payments'),
+            where('condominioId', '==', condoId),
             where('status', '==', 'aprobado'),
             where('paymentDate', '>=', startOfMonthTimestamp)
         );
@@ -108,40 +115,47 @@ export default function AdminDashboardPage() {
                 const data = doc.data() as Payment;
                 const amountBs = data.totalAmount || 0;
                 totalBs += amountBs;
-
-                if (data.paymentMethod === 'adelanto') {
-                    totalUsd += amountBs;
-                } else {
-                    const rate = data.exchangeRate || activeRate || 1; 
-                    if (rate > 0) totalUsd += amountBs / rate;
-                }
+                const rate = data.exchangeRate || activeRate || 1; 
+                if (rate > 0) totalUsd += amountBs / rate;
             });
             setStats(prev => ({ ...prev, monthlyIncome: totalBs, monthlyIncomeUSD: totalUsd }));
-            setLoading(false); // Desactivar carga cuando lleguen los primeros datos críticos
+            setLoading(false);
         });
 
-        const unsubPending = onSnapshot(query(collection(db, 'payments'), where('status', '==', 'pendiente')), (snapshot) => {
+        // 4. Pagos Pendientes (Filtrado por Condominio)
+        const unsubPending = onSnapshot(query(
+            collection(db, 'payments'), 
+            where('condominioId', '==', condoId),
+            where('status', '==', 'pendiente')
+        ), (snapshot) => {
             setStats(prev => ({ ...prev, pendingPayments: snapshot.size }));
         });
 
-        const unsubOwners = onSnapshot(collection(db, 'owners'), (snapshot) => {
-            setStats(prev => ({ ...prev, totalOwners: snapshot.size > 0 ? snapshot.size - 1 : 0 })); 
+        // 5. Unidades / Propietarios (Filtrado por Condominio)
+        const unsubOwners = onSnapshot(query(
+            collection(db, 'owners'),
+            where('condominioId', '==', condoId)
+        ), (snapshot) => {
+            setStats(prev => ({ ...prev, totalOwners: snapshot.size })); 
         });
 
+        // 6. Últimos Pagos (Filtrado por Condominio)
         const unsubRecent = onSnapshot(query(
             collection(db, 'payments'), 
+            where('condominioId', '==', condoId),
             where('status', '==', 'aprobado'),
             orderBy('paymentDate', 'desc'),
             limit(5)
         ), (snapshot) => {
-            const approvedPayments = snapshot.docs.map(doc => ({ 
-                id: doc.id, 
-                ...doc.data() 
-            })) as Payment[];
+            const approvedPayments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Payment[];
             setRecentPayments(approvedPayments);
         });
         
-        const unsubFeedback = onSnapshot(collection(db, 'app_feedback'), (snapshot) => {
+        // 7. Feedback (Filtrado por Condominio si aplica)
+        const unsubFeedback = onSnapshot(query(
+            collection(db, 'app_feedback'),
+            where('condominioId', '==', condoId)
+        ), (snapshot) => {
             const feedbackList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Feedback));
             setFeedbackData(feedbackList);
         });
@@ -154,7 +168,7 @@ export default function AdminDashboardPage() {
             unsubRecent();
             unsubFeedback();
         }
-    }, [activeRate]);
+    }, [ownerData, activeRate]);
 
     const likes = feedbackData.filter(f => f.response === 'liked').length;
     const dislikes = feedbackData.filter(f => f.response === 'disliked').length;
@@ -170,7 +184,7 @@ export default function AdminDashboardPage() {
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
                 <Card className="bg-primary text-primary-foreground">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Pagos Recibidos (Mes)</CardTitle>
+                        <CardTitle className="text-sm font-medium">Cobrado este Mes</CardTitle>
                         <Receipt className="h-4 w-4 opacity-70" />
                     </CardHeader>
                     <CardContent>
@@ -183,47 +197,36 @@ export default function AdminDashboardPage() {
                     </CardContent>
                 </Card>
                 
-                <Card className="bg-yellow-500 text-yellow-950">
+                <Card className="bg-orange-500 text-white">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Pagos Pendientes</CardTitle>
+                        <CardTitle className="text-sm font-medium">Por Validar</CardTitle>
                         <AlertCircle className="h-4 w-4" />
                     </CardHeader>
                     <CardContent>
-                        {loading ? <Loader2 className="h-6 w-6 animate-spin"/> :
-                            <div className="text-2xl font-bold">{stats.pendingPayments}</div>
-                        }
-                        <p className="text-xs opacity-80">Por verificar</p>
+                        <div className="text-2xl font-bold">{stats.pendingPayments}</div>
+                        <p className="text-xs opacity-80">Pagos pendientes</p>
                     </CardContent>
                 </Card>
                 
-                <Card className="bg-primary text-primary-foreground">
+                <Card className="bg-slate-900 text-white">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Unidades Registradas</CardTitle>
+                        <CardTitle className="text-sm font-medium">Censo Propietarios</CardTitle>
                         <Users className="h-4 w-4" />
                     </CardHeader>
                     <CardContent>
-                        {loading ? <Loader2 className="h-6 w-6 animate-spin"/> :
-                            <div className="text-2xl font-bold">{stats.totalOwners}</div>
-                        }
-                        <p className="text-xs opacity-80">Propietarios activos</p>
+                        <div className="text-2xl font-bold">{stats.totalOwners}</div>
+                        <p className="text-xs opacity-80">Unidades en este condominio</p>
                     </CardContent>
                 </Card>
                 
                 <Card className="border-2">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Satisfacción App</CardTitle>
+                        <CardTitle className="text-sm font-medium">Satisfacción</CardTitle>
                         <Smile className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        {loading ? <Loader2 className="h-6 w-6 animate-spin"/> :
-                            <>
-                                <div className="text-2xl font-bold">{satisfactionRate.toFixed(0)}%</div>
-                                <Progress value={satisfactionRate} className="mt-2 h-2" />
-                                <p className="text-[10px] mt-2 text-muted-foreground">
-                                    {likes} 👍 / {dislikes} 👎 ({totalFeedback} votos)
-                                </p>
-                            </>
-                        }
+                        <div className="text-2xl font-bold">{satisfactionRate.toFixed(0)}%</div>
+                        <Progress value={satisfactionRate} className="mt-2 h-2" />
                     </CardContent>
                 </Card>
             </div>
@@ -232,7 +235,7 @@ export default function AdminDashboardPage() {
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-xl">
                         <CheckCircle className="text-primary w-5 h-5" />
-                        Últimos Pagos Aprobados
+                        Cobranza Reciente
                     </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -250,12 +253,12 @@ export default function AdminDashboardPage() {
                                 {loading ? (
                                     <TableRow><TableCell colSpan={4} className="h-24 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto"/></TableCell></TableRow>
                                 ) : recentPayments.length === 0 ? (
-                                    <TableRow><TableCell colSpan={4} className="h-24 text-center text-muted-foreground">No hay pagos recientes.</TableCell></TableRow>
+                                    <TableRow><TableCell colSpan={4} className="h-24 text-center text-muted-foreground">No hay pagos registrados aún.</TableCell></TableRow>
                                 ) : (
                                     recentPayments.map(payment => (
                                         <TableRow key={payment.id}>
                                             <TableCell className="font-medium">
-                                                {payment.beneficiaries?.[0]?.ownerName || 'Sin nombre'}
+                                                {payment.beneficiaries?.[0]?.ownerName || 'Residente'}
                                             </TableCell>
                                             <TableCell>Bs. {formatToTwoDecimals(payment.totalAmount)}</TableCell>
                                             <TableCell>

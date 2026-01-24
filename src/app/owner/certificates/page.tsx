@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -10,13 +9,14 @@ import { useToast } from '@/hooks/use-toast';
 import { collection, query, where, onSnapshot, addDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
-import { Loader2, AlertTriangle, ShieldCheck, FilePlus, Info, CheckCircle } from 'lucide-react';
+import { Loader2, AlertTriangle, ShieldCheck, FilePlus, Info } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Label } from '@/components/ui/label';
 
 type Debt = {
-  id: string;
-  status: 'pending' | 'paid' | 'vencida';
+    id: string;
+    status: 'pending' | 'paid' | 'vencida';
+    condominioId?: string;
 };
 
 type CertificateRequest = {
@@ -26,9 +26,9 @@ type CertificateRequest = {
     property: { street: string; house: string };
     type: 'residencia' | 'solvencia';
     createdAt: Timestamp;
-    status: 'solicitud'; // Special status for owner requests
+    status: 'solicitud';
+    condominioId: string; // Campo obligatorio ahora
 };
-
 
 export default function OwnerCertificatesPage() {
     const { user, ownerData, loading: authLoading } = useAuth();
@@ -39,7 +39,6 @@ export default function OwnerCertificatesPage() {
     const [loading, setLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     
-    // Form state
     const [certificateType, setCertificateType] = useState<'residencia' | 'solvencia' | ''>('');
     const [selectedProperty, setSelectedProperty] = useState<{ street: string; house: string } | null>(null);
 
@@ -55,14 +54,19 @@ export default function OwnerCertificatesPage() {
             return;
         }
 
-        const debtsQuery = query(collection(db, "debts"), where("ownerId", "==", user.uid));
+        // CORRECCIÓN: Filtramos deudas por usuario Y por condominio asignado
+        const debtsQuery = query(
+            collection(db, "debts"), 
+            where("ownerId", "==", user.uid),
+            where("condominioId", "==", ownerData?.condominioId)
+        );
+
         const unsubscribe = onSnapshot(debtsQuery, (snapshot) => {
             const debtsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Debt));
             setDebts(debtsData);
             setLoading(false);
         });
 
-        // Pre-select first property
         if(ownerData?.properties && ownerData.properties.length > 0) {
             setSelectedProperty(ownerData.properties[0]);
         }
@@ -71,35 +75,35 @@ export default function OwnerCertificatesPage() {
     }, [user, authLoading, router, ownerData]);
 
     const handleSubmitRequest = async () => {
-        if (!user || !ownerData || !selectedProperty || !certificateType) {
-            toast({ variant: 'destructive', title: 'Datos incompletos', description: 'Por favor, seleccione un tipo de constancia y una propiedad.' });
+        if (!user || !ownerData || !selectedProperty || !certificateType || !ownerData.condominioId) {
+            toast({ variant: 'destructive', title: 'Datos incompletos', description: 'Faltan datos del perfil o del condominio.' });
             return;
         }
         
         if (!ownerData.cedula) {
-             toast({ variant: 'destructive', title: 'Cédula no registrada', description: 'Su perfil no tiene una cédula registrada. Por favor, contacte a la administración.' });
+             toast({ variant: 'destructive', title: 'Cédula no registrada', description: 'Su perfil no tiene una cédula registrada.' });
             return;
         }
         
         setIsSubmitting(true);
         try {
-            const requestData: Omit<CertificateRequest, 'createdAt'> = {
+            // CORRECCIÓN: La solicitud ahora incluye el condominioId del dueño
+            const requestData = {
                 ownerId: user.uid,
                 ownerName: ownerData.name,
                 ownerCedula: ownerData.cedula,
                 property: selectedProperty,
                 type: certificateType,
                 status: 'solicitud',
+                condominioId: ownerData.condominioId, 
+                createdAt: serverTimestamp(),
             };
 
-            await addDoc(collection(db, "certificates"), {
-                ...requestData,
-                createdAt: serverTimestamp(),
-            });
+            await addDoc(collection(db, "certificates"), requestData);
 
             toast({
                 title: 'Solicitud Enviada',
-                description: 'La administración revisará su solicitud y generará el documento pronto.',
+                description: 'La administración de su condominio revisará su solicitud pronto.',
                 className: 'bg-blue-100 border-blue-400 text-blue-800'
             });
 
@@ -112,7 +116,6 @@ export default function OwnerCertificatesPage() {
             setIsSubmitting(false);
         }
     };
-
 
     if (loading || authLoading) {
         return <div className="flex justify-center items-center h-full"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>;
@@ -128,7 +131,7 @@ export default function OwnerCertificatesPage() {
                             Acceso Denegado
                         </DialogTitle>
                         <DialogDescription>
-                            Para poder solicitar constancias, debe estar solvente con el condominio. Por favor, verifique sus deudas pendientes.
+                            Debe estar solvente con el condominio para solicitar constancias.
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>
@@ -141,7 +144,6 @@ export default function OwnerCertificatesPage() {
         );
     }
     
-
     return (
         <div className="space-y-8">
             <div>
@@ -156,13 +158,13 @@ export default function OwnerCertificatesPage() {
                         ¡Estás Solvente!
                     </CardTitle>
                     <CardDescription>
-                        Puedes solicitar una constancia para cualquiera de tus propiedades.
+                        Solicite su documento para la propiedad seleccionada.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
                      <div className="p-4 bg-blue-100/50 border border-blue-300 rounded-md text-sm text-blue-800 flex items-start gap-2">
                         <Info className="h-4 w-4 mt-0.5 shrink-0" />
-                        <span>Su solicitud será enviada a la administración para su aprobación y generación. Se le notificará cuando esté lista.</span>
+                        <span>Su solicitud será procesada por la administración de su condominio.</span>
                     </div>
                      <div className="space-y-2">
                         <Label>Tipo de Constancia</Label>
