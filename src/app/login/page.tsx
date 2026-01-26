@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
@@ -48,65 +49,50 @@ function LoginPage() {
         setLoading(true);
 
         try {
-            // --- 1. PRIORIDAD ABSOLUTA: BYPASS PARA SUPER ADMIN ---
+            // 1. BYPASS SUPER ADMIN
             if (cleanEmail === ADMIN_EMAIL) {
                 await signInWithEmailAndPassword(auth, cleanEmail, password);
-                
-                // Limpiamos rastro de modo soporte previo para evitar conflictos
                 localStorage.removeItem('support_condo_id');
-                
-                toast({ title: 'Acceso Maestro', description: 'Bienvenido, Super Admin.' });
-                
-                // REDIRECCIÓN CORRECTA AL PANEL MAESTRO
-                router.push('/super-admin'); 
+                router.push('/super-admin');
                 return;
             }
-
-            // --- 2. LÓGICA PARA OTROS USUARIOS ---
-            // Verificamos si el acceso de propietarios está habilitado globalmente
-            const settingsRef = doc(db, 'config', 'mainSettings');
-            const settingsSnap = await getDoc(settingsRef);
             
-            if (role === 'owner' && settingsSnap.exists()) {
-                const settings = settingsSnap.data();
-                if (settings.loginSettings && !settings.loginSettings.ownerLoginEnabled) {
-                    toast({
-                        variant: 'destructive',
-                        title: 'Acceso Deshabilitado',
-                        description: settings.loginSettings.disabledMessage || 'Acceso deshabilitado temporalmente.',
-                    });
-                    setLoading(false);
-                    return;
+            // 2. INICIO DE SESIÓN PRIMERO
+            const userCredential = await signInWithEmailAndPassword(auth, cleanEmail, password);
+            const user = userCredential.user;
+
+            // 3. BUSCAR ROL EN COLECCIÓN 'owners' USANDO EL UID
+            let userDoc = await getDoc(doc(db, "owners", user.uid));
+            let userData = userDoc.exists() ? userDoc.data() : null;
+
+            // Si no aparece por UID, buscamos por correo (como respaldo)
+            if (!userData) {
+                const q = query(collection(db, "owners"), where("email", "==", cleanEmail));
+                const querySnapshot = await getDocs(q);
+                if (!querySnapshot.empty) {
+                    userData = querySnapshot.docs[0].data();
                 }
             }
 
-            // Validación de Rol en la base de datos (Colección 'owners')
-            let userRoleFromDB: string | null = null;
-            const q = query(collection(db, "owners"), where("email", "==", cleanEmail));
-            const querySnapshot = await getDocs(q);
-            
-            if (querySnapshot.empty) {
+            if (!userData) {
                 throw new Error("user-not-found");
             }
 
-            userRoleFromDB = querySnapshot.docs[0].data().role;
+            // 4. VERIFICACIÓN DE ROL
             const expectedRole = role === 'admin' ? 'administrador' : 'propietario';
-
-            if (userRoleFromDB !== expectedRole) {
+            
+            if (userData.role?.toLowerCase() !== expectedRole) {
                 throw new Error("role-mismatch");
             }
 
-            // Inicio de sesión final
-            await signInWithEmailAndPassword(auth, cleanEmail, password);
-            
-            toast({ title: 'Sesión Iniciada', description: 'Redirigiendo...' });
+            toast({ title: 'Bienvenido', description: 'Cargando panel de EFAS CondoSys...' });
 
             if (role === 'admin') {
                 router.push('/admin/dashboard');
             } else {
-                router.push('/dashboard');
+                router.push('/owner/dashboard');
             }
-            
+
         } catch (error: any) {
             console.error("Login error:", error);
             let description = 'Error de autenticación. Verifique sus datos.';
@@ -115,7 +101,7 @@ function LoginPage() {
                 description = `Este correo no está registrado como ${role === 'admin' ? 'Administrador' : 'Propietario'}.`;
             } else if (error.message === "user-not-found") {
                 description = 'El correo no existe en nuestra base de datos.';
-            } else if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+            } else if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found') {
                 description = 'Correo o contraseña incorrectos.';
             } else if (error.code === 'auth/too-many-requests') {
                 description = 'Cuenta temporalmente bloqueada. Intente más tarde.';
@@ -193,9 +179,14 @@ function LoginPage() {
                         <Button type="submit" disabled={loading} className="w-full h-14 bg-[#0081c9] hover:bg-sky-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-sky-900/20 transition-all">
                             {loading ? <Loader2 className="animate-spin w-5 h-5" /> : 'Acceder al Sistema'}
                         </Button>
-                        <Link href="/welcome" className="text-[10px] font-black uppercase text-slate-500 hover:text-[#f59e0b] tracking-[0.2em] text-center transition-colors">
-                            ← Volver al Portal
-                        </Link>
+                        <div className="flex justify-between w-full">
+                            <Link href="/forgot-password" className="text-[10px] font-black uppercase text-slate-500 hover:text-[#f59e0b] tracking-[0.2em] text-center transition-colors">
+                                ¿Olvidaste tu clave?
+                            </Link>
+                            <Link href="/welcome" className="text-[10px] font-black uppercase text-slate-500 hover:text-[#f59e0b] tracking-[0.2em] text-center transition-colors">
+                                ← Volver al Portal
+                            </Link>
+                        </div>
                     </CardFooter>
                 </form>
             </Card>
