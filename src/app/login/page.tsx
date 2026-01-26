@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
@@ -47,71 +46,72 @@ function LoginPage() {
         }
 
         setLoading(true);
+        console.log("--- Iniciando Proceso de Login ---");
 
         try {
             // 1. BYPASS SUPER ADMIN
             if (cleanEmail === ADMIN_EMAIL) {
+                console.log("Detectado Super Admin. Redirigiendo...");
                 await signInWithEmailAndPassword(auth, cleanEmail, password);
                 localStorage.removeItem('support_condo_id');
                 router.push('/super-admin');
                 return;
             }
-            
-            // 2. INICIO DE SESIÓN PRIMERO
+
+            // 2. AUTENTICACIÓN
+            console.log("Autenticando con Firebase Auth...");
             const userCredential = await signInWithEmailAndPassword(auth, cleanEmail, password);
             const user = userCredential.user;
+            console.log("Auth exitosa. UID:", user.uid);
 
-            // 3. BUSCAR ROL EN COLECCIÓN 'owners' USANDO EL UID
-            let userDoc = await getDoc(doc(db, "owners", user.uid));
-            let userData = userDoc.exists() ? userDoc.data() : null;
+            // 3. BÚSQUEDA DE DATOS (Intentamos UID y luego Email)
+            let userData = null;
+            
+            // Intento 1: Por ID de documento (debería ser el UID)
+            const docRef = doc(db, "owners", user.uid);
+            const docSnap = await getDoc(docRef);
 
-            // Si no aparece por UID, buscamos por correo (como respaldo)
-            if (!userData) {
+            if (docSnap.exists()) {
+                userData = docSnap.data();
+                console.log("Documento encontrado por UID.");
+            } else {
+                console.log("No se encontró doc por UID, intentando búsqueda por campo email...");
                 const q = query(collection(db, "owners"), where("email", "==", cleanEmail));
                 const querySnapshot = await getDocs(q);
                 if (!querySnapshot.empty) {
                     userData = querySnapshot.docs[0].data();
+                    console.log("Documento encontrado por campo Email.");
                 }
             }
 
+            // 4. VALIDACIÓN FINAL
             if (!userData) {
+                console.error("Error: Usuario autenticado pero sin datos en Firestore.");
                 throw new Error("user-not-found");
             }
 
-            // 4. VERIFICACIÓN DE ROL
+            console.log("Datos en Firestore:", userData);
+
             const expectedRole = role === 'admin' ? 'administrador' : 'propietario';
-            
             if (userData.role?.toLowerCase() !== expectedRole) {
+                console.error(`Error: Rol esperado ${expectedRole}, pero se encontró ${userData.role}`);
                 throw new Error("role-mismatch");
             }
 
-            toast({ title: 'Bienvenido', description: 'Cargando panel de EFAS CondoSys...' });
-
-            if (role === 'admin') {
-                router.push('/admin/dashboard');
-            } else {
-                router.push('/owner/dashboard');
-            }
+            // 5. ÉXITO
+            toast({ title: 'Acceso Concedido', description: 'Cargando CondoSys...' });
+            router.push(role === 'admin' ? '/admin/dashboard' : '/owner/dashboard');
 
         } catch (error: any) {
-            console.error("Login error:", error);
-            let description = 'Error de autenticación. Verifique sus datos.';
+            console.error("Error completo capturado:", error);
+            let msg = 'Error de autenticación. Verifique sus datos.';
             
-            if (error.message === "role-mismatch") {
-                description = `Este correo no está registrado como ${role === 'admin' ? 'Administrador' : 'Propietario'}.`;
-            } else if (error.message === "user-not-found") {
-                description = 'El correo no existe en nuestra base de datos.';
-            } else if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found') {
-                description = 'Correo o contraseña incorrectos.';
-            } else if (error.code === 'auth/too-many-requests') {
-                description = 'Cuenta temporalmente bloqueada. Intente más tarde.';
-            }
+            if (error.message === "user-not-found") msg = "Tu correo no tiene un perfil configurado en Firestore.";
+            if (error.message === "role-mismatch") msg = `No tienes permisos de ${role === 'admin' ? 'Administrador' : 'Propietario'}.`;
+            if (error.code === 'auth/permission-denied') msg = "Firestore bloqueó la lectura (Revisa tus Rules).";
+            if (error.code === 'auth/invalid-credential') msg = "Correo o contraseña incorrectos.";
 
-            toast({
-                variant: 'destructive',
-                title: 'Error de Acceso',
-                description: description,
-            });
+            toast({ variant: 'destructive', title: 'Error de Acceso', description: msg });
         } finally {
             setLoading(false);
         }
@@ -180,7 +180,7 @@ function LoginPage() {
                             {loading ? <Loader2 className="animate-spin w-5 h-5" /> : 'Acceder al Sistema'}
                         </Button>
                         <div className="flex justify-between w-full">
-                            <Link href="/forgot-password" className="text-[10px] font-black uppercase text-slate-500 hover:text-[#f59e0b] tracking-[0.2em] text-center transition-colors">
+                            <Link href="/forgot-password" className="text-[11px] font-bold text-[#0081c9] hover:underline uppercase tracking-widest">
                                 ¿Olvidaste tu clave?
                             </Link>
                             <Link href="/welcome" className="text-[10px] font-black uppercase text-slate-500 hover:text-[#f59e0b] tracking-[0.2em] text-center transition-colors">
