@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, createContext, useContext, ReactNode } from 'react';
@@ -19,7 +20,6 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const ADMIN_EMAIL = 'vallecondo@gmail.com';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-    const [mounted, setMounted] = useState(false);
     const [user, setUser] = useState<User | null>(null);
     const [ownerData, setOwnerData] = useState<any | null>(null);
     const [companyInfo, setCompanyInfo] = useState<any | null>(null);
@@ -27,12 +27,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [activeCondoId, setActiveCondoId] = useState<string | null>(null);
 
     useEffect(() => {
-        setMounted(true);
         const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
+            setLoading(true);
             setUser(firebaseUser);
             if (!firebaseUser) {
                 setOwnerData(null);
                 setActiveCondoId(null);
+                setCompanyInfo(null);
                 setLoading(false);
             }
         });
@@ -44,14 +45,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const isSuper = user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
         
+        let unsubscribeUser: () => void;
+
         if (isSuper) {
             const supportId = typeof window !== 'undefined' ? localStorage.getItem('support_condo_id') : null;
-            setOwnerData({ role: 'super-admin', condominioId: supportId });
+            setOwnerData({ role: 'super-admin', name: 'Super Admin', condominioId: supportId });
             setActiveCondoId(supportId);
             setLoading(false);
         } else {
             const userRef = doc(db, 'users', user.uid);
-            const unsubscribeUser = onSnapshot(userRef, (docSnap) => {
+            unsubscribeUser = onSnapshot(userRef, (docSnap) => {
                 if (docSnap.exists()) {
                     const data = docSnap.data();
                     setOwnerData(data);
@@ -63,10 +66,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 setLoading(false);
             }, (error) => {
                 console.error("Error fetching user profile:", error);
+                setOwnerData(null);
+                setActiveCondoId(null);
                 setLoading(false);
             });
-            return () => unsubscribeUser();
         }
+        
+        return () => {
+            if (unsubscribeUser) unsubscribeUser();
+        };
+
     }, [user]);
 
     useEffect(() => {
@@ -76,15 +85,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         const configRef = doc(db, 'condominios', activeCondoId, 'config', 'mainSettings');
         const unsubscribeConfig = onSnapshot(configRef, (docSnap) => {
-            if (docSnap.exists()) {
-                setCompanyInfo(docSnap.data().companyInfo || null);
-            }
+            setCompanyInfo(docSnap.exists() ? docSnap.data().companyInfo : null);
         }, () => setCompanyInfo(null));
+        
         return () => unsubscribeConfig();
+
     }, [activeCondoId]);
-
-    if (!mounted) return null;
-
+    
     const isSuper = user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
 
     const value: AuthContextType = {

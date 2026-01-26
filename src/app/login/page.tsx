@@ -1,9 +1,10 @@
+
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
@@ -13,7 +14,6 @@ import { auth, db } from '@/lib/firebase';
 import Link from 'next/link';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 
-// Tu correo de Super Admin
 const ADMIN_EMAIL = 'vallecondo@gmail.com';
 
 function LoginPage() {
@@ -67,8 +67,7 @@ function LoginPage() {
             // 3. BÚSQUEDA DE DATOS (Intentamos UID y luego Email)
             let userData = null;
             
-            // Intento 1: Por ID de documento (debería ser el UID)
-            const docRef = doc(db, "owners", user.uid);
+            const docRef = doc(db, "users", user.uid);
             const docSnap = await getDoc(docRef);
 
             if (docSnap.exists()) {
@@ -76,7 +75,7 @@ function LoginPage() {
                 console.log("Documento encontrado por UID.");
             } else {
                 console.log("No se encontró doc por UID, intentando búsqueda por campo email...");
-                const q = query(collection(db, "owners"), where("email", "==", cleanEmail));
+                const q = query(collection(db, "users"), where("email", "==", cleanEmail));
                 const querySnapshot = await getDocs(q);
                 if (!querySnapshot.empty) {
                     userData = querySnapshot.docs[0].data();
@@ -110,6 +109,8 @@ function LoginPage() {
             if (error.message === "role-mismatch") msg = `No tienes permisos de ${role === 'admin' ? 'Administrador' : 'Propietario'}.`;
             if (error.code === 'auth/permission-denied') msg = "Firestore bloqueó la lectura (Revisa tus Rules).";
             if (error.code === 'auth/invalid-credential') msg = "Correo o contraseña incorrectos.";
+            if (error.code === 'auth/user-not-found') msg = "El correo electrónico no se encuentra registrado.";
+
 
             toast({ variant: 'destructive', title: 'Error de Acceso', description: msg });
         } finally {
@@ -130,7 +131,7 @@ function LoginPage() {
             {/* Fondo decorativo */}
             <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-[#0081c9]/10 blur-[100px] rounded-full"></div>
 
-            <div className="mb-8 text-center relative z-10">
+            <div className="text-center mb-8 relative z-10">
                  <h1 className="text-4xl font-black italic uppercase tracking-tighter">
                     <span className="text-[#f59e0b]">EFAS</span>
                     <span className="text-[#0081c9]"> CondoSys</span>
