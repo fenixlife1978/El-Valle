@@ -96,38 +96,67 @@ function VerifyPaymentsTab() {
     }, []);
 
     useEffect(() => {
-        if (ownersMap.size === 0 || authLoading || !ownerData?.condominioId) {
+        if (authLoading || !ownerData?.condominioId || ownersMap.size === 0) {
             if (!authLoading) setLoading(false);
             return;
         }
-        
-        setLoading(true);
-        const q = query(collection(db, "condominios", ownerData.condominioId, "payments"), orderBy('reportedAt', 'desc'));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const paymentsData: FullPayment[] = snapshot.docs.map(doc => {
-                const data = doc.data();
-                const firstBeneficiary = data.beneficiaries?.[0];
-                let userName = 'Beneficiario no identificado';
-                let unit = 'Propiedad no especificada';
-                if (firstBeneficiary?.ownerId) {
-                    const owner = ownersMap.get(firstBeneficiary.ownerId);
-                    if (owner) {
-                        userName = owner.name;
-                        if (data.beneficiaries?.length > 1) unit = "Múltiples Propiedades";
-                        else if (firstBeneficiary.street && firstBeneficiary.house) unit = `${firstBeneficiary.street} - ${firstBeneficiary.house}`;
-                        else if (owner.properties && owner.properties.length > 0) unit = `${owner.properties[0].street} - ${owner.properties[0].house}`;
-                    }
-                }
-                return { id: doc.id, user: userName, unit: unit, amount: data.totalAmount, date: new Date(data.paymentDate.seconds * 1000).toISOString(), bank: data.bank, type: data.paymentMethod, reference: data.reference, ...data } as FullPayment;
-            });
-            setPayments(paymentsData);
-            setLoading(false);
-        }, (error) => {
-            console.error("Error fetching payments: ", error);
-            toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron cargar los pagos.' });
-            setLoading(false);
-        });
-
+    
+        let unsubscribe: (() => void) | undefined;
+    
+        const fetchPayments = () => {
+            setLoading(true);
+            try {
+                const q = query(
+                    collection(db, "condominios", ownerData.condominioId, "payments"),
+                    orderBy('reportedAt', 'desc')
+                );
+    
+                unsubscribe = onSnapshot(q, (snapshot) => {
+                    const paymentsData: FullPayment[] = snapshot.docs.map(doc => {
+                        const data = doc.data();
+                        const firstBeneficiary = data.beneficiaries?.[0];
+                        let userName = 'Beneficiario no identificado';
+                        let unit = 'Propiedad no especificada';
+                        if (firstBeneficiary?.ownerId) {
+                            const owner = ownersMap.get(firstBeneficiary.ownerId);
+                            if (owner) {
+                                userName = owner.name;
+                                if (data.beneficiaries?.length > 1) {
+                                    unit = "Múltiples Propiedades";
+                                } else if (firstBeneficiary.street && firstBeneficiary.house) {
+                                    unit = `${firstBeneficiary.street} - ${firstBeneficiary.house}`;
+                                } else if (owner.properties && owner.properties.length > 0) {
+                                    unit = `${owner.properties[0].street} - ${owner.properties[0].house}`;
+                                }
+                            }
+                        }
+                        return { 
+                            id: doc.id, 
+                            user: userName, 
+                            unit: unit, 
+                            amount: data.totalAmount, 
+                            date: new Date(data.paymentDate.seconds * 1000).toISOString(), 
+                            bank: data.bank, 
+                            type: data.paymentMethod, 
+                            reference: data.reference, 
+                            ...data 
+                        } as FullPayment;
+                    });
+                    setPayments(paymentsData);
+                    setLoading(false);
+                }, (error) => {
+                    console.error("Error fetching payments:", error);
+                    toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron cargar los pagos.' });
+                    setLoading(false);
+                });
+            } catch (error) {
+                console.error("Error setting up payment fetch:", error);
+                setLoading(false);
+            }
+        };
+    
+        fetchPayments();
+    
         const fetchSettings = async () => {
             const settingsRef = doc(db, 'config', 'mainSettings');
             const docSnap = await getDoc(settingsRef);
@@ -139,8 +168,13 @@ function VerifyPaymentsTab() {
         };
         fetchSettings();
 
-        return () => unsubscribe();
-    }, [toast, ownersMap, ownerData?.condominioId, authLoading]);
+        return () => {
+            if (unsubscribe) {
+                unsubscribe();
+            }
+        };
+    }, [ownerData?.condominioId, authLoading, ownersMap, toast]);
+
 
     const handleStatusChange = async (id: string, newStatus: PaymentStatus) => {
         const paymentRef = doc(db, 'payments', id);
@@ -907,7 +941,7 @@ function ReportPaymentTab() {
                                                     </div>
                                                     <div className="space-y-2"><Label htmlFor={`amount-${row.id}`}>Monto Asignado (Bs.)</Label><Input id={`amount-${row.id}`} type="number" placeholder="0.00" value={row.amount} onChange={(e) => updateBeneficiaryRow(row.id, { amount: e.target.value })} disabled={loading || !row.owner} /></div>
                                                 </div>
-                                                {row.owner && <div className="mt-4 space-y-2"><Label>Asignar a Propiedad</Label><Select onValueChange={(v) => updateBeneficiaryRow(row.id, { selectedProperty: row.owner?.properties?.find(p => `${p.street}-${p.house}` === v) || null })} value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''} disabled={loading || !row.owner}><SelectTrigger><SelectValue placeholder="Seleccione una propiedad..." /></SelectTrigger><SelectContent>{row.owner?.properties?.map((p: any) => (<SelectItem key={`${p.street}-${p.house}`} value={`${p.street}-${p.house}`}>{`${p.street} - ${p.house}`}</SelectItem>)) || <SelectItem disabled value="none">Sin propiedades registradas</SelectItem>}</SelectContent></Select></div>}
+                                                {row.owner && <div className="mt-4 space-y-2"><Label>Asignar a Propiedad</Label><Select onValueChange={(v) => updateBeneficiaryRow(row.id, { selectedProperty: row.owner?.properties?.find(p => `${p.street}-${p.house}` === v) || null })} value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''} disabled={loading || !row.owner}><SelectTrigger><SelectValue placeholder="Seleccione una propiedad..." /></SelectTrigger><SelectContent>{row.owner?.properties?.length ? row.owner.properties.map((p: any) => (<SelectItem key={`${p.street}-${p.house}`} value={`${p.street}-${p.house}`}>{`${p.street} - ${p.house}`}</SelectItem>)) : <SelectItem disabled value="none">Sin propiedades registradas</SelectItem>}</SelectContent></Select></div>}
                                                 <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive" onClick={() => removeBeneficiaryRow(row.id)} disabled={loading}><Trash2 className="h-4 w-4"/></Button>
                                             </Card>
                                         ))}
@@ -938,37 +972,6 @@ function ReportPaymentTab() {
     );
 }
 
-function AdminPaymentsPageContent() {
-    const searchParams = useSearchParams();
-    const defaultTab = searchParams?.get('tab') || 'verify';
-    const router = useRouter();
-
-    const onTabChange = (value: string) => {
-        router.push(`/admin/payments?tab=${value}`);
-    };
-    
-    return (
-         <div className="space-y-8">
-            <div>
-                <h1 className="text-3xl font-bold font-headline">Gestión de Pagos</h1>
-                <p className="text-muted-foreground">Registre, verifique y gestione los pagos de los propietarios.</p>
-            </div>
-            <Tabs defaultValue={defaultTab} onValueChange={onTabChange} className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="verify">Verificar Pagos</TabsTrigger>
-                    <TabsTrigger value="report">Reportar Pago (Admin)</TabsTrigger>
-                </TabsList>
-                <TabsContent value="verify">
-                    <VerifyPaymentsTab />
-                </TabsContent>
-                <TabsContent value="report">
-                    <ReportPaymentTab />
-                </TabsContent>
-            </Tabs>
-        </div>
-    );
-}
-
 export default function AdminPaymentsPage() {
     return (
         <Suspense fallback={<div className="flex justify-center items-center h-full"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>}>
@@ -976,3 +979,5 @@ export default function AdminPaymentsPage() {
         </Suspense>
     );
 }
+
+```
