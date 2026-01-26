@@ -10,14 +10,17 @@ import {
     WalletCards,
     ClipboardList,
     Plus,
-    Loader2
+    Loader2,
+    ArrowLeftCircle,
+    AlertTriangle
 } from 'lucide-react';
-import { type ReactNode, useEffect } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
 import { useAuth } from '@/hooks/use-auth';
 import { BottomNavBar, type BottomNavItem } from '@/components/bottom-nav-bar';
-import Header from '@/components/Header'; // Importamos el nuevo Header
+import Header from '@/components/Header';
+import { Button } from '@/components/ui/button';
 
 const adminNavItems: NavItem[] = [
     { href: "/admin/dashboard", icon: Home, label: "Dashboard" },
@@ -66,26 +69,36 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     const { ownerData, role, loading, user } = useAuth();
     const pathname = usePathname() ?? '';
     const router = useRouter();
+    const [supportCondoId, setSupportCondoId] = useState<string | null>(null);
 
     useEffect(() => {
+        // Verificar si estamos en Modo Soporte (desde el Super Admin)
+        const mode = localStorage.getItem('support_condo_id');
+        setSupportCondoId(mode);
+
         if (!loading) {
-            // Verificamos si es administrador o super-admin (tu cuenta vallecondo@gmail.com)
-            const hasAccess = role === 'administrador' || role === 'super-admin';
+            // Permitimos acceso si es administrador, super-admin o si el correo es el tuyo
+            const hasAccess = role === 'administrador' || role === 'super-admin' || user?.email === 'vallecondo@gmail.com';
             if (!user || !hasAccess) {
                 router.replace('/login');
             }
         }
     }, [role, loading, user, router]);
     
-    const hasAccess = role === 'administrador' || role === 'super-admin';
+    const exitSupportMode = () => {
+        localStorage.removeItem('support_condo_id');
+        router.push('/super-admin');
+    };
 
-    // Pantalla de carga con diseño de salud visual
+    const hasAccess = role === 'administrador' || role === 'super-admin' || user?.email === 'vallecondo@gmail.com';
+
+    // Pantalla de carga (Azul EFAS CondoSys)
     if (loading || !user || !hasAccess) {
         return (
             <div className="flex h-screen w-full flex-col items-center justify-center bg-[#020617]">
-                <Loader2 className="h-10 w-10 animate-spin text-[#006241]" />
-                <p className="ml-2 mt-4 text-slate-400 font-bold text-xs uppercase tracking-widest">
-                    Verificando Credenciales...
+                <Loader2 className="h-10 w-10 animate-spin text-[#0081c9]" />
+                <p className="ml-2 mt-4 text-slate-500 font-black text-[10px] uppercase tracking-[0.3em] italic">
+                    EFAS CondoSys: Validando...
                 </p>
             </div>
         );
@@ -93,7 +106,28 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
     return (
         <div className="flex flex-col min-h-screen bg-[#020617]">
-            {/* Header con Tasa BCV y Logo */}
+            {/* 1. Banner de Modo Soporte (Solo visible si vienes del Panel Maestro) */}
+            {supportCondoId && (
+                <div className="bg-[#f59e0b] text-[#020617] py-2 px-4 shadow-lg border-b border-amber-600 flex justify-between items-center z-[110] sticky top-0">
+                    <div className="flex items-center gap-3">
+                        <AlertTriangle className="w-4 h-4 animate-pulse" />
+                        <span className="text-[11px] font-black uppercase tracking-tight italic">
+                            Modo Soporte: <span className="bg-[#020617] text-white px-2 py-0.5 rounded ml-1">{supportCondoId}</span>
+                        </span>
+                    </div>
+                    <Button 
+                        onClick={exitSupportMode}
+                        variant="secondary"
+                        size="sm"
+                        className="bg-[#020617] text-white hover:bg-slate-800 rounded-full font-black text-[9px] uppercase px-4 h-7"
+                    >
+                        <ArrowLeftCircle className="w-3 h-3 mr-2" /> 
+                        Volver al Mando
+                    </Button>
+                </div>
+            )}
+
+            {/* 2. Header con Tasa BCV */}
             <Header />
 
             <div className="flex flex-1 overflow-hidden">
@@ -103,12 +137,10 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                     navItems={adminNavItems} 
                     mobileNavItems={adminNavItems}
                 >
-                    {/* El padding-bottom evita que el contenido se tape con la barra móvil */}
-                    <div className="pb-24 sm:pb-8 px-4 sm:px-6 pt-6">
+                    <div className="pb-24 sm:pb-8 px-4 sm:px-6 pt-6 bg-slate-50 min-h-full rounded-t-[2.5rem] sm:rounded-none">
                         {children}
                     </div>
                     
-                    {/* Barra de navegación inferior para móviles */}
                     <BottomNavBar items={adminBottomNavItems} pathname={pathname} />
                 </DashboardLayout>
             </div>

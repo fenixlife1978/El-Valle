@@ -75,6 +75,7 @@ function VerifyPaymentsTab() {
     const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
     const { toast } = useToast();
     const { requestAuthorization } = useAuthorization();
+    const { ownerData, loading: authLoading } = useAuth();
     const [ownersMap, setOwnersMap] = useState<Map<string, Owner>>(new Map());
     const [isReceiptPreviewOpen, setIsReceiptPreviewOpen] = useState(false);
     const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
@@ -95,9 +96,13 @@ function VerifyPaymentsTab() {
     }, []);
 
     useEffect(() => {
-        if (ownersMap.size === 0) return;
+        if (ownersMap.size === 0 || authLoading || !ownerData?.condominioId) {
+            if (!authLoading) setLoading(false);
+            return;
+        }
+        
         setLoading(true);
-        const q = query(collection(db, "payments"), orderBy('reportedAt', 'desc'));
+        const q = query(collection(db, "condominios", ownerData.condominioId, "payments"), orderBy('reportedAt', 'desc'));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const paymentsData: FullPayment[] = snapshot.docs.map(doc => {
                 const data = doc.data();
@@ -135,7 +140,7 @@ function VerifyPaymentsTab() {
         fetchSettings();
 
         return () => unsubscribe();
-    }, [toast, ownersMap]);
+    }, [toast, ownersMap, ownerData?.condominioId, authLoading]);
 
     const handleStatusChange = async (id: string, newStatus: PaymentStatus) => {
         const paymentRef = doc(db, 'payments', id);
@@ -811,7 +816,7 @@ function ReportPaymentTab() {
         try {
             const beneficiaries = beneficiaryRows.map(row => ({ ownerId: row.owner!.id, ownerName: row.owner!.name, ...(row.selectedProperty || {}), amount: Number(row.amount) }));
             const paymentData = { paymentDate: Timestamp.fromDate(paymentDate!), exchangeRate, paymentMethod, bank: bank === 'Otro' ? otherBank : bank, reference, totalAmount: Number(totalAmount), beneficiaries, beneficiaryIds: Array.from(new Set(beneficiaries.map(b => b.ownerId))), status: 'pendiente', reportedAt: serverTimestamp(), reportedBy: authUser?.uid || 'unknown_admin', receiptUrl: receiptImage };
-            await addDoc(collection(db, "payments"), paymentData);
+            await addDoc(collection(db, "condominios", authOwnerData.condominioId, "payments"), paymentData);
             resetForm(); setIsInfoDialogOpen(true);
         } catch (error) { console.error("Error submitting payment:", error); toast({ variant: "destructive", title: "Error Inesperado", description: "No se pudo enviar el reporte." });
         } finally { setIsSubmitting(false); }
@@ -821,7 +826,7 @@ function ReportPaymentTab() {
         if (beneficiaryRows.some(row => !row.owner || !row.amount || Number(row.amount) <= 0 || !row.selectedProperty)) return { isValid: false, error: 'Por favor, complete todos los campos para cada beneficiario.' };
         if (Math.abs(balance) > 0.01) return { isValid: false, error: 'El monto total no coincide con la suma de los montos asignados.' };
         try {
-            const q = query(collection(db, "payments"), where("reference", "==", reference), where("totalAmount", "==", Number(totalAmount)), where("paymentDate", "==", Timestamp.fromDate(paymentDate)));
+            const q = query(collection(db, "condominios", authOwnerData.condominioId, "payments"), where("reference", "==", reference), where("totalAmount", "==", Number(totalAmount)), where("paymentDate", "==", Timestamp.fromDate(paymentDate)));
             if (!(await getDocs(q)).empty) return { isValid: false, error: 'Ya existe un reporte de pago con esta misma referencia, monto y fecha.' };
         } catch (dbError) { return { isValid: false, error: "No se pudo verificar si el pago ya existe." }; }
         return { isValid: true };
@@ -902,7 +907,7 @@ function ReportPaymentTab() {
                                                     </div>
                                                     <div className="space-y-2"><Label htmlFor={`amount-${row.id}`}>Monto Asignado (Bs.)</Label><Input id={`amount-${row.id}`} type="number" placeholder="0.00" value={row.amount} onChange={(e) => updateBeneficiaryRow(row.id, { amount: e.target.value })} disabled={loading || !row.owner} /></div>
                                                 </div>
-                                                {row.owner && <div className="mt-4 space-y-2"><Label>Asignar a Propiedad</Label><Select onValueChange={(v) => updateBeneficiaryRow(row.id, { selectedProperty: row.owner!.properties.find(p => `${p.street}-${p.house}` === v) || null })} value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''} disabled={loading || !row.owner}><SelectTrigger><SelectValue placeholder="Seleccione una propiedad..." /></SelectTrigger><SelectContent>{row.owner?.properties && row.owner.properties.length > 0 ? ( row.owner.properties.map((p: any) => (<SelectItem key={`${p.street}-${p.house}`} value={`${p.street}-${p.house}`}>{`${p.street} - ${p.house}`}</SelectItem>)) ) : ( <SelectItem value="no-property" disabled>Sin propiedades registradas</SelectItem> )}</SelectContent></Select></div>}
+                                                {row.owner && <div className="mt-4 space-y-2"><Label>Asignar a Propiedad</Label><Select onValueChange={(v) => updateBeneficiaryRow(row.id, { selectedProperty: row.owner?.properties?.find(p => `${p.street}-${p.house}` === v) || null })} value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''} disabled={loading || !row.owner}><SelectTrigger><SelectValue placeholder="Seleccione una propiedad..." /></SelectTrigger><SelectContent>{row.owner?.properties?.map((p: any) => (<SelectItem key={`${p.street}-${p.house}`} value={`${p.street}-${p.house}`}>{`${p.street} - ${p.house}`}</SelectItem>)) || <SelectItem disabled value="none">Sin propiedades registradas</SelectItem>}</SelectContent></Select></div>}
                                                 <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive" onClick={() => removeBeneficiaryRow(row.id)} disabled={loading}><Trash2 className="h-4 w-4"/></Button>
                                             </Card>
                                         ))}

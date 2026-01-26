@@ -1,18 +1,15 @@
-
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
-import { Loader2, Save, Building2, Upload, DollarSign, KeyRound, LogIn, History, PlusCircle } from "lucide-react";
-import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { doc, getDoc, updateDoc, setDoc } from 'firebase/firestore';
+import { Loader2, Save, Upload, DollarSign, KeyRound, PlusCircle, Building2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from "@/components/ui/badge";
@@ -20,8 +17,35 @@ import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Switch } from '@/components/ui/switch';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { useAuth } from '@/hooks/use-auth'; 
 
-// --- FUNCIONALIDAD DE COMPRESIÓN ---
+// --- DEFINICIONES DE TIPOS (ESTO REPARA LOS ERRORES DE TYPESCRIPT) ---
+type CompanyInfo = {
+    name: string; address: string; phone: string; email: string; logo: string; rif: string;
+};
+
+type ExchangeRate = {
+    id: string; date: string; rate: number; active: boolean;
+};
+
+type LoginSettings = {
+    ownerLoginEnabled: boolean; disabledMessage: string;
+};
+
+type Settings = {
+    companyInfo: CompanyInfo;
+    exchangeRates: ExchangeRate[];
+    condoFee: number;
+    loginSettings: LoginSettings;
+};
+
+const defaultSettings: Settings = {
+    companyInfo: { name: '', address: '', phone: '', email: '', logo: '', rif: '' },
+    exchangeRates: [],
+    condoFee: 0,
+    loginSettings: { ownerLoginEnabled: true, disabledMessage: 'Mantenimiento.' }
+};
+
 const compressImage = (file: File, maxWidth: number, maxHeight: number): Promise<string> => {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -31,57 +55,22 @@ const compressImage = (file: File, maxWidth: number, maxHeight: number): Promise
             img.src = event.target?.result as string;
             img.onload = () => {
                 const canvas = document.createElement('canvas');
-                let width = img.width;
-                let height = img.height;
-
-                if (width > height) {
-                    if (width > maxWidth) {
-                        height *= maxWidth / width;
-                        width = maxWidth;
-                    }
-                } else {
-                    if (height > maxHeight) {
-                        width *= maxHeight / height;
-                        height = maxHeight;
-                    }
-                }
-
-                canvas.width = width;
-                canvas.height = height;
+                let width = img.width; let height = img.height;
+                if (width > height) { if (width > maxWidth) { height *= maxWidth / width; width = maxWidth; } }
+                else { if (height > maxHeight) { width *= maxHeight / height; height = maxHeight; } }
+                canvas.width = width; canvas.height = height;
                 const ctx = canvas.getContext('2d');
                 ctx?.drawImage(img, 0, 0, width, height);
-                
-                // Convertimos a JPG con calidad 0.7 (muy ligero)
-                // Incluso si el original era PNG, esto lo vuelve JPG ligero
-                const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-                resolve(dataUrl);
+                resolve(canvas.toDataURL('image/jpeg', 0.7));
             };
         };
         reader.onerror = (error) => reject(error);
     });
 };
 
-type CompanyInfo = {
-    name: string; address: string; phone: string; email: string;
-    logo: string; website: string; rif: string; bankName: string; accountNumber: string;
-};
-
-type Settings = {
-    companyInfo: CompanyInfo;
-    exchangeRates: any[];
-    condoFee: number;
-    loginSettings: { ownerLoginEnabled: boolean; disabledMessage: string; };
-};
-
-const defaultSettings: Settings = {
-    companyInfo: { name: '', address: '', phone: '', email: '', logo: '', website: '', rif: '', bankName: '', accountNumber: '' },
-    exchangeRates: [],
-    condoFee: 0,
-    loginSettings: { ownerLoginEnabled: true, disabledMessage: 'Mantenimiento.' }
-};
-
 export default function SettingsPage() {
     const { toast } = useToast();
+    const { user } = useAuth();
     const { requestAuthorization } = useAuthorization();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState<Record<string, boolean>>({});
@@ -89,44 +78,55 @@ export default function SettingsPage() {
     const [newRate, setNewRate] = useState({ date: format(new Date(), 'yyyy-MM-dd'), rate: '' });
     const [newAuthKey, setNewAuthKey] = useState('');
 
+    // Casteo de seguridad para evitar error de TypeScript en condominioId
+    const condoId = (user as any)?.condominioId;
+
     useEffect(() => {
         async function fetchSettings() {
+            if (!condoId) return;
             try {
-                const docRef = doc(db, 'config', 'mainSettings');
-                const docSnap = await getDoc(docRef);
+                const docSnap = await getDoc(doc(db, 'condominios', condoId, 'config', 'mainSettings'));
                 if (docSnap.exists()) {
-                    setSettings(prev => ({ ...prev, ...docSnap.data() }));
+                    setSettings(prev => ({ ...prev, ...(docSnap.data() as Settings) }));
+                } else {
+                    await setDoc(doc(db, 'condominios', condoId, 'config', 'mainSettings'), defaultSettings);
                 }
-            } catch (error) {
-                toast({ variant: "destructive", title: "Error de carga" });
-            } finally { setLoading(false); }
+            } catch (error) { 
+                toast({ variant: "destructive", title: "Error de carga" }); 
+            } finally { 
+                setLoading(false); 
+            }
         }
         fetchSettings();
-    }, [toast]);
+    }, [condoId, toast]);
 
     const handleSave = async (section: string, dataToSave: Partial<Settings>) => {
+        if (!condoId) return;
         setSaving(prev => ({ ...prev, [section]: true }));
         try {
-            await updateDoc(doc(db, 'config', 'mainSettings'), dataToSave);
+            await setDoc(doc(db, 'condominios', condoId, 'config', 'mainSettings'), dataToSave, { merge: true });
             toast({ title: "Guardado correctamente" });
-        } catch (error) {
-            toast({ variant: "destructive", title: "Error al guardar" });
+        } catch (e) { 
+            toast({ variant: "destructive", title: "Error al guardar" }); 
         } finally { 
-            setSaving(prev => ({ ...prev, [section]: false }));
+            setSaving(prev => ({ ...prev, [section]: false })); 
         }
     };
-    
+
     const handleSaveSecurity = async (key: string) => {
+        if (!condoId) return;
         requestAuthorization(async () => {
              setSaving(prev => ({ ...prev, security: true }));
              try {
-                await updateDoc(doc(db, 'config', 'authorization'), { key });
-                toast({ title: "Clave de autorización actualizada" });
+                await setDoc(doc(db, 'condominios', condoId, 'config', 'authorization'), { 
+                    key, updatedAt: new Date().toISOString() 
+                }, { merge: true });
+                toast({ title: "PIN actualizado" });
                 setNewAuthKey('');
-             } catch (error) {
-                toast({ variant: "destructive", title: "Error al guardar la clave" });
-             } finally {
-                setSaving(prev => ({ ...prev, security: false }));
+             } catch (e) { 
+                toast({ variant: "destructive", title: "Error" }); 
+             } finally { 
+                setSaving(prev => ({ ...prev, security: false })); 
              }
         });
     };
@@ -136,118 +136,92 @@ export default function SettingsPage() {
         if (file) {
             try {
                 setSaving(prev => ({...prev, company: true }));
-                const compressedBase64 = await compressImage(file, 180, 180);
-                setSettings(prev => ({
-                    ...prev, 
-                    companyInfo: { ...prev.companyInfo, logo: compressedBase64 }
-                }));
-                toast({ title: "Imagen optimizada", description: "El logo se ha reducido para ahorrar espacio." });
-            } catch (error) {
-                toast({ variant: "destructive", title: "Error al procesar imagen" });
-            } finally {
-                setSaving(prev => ({...prev, company: false }));
-            }
+                const base64 = await compressImage(file, 200, 200);
+                const updatedInfo = { ...settings.companyInfo, logo: base64 };
+                setSettings(prev => ({ ...prev, companyInfo: updatedInfo }));
+                await handleSave('company', { companyInfo: updatedInfo });
+            } catch (e) { toast({ variant: "destructive", title: "Error imagen" }); }
+            finally { setSaving(prev => ({...prev, company: false })); }
         }
     };
 
     const handleAddRate = () => {
-        const rateValue = parseFloat(newRate.rate);
-        if (isNaN(rateValue) || rateValue <= 0) return;
-        const updatedRates = [...settings.exchangeRates];
-        updatedRates.forEach(r => r.active = false);
-        const newRateEntry = { id: `${newRate.date}-${Date.now()}`, date: newRate.date, rate: rateValue, active: true };
-        updatedRates.push(newRateEntry);
-        updatedRates.sort((a, b) => b.date.localeCompare(a.date));
+        const val = parseFloat(newRate.rate);
+        if (isNaN(val)) return;
+        const newEntry: ExchangeRate = { id: Date.now().toString(), date: newRate.date, rate: val, active: true };
+        const updatedRates = [newEntry, ...settings.exchangeRates.map(r => ({ ...r, active: false }))];
+        setSettings(prev => ({ ...prev, exchangeRates: updatedRates }));
         handleSave('rates', { exchangeRates: updatedRates });
-        setSettings(prev => ({...prev, exchangeRates: updatedRates}));
         setNewRate({ date: format(new Date(), 'yyyy-MM-dd'), rate: '' });
     };
 
     if (loading) return <div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin" /></div>;
 
     return (
-        <div className="max-w-6xl mx-auto space-y-6 p-4 md:p-6">
-            <header><h1 className="text-3xl font-bold">Configuración</h1></header>
-            <Tabs defaultValue="company">
-                <TabsList className="grid w-full grid-cols-4">
-                    <TabsTrigger value="company">Empresa</TabsTrigger>
-                    <TabsTrigger value="rates">Tasas</TabsTrigger>
-                    <TabsTrigger value="fees">Acceso</TabsTrigger>
-                    <TabsTrigger value="security">Seguridad</TabsTrigger>
+        <div className="max-w-6xl mx-auto space-y-8 p-4 md:p-6 pb-24">
+            <header className="flex items-center gap-4">
+                <div className="bg-[#0081c9] p-3 rounded-2xl shadow-lg shadow-blue-200"><Building2 className="text-white h-8 w-8" /></div>
+                <h1 className="text-4xl font-black italic uppercase text-[#0081c9] tracking-tighter">Panel de Control</h1>
+            </header>
+            
+            <Tabs defaultValue="company" className="w-full">
+                <TabsList className="grid w-full grid-cols-4 h-14 bg-slate-100 p-1 rounded-2xl">
+                    <TabsTrigger value="company" className="rounded-xl font-bold uppercase text-xs">Empresa</TabsTrigger>
+                    <TabsTrigger value="rates" className="rounded-xl font-bold uppercase text-xs">Tasas BCV</TabsTrigger>
+                    <TabsTrigger value="fees" className="rounded-xl font-bold uppercase text-xs">Acceso</TabsTrigger>
+                    <TabsTrigger value="security" className="rounded-xl font-bold uppercase text-xs">Seguridad</TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="company">
-                    <Card>
-                        <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl"><CardTitle>Información</CardTitle></CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="flex items-center gap-4">
-                                {settings.companyInfo.logo && <img src={settings.companyInfo.logo} alt="Logo" className="w-20 h-20 object-contain"/>}
-                                <Input id="logo" type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
-                                <Button variant="outline" onClick={() => document.getElementById('logo')?.click()}>
-                                    <Upload className="mr-2 h-4 w-4"/>Subir Logo (PNG/JPG)
-                                </Button>
+                <TabsContent value="company" className="mt-6">
+                    <Card className="rounded-[2.5rem] border-none shadow-xl overflow-hidden">
+                        <CardHeader className="bg-[#0081c9] text-white p-8">
+                            <CardTitle className="text-2xl font-black italic uppercase tracking-tight">Información de Identidad</CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-8 space-y-8">
+                            <div className="flex flex-col md:flex-row items-center gap-8">
+                                <div className="relative">
+                                    <div className="w-32 h-32 rounded-full border-4 border-slate-100 overflow-hidden bg-slate-50 flex items-center justify-center">
+                                        {settings.companyInfo?.logo ? <img src={settings.companyInfo.logo} className="w-full h-full object-cover" /> : <Upload className="text-slate-300 h-10 w-10" />}
+                                    </div>
+                                    <Button size="icon" className="absolute bottom-0 right-0 rounded-full shadow-lg" onClick={() => document.getElementById('logo-input')?.click()}><Upload className="h-4 w-4" /></Button>
+                                    <input id="logo-input" type="file" className="hidden" onChange={handleAvatarChange} accept="image/*" />
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1">
+                                    <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-400 ml-2">Nombre Comercial</Label><Input className="rounded-xl" value={settings.companyInfo?.name || ''} onChange={e => setSettings({...settings, companyInfo: {...settings.companyInfo, name: e.target.value}})} /></div>
+                                    <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-400 ml-2">RIF Jurídico</Label><Input className="rounded-xl" value={settings.companyInfo?.rif || ''} onChange={e => setSettings({...settings, companyInfo: {...settings.companyInfo, rif: e.target.value}})} /></div>
+                                </div>
                             </div>
-                            <div className="grid md:grid-cols-2 gap-4">
-                                <div>
-                                    <Label htmlFor="companyName">Nombre de la Empresa</Label>
-                                    <Input id="companyName" placeholder="Nombre" value={settings.companyInfo.name} onChange={e => setSettings({...settings, companyInfo: {...settings.companyInfo, name: e.target.value}})} />
-                                </div>
-                                <div>
-                                    <Label htmlFor="companyRif">RIF</Label>
-                                    <Input id="companyRif" placeholder="RIF" value={settings.companyInfo.rif} onChange={e => setSettings({...settings, companyInfo: {...settings.companyInfo, rif: e.target.value}})} />
-                                </div>
-                                <div className="md:col-span-2">
-                                     <Label htmlFor="companyAddress">Dirección Fiscal</Label>
-                                     <Textarea id="companyAddress" placeholder="Dirección Fiscal Completa" value={settings.companyInfo.address} onChange={e => setSettings({...settings, companyInfo: {...settings.companyInfo, address: e.target.value}})} />
-                                </div>
-                                <div>
-                                    <Label htmlFor="companyEmail">Email</Label>
-                                    <Input id="companyEmail" placeholder="Email" value={settings.companyInfo.email} onChange={e => setSettings({...settings, companyInfo: {...settings.companyInfo, email: e.target.value}})} />
-                                </div>
-                                <div>
-                                    <Label htmlFor="companyPhone">Teléfono</Label>
-                                    <Input id="companyPhone" placeholder="Teléfono" value={settings.companyInfo.phone} onChange={e => setSettings({...settings, companyInfo: {...settings.companyInfo, phone: e.target.value}})} />
-                                </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-400 ml-2">Correo Electrónico</Label><Input className="rounded-xl" value={settings.companyInfo?.email || ''} onChange={e => setSettings({...settings, companyInfo: {...settings.companyInfo, email: e.target.value}})} /></div>
+                                <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-400 ml-2">Teléfono de Contacto</Label><Input className="rounded-xl" value={settings.companyInfo?.phone || ''} onChange={e => setSettings({...settings, companyInfo: {...settings.companyInfo, phone: e.target.value}})} /></div>
+                                <div className="md:col-span-2 space-y-1"><Label className="text-[10px] font-black uppercase text-slate-400 ml-2">Dirección Fiscal</Label><Textarea className="rounded-xl min-h-[100px]" value={settings.companyInfo?.address || ''} onChange={e => setSettings({...settings, companyInfo: {...settings.companyInfo, address: e.target.value}})} /></div>
                             </div>
                         </CardContent>
-                        <CardFooter>
-                            <Button onClick={() => handleSave('company', { companyInfo: settings.companyInfo })} disabled={saving['company']}>
-                                {saving['company'] ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4"/>}
-                                Guardar Información
+                        <CardFooter className="p-8 bg-slate-50 flex justify-end">
+                            <Button className="bg-[#0081c9] hover:bg-[#006da8] rounded-full px-8 font-bold" onClick={() => handleSave('company', { companyInfo: settings.companyInfo })} disabled={saving['company']}>
+                                {saving['company'] ? <Loader2 className="animate-spin" /> : <Save className="mr-2 h-4 w-4" />} Actualizar Datos
                             </Button>
                         </CardFooter>
                     </Card>
                 </TabsContent>
 
-                <TabsContent value="rates">
-                    <Card>
-                        <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl">
-                            <CardTitle>Historial y Gestión de Tasas de Cambio</CardTitle>
-                            <CardDescription className="text-primary-foreground/90">Agregue la tasa de cambio del BCV para el día. La más reciente se usará como activa.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="flex gap-4 mb-4 items-end">
-                                <div className="space-y-2 flex-1">
-                                    <Label htmlFor="newRateDate">Fecha</Label>
-                                    <Input id="newRateDate" type="date" value={newRate.date} onChange={e => setNewRate({...newRate, date: e.target.value})} />
-                                </div>
-                                <div className="space-y-2 flex-1">
-                                    <Label htmlFor="newRateValue">Tasa (Bs.)</Label>
-                                    <Input id="newRateValue" type="number" placeholder="Ej: 36.33" value={newRate.rate} onChange={e => setNewRate({...newRate, rate: e.target.value})} />
-                                </div>
-                                <Button onClick={handleAddRate} disabled={saving['rates']}>
-                                    {saving['rates'] ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlusCircle className="h-4 w-4" />}
-                                    <span className="ml-2 hidden sm:inline">Agregar Tasa</span>
-                                </Button>
+                <TabsContent value="rates" className="mt-6">
+                    <Card className="rounded-[2.5rem] border-none shadow-xl">
+                        <CardHeader className="bg-[#0081c9] text-white p-8"><CardTitle className="text-2xl font-black italic uppercase">Gestión de Divisas</CardTitle></CardHeader>
+                        <CardContent className="p-8 space-y-6">
+                            <div className="flex gap-4 items-end bg-slate-50 p-6 rounded-3xl border border-dashed">
+                                <div className="flex-1 space-y-1"><Label className="text-[10px] font-black ml-2">Fecha de Tasa</Label><Input type="date" className="rounded-xl" value={newRate.date} onChange={e => setNewRate({...newRate, date: e.target.value})} /></div>
+                                <div className="flex-1 space-y-1"><Label className="text-[10px] font-black ml-2">Valor BCV (Bs.)</Label><Input type="number" className="rounded-xl" value={newRate.rate} onChange={e => setNewRate({...newRate, rate: e.target.value})} /></div>
+                                <Button className="bg-[#0081c9] rounded-xl h-10" onClick={handleAddRate}><PlusCircle className="h-4 w-4 mr-2" /> Agregar</Button>
                             </div>
                             <Table>
-                                <TableHeader><TableRow><TableHead>Fecha</TableHead><TableHead>Tasa</TableHead><TableHead>Estado</TableHead></TableRow></TableHeader>
+                                <TableHeader><TableRow className="border-none bg-slate-100 rounded-xl"><TableHead className="font-black italic">FECHA</TableHead><TableHead className="font-black italic">TASA</TableHead><TableHead className="font-black italic text-right">ESTADO</TableHead></TableRow></TableHeader>
                                 <TableBody>
-                                    {settings.exchangeRates.map((r: any) => (
-                                        <TableRow key={r.id}>
-                                            <TableCell>{format(parseISO(r.date), 'PPP', { locale: es })}</TableCell>
-                                            <TableCell>Bs. {r.rate}</TableCell>
-                                            <TableCell>{r.active ? <Badge>Activa</Badge> : <Badge variant="outline">Histórica</Badge>}</TableCell>
+                                    {settings.exchangeRates.map((r) => (
+                                        <TableRow key={r.id} className="border-slate-50">
+                                            <TableCell className="font-medium">{format(parseISO(r.date), 'PPP', { locale: es })}</TableCell>
+                                            <TableCell className="font-bold">Bs. {r.rate}</TableCell>
+                                            <TableCell className="text-right">{r.active ? <Badge className="bg-green-500 rounded-full">Activa</Badge> : <Badge variant="outline" className="rounded-full">Historial</Badge>}</TableCell>
                                         </TableRow>
                                     ))}
                                 </TableBody>
@@ -255,92 +229,41 @@ export default function SettingsPage() {
                         </CardContent>
                     </Card>
                 </TabsContent>
-                
-                <TabsContent value="fees">
-                    <Card>
-                        <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl">
-                            <CardTitle>Cuotas y Acceso</CardTitle>
-                            <CardDescription className="text-primary-foreground/90">Gestione los montos de cuotas y el acceso de los propietarios a la plataforma.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-6">
+
+                <TabsContent value="fees" className="mt-6">
+                    <Card className="rounded-[2.5rem] border-none shadow-xl">
+                        <CardHeader className="bg-[#0081c9] text-white p-8"><CardTitle className="text-2xl font-black italic uppercase">Administración de Acceso</CardTitle></CardHeader>
+                        <CardContent className="p-8 space-y-8">
                             <div className="space-y-2">
-                                <Label htmlFor="condoFee">Cuota Condominial Mensual (USD)</Label>
+                                <Label className="text-sm font-bold ml-2">Cuota Condominial (USD)</Label>
                                 <div className="flex gap-2 items-center">
-                                    <DollarSign className="h-5 w-5 text-muted-foreground"/>
-                                    <Input
-                                        id="condoFee"
-                                        type="number"
-                                        className="max-w-xs"
-                                        value={settings.condoFee || ''}
-                                        onChange={e => setSettings({...settings, condoFee: parseFloat(e.target.value) || 0})}
-                                        placeholder="Ej: 25.00"
-                                    />
+                                    <div className="bg-slate-100 p-2 rounded-xl"><DollarSign className="h-6 w-6 text-slate-500"/></div>
+                                    <Input type="number" className="max-w-[200px] text-xl font-bold rounded-xl" value={settings.condoFee || ''} onChange={e => setSettings({...settings, condoFee: parseFloat(e.target.value) || 0})} />
                                 </div>
                             </div>
-                             <div className="space-y-4 rounded-lg border p-4">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <Label htmlFor="ownerLoginEnabled" className="text-base">Acceso de Propietarios</Label>
-                                        <p className="text-sm text-muted-foreground">Habilita o deshabilita el inicio de sesión para los propietarios.</p>
-                                    </div>
-                                    <Switch
-                                        id="ownerLoginEnabled"
-                                        checked={settings.loginSettings?.ownerLoginEnabled}
-                                        onCheckedChange={checked => setSettings({...settings, loginSettings: {...settings.loginSettings, ownerLoginEnabled: checked}})}
-                                    />
-                                </div>
-                                {!settings.loginSettings?.ownerLoginEnabled && (
-                                    <div className="space-y-2">
-                                        <Label htmlFor="disabledMessage">Mensaje de Deshabilitación</Label>
-                                        <Textarea
-                                            id="disabledMessage"
-                                            value={settings.loginSettings?.disabledMessage}
-                                            onChange={e => setSettings({...settings, loginSettings: {...settings.loginSettings, disabledMessage: e.target.value}})}
-                                            placeholder="Ej: El sistema está en mantenimiento. Intente más tarde."
-                                        />
-                                    </div>
-                                )}
+                            <div className="p-6 rounded-3xl bg-slate-50 border flex items-center justify-between">
+                                <div><h3 className="font-black italic uppercase text-slate-700">Acceso Propietarios</h3><p className="text-xs text-slate-400">Permite a los vecinos entrar a la App.</p></div>
+                                <Switch checked={settings.loginSettings?.ownerLoginEnabled} onCheckedChange={c => setSettings({...settings, loginSettings: {...settings.loginSettings, ownerLoginEnabled: c}})} />
                             </div>
                         </CardContent>
-                        <CardFooter>
-                             <Button onClick={() => handleSave('fees', { condoFee: settings.condoFee, loginSettings: settings.loginSettings })} disabled={saving['fees']}>
-                                {saving['fees'] ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4"/>}
-                                Guardar Ajustes de Acceso
-                            </Button>
+                        <CardFooter className="p-8 bg-slate-50 flex justify-end">
+                            <Button className="bg-[#0081c9] rounded-full px-8 font-bold" onClick={() => handleSave('fees', { condoFee: settings.condoFee, loginSettings: settings.loginSettings })}>Guardar Ajustes</Button>
                         </CardFooter>
                     </Card>
                 </TabsContent>
-                
-                <TabsContent value="security">
-                     <Card>
-                        <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl">
-                            <CardTitle>Seguridad</CardTitle>
-                            <CardDescription className="text-primary-foreground/90">Gestione la clave de autorización para acciones críticas.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="authKey">Nueva Clave de Autorización</Label>
-                                <Input
-                                    id="authKey"
-                                    type="password"
-                                    value={newAuthKey}
-                                    onChange={e => setNewAuthKey(e.target.value)}
-                                    placeholder="Ingrese una nueva clave segura"
-                                />
-                                <p className="text-xs text-muted-foreground">
-                                    Esta clave se solicitará para realizar operaciones delicadas como eliminar datos o cambiar configuraciones importantes.
-                                </p>
-                            </div>
+
+                <TabsContent value="security" className="mt-6">
+                    <Card className="rounded-[2.5rem] border-none shadow-xl">
+                        <CardHeader className="bg-red-500 text-white p-8"><CardTitle className="text-2xl font-black italic uppercase">Control de Seguridad (PIN)</CardTitle></CardHeader>
+                        <CardContent className="p-8 space-y-4">
+                            <div className="space-y-2"><Label className="text-sm font-bold ml-2">Nuevo PIN de Autorización</Label><Input type="password" placeholder="••••••" className="rounded-xl text-center text-2xl tracking-[1em]" value={newAuthKey} onChange={e => setNewAuthKey(e.target.value)} /></div>
+                            <p className="text-[10px] text-slate-400 uppercase font-black text-center">Este PIN será requerido para acciones críticas como eliminación de datos.</p>
                         </CardContent>
-                        <CardFooter>
-                             <Button onClick={() => handleSaveSecurity(newAuthKey)} disabled={!newAuthKey || saving['security']}>
-                                {saving['security'] ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <KeyRound className="mr-2 h-4 w-4"/>}
-                                Cambiar Clave
-                            </Button>
+                        <CardFooter className="p-8 bg-slate-50 flex justify-end">
+                            <Button className="bg-red-500 hover:bg-red-600 rounded-full px-8 font-bold text-white" onClick={() => handleSaveSecurity(newAuthKey)} disabled={!newAuthKey}><KeyRound className="mr-2 h-4 w-4"/> Actualizar PIN</Button>
                         </CardFooter>
                     </Card>
                 </TabsContent>
-                
             </Tabs>
         </div>
     );

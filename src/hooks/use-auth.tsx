@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, createContext, useContext, ReactNode } from 'react';
@@ -13,6 +12,7 @@ export interface AuthContextType {
     loading: boolean;
     isSuperAdmin: boolean;
     companyInfo: any | null;
+    activeCondoId: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -24,78 +24,77 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [ownerData, setOwnerData] = useState<any | null>(null);
     const [companyInfo, setCompanyInfo] = useState<any | null>(null);
     const [loading, setLoading] = useState(true);
-    
+    const [activeCondoId, setActiveCondoId] = useState<string | null>(null);
+
     useEffect(() => {
         setMounted(true);
-
         const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
             setUser(firebaseUser);
             if (!firebaseUser) {
                 setOwnerData(null);
+                setActiveCondoId(null);
                 setLoading(false);
             }
         });
+        return () => unsubscribeAuth();
+    }, []);
 
-        const configRef = doc(db, 'config', 'mainSettings');
+    useEffect(() => {
+        if (!user) return;
+
+        const isSuper = user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+        
+        if (isSuper) {
+            const supportId = typeof window !== 'undefined' ? localStorage.getItem('support_condo_id') : null;
+            setOwnerData({ role: 'super-admin', condominioId: supportId });
+            setActiveCondoId(supportId);
+            setLoading(false);
+        } else {
+            const userRef = doc(db, 'users', user.uid);
+            const unsubscribeUser = onSnapshot(userRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    setOwnerData(data);
+                    setActiveCondoId(data.condominioId || null);
+                } else {
+                    setOwnerData(null);
+                    setActiveCondoId(null);
+                }
+                setLoading(false);
+            }, (error) => {
+                console.error("Error fetching user profile:", error);
+                setLoading(false);
+            });
+            return () => unsubscribeUser();
+        }
+    }, [user]);
+
+    useEffect(() => {
+        if (!activeCondoId) {
+            setCompanyInfo(null);
+            return;
+        }
+        const configRef = doc(db, 'condominios', activeCondoId, 'config', 'mainSettings');
         const unsubscribeConfig = onSnapshot(configRef, (docSnap) => {
             if (docSnap.exists()) {
                 setCompanyInfo(docSnap.data().companyInfo || null);
             }
-        }, (error) => {
-            console.warn("Could not fetch company info:", error);
-        });
+        }, () => setCompanyInfo(null));
+        return () => unsubscribeConfig();
+    }, [activeCondoId]);
 
-        return () => {
-            unsubscribeAuth();
-            unsubscribeConfig();
-        };
-    }, []);
+    if (!mounted) return null;
 
-    useEffect(() => {
-        if (!user) {
-            setLoading(false); // Ensure loading is false if there's no user
-            return;
-        }
-
-        const isSuper = user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
-
-        if (isSuper) {
-            setOwnerData({ role: 'super-admin' });
-            setLoading(false);
-            return;
-        }
-
-        const ownerDocRef = doc(db, 'owners', user.uid);
-        const unsubscribeOwner = onSnapshot(ownerDocRef, (docSnap) => {
-            if (docSnap.exists()) {
-                setOwnerData(docSnap.data());
-            } else {
-                setOwnerData(null);
-            }
-            setLoading(false);
-        }, (error) => {
-             console.error("Error fetching owner profile:", error);
-             setOwnerData(null);
-             setLoading(false);
-        });
-
-        return () => unsubscribeOwner();
-    }, [user]);
-
-    // This is the key to fixing the hydration error.
-    // On the server, this will be false, so it will render null.
-    // On the client, it will become true after the first render, and then render the children.
-    if (!mounted) {
-        return null;
-    }
+    const isSuper = user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
 
     const value: AuthContextType = {
         user,
         ownerData,
-        role: ownerData?.role || null,
+        role: isSuper ? 'super-admin' : (ownerData?.role || null),
         loading,
-        isSuperAdmin: user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase(),
-        companyInfo
+        isSuperAdmin: isSuper,
+        companyInfo,
+        activeCondoId
     };
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

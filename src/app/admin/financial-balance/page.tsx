@@ -180,7 +180,7 @@ export default function FinancialBalancePage() {
                 const endDate = new Date(year, month, 0, 23, 59, 59);
     
                 const paymentsQuery = query(
-                    collection(db, "payments"),
+                    collection(db, "condominios", ownerData.condominioId, "payments"),
                     where("status", "==", "aprobado"),
                     where("paymentDate", ">=", Timestamp.fromDate(startDate)),
                     where("paymentDate", "<=", Timestamp.fromDate(endDate))

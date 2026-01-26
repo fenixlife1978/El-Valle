@@ -2,52 +2,46 @@
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { collection, onSnapshot, addDoc, deleteDoc, doc, serverTimestamp, orderBy, query, updateDoc, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { PlusCircle, Loader2, Trash2, XCircle, Edit, Save } from 'lucide-react';
+import { PlusCircle, Loader2, Trash2, XCircle, Edit, Save, AlertCircle, Megaphone } from 'lucide-react';
 import { useAuthorization } from '@/hooks/use-authorization';
-import { useAuth } from '@/hooks/use-auth'; // IMPORTANTE: Para obtener el condominioId
+import { useAuth } from '@/hooks/use-auth';
 import { compressImage } from '@/lib/utils';
 import Image from 'next/image';
 import { Textarea } from '@/components/ui/textarea';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-
-type Anuncio = {
-  id: string;
-  titulo: string;
-  descripcion?: string;
-  urlImagen: string;
-  createdAt: any;
-  condominioId: string;
-};
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 
 export default function BillboardPage() {
   const { toast } = useToast();
   const { requestAuthorization } = useAuthorization();
-  const { ownerData } = useAuth(); // Obtenemos la data del administrador logueado
+  const { ownerData } = useAuth() as any; 
   
-  const [anuncios, setAnuncios] = useState<Anuncio[]>([]);
+  const [anuncios, setAnuncios] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Estados para nuevo anuncio
   const [titulo, setTitulo] = useState('');
   const [descripcion, setDescripcion] = useState('');
   const [imagen, setImagen] = useState<string | null>(null);
 
+  // Estados para edición
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [editingAnuncio, setEditingAnuncio] = useState<Anuncio | null>(null);
+  const [editingAnuncio, setEditingAnuncio] = useState<any | null>(null);
   const [editTitulo, setEditTitulo] = useState('');
   const [editDescripcion, setEditDescripcion] = useState('');
-  const [editImagen, setEditImagen] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!ownerData?.condominioId) return;
+    if (!ownerData?.condominioId) {
+        const timer = setTimeout(() => { if (loading) setLoading(false); }, 3000);
+        return () => clearTimeout(timer);
+    }
 
-    // FILTRO MULTIEMPRESA: Solo anuncios del condominio actual
     const q = query(
       collection(db, "billboard_announcements"), 
       where("condominioId", "==", ownerData.condominioId),
@@ -55,49 +49,33 @@ export default function BillboardPage() {
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Anuncio));
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setAnuncios(data);
       setLoading(false);
-    });
+    }, () => setLoading(false));
 
     return () => unsubscribe();
   }, [ownerData?.condominioId]);
-  
-  const resetForm = () => {
-      setTitulo('');
-      setDescripcion('');
-      setImagen(null);
-  };
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, isEdit = false) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     setIsSubmitting(true);
-    toast({ title: 'Procesando imagen...', description: 'Optimizando archivo.' });
     try {
         const compressedBase64 = await compressImage(file, 800, 800);
-        if (isEdit) {
-            setEditImagen(compressedBase64);
-        } else {
-            setImagen(compressedBase64);
-        }
+        setImagen(compressedBase64);
     } catch (error) {
-        toast({ variant: 'destructive', title: 'Error', description: 'No se pudo procesar la imagen.' });
+        toast({ variant: 'destructive', title: 'Error de imagen' });
     } finally {
         setIsSubmitting(false);
     }
   };
 
   const handleSaveAnuncio = () => {
-    if (!titulo || !imagen || !ownerData?.condominioId) {
-        toast({ variant: 'destructive', title: 'Error', description: 'Faltan datos o ID de condominio.' });
-        return;
-    }
+    if (!titulo || !imagen || !ownerData?.condominioId) return;
     requestAuthorization(async () => {
         setIsSubmitting(true);
         try {
-            // CADA NUEVO ANUNCIO SE GUARDA CON EL ID DEL CONDOMINIO
             await addDoc(collection(db, 'billboard_announcements'), {
                 titulo,
                 descripcion,
@@ -105,8 +83,8 @@ export default function BillboardPage() {
                 condominioId: ownerData.condominioId,
                 createdAt: serverTimestamp(),
             });
-            toast({ title: 'Anuncio Guardado' });
-            resetForm();
+            toast({ title: 'Anuncio publicado' });
+            setTitulo(''); setDescripcion(''); setImagen(null);
         } catch (error) {
             toast({ variant: 'destructive', title: 'Error al guardar' });
         } finally {
@@ -115,163 +93,112 @@ export default function BillboardPage() {
     });
   };
 
-  const handleOpenEditDialog = (anuncio: Anuncio) => {
+  const openEdit = (anuncio: any) => {
     setEditingAnuncio(anuncio);
     setEditTitulo(anuncio.titulo);
-    setEditDescripcion(anuncio.descripcion || '');
-    setEditImagen(anuncio.urlImagen);
+    setEditDescripcion(anuncio.descripcion);
     setIsEditDialogOpen(true);
   };
 
   const handleUpdateAnuncio = () => {
-    if (!editingAnuncio || !editTitulo || !editImagen) return;
-    
+    if (!editingAnuncio) return;
     requestAuthorization(async () => {
-        setIsSubmitting(true);
         try {
-            const anuncioRef = doc(db, 'billboard_announcements', editingAnuncio.id);
-            await updateDoc(anuncioRef, {
+            await updateDoc(doc(db, 'billboard_announcements', editingAnuncio.id), {
                 titulo: editTitulo,
                 descripcion: editDescripcion,
-                urlImagen: editImagen,
+                updatedAt: serverTimestamp(),
             });
-            toast({ title: 'Anuncio Actualizado' });
+            toast({ title: 'Anuncio actualizado' });
             setIsEditDialogOpen(false);
         } catch (error) {
             toast({ variant: 'destructive', title: 'Error al actualizar' });
-        } finally {
-            setIsSubmitting(false);
         }
     });
   };
-  
-  const handleDeleteAnuncio = (id: string) => {
-      if(window.confirm('¿Deseas eliminar este anuncio?')) {
-        requestAuthorization(async () => {
-            try {
-                await deleteDoc(doc(db, 'billboard_announcements', id));
-                toast({ title: 'Anuncio eliminado' });
-            } catch (error) {
-                toast({ variant: 'destructive', title: 'Error al eliminar' });
-            }
-        });
-      }
-  };
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold font-headline">Gestión de Cartelera Digital</h1>
-        <p className="text-muted-foreground">Administra los anuncios de tu condominio.</p>
+    <div className="space-y-8 p-4">
+      <div className="flex items-center gap-4">
+        <img src="/logo-efas.png" className="h-14 w-14 object-contain" alt="EFAS" />
+        <div>
+          <h1 className="text-3xl font-black italic text-[#0081c9] tracking-tighter">
+            CARTELERA <span className="text-[#f59e0b]">INFORMATIVA</span>
+          </h1>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Gestión de Comunicados EFAS</p>
+        </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Nuevo Anuncio</CardTitle>
-          <CardDescription>Crea un anuncio para los residentes de su edificio.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-            <div className="space-y-2">
-                <Label htmlFor="titulo">Título del Anuncio</Label>
-                <Input id="titulo" value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Ej: Asamblea Extraordinaria" disabled={isSubmitting} />
-            </div>
-             <div className="space-y-2">
-                <Label htmlFor="descripcion">Descripción</Label>
-                <Textarea id="descripcion" value={descripcion} onChange={(e) => setDescripcion(e.target.value)} placeholder="Detalles del anuncio..." disabled={isSubmitting} />
-            </div>
-            <div className="space-y-2">
-                <Label htmlFor="imagen-upload">Imagen del Anuncio</Label>
-                <Input id="imagen-upload" type="file" accept="image/png, image/jpeg" onChange={(e) => handleImageUpload(e, false)} disabled={isSubmitting} />
-            </div>
-            {imagen && (
-                <div className="space-y-2">
-                     <div className="relative w-full max-w-sm border p-2 rounded-md bg-muted/50">
-                        <Image src={imagen} alt="Vista previa" width={400} height={400} className="w-full h-auto object-contain rounded" />
-                        <Button variant="destructive" size="icon" className="absolute -top-2 -right-2 h-7 w-7 rounded-full" onClick={() => setImagen(null)} disabled={isSubmitting}>
-                            <XCircle className="h-5 w-5" />
-                        </Button>
-                    </div>
-                </div>
+      <Card className="rounded-[2rem] border-none shadow-sm overflow-hidden bg-white">
+        <CardHeader><CardTitle className="text-lg">Crear Aviso Nuevo</CardTitle></CardHeader>
+        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-4">
+            <Input placeholder="Título" value={titulo} onChange={(e) => setTitulo(e.target.value)} className="rounded-xl" />
+            <Textarea placeholder="Descripción..." value={descripcion} onChange={(e) => setDescripcion(e.target.value)} className="rounded-xl min-h-[100px]" />
+          </div>
+          <div className="border-2 border-dashed border-slate-100 rounded-[2rem] p-4 flex flex-col items-center justify-center bg-slate-50/50">
+            {imagen ? (
+              <div className="relative w-full aspect-video">
+                <Image src={imagen} alt="Preview" fill className="object-contain rounded-xl" />
+                <Button variant="destructive" size="icon" className="absolute -top-2 -right-2 rounded-full h-8 w-8" onClick={() => setImagen(null)}><XCircle className="h-4 w-4" /></Button>
+              </div>
+            ) : (
+              <Label className="cursor-pointer text-center">
+                <Input type="file" className="hidden" onChange={handleImageUpload} />
+                <PlusCircle className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+                <span className="text-slate-400 font-bold text-xs uppercase">Cargar Banner</span>
+              </Label>
             )}
+          </div>
         </CardContent>
-        <CardFooter>
-            <Button onClick={handleSaveAnuncio} disabled={isSubmitting || !titulo || !imagen}>
-                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <PlusCircle className="mr-2 h-4 w-4"/>}
-                Publicar Anuncio
-            </Button>
+        <CardFooter className="flex justify-end bg-slate-50/50 p-4">
+          <Button onClick={handleSaveAnuncio} disabled={isSubmitting || !titulo || !imagen} className="bg-[#0081c9] rounded-full px-8">
+            {isSubmitting ? <Loader2 className="animate-spin h-4 w-4" /> : "Publicar Ahora"}
+          </Button>
         </CardFooter>
       </Card>
 
-      <Card>
-        <CardHeader>
-            <CardTitle>Anuncios de mi Condominio</CardTitle>
-            <CardDescription>Lista de anuncios publicados actualmente.</CardDescription>
-        </CardHeader>
-        <CardContent>
-            {loading ? (
-                <div className="flex justify-center items-center h-24"><Loader2 className="h-8 w-8 animate-spin text-primary"/></div>
-            ) : anuncios.length === 0 ? (
-                <p className="text-center text-muted-foreground">No hay anuncios activos para este condominio.</p>
-            ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {anuncios.map((anuncio) => (
-                        <Card key={anuncio.id} className="overflow-hidden flex flex-col">
-                            <div className="aspect-square relative w-full">
-                                <Image src={anuncio.urlImagen} alt={anuncio.titulo} fill className="object-cover" />
-                            </div>
-                            <div className="p-4 flex flex-col flex-grow">
-                                <h3 className="font-bold">{anuncio.titulo}</h3>
-                                <p className="text-sm text-muted-foreground truncate flex-grow">{anuncio.descripcion || 'Sin descripción'}</p>
-                                <div className="flex gap-2 mt-4">
-                                     <Button variant="outline" size="sm" className="flex-1" onClick={() => handleOpenEditDialog(anuncio)}>
-                                        <Edit className="mr-2 h-4 w-4"/> Editar
-                                    </Button>
-                                    <Button variant="destructive" size="sm" className="flex-1" onClick={() => handleDeleteAnuncio(anuncio.id)}>
-                                        <Trash2 className="mr-2 h-4 w-4"/>
-                                    </Button>
-                                </div>
-                            </div>
-                        </Card>
-                    ))}
-                </div>
-            )}
-        </CardContent>
-      </Card>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {anuncios.map((anuncio) => (
+          <Card key={anuncio.id} className="rounded-[2rem] overflow-hidden border-none shadow-sm bg-white group hover:shadow-md transition-all">
+            <div className="aspect-video relative overflow-hidden">
+              <Image src={anuncio.urlImagen} alt={anuncio.titulo} fill className="object-cover group-hover:scale-105 transition-transform" />
+            </div>
+            <div className="p-5">
+              <h3 className="font-bold text-slate-700 leading-tight">{anuncio.titulo}</h3>
+              <p className="text-xs text-slate-400 mt-2 line-clamp-2">{anuncio.descripcion}</p>
+              <div className="flex gap-2 mt-4 pt-4 border-t border-slate-50">
+                <Button variant="outline" size="sm" className="flex-1 rounded-full text-[#0081c9] border-blue-100" onClick={() => openEdit(anuncio)}>
+                  <Edit className="h-3 w-3 mr-2" /> Editar
+                </Button>
+                <Button variant="destructive" size="icon" className="rounded-full h-8 w-8" onClick={() => requestAuthorization(() => deleteDoc(doc(db, 'billboard_announcements', anuncio.id)))}>
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </Card>
+        ))}
+      </div>
 
-        {/* Dialogo de Edición */}
-        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-            <DialogContent className="sm:max-w-lg">
-                <DialogHeader>
-                    <DialogTitle>Editar Anuncio</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4 py-4">
-                    <div className="space-y-2">
-                        <Label>Título</Label>
-                        <Input value={editTitulo} onChange={(e) => setEditTitulo(e.target.value)} disabled={isSubmitting} />
-                    </div>
-                    <div className="space-y-2">
-                        <Label>Descripción</Label>
-                        <Textarea value={editDescripcion} onChange={(e) => setEditDescripcion(e.target.value)} disabled={isSubmitting} />
-                    </div>
-                    <div className="space-y-2">
-                        <Label>Imagen</Label>
-                        <Input type="file" accept="image/png, image/jpeg" onChange={(e) => handleImageUpload(e, true)} disabled={isSubmitting} />
-                    </div>
-                    {editImagen && (
-                        <div className="relative w-full max-w-xs border p-2 rounded-md">
-                            <Image src={editImagen} alt="Edit preview" width={300} height={300} className="w-full h-auto rounded" />
-                        </div>
-                    )}
-                </div>
-                <DialogFooter>
-                    <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>Cancelar</Button>
-                    <Button onClick={handleUpdateAnuncio} disabled={isSubmitting}>
-                        {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                        Guardar
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="rounded-[2rem]">
+          <DialogHeader><DialogTitle>Editar Anuncio</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Título</Label>
+              <Input value={editTitulo} onChange={(e) => setEditTitulo(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Descripción</Label>
+              <Textarea value={editDescripcion} onChange={(e) => setEditDescripcion(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setIsEditDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={handleUpdateAnuncio} className="bg-[#0081c9] rounded-full">Guardar Cambios</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

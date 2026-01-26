@@ -43,7 +43,7 @@ export default function WelcomePage() {
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="border border-slate-200 p-1 rounded-lg shadow-sm bg-white">
-              <img src="/og-banner.png" alt="EFAS Logo" className="w-10 h-10 object-contain" />
+              <img src="/logo-efas.png" alt="EFAS Logo" className="w-10 h-10 object-contain" />
             </div>
             <div className="flex flex-col">
               <h1 className="font-montserrat text-2xl font-black italic tracking-tighter leading-none">
@@ -56,10 +56,12 @@ export default function WelcomePage() {
           </div>
           
           <div className="flex items-center gap-6 md:gap-10">
-            <Link href="/login-propietario" className="text-sm font-bold text-slate-600 hover:text-[#0081c9] transition-colors">
+            {/* CORRECCIÓN: Apuntar a /login con el parámetro de propietario */}
+            <Link href="/login?role=owner" className="text-sm font-bold text-slate-600 hover:text-[#0081c9] transition-colors">
               Propietarios
             </Link>
-            <Link href="/login" className="bg-[#0081c9] hover:bg-[#006da8] text-white px-7 py-2.5 rounded-full text-[11px] font-black tracking-widest uppercase transition-all shadow-lg shadow-blue-500/20">
+            {/* CORRECCIÓN: Apuntar a /login con el parámetro de admin */}
+            <Link href="/login?role=admin" className="bg-[#0081c9] hover:bg-[#006da8] text-white px-7 py-2.5 rounded-full text-[11px] font-black tracking-widest uppercase transition-all shadow-lg shadow-blue-500/20">
               Acceso Admin
             </Link>
           </div>
@@ -79,25 +81,44 @@ export default function WelcomePage() {
             Potencia tu <br /> comunidad
           </h2>
 
-          <div className="relative inline-block mb-10 group">
-             <div className="absolute -inset-10 bg-blue-500/5 blur-3xl rounded-full group-hover:bg-blue-500/10 transition-colors"></div>
-             <div className="relative bg-white p-5 rounded-[2.5rem] shadow-[0_32px_64px_-12px_rgba(0,0,0,0.14)] border border-slate-50 transition-transform hover:scale-105 duration-500">
-               <img 
-                 src="/og-banner.png" 
-                 alt="Logo Central EFAS" 
-                 className="w-40 h-40 md:w-60 md:h-60 object-contain" 
-               />
-             </div>
+          <div className="flex flex-col md:flex-row items-center justify-center gap-8 mb-16">
+            <div className="relative inline-block group">
+               <div className="absolute -inset-10 bg-blue-500/5 blur-3xl rounded-full group-hover:bg-blue-500/10 transition-colors"></div>
+               <div className="relative bg-white p-5 rounded-[2.5rem] shadow-[0_32px_64px_-12px_rgba(0,0,0,0.14)] border border-slate-50 transition-transform hover:scale-105 duration-500">
+                 <img 
+                   src="/logo-efas.png" 
+                   alt="Logo Central EFAS" 
+                   className="w-40 h-40 md:w-60 md:h-60 object-contain" 
+                 />
+               </div>
+            </div>
+
+            {/* BOTONES DE ACCIÓN RÁPIDA EN EL HERO */}
+            <div className="flex flex-col gap-4">
+               <Link href="/login?role=admin" className="flex items-center justify-between gap-6 bg-slate-900 text-white px-8 py-5 rounded-2xl hover:bg-[#0081c9] transition-all group">
+                  <div className="text-left">
+                    <p className="text-[10px] font-black uppercase text-slate-400 group-hover:text-blue-100">Entrar como</p>
+                    <p className="font-montserrat font-black italic uppercase">Administrador</p>
+                  </div>
+                  <ArrowRight className="w-5 h-5 group-hover:translate-x-2 transition-transform" />
+               </Link>
+               <Link href="/login?role=owner" className="flex items-center justify-between gap-6 bg-white border border-slate-200 px-8 py-5 rounded-2xl hover:border-[#0081c9] transition-all group">
+                  <div className="text-left">
+                    <p className="text-[10px] font-black uppercase text-slate-400 group-hover:text-[#0081c9]">Entrar como</p>
+                    <p className="font-montserrat font-black italic uppercase text-slate-700">Propietario</p>
+                  </div>
+                  <ArrowRight className="w-5 h-5 group-hover:translate-x-2 transition-transform text-slate-300 group-hover:text-[#0081c9]" />
+               </Link>
+            </div>
           </div>
 
-          {/* TEXTO DESCRIPTIVO SOLICITADO */}
           <p className="max-w-2xl mx-auto text-slate-500 text-lg md:text-xl font-medium leading-relaxed font-inter mb-20">
             El más robusto <span className="text-[#0f172a] font-bold">Sistema de Autogestión de Condominios</span> pensado para la transparencia, el control financiero y la comodidad de cada propietario.
           </p>
         </div>
 
         {/* SECCIÓN MÓDULOS */}
-        <div className="pt-24 border-t border-slate-50">
+        <div className="pt-24 border-t border-slate-100">
           <div className="text-center mb-20">
             <h3 className="font-montserrat text-3xl font-black italic text-[#0f172a] uppercase tracking-tighter mb-4">
               Módulos Integrados

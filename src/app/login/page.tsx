@@ -3,152 +3,147 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Eye, EyeOff } from 'lucide-react';
+import { Loader2, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { useGatekeeper } from '@/hooks/use-gatekeeper';
 import Link from 'next/link';
-import { Skeleton } from '@/components/ui/skeleton';
-
-const ADMIN_EMAIL = 'vallecondo@gmail.com';
 
 function LoginPage() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { toast } = useToast();
+    const { verifyAccess } = useGatekeeper();
+
+    const roleParam = searchParams?.get('role') || null;
+    const isValidRole = roleParam === 'admin' || roleParam === 'owner';
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
-    const [role, setRole] = useState<'owner' | 'admin' | null>(null);
     const [showPassword, setShowPassword] = useState(false);
 
     useEffect(() => {
-        const roleParam = searchParams?.get('role') ?? null;
-        if (roleParam === 'admin' || roleParam === 'owner') {
-            setRole(roleParam);
-        } else {
-            router.replace('/welcome');
+        if (!isValidRole) {
+            const timer = setTimeout(() => {
+                const currentParams = new URLSearchParams(window.location.search);
+                const currentRole = currentParams.get('role');
+                if (currentRole !== 'admin' && currentRole !== 'owner') {
+                    router.replace('/welcome');
+                }
+            }, 1000); 
+            return () => clearTimeout(timer);
         }
-    }, [searchParams, router]);
+    }, [isValidRole, router]);
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
-        const cleanEmail = email.trim().toLowerCase();
-
-        if (!email || !password || !role) {
-            toast({ variant: 'destructive', title: 'Campos incompletos' });
-            return;
-        }
+        if (!isValidRole) return;
 
         setLoading(true);
-
         try {
-            await signInWithEmailAndPassword(auth, cleanEmail, password);
-            toast({ title: 'Sesión Iniciada', description: 'Redirigiendo...' });
-            
-            // La redirección ahora es manejada por el AuthGuard en el layout
-            // para evitar bucles y asegurar que los datos del usuario estén cargados.
-            
-        } catch (error: any) {
-            console.error("Login error:", error);
-            let description = 'Ocurrió un error. Verifique sus credenciales.';
-            
-            if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-                description = 'Correo o contraseña incorrectos.';
-            } else if (error.code === 'auth/too-many-requests') {
-                description = 'Cuenta temporalmente bloqueada. Intente más tarde.';
+            const userCredential = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
+            const user = userCredential.user;
+
+            if (user.email === 'vallecondo@gmail.com') {
+                toast({ title: 'Modo Super Admin' });
+                router.push('/super-admin');
+                return;
             }
 
+            const userDoc = await getDoc(doc(db, 'users', user.uid));
+            if (!userDoc.exists()) throw new Error('Perfil no encontrado.');
+
+            const userData = userDoc.data();
+            const condoId = userData?.condominioId;
+
+            if (condoId) {
+                const isAllowed = await verifyAccess(condoId);
+                if (!isAllowed) return;
+            }
+
+            toast({ title: 'Éxito', description: 'Iniciando sesión...' });
+            router.push(roleParam === 'admin' ? '/admin/dashboard' : '/owner/dashboard');
+
+        } catch (error: any) {
             toast({
                 variant: 'destructive',
                 title: 'Error de Acceso',
-                description: description,
+                description: 'Verifique sus credenciales.',
             });
         } finally {
             setLoading(false);
         }
     };
 
-    if (!role) {
+    if (!isValidRole) {
         return (
-             <div className="min-h-screen flex items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <div className="min-h-screen flex flex-col items-center justify-center bg-[#020617] gap-4">
+                <Loader2 className="h-10 w-10 animate-spin text-[#0081c9]" />
+                <p className="text-[10px] font-black uppercase text-slate-500 italic tracking-[0.3em]">Verificando Acceso...</p>
             </div>
         );
     }
 
     return (
-        <main className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
-            <div className="text-center mb-6">
-                <div className="w-24 h-24 rounded-full mx-auto overflow-hidden bg-card border flex items-center justify-center">
-                    <img src={'/logo-efas.png'} alt="Company Logo" className="w-full h-full object-cover" />
-                </div>
+        <main className="min-h-screen flex flex-col items-center justify-center bg-[#020617] p-4 font-montserrat">
+            <div className="mb-8 text-center">
+                <h1 className="text-4xl font-black italic uppercase tracking-tighter">
+                    <span className="text-[#f59e0b]">EFAS</span>
+                    <span className="text-[#0081c9]">CondoSys</span>
+                </h1>
+                <p className="text-[9px] text-slate-500 font-bold tracking-[0.4em] uppercase mt-2">Autogestión de Condominios</p>
             </div>
-            
-            <Card className="w-full max-w-sm">
-                <CardHeader className="text-center">
-                    <CardTitle>ValleCondo</CardTitle>
-                    <CardDescription>
-                        Entrar como {role === 'admin' ? 'Administrador' : 'Propietario'}
-                    </CardDescription>
+
+            <Card className="w-full max-w-sm border-none shadow-2xl rounded-[2.5rem] overflow-hidden bg-slate-900 text-white">
+                <CardHeader className="text-center pb-2 pt-8">
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-500/10 text-sky-400 text-[9px] font-black uppercase tracking-wider mb-2 mx-auto">
+                        <AlertCircle className="w-3 h-3" /> Acceso {roleParam === 'admin' ? 'Administrativo' : 'Propietario'}
+                    </div>
                 </CardHeader>
-                <form onSubmit={handleLogin}>
-                    <CardContent className="space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="email">Correo Electrónico</Label>
+
+                <form onSubmit={handleLogin} className="p-2">
+                    <CardContent className="space-y-4 pt-4">
+                        <div className="space-y-1.5">
+                            <Label className="text-[10px] font-black uppercase text-slate-500 ml-1">E-mail</Label>
                             <Input 
-                                id="email" 
                                 type="email" 
-                                placeholder="tu@email.com" 
-                                value={email} 
-                                onChange={(e) => setEmail(e.target.value)} 
-                                required 
+                                className="h-12 rounded-2xl border-slate-800 bg-slate-950 text-white focus-visible:ring-[#0081c9]"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                required
                             />
                         </div>
-                        <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                                <Label htmlFor="password">Contraseña</Label>
-                                <Button variant="link" size="sm" asChild className="p-0 h-auto text-xs">
-                                    <Link href="/forgot-password">¿Olvidaste tu contraseña?</Link>
-                                </Button>
-                            </div>
+
+                        <div className="space-y-1.5">
+                            <Label className="text-[10px] font-black uppercase text-slate-500 ml-1">Contraseña</Label>
                             <div className="relative">
-                                <Input
-                                    id="password"
+                                <Input 
                                     type={showPassword ? "text" : "password"}
+                                    className="h-12 rounded-2xl border-slate-800 bg-slate-950 text-white focus-visible:ring-[#0081c9] pr-12"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
                                     required
-                                    className="pr-10"
                                 />
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
-                                    onClick={() => setShowPassword(!showPassword)}
-                                >
-                                    {showPassword ? <EyeOff className="h-4 w-4"/> : <Eye className="h-4 w-4"/>}
-                                </Button>
+                                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500">
+                                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                </button>
                             </div>
                         </div>
                     </CardContent>
-                    <CardFooter className="flex flex-col gap-4">
-                        <Button type="submit" className="w-full" disabled={loading}>
-                            {loading ? (
-                                <>
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    Verificando...
-                                </>
-                            ) : 'Ingresar'}
+
+                    <CardFooter className="flex flex-col gap-3 pb-8 pt-4">
+                        <Button type="submit" disabled={loading} className="w-full h-14 bg-[#0081c9] hover:bg-sky-700 text-white rounded-[1.25rem] font-black text-lg shadow-lg shadow-sky-500/20">
+                            {loading ? <Loader2 className="animate-spin" /> : 'INICIAR SESIÓN'}
                         </Button>
-                        <Button variant="link" size="sm" asChild className="text-xs">
-                            <Link href="/welcome">Cambiar de rol</Link>
-                        </Button>
+                        <Link href="/welcome" className="text-[10px] font-black uppercase text-slate-500 hover:text-[#f59e0b] tracking-widest text-center transition-colors">
+                            ← Volver al inicio
+                        </Link>
                     </CardFooter>
                 </form>
             </Card>
@@ -157,13 +152,5 @@ function LoginPage() {
 }
 
 export default function LoginPageWithSuspense() {
-    return (
-        <Suspense fallback={
-            <div className="min-h-screen flex items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-        }>
-            <LoginPage />
-        </Suspense>
-    );
+    return <Suspense fallback={null}><LoginPage /></Suspense>;
 }
