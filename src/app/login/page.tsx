@@ -1,10 +1,9 @@
-
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
@@ -13,8 +12,8 @@ import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
 import Link from 'next/link';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
-import { Skeleton } from '@/components/ui/skeleton';
 
+// Tu correo de Super Admin
 const ADMIN_EMAIL = 'vallecondo@gmail.com';
 
 function LoginPage() {
@@ -28,9 +27,6 @@ function LoginPage() {
     const [role, setRole] = useState<'owner' | 'admin' | null>(null);
     const [showPassword, setShowPassword] = useState(false);
 
-    const [logoUrl, setLogoUrl] = useState<string | null>(null);
-    const [loadingLogo, setLoadingLogo] = useState(true);
-
     useEffect(() => {
         const roleParam = searchParams?.get('role') ?? null;
         if (roleParam === 'admin' || roleParam === 'owner') {
@@ -38,24 +34,6 @@ function LoginPage() {
         } else {
             router.replace('/welcome');
         }
-
-        async function fetchLogo() {
-          try {
-            const settingsRef = doc(db, 'config', 'mainSettings');
-            const docSnap = await getDoc(settingsRef);
-            if (docSnap.exists()) {
-              const settings = docSnap.data();
-              if (settings.companyInfo && settings.companyInfo.logo) {
-                setLogoUrl(settings.companyInfo.logo);
-              }
-            }
-          } catch (error) {
-            console.warn("Logo no cargado por falta de permisos.");
-          } finally {
-            setLoadingLogo(false);
-          }
-        }
-        fetchLogo();
     }, [searchParams, router]);
 
     const handleLogin = async (e: React.FormEvent) => {
@@ -70,15 +48,22 @@ function LoginPage() {
         setLoading(true);
 
         try {
-            // --- BYPASS PARA SUPER ADMIN ---
+            // --- 1. PRIORIDAD ABSOLUTA: BYPASS PARA SUPER ADMIN ---
             if (cleanEmail === ADMIN_EMAIL) {
                 await signInWithEmailAndPassword(auth, cleanEmail, password);
-                toast({ title: 'Bienvenido, Super Admin', description: 'Accediendo al panel maestro...' });
-                router.push('/admin/dashboard'); 
+                
+                // Limpiamos rastro de modo soporte previo para evitar conflictos
+                localStorage.removeItem('support_condo_id');
+                
+                toast({ title: 'Acceso Maestro', description: 'Bienvenido, Super Admin.' });
+                
+                // REDIRECCIÓN CORRECTA AL PANEL MAESTRO
+                router.push('/super-admin'); 
                 return;
             }
 
-            // --- LÓGICA NORMAL PARA OTROS USUARIOS ---
+            // --- 2. LÓGICA PARA OTROS USUARIOS ---
+            // Verificamos si el acceso de propietarios está habilitado globalmente
             const settingsRef = doc(db, 'config', 'mainSettings');
             const settingsSnap = await getDoc(settingsRef);
             
@@ -95,20 +80,23 @@ function LoginPage() {
                 }
             }
 
+            // Validación de Rol en la base de datos (Colección 'owners')
             let userRoleFromDB: string | null = null;
             const q = query(collection(db, "owners"), where("email", "==", cleanEmail));
             const querySnapshot = await getDocs(q);
             
-            if (!querySnapshot.empty) {
-                userRoleFromDB = querySnapshot.docs[0].data().role;
+            if (querySnapshot.empty) {
+                throw new Error("user-not-found");
             }
-            
+
+            userRoleFromDB = querySnapshot.docs[0].data().role;
             const expectedRole = role === 'admin' ? 'administrador' : 'propietario';
 
             if (userRoleFromDB !== expectedRole) {
                 throw new Error("role-mismatch");
             }
 
+            // Inicio de sesión final
             await signInWithEmailAndPassword(auth, cleanEmail, password);
             
             toast({ title: 'Sesión Iniciada', description: 'Redirigiendo...' });
@@ -124,11 +112,13 @@ function LoginPage() {
             let description = 'Error de autenticación. Verifique sus datos.';
             
             if (error.message === "role-mismatch") {
-                description = `No tienes permisos de ${role}.`;
+                description = `Este correo no está registrado como ${role === 'admin' ? 'Administrador' : 'Propietario'}.`;
+            } else if (error.message === "user-not-found") {
+                description = 'El correo no existe en nuestra base de datos.';
             } else if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
                 description = 'Correo o contraseña incorrectos.';
             } else if (error.code === 'auth/too-many-requests') {
-                description = 'Cuenta temporalmente bloqueada por muchos intentos. Intente más tarde.';
+                description = 'Cuenta temporalmente bloqueada. Intente más tarde.';
             }
 
             toast({
@@ -143,65 +133,68 @@ function LoginPage() {
    
     if (!role) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-background">
-                <Loader2 className="h-8 w-8 animate-spin" />
+            <div className="min-h-screen flex items-center justify-center bg-[#020617]">
+                <Loader2 className="h-8 w-8 animate-spin text-[#0081c9]" />
             </div>
         );
     }
 
     return (
-        <main className="min-h-screen flex flex-col items-center justify-center bg-[#020617] p-4 font-montserrat">
-            <div className="mb-8 text-center">
+        <main className="min-h-screen flex flex-col items-center justify-center bg-[#020617] p-4 font-montserrat relative overflow-hidden">
+            {/* Fondo decorativo */}
+            <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-[#0081c9]/10 blur-[100px] rounded-full"></div>
+
+            <div className="mb-8 text-center relative z-10">
                  <h1 className="text-4xl font-black italic uppercase tracking-tighter">
                     <span className="text-[#f59e0b]">EFAS</span>
-                    <span className="text-[#0081c9]">CondoSys</span>
+                    <span className="text-[#0081c9]"> CondoSys</span>
                 </h1>
-                <p className="text-[9px] text-slate-500 font-bold tracking-[0.4em] uppercase mt-2">Autogestión de Condominios</p>
+                <p className="text-[9px] text-slate-500 font-black tracking-[0.4em] uppercase mt-2 italic">Autogestión de Condominios</p>
             </div>
 
-            <Card className="w-full max-w-sm border-none shadow-2xl rounded-[2.5rem] overflow-hidden bg-slate-900 text-white">
+            <Card className="w-full max-w-sm border-slate-800 shadow-2xl rounded-[2.5rem] overflow-hidden bg-slate-900/50 backdrop-blur-xl text-white relative z-10">
                 <CardHeader className="text-center pb-2 pt-8">
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-500/10 text-sky-400 text-[9px] font-black uppercase tracking-wider mb-2 mx-auto">
-                        <AlertCircle className="w-3 h-3" /> Acceso {role === 'admin' ? 'Administrativo' : 'Propietario'}
+                    <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-sky-500/10 text-sky-400 text-[10px] font-black uppercase tracking-wider mb-2 mx-auto border border-sky-500/20">
+                        <AlertCircle className="w-3.5 h-3.5" /> Acceso {role === 'admin' ? 'Administrativo' : 'Propietario'}
                     </div>
                 </CardHeader>
 
-                <form onSubmit={handleLogin} className="p-2">
-                    <CardContent className="space-y-4 pt-4">
-                        <div className="space-y-1.5">
-                            <Label className="text-[10px] font-black uppercase text-slate-500 ml-1">E-mail</Label>
+                <form onSubmit={handleLogin}>
+                    <CardContent className="space-y-5 pt-4 px-8">
+                        <div className="space-y-2">
+                            <Label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">E-mail Corporativo</Label>
                             <Input 
                                 type="email" 
-                                className="h-12 rounded-2xl border-slate-800 bg-slate-950 text-white focus-visible:ring-[#0081c9]"
+                                className="h-12 rounded-2xl border-slate-700 bg-slate-950/50 text-white focus-visible:ring-[#0081c9] transition-all"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
                             />
                         </div>
 
-                        <div className="space-y-1.5">
-                            <Label className="text-[10px] font-black uppercase text-slate-500 ml-1">Contraseña</Label>
+                        <div className="space-y-2">
+                            <Label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Contraseña</Label>
                             <div className="relative">
                                 <Input 
                                     type={showPassword ? "text" : "password"}
-                                    className="h-12 rounded-2xl border-slate-800 bg-slate-950 text-white focus-visible:ring-[#0081c9] pr-12"
+                                    className="h-12 rounded-2xl border-slate-700 bg-slate-950/50 text-white focus-visible:ring-[#0081c9] pr-12 transition-all"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
                                     required
                                 />
-                                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500">
+                                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors">
                                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                                 </button>
                             </div>
                         </div>
                     </CardContent>
 
-                    <CardFooter className="flex flex-col gap-3 pb-8 pt-4">
-                        <Button type="submit" disabled={loading} className="w-full h-14 bg-[#0081c9] hover:bg-sky-700 text-white rounded-[1.25rem] font-black text-lg shadow-lg shadow-sky-500/20">
-                            {loading ? <Loader2 className="animate-spin" /> : 'INICIAR SESIÓN'}
+                    <CardFooter className="flex flex-col gap-4 pb-10 pt-6 px-8">
+                        <Button type="submit" disabled={loading} className="w-full h-14 bg-[#0081c9] hover:bg-sky-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-sky-900/20 transition-all">
+                            {loading ? <Loader2 className="animate-spin w-5 h-5" /> : 'Acceder al Sistema'}
                         </Button>
-                        <Link href="/welcome" className="text-[10px] font-black uppercase text-slate-500 hover:text-[#f59e0b] tracking-widest text-center transition-colors">
-                            ← Volver al inicio
+                        <Link href="/welcome" className="text-[10px] font-black uppercase text-slate-500 hover:text-[#f59e0b] tracking-[0.2em] text-center transition-colors">
+                            ← Volver al Portal
                         </Link>
                     </CardFooter>
                 </form>
@@ -210,10 +203,9 @@ function LoginPage() {
     );
 }
 
-// Wrap the main component in Suspense for useSearchParams
 export default function LoginPageWithSuspense() {
     return (
-        <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><Loader2 className="h-8 w-8 animate-spin" /></div>}>
+        <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-[#020617]"><Loader2 className="h-8 w-8 animate-spin text-[#0081c9]" /></div>}>
             <LoginPage />
         </Suspense>
     )

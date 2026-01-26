@@ -107,7 +107,8 @@ function VerifyPaymentsTab() {
             setLoading(true);
             try {
                 const q = query(
-                    collection(db, "condominios", ownerData.condominioId, "payments"),
+                    collection(db, "payments"),
+                    where("condominioId", "==", ownerData.condominioId),
                     orderBy('reportedAt', 'desc')
                 );
     
@@ -849,8 +850,22 @@ function ReportPaymentTab() {
         if (!validationResult.isValid) { toast({ variant: 'destructive', title: 'Error de Validación', description: validationResult.error, duration: 6000 }); setIsSubmitting(false); return; }
         try {
             const beneficiaries = beneficiaryRows.map(row => ({ ownerId: row.owner!.id, ownerName: row.owner!.name, ...(row.selectedProperty || {}), amount: Number(row.amount) }));
-            const paymentData = { paymentDate: Timestamp.fromDate(paymentDate!), exchangeRate, paymentMethod, bank: bank === 'Otro' ? otherBank : bank, reference, totalAmount: Number(totalAmount), beneficiaries, beneficiaryIds: Array.from(new Set(beneficiaries.map(b => b.ownerId))), status: 'pendiente', reportedAt: serverTimestamp(), reportedBy: authUser?.uid || 'unknown_admin', receiptUrl: receiptImage };
-            await addDoc(collection(db, "condominios", authOwnerData.condominioId, "payments"), paymentData);
+            const paymentData = { 
+                condominioId: authOwnerData.condominioId,
+                paymentDate: Timestamp.fromDate(paymentDate!), 
+                exchangeRate, 
+                paymentMethod, 
+                bank: bank === 'Otro' ? otherBank : bank, 
+                reference, 
+                totalAmount: Number(totalAmount), 
+                beneficiaries, 
+                beneficiaryIds: Array.from(new Set(beneficiaries.map(b => b.ownerId))), 
+                status: 'pendiente' as 'pendiente', 
+                reportedAt: serverTimestamp(), 
+                reportedBy: authUser?.uid || 'unknown_admin', 
+                receiptUrl: receiptImage 
+            };
+            await addDoc(collection(db, "payments"), paymentData);
             resetForm(); setIsInfoDialogOpen(true);
         } catch (error) { console.error("Error submitting payment:", error); toast({ variant: "destructive", title: "Error Inesperado", description: "No se pudo enviar el reporte." });
         } finally { setIsSubmitting(false); }
@@ -863,7 +878,13 @@ function ReportPaymentTab() {
         if (beneficiaryRows.some(row => !row.owner || !row.amount || Number(row.amount) <= 0 || !row.selectedProperty)) return { isValid: false, error: 'Por favor, complete todos los campos para cada beneficiario.' };
         if (Math.abs(balance) > 0.01) return { isValid: false, error: 'El monto total no coincide con la suma de los montos asignados.' };
         try {
-            const q = query(collection(db, "condominios", authOwnerData.condominioId, "payments"), where("reference", "==", reference), where("totalAmount", "==", Number(totalAmount)), where("paymentDate", "==", Timestamp.fromDate(paymentDate)));
+            const q = query(
+                collection(db, "payments"),
+                where("condominioId", "==", authOwnerData.condominioId),
+                where("reference", "==", reference), 
+                where("totalAmount", "==", Number(totalAmount)), 
+                where("paymentDate", "==", Timestamp.fromDate(paymentDate))
+            );
             if (!(await getDocs(q)).empty) return { isValid: false, error: 'Ya existe un reporte de pago con esta misma referencia, monto y fecha.' };
         } catch (dbError) { return { isValid: false, error: "No se pudo verificar si el pago ya existe." }; }
         return { isValid: true };
