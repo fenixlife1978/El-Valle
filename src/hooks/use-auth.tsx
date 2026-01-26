@@ -56,7 +56,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 return;
             }
 
-            // Buscamos primero en 'owners' como indica tu captura
             const ownerRef = doc(db, 'owners', user.uid);
             const ownerSnap = await getDoc(ownerRef);
             let finalRef = ownerRef;
@@ -77,7 +76,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 if (docSnap.exists()) {
                     const data = docSnap.data();
                     setOwnerData(data);
-                    // Aquí capturamos el ID del condominio (ej. "condo_01")
                     setActiveCondoId(data.condominioId || null);
                 }
                 setLoading(false);
@@ -88,34 +86,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return () => { if (unsubscribeSnap) unsubscribeSnap(); };
     }, [user]);
 
-    // 3. Cargar información de la Empresa (Ruta: config/mainSettings)
+    // 3. Cargar información de la Empresa (Ruta: condominios/{id}/config/mainSettings)
     useEffect(() => {
         if (!activeCondoId) {
             setCompanyInfo(null);
             return;
         }
 
-        // RUTA CONFIRMADA: condominios > {id} > config > mainSettings
         const configRef = doc(db, 'condominios', activeCondoId, 'config', 'mainSettings');
         
         const unsubscribeConfig = onSnapshot(configRef, (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
-                
-                // Si tienes los datos dentro de un objeto 'companyInfo', lo extraemos.
-                // Si están sueltos en el documento, usamos la raíz 'data'.
-                const rawInfo = data.companyInfo || data;
-
+                // Usamos los nombres de campos que vimos en la captura de pantalla
                 setCompanyInfo({
-                    name: rawInfo.nombre || rawInfo.name || "Condominio",
-                    rif: rawInfo.rif || "",
-                    logo: rawInfo.logo || "",
-                    // Agregamos otros campos por si acaso
-                    address: rawInfo.direccion || rawInfo.address || ""
+                    name: data.nombre, // Cambiado de 'name' a 'nombre'
+                    rif: data.rif,
+                    logo: data.logo,
+                    address: data.address,
+                    phone: data.phone,
+                    email: data.email,
+                    bankName: data.bankName,
+                    accountNumber: data.accountNumber
                 });
-                console.log("AuthProvider: Configuración cargada correctamente");
             } else {
-                console.warn("AuthProvider: No se encontró el documento mainSettings");
+                console.warn("AuthProvider: No se encontró el documento mainSettings para el condominio:", activeCondoId);
                 setCompanyInfo(null);
             }
         }, (error) => {
