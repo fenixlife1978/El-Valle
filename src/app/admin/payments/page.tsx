@@ -857,6 +857,9 @@ function ReportPaymentTab() {
     };
     const validateForm = async (): Promise<{ isValid: boolean, error?: string }> => {
         if (!paymentDate || !exchangeRate || !paymentMethod || !bank || !totalAmount || Number(totalAmount) <= 0 || reference.length < 4) return { isValid: false, error: 'Por favor, complete todos los campos de la transacción (referencia min. 4 dígitos).' };
+        if (!receiptImage) {
+            return { isValid: false, error: 'Debe adjuntar una imagen del comprobante de pago.' };
+        }
         if (beneficiaryRows.some(row => !row.owner || !row.amount || Number(row.amount) <= 0 || !row.selectedProperty)) return { isValid: false, error: 'Por favor, complete todos los campos para cada beneficiario.' };
         if (Math.abs(balance) > 0.01) return { isValid: false, error: 'El monto total no coincide con la suma de los montos asignados.' };
         try {
@@ -867,7 +870,7 @@ function ReportPaymentTab() {
     };
 
     return (
-         <Card className="w-full max-w-4xl border-2 border-white overflow-hidden shadow-2xl rounded-2xl">
+        <Card className="w-full max-w-4xl border-2 border-white overflow-hidden shadow-2xl rounded-2xl">
             <CardHeader className="bg-primary text-primary-foreground p-4 flex flex-row items-center justify-between rounded-t-2xl">
                  <div className="flex items-center gap-3">
                     <Banknote className="w-7 h-7" />
@@ -955,9 +958,15 @@ function ReportPaymentTab() {
                             </CollapsibleContent>
                         </Card>
                     </Collapsible>
-                </form>
-            </Card>
-        </div>
+                </CardContent>
+                <CardFooter>
+                    <Button type="submit" className="w-full" disabled={isSubmitting}>
+                        {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                        Enviar Reporte de Pago
+                    </Button>
+                </CardFooter>
+            </form>
+        </Card>
     );
 }
 
