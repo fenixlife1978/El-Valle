@@ -25,10 +25,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [loading, setLoading] = useState(true);
     const [activeCondoId, setActiveCondoId] = useState<string | null>(null);
 
-    // 1. Escuchar cambios de autenticación
     useEffect(() => {
         const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
-            setLoading(true);
             setUser(firebaseUser);
             if (!firebaseUser) {
                 setOwnerData(null);
@@ -40,7 +38,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return () => unsubscribeAuth();
     }, []);
 
-    // 2. Cargar perfil del usuario (Búsqueda en owners o users)
     useEffect(() => {
         if (!user) return;
 
@@ -56,28 +53,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 return;
             }
 
+            // Intentamos buscar en 'owners' (tu colección principal según captura)
             const ownerRef = doc(db, 'owners', user.uid);
-            const ownerSnap = await getDoc(ownerRef);
-            let finalRef = ownerRef;
-
-            if (!ownerSnap.exists()) {
-                const userRef = doc(db, 'users', user.uid);
-                const userDocSnap = await getDoc(userRef);
-                if (userDocSnap.exists()) {
-                    finalRef = userRef;
-                } else {
-                    setOwnerData(null);
-                    setLoading(false);
-                    return;
-                }
-            }
-
-            unsubscribeSnap = onSnapshot(finalRef, (docSnap) => {
+            
+            unsubscribeSnap = onSnapshot(ownerRef, (docSnap) => {
                 if (docSnap.exists()) {
                     const data = docSnap.data();
+                    console.log("AuthProvider: Perfil encontrado en 'owners':", data);
                     setOwnerData(data);
+                    // IMPORTANTE: Asegúrate que en Firestore el campo se llame exactamente 'condominioId'
                     setActiveCondoId(data.condominioId || null);
+                } else {
+                    console.error("AuthProvider: No existe el documento en 'owners' para el UID:", user.uid);
                 }
+                setLoading(false);
+            }, (err) => {
+                console.error("AuthProvider: Error leyendo perfil:", err);
                 setLoading(false);
             });
         };
@@ -86,49 +77,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return () => { if (unsubscribeSnap) unsubscribeSnap(); };
     }, [user]);
 
-    // 3. Cargar información de la Empresa (Ruta: condominios/{id}/config/mainSettings)
     useEffect(() => {
-        if (!activeCondoId) {
-            setCompanyInfo(null);
-            return;
-        }
+        if (!activeCondoId) return;
 
+        console.log("AuthProvider: Buscando config para condo:", activeCondoId);
         const configRef = doc(db, 'condominios', activeCondoId, 'config', 'mainSettings');
         
         const unsubscribeConfig = onSnapshot(configRef, (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
-                // Usamos los nombres de campos que vimos en la captura de pantalla
+                console.log("AuthProvider: Datos de empresa recibidos:", data);
                 setCompanyInfo({
-                    name: data.nombre, // Cambiado de 'name' a 'nombre'
-                    rif: data.rif,
-                    logo: data.logo,
-                    address: data.address,
-                    phone: data.phone,
-                    email: data.email,
-                    bankName: data.bankName,
-                    accountNumber: data.accountNumber
+                    name: data.nombre || data.name || "Sin Nombre",
+                    rif: data.rif || "",
+                    logo: data.logo || ""
                 });
             } else {
-                console.warn("AuthProvider: No se encontró el documento mainSettings para el condominio:", activeCondoId);
+                console.warn("AuthProvider: El documento 'config/mainSettings' NO EXISTE en la ruta.");
                 setCompanyInfo(null);
             }
         }, (error) => {
-            console.error("AuthProvider: Error cargando mainSettings:", error);
-            setCompanyInfo(null);
+            console.error("AuthProvider: Error de permisos/lectura en mainSettings:", error);
         });
         
         return () => unsubscribeConfig();
     }, [activeCondoId]);
     
-    const isSuper = user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
-
     const value: AuthContextType = {
         user,
         ownerData,
-        role: isSuper ? 'super-admin' : (ownerData?.role || null),
+        role: user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase() ? 'super-admin' : (ownerData?.role || null),
         loading,
-        isSuperAdmin: isSuper,
+        isSuperAdmin: user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase(),
         companyInfo,
         activeCondoId
     };
