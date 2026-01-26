@@ -4,7 +4,6 @@ import {
     Home,
     Users,
     Settings,
-    FileSearch,
     Landmark,
     Grid3X3,
     WalletCards,
@@ -12,7 +11,8 @@ import {
     Plus,
     Loader2,
     ArrowLeftCircle,
-    AlertTriangle
+    AlertTriangle,
+    FileSearch
 } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
@@ -72,15 +72,26 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     const [supportCondoId, setSupportCondoId] = useState<string | null>(null);
 
     useEffect(() => {
-        // Verificar si estamos en Modo Soporte (desde el Super Admin)
         const mode = localStorage.getItem('support_condo_id');
         setSupportCondoId(mode);
 
+        // SOLO validamos cuando loading es false Y ya tenemos el rol (o estamos seguros de que no vendrá)
         if (!loading) {
-            // Permitimos acceso si es administrador, super-admin o si el correo es el tuyo
-            const hasAccess = role === 'administrador' || role === 'super-admin' || user?.email === 'vallecondo@gmail.com';
-            if (!user || !hasAccess) {
-                router.replace('/login');
+            // Si no hay usuario en absoluto
+            if (!user) {
+                router.replace('/login?role=admin');
+                return;
+            }
+
+            // Normalizamos el rol para evitar fallos por mayúsculas
+            const userRole = role?.toLowerCase();
+            const isSuperAdmin = user.email === 'vallecondo@gmail.com';
+            const isAdmin = userRole === 'administrador' || userRole === 'super-admin';
+
+            // Si ya cargó y definitivamente no tiene acceso
+            if (!isSuperAdmin && !isAdmin) {
+                console.warn("Acceso denegado: Usuario sin rol administrativo");
+                router.replace('/welcome');
             }
         }
     }, [role, loading, user, router]);
@@ -90,10 +101,13 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         router.push('/super-admin');
     };
 
-    const hasAccess = role === 'administrador' || role === 'super-admin' || user?.email === 'vallecondo@gmail.com';
+    // Lógica de visualización
+    const isSuperAdmin = user?.email === 'vallecondo@gmail.com';
+    const isAdmin = role?.toLowerCase() === 'administrador' || role?.toLowerCase() === 'super-admin';
+    const authorized = isSuperAdmin || isAdmin;
 
-    // Pantalla de carga (Azul EFAS CondoSys)
-    if (loading || !user || !hasAccess) {
+    // Mientras carga o si no está autorizado, mostramos la pantalla de carga
+    if (loading || !user || !authorized) {
         return (
             <div className="flex h-screen w-full flex-col items-center justify-center bg-[#020617]">
                 <Loader2 className="h-10 w-10 animate-spin text-[#0081c9]" />
@@ -106,7 +120,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
     return (
         <div className="flex flex-col min-h-screen bg-[#020617]">
-            {/* 1. Banner de Modo Soporte (Solo visible si vienes del Panel Maestro) */}
             {supportCondoId && (
                 <div className="bg-[#f59e0b] text-[#020617] py-2 px-4 shadow-lg border-b border-amber-600 flex justify-between items-center z-[110] sticky top-0">
                     <div className="flex items-center gap-3">
@@ -122,12 +135,11 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                         className="bg-[#020617] text-white hover:bg-slate-800 rounded-full font-black text-[9px] uppercase px-4 h-7"
                     >
                         <ArrowLeftCircle className="w-3 h-3 mr-2" /> 
-                        Volver al Mando
+                        Volver
                     </Button>
                 </div>
             )}
 
-            {/* 2. Header con Tasa BCV */}
             <Header />
 
             <div className="flex flex-1 overflow-hidden">
@@ -137,6 +149,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                     navItems={adminNavItems} 
                     mobileNavItems={adminNavItems}
                 >
+                    {/* Contenedor blanco para el contenido */}
                     <div className="pb-24 sm:pb-8 px-4 sm:px-6 pt-6 bg-slate-50 min-h-full rounded-t-[2.5rem] sm:rounded-none">
                         {children}
                     </div>

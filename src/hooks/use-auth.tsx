@@ -1,9 +1,8 @@
-
 'use client';
 
 import React, { useState, useEffect, createContext, useContext, ReactNode } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot, getDoc } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
 
 export interface AuthContextType {
@@ -26,6 +25,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [loading, setLoading] = useState(true);
     const [activeCondoId, setActiveCondoId] = useState<string | null>(null);
 
+    // 1. Escuchar cambios de autenticación
     useEffect(() => {
         const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
             setLoading(true);
@@ -40,56 +40,90 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return () => unsubscribeAuth();
     }, []);
 
+    // 2. Cargar perfil del usuario (Búsqueda en owners o users)
     useEffect(() => {
         if (!user) return;
 
         const isSuper = user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
-        
-        let unsubscribeUser: () => void;
+        let unsubscribeSnap: () => void;
 
-        if (isSuper) {
-            const supportId = typeof window !== 'undefined' ? localStorage.getItem('support_condo_id') : null;
-            setOwnerData({ role: 'super-admin', name: 'Super Admin', condominioId: supportId });
-            setActiveCondoId(supportId);
-            setLoading(false);
-        } else {
-            const userRef = doc(db, 'users', user.uid);
-            unsubscribeUser = onSnapshot(userRef, (docSnap) => {
+        const fetchUserData = async () => {
+            if (isSuper) {
+                const supportId = typeof window !== 'undefined' ? localStorage.getItem('support_condo_id') : null;
+                setOwnerData({ role: 'super-admin', name: 'Super Admin', condominioId: supportId });
+                setActiveCondoId(supportId);
+                setLoading(false);
+                return;
+            }
+
+            // Buscamos primero en 'owners' como indica tu captura
+            const ownerRef = doc(db, 'owners', user.uid);
+            const ownerSnap = await getDoc(ownerRef);
+            let finalRef = ownerRef;
+
+            if (!ownerSnap.exists()) {
+                const userRef = doc(db, 'users', user.uid);
+                const userDocSnap = await getDoc(userRef);
+                if (userDocSnap.exists()) {
+                    finalRef = userRef;
+                } else {
+                    setOwnerData(null);
+                    setLoading(false);
+                    return;
+                }
+            }
+
+            unsubscribeSnap = onSnapshot(finalRef, (docSnap) => {
                 if (docSnap.exists()) {
                     const data = docSnap.data();
                     setOwnerData(data);
+                    // Aquí capturamos el ID del condominio (ej. "condo_01")
                     setActiveCondoId(data.condominioId || null);
-                } else {
-                    setOwnerData(null);
-                    setActiveCondoId(null);
                 }
                 setLoading(false);
-            }, (error) => {
-                console.error("Error fetching user profile:", error);
-                setOwnerData(null);
-                setActiveCondoId(null);
-                setLoading(false);
             });
-        }
-        
-        return () => {
-            if (unsubscribeUser) unsubscribeUser();
         };
 
+        fetchUserData();
+        return () => { if (unsubscribeSnap) unsubscribeSnap(); };
     }, [user]);
 
+    // 3. Cargar información de la Empresa (Ruta: config/mainSettings)
     useEffect(() => {
         if (!activeCondoId) {
             setCompanyInfo(null);
             return;
         }
+
+        // RUTA CONFIRMADA: condominios > {id} > config > mainSettings
         const configRef = doc(db, 'condominios', activeCondoId, 'config', 'mainSettings');
+        
         const unsubscribeConfig = onSnapshot(configRef, (docSnap) => {
-            setCompanyInfo(docSnap.exists() ? docSnap.data().companyInfo : null);
-        }, () => setCompanyInfo(null));
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                
+                // Si tienes los datos dentro de un objeto 'companyInfo', lo extraemos.
+                // Si están sueltos en el documento, usamos la raíz 'data'.
+                const rawInfo = data.companyInfo || data;
+
+                setCompanyInfo({
+                    name: rawInfo.nombre || rawInfo.name || "Condominio",
+                    rif: rawInfo.rif || "",
+                    logo: rawInfo.logo || "",
+                    // Agregamos otros campos por si acaso
+                    address: rawInfo.direccion || rawInfo.address || ""
+                });
+                console.log("AuthProvider: Configuración cargada correctamente");
+            } else {
+                console.warn("AuthProvider: No se encontró el documento mainSettings");
+                setCompanyInfo(null);
+            }
+        }, (error) => {
+            console.error("AuthProvider: Error cargando mainSettings:", error);
+            setCompanyInfo(null);
+        });
         
         return () => unsubscribeConfig();
-
     }, [activeCondoId]);
     
     const isSuper = user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();

@@ -1,10 +1,9 @@
-
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
@@ -30,7 +29,7 @@ function LoginPage() {
     useEffect(() => {
         const roleParam = searchParams?.get('role') ?? null;
         if (roleParam === 'admin' || roleParam === 'owner') {
-            setRole(roleParam);
+            setRole(roleParam as 'owner' | 'admin');
         } else {
             router.replace('/welcome');
         }
@@ -46,10 +45,10 @@ function LoginPage() {
         }
 
         setLoading(true);
-        console.log("--- Iniciando Proceso de Login ---");
+        console.log("--- Iniciando Proceso de Login EFAS ---");
 
         try {
-            // 1. BYPASS SUPER ADMIN
+            // 1. BYPASS SUPER ADMIN (Tu acceso directo)
             if (cleanEmail === ADMIN_EMAIL) {
                 console.log("Detectado Super Admin. Redirigiendo...");
                 await signInWithEmailAndPassword(auth, cleanEmail, password);
@@ -58,59 +57,61 @@ function LoginPage() {
                 return;
             }
 
-            // 2. AUTENTICACIÓN
-            console.log("Autenticando con Firebase Auth...");
+            // 2. AUTENTICACIÓN FIREBASE
             const userCredential = await signInWithEmailAndPassword(auth, cleanEmail, password);
             const user = userCredential.user;
             console.log("Auth exitosa. UID:", user.uid);
 
-            // 3. BÚSQUEDA DE DATOS (Intentamos UID y luego Email)
+            // 3. BÚSQUEDA DE PERFIL EN FIRESTORE
             let userData = null;
             
-            const docRef = doc(db, "users", user.uid);
-            const docSnap = await getDoc(docRef);
-
-            if (docSnap.exists()) {
-                userData = docSnap.data();
-                console.log("Documento encontrado por UID.");
+            // Intento 1: Colección 'owners' (Donde están la mayoría de tus admins/propietarios)
+            const ownerDoc = await getDoc(doc(db, "owners", user.uid));
+            
+            if (ownerDoc.exists()) {
+                userData = ownerDoc.data();
+                console.log("Datos encontrados en 'owners'");
             } else {
-                console.log("No se encontró doc por UID, intentando búsqueda por campo email...");
-                const q = query(collection(db, "users"), where("email", "==", cleanEmail));
-                const querySnapshot = await getDocs(q);
-                if (!querySnapshot.empty) {
-                    userData = querySnapshot.docs[0].data();
-                    console.log("Documento encontrado por campo Email.");
+                // Intento 2: Colección 'users' (Respaldo por si se guardaron allí)
+                const userDoc = await getDoc(doc(db, "users", user.uid));
+                if (userDoc.exists()) {
+                    userData = userDoc.data();
+                    console.log("Datos encontrados en 'users'");
                 }
             }
 
-            // 4. VALIDACIÓN FINAL
+            // 4. VALIDACIONES DE PERFIL Y ROL
             if (!userData) {
-                console.error("Error: Usuario autenticado pero sin datos en Firestore.");
+                console.error("No se encontró el perfil en Firestore para el UID:", user.uid);
                 throw new Error("user-not-found");
             }
 
-            console.log("Datos en Firestore:", userData);
-
+            const dbRole = userData.role?.toLowerCase();
             const expectedRole = role === 'admin' ? 'administrador' : 'propietario';
-            if (userData.role?.toLowerCase() !== expectedRole) {
-                console.error(`Error: Rol esperado ${expectedRole}, pero se encontró ${userData.role}`);
+
+            if (dbRole !== expectedRole) {
+                console.error(`Rol incorrecto. Base de datos: ${dbRole}, Esperado: ${expectedRole}`);
                 throw new Error("role-mismatch");
             }
 
-            // 5. ÉXITO
-            toast({ title: 'Acceso Concedido', description: 'Cargando CondoSys...' });
-            router.push(role === 'admin' ? '/admin/dashboard' : '/owner/dashboard');
+            // 5. REDIRECCIÓN SEGÚN ROL
+            toast({ title: 'Acceso Concedido', description: `Iniciando sesión como ${dbRole}...` });
+            
+            if (role === 'admin') {
+                router.push('/admin/dashboard');
+            } else {
+                router.push('/dashboard');
+            }
 
         } catch (error: any) {
-            console.error("Error completo capturado:", error);
+            console.error("Error en el proceso de Login:", error);
             let msg = 'Error de autenticación. Verifique sus datos.';
             
-            if (error.message === "user-not-found") msg = "Tu correo no tiene un perfil configurado en Firestore.";
+            if (error.message === "user-not-found") msg = "Tu cuenta no tiene un perfil configurado en el sistema.";
             if (error.message === "role-mismatch") msg = `No tienes permisos de ${role === 'admin' ? 'Administrador' : 'Propietario'}.`;
-            if (error.code === 'auth/permission-denied') msg = "Firestore bloqueó la lectura (Revisa tus Rules).";
             if (error.code === 'auth/invalid-credential') msg = "Correo o contraseña incorrectos.";
-            if (error.code === 'auth/user-not-found') msg = "El correo electrónico no se encuentra registrado.";
-
+            if (error.code === 'auth/user-not-found') msg = "El usuario no está registrado.";
+            if (error.code === 'auth/too-many-requests') msg = "Acceso bloqueado temporalmente por demasiados intentos.";
 
             toast({ variant: 'destructive', title: 'Error de Acceso', description: msg });
         } finally {
@@ -128,8 +129,9 @@ function LoginPage() {
 
     return (
         <main className="min-h-screen flex flex-col items-center justify-center bg-[#020617] p-4 font-montserrat relative overflow-hidden">
-            {/* Fondo decorativo */}
+            {/* Fondo con gradientes sutiles */}
             <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-[#0081c9]/10 blur-[100px] rounded-full"></div>
+            <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-[#f59e0b]/5 blur-[100px] rounded-full"></div>
 
             <div className="text-center mb-8 relative z-10">
                  <h1 className="text-4xl font-black italic uppercase tracking-tighter">
@@ -169,7 +171,11 @@ function LoginPage() {
                                     onChange={(e) => setPassword(e.target.value)}
                                     required
                                 />
-                                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors">
+                                <button 
+                                    type="button" 
+                                    onClick={() => setShowPassword(!showPassword)} 
+                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors"
+                                >
                                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                                 </button>
                             </div>
@@ -180,12 +186,18 @@ function LoginPage() {
                         <Button type="submit" disabled={loading} className="w-full h-14 bg-[#0081c9] hover:bg-sky-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-sky-900/20 transition-all">
                             {loading ? <Loader2 className="animate-spin w-5 h-5" /> : 'Acceder al Sistema'}
                         </Button>
-                        <div className="flex justify-between w-full">
-                            <Link href="/forgot-password" className="text-[11px] font-bold text-[#0081c9] hover:underline uppercase tracking-widest">
+                        <div className="flex justify-between w-full px-1">
+                            <Link 
+                                href="/forgot-password" 
+                                className="text-[11px] font-bold text-[#0081c9] hover:underline uppercase tracking-widest"
+                            >
                                 ¿Olvidaste tu clave?
                             </Link>
-                            <Link href="/welcome" className="text-[10px] font-black uppercase text-slate-500 hover:text-[#f59e0b] tracking-[0.2em] text-center transition-colors">
-                                ← Volver al Portal
+                            <Link 
+                                href="/welcome" 
+                                className="text-[10px] font-black uppercase text-slate-500 hover:text-[#f59e0b] tracking-[0.2em] transition-colors"
+                            >
+                                ← Volver
                             </Link>
                         </div>
                     </CardFooter>
@@ -197,8 +209,12 @@ function LoginPage() {
 
 export default function LoginPageWithSuspense() {
     return (
-        <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-[#020617]"><Loader2 className="h-8 w-8 animate-spin text-[#0081c9]" /></div>}>
+        <Suspense fallback={
+            <div className="min-h-screen flex items-center justify-center bg-[#020617]">
+                <Loader2 className="h-8 w-8 animate-spin text-[#0081c9]" />
+            </div>
+        }>
             <LoginPage />
         </Suspense>
-    )
+    );
 }
