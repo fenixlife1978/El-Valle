@@ -1,3 +1,4 @@
+
 'use client';
 
 import Link from 'next/link';
@@ -13,6 +14,27 @@ import {
 } from 'lucide-react';
 
 export default function WelcomePage() {
+  const modules = [
+    {
+      title: "Cobranza Multidivisa",
+      desc: "Gestión automática basada en tasas oficiales para una contabilidad transparente y sin errores.",
+      icon: <Wallet className="w-8 h-8 text-[#0081c9]" />,
+      bgColor: "bg-[#f0f9ff]"
+    },
+    {
+      title: "Panel Inteligente",
+      desc: "Visualización clara de gastos, fondos de reserva y estados de cuenta en tiempo real.",
+      icon: <LayoutDashboard className="w-8 h-8 text-[#f59e0b]" />,
+      bgColor: "bg-[#fffbeb]"
+    },
+    {
+      title: "Seguridad y Respaldo",
+      desc: "Toda la información protegida y disponible para auditorías en cualquier momento.",
+      icon: <ShieldCheck className="w-8 h-8 text-[#0081c9]" />,
+      bgColor: "bg-[#f0f9ff]"
+    }
+  ];
+
   return (
     <div className="min-h-screen bg-white flex flex-col font-sans">
       {/* NAVBAR */}
@@ -102,35 +124,19 @@ export default function WelcomePage() {
             </div>
 
             <div className="grid md:grid-cols-3 gap-12">
-              <div className="flex flex-col items-center text-center group p-8 bg-white rounded-3xl shadow-sm border border-slate-100 hover:shadow-xl transition-all">
+              {modules.map((module, i) => (
+              <div key={i} className="flex flex-col items-center text-center group p-8 bg-white rounded-3xl shadow-sm border border-slate-100 hover:shadow-xl transition-all">
                 <div className="w-16 h-16 bg-sky-50 rounded-2xl flex items-center justify-center text-sky-600 mb-6 group-hover:bg-sky-600 group-hover:text-white transition-colors">
-                  <Wallet className="w-8 h-8" />
+                  {module.icon}
                 </div>
-                <h3 className="text-xl font-black text-slate-800 mb-3">Cobranza Multidivisa</h3>
+                <h3 className="font-montserrat text-xl font-black text-slate-900 uppercase tracking-tight italic mb-3">
+                  {module.title}
+                </h3>
                 <p className="text-slate-500 font-medium text-sm leading-relaxed">
-                  Gestión automática basada en tasas oficiales para una contabilidad transparente y sin errores.
+                  {module.desc}
                 </p>
               </div>
-
-              <div className="flex flex-col items-center text-center group p-8 bg-white rounded-3xl shadow-sm border border-slate-100 hover:shadow-xl transition-all">
-                <div className="w-16 h-16 bg-amber-50 rounded-2xl flex items-center justify-center text-amber-500 mb-6 group-hover:bg-amber-500 group-hover:text-white transition-colors">
-                  <LayoutDashboard className="w-8 h-8" />
-                </div>
-                <h3 className="text-xl font-black text-slate-800 mb-3">Panel Inteligente</h3>
-                <p className="text-slate-500 font-medium text-sm leading-relaxed">
-                  Visualización clara de gastos, fondos de reserva y estados de cuenta en tiempo real.
-                </p>
-              </div>
-
-              <div className="flex flex-col items-center text-center group p-8 bg-white rounded-3xl shadow-sm border border-slate-100 hover:shadow-xl transition-all">
-                <div className="w-16 h-16 bg-sky-50 rounded-2xl flex items-center justify-center text-sky-600 mb-6 group-hover:bg-sky-600 group-hover:text-white transition-colors">
-                  <ShieldCheck className="w-8 h-8" />
-                </div>
-                <h3 className="text-xl font-black text-slate-800 mb-3">Seguridad y Respaldo</h3>
-                <p className="text-slate-500 font-medium text-sm leading-relaxed">
-                  Toda la información protegida y disponible para auditorías en cualquier momento.
-                </p>
-              </div>
+            ))}
             </div>
           </div>
         </section>

@@ -1,91 +1,150 @@
+
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
-import { doc, getDoc } from 'firebase/firestore';
-import { useGatekeeper } from '@/hooks/use-gatekeeper';
 import Link from 'next/link';
+import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
+import { Skeleton } from '@/components/ui/skeleton';
+
+const ADMIN_EMAIL = 'vallecondo@gmail.com';
 
 function LoginPage() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { toast } = useToast();
-    const { verifyAccess } = useGatekeeper();
-
-    const roleParam = searchParams?.get('role') || null;
-    const isValidRole = roleParam === 'admin' || roleParam === 'owner';
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
+    const [role, setRole] = useState<'owner' | 'admin' | null>(null);
     const [showPassword, setShowPassword] = useState(false);
 
+    const [logoUrl, setLogoUrl] = useState<string | null>(null);
+    const [loadingLogo, setLoadingLogo] = useState(true);
+
     useEffect(() => {
-        if (!isValidRole) {
-            const timer = setTimeout(() => {
-                const currentParams = new URLSearchParams(window.location.search);
-                const currentRole = currentParams.get('role');
-                if (currentRole !== 'admin' && currentRole !== 'owner') {
-                    router.replace('/welcome');
-                }
-            }, 1000); 
-            return () => clearTimeout(timer);
+        const roleParam = searchParams?.get('role') ?? null;
+        if (roleParam === 'admin' || roleParam === 'owner') {
+            setRole(roleParam);
+        } else {
+            router.replace('/welcome');
         }
-    }, [isValidRole, router]);
+
+        async function fetchLogo() {
+          try {
+            const settingsRef = doc(db, 'config', 'mainSettings');
+            const docSnap = await getDoc(settingsRef);
+            if (docSnap.exists()) {
+              const settings = docSnap.data();
+              if (settings.companyInfo && settings.companyInfo.logo) {
+                setLogoUrl(settings.companyInfo.logo);
+              }
+            }
+          } catch (error) {
+            console.warn("Logo no cargado por falta de permisos.");
+          } finally {
+            setLoadingLogo(false);
+          }
+        }
+        fetchLogo();
+    }, [searchParams, router]);
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!isValidRole) return;
+        const cleanEmail = email.trim().toLowerCase();
+
+        if (!email || !password || !role) {
+            toast({ variant: 'destructive', title: 'Campos incompletos' });
+            return;
+        }
 
         setLoading(true);
-        try {
-            const userCredential = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
-            const user = userCredential.user;
 
-            if (user.email === 'vallecondo@gmail.com') {
-                toast({ title: 'Modo Super Admin' });
-                router.push('/super-admin');
+        try {
+            // --- BYPASS PARA SUPER ADMIN ---
+            if (cleanEmail === ADMIN_EMAIL) {
+                await signInWithEmailAndPassword(auth, cleanEmail, password);
+                toast({ title: 'Bienvenido, Super Admin', description: 'Accediendo al panel maestro...' });
+                router.push('/admin/dashboard'); 
                 return;
             }
 
-            const userDoc = await getDoc(doc(db, 'users', user.uid));
-            if (!userDoc.exists()) throw new Error('Perfil no encontrado.');
-
-            const userData = userDoc.data();
-            const condoId = userData?.condominioId;
-
-            if (condoId) {
-                const isAllowed = await verifyAccess(condoId);
-                if (!isAllowed) return;
+            // --- LÓGICA NORMAL PARA OTROS USUARIOS ---
+            const settingsRef = doc(db, 'config', 'mainSettings');
+            const settingsSnap = await getDoc(settingsRef);
+            
+            if (role === 'owner' && settingsSnap.exists()) {
+                const settings = settingsSnap.data();
+                if (settings.loginSettings && !settings.loginSettings.ownerLoginEnabled) {
+                    toast({
+                        variant: 'destructive',
+                        title: 'Acceso Deshabilitado',
+                        description: settings.loginSettings.disabledMessage || 'Acceso deshabilitado temporalmente.',
+                    });
+                    setLoading(false);
+                    return;
+                }
             }
 
-            toast({ title: 'Éxito', description: 'Iniciando sesión...' });
-            router.push(roleParam === 'admin' ? '/admin/dashboard' : '/owner/dashboard');
+            let userRoleFromDB: string | null = null;
+            const q = query(collection(db, "owners"), where("email", "==", cleanEmail));
+            const querySnapshot = await getDocs(q);
+            
+            if (!querySnapshot.empty) {
+                userRoleFromDB = querySnapshot.docs[0].data().role;
+            }
+            
+            const expectedRole = role === 'admin' ? 'administrador' : 'propietario';
 
+            if (userRoleFromDB !== expectedRole) {
+                throw new Error("role-mismatch");
+            }
+
+            await signInWithEmailAndPassword(auth, cleanEmail, password);
+            
+            toast({ title: 'Sesión Iniciada', description: 'Redirigiendo...' });
+
+            if (role === 'admin') {
+                router.push('/admin/dashboard');
+            } else {
+                router.push('/dashboard');
+            }
+            
         } catch (error: any) {
+            console.error("Login error:", error);
+            let description = 'Error de autenticación. Verifique sus datos.';
+            
+            if (error.message === "role-mismatch") {
+                description = `No tienes permisos de ${role}.`;
+            } else if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+                description = 'Correo o contraseña incorrectos.';
+            } else if (error.code === 'auth/too-many-requests') {
+                description = 'Cuenta temporalmente bloqueada por muchos intentos. Intente más tarde.';
+            }
+
             toast({
                 variant: 'destructive',
                 title: 'Error de Acceso',
-                description: 'Verifique sus credenciales.',
+                description: description,
             });
         } finally {
             setLoading(false);
         }
     };
-
-    if (!isValidRole) {
+   
+    if (!role) {
         return (
-            <div className="min-h-screen flex flex-col items-center justify-center bg-[#020617] gap-4">
-                <Loader2 className="h-10 w-10 animate-spin text-[#0081c9]" />
-                <p className="text-[10px] font-black uppercase text-slate-500 italic tracking-[0.3em]">Verificando Acceso...</p>
+            <div className="min-h-screen flex items-center justify-center bg-background">
+                <Loader2 className="h-8 w-8 animate-spin" />
             </div>
         );
     }
@@ -93,7 +152,7 @@ function LoginPage() {
     return (
         <main className="min-h-screen flex flex-col items-center justify-center bg-[#020617] p-4 font-montserrat">
             <div className="mb-8 text-center">
-                <h1 className="text-4xl font-black italic uppercase tracking-tighter">
+                 <h1 className="text-4xl font-black italic uppercase tracking-tighter">
                     <span className="text-[#f59e0b]">EFAS</span>
                     <span className="text-[#0081c9]">CondoSys</span>
                 </h1>
@@ -103,7 +162,7 @@ function LoginPage() {
             <Card className="w-full max-w-sm border-none shadow-2xl rounded-[2.5rem] overflow-hidden bg-slate-900 text-white">
                 <CardHeader className="text-center pb-2 pt-8">
                     <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-500/10 text-sky-400 text-[9px] font-black uppercase tracking-wider mb-2 mx-auto">
-                        <AlertCircle className="w-3 h-3" /> Acceso {roleParam === 'admin' ? 'Administrativo' : 'Propietario'}
+                        <AlertCircle className="w-3 h-3" /> Acceso {role === 'admin' ? 'Administrativo' : 'Propietario'}
                     </div>
                 </CardHeader>
 
@@ -151,6 +210,11 @@ function LoginPage() {
     );
 }
 
+// Wrap the main component in Suspense for useSearchParams
 export default function LoginPageWithSuspense() {
-    return <Suspense fallback={null}><LoginPage /></Suspense>;
+    return (
+        <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><Loader2 className="h-8 w-8 animate-spin" /></div>}>
+            <LoginPage />
+        </Suspense>
+    )
 }

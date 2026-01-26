@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -96,7 +97,7 @@ export default function AdminDashboardPage() {
 
     return (
         <div className="space-y-6">
-            <h1 className="text-2xl font-black text-slate-800">Panel de Control</h1>
+            <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tight italic">Panel de <span className="text-[#0081c9]">Control</span></h1>
             
             <CarteleraDigital anuncios={anuncios} />
 

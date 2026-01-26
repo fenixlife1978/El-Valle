@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -122,10 +123,10 @@ export default function BillboardPage() {
       <div className="flex items-center gap-4">
         <img src="/logo-efas.png" className="h-14 w-14 object-contain" alt="EFAS" />
         <div>
-          <h1 className="text-3xl font-black italic text-[#0081c9] tracking-tighter">
-            CARTELERA <span className="text-[#f59e0b]">INFORMATIVA</span>
+          <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tight italic">
+            Cartelera <span className="text-[#0081c9]">Informativa</span>
           </h1>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Gestión de Comunicados EFAS</p>
+          <p className="text-sm text-slate-500 font-medium mt-1">Gestión de Comunicados EFAS.</p>
         </div>
       </div>
 
