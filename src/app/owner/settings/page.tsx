@@ -138,9 +138,14 @@ export default function OwnerSettingsPage() {
     return (
         <div className="space-y-8 max-w-4xl mx-auto">
              
-            <div>
-                <h1 className="text-3xl font-bold font-headline">Configuración de la Cuenta</h1>
-                <p className="text-muted-foreground">Gestiona tu información personal y seguridad.</p>
+            <div className="mb-10">
+                <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">
+                    Configuración de <span className="text-[#0081c9]">Cuenta</span>
+                </h2>
+                <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
+                <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">
+                    Gestiona tu información personal y seguridad.
+                </p>
             </div>
 
             <Card>

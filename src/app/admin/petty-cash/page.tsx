@@ -476,15 +476,14 @@ export default function PettyCashPage() {
     
     return (
         <div className="space-y-8">
-             <div className="flex items-center justify-between gap-4 flex-wrap">
-                <div>
-                    <h1 className="text-3xl font-bold font-headline">Libro de Caja Chica</h1>
-                    <p className="text-muted-foreground">Registre y consulte todos los movimientos de la caja chica.</p>
-                </div>
-                <Button onClick={() => setIsDialogOpen(true)}>
-                    <PlusCircle className="mr-2 h-4 w-4" />
-                    Registrar Movimiento
-                </Button>
+             <div className="mb-10">
+                <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">
+                    Caja <span className="text-[#0081c9]">Chica</span>
+                </h2>
+                <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
+                <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">
+                    Registro y consulta de los movimientos de la caja chica.
+                </p>
             </div>
             
              <Card>

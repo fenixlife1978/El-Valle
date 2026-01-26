@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -7,14 +8,18 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Loader2, Info, Calculator, Minus, Equal, Check, Receipt } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { collection, query, onSnapshot, where, doc, getDoc } from 'firebase/firestore';
+import { collection, query, onSnapshot, where, doc, getDoc, writeBatch, Timestamp, addDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { isBefore, startOfMonth, format, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
 
 type Debt = {
     id: string;
@@ -25,6 +30,20 @@ type Debt = {
     description: string;
     status: 'pending' | 'paid' | 'vencida';
 };
+
+type PaymentDetails = {
+    paymentMethod: 'movil' | 'transferencia' | '';
+    bank: string;
+    otherBank: string;
+    reference: string;
+};
+
+const venezuelanBanks = [
+    { value: 'banesco', label: 'Banesco' }, { value: 'mercantil', label: 'Mercantil' },
+    { value: 'provincial', label: 'Provincial' }, { value: 'bdv', label: 'Banco de Venezuela' },
+    { value: 'bnc', label: 'Banco Nacional de Crédito (BNC)' }, { value: 'tesoro', label: 'Banco del Tesoro' },
+    { value: 'otro', label: 'Otro' },
+];
 
 const monthsLocale: { [key: number]: string } = {
     1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril', 5: 'Mayo', 6: 'Junio',
@@ -42,7 +61,16 @@ export default function OwnerPaymentCalculatorPage() {
     const [selectedPendingDebts, setSelectedPendingDebts] = useState<string[]>([]);
     const [selectedAdvanceMonths, setSelectedAdvanceMonths] = useState<string[]>([]);
     
+    const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
+    const [processingPayment, setProcessingPayment] = useState(false);
+    const [paymentDetails, setPaymentDetails] = useState<PaymentDetails>({ paymentMethod: '', bank: '', otherBank: '', reference: '' });
+
+    const [now, setNow] = useState<Date | null>(null);
     const { toast } = useToast();
+    
+    useEffect(() => {
+        setNow(new Date());
+    }, []);
 
     useEffect(() => {
         if (authLoading || !user || !ownerData) return;
@@ -92,12 +120,13 @@ export default function OwnerPaymentCalculatorPage() {
     };
     
     const futureMonths = useMemo(() => {
+        if (!now) return [];
         const paidAdvanceMonths = ownerDebts
             .filter(d => d.status === 'paid' && d.description.includes('Adelantado'))
             .map(d => `${d.year}-${String(d.month).padStart(2, '0')}`);
 
         return Array.from({ length: 12 }, (_, i) => {
-            const date = addMonths(new Date(), i);
+            const date = addMonths(now, i);
             const value = format(date, 'yyyy-MM');
             return {
                 value,
@@ -105,7 +134,7 @@ export default function OwnerPaymentCalculatorPage() {
                 disabled: paidAdvanceMonths.includes(value),
             };
         });
-    }, [ownerDebts]);
+    }, [ownerDebts, now]);
 
 
     const paymentCalculator = useMemo(() => {
@@ -136,15 +165,73 @@ export default function OwnerPaymentCalculatorPage() {
         return num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     };
 
+    const handleRegisterPayment = async () => {
+        if (!paymentDetails.paymentMethod || !paymentDetails.bank || !paymentDetails.reference) {
+            toast({ variant: 'destructive', title: 'Campos requeridos', description: 'Por favor, complete todos los detalles del pago.' });
+            return;
+        }
+        if (paymentDetails.bank === 'otro' && !paymentDetails.otherBank) {
+            toast({ variant: 'destructive', title: 'Campo requerido', description: 'Por favor, especifique el nombre del otro banco.' });
+            return;
+        }
+
+        setProcessingPayment(true);
+        if (!ownerData || !user) return;
+
+        try {
+            const paymentAmountBs = paymentCalculator.totalToPay;
+            if (paymentAmountBs <= 0) {
+                toast({ variant: "destructive", title: "Monto Inválido", description: "El monto a pagar debe ser mayor que cero." });
+                setProcessingPayment(false);
+                return;
+            }
+
+            const paymentData = {
+                reportedBy: user.uid,
+                beneficiaries: [{ ownerId: user.uid, ownerName: ownerData.name, ...ownerData.properties[0], amount: paymentAmountBs }],
+                beneficiaryIds: [user.uid],
+                totalAmount: paymentAmountBs,
+                exchangeRate: activeRate,
+                paymentDate: Timestamp.now(),
+                reportedAt: Timestamp.now(),
+                paymentMethod: paymentDetails.paymentMethod,
+                bank: paymentDetails.bank === 'otro' ? paymentDetails.otherBank : paymentDetails.bank,
+                reference: paymentDetails.reference,
+                status: 'pendiente',
+                observations: `Pago desde calculadora para ${paymentCalculator.dueMonthsCount} deuda(s) y ${paymentCalculator.advanceMonthsCount} adelanto(s).`
+            };
+
+            await addDoc(collection(db, 'payments'), paymentData);
+
+            toast({ title: 'Pago Reportado Exitosamente', description: 'Tu pago ha sido enviado para verificación.', className: 'bg-green-100 border-green-400 text-green-800' });
+            setIsPaymentDialogOpen(false);
+            setPaymentDetails({ paymentMethod: '', bank: '', otherBank: '', reference: '' });
+            setSelectedPendingDebts([]);
+            setSelectedAdvanceMonths([]);
+
+        } catch (error) {
+            console.error(error);
+            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo reportar el pago.' });
+        } finally {
+            setProcessingPayment(false);
+        }
+    };
+
+
     if (authLoading || loadingDebts) {
         return <div className="flex justify-center items-center h-64"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>;
     }
     
     return (
         <div className="space-y-6">
-            <div>
-                <h1 className="text-3xl font-bold font-headline">Calculadora de Pagos</h1>
-                <p className="text-muted-foreground">Seleccione las deudas que desea pagar para calcular el monto total.</p>
+            <div className="mb-10">
+                <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">
+                    Calculadora de <span className="text-[#0081c9]">Pagos</span>
+                </h2>
+                <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
+                <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">
+                    Selecciona las deudas a pagar y calcula el monto total.
+                </p>
             </div>
             
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
@@ -221,7 +308,7 @@ export default function OwnerPaymentCalculatorPage() {
                                 </div>
                             </CardContent>
                             <CardFooter>
-                                <Button className="w-full" onClick={() => router.push('/owner/payments/report')} disabled={!paymentCalculator.hasSelection || paymentCalculator.totalToPay <= 0}>
+                                <Button className="w-full" onClick={() => setIsPaymentDialogOpen(true)} disabled={!paymentCalculator.hasSelection || paymentCalculator.totalToPay <= 0}>
                                     <Receipt className="mr-2 h-4 w-4" />
                                     Reportar Pago
                                 </Button>
@@ -230,6 +317,53 @@ export default function OwnerPaymentCalculatorPage() {
                     )}
                 </div>
             </div>
+
+            <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Reportar Pago por Bs. {formatToTwoDecimals(paymentCalculator.totalToPay)}</DialogTitle>
+                        <DialogDescription>
+                            Ingrese los detalles de la transacción para completar el reporte.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="space-y-2">
+                           <Label htmlFor="paymentMethod">Tipo de Pago</Label>
+                           <Select value={paymentDetails.paymentMethod} onValueChange={(v) => setPaymentDetails(d => ({...d, paymentMethod: v as any}))}>
+                                <SelectTrigger><SelectValue placeholder="Seleccione..." /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="transferencia">Transferencia</SelectItem>
+                                    <SelectItem value="movil">Pago Móvil</SelectItem>
+                                </SelectContent>
+                           </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="bank">Banco Emisor</Label>
+                            <Select value={paymentDetails.bank} onValueChange={(v) => setPaymentDetails(d => ({...d, bank: v}))}>
+                                <SelectTrigger><SelectValue placeholder="Seleccione un banco..." /></SelectTrigger>
+                                <SelectContent>{venezuelanBanks.map(b => <SelectItem key={b.value} value={b.value}>{b.label}</SelectItem>)}</SelectContent>
+                            </Select>
+                        </div>
+                        {paymentDetails.bank === 'otro' && (
+                            <div className="space-y-2">
+                                <Label htmlFor="otherBank">Nombre del Otro Banco</Label>
+                                <Input id="otherBank" value={paymentDetails.otherBank} onChange={(e) => setPaymentDetails(d => ({...d, otherBank: e.target.value}))} />
+                            </div>
+                        )}
+                        <div className="space-y-2">
+                            <Label htmlFor="reference">Referencia</Label>
+                            <Input id="reference" value={paymentDetails.reference} onChange={(e) => setPaymentDetails(d => ({...d, reference: e.target.value.replace(/\D/g, '')}))} />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsPaymentDialogOpen(false)} disabled={processingPayment}>Cancelar</Button>
+                        <Button onClick={handleRegisterPayment} disabled={processingPayment}>
+                            {processingPayment ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
+                            Confirmar y Reportar Pago
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

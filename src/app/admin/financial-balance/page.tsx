@@ -19,6 +19,7 @@ import { es } from 'date-fns/locale';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { useAuth } from '@/hooks/use-auth';
 
 
 type FinancialItem = {
@@ -79,6 +80,7 @@ const formatToTwoDecimals = (num: number) => {
 
 export default function FinancialBalancePage() {
     const { toast } = useToast();
+    const { ownerData } = useAuth();
     const [view, setView] = useState<'list' | 'form'>('list');
     const [isEditing, setIsEditing] = useState(false);
     
@@ -179,6 +181,12 @@ export default function FinancialBalancePage() {
                 const startDate = new Date(year, month - 1, 1);
                 const endDate = new Date(year, month, 0, 23, 59, 59);
     
+                if (!ownerData?.condominioId) {
+                    console.warn("Condo ID is missing from auth context.");
+                    setLoadingPeriodData(false);
+                    return;
+                }
+
                 const paymentsQuery = query(
                     collection(db, "condominios", ownerData.condominioId, "payments"),
                     where("status", "==", "aprobado"),
@@ -200,7 +208,7 @@ export default function FinancialBalancePage() {
         if (!loading) {
             fetchPeriodData();
         }
-    }, [selectedMonth, selectedYear, isEditing, loading, toast]);
+    }, [selectedMonth, selectedYear, isEditing, loading, toast, ownerData]);
 
 
     const totals = useMemo(() => {
@@ -570,12 +578,14 @@ export default function FinancialBalancePage() {
         return (
             <div className="space-y-8">
                 
-                <div className="flex justify-between items-center">
-                    <div>
-                        <h1 className="text-3xl font-bold font-headline">Balance Financiero</h1>
-                        <p className="text-muted-foreground">Consulta o crea los balances financieros mensuales.</p>
-                    </div>
-                    <Button onClick={handleNewStatement}><PlusCircle className="mr-2 h-4 w-4"/> Nuevo Balance</Button>
+                <div className="mb-10">
+                    <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">
+                        Balance <span className="text-[#0081c9]">Financiero</span>
+                    </h2>
+                    <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
+                    <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">
+                        Consulta y creación de los balances financieros mensuales.
+                    </p>
                 </div>
                 <Card>
                     <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl"><CardTitle>Balances Guardados</CardTitle></CardHeader>

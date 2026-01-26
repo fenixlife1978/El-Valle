@@ -425,7 +425,7 @@ function VerifyPaymentsTab() {
                 head: [['Período', 'Concepto (Propiedad)', 'Monto ($)', 'Monto Pagado (Bs)']], 
                 body: tableBody, 
                 theme: 'striped', 
-                headStyles: { fillColor: [44, 62, 80], textColor: 255 }, 
+                headStyles: { fillColor: [30, 80, 180], textColor: 255 }, 
                 styles: { fontSize: 9, cellPadding: 2.5 },
                 columnStyles: {
                     2: { halign: 'right' },
@@ -955,29 +955,38 @@ function ReportPaymentTab() {
                             </CollapsibleContent>
                         </Card>
                     </Collapsible>
-                </CardContent>
-                <CardFooter className="bg-background/10 p-6 flex justify-end gap-4">
-                    <Button type="button" variant="ghost" className="text-muted-foreground hover:text-white" onClick={resetForm} disabled={isSubmitting}>
-                        CANCELAR
-                    </Button>
-                    <Button type="submit" className="rounded-xl" disabled={isSubmitting}>
-                        {isSubmitting ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Save className="mr-2 h-5 w-5" />}
-                        Enviar Reporte
-                    </Button>
-                </CardFooter>
-                <BankSelectionModal isOpen={isBankModalOpen} onOpenChange={setIsBankModalOpen} selectedValue={bank} onSelect={(value) => { setBank(value); if (value !== 'Otro') setOtherBank(''); setIsBankModalOpen(false); }} />
-                <Dialog open={isInfoDialogOpen} onOpenChange={setIsInfoDialogOpen}><DialogContent><DialogHeader><DialogTitle className="flex items-center gap-2"><Info className="h-6 w-6 text-blue-500" />Reporte Enviado para Revisión</DialogTitle><div className="pt-4 text-sm text-muted-foreground space-y-4"><p>¡Gracias! Hemos recibido el reporte de pago. Será procesado en un máximo de <strong>24 horas</strong>.</p></div></DialogHeader><DialogFooter><Button onClick={() => setIsInfoDialogOpen(false)}>Entendido</Button></DialogFooter></DialogContent></Dialog>
-            </form>
-        </Card>
+                </form>
+            </Card>
+        </div>
     );
 }
 
 export default function AdminPaymentsPage() {
     return (
+      <div className="space-y-8">
+        <div className="mb-10">
+            <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">
+                Gestión de <span className="text-[#0081c9]">Pagos</span>
+            </h2>
+            <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
+            <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">
+                Verificación y registro de los pagos de los propietarios.
+            </p>
+        </div>
         <Suspense fallback={<div className="flex justify-center items-center h-full"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>}>
-            <AdminPaymentsPageContent />
+            <Tabs defaultValue="verify">
+                <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="verify">Verificar Pagos</TabsTrigger>
+                    <TabsTrigger value="report">Reportar Pago (Manual)</TabsTrigger>
+                </TabsList>
+                <TabsContent value="verify">
+                    <VerifyPaymentsTab />
+                </TabsContent>
+                <TabsContent value="report">
+                    <ReportPaymentTab />
+                </TabsContent>
+            </Tabs>
         </Suspense>
+      </div>
     );
 }
-
-```

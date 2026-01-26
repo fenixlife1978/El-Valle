@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -57,9 +58,14 @@ export default function PaymentMethodsPage() {
 
     return (
         <div className="space-y-8">
-            <div>
-                <h1 className="text-3xl font-bold font-headline">Métodos de Pago</h1>
-                <p className="text-muted-foreground">Aquí encontrarás los datos para realizar tus pagos de condominio.</p>
+            <div className="mb-10">
+                <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">
+                    Métodos de <span className="text-[#0081c9]">Pago</span>
+                </h2>
+                <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
+                <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">
+                    Datos bancarios para realizar tus pagos de condominio.
+                </p>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

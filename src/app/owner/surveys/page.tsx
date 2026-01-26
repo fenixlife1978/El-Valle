@@ -175,9 +175,14 @@ export default function OwnerSurveysPage() {
     return (
         <div className="space-y-8">
             
-            <div>
-                <h1 className="text-3xl font-bold font-headline">Encuestas y Votaciones</h1>
-                <p className="text-muted-foreground">Participa en las decisiones de la comunidad.</p>
+            <div className="mb-10">
+                <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">
+                    Encuestas y <span className="text-[#0081c9]">Votaciones</span>
+                </h2>
+                <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
+                <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">
+                    Participa en las decisiones de la comunidad.
+                </p>
             </div>
 
             {surveys.length === 0 ? (

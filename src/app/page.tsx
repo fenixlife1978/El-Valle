@@ -45,10 +45,10 @@ export default function WelcomePage() {
             <img src="/logo-efas.png" alt="EFAS Logo" className="w-full h-full object-contain" />
           </div>
           <div className="flex flex-col">
-            <div className="flex items-center gap-1 text-2xl font-black tracking-tighter leading-none">
-              <span className="text-amber-500">EFAS</span>
-              <span className="text-sky-500">CondoSys</span>
-            </div>
+            <h1 className="text-2xl font-black italic tracking-tighter leading-none">
+              <span className="text-[#f59e0b]">EFAS</span>
+              <span className="text-[#0081c9]">CondoSys</span>
+            </h1>
             <span className="text-[7px] sm:text-[9px] font-black uppercase tracking-widest text-slate-400">
               Sistema de Autogestión de Condominios
             </span>
@@ -92,7 +92,7 @@ export default function WelcomePage() {
 
           <h1 className="text-5xl md:text-7xl font-black tracking-tight text-slate-900 mb-8 leading-[1.05]">
             Potencia tu comunidad con <br />
-            <span className="text-amber-500">EFAS</span> <span className="text-sky-600">CondoSys</span>
+            <span className="text-[#f59e0b]">EFAS</span> <span className="text-[#0081c9]">CondoSys</span>
           </h1>
 
           <p className="text-xl text-slate-500 mb-12 max-w-3xl mx-auto leading-relaxed font-medium">
@@ -120,7 +120,7 @@ export default function WelcomePage() {
           <div className="max-w-6xl mx-auto px-6">
             <div className="text-center mb-16">
               <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">Módulos Integrados</h2>
-              <div className="h-1.5 w-20 bg-amber-500 mx-auto mt-4 rounded-full" />
+              <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full" />
             </div>
 
             <div className="grid md:grid-cols-3 gap-12">

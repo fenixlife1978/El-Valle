@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -146,9 +147,14 @@ export default function OwnerCertificatesPage() {
     
     return (
         <div className="space-y-8">
-            <div>
-                <h1 className="text-3xl font-bold font-headline">Solicitud de Constancias</h1>
-                <p className="text-muted-foreground">Genere una solicitud para sus documentos de residencia o solvencia.</p>
+            <div className="mb-10">
+                <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">
+                    Solicitud de <span className="text-[#0081c9]">Constancias</span>
+                </h2>
+                <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
+                <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">
+                    Genera una solicitud para tus documentos de residencia o solvencia.
+                </p>
             </div>
             
             <Card className="max-w-2xl mx-auto">

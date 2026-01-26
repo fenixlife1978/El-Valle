@@ -120,14 +120,14 @@ export default function BillboardPage() {
 
   return (
     <div className="space-y-8 p-4">
-      <div className="flex items-center gap-4">
-        <img src="/logo-efas.png" className="h-14 w-14 object-contain" alt="EFAS" />
-        <div>
-          <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tight italic">
-            Cartelera <span className="text-[#0081c9]">Informativa</span>
-          </h1>
-          <p className="text-sm text-slate-500 font-medium mt-1">Gestión de Comunicados EFAS.</p>
-        </div>
+      <div className="mb-10">
+          <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">
+              Cartelera <span className="text-[#0081c9]">Informativa</span>
+          </h2>
+          <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
+          <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">
+              Gestión y publicación de comunicados para la comunidad.
+          </p>
       </div>
 
       <Card className="rounded-[2rem] border-none shadow-sm overflow-hidden bg-white">

@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -159,10 +160,15 @@ export default function SettingsPage() {
 
     return (
         <div className="max-w-6xl mx-auto space-y-8 p-4 md:p-6 pb-24">
-            <header className="flex items-center gap-4">
-                <div className="bg-[#0081c9] p-3 rounded-2xl shadow-lg shadow-blue-200"><Building2 className="text-white h-8 w-8" /></div>
-                <h1 className="text-4xl font-black italic uppercase text-[#0081c9] tracking-tighter">Panel de Control</h1>
-            </header>
+            <div className="mb-10">
+                <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">
+                    Configuración <span className="text-[#0081c9]">General</span>
+                </h2>
+                <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
+                <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">
+                    Ajustes de identidad, tasas y acceso al sistema.
+                </p>
+            </div>
             
             <Tabs defaultValue="company" className="w-full">
                 <TabsList className="grid w-full grid-cols-4 h-14 bg-slate-100 p-1 rounded-2xl">
@@ -174,7 +180,7 @@ export default function SettingsPage() {
 
                 <TabsContent value="company" className="mt-6">
                     <Card className="rounded-[2.5rem] border-none shadow-xl overflow-hidden">
-                        <CardHeader className="bg-[#0081c9] text-white p-8">
+                        <CardHeader className="bg-slate-900 text-white p-8">
                             <CardTitle className="text-2xl font-black italic uppercase tracking-tight">Información de Identidad</CardTitle>
                         </CardHeader>
                         <CardContent className="p-8 space-y-8">
@@ -207,7 +213,7 @@ export default function SettingsPage() {
 
                 <TabsContent value="rates" className="mt-6">
                     <Card className="rounded-[2.5rem] border-none shadow-xl">
-                        <CardHeader className="bg-[#0081c9] text-white p-8"><CardTitle className="text-2xl font-black italic uppercase">Gestión de Divisas</CardTitle></CardHeader>
+                        <CardHeader className="bg-slate-900 text-white p-8"><CardTitle className="text-2xl font-black italic uppercase">Gestión de Divisas</CardTitle></CardHeader>
                         <CardContent className="p-8 space-y-6">
                             <div className="flex gap-4 items-end bg-slate-50 p-6 rounded-3xl border border-dashed">
                                 <div className="flex-1 space-y-1"><Label className="text-[10px] font-black ml-2">Fecha de Tasa</Label><Input type="date" className="rounded-xl" value={newRate.date} onChange={e => setNewRate({...newRate, date: e.target.value})} /></div>
@@ -232,7 +238,7 @@ export default function SettingsPage() {
 
                 <TabsContent value="fees" className="mt-6">
                     <Card className="rounded-[2.5rem] border-none shadow-xl">
-                        <CardHeader className="bg-[#0081c9] text-white p-8"><CardTitle className="text-2xl font-black italic uppercase">Administración de Acceso</CardTitle></CardHeader>
+                        <CardHeader className="bg-slate-900 text-white p-8"><CardTitle className="text-2xl font-black italic uppercase">Administración de Acceso</CardTitle></CardHeader>
                         <CardContent className="p-8 space-y-8">
                             <div className="space-y-2">
                                 <Label className="text-sm font-bold ml-2">Cuota Condominial (USD)</Label>

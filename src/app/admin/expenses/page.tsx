@@ -138,9 +138,14 @@ export default function ExpensesPage() {
     
     return (
         <div className="space-y-8">
-             <div>
-                <h1 className="text-3xl font-bold font-headline">Gestión de Egresos</h1>
-                <p className="text-muted-foreground">Registre y consulte los gastos del condominio.</p>
+             <div className="mb-10">
+                <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">
+                    Gestión de <span className="text-[#0081c9]">Egresos</span>
+                </h2>
+                <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
+                <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">
+                    Registro y consulta de los gastos del condominio.
+                </p>
             </div>
             <RegisterExpenseForm onSave={() => {}} />
             <Card>

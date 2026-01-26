@@ -1,9 +1,10 @@
 
+
 'use client';
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
@@ -167,9 +168,14 @@ export default function SyncProfilesPage() {
 
     return (
         <div className="space-y-8">
-            <div>
-                <h1 className="text-3xl font-bold font-headline">Sincronización y Mantenimiento</h1>
-                <p className="text-muted-foreground">Herramientas para corregir y mantener la integridad de los datos de usuario.</p>
+            <div className="mb-10">
+                <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">
+                    Sincronización y <span className="text-[#0081c9]">Mantenimiento</span>
+                </h2>
+                <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
+                <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">
+                    Herramientas para corregir y mantener la integridad de los datos de usuario.
+                </p>
             </div>
 
             <Card>
@@ -213,7 +219,7 @@ export default function SyncProfilesPage() {
                                 </h3>
                                 <p className="text-sm text-muted-foreground">
                                     {missingProfileResult.missing > 0 
-                                        ? `Se encontraron ${missingProfileResult.missing} cuenta(s) de autenticación sin su perfil de propietario. Es necesario crearlos manualmente.`
+                                        ? `Se encontraron ${missingProfileResult.missing} cuenta(s) de autenticación sin su perfil de propietario. Es necesario crearlos manually.`
                                         : `Se verificaron ${missingProfileResult.checked} perfiles y todos están correctos.`
                                     }
                                 </p>

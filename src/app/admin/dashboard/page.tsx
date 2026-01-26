@@ -97,7 +97,15 @@ export default function AdminDashboardPage() {
 
     return (
         <div className="space-y-6">
-            <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tight italic">Panel de <span className="text-[#0081c9]">Control</span></h1>
+            <div className="mb-10">
+                <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">
+                    Panel de <span className="text-[#0081c9]">Control</span>
+                </h2>
+                <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
+                <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">
+                    Vista general y métricas clave del condominio.
+                </p>
+            </div>
             
             <CarteleraDigital anuncios={anuncios} />
 

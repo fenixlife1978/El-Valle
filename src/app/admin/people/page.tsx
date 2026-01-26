@@ -419,22 +419,14 @@ export default function OwnersManagement() {
 
     return (
         <div className="space-y-8">
-            <div className="flex items-center justify-between gap-4 flex-wrap">
-                <div>
-                    <h1 className="text-3xl font-bold font-headline">Gestión de Personas</h1>
-                    <p className="text-muted-foreground">Agrega, edita y consulta personas en la base de datos.</p>
-                </div>
-                <div className="flex gap-2 flex-wrap">
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild><Button variant="outline"><FileDown className="mr-2 h-4 w-4" />Exportar</Button></DropdownMenuTrigger>
-                        <DropdownMenuContent>
-                            <DropdownMenuItem onClick={handleExportExcel}><FileSpreadsheet className="mr-2 h-4 w-4" />Excel</DropdownMenuItem>
-                            <DropdownMenuItem onClick={handleExportPDF}><FileText className="mr-2 h-4 w-4" />PDF</DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                    <Button onClick={() => handleAddUser('propietario')}><PlusCircle className="mr-2 h-4 w-4" />Propietario</Button>
-                    {isMainAdmin && <Button onClick={() => handleAddUser('administrador')} variant="secondary"><PlusCircle className="mr-2 h-4 w-4" />Admin</Button>}
-                </div>
+            <div className="mb-10">
+                <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">
+                    Gestión de <span className="text-[#0081c9]">Personas</span>
+                </h2>
+                <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
+                <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">
+                    Agrega, edita y consulta personas en la base de datos.
+                </p>
             </div>
             
             <Card>
@@ -458,6 +450,17 @@ export default function OwnersManagement() {
                         <TabsContent value="admins">{renderUserGrid(filteredAdmins)}</TabsContent>
                     </Tabs>
                 </CardContent>
+                 <CardFooter className="flex justify-end gap-2 p-4 bg-muted/50">
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild><Button variant="outline"><FileDown className="mr-2 h-4 w-4" />Exportar Listas</Button></DropdownMenuTrigger>
+                        <DropdownMenuContent>
+                            <DropdownMenuItem onClick={handleExportExcel}><FileSpreadsheet className="mr-2 h-4 w-4" />Excel</DropdownMenuItem>
+                            <DropdownMenuItem onClick={handleExportPDF}><FileText className="mr-2 h-4 w-4" />PDF</DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                    <Button onClick={() => handleAddUser('propietario')}><PlusCircle className="mr-2 h-4 w-4" />Propietario</Button>
+                    {isMainAdmin && <Button onClick={() => handleAddUser('administrador')} variant="secondary"><PlusCircle className="mr-2 h-4 w-4" />Admin</Button>}
+                </CardFooter>
             </Card>
 
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
