@@ -11,7 +11,8 @@ import {
     serverTimestamp, 
     query, 
     orderBy, 
-    Timestamp 
+    Timestamp,
+    writeBatch
 } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth'; // Hook para obtener el condominio activo
 import { Button } from '@/components/ui/button';
@@ -56,19 +57,52 @@ function RegisterExpenseForm({ workingCondoId, onSave }: { workingCondoId: strin
     setLoading(true);
     const formData = new FormData(e.currentTarget);
     const dateValue = formData.get("date") as string;
+    const category = formData.get("category") as string;
+    const amount = parseFloat(formData.get("amount") as string);
+    const description = formData.get("description") as string;
+    const reference = formData.get("reference") as string;
+    const fullDate = new Date(`${dateValue}T00:00:00`);
 
     try {
-      // RUTA SEGMENTADA: /condominios/{id}/gastos
-      await addDoc(collection(db, "condominios", workingCondoId, "gastos"), {
-        description: formData.get("description"),
-        amount: parseFloat(formData.get("amount") as string),
-        category: formData.get("category"),
-        date: Timestamp.fromDate(new Date(`${dateValue}T00:00:00`)),
-        reference: formData.get("reference"),
-        createdAt: serverTimestamp(),
-      });
+      if (category === 'Reposición Caja Chica') {
+        const batch = writeBatch(db);
+        
+        // 1. Create the main expense document that justifies the cash leaving the bank
+        const expenseRef = doc(collection(db, "condominios", workingCondoId, "gastos"));
+        batch.set(expenseRef, {
+            description: description,
+            amount: amount,
+            category: category,
+            date: Timestamp.fromDate(fullDate),
+            reference: reference,
+            createdAt: serverTimestamp(),
+        });
 
-      toast({ title: "Gasto registrado", description: "El egreso se guardó correctamente." });
+        // 2. Create the replenishment document for the petty cash module
+        const replenishmentRef = doc(collection(db, "condominios", workingCondoId, "petty_cash_replenishments"));
+        batch.set(replenishmentRef, {
+            date: Timestamp.fromDate(fullDate),
+            amount: amount,
+            description: `Fondo de reposición: ${description}`,
+            expenses: [],
+            sourceExpenseId: expenseRef.id 
+        });
+
+        await batch.commit();
+        toast({ title: "Gasto y Fondo Registrados", description: "Se registró el egreso y se acreditó el fondo a Caja Chica." });
+      } else {
+        // Original logic for other expenses
+        await addDoc(collection(db, "condominios", workingCondoId, "gastos"), {
+          description: description,
+          amount: amount,
+          category: category,
+          date: Timestamp.fromDate(fullDate),
+          reference: reference,
+          createdAt: serverTimestamp(),
+        });
+        toast({ title: "Gasto registrado", description: "El egreso se guardó correctamente." });
+      }
+      
       (e.target as HTMLFormElement).reset();
       onSave();
     } catch (error) {
