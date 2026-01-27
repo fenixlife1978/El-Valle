@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -42,6 +43,16 @@ type FinancialStatement = {
 };
 
 const emptyItem = { id: '', dia: '', concepto: '', monto: 0, categoria: 'N/A' };
+
+
+const formatToTwoDecimals = (num: number): string => {
+  if (typeof num !== 'number' || isNaN(num)) return '0,00';
+  const truncated = Math.trunc(num * 100) / 100;
+  return truncated.toLocaleString('es-VE', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+};
 
 
 export default function FinancialBalancePage() {
@@ -117,6 +128,8 @@ export default function FinancialBalancePage() {
 
         const info = activeSettings.companyInfo;
         const pdf = new jsPDF();
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const margin = 14;
 
         // 1. ENCABEZADO
         if (info.logo) {
@@ -183,14 +196,43 @@ export default function FinancialBalancePage() {
 
         autoTable(pdf, {
             startY: startY,
-            head: [['Resumen de Egresos por Categoría', '']],
-            body: [
-              ...Object.entries(egresosByCategory).map(([cat, total]) => [cat, formatToTwoDecimals(total)])
-            ],
+            head: [['Resumen de Egresos por Categoría', 'Monto Total (Bs.)']],
+            body: Object.entries(egresosByCategory).map(([cat, total]) => [cat, formatToTwoDecimals(total)]),
             theme: 'grid',
             headStyles: { fillColor: [75, 85, 99], textColor: 255, fontStyle: 'bold' },
             columnStyles: { 1: { halign: 'right' } }
         });
+        startY = (pdf as any).lastAutoTable.finalY + 10;
+
+        // 6. NOTAS
+        if (s.notas) {
+            pdf.setFont("helvetica", "bold").setFontSize(10).text("Notas:", margin, startY);
+            startY += 5;
+            pdf.setFont("helvetica", "normal").setFontSize(9);
+            const notesLines = pdf.splitTextToSize(s.notas, pageWidth - margin * 2);
+            pdf.text(notesLines, margin, startY);
+            startY += (notesLines.length * 4) + 10;
+        }
+        
+        // 7. LIQUIDEZ
+        const finalY = 250;
+        pdf.setFontSize(9).setFont("helvetica", "normal");
+        pdf.text('Saldo del Mes en Banco:', 130, finalY);
+        pdf.text(`Bs. ${formatToTwoDecimals(s.estadoFinanciero.saldoNeto)}`, 200, finalY, { align: 'right' });
+        
+        pdf.text('Saldo en Caja Chica:', 130, finalY + 5);
+        pdf.text('Bs. 0,00', 200, finalY + 5, { align: 'right' });
+        
+        pdf.text('Saldo en Efectivo:', 130, finalY + 10);
+        pdf.text('Bs. 0,00', 200, finalY + 10, { align: 'right' });
+
+        const totalY = finalY + 18;
+        pdf.setFillColor(230, 245, 208); // Un verde claro
+        pdf.rect(128, totalY - 5, 74, 7, 'F');
+        pdf.setFontSize(10).setFont("helvetica", "bold");
+        pdf.text('TOTAL LIQUIDEZ', 130, totalY);
+        pdf.text(`Bs. ${formatToTwoDecimals(s.estadoFinanciero.saldoNeto)}`, 200, totalY, { align: 'right' });
+
 
         if (action === 'download') {
             pdf.save(`Balance_${s.id}.pdf`);
@@ -273,11 +315,16 @@ export default function FinancialBalancePage() {
     };
 
     return (
-        <div className="p-4 md:p-8 space-y-8 max-w-7xl mx-auto min-h-screen bg-[#f8fafc]">
-            <header className="flex flex-col md:flex-row justify-between items-start gap-4">
-                <div className="space-y-2">
-                    <h2 className="text-4xl font-black uppercase italic text-slate-900 leading-none">BALANCE <span className="text-blue-600">FINANCIERO</span></h2>
-                    <div className="h-1.5 w-20 bg-yellow-400 rounded-full" />
+        <div className="p-4 md:p-8 space-y-8 max-w-7xl mx-auto">
+             <header className="flex flex-col md:flex-row justify-between items-start gap-4">
+                <div className="mb-10">
+                    <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">
+                        Balance <span className="text-[#0081c9]">Financiero</span>
+                    </h2>
+                    <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
+                    <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">
+                        Creación y gestión de los cierres contables mensuales.
+                    </p>
                 </div>
                 {view === 'list' && (
                     <Button onClick={() => setView('form')} className="bg-blue-600 hover:bg-blue-700 text-white font-black px-8 h-12 rounded-full shadow-lg transition-all hover:scale-105">
