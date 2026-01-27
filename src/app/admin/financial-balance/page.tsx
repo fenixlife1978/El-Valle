@@ -341,7 +341,13 @@ export default function FinancialBalance() {
         
         const saldoFinal = totalIn - totalOut;
         docPDF.setFontSize(14).setFont('helvetica', 'bold');
-        docPDF.setTextColor(saldoFinal >= 0 ? [0, 129, 201] : [239, 68, 68]);
+        
+        if (saldoFinal >= 0) {
+            docPDF.setTextColor(0, 129, 201);
+        } else {
+            docPDF.setTextColor(239, 68, 68);
+        }
+        
         docPDF.text(`Bs. ${formatCurrency(saldoFinal)}`, pageWidth - margin - 5, startY + 22, { align: 'right' });
 
         // Notas al pie
