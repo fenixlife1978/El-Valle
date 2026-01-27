@@ -1,16 +1,26 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, onSnapshot, deleteDoc, doc, serverTimestamp, query, orderBy, Timestamp } from 'firebase/firestore';
+import { 
+    collection, 
+    addDoc, 
+    onSnapshot, 
+    deleteDoc, 
+    doc, 
+    serverTimestamp, 
+    query, 
+    orderBy, 
+    Timestamp 
+} from 'firebase/firestore';
+import { useAuth } from '@/hooks/use-auth'; // Hook para obtener el condominio activo
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, PlusCircle, Trash2 } from 'lucide-react';
+import { Loader2, PlusCircle, Trash2, Building2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Badge } from '@/components/ui/badge';
@@ -19,7 +29,7 @@ type Expense = {
     id: string;
     description: string;
     amount: number;
-    category: 'Servicios' | 'Mantenimientos y Servicios' | 'Nomina' | 'Administracion' | 'Telefonia e Internet' | 'Gastos ExtraOrdinarios' | 'Reparaciones Generales' | 'Otros Gastos' | 'Reposición Caja Chica';
+    category: string;
     date: Timestamp;
     reference: string;
     createdAt: Timestamp;
@@ -31,28 +41,29 @@ const formatToTwoDecimals = (num: number) => {
     return truncated.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-function RegisterExpenseForm({ onSave }: { onSave: () => void }) {
+// Componente del Formulario integrado con workingCondoId
+function RegisterExpenseForm({ workingCondoId, onSave }: { workingCondoId: string | null, onSave: () => void }) {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!workingCondoId) {
+        toast({ variant: "destructive", title: "Error", description: "No hay un condominio seleccionado." });
+        return;
+    }
+
     setLoading(true);
     const formData = new FormData(e.currentTarget);
     const dateValue = formData.get("date") as string;
 
-    if (!dateValue) {
-        toast({ variant: "destructive", title: "Error", description: "La fecha es obligatoria." });
-        setLoading(false);
-        return;
-    }
-
     try {
-      await addDoc(collection(db, "expenses"), {
+      // RUTA SEGMENTADA: /condominios/{id}/gastos
+      await addDoc(collection(db, "condominios", workingCondoId, "gastos"), {
         description: formData.get("description"),
         amount: parseFloat(formData.get("amount") as string),
         category: formData.get("category"),
-        date: Timestamp.fromDate(new Date(`${dateValue}T00:00:00`)), // Ensure it's start of day
+        date: Timestamp.fromDate(new Date(`${dateValue}T00:00:00`)),
         reference: formData.get("reference"),
         createdAt: serverTimestamp(),
       });
@@ -69,38 +80,38 @@ function RegisterExpenseForm({ onSave }: { onSave: () => void }) {
   }
 
   return (
-    <Card>
+    <Card className="bg-slate-900/40 border-slate-800">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2"><PlusCircle/> Registrar Nuevo Egreso</CardTitle>
-        <CardDescription>Añade un nuevo gasto al registro contable.</CardDescription>
+        <CardTitle className="flex items-center gap-2 text-white"><PlusCircle className="text-[#0081c9]"/> Registrar Nuevo Egreso</CardTitle>
+        <CardDescription className="text-slate-400">Añade un nuevo gasto al registro de este condominio.</CardDescription>
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input name="description" placeholder="Descripción del gasto" required />
-                <Input name="reference" placeholder="Nº Factura o Referencia" required />
-                <Input name="amount" type="number" step="0.01" placeholder="Monto Bs." required />
+                <Input name="description" placeholder="Descripción del gasto" className="bg-slate-950 border-slate-800 text-white" required />
+                <Input name="reference" placeholder="Nº Factura o Referencia" className="bg-slate-950 border-slate-800 text-white" required />
+                <Input name="amount" type="number" step="0.01" placeholder="Monto Bs." className="bg-slate-950 border-slate-800 text-white" required />
                 <Select name="category" required>
-                <SelectTrigger>
-                    <SelectValue placeholder="Categoría" />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="Servicios">Servicios (Luz, Agua, Aseo)</SelectItem>
-                    <SelectItem value="Mantenimientos y Servicios">Mantenimientos y Servicios</SelectItem>
-                    <SelectItem value="Nomina">Nómina / Sueldos</SelectItem>
-                    <SelectItem value="Administracion">Gastos Administrativos</SelectItem>
-                    <SelectItem value="Telefonia e Internet">Telefonia e Internet</SelectItem>
-                    <SelectItem value="Gastos ExtraOrdinarios">Gastos ExtraOrdinarios</SelectItem>
-                    <SelectItem value="Reparaciones Generales">Reparaciones Generales</SelectItem>
-                    <SelectItem value="Reposición Caja Chica">Reposición Caja Chica</SelectItem>
-                    <SelectItem value="Otros Gastos">Otros Gastos</SelectItem>
-                </SelectContent>
+                    <SelectTrigger className="bg-slate-950 border-slate-800 text-white">
+                        <SelectValue placeholder="Categoría" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-900 border-slate-800 text-white">
+                        <SelectItem value="Servicios">Servicios (Luz, Agua, Aseo)</SelectItem>
+                        <SelectItem value="Mantenimientos y Servicios">Mantenimientos y Servicios</SelectItem>
+                        <SelectItem value="Nomina">Nómina / Sueldos</SelectItem>
+                        <SelectItem value="Administracion">Gastos Administrativos</SelectItem>
+                        <SelectItem value="Telefonia e Internet">Telefonia e Internet</SelectItem>
+                        <SelectItem value="Gastos ExtraOrdinarios">Gastos ExtraOrdinarios</SelectItem>
+                        <SelectItem value="Reparaciones Generales">Reparaciones Generales</SelectItem>
+                        <SelectItem value="Reposición Caja Chica">Reposición Caja Chica</SelectItem>
+                        <SelectItem value="Otros Gastos">Otros Gastos</SelectItem>
+                    </SelectContent>
                 </Select>
-                <Input name="date" type="date" defaultValue={format(new Date(), 'yyyy-MM-dd')} required />
+                <Input name="date" type="date" defaultValue={format(new Date(), 'yyyy-MM-dd')} className="bg-slate-950 border-slate-800 text-white" required />
             </div>
         </CardContent>
         <CardFooter>
-            <Button type="submit" disabled={loading} className="w-full md:w-auto">
+            <Button type="submit" disabled={loading || !workingCondoId} className="w-full md:w-auto bg-[#0081c9] hover:bg-[#006bb3]">
                 {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <PlusCircle className="mr-2 h-4 w-4"/>}
                 Guardar Gasto
             </Button>
@@ -111,25 +122,44 @@ function RegisterExpenseForm({ onSave }: { onSave: () => void }) {
 }
 
 export default function ExpensesPage() {
+    const { user: currentUser, activeCondoId } = useAuth();
+    const { toast } = useToast();
+    
     const [expenses, setExpenses] = useState<Expense[]>([]);
     const [loading, setLoading] = useState(true);
-    const { toast } = useToast();
+
+    // DETERMINAR ID DE TRABAJO (Soporte vallecondo@gmail.com)
+    const sId = typeof window !== 'undefined' ? localStorage.getItem('support_mode_id') : null;
+    const workingCondoId = (sId && currentUser?.email === 'vallecondo@gmail.com') ? sId : activeCondoId;
 
     useEffect(() => {
-        const q = query(collection(db, "expenses"), orderBy("date", "desc"));
+        if (!workingCondoId) return;
+
+        setLoading(true);
+        // CONSULTA SEGMENTADA AL CONDOMINIO ESPECÍFICO
+        const q = query(
+            collection(db, "condominios", workingCondoId, "gastos"), 
+            orderBy("date", "desc")
+        );
+
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const expensesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Expense));
             setExpenses(expensesData);
             setLoading(false);
+        }, (error) => {
+            console.error("Error al cargar gastos:", error);
+            setLoading(false);
         });
+
         return () => unsubscribe();
-    }, []);
+    }, [workingCondoId]);
 
     const handleDelete = async (id: string) => {
+        if (!workingCondoId) return;
         if(window.confirm('¿Estás seguro de que quieres eliminar este gasto?')) {
             try {
-                await deleteDoc(doc(db, "expenses", id));
-                toast({ title: "Gasto eliminado", description: "El registro ha sido borrado." });
+                await deleteDoc(doc(db, "condominios", workingCondoId, "gastos", id));
+                toast({ title: "Gasto eliminado" });
             } catch (error) {
                 toast({ variant: "destructive", title: "Error", description: "No se pudo eliminar el gasto." });
             }
@@ -137,53 +167,73 @@ export default function ExpensesPage() {
     };
     
     return (
-        <div className="space-y-8">
-             <div className="mb-10">
-                <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">
-                    Gestión de <span className="text-[#0081c9]">Egresos</span>
-                </h2>
-                <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
-                <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">
-                    Registro y consulta de los gastos del condominio.
-                </p>
+        <div className="space-y-8 p-6">
+             <div className="flex justify-between items-end">
+                <div>
+                    <h2 className="text-4xl font-black text-white uppercase tracking-tighter italic">
+                        Gestión de <span className="text-[#0081c9]">Egresos</span>
+                    </h2>
+                    <p className="text-slate-500 font-bold text-sm uppercase flex items-center gap-2 mt-1">
+                        <Building2 className="h-4 w-4 text-amber-500"/>
+                        ID Condominio: <span className="text-amber-500">{workingCondoId || "Seleccione uno"}</span>
+                    </p>
+                </div>
             </div>
-            <RegisterExpenseForm onSave={() => {}} />
-            <Card>
+
+            <RegisterExpenseForm workingCondoId={workingCondoId} onSave={() => {}} />
+
+            <Card className="bg-slate-900/40 border-slate-800">
                 <CardHeader>
-                    <CardTitle>Historial de Egresos</CardTitle>
+                    <CardTitle className="text-white">Historial de Egresos</CardTitle>
                 </CardHeader>
                 <CardContent>
                      {loading ? (
-                        <div className="flex justify-center items-center h-24"><Loader2 className="h-8 w-8 animate-spin text-primary"/></div>
+                        <div className="flex justify-center items-center h-24"><Loader2 className="h-8 w-8 animate-spin text-[#0081c9]"/></div>
                     ) : (
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Fecha</TableHead>
-                                    <TableHead>Descripción</TableHead>
-                                    <TableHead>Referencia</TableHead>
-                                    <TableHead>Categoría</TableHead>
-                                    <TableHead className="text-right">Monto (Bs.)</TableHead>
-                                    <TableHead className="text-right">Acción</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {expenses.map(expense => (
-                                    <TableRow key={expense.id}>
-                                        <TableCell>{format(expense.date.toDate(), 'dd/MM/yyyy', { locale: es })}</TableCell>
-                                        <TableCell>{expense.description}</TableCell>
-                                        <TableCell>{expense.reference}</TableCell>
-                                        <TableCell><Badge variant="secondary">{expense.category}</Badge></TableCell>
-                                        <TableCell className="text-right font-medium">Bs. {formatToTwoDecimals(expense.amount)}</TableCell>
-                                        <TableCell className="text-right">
-                                            <Button variant="ghost" size="icon" onClick={() => handleDelete(expense.id)}>
-                                                <Trash2 className="h-4 w-4 text-destructive"/>
-                                            </Button>
-                                        </TableCell>
+                        <div className="rounded-md border border-slate-800 overflow-hidden">
+                            <Table>
+                                <TableHeader className="bg-slate-950">
+                                    <TableRow className="border-slate-800 hover:bg-slate-950">
+                                        <TableHead className="text-slate-400">Fecha</TableHead>
+                                        <TableHead className="text-slate-400">Descripción</TableHead>
+                                        <TableHead className="text-slate-400">Referencia</TableHead>
+                                        <TableHead className="text-slate-400">Categoría</TableHead>
+                                        <TableHead className="text-right text-slate-400">Monto (Bs.)</TableHead>
+                                        <TableHead className="text-right text-slate-400">Acción</TableHead>
                                     </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
+                                </TableHeader>
+                                <TableBody>
+                                    {expenses.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell colSpan={6} className="text-center py-10 text-slate-500">No hay gastos registrados para este condominio.</TableCell>
+                                        </TableRow>
+                                    ) : (
+                                        expenses.map(expense => (
+                                            <TableRow key={expense.id} className="border-slate-800 hover:bg-slate-800/50">
+                                                <TableCell className="text-slate-300">
+                                                    {expense.date ? format(expense.date.toDate(), 'dd/MM/yyyy', { locale: es }) : '---'}
+                                                </TableCell>
+                                                <TableCell className="text-white font-medium">{expense.description}</TableCell>
+                                                <TableCell className="text-slate-400 text-xs uppercase">{expense.reference}</TableCell>
+                                                <TableCell>
+                                                    <Badge variant="outline" className="border-slate-700 text-slate-300 bg-slate-800">
+                                                        {expense.category}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="text-right font-bold text-white">
+                                                    Bs. {formatToTwoDecimals(expense.amount)}
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    <Button variant="ghost" size="icon" onClick={() => handleDelete(expense.id)} className="hover:bg-red-500/20 group">
+                                                        <Trash2 className="h-4 w-4 text-slate-500 group-hover:text-red-400"/>
+                                                    </Button>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </div>
                     )}
                 </CardContent>
             </Card>
