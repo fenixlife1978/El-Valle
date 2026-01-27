@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -57,12 +58,14 @@ export default function SuperAdminPage() {
   return (
     <div className="p-8 space-y-6 max-w-7xl mx-auto">
       <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-4xl font-extrabold flex items-center gap-3">
-            <ShieldCheck className="h-12 w-12 text-blue-600" /> 
-            Panel Maestro: vallecondo@gmail.com
-          </h1>
-          <p className="text-muted-foreground mt-2 text-lg">Control total de acceso y condominios activos.</p>
+        <div className="mb-10">
+          <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">
+            Panel <span className="text-[#0081c9]">Maestro</span>
+          </h2>
+          <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
+          <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">
+            Control total de acceso y condominios activos.
+          </p>
         </div>
       </div>
 

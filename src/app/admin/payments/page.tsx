@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, useMemo, useCallback, Suspense } from 'react';
@@ -546,7 +547,7 @@ function VerifyPaymentsTab() {
             setReceiptData({
                 payment, beneficiary, ownerName: owner.name,
                 ownerUnit: ownerUnit,
-                paidDebts: paidDebts.sort((a,b) => a.year - b.year || a.month - b.month),
+                paidDebts: paidDebts.sort((a,b) => a.year - b.year || a.month - a.month),
                 previousBalance, currentBalance: currentBalance,
                 receiptNumber, qrCodeUrl
             });
@@ -960,13 +961,13 @@ function ReportPaymentTab() {
                                             <Card key={row.id} className="p-4 bg-muted/50 relative">
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                     <div className="space-y-2"><Label htmlFor={`search-${row.id}`}>Beneficiario {index + 1}</Label>
-                                                        {!row.owner ? (<><div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input id={`search-${row.id}`} placeholder="Buscar por nombre..." className="pl-9" value={row.searchTerm} onChange={(e) => updateBeneficiaryRow(row.id, { searchTerm: e.target.value })} disabled={loading} /></div>{row.searchTerm.length >= 3 && getFilteredOwners(row.searchTerm).length > 0 && <Card className="border rounded-lg"><ScrollArea className="h-32">{getFilteredOwners(row.searchTerm).map(owner => (<div key={owner.id} onClick={() => handleOwnerSelect(row.id, owner)} className="p-2 hover:bg-muted cursor-pointer border-b last:border-b-0"><p className="font-medium text-sm">{owner.name}</p></div>))}</ScrollArea></Card>}</>)
-                                                        : (<div className="p-3 bg-background rounded-lg flex items-center justify-between"><div><p className="font-semibold text-primary">{row.owner.name}</p></div><Button variant="ghost" size="icon" onClick={() => updateBeneficiaryRow(row.id, { owner: null, selectedProperty: null })} disabled={loading}><XCircle className="h-5 w-5 text-destructive" /></Button></div>)}
+                                                        {!row.owner ? (<><div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input id={`search-${row.id}`} placeholder="Buscar por nombre..." className="pl-9" value={row.searchTerm} onChange={(e) => updateBeneficiaryRow(row.id, { searchTerm: e.target.value })} disabled={loading} /></div>{row.searchTerm.length >= 2 && getFilteredOwners(row.searchTerm).length > 0 && <Card className="border rounded-md"><ScrollArea className="h-32">{getFilteredOwners(row.searchTerm).map(owner => (<div key={owner.id} onClick={() => handleOwnerSelect(row.id, owner)} className="p-2 hover:bg-muted cursor-pointer border-b last:border-b-0"><p className="font-medium text-sm">{owner.name}</p></div>))}</ScrollArea></Card>}</>)
+                                                        : (<div className="p-3 bg-background rounded-md flex items-center justify-between"><div><p className="font-semibold text-primary">{row.owner.name}</p></div><Button variant="ghost" size="icon" onClick={() => updateBeneficiaryRow(row.id, { owner: null, selectedProperty: null })} disabled={loading}><XCircle className="h-5 w-5 text-destructive" /></Button></div>)}
                                                     </div>
                                                     <div className="space-y-2"><Label htmlFor={`amount-${row.id}`}>Monto Asignado (Bs.)</Label><Input id={`amount-${row.id}`} type="number" placeholder="0.00" value={row.amount} onChange={(e) => updateBeneficiaryRow(row.id, { amount: e.target.value })} disabled={loading || !row.owner} /></div>
                                                 </div>
-                                                {row.owner && <div className="mt-4 space-y-2"><Label>Asignar a Propiedad</Label><Select onValueChange={(v) => updateBeneficiaryRow(row.id, { selectedProperty: row.owner?.properties?.find(p => `${p.street}-${p.house}` === v) || null })} value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''} disabled={loading || !row.owner}><SelectTrigger><SelectValue placeholder="Seleccione una propiedad..." /></SelectTrigger><SelectContent>{row.owner?.properties?.length ? row.owner.properties.map((p: any) => (<SelectItem key={`${p.street}-${p.house}`} value={`${p.street}-${p.house}`}>{`${p.street} - ${p.house}`}</SelectItem>)) : <SelectItem disabled value="none">Sin propiedades registradas</SelectItem>}</SelectContent></Select></div>}
-                                                <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive" onClick={() => removeBeneficiaryRow(row.id)} disabled={loading}><Trash2 className="h-4 w-4"/></Button>
+                                                {row.owner && <div className="mt-4 space-y-2"><Label>Asignar a Propiedad</Label><Select onValueChange={(v) => updateBeneficiaryRow(row.id, { selectedProperty: row.owner!.properties.find(p => `${p.street}-${p.house}` === v) || null })} value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''} disabled={loading || !row.owner}><SelectTrigger><SelectValue placeholder="Seleccione una propiedad..." /></SelectTrigger><SelectContent>{row.owner.properties.map(p => (<SelectItem key={`${p.street}-${p.house}`} value={`${p.street}-${p.house}`}>{`${p.street} - ${p.house}`}</SelectItem>))}</SelectContent></Select></div>}
+                                                {index > 0 && <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive" onClick={() => removeBeneficiaryRow(row.id)} disabled={loading}><Trash2 className="h-4 w-4"/></Button>}
                                             </Card>
                                         ))}
                                         <Button type="button" variant="outline" size="sm" onClick={addBeneficiaryRow} disabled={loading}><UserPlus className="mr-2 h-4 w-4"/>Añadir Otro Beneficiario</Button>
@@ -979,44 +980,32 @@ function ReportPaymentTab() {
                             </CollapsibleContent>
                         </Card>
                     </Collapsible>
-                </CardContent>
-                <CardFooter>
-                    <Button type="submit" className="w-full" disabled={isSubmitting}>
-                        {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                        Enviar Reporte de Pago
-                    </Button>
-                </CardFooter>
-            </form>
-        </Card>
-    );
-}
+                </form>
+            </Card>
 
-export default function AdminPaymentsPage() {
-    return (
-      <div className="space-y-8">
-        <div className="mb-10">
-            <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">
-                Gestión de <span className="text-[#0081c9]">Pagos</span>
-            </h2>
-            <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
-            <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">
-                Verificación y registro de los pagos de los propietarios.
-            </p>
+            <BankSelectionModal isOpen={isBankModalOpen} onOpenChange={setIsBankModalOpen} selectedValue={bank} onSelect={(value) => { setBank(value); if (value !== 'Otro') setOtherBank(''); setIsBankModalOpen(false); }} />
+            
+            <Dialog open={isInfoDialogOpen} onOpenChange={setIsInfoDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Info className="h-6 w-6 text-primary" />
+                            Reporte Enviado para Revisión
+                        </DialogTitle>
+                         <div className="pt-4 text-sm text-muted-foreground space-y-4">
+                           <p>¡Gracias! Hemos recibido tu reporte de pago. El tiempo máximo para la aprobación es de <strong>24 horas</strong>.</p>
+                           <p>Te invitamos a ingresar nuevamente después de este lapso para:</p>
+                           <ul className="list-disc list-inside space-y-1">
+                               <li>Verificar si el monto enviado cubrió completamente tu deuda.</li>
+                               <li>Descargar tu recibo de pago una vez que sea aprobado.</li>
+                           </ul>
+                        </div>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button onClick={() => setIsInfoDialogOpen(false)}>Entendido</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
-        <Suspense fallback={<div className="flex justify-center items-center h-full"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>}>
-            <Tabs defaultValue="verify">
-                <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="verify">Verificar Pagos</TabsTrigger>
-                    <TabsTrigger value="report">Reportar Pago (Manual)</TabsTrigger>
-                </TabsList>
-                <TabsContent value="verify">
-                    <VerifyPaymentsTab />
-                </TabsContent>
-                <TabsContent value="report">
-                    <ReportPaymentTab />
-                </TabsContent>
-            </Tabs>
-        </Suspense>
-      </div>
     );
 }

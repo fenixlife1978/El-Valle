@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -149,7 +150,7 @@ export default function BillboardPage() {
           </h2>
           <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
           <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">
-              {currentCondoId ? `Gestionando: ${currentCondoId}` : "Cargando..."}
+              Gestiona los comunicados para todos los residentes
           </p>
       </div>
 

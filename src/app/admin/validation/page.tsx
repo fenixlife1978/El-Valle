@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -61,22 +62,19 @@ export default function ValidationPage() {
         }
     };
 
-    if (loading) return <div className="flex h-screen items-center justify-center bg-slate-950"><Loader2 className="animate-spin text-[#0081c9] h-10 w-10" /></div>;
+    if (loading) return <div className="flex h-screen items-center justify-center bg-[#020617]"><Loader2 className="animate-spin text-[#0081c9] h-10 w-10" /></div>;
 
     return (
-        <div className="p-8 space-y-8">
-            <header>
-                <div className="flex items-center gap-2">
-                   {isSuperAdmin && <ShieldCheck className="text-amber-500 h-8 w-8" />}
-                   <h2 className="text-4xl font-black text-white uppercase tracking-tighter italic">
-                        Control de <span className="text-[#0081c9]">Accesos</span>
-                    </h2>
-                </div>
+        <div className="p-6 md:p-8 space-y-8">
+            <div className="mb-10">
+                <h2 className="text-4xl font-black text-white uppercase tracking-tighter italic drop-shadow-sm">
+                    Control de <span className="text-[#0081c9]">Accesos</span>
+                </h2>
                 <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
-                <p className="text-slate-500 font-bold mt-3 text-sm uppercase">
-                    {isSuperAdmin ? "Validación Global de Administradores (Owners Collection)" : "Aprobación de nuevos Residentes"}
+                <p className="text-slate-400 font-bold mt-3 text-sm uppercase tracking-wide">
+                    {isSuperAdmin ? "Validación Global de Administradores" : "Aprobación de nuevos Residentes"}
                 </p>
-            </header>
+            </div>
 
             <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-sm">
                 <CardHeader>
@@ -89,7 +87,7 @@ export default function ValidationPage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div className="rounded-md border border-slate-800">
+                    <div className="rounded-md border border-slate-800 overflow-hidden">
                         <Table>
                             <TableHeader className="bg-slate-950">
                                 <TableRow className="border-slate-800">

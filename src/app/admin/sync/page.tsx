@@ -1,16 +1,19 @@
+
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Loader2, RefreshCw, ShieldAlert, Database } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useRouter } from 'next/navigation';
 
 export default function SyncPage() {
     const { user, loading: authLoading } = useAuth();
     const [isSyncing, setIsSyncing] = useState(false);
     const { toast } = useToast();
+    const router = useRouter();
 
     // 1. EL CANDADO DE SUPER ADMIN: Solo para vallecondo@gmail.com
     if (authLoading) return (
@@ -21,13 +24,13 @@ export default function SyncPage() {
 
     if (user?.email !== 'vallecondo@gmail.com') {
         return (
-            <div className="flex flex-col items-center justify-center h-[80vh] text-center space-y-4">
+            <div className="flex flex-col items-center justify-center h-[80vh] text-center space-y-4 text-white">
                 <ShieldAlert className="h-20 w-20 text-red-600 animate-pulse" />
-                <h1 className="text-3xl font-black text-white uppercase tracking-tighter">Acceso Denegado</h1>
-                <p className="text-slate-500 max-w-md font-bold">
+                <h1 className="text-3xl font-black uppercase tracking-tighter">Acceso Denegado</h1>
+                <p className="text-slate-400 max-w-md font-bold">
                     Esta área contiene herramientas de sincronización global. Solo el Super Administrador tiene privilegios de ejecución aquí.
                 </p>
-                <Button variant="outline" className="border-slate-800 text-slate-400" onClick={() => window.location.href = '/admin/dashboard'}>
+                <Button variant="outline" className="border-slate-800 text-slate-400" onClick={() => router.push('/admin/dashboard')}>
                     Volver al Panel Seguro
                 </Button>
             </div>
@@ -55,18 +58,16 @@ export default function SyncPage() {
     };
 
     return (
-        <div className="p-8 space-y-10">
-            <header>
-                <div className="flex items-center gap-3">
-                    <Database className="h-8 w-8 text-amber-500" />
-                    <h2 className="text-4xl font-black text-white uppercase tracking-tighter italic">
-                        Sincronización <span className="text-amber-500">Global</span>
-                    </h2>
-                </div>
-                <p className="text-slate-500 font-bold mt-2 text-sm uppercase tracking-widest">
+        <div className="p-6 md:p-8 space-y-10">
+            <div className="mb-10">
+                <h2 className="text-4xl font-black text-white uppercase tracking-tighter italic drop-shadow-sm">
+                    Sincronización <span className="text-amber-500">Global</span>
+                </h2>
+                <div className="h-1.5 w-20 bg-amber-500 mt-2 rounded-full"></div>
+                <p className="text-slate-400 font-bold mt-3 text-sm uppercase tracking-wide">
                     Consola de mantenimiento de base de datos - ValleCondo 2026
                 </p>
-            </header>
+            </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <Card className="lg:col-span-2 bg-slate-900/50 border-amber-500/20 shadow-2xl backdrop-blur-sm">

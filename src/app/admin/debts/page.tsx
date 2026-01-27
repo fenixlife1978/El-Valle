@@ -1258,11 +1258,3 @@ export default function DebtManagementPage() {
     // Fallback while loading or if view is invalid
     return null;
 }
-
-
-
-
-
-
-
-    

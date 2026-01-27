@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -78,16 +79,23 @@ export default function SuperAdminPage() {
     router.push('/admin/dashboard');
   };
 
-  if (loading) return <div className="p-20 text-center font-black italic">CARGANDO PANEL MAESTRO...</div>;
+  if (loading) return (
+    <div className="flex h-screen items-center justify-center bg-slate-950">
+        <Loader2 className="animate-spin text-amber-500 h-10 w-10" />
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-slate-50 p-8 font-sans">
       <div className="max-w-6xl mx-auto flex justify-between items-start mb-8">
-        <div>
-          <h1 className="text-4xl font-black italic tracking-tighter text-slate-800 uppercase">
+        <div className="mb-10">
+          <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">
             <span className="text-orange-500">EFAS</span>CONDOSYS <span className="text-slate-300 font-light">MASTER</span>
-          </h1>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">SUPER ADMIN: {user?.email}</p>
+          </h2>
+          <div className="h-1.5 w-20 bg-orange-500 mt-2 rounded-full"></div>
+          <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">
+            SUPER ADMIN: {user?.email}
+          </p>
         </div>
         <div className="flex gap-2">
           <Button onClick={() => signOut(auth)} className="bg-red-800 hover:bg-red-900 text-white font-bold rounded-xl px-6 uppercase italic">

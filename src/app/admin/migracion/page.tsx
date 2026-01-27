@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -58,6 +59,16 @@ export default function MigrationPage() {
 
   return (
     <div className="p-8 space-y-6 max-w-4xl mx-auto">
+      <div className="mb-10">
+          <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">
+              Sistema de <span className="text-[#0081c9]">Migración</span>
+          </h2>
+          <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
+          <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">
+              Herramienta para la transición de datos a la nueva estructura multi-condominio.
+          </p>
+      </div>
+
       <div className="bg-amber-50 border-l-4 border-amber-400 p-4 mb-6">
         <div className="flex items-center">
           <AlertTriangle className="text-amber-400 mr-3" />
@@ -66,10 +77,6 @@ export default function MigrationPage() {
           </p>
         </div>
       </div>
-
-      <h1 className="text-3xl font-black italic text-[#0081c9] tracking-tighter">
-        SISTEMA DE <span className="text-[#f59e0b]">MIGRACIÓN</span>
-      </h1>
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <MigrationCard 

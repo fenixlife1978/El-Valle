@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -47,7 +48,7 @@ export default function NuevoCondominioPage() {
       });
 
       toast({ title: "¡Éxito!", description: "Condominio registrado y configurado." });
-      router.push('/super-admin/condominios');
+      router.push('/super-admin');
     } catch (error) {
       console.error(error);
       toast({ variant: 'destructive', title: "Error", description: "No tienes permisos de Super Admin." });
@@ -100,3 +101,4 @@ export default function NuevoCondominioPage() {
     </div>
   );
 }
+
