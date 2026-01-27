@@ -3,25 +3,17 @@
 import { useState, useEffect } from 'react';
 import { db } from '@/lib/firebase';
 import { 
-    collection, 
-    addDoc, 
-    onSnapshot, 
-    deleteDoc, 
-    doc, 
-    serverTimestamp, 
-    query, 
-    orderBy, 
-    Timestamp,
-    writeBatch
+    collection, addDoc, onSnapshot, deleteDoc, doc, 
+    serverTimestamp, query, orderBy, Timestamp, writeBatch
 } from 'firebase/firestore';
-import { useAuth } from '@/hooks/use-auth'; // Hook para obtener el condominio activo
+import { useAuth } from '@/hooks/use-auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, PlusCircle, Trash2, Building2 } from 'lucide-react';
+import { Loader2, PlusCircle, Trash2, Building2, CreditCard, Save } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Badge } from '@/components/ui/badge';
@@ -42,7 +34,6 @@ const formatToTwoDecimals = (num: number) => {
     return truncated.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-// Componente del Formulario integrado con workingCondoId
 function RegisterExpenseForm({ workingCondoId, onSave }: { workingCondoId: string | null, onSave: () => void }) {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
@@ -59,95 +50,107 @@ function RegisterExpenseForm({ workingCondoId, onSave }: { workingCondoId: strin
     const dateValue = formData.get("date") as string;
     const category = formData.get("category") as string;
     const amount = parseFloat(formData.get("amount") as string);
-    const description = formData.get("description") as string;
-    const reference = formData.get("reference") as string;
+    const description = (formData.get("description") as string).toUpperCase();
+    const reference = (formData.get("reference") as string).toUpperCase();
     const fullDate = new Date(`${dateValue}T00:00:00`);
 
     try {
       if (category === 'Caja Chica') {
         const batch = writeBatch(db);
-        
-        // 1. Create the main expense document that justifies the cash leaving the bank
         const expenseRef = doc(collection(db, "condominios", workingCondoId, "gastos"));
         batch.set(expenseRef, {
-            description: description,
-            amount: amount,
-            category: category,
+            description,
+            amount,
+            category,
             date: Timestamp.fromDate(fullDate),
-            reference: reference,
+            reference,
             createdAt: serverTimestamp(),
         });
 
-        // 2. Create the replenishment document for the petty cash module
         const replenishmentRef = doc(collection(db, "condominios", workingCondoId, "petty_cash_replenishments"));
         batch.set(replenishmentRef, {
             date: Timestamp.fromDate(fullDate),
-            amount: amount,
-            description: `Fondo de reposición: ${description}`,
+            amount,
+            description: `REPOSICIÓN: ${description}`,
             expenses: [],
             sourceExpenseId: expenseRef.id 
         });
 
         await batch.commit();
-        toast({ title: "Gasto y Fondo Registrados", description: "Se registró el egreso y se acreditó el fondo a Caja Chica." });
+        toast({ title: "Gasto y Fondo Registrados" });
       } else {
-        // Original logic for other expenses
         await addDoc(collection(db, "condominios", workingCondoId, "gastos"), {
-          description: description,
-          amount: amount,
-          category: category,
+          description,
+          amount,
+          category,
           date: Timestamp.fromDate(fullDate),
-          reference: reference,
+          reference,
           createdAt: serverTimestamp(),
         });
-        toast({ title: "Gasto registrado", description: "El egreso se guardó correctamente." });
+        toast({ title: "Gasto registrado correctamente" });
       }
       
       (e.target as HTMLFormElement).reset();
       onSave();
     } catch (error) {
-      console.error(error);
-      toast({ variant: "destructive", title: "Error", description: "No se pudo guardar el gasto." });
+      toast({ variant: "destructive", title: "Error al guardar" });
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <Card className="bg-slate-900/40 border-slate-800">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-white"><PlusCircle className="text-[#0081c9]"/> Registrar Nuevo Egreso</CardTitle>
-        <CardDescription className="text-slate-400">Añade un nuevo gasto al registro de este condominio.</CardDescription>
+    <Card className="bg-white border-none shadow-2xl rounded-[2.5rem] overflow-hidden">
+      <CardHeader className="bg-slate-50 pb-8">
+        <CardTitle className="flex items-center gap-3 text-slate-900 font-black uppercase italic">
+            <PlusCircle className="text-blue-600 h-6 w-6"/> Nuevo Registro de Egreso
+        </CardTitle>
+        <CardDescription className="font-bold text-slate-400">Complete los datos del comprobante o factura.</CardDescription>
       </CardHeader>
       <form onSubmit={handleSubmit}>
-        <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input name="description" placeholder="Descripción del gasto" className="bg-slate-950 border-slate-800 text-white" required />
-                <Input name="reference" placeholder="Nº Factura o Referencia" className="bg-slate-950 border-slate-800 text-white" required />
-                <Input name="amount" type="number" step="0.01" placeholder="Monto Bs." className="bg-slate-950 border-slate-800 text-white" required />
-                <Select name="category" required>
-                    <SelectTrigger className="bg-slate-950 border-slate-800 text-white">
-                        <SelectValue placeholder="Categoría" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-slate-900 border-slate-800 text-white">
-                        <SelectItem value="Servicios">Servicios (Luz, Agua, Aseo)</SelectItem>
-                        <SelectItem value="Mantenimientos y Servicios">Mantenimientos y Servicios</SelectItem>
-                        <SelectItem value="Nomina">Nómina / Sueldos</SelectItem>
-                        <SelectItem value="Administracion">Gastos Administrativos</SelectItem>
-                        <SelectItem value="Telefonia e Internet">Telefonia e Internet</SelectItem>
-                        <SelectItem value="Gastos ExtraOrdinarios">Gastos ExtraOrdinarios</SelectItem>
-                        <SelectItem value="Reparaciones Generales">Reparaciones Generales</SelectItem>
-                        <SelectItem value="Caja Chica">Caja Chica (Asignación/Reposición)</SelectItem>
-                        <SelectItem value="Otros Gastos">Otros Gastos</SelectItem>
-                    </SelectContent>
-                </Select>
-                <Input name="date" type="date" defaultValue={format(new Date(), 'yyyy-MM-dd')} className="bg-slate-950 border-slate-800 text-white" required />
+        <CardContent className="p-8 space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Descripción del Gasto</label>
+                    <Input name="description" placeholder="Ej: PAGO DE VIGILANCIA" className="bg-slate-100 border-none h-14 rounded-2xl font-bold" required />
+                </div>
+                <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Nº Factura / Referencia</label>
+                    <Input name="reference" placeholder="000123" className="bg-slate-100 border-none h-14 rounded-2xl font-bold" required />
+                </div>
+                <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Monto Bs.</label>
+                    <Input name="amount" type="number" step="0.01" className="bg-slate-100 border-none h-14 rounded-2xl font-bold text-blue-600 text-xl" required />
+                </div>
+                <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Categoría</label>
+                    <Select name="category" required>
+                        <SelectTrigger className="bg-slate-100 border-none h-14 rounded-2xl font-bold">
+                            <SelectValue placeholder="Seleccione Categoría" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="Servicios">Servicios (Luz, Agua, Aseo)</SelectItem>
+                            <SelectItem value="Mantenimientos y Servicios">Mantenimientos y Servicios</SelectItem>
+                            <SelectItem value="Nomina">Nómina / Sueldos</SelectItem>
+                            <SelectItem value="Administracion">Gastos Administrativos</SelectItem>
+                            <SelectItem value="Telefonia e Internet">Telefonia e Internet</SelectItem>
+                            <SelectItem value="Gastos ExtraOrdinarios">Gastos ExtraOrdinarios</SelectItem>
+                            <SelectItem value="Reparaciones Generales">Reparaciones Generales</SelectItem>
+                            <SelectItem value="Caja Chica">Caja Chica</SelectItem>
+                            <SelectItem value="Otros Gastos">Otros Gastos</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                    <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Fecha del Movimiento</label>
+                    <Input name="date" type="date" defaultValue={format(new Date(), 'yyyy-MM-dd')} className="bg-slate-100 border-none h-14 rounded-2xl font-bold" required />
+                </div>
             </div>
         </CardContent>
-        <CardFooter>
-            <Button type="submit" disabled={loading || !workingCondoId} className="w-full md:w-auto bg-[#0081c9] hover:bg-[#006bb3]">
-                {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <PlusCircle className="mr-2 h-4 w-4"/>}
-                Guardar Gasto
+        <CardFooter className="bg-slate-50 p-8">
+            <Button type="submit" disabled={loading || !workingCondoId} className="w-full h-16 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-2xl text-lg shadow-xl uppercase tracking-widest transition-all">
+                {loading ? <Loader2 className="mr-2 h-6 w-6 animate-spin"/> : <Save className="mr-2 h-6 w-6"/>}
+                Guardar Egreso
             </Button>
         </CardFooter>
       </form>
@@ -158,116 +161,109 @@ function RegisterExpenseForm({ workingCondoId, onSave }: { workingCondoId: strin
 export default function ExpensesPage() {
     const { user: currentUser, activeCondoId } = useAuth();
     const { toast } = useToast();
-    
     const [expenses, setExpenses] = useState<Expense[]>([]);
     const [loading, setLoading] = useState(true);
 
-    // DETERMINAR ID DE TRABAJO (Soporte vallecondo@gmail.com)
     const sId = typeof window !== 'undefined' ? localStorage.getItem('support_mode_id') : null;
     const workingCondoId = (sId && currentUser?.email === 'vallecondo@gmail.com') ? sId : activeCondoId;
 
     useEffect(() => {
         if (!workingCondoId) return;
-
         setLoading(true);
-        // CONSULTA SEGMENTADA AL CONDOMINIO ESPECÍFICO
         const q = query(
             collection(db, "condominios", workingCondoId, "gastos"), 
             orderBy("date", "desc")
         );
-
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const expensesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Expense));
-            setExpenses(expensesData);
-            setLoading(false);
-        }, (error) => {
-            console.error("Error al cargar gastos:", error);
+            setExpenses(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Expense)));
             setLoading(false);
         });
-
         return () => unsubscribe();
     }, [workingCondoId]);
 
     const handleDelete = async (id: string) => {
         if (!workingCondoId) return;
-        if(window.confirm('¿Estás seguro de que quieres eliminar este gasto?')) {
+        if(window.confirm('¿Eliminar este registro de egreso permanentemente?')) {
             try {
                 await deleteDoc(doc(db, "condominios", workingCondoId, "gastos", id));
                 toast({ title: "Gasto eliminado" });
             } catch (error) {
-                toast({ variant: "destructive", title: "Error", description: "No se pudo eliminar el gasto." });
+                toast({ variant: "destructive", title: "Error al eliminar" });
             }
         }
     };
     
     return (
-        <div className="space-y-8 p-6">
-             <div className="flex justify-between items-end">
-                <div>
-                    <h2 className="text-4xl font-black text-white uppercase tracking-tighter italic">
-                        Gestión de <span className="text-[#0081c9]">Egresos</span>
+        <div className="space-y-10 p-8 max-w-7xl mx-auto">
+            {/* ENCABEZADO CON RAYA AMARILLA */}
+            <div className="flex justify-between items-end">
+                <div className="space-y-2">
+                    <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic leading-none">
+                        Gestión de <span className="text-blue-600">Egresos</span>
                     </h2>
-                    <p className="text-slate-500 font-bold text-sm uppercase flex items-center gap-2 mt-1">
-                        <Building2 className="h-4 w-4 text-amber-500"/>
-                        ID Condominio: <span className="text-amber-500">{workingCondoId || "Seleccione uno"}</span>
+                    <div className="h-1.5 w-20 bg-yellow-400 rounded-full" />
+                    <p className="text-slate-400 font-bold text-[10px] uppercase flex items-center gap-2 pt-2">
+                        <Building2 className="h-3 w-3 text-blue-500"/>
+                        Condominio: <span className="text-slate-900">{workingCondoId || "---"}</span>
                     </p>
                 </div>
             </div>
 
             <RegisterExpenseForm workingCondoId={workingCondoId} onSave={() => {}} />
 
-            <Card className="bg-slate-900/40 border-slate-800">
-                <CardHeader>
-                    <CardTitle className="text-white">Historial de Egresos</CardTitle>
+            <Card className="rounded-[2.5rem] shadow-2xl overflow-hidden border-none bg-white">
+                <CardHeader className="border-b border-slate-50 p-8">
+                    <CardTitle className="text-slate-900 font-black uppercase italic flex items-center gap-2">
+                        <CreditCard className="text-blue-600"/> Historial de Movimientos
+                    </CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-0">
                      {loading ? (
-                        <div className="flex justify-center items-center h-24"><Loader2 className="h-8 w-8 animate-spin text-[#0081c9]"/></div>
+                        <div className="flex justify-center items-center h-40"><Loader2 className="h-10 w-10 animate-spin text-blue-600"/></div>
                     ) : (
-                        <div className="rounded-md border border-slate-800 overflow-hidden">
-                            <Table>
-                                <TableHeader className="bg-slate-950">
-                                    <TableRow className="border-slate-800 hover:bg-slate-950">
-                                        <TableHead className="text-slate-400">Fecha</TableHead>
-                                        <TableHead className="text-slate-400">Descripción</TableHead>
-                                        <TableHead className="text-slate-400">Referencia</TableHead>
-                                        <TableHead className="text-slate-400">Categoría</TableHead>
-                                        <TableHead className="text-right text-slate-400">Monto (Bs.)</TableHead>
-                                        <TableHead className="text-right text-slate-400">Acción</TableHead>
+                        <Table>
+                            <TableHeader className="bg-slate-900">
+                                <TableRow className="h-16 hover:bg-slate-900">
+                                    <TableHead className="text-white px-8 font-bold text-xs uppercase">Fecha</TableHead>
+                                    <TableHead className="text-white font-bold text-xs uppercase">Descripción</TableHead>
+                                    <TableHead className="text-white font-bold text-xs uppercase">Categoría</TableHead>
+                                    <TableHead className="text-right text-white font-bold text-xs uppercase">Monto (Bs.)</TableHead>
+                                    <TableHead className="text-right text-white px-8 font-bold text-xs uppercase">Acción</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {expenses.length === 0 ? (
+                                    <TableRow>
+                                        <TableCell colSpan={5} className="text-center py-20 text-slate-300 font-black uppercase italic tracking-widest">No hay egresos registrados</TableCell>
                                     </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {expenses.length === 0 ? (
-                                        <TableRow>
-                                            <TableCell colSpan={6} className="text-center py-10 text-slate-500">No hay gastos registrados para este condominio.</TableCell>
+                                ) : (
+                                    expenses.map(expense => (
+                                        <TableRow key={expense.id} className="h-20 hover:bg-slate-50 transition-colors border-b border-slate-50">
+                                            <TableCell className="px-8 font-bold text-slate-500">
+                                                {expense.date ? format(expense.date.toDate(), 'dd/MM/yyyy') : '---'}
+                                            </TableCell>
+                                            <TableCell>
+                                                <p className="font-black text-slate-800 uppercase italic">{expense.description}</p>
+                                                <p className="text-[9px] text-slate-400 font-bold">REF: {expense.reference}</p>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Badge className="bg-blue-50 text-blue-600 border-none shadow-none font-black text-[9px] uppercase px-3">
+                                                    {expense.category}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell className="text-right font-black text-red-500 text-xl italic tracking-tighter">
+                                                - Bs. {formatToTwoDecimals(expense.amount)}
+                                            </TableCell>
+                                            <TableCell className="text-right px-8">
+                                                <Button variant="ghost" size="icon" onClick={() => handleDelete(expense.id)} className="text-red-200 hover:text-red-600 hover:bg-red-50 rounded-full">
+                                                    <Trash2 className="h-5 w-5"/>
+                                                </Button>
+                                            </TableCell>
                                         </TableRow>
-                                    ) : (
-                                        expenses.map(expense => (
-                                            <TableRow key={expense.id} className="border-slate-800 hover:bg-slate-800/50">
-                                                <TableCell className="text-slate-300">
-                                                    {expense.date ? format(expense.date.toDate(), 'dd/MM/yyyy', { locale: es }) : '---'}
-                                                </TableCell>
-                                                <TableCell className="text-white font-medium">{expense.description}</TableCell>
-                                                <TableCell className="text-slate-400 text-xs uppercase">{expense.reference}</TableCell>
-                                                <TableCell>
-                                                    <Badge variant="outline" className="border-slate-700 text-slate-300 bg-slate-800">
-                                                        {expense.category}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell className="text-right font-bold text-white">
-                                                    Bs. {formatToTwoDecimals(expense.amount)}
-                                                </TableCell>
-                                                <TableCell className="text-right">
-                                                    <Button variant="ghost" size="icon" onClick={() => handleDelete(expense.id)} className="hover:bg-red-500/20 group">
-                                                        <Trash2 className="h-4 w-4 text-slate-500 group-hover:text-red-400"/>
-                                                    </Button>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))
-                                    )}
-                                </TableBody>
-                            </Table>
-                        </div>
+                                    ))
+                                )}
+                            </TableBody>
+                        </Table>
                     )}
                 </CardContent>
             </Card>
