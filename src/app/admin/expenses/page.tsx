@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -112,11 +113,11 @@ function RegisterExpenseForm({ workingCondoId, onSave }: { workingCondoId: strin
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                     <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Descripción del Gasto</label>
-                    <Input name="description" placeholder="Ej: PAGO DE VIGILANCIA" className="bg-slate-100 border-none h-14 rounded-2xl font-bold" required />
+                    <Input name="description" placeholder="Ej: PAGO DE VIGILANCIA" className="bg-slate-100 border-none h-14 rounded-2xl font-bold text-slate-900" required />
                 </div>
                 <div className="space-y-2">
                     <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Nº Factura / Referencia</label>
-                    <Input name="reference" placeholder="000123" className="bg-slate-100 border-none h-14 rounded-2xl font-bold" required />
+                    <Input name="reference" placeholder="000123" className="bg-slate-100 border-none h-14 rounded-2xl font-bold text-slate-900" required />
                 </div>
                 <div className="space-y-2">
                     <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Monto Bs.</label>
@@ -125,7 +126,7 @@ function RegisterExpenseForm({ workingCondoId, onSave }: { workingCondoId: strin
                 <div className="space-y-2">
                     <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Categoría</label>
                     <Select name="category" required>
-                        <SelectTrigger className="bg-slate-100 border-none h-14 rounded-2xl font-bold">
+                        <SelectTrigger className="bg-slate-100 border-none h-14 rounded-2xl font-bold text-slate-900">
                             <SelectValue placeholder="Seleccione Categoría" />
                         </SelectTrigger>
                         <SelectContent>
@@ -143,7 +144,7 @@ function RegisterExpenseForm({ workingCondoId, onSave }: { workingCondoId: strin
                 </div>
                 <div className="space-y-2 md:col-span-2">
                     <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Fecha del Movimiento</label>
-                    <Input name="date" type="date" defaultValue={format(new Date(), 'yyyy-MM-dd')} className="bg-slate-100 border-none h-14 rounded-2xl font-bold" required />
+                    <Input name="date" type="date" defaultValue={format(new Date(), 'yyyy-MM-dd')} className="bg-slate-100 border-none h-14 rounded-2xl font-bold text-slate-900" required />
                 </div>
             </div>
         </CardContent>
@@ -270,3 +271,5 @@ export default function ExpensesPage() {
         </div>
     );
 }
+
+    
