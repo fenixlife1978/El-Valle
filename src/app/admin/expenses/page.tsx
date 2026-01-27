@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { db } from '@/lib/firebase';
 import { 
     collection, addDoc, onSnapshot, deleteDoc, doc, 
@@ -14,10 +14,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, PlusCircle, Trash2, Building2, CreditCard, Save } from 'lucide-react';
+import { Loader2, PlusCircle, Trash2, Building2, CreditCard, Save, FileDown } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Badge } from '@/components/ui/badge';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 type Expense = {
     id: string;
@@ -34,6 +36,10 @@ const formatToTwoDecimals = (num: number) => {
     const truncated = Math.trunc(num * 100) / 100;
     return truncated.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
+
+const monthOptions = Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: format(new Date(2000, i), 'MMMM', { locale: es }) }));
+const yearOptions = Array.from({ length: 10 }, (_, i) => String(new Date().getFullYear() - i));
+
 
 function RegisterExpenseForm({ workingCondoId, onSave }: { workingCondoId: string | null, onSave: () => void }) {
   const [loading, setLoading] = useState(false);
@@ -160,10 +166,12 @@ function RegisterExpenseForm({ workingCondoId, onSave }: { workingCondoId: strin
 }
 
 export default function ExpensesPage() {
-    const { user: currentUser, activeCondoId } = useAuth();
+    const { user: currentUser, activeCondoId, companyInfo } = useAuth();
     const { toast } = useToast();
     const [expenses, setExpenses] = useState<Expense[]>([]);
     const [loading, setLoading] = useState(true);
+    const [filterYear, setFilterYear] = useState(String(new Date().getFullYear()));
+    const [filterMonth, setFilterMonth] = useState(String(new Date().getMonth() + 1));
 
     const sId = typeof window !== 'undefined' ? localStorage.getItem('support_mode_id') : null;
     const workingCondoId = (sId && currentUser?.email === 'vallecondo@gmail.com') ? sId : activeCondoId;
@@ -182,6 +190,21 @@ export default function ExpensesPage() {
         return () => unsubscribe();
     }, [workingCondoId]);
 
+    const filteredExpenses = useMemo(() => {
+        return expenses.filter(expense => {
+            const expenseDate = expense.date.toDate();
+            return (
+                expenseDate.getFullYear() === parseInt(filterYear) &&
+                (expenseDate.getMonth() + 1) === parseInt(filterMonth)
+            );
+        });
+    }, [expenses, filterYear, filterMonth]);
+    
+    const totalFilteredAmount = useMemo(() => {
+        return filteredExpenses.reduce((total, expense) => total + expense.amount, 0);
+    }, [filteredExpenses]);
+
+
     const handleDelete = async (id: string) => {
         if (!workingCondoId) return;
         if(window.confirm('¿Eliminar este registro de egreso permanentemente?')) {
@@ -193,10 +216,43 @@ export default function ExpensesPage() {
             }
         }
     };
+
+    const handleExportPDF = () => {
+        if (!companyInfo) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Información de la empresa no cargada.' });
+            return;
+        }
+
+        const doc = new jsPDF();
+        const selectedMonth = monthOptions.find(m => m.value === filterMonth)?.label;
+        const title = `Reporte de Egresos - ${selectedMonth} ${filterYear}`;
+        
+        doc.setFontSize(18).text(title, 14, 22);
+        doc.setFontSize(11);
+        doc.setTextColor(100);
+        doc.text(`Generado para: ${companyInfo.name}`, 14, 29);
+        doc.text(`Fecha: ${format(new Date(), 'dd/MM/yyyy')}`, 190, 29, { align: 'right' });
+
+        autoTable(doc, {
+            startY: 40,
+            head: [['Fecha', 'Descripción', 'Referencia', 'Categoría', 'Monto (Bs.)']],
+            body: filteredExpenses.map(exp => [
+                format(exp.date.toDate(), 'dd/MM/yyyy'),
+                exp.description,
+                exp.reference,
+                exp.category,
+                formatToTwoDecimals(exp.amount)
+            ]),
+            foot: [['', '', '', 'Total Egresos', formatToTwoDecimals(totalFilteredAmount)]],
+            headStyles: { fillColor: [22, 163, 74] },
+            footStyles: { fillColor: [22, 163, 74], textColor: 255, fontStyle: 'bold' }
+        });
+
+        doc.save(`reporte_egresos_${filterYear}_${filterMonth}.pdf`);
+    };
     
     return (
         <div className="space-y-10 p-8 max-w-7xl mx-auto">
-            {/* ENCABEZADO CON RAYA AMARILLA */}
             <div className="flex justify-between items-end">
                 <div className="space-y-2">
                     <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic leading-none">
@@ -214,9 +270,25 @@ export default function ExpensesPage() {
 
             <Card className="rounded-[2.5rem] shadow-2xl overflow-hidden border-none bg-white">
                 <CardHeader className="border-b border-slate-50 p-8">
-                    <CardTitle className="text-slate-900 font-black uppercase italic flex items-center gap-2">
-                        <CreditCard className="text-blue-600"/> Historial de Movimientos
-                    </CardTitle>
+                    <div className="flex justify-between items-center flex-wrap gap-4">
+                        <CardTitle className="text-slate-900 font-black uppercase italic flex items-center gap-2">
+                            <CreditCard className="text-blue-600"/> Historial de Movimientos
+                        </CardTitle>
+                        <div className="flex items-center gap-2">
+                            <Select value={filterMonth} onValueChange={setFilterMonth}>
+                                <SelectTrigger className="w-[180px] rounded-xl"><SelectValue /></SelectTrigger>
+                                <SelectContent>{monthOptions.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent>
+                            </Select>
+                            <Select value={filterYear} onValueChange={setFilterYear}>
+                                <SelectTrigger className="w-[120px] rounded-xl"><SelectValue /></SelectTrigger>
+                                <SelectContent>{yearOptions.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
+                            </Select>
+                             <Button onClick={handleExportPDF} variant="outline" className="rounded-xl">
+                                <FileDown className="h-4 w-4 mr-2" />
+                                Exportar PDF
+                            </Button>
+                        </div>
+                    </div>
                 </CardHeader>
                 <CardContent className="p-0">
                      {loading ? (
@@ -233,12 +305,12 @@ export default function ExpensesPage() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {expenses.length === 0 ? (
+                                {filteredExpenses.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={5} className="text-center py-20 text-slate-300 font-black uppercase italic tracking-widest">No hay egresos registrados</TableCell>
+                                        <TableCell colSpan={5} className="text-center py-20 text-slate-300 font-black uppercase italic tracking-widest">No hay egresos registrados para este período</TableCell>
                                     </TableRow>
                                 ) : (
-                                    expenses.map(expense => (
+                                    filteredExpenses.map(expense => (
                                         <TableRow key={expense.id} className="h-20 hover:bg-slate-50 transition-colors border-b border-slate-50">
                                             <TableCell className="px-8 font-bold text-slate-500">
                                                 {expense.date ? format(expense.date.toDate(), 'dd/MM/yyyy') : '---'}
@@ -271,5 +343,3 @@ export default function ExpensesPage() {
         </div>
     );
 }
-
-    
