@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -128,7 +129,7 @@ export default function FinancialBalancePage() {
 
         const info = activeSettings.companyInfo;
         const pdf = new jsPDF();
-        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageWidth = (pdf as any).internal.pageSize.getWidth();
         const margin = 14;
 
         // 1. ENCABEZADO
@@ -147,7 +148,7 @@ export default function FinancialBalancePage() {
         // 2. TÍTULO Y QR
         const periodMonth = s.id.split('-')[1];
         const periodYear = s.id.split('-')[0];
-        const monthLabel = es.localize?.month(parseInt(periodMonth) - 1, { width: 'wide' }) || '';
+        const monthLabel = es.localize?.month((parseInt(periodMonth) - 1) as any, { width: 'wide' }) || '';
         const periodText = `Correspondiente al período de ${monthLabel} ${periodYear}`;
         
         pdf.setFont("helvetica", "bold").setFontSize(14).text("Balance Financiero", 105, 55, { align: 'center' });
@@ -340,7 +341,7 @@ export default function FinancialBalancePage() {
                         <TableBody>
                             {statements.map(s => (
                                 <TableRow key={s.id} className="h-20 hover:bg-slate-50 transition-all border-b border-slate-100">
-                                    <TableCell className="px-8 font-black text-slate-800 text-lg italic capitalize">{es.localize?.month(parseInt(s.id.split('-')[1]) - 1, { width: 'wide' })} {s.id.split('-')[0]}</TableCell>
+                                    <TableCell className="px-8 font-black text-slate-800 text-lg italic capitalize">{es.localize?.month((parseInt(s.id.split('-')[1]) - 1) as any, { width: 'wide' })} {s.id.split('-')[0]}</TableCell>
                                     <TableCell className="text-right px-8 font-black text-emerald-600 text-xl tracking-tighter italic">Bs. {s.estadoFinanciero.saldoNeto.toLocaleString('es-VE', {minimumFractionDigits: 2})}</TableCell>
                                     <TableCell className="text-right px-8 space-x-2">
                                         <Button onClick={() => generatePDF(s, 'view')} variant="outline" className="rounded-xl font-bold border-slate-200"><Eye className="mr-2 h-4 w-4" /> Ver</Button>
