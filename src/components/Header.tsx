@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { db } from '@/lib/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 
 export default function Header() {
     const { companyInfo: authCompanyInfo, loading: authLoading, activeCondoId: authCondoId, user } = useAuth();
@@ -14,74 +14,64 @@ export default function Header() {
     const [tasaBCV, setTasaBCV] = useState<number | string>("---");
 
     useEffect(() => {
-        const loadData = async () => {
-            // Identificar si estamos usando el ID de un cliente (Soporte) o el propio (Admin normal)
-            const sId = localStorage.getItem('support_mode_id');
-            const currentId = (sId && user?.email === 'vallecondo@gmail.com') ? sId : authCondoId;
+        // 1. DETERMINAR ID DEL CONDOMINIO (NORMAL O SOPORTE)
+        const sId = localStorage.getItem('support_mode_id');
+        const isSuperAdmin = user?.email === 'vallecondo@gmail.com';
+        const currentId = (sId && isSuperAdmin) ? sId : authCondoId;
 
-            // 1. CARGAR INFORMACIÓN DE CABECERA (LOGO / NOMBRE / RIF)
-            if (sId && user?.email === 'vallecondo@gmail.com') {
-                setIsSupport(true);
-                setLoadingSupport(true);
-                try {
-                    const docSnap = await getDoc(doc(db, 'condominios', sId));
-                    if (docSnap.exists()) {
-                        const d = docSnap.data();
-                        setSupportInfo({
-                            name: d.name || d.nombre,
-                            rif: d.rif,
-                            logo: d.logo
-                        });
-                    }
-                } catch (e) { 
-                    console.error("Error cargando datos de soporte:", e); 
-                } finally { 
-                    setLoadingSupport(false); 
+        // 2. CARGAR INFORMACIÓN DE CABECERA (LOGO / NOMBRE)
+        if (sId && isSuperAdmin) {
+            setIsSupport(true);
+            setLoadingSupport(true);
+            getDoc(doc(db, 'condominios', sId)).then(docSnap => {
+                if (docSnap.exists()) {
+                    const d = docSnap.data();
+                    setSupportInfo({
+                        name: d.name || d.nombre,
+                        rif: d.rif,
+                        logo: d.logo
+                    });
                 }
-            } else {
-                setIsSupport(false);
-                setSupportInfo(null);
-            }
+                setLoadingSupport(false);
+            });
+        } else {
+            setIsSupport(false);
+            setSupportInfo(null);
+        }
 
-            // 2. CARGAR TASA ACTIVA DESDE config/mainSettings -> exchangeRates (ARRAY)
-            if (currentId) {
-                try {
-                    const settingsRef = doc(db, 'condominios', currentId, 'config', 'mainSettings');
-                    const settingsSnap = await getDoc(settingsRef);
-                    
-                    if (settingsSnap.exists()) {
-                        const data = settingsSnap.data();
+        // 3. ESCUCHADOR EN TIEMPO REAL PARA LA TASA (onSnapshot)
+        if (currentId) {
+            const settingsRef = doc(db, 'condominios', currentId, 'config', 'mainSettings');
+            
+            // onSnapshot mantiene la conexión abierta y se activa ante cualquier cambio
+            const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    if (Array.isArray(data.exchangeRates)) {
+                        const rateActive = data.exchangeRates.find((r: any) => r.active === true);
                         
-                        if (Array.isArray(data.exchangeRates)) {
-                            // Buscamos el objeto dentro del array que esté marcado como activo
-                            const rateActive = data.exchangeRates.find((r: any) => 
-                                r.active === true || 
-                                r.status === 'active' || 
-                                r.isDefault === true
-                            );
-                            
-                            if (rateActive) {
-                                // Intentamos obtener el valor de los campos más comunes
-                                const valor = rateActive.rate || rateActive.value || rateActive.monto;
-                                setTasaBCV(valor || "---");
-                            } else {
-                                setTasaBCV("---");
-                            }
+                        if (rateActive) {
+                            const valor = rateActive.rate || rateActive.value || rateActive.monto;
+                            // Formateo numérico para asegurar decimales
+                            const formatted = typeof valor === 'number' 
+                                ? valor.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 4 })
+                                : valor;
+                            setTasaBCV(formatted);
+                        } else {
+                            setTasaBCV("---");
                         }
-                    } else {
-                        setTasaBCV("---");
                     }
-                } catch (e) {
-                    console.error("Error cargando exchangeRates:", e);
-                    setTasaBCV("---");
                 }
-            }
-        };
+            }, (error) => {
+                console.error("Error en tiempo real (Tasa):", error);
+                setTasaBCV("Error");
+            });
 
-        loadData();
+            // Limpiar el escuchador cuando el componente se desmonte
+            return () => unsubscribe();
+        }
     }, [user, authCondoId]);
 
-    // Selección de qué información mostrar según el modo
     const info = isSupport ? supportInfo : authCompanyInfo;
     const isLoading = isSupport ? loadingSupport : authLoading;
     const cId = isSupport ? localStorage.getItem('support_mode_id') : authCondoId;
@@ -90,13 +80,13 @@ export default function Header() {
         <header className="bg-[#020617] text-white p-4 shadow-md border-b border-slate-800">
             <div className="container mx-auto flex items-center justify-between">
                 
-                {/* LADO IZQUIERDO: LOGO Y DATOS DEL CONDOMINIO */}
+                {/* LADO IZQUIERDO: LOGO Y DATOS */}
                 <div className="flex items-center gap-4">
-                    <div className="relative w-12 h-12 rounded-full overflow-hidden bg-slate-800 border border-slate-700 flex items-center justify-center">
+                    <div className="relative w-12 h-12 rounded-full overflow-hidden bg-slate-800 border border-slate-700 flex items-center justify-center shadow-inner">
                         {info?.logo ? (
                             <img src={info.logo} alt="Logo" className="object-cover w-full h-full" />
                         ) : (
-                            <span className="text-[8px] font-black text-slate-500 uppercase text-center">Sin Logo</span>
+                            <span className="text-[8px] font-black text-slate-500 uppercase text-center leading-tight">Sin<br/>Logo</span>
                         )}
                     </div>
 
@@ -117,29 +107,25 @@ export default function Header() {
                     </div>
                 </div>
 
-                {/* LADO DERECHO: TASA BCV Y ACCIONES */}
+                {/* LADO DERECHO: TASA BCV */}
                 <div className="flex items-center gap-6">
-                    
-                    {/* CONTENEDOR TASA BCV DINÁMICA */}
                     <div className="flex items-center gap-3 border-r border-slate-700 pr-6">
-                        {/* LOGO BCV REDONDO DESDE PUBLIC */}
-                        <div className="w-10 h-10 rounded-full overflow-hidden border border-slate-600 bg-white flex-shrink-0 shadow-inner">
+                        <div className="w-10 h-10 rounded-full overflow-hidden border border-slate-600 bg-white flex-shrink-0 shadow-lg">
                             <img 
                                 src="/logo-bcv.png" 
                                 alt="BCV" 
-                                className="w-full h-full object-cover"
+                                className="w-full h-full object-contain p-0.5"
                             />
                         </div>
                         
                         <div className="flex flex-col items-end">
                             <span className="text-[9px] font-black uppercase tracking-widest text-emerald-400">Tasa Oficial BCV</span>
-                            <div className="text-xl font-black italic text-white tracking-tighter leading-none">
-                                {tasaBCV} <span className="text-[10px] text-slate-500 not-italic ml-1 font-bold tracking-normal">VES</span>
+                            <div className="text-xl font-black italic text-white tracking-tighter leading-none flex items-baseline gap-1">
+                                {tasaBCV} <span className="text-[10px] text-slate-500 not-italic font-bold">VES</span>
                             </div>
                         </div>
                     </div>
 
-                    {/* BOTÓN PARA CERRAR SOPORTE (Solo Super Admin) */}
                     {isSupport && (
                         <button 
                             onClick={() => {
