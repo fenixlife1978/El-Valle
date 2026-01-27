@@ -64,6 +64,8 @@ function RegisterExpenseForm({ workingCondoId, onSave }: { workingCondoId: strin
     try {
       if (category === 'Caja Chica') {
         const batch = writeBatch(db);
+        
+        // 1. Gasto general
         const expenseRef = doc(collection(db, "condominios", workingCondoId, "gastos"));
         batch.set(expenseRef, {
             description,
@@ -74,17 +76,28 @@ function RegisterExpenseForm({ workingCondoId, onSave }: { workingCondoId: strin
             createdAt: serverTimestamp(),
         });
 
+        // 2. Ciclo de reposición en Caja Chica
         const replenishmentRef = doc(collection(db, "condominios", workingCondoId, "petty_cash_replenishments"));
         batch.set(replenishmentRef, {
             date: Timestamp.fromDate(fullDate),
             amount,
-            description: `REPOSICIÓN: ${description}`,
+            description: `ASIGNACIÓN: ${description}`,
             expenses: [],
             sourceExpenseId: expenseRef.id 
         });
 
+        // 3. Movimiento de INGRESO en el libro de Caja Chica
+        const movementRef = doc(collection(db, "condominios", workingCondoId, "cajaChica_movimientos"));
+        batch.set(movementRef, {
+            date: Timestamp.fromDate(fullDate),
+            description: `INGRESO POR ASIGNACIÓN: ${description}`,
+            amount,
+            type: 'ingreso',
+            replenishmentId: replenishmentRef.id
+        });
+
         await batch.commit();
-        toast({ title: "Gasto y Fondo Registrados" });
+        toast({ title: "Gasto y Fondo Registrados", description: `Se ha añadido un ingreso de Bs. ${amount} a la Caja Chica.` });
       } else {
         await addDoc(collection(db, "condominios", workingCondoId, "gastos"), {
           description,
@@ -100,7 +113,8 @@ function RegisterExpenseForm({ workingCondoId, onSave }: { workingCondoId: strin
       (e.target as HTMLFormElement).reset();
       onSave();
     } catch (error) {
-      toast({ variant: "destructive", title: "Error al guardar" });
+      toast({ variant: "destructive", title: "Error al guardar", description: (error as Error).message });
+      console.error(error);
     } finally {
       setLoading(false);
     }
