@@ -470,11 +470,11 @@ export default function PettyCashManager() {
                                     <Label className="text-[10px] uppercase font-black text-slate-400">Desde</Label>
                                     <div className="flex gap-1">
                                         <Select value={filterDateRange.fromMonth} onValueChange={(v) => setFilterDateRange(p => ({...p, fromMonth: v}))}>
-                                            <SelectTrigger className="h-9 text-xs font-bold bg-white"><SelectValue/></SelectTrigger>
+                                            <SelectTrigger className="h-9 text-xs font-bold bg-slate-100 text-slate-900 rounded-xl"><SelectValue/></SelectTrigger>
                                             <SelectContent>{monthOptions.map(m=><SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent>
                                         </Select>
                                         <Select value={filterDateRange.fromYear} onValueChange={(v) => setFilterDateRange(p => ({...p, fromYear: v}))}>
-                                            <SelectTrigger className="h-9 text-xs font-bold bg-white"><SelectValue/></SelectTrigger>
+                                            <SelectTrigger className="h-9 text-xs font-bold bg-slate-100 text-slate-900 rounded-xl"><SelectValue/></SelectTrigger>
                                             <SelectContent>{yearOptions.map(y=><SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
                                         </Select>
                                     </div>
@@ -483,11 +483,11 @@ export default function PettyCashManager() {
                                     <Label className="text-[10px] uppercase font-black text-slate-400">Hasta</Label>
                                     <div className="flex gap-1">
                                         <Select value={filterDateRange.toMonth} onValueChange={(v) => setFilterDateRange(p => ({...p, toMonth: v}))}>
-                                            <SelectTrigger className="h-9 text-xs font-bold bg-white"><SelectValue/></SelectTrigger>
+                                            <SelectTrigger className="h-9 text-xs font-bold bg-slate-100 text-slate-900 rounded-xl"><SelectValue/></SelectTrigger>
                                             <SelectContent>{monthOptions.map(m=><SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent>
                                         </Select>
                                         <Select value={filterDateRange.toYear} onValueChange={(v) => setFilterDateRange(p => ({...p, toYear: v}))}>
-                                            <SelectTrigger className="h-9 text-xs font-bold bg-white"><SelectValue/></SelectTrigger>
+                                            <SelectTrigger className="h-9 text-xs font-bold bg-slate-100 text-slate-900 rounded-xl"><SelectValue/></SelectTrigger>
                                             <SelectContent>{yearOptions.map(y=><SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
                                         </Select>
                                     </div>
