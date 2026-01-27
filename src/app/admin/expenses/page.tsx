@@ -64,7 +64,7 @@ function RegisterExpenseForm({ workingCondoId, onSave }: { workingCondoId: strin
     const fullDate = new Date(`${dateValue}T00:00:00`);
 
     try {
-      if (category === 'Reposición Caja Chica') {
+      if (category === 'Caja Chica') {
         const batch = writeBatch(db);
         
         // 1. Create the main expense document that justifies the cash leaving the bank
@@ -137,7 +137,7 @@ function RegisterExpenseForm({ workingCondoId, onSave }: { workingCondoId: strin
                         <SelectItem value="Telefonia e Internet">Telefonia e Internet</SelectItem>
                         <SelectItem value="Gastos ExtraOrdinarios">Gastos ExtraOrdinarios</SelectItem>
                         <SelectItem value="Reparaciones Generales">Reparaciones Generales</SelectItem>
-                        <SelectItem value="Reposición Caja Chica">Reposición Caja Chica</SelectItem>
+                        <SelectItem value="Caja Chica">Caja Chica (Asignación/Reposición)</SelectItem>
                         <SelectItem value="Otros Gastos">Otros Gastos</SelectItem>
                     </SelectContent>
                 </Select>

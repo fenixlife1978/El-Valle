@@ -165,7 +165,7 @@
         "properties": {
             "description": { "type": "string" },
             "amount": { "type": "number" },
-            "category": { "type": "string", "enum": ["Servicios", "Mantenimientos y Servicios", "Nomina", "Administracion", "Telefonia e Internet", "Gastos ExtraOrdinarios", "Reparaciones Generales", "Reposición Caja Chica", "Otros Gastos"] },
+            "category": { "type": "string", "enum": ["Servicios", "Mantenimientos y Servicios", "Nomina", "Administracion", "Telefonia e Internet", "Gastos ExtraOrdinarios", "Reparaciones Generales", "Caja Chica", "Otros Gastos"] },
             "date": { "type": "string", "format": "date-time" },
             "createdAt": { "type": "string", "format": "date-time" },
             "reference": { "type": "string" }

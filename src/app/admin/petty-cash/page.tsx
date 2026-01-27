@@ -240,7 +240,7 @@ export default function PettyCashPage() {
                     batch.set(expenseRef, {
                         description: `Reposición Caja Chica: ${dialogDescription}`,
                         amount: parseFloat(dialogAmount),
-                        category: "Reposición Caja Chica",
+                        category: "Caja Chica",
                         date: Timestamp.fromDate(dialogDate),
                         reference: `CCH-${replenishmentRef.id}`, // Link to replenishment
                         createdAt: serverTimestamp(),
@@ -447,7 +447,7 @@ export default function PettyCashPage() {
                 batch.set(expenseRef, {
                     description: `Reposición de Caja Chica por gastos del ciclo: "${rep.description}"`,
                     amount: totalExpenses,
-                    category: "Reposición Caja Chica",
+                    category: "Caja Chica",
                     date: Timestamp.now(),
                     reference: `CCH-REP-${rep.id.slice(0, 5)}`,
                     createdAt: serverTimestamp(),
