@@ -427,17 +427,17 @@ export default function PettyCashManager() {
                     </CardTitle>
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-6">
-                    <div className="p-5 bg-green-50/50 border border-green-100 rounded-2xl text-center">
-                        <p className="text-[10px] text-green-700 font-black uppercase tracking-widest mb-1">Total Ingresos</p>
-                        <p className="text-3xl font-black text-green-600">Bs. {formatToTwoDecimals(totals.totalIngresos)}</p>
+                    <div className="p-5 bg-green-100 border border-green-200 rounded-2xl text-center">
+                        <p className="text-[10px] text-green-800 font-black uppercase tracking-widest mb-1">Total Ingresos</p>
+                        <p className="text-3xl font-black text-green-900">Bs. {formatToTwoDecimals(totals.totalIngresos)}</p>
                     </div>
-                    <div className="p-5 bg-red-50/50 border border-red-100 rounded-2xl text-center">
-                        <p className="text-[10px] text-red-700 font-black uppercase tracking-widest mb-1">Total Egresos</p>
-                        <p className="text-3xl font-black text-red-600">Bs. {formatToTwoDecimals(totals.totalEgresos)}</p>
+                    <div className="p-5 bg-red-100 border border-red-200 rounded-2xl text-center">
+                        <p className="text-[10px] text-red-800 font-black uppercase tracking-widest mb-1">Total Egresos</p>
+                        <p className="text-3xl font-black text-red-900">Bs. {formatToTwoDecimals(totals.totalEgresos)}</p>
                     </div>
-                    <div className="p-5 bg-blue-50 border border-blue-200 rounded-2xl text-center shadow-inner">
-                        <p className="text-[10px] text-blue-700 font-black uppercase tracking-widest mb-1">Saldo Disponible</p>
-                        <p className="text-3xl font-black text-[#0081c9]">Bs. {formatToTwoDecimals(totals.saldo)}</p>
+                    <div className="p-5 bg-blue-100 border border-blue-200 rounded-2xl text-center shadow-inner">
+                        <p className="text-[10px] text-blue-800 font-black uppercase tracking-widest mb-1">Saldo Disponible</p>
+                        <p className="text-3xl font-black text-blue-900">Bs. {formatToTwoDecimals(totals.saldo)}</p>
                     </div>
                 </CardContent>
             </Card>
@@ -470,11 +470,11 @@ export default function PettyCashManager() {
                                     <Label className="text-[10px] uppercase font-black text-slate-400">Desde</Label>
                                     <div className="flex gap-1">
                                         <Select value={filterDateRange.fromMonth} onValueChange={(v) => setFilterDateRange(p => ({...p, fromMonth: v}))}>
-                                            <SelectTrigger className="h-9 text-xs font-bold bg-slate-100 text-slate-900 rounded-xl"><SelectValue/></SelectTrigger>
+                                            <SelectTrigger className="h-9 text-xs font-bold bg-white text-slate-900 rounded-xl"><SelectValue/></SelectTrigger>
                                             <SelectContent>{monthOptions.map(m=><SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent>
                                         </Select>
                                         <Select value={filterDateRange.fromYear} onValueChange={(v) => setFilterDateRange(p => ({...p, fromYear: v}))}>
-                                            <SelectTrigger className="h-9 text-xs font-bold bg-slate-100 text-slate-900 rounded-xl"><SelectValue/></SelectTrigger>
+                                            <SelectTrigger className="h-9 text-xs font-bold bg-white text-slate-900 rounded-xl"><SelectValue/></SelectTrigger>
                                             <SelectContent>{yearOptions.map(y=><SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
                                         </Select>
                                     </div>
@@ -483,11 +483,11 @@ export default function PettyCashManager() {
                                     <Label className="text-[10px] uppercase font-black text-slate-400">Hasta</Label>
                                     <div className="flex gap-1">
                                         <Select value={filterDateRange.toMonth} onValueChange={(v) => setFilterDateRange(p => ({...p, toMonth: v}))}>
-                                            <SelectTrigger className="h-9 text-xs font-bold bg-slate-100 text-slate-900 rounded-xl"><SelectValue/></SelectTrigger>
+                                            <SelectTrigger className="h-9 text-xs font-bold bg-white text-slate-900 rounded-xl"><SelectValue/></SelectTrigger>
                                             <SelectContent>{monthOptions.map(m=><SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent>
                                         </Select>
                                         <Select value={filterDateRange.toYear} onValueChange={(v) => setFilterDateRange(p => ({...p, toYear: v}))}>
-                                            <SelectTrigger className="h-9 text-xs font-bold bg-slate-100 text-slate-900 rounded-xl"><SelectValue/></SelectTrigger>
+                                            <SelectTrigger className="h-9 text-xs font-bold bg-white text-slate-900 rounded-xl"><SelectValue/></SelectTrigger>
                                             <SelectContent>{yearOptions.map(y=><SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
                                         </Select>
                                     </div>
