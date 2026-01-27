@@ -1,402 +1,435 @@
 
-
-'use client';
+"use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { useAuth } from '@/hooks/use-auth';
 import { db } from '@/lib/firebase';
-import { collection, doc, setDoc, deleteDoc, onSnapshot, orderBy, query, serverTimestamp, Timestamp } from 'firebase/firestore';
-import { Button } from '@/components/ui/button';
-import { Card, CardTitle, CardContent, CardHeader } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { useToast } from '@/hooks/use-toast';
-import { PlusCircle, Loader2, Save, FileDown, Trash2, Eye, ChevronLeft, X, TrendingUp, BarChartHorizontalBig } from 'lucide-react';
+import { 
+    collection, query, orderBy, onSnapshot, addDoc, 
+    deleteDoc, doc, updateDoc, Timestamp, setDoc
+} from 'firebase/firestore';
+import { 
+    FileText, Save, Trash2, Eye, EyeOff, 
+    TrendingUp, TrendingDown, Wallet, History,
+    CheckCircle2, AlertCircle, Loader2, Building2,
+    PlusCircle, X, Download
+} from 'lucide-react';
+import { format, parse } from 'date-fns';
+import { es } from 'date-fns/locale';
+import { useAuth } from '@/hooks/use-auth';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import QRCode from 'qrcode';
-import { Textarea } from '@/components/ui/textarea';
-import { format } from 'date-fns';
-import { es } from 'date-fns/locale';
 
-const inputStyle = "bg-slate-100 border-none h-12 text-md font-bold text-slate-900 rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500 placeholder:text-slate-400";
 
-type FinancialItem = {
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
+
+// --- TYPE DEFINITIONS ---
+interface FinancialItem {
     id: string;
     dia: string;
     concepto: string;
     monto: number;
     categoria: string;
+}
+
+interface SavedBalance {
+    id: string;
+    nombrePeriodo?: string; // Made optional for safety
+    totalIngresos?: number;
+    totalEgresos?: number;
+    saldoNeto?: number;
+    fechaCierre?: Timestamp;
+    publicado: boolean;
+    ingresos: FinancialItem[];
+    egresos: FinancialItem[];
+    notas?: string;
+    companyInfo?: CompanyInfo;
+    createdAt: Timestamp;
+}
+
+interface AutomaticExpense {
+    id: string;
+    monto?: number;
+    amount?: number;
+    description?: string;
+    concepto?: string;
+    category?: string;
+}
+
+type CompanyInfo = {
+    name: string;
+    address: string;
+    rif: string;
+    phone: string;
+    email: string;
+    logo: string;
 };
 
-type FinancialStatement = {
-  id: string;
-  ingresos: FinancialItem[];
-  egresos: FinancialItem[];
-  estadoFinanciero: { 
-    saldoNeto: number;
-    saldoAnterior: number;
-    totalIngresos: number;
-    totalEgresos: number;
-   };
-  notas: string;
-  createdAt: Timestamp;
+// Helper para formato de moneda
+const formatCurrency = (num: number) => {
+    return (num || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-const emptyItem = { id: '', dia: '', concepto: '', monto: 0, categoria: 'N/A' };
+const months = Array.from({ length: 12 }, (_, i) => ({
+  value: String(i + 1),
+  label: format(new Date(2000, i), 'MMMM', { locale: es }),
+}));
 
-
-const formatToTwoDecimals = (num: number): string => {
-  if (typeof num !== 'number' || isNaN(num)) return '0,00';
-  const truncated = Math.trunc(num * 100) / 100;
-  return truncated.toLocaleString('es-VE', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-};
-
-
-export default function FinancialBalancePage() {
-    const { activeCondoId } = useAuth();
-    const { toast } = useToast();
-    const [view, setView] = useState<'list' | 'form'>('list');
-    const [loading, setLoading] = useState(true);
-    const [saving, setSaving] = useState(false);
-    const [statements, setStatements] = useState<FinancialStatement[]>([]);
-    const [activeSettings, setActiveSettings] = useState<any>(null);
-    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+export default function FinancialBalance() {
+    const { activeCondoId, companyInfo } = useAuth();
     
-    // State for the form
-    const [selectedMonth, setSelectedMonth] = useState(String(new Date().getMonth() + 1).padStart(2, '0'));
-    const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
-    const [prevBalance, setPrevBalance] = useState(0); 
-    const [ingresos, setIngresos] = useState<FinancialItem[]>([{ ...emptyItem, id: Date.now().toString() }]);
-    const [egresos, setEgresos] = useState<FinancialItem[]>([{ ...emptyItem, id: Date.now().toString() }]);
-    const [notas, setNotas] = useState('');
+    // Estados de datos
+    const [statements, setStatements] = useState<SavedBalance[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const condoId = activeCondoId || "condo_01";
+    // Formulario para nuevo cierre
+    const [periodName, setPeriodName] = useState('');
+    const [ingresos, setIngresos] = useState<FinancialItem[]>([]);
+    const [egresos, setEgresos] = useState<FinancialItem[]>([]);
+    const [notas, setNotas] = useState('');
 
     useEffect(() => {
         if (!activeCondoId) {
             const timer = setTimeout(() => setLoading(false), 3000);
             return () => clearTimeout(timer);
         }
-
-        const q = query(collection(db, "condominios", activeCondoId, "financial_statements"), orderBy("createdAt", "desc"));
-        const unsubStatements = onSnapshot(q, 
-            (snap) => {
-                setStatements(snap.docs.map(d => ({ id: d.id, ...d.data() } as FinancialStatement)));
+    
+        const q = query(
+            collection(db, "condominios", activeCondoId, "financial_statements"), 
+            orderBy("createdAt", "desc")
+        );
+    
+        const unsubscribe = onSnapshot(q, 
+            (snapshot) => {
+                setStatements(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SavedBalance)));
                 setLoading(false);
-            },
+            }, 
             (error) => {
-                 console.error("Error en Firebase:", error);
-                 toast({ variant: 'destructive', title: 'Error de Conexión', description: 'Revisa tus permisos en Firebase.' });
-                 setLoading(false);
+                console.error("Error en Firebase:", error);
+                setLoading(false);
             }
         );
+    
+        return () => unsubscribe();
+    }, [activeCondoId]);
 
-        const unsubSettings = onSnapshot(doc(db, "condominios", activeCondoId, "config", "mainSettings"), (snap) => {
-            if (snap.exists()) setActiveSettings(snap.data());
-        });
-        
-        return () => { unsubStatements(); unsubSettings(); };
-    }, [activeCondoId, toast]);
 
-    const totalIngresos = useMemo(() => ingresos.reduce((acc, item) => acc + Number(item.monto || 0), 0), [ingresos]);
-    const totalEgresos = useMemo(() => egresos.reduce((acc, item) => acc + Number(item.monto || 0), 0), [egresos]);
-    const saldoNeto = useMemo(() => prevBalance + totalIngresos - totalEgresos, [prevBalance, totalIngresos, totalEgresos]);
+    // --- Cálculos ---
+    const totalIngresos = useMemo(() => ingresos.reduce((acc, item) => acc + (Number(item.monto) || 0), 0), [ingresos]);
+    const totalEgresos = useMemo(() => egresos.reduce((acc, item) => acc + (Number(item.monto) || 0), 0), [egresos]);
+    const saldoNeto = totalIngresos - totalEgresos;
 
-    const handleItemChange = (type: 'ingresos' | 'egresos', id: string, field: keyof FinancialItem, value: string | number) => {
-        const setter = type === 'ingresos' ? setIngresos : setEgresos;
-        setter(prev => prev.map(item => item.id === id ? { ...item, [field]: value } : item));
-    };
+    // --- Acciones ---
 
     const addItem = (type: 'ingresos' | 'egresos') => {
-        const setter = type === 'ingresos' ? setIngresos : setEgresos;
-        setter(prev => [...prev, { ...emptyItem, id: Date.now().toString() }]);
+        const newItem: FinancialItem = { id: Date.now().toString(), dia: format(new Date(), 'dd'), concepto: '', monto: 0, categoria: 'Otros' };
+        if (type === 'ingresos') setIngresos([...ingresos, newItem]);
+        else setEgresos([...egresos, newItem]);
+    };
+
+    const updateItem = (type: 'ingresos' | 'egresos', id: string, field: keyof FinancialItem, value: any) => {
+        const updater = (items: FinancialItem[]) => items.map(item => item.id === id ? { ...item, [field]: value } : item);
+        if (type === 'ingresos') setIngresos(updater);
+        else setEgresos(updater);
     };
 
     const removeItem = (type: 'ingresos' | 'egresos', id: string) => {
-        const setter = type === 'ingresos' ? setIngresos : setEgresos;
-        setter(prev => prev.length > 1 ? prev.filter(item => item.id !== id) : prev);
+        if (type === 'ingresos') setIngresos(ingresos.filter(item => item.id !== id));
+        else setEgresos(egresos.filter(item => item.id !== id));
     };
 
-    const generatePDF = async (s: FinancialStatement, action: 'download' | 'view' = 'download') => {
-        if (!activeSettings?.companyInfo) {
-            toast({ variant: "destructive", title: "Faltan datos", description: "No se encontró la información de la empresa." });
+    const handleCreateCierre = async () => {
+        const monthMatch = periodName.match(/(\w+)\s+(\d{4})/);
+        if (!activeCondoId || !monthMatch) {
+            alert("El nombre del período debe ser 'Mes Año' (ej: Enero 2024)");
+            return;
+        }
+        
+        const monthIndex = months.findIndex(m => m.label.toLowerCase() === monthMatch[1].toLowerCase());
+        const year = monthMatch[2];
+
+        if (monthIndex === -1) {
+            alert("Mes inválido.");
+            return;
+        }
+        
+        const docId = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+
+        setIsSubmitting(true);
+        try {
+            await setDoc(doc(db, 'condominios', activeCondoId, 'financial_statements', docId), {
+                ingresos,
+                egresos,
+                notas,
+                createdAt: Timestamp.now(),
+                publicado: false,
+                companyInfo: companyInfo || null,
+            });
+
+            setPeriodName('');
+            setIngresos([]);
+            setEgresos([]);
+            setNotas('');
+            alert("Balance cerrado y guardado exitosamente.");
+        } catch (error) {
+            console.error(error);
+            alert("Error al guardar el balance.");
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const togglePublish = async (id: string, currentState: boolean) => {
+        if (!activeCondoId) return;
+        try {
+            await updateDoc(doc(db, 'condominios', activeCondoId, 'financial_statements', id), {
+                publicado: !currentState
+            });
+        } catch (error) { console.error(error); }
+    };
+
+    const handleDeleteBalance = async (id: string) => {
+        if (!activeCondoId || !confirm("¿Está seguro de eliminar este registro histórico?")) return;
+        try {
+            await deleteDoc(doc(db, 'condominios', activeCondoId, 'financial_statements', id));
+        } catch (error) { console.error(error); }
+    };
+
+     const generatePDF = async (statement: SavedBalance) => {
+        if (!companyInfo) {
+            alert("La información de la compañía no está cargada.");
             return;
         }
 
-        const info = activeSettings.companyInfo;
-        const pdf = new jsPDF();
-        const pageWidth = (pdf as any).internal.pageSize.getWidth();
+        const doc = new jsPDF();
+        const pageWidth = (doc as any).internal.pageSize.getWidth();
         const margin = 14;
 
-        // 1. ENCABEZADO
-        if (info.logo) {
-            try { pdf.addImage(info.logo, 'PNG', 14, 15, 25, 25); } catch(e) {}
+        if (statement.companyInfo?.logo) {
+            doc.addImage(statement.companyInfo.logo, 'PNG', margin, margin, 25, 25);
         }
-        pdf.setFont("helvetica", "bold").setFontSize(10).text(info.name?.toUpperCase() || "", 45, 20);
-        pdf.setFont("helvetica", "normal").setFontSize(8);
-        pdf.text(info.rif || "", 45, 25);
-        const addressLines = pdf.splitTextToSize(info.address || "", 100);
-        pdf.text(addressLines, 45, 30);
-        const addressHeight = addressLines.length * 3.5;
-        pdf.text(`Teléfono: ${info.phone || ""}`, 45, 30 + addressHeight);
-        pdf.text(`Emitido: ${format(new Date(), 'dd/MM/yyyy')}`, 200, 20, { align: 'right' });
+        if(statement.companyInfo){
+            doc.setFontSize(12).setFont('helvetica', 'bold').text(statement.companyInfo.name, margin + 30, margin + 8);
+            doc.setFontSize(9).setFont('helvetica', 'normal');
+            doc.text(statement.companyInfo.rif, margin + 30, margin + 14);
+            doc.text(statement.companyInfo.address, margin + 30, margin + 19);
+            doc.text(`Teléfono: ${statement.companyInfo.phone}`, margin + 30, margin + 24);
+        }
 
-        // 2. TÍTULO Y QR
-        const periodMonth = s.id.split('-')[1];
-        const periodYear = s.id.split('-')[0];
-        const monthLabel = es.localize?.month((parseInt(periodMonth) - 1) as any, { width: 'wide' }) || '';
-        const periodText = `Correspondiente al período de ${monthLabel} ${periodYear}`;
+        doc.text(`Emitido: ${format(new Date(), 'dd/MM/yyyy')}`, pageWidth - margin, margin + 8, { align: 'right' });
         
-        pdf.setFont("helvetica", "bold").setFontSize(14).text("Balance Financiero", 105, 55, { align: 'center' });
-        pdf.setFont("helvetica", "normal").setFontSize(10).text(periodText, 105, 61, { align: 'center' });
-        
-        const qrDataUrl = await QRCode.toDataURL(`${window.location.origin}/report-viewer/${s.id}`);
-        pdf.addImage(qrDataUrl, 'PNG', 170, 50, 25, 25);
-        let startY = 75;
+        const monthValue = parseInt(statement.id.split('-')[1]);
+        const yearLabel = statement.id.split('-')[0];
+        const monthLabel = format(new Date(parseInt(yearLabel), monthValue - 1), 'MMMM', { locale: es });
+        const period = `${monthLabel} ${yearLabel}`;
 
-        // 3. TABLA DE INGRESOS
-        const ingresosBody = [
-            ["01", "saldo inicial (Mes Anterior)", "N/A", formatToTwoDecimals(s.estadoFinanciero.saldoAnterior)],
-            ...s.ingresos.map(item => [item.dia, item.concepto, item.categoria, formatToTwoDecimals(item.monto)])
-        ];
-        autoTable(pdf, {
-            startY: startY,
-            head: [['DÍA', 'INGRESOS', 'CATEGORÍA', 'MONTO (Bs.)']],
-            body: ingresosBody,
-            foot: [['', '', 'TOTAL INGRESOS', formatToTwoDecimals(s.estadoFinanciero.totalIngresos + s.estadoFinanciero.saldoAnterior)]],
-            theme: 'grid',
-            headStyles: { fillColor: [22, 163, 74], textColor: 255, fontStyle: 'bold', halign: 'center' },
-            footStyles: { fillColor: [22, 163, 74], textColor: 255, fontStyle: 'bold', halign: 'right' },
-            columnStyles: { 3: { halign: 'right' } }
+        doc.setFontSize(16).setFont('helvetica', 'bold').text('Balance Financiero', pageWidth / 2, margin + 52, { align: 'center' });
+        doc.setFontSize(12).setFont('helvetica', 'normal').text(`Correspondiente al período de ${period}`, pageWidth / 2, margin + 59, { align: 'center' });
+        
+        try {
+            const qrCodeUrl = await QRCode.toDataURL(`${window.location.origin}/owner/report/balance-${statement.id}`, {
+                errorCorrectionLevel: 'M', margin: 2, scale: 4,
+            });
+
+            if (qrCodeUrl) {
+                const qrSize = 30;
+                doc.addImage(qrCodeUrl, 'PNG', pageWidth - margin - qrSize, margin + 50, qrSize, qrSize);
+            }
+        } catch (err) {
+            console.error('Failed to generate QR code', err);
+        }
+
+        let startY = margin + 85;
+
+        // Tabla de Ingresos
+        const totalIngresos = statement.ingresos.reduce((sum, item) => sum + item.monto, 0);
+        autoTable(doc, {
+            head: [['DÍA', 'INGRESOS', 'MONTO (Bs.)']],
+            body: statement.ingresos.map(i => [i.dia, i.concepto, { content: formatCurrency(i.monto), styles: { halign: 'right' } }]),
+            foot: [[{ content: '', styles: { halign: 'right' } }, { content: 'TOTAL INGRESOS', styles: { halign: 'right' } }, { content: formatCurrency(totalIngresos), styles: { halign: 'right' } }]],
+            startY, theme: 'striped', headStyles: { fillColor: [30, 80, 180], halign: 'center' }, footStyles: { fillColor: [30, 80, 180], textColor: 255, fontStyle: 'bold' }
         });
-        startY = (pdf as any).lastAutoTable.finalY + 10;
+        startY = (doc as any).lastAutoTable.finalY + 10;
 
-        // 4. TABLA DE EGRESOS
-        autoTable(pdf, {
-            startY: startY,
-            head: [['DÍA', 'EGRESOS', 'CATEGORÍA', 'MONTO (Bs.)']],
-            body: s.egresos.map(item => [item.dia, item.concepto, item.categoria, formatToTwoDecimals(item.monto)]),
-            foot: [['', '', 'TOTAL EGRESOS', formatToTwoDecimals(s.estadoFinanciero.totalEgresos)]],
-            theme: 'grid',
-            headStyles: { fillColor: [220, 38, 38], textColor: 255, fontStyle: 'bold', halign: 'center' },
-            footStyles: { fillColor: [220, 38, 38], textColor: 255, fontStyle: 'bold', halign: 'right' },
-            columnStyles: { 3: { halign: 'right' } }
+        // Tabla de Egresos
+        const totalEgresos = statement.egresos.reduce((sum, item) => sum + item.monto, 0);
+        autoTable(doc, {
+            head: [['DÍA', 'EGRESOS', 'MONTO (Bs.)']],
+            body: statement.egresos.map(e => [e.dia, e.concepto, { content: formatCurrency(e.monto), styles: { halign: 'right' } }]),
+            foot: [[{ content: '', styles: { halign: 'right' } }, { content: 'TOTAL EGRESOS', styles: { halign: 'right' } }, { content: formatCurrency(totalEgresos), styles: { halign: 'right' } }]],
+            startY, theme: 'striped', headStyles: { fillColor: [220, 53, 69], halign: 'center' }, footStyles: { fillColor: [220, 53, 69], textColor: 255, fontStyle: 'bold' }
         });
-        startY = (pdf as any).lastAutoTable.finalY + 10;
+        startY = (doc as any).lastAutoTable.finalY + 10;
         
-        // 5. RESUMEN DE EGRESOS POR CATEGORÍA
-        const egresosByCategory = s.egresos.reduce((acc, item) => {
-            const cat = item.categoria || 'Sin Categoría';
-            acc[cat] = (acc[cat] || 0) + Number(item.monto);
+        // Resumen de Egresos
+        const expensesByCategory = statement.egresos.reduce((acc, expense) => {
+            const category = expense.categoria || 'Otros';
+            acc[category] = (acc[category] || 0) + expense.monto;
             return acc;
         }, {} as Record<string, number>);
 
-        autoTable(pdf, {
-            startY: startY,
-            head: [['Resumen de Egresos por Categoría', 'Monto Total (Bs.)']],
-            body: Object.entries(egresosByCategory).map(([cat, total]) => [cat, formatToTwoDecimals(total)]),
-            theme: 'grid',
-            headStyles: { fillColor: [75, 85, 99], textColor: 255, fontStyle: 'bold' },
-            columnStyles: { 1: { halign: 'right' } }
+        autoTable(doc, {
+            head: [['RESUMEN DE EGRESOS POR CATEGORÍA', 'MONTO (Bs.)']],
+            body: Object.entries(expensesByCategory).map(([cat, amount]) => [cat, { content: formatCurrency(amount), styles: { halign: 'right' } }]),
+            startY, theme: 'grid', headStyles: { fillColor: [108, 117, 125], halign: 'center' }
         });
-        startY = (pdf as any).lastAutoTable.finalY + 10;
-
-        // 6. NOTAS
-        if (s.notas) {
-            pdf.setFont("helvetica", "bold").setFontSize(10).text("Notas:", margin, startY);
-            startY += 5;
-            pdf.setFont("helvetica", "normal").setFontSize(9);
-            const notesLines = pdf.splitTextToSize(s.notas, pageWidth - margin * 2);
-            pdf.text(notesLines, margin, startY);
-            startY += (notesLines.length * 4) + 10;
+        startY = (doc as any).lastAutoTable.finalY + 10;
+        
+        // Sección de Notas
+        if(statement.notas) {
+             doc.setFontSize(10).text('Notas:', margin, startY);
+             doc.setFontSize(10).setFont('helvetica', 'normal').text(statement.notas, margin, startY + 5, { maxWidth: 180 });
+             startY = (doc as any).getTextDimensions(statement.notas, {maxWidth: 180}).h + startY + 10;
         }
+
+        // Resumen de Liquidez
+        const saldoNetoLocal = totalIngresos - totalEgresos;
+        doc.setFillColor(230, 240, 255);
+        doc.rect(margin, startY - 2, pageWidth - margin * 2, 32, 'F');
+        doc.setFontSize(11).setFont('helvetica', 'bold').setTextColor(30, 80, 180);
         
-        // 7. LIQUIDEZ
-        const finalY = 250;
-        pdf.setFontSize(9).setFont("helvetica", "normal");
-        pdf.text('Saldo del Mes en Banco:', 130, finalY);
-        pdf.text(`Bs. ${formatToTwoDecimals(s.estadoFinanciero.saldoNeto)}`, 200, finalY, { align: 'right' });
+        doc.text('Saldo del Mes en Banco (Ingresos - Egresos)', margin + 2, startY + 5);
+        doc.text(formatCurrency(saldoNetoLocal), pageWidth - margin - 2, startY + 5, { align: 'right' });
+
+        doc.text('(-) Fondo de Reserva del Mes', margin + 2, startY + 12);
+        doc.text(formatCurrency(0), pageWidth - margin - 2, startY + 12, { align: 'right' });
         
-        pdf.text('Saldo en Caja Chica:', 130, finalY + 5);
-        pdf.text('Bs. 0,00', 200, finalY + 5, { align: 'right' });
-        
-        pdf.text('Saldo en Efectivo:', 130, finalY + 10);
-        pdf.text('Bs. 0,00', 200, finalY + 10, { align: 'right' });
+        doc.text('(=) SALDO NETO', margin + 2, startY + 19);
+        doc.text(formatCurrency(saldoNetoLocal), pageWidth - margin - 2, startY + 19, { align: 'right' });
 
-        const totalY = finalY + 18;
-        pdf.setFillColor(230, 245, 208); // Un verde claro
-        pdf.rect(128, totalY - 5, 74, 7, 'F');
-        pdf.setFontSize(10).setFont("helvetica", "bold");
-        pdf.text('TOTAL LIQUIDEZ', 130, totalY);
-        pdf.text(`Bs. ${formatToTwoDecimals(s.estadoFinanciero.saldoNeto)}`, 200, totalY, { align: 'right' });
-
-
-        if (action === 'download') {
-            pdf.save(`Balance_${s.id}.pdf`);
-        } else {
-            setPreviewUrl(pdf.output('bloburl').toString());
-        }
-    };
-    
-    const handleSave = async () => {
-        setSaving(true);
-        const id = `${selectedYear}-${selectedMonth}`;
-        const finalIngresos = ingresos.filter(i => i.concepto && i.monto > 0);
-        const finalEgresos = egresos.filter(e => e.concepto && e.monto > 0);
-        try {
-            await setDoc(doc(db, "condominios", condoId, "financial_statements", id), {
-                id,
-                ingresos: finalIngresos,
-                egresos: finalEgresos,
-                notas,
-                estadoFinanciero: {
-                    saldoAnterior: prevBalance,
-                    totalIngresos: totalIngresos,
-                    totalEgresos: totalEgresos,
-                    saldoNeto: saldoNeto,
-                },
-                createdAt: serverTimestamp(),
-            });
-            setView('list');
-            toast({ title: "Balance Guardado con Éxito" });
-        } catch (e) { toast({ variant: 'destructive', title: "Error al guardar" }); }
-        finally { setSaving(false); }
-    };
-    
-    const resetForm = () => {
-        setView('list');
-        setIngresos([{ ...emptyItem, id: Date.now().toString() }]);
-        setEgresos([{ ...emptyItem, id: Date.now().toString() }]);
-        setNotas('');
-        setPrevBalance(0);
-    };
-
-    if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600 h-10 w-10" /></div>;
-
-    const renderItemTable = (type: 'ingresos' | 'egresos') => {
-        const items = type === 'ingresos' ? ingresos : egresos;
-        return (
-            <Card className="rounded-2xl overflow-hidden">
-                <CardHeader className="bg-slate-100 p-4">
-                    <CardTitle className="text-md font-black uppercase text-slate-600">{type}</CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead className="w-24">Día</TableHead>
-                                <TableHead>Concepto</TableHead>
-                                <TableHead className="w-40">Categoría</TableHead>
-                                <TableHead className="w-40 text-right">Monto (Bs.)</TableHead>
-                                <TableHead className="w-12"></TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {items.map(item => (
-                                <TableRow key={item.id}>
-                                    <TableCell><Input className={inputStyle} value={item.dia} onChange={(e) => handleItemChange(type, item.id, 'dia', e.target.value)} /></TableCell>
-                                    <TableCell><Input className={inputStyle} value={item.concepto} onChange={(e) => handleItemChange(type, item.id, 'concepto', e.target.value)} /></TableCell>
-                                    <TableCell><Input className={inputStyle} value={item.categoria} onChange={(e) => handleItemChange(type, item.id, 'categoria', e.target.value)} /></TableCell>
-                                    <TableCell><Input type="number" className={`${inputStyle} text-right`} value={item.monto} onChange={(e) => handleItemChange(type, item.id, 'monto', parseFloat(e.target.value) || 0)} /></TableCell>
-                                    <TableCell><Button variant="ghost" size="icon" onClick={() => removeItem(type, item.id)}><Trash2 className="h-4 w-4 text-red-400"/></Button></TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </CardContent>
-                <CardContent className="p-4 bg-slate-50">
-                    <Button type="button" variant="outline" size="sm" onClick={() => addItem(type)}><PlusCircle className="mr-2 h-4 w-4"/>Añadir Fila</Button>
-                </CardContent>
-            </Card>
-        );
+        doc.save(`Balance_Financiero_${statement.id}.pdf`);
     };
 
     return (
-        <div className="p-4 md:p-8 space-y-8 max-w-7xl mx-auto">
-             <header className="flex flex-col md:flex-row justify-between items-start gap-4">
-                <div className="mb-10">
-                    <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">
-                        Balance <span className="text-[#0081c9]">Financiero</span>
-                    </h2>
-                    <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
-                    <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">
-                        Creación y gestión de los cierres contables mensuales.
-                    </p>
-                </div>
-                {view === 'list' && (
-                    <Button onClick={() => setView('form')} className="bg-blue-600 hover:bg-blue-700 text-white font-black px-8 h-12 rounded-full shadow-lg transition-all hover:scale-105">
-                        <PlusCircle className="mr-2 h-5 w-5" /> NUEVO CIERRE MENSUAL
-                    </Button>
-                )}
-            </header>
+        <div className="space-y-8 pb-10">
+            {/* Header */}
+            <div>
+                <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">
+                    Balance <span className="text-[#0081c9]">Financiero</span>
+                </h2>
+                <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
+                <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide flex items-center gap-2">
+                    <Building2 className="h-4 w-4" /> Consolidación de Ingresos y Egresos Automáticos
+                </p>
+            </div>
 
-            {view === 'list' ? (
-                <Card className="rounded-[2.5rem] shadow-xl overflow-hidden border-none bg-white">
-                    <Table>
-                        <TableHeader className="bg-slate-900"><TableRow className="h-16"><TableHead className="px-8 text-white font-bold uppercase text-xs">Periodo Contable</TableHead><TableHead className="text-right px-8 text-white font-bold uppercase text-xs">Cierre de Caja</TableHead><TableHead className="text-right px-8 text-white font-bold uppercase text-xs">Acción</TableHead></TableRow></TableHeader>
-                        <TableBody>
-                            {statements.map(s => (
-                                <TableRow key={s.id} className="h-20 hover:bg-slate-50 transition-all border-b border-slate-100">
-                                    <TableCell className="px-8 font-black text-slate-800 text-lg italic capitalize">{es.localize?.month((parseInt(s.id.split('-')[1]) - 1) as any, { width: 'wide' })} {s.id.split('-')[0]}</TableCell>
-                                    <TableCell className="text-right px-8 font-black text-emerald-600 text-xl tracking-tighter italic">Bs. {s.estadoFinanciero.saldoNeto.toLocaleString('es-VE', {minimumFractionDigits: 2})}</TableCell>
-                                    <TableCell className="text-right px-8 space-x-2">
-                                        <Button onClick={() => generatePDF(s, 'view')} variant="outline" className="rounded-xl font-bold border-slate-200"><Eye className="mr-2 h-4 w-4" /> Ver</Button>
-                                        <Button onClick={() => generatePDF(s)} className="bg-slate-900 text-white rounded-xl font-bold"><FileDown className="mr-2 h-4 w-4" /> PDF</Button>
-                                        <Button onClick={() => { if(confirm("¿Eliminar permanente?")) deleteDoc(doc(db, "condominios", condoId, "financial_statements", s.id)) }} variant="ghost" className="text-red-400"><Trash2 className="h-5 w-5" /></Button>
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </Card>
-            ) : (
-                <div className="space-y-6">
-                    <Card className="rounded-2xl shadow-lg border-none bg-white">
-                        <CardHeader><CardTitle className="flex items-center gap-2"><BarChartHorizontalBig/> Editor del Cierre Contable</CardTitle></CardHeader>
-                        <CardContent className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                            <div className="space-y-2"><label className="text-[10px] font-bold text-slate-500">Año</label><Input value={selectedYear} onChange={e => setSelectedYear(e.target.value)} className={inputStyle} /></div>
-                            <div className="space-y-2"><label className="text-[10px] font-bold text-slate-500">Mes</label><Input value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} className={inputStyle} /></div>
-                            <div className="lg:col-span-2 space-y-2"><label className="text-[10px] font-bold text-slate-500">Saldo del Mes Anterior</label><Input type="number" value={prevBalance} onChange={e => setPrevBalance(Number(e.target.value))} className={inputStyle} /></div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                
+                <div className="lg:col-span-2 space-y-6">
+                    <Card className="border-t-4 border-[#0081c9] shadow-lg">
+                        <CardHeader>
+                            <CardTitle className="text-xl font-black uppercase tracking-widest text-slate-700 flex items-center gap-2">
+                                <Save className="h-5 w-5 text-[#0081c9]" /> Nuevo Cierre de Período
+                            </CardTitle>
+                             <div className="space-y-2 pt-4">
+                                <Label className="text-[10px] font-black uppercase text-slate-400">Nombre del Período</Label>
+                                <Input placeholder="Ej: MARZO 2024" value={periodName} onChange={(e) => setPeriodName(e.target.value)} className="font-bold uppercase"/>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                            {/* Ingresos */}
+                            <div className="space-y-2">
+                                <h3 className="font-bold flex items-center gap-2 text-green-600"><TrendingUp/> Ingresos</h3>
+                                {ingresos.map(item => (
+                                    <div key={item.id} className="grid grid-cols-[1fr_3fr_1.5fr_auto] gap-2 items-center">
+                                        <Input value={item.dia} onChange={(e) => updateItem('ingresos', item.id, 'dia', e.target.value)} placeholder="Día"/>
+                                        <Input value={item.concepto} onChange={(e) => updateItem('ingresos', item.id, 'concepto', e.target.value)} placeholder="Concepto"/>
+                                        <Input type="number" value={item.monto} onChange={(e) => updateItem('ingresos', item.id, 'monto', parseFloat(e.target.value))} placeholder="Monto"/>
+                                        <Button size="icon" variant="ghost" onClick={() => removeItem('ingresos', item.id)}><X className="h-4 w-4"/></Button>
+                                    </div>
+                                ))}
+                                <Button size="sm" variant="outline" onClick={() => addItem('ingresos')}><PlusCircle className="mr-2 h-4 w-4"/>Añadir Ingreso</Button>
+                            </div>
+                             {/* Egresos */}
+                            <div className="space-y-2">
+                                <h3 className="font-bold flex items-center gap-2 text-red-600"><TrendingDown/> Egresos</h3>
+                                {egresos.map(item => (
+                                    <div key={item.id} className="grid grid-cols-[1fr_2.5fr_1.5fr_1.5fr_auto] gap-2 items-center">
+                                        <Input value={item.dia} onChange={(e) => updateItem('egresos', item.id, 'dia', e.target.value)} placeholder="Día"/>
+                                        <Input value={item.concepto} onChange={(e) => updateItem('egresos', item.id, 'concepto', e.target.value)} placeholder="Concepto"/>
+                                        <Input value={item.categoria} onChange={(e) => updateItem('egresos', item.id, 'categoria', e.target.value)} placeholder="Categoría"/>
+                                        <Input type="number" value={item.monto} onChange={(e) => updateItem('egresos', item.id, 'monto', parseFloat(e.target.value))} placeholder="Monto"/>
+                                        <Button size="icon" variant="ghost" onClick={() => removeItem('egresos', item.id)}><X className="h-4 w-4"/></Button>
+                                    </div>
+                                ))}
+                                <Button size="sm" variant="outline" onClick={() => addItem('egresos')}><PlusCircle className="mr-2 h-4 w-4"/>Añadir Egreso</Button>
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Notas Adicionales</Label>
+                                <Textarea value={notas} onChange={e => setNotas(e.target.value)} placeholder="Añade cualquier observación relevante aquí..." />
+                            </div>
                         </CardContent>
                     </Card>
-
-                    {renderItemTable('ingresos')}
-                    {renderItemTable('egresos')}
-
-                     <Card className="rounded-2xl shadow-lg border-none bg-white">
-                        <CardHeader><CardTitle>Notas Adicionales</CardTitle></CardHeader>
-                        <CardContent><Textarea placeholder="Añadir notas o aclaratorias para este balance..." value={notas} onChange={(e) => setNotas(e.target.value)} className="min-h-[100px] bg-slate-50 border-slate-200 rounded-xl" /></CardContent>
-                    </Card>
-
-                    <Card className="bg-slate-900 text-white rounded-2xl p-6 space-y-4">
-                        <div className="flex justify-between text-sm"><span className="text-slate-400">Saldo Anterior:</span><span className="font-mono">{formatToTwoDecimals(prevBalance)}</span></div>
-                        <div className="flex justify-between text-sm"><span className="text-slate-400">(+) Total Ingresos:</span><span className="font-mono text-green-400">{formatToTwoDecimals(totalIngresos)}</span></div>
-                        <div className="flex justify-between text-sm"><span className="text-slate-400">(-) Total Egresos:</span><span className="font-mono text-red-400">{formatToTwoDecimals(totalEgresos)}</span></div>
-                        <hr className="border-slate-700"/>
-                        <div className="flex justify-between items-center text-2xl font-black"><span className="text-blue-400">SALDO NETO:</span><span className="font-mono">Bs. {formatToTwoDecimals(saldoNeto)}</span></div>
-                    </Card>
-
-                    <div className="flex justify-end gap-4">
-                        <Button onClick={resetForm} variant="ghost" className="text-slate-500">Cancelar</Button>
-                        <Button onClick={handleSave} disabled={saving} className="w-full md:w-auto h-12 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-full text-md shadow-lg">
-                            {saving ? <Loader2 className="animate-spin" /> : "PUBLICAR Y ARCHIVAR BALANCE"}
-                        </Button>
-                    </div>
                 </div>
-            )}
 
-            {previewUrl && (
-                <div className="fixed inset-0 bg-slate-900/95 z-[100] flex items-center justify-center p-4 md:p-8 backdrop-blur-md">
-                    <div className="bg-white w-full max-w-6xl h-full rounded-2xl overflow-hidden flex flex-col shadow-2xl">
-                        <div className="p-4 flex justify-between items-center border-b"><h3 className="font-bold text-slate-800">Consulta de Balance Oficial</h3><Button onClick={() => setPreviewUrl(null)} variant="ghost" size="icon" className="h-10 w-10 rounded-full hover:bg-red-50 text-red-500"><X size={24} /></Button></div>
-                        <iframe src={previewUrl} className="flex-1 w-full border-none" />
-                    </div>
+                <div className="lg:col-span-1 space-y-6">
+                    <Card className="sticky top-4">
+                        <CardHeader>
+                            <CardTitle className="text-xl">Resumen</CardTitle>
+                        </CardHeader>
+                         <CardContent className="space-y-4">
+                            <div className="flex justify-between items-center"><p className="text-muted-foreground">Total Ingresos:</p><p className="font-bold text-green-600">Bs. {formatCurrency(totalIngresos)}</p></div>
+                            <div className="flex justify-between items-center"><p className="text-muted-foreground">Total Egresos:</p><p className="font-bold text-red-600">Bs. {formatCurrency(totalEgresos)}</p></div>
+                             <Separator/>
+                            <div className="flex justify-between items-center text-lg"><p className="font-bold">Saldo Neto:</p><p className="font-bold">Bs. {formatCurrency(saldoNeto)}</p></div>
+                        </CardContent>
+                        <CardFooter>
+                            <Button onClick={handleCreateCierre} disabled={isSubmitting || !periodName || (ingresos.length === 0 && egresos.length === 0)} className="w-full">
+                                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                                Guardar Cierre de Balance
+                            </Button>
+                        </CardFooter>
+                    </Card>
                 </div>
-            )}
+            </div>
+
+            <Card className="shadow-md mt-8">
+                <CardHeader>
+                    <CardTitle>Balances Guardados</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Período</TableHead>
+                                <TableHead>Ingresos</TableHead>
+                                <TableHead>Egresos</TableHead>
+                                <TableHead>Estado</TableHead>
+                                <TableHead className="text-right">Acciones</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {loading ? (
+                                <TableRow><TableCell colSpan={5} className="h-24 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-primary"/></TableCell></TableRow>
+                            ) : statements.length === 0 ? (
+                                <TableRow><TableCell colSpan={5} className="h-32 text-center text-muted-foreground italic">No se han encontrado balances guardados.</TableCell></TableRow>
+                            ) : (
+                                statements.map((b) => (
+                                    <TableRow key={b.id}>
+                                        <TableCell className="font-medium uppercase">{b.id}</TableCell>
+                                        <TableCell className="text-green-600">Bs. {formatCurrency(b.ingresos.reduce((s,i) => s + i.monto, 0))}</TableCell>
+                                        <TableCell className="text-red-600">Bs. {formatCurrency(b.egresos.reduce((s,i) => s + i.monto, 0))}</TableCell>
+                                        <TableCell><Badge variant={b.publicado ? "default" : "secondary"}>{b.publicado ? "Publicado" : "Borrador"}</Badge></TableCell>
+                                        <TableCell className="text-right space-x-1">
+                                            <Button variant="ghost" size="icon" onClick={() => generatePDF(b)}><Download className="h-4 w-4"/></Button>
+                                            <Button variant="ghost" size="icon" onClick={() => togglePublish(b.id, b.publicado)} title={b.publicado ? "Quitar publicación" : "Publicar"}>{b.publicado ? <EyeOff className="h-4 w-4"/> : <Eye className="h-4 w-4"/>}</Button>
+                                            <Button variant="ghost" size="icon" onClick={() => handleDeleteBalance(b.id)} className="text-destructive"><Trash2 className="h-4 w-4" /></Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            )}
+                        </TableBody>
+                    </Table>
+                </CardContent>
+            </Card>
         </div>
     );
 }
