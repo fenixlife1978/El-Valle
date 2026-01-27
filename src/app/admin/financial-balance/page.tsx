@@ -5,7 +5,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '@/lib/firebase';
 import { 
     collection, query, orderBy, onSnapshot, addDoc, 
-    deleteDoc, doc, updateDoc, Timestamp, setDoc, where, getDocs
+    deleteDoc, doc, updateDoc, Timestamp, setDoc, where, getDocs, getDoc
 } from 'firebase/firestore';
 import { 
     FileText, Save, Trash2, Eye, EyeOff, 
