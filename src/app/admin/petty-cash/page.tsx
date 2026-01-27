@@ -29,6 +29,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { useAuth } from '@/hooks/use-auth';
+import { useToast } from "@/hooks/use-toast";
+
 
 // --- Interfaces ---
 interface Transaction {
@@ -64,6 +66,7 @@ const formatToTwoDecimals = (num: number) => {
 
 export default function PettyCashManager() {
     const { user, activeCondoId } = useAuth();
+    const { toast } = useToast();
     
     // States
     const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -82,7 +85,6 @@ export default function PettyCashManager() {
     const [dialogDate, setDialogDate] = useState<Date | undefined>(new Date());
     const [dialogAmount, setDialogAmount] = useState('');
     const [dialogDescription, setDialogDescription] = useState('');
-    const [dialogSelectedRepId, setDialogSelectedRepId] = useState('');
     const [dialogReceiptFile, setDialogReceiptFile] = useState<File | null>(null);
     const [dialogReceiptImage, setDialogReceiptImage] = useState<string | null>(null);
 
@@ -194,7 +196,6 @@ export default function PettyCashManager() {
         setDialogAmount('');
         setDialogDescription('');
         setDialogDate(new Date());
-        setDialogSelectedRepId('');
         setDialogReceiptFile(null);
         setDialogReceiptImage(null);
     };
@@ -225,7 +226,15 @@ export default function PettyCashManager() {
                 });
             } else {
                 // Es un gasto contra un fondo existente
-                if (!dialogSelectedRepId) throw new Error("Debe seleccionar un fondo");
+                if (amount > totals.saldo) {
+                    throw new Error(`Saldo insuficiente en Caja Chica. Disponible: Bs. ${formatToTwoDecimals(totals.saldo)}`);
+                }
+
+                const latestReplenishment = replenishments.length > 0 ? replenishments[0] : null;
+                if (!latestReplenishment) {
+                    throw new Error("No existe un ciclo de reposición para asignar este gasto. Por favor, cree un ingreso primero.");
+                }
+                const replenishmentToUseId = latestReplenishment.id;
                 
                 let receiptUrl = "";
                 if (dialogReceiptFile) {
@@ -240,11 +249,11 @@ export default function PettyCashManager() {
                     description: dialogDescription,
                     amount: amount,
                     receiptUrl,
-                    replenishmentId: dialogSelectedRepId
+                    replenishmentId: replenishmentToUseId
                 };
 
-                const repRef = doc(db, 'condominios', workingCondoId, 'cajaChica_reposiciones', dialogSelectedRepId);
-                const targetRep = replenishments.find(r => r.id === dialogSelectedRepId);
+                const repRef = doc(db, 'condominios', workingCondoId, 'cajaChica_reposiciones', replenishmentToUseId);
+                const targetRep = replenishments.find(r => r.id === replenishmentToUseId);
                 const updatedExpenses = [...(targetRep?.expenses || []), newExpense];
 
                 const batch = writeBatch(db);
@@ -255,18 +264,23 @@ export default function PettyCashManager() {
                     description: dialogDescription,
                     amount: amount,
                     type: 'egreso',
-                    replenishmentId: dialogSelectedRepId
+                    replenishmentId: replenishmentToUseId
                 });
                 await batch.commit();
             }
             resetDialog();
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error saving movement:", error);
+            toast({
+                variant: 'destructive',
+                title: 'Error al Guardar',
+                description: error.message || 'Ocurrió un error inesperado.'
+            });
         } finally {
             setIsSubmitting(false);
         }
     };
-
+    
     const handleReplenish = async (rep: any) => {
         if (!workingCondoId) return;
         setIsSubmitting(true);
@@ -427,15 +441,15 @@ export default function PettyCashManager() {
                     </CardTitle>
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-6">
-                    <div className="p-5 bg-green-100 border border-green-200 rounded-2xl text-center">
+                    <div className="p-5 bg-green-50 border border-green-200 rounded-2xl text-center">
                         <p className="text-[10px] text-green-800 font-black uppercase tracking-widest mb-1">Total Ingresos</p>
-                        <p className="text-3xl font-black text-green-900">Bs. {formatToTwoDecimals(totals.totalIngresos)}</p>
+                        <p className="text-3xl font-black text-green-700">Bs. {formatToTwoDecimals(totals.totalIngresos)}</p>
                     </div>
-                    <div className="p-5 bg-red-100 border border-red-200 rounded-2xl text-center">
+                    <div className="p-5 bg-red-50 border border-red-200 rounded-2xl text-center">
                         <p className="text-[10px] text-red-800 font-black uppercase tracking-widest mb-1">Total Egresos</p>
-                        <p className="text-3xl font-black text-red-900">Bs. {formatToTwoDecimals(totals.totalEgresos)}</p>
+                        <p className="text-3xl font-black text-red-700">Bs. {formatToTwoDecimals(totals.totalEgresos)}</p>
                     </div>
-                    <div className="p-5 bg-blue-100 border border-blue-200 rounded-2xl text-center shadow-inner">
+                    <div className="p-5 bg-blue-50 border border-blue-200 rounded-2xl text-center shadow-inner">
                         <p className="text-[10px] text-blue-800 font-black uppercase tracking-widest mb-1">Saldo Disponible</p>
                         <p className="text-3xl font-black text-blue-900">Bs. {formatToTwoDecimals(totals.saldo)}</p>
                     </div>
@@ -675,22 +689,6 @@ export default function PettyCashManager() {
                                     <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={dialogDate} onSelect={setDialogDate} locale={es} /></PopoverContent>
                                 </Popover>
                             </div>
-
-                            {dialogType === 'egreso' && (
-                                <div className="space-y-1.5">
-                                    <Label className="text-xs font-black uppercase">Fondo de Origen</Label>
-                                    <Select onValueChange={setDialogSelectedRepId} value={dialogSelectedRepId}>
-                                        <SelectTrigger className="font-bold"><SelectValue placeholder="Seleccione el fondo..." /></SelectTrigger>
-                                        <SelectContent>
-                                            {replenishments.map(rep => (
-                                                <SelectItem key={rep.id} value={rep.id} className="text-xs">
-                                                    {rep.description} ({format(rep.date.toDate(), "dd/MM/yy")})
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            )}
 
                             <div className="space-y-1.5">
                                 <Label className="text-xs font-black uppercase">{dialogType === 'ingreso' ? 'Monto Repuesto (Bs.)' : 'Monto del Gasto (Bs.)'}</Label>
