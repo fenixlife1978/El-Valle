@@ -29,19 +29,12 @@ import { useToast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
 
 // --- Type Definitions ---
-interface FinancialItem {
-    concepto: string;
-    monto: number;
-    dia: string;
-    categoria: string;
-}
-
 interface IncomeItem {
     concepto: string;
     estimado: number;
     real: number;
-    categoria?: string;
     dia?: string;
+    categoria?: string;
     monto?: number;
 }
 
@@ -146,12 +139,13 @@ export default function FinancialBalancePage() {
             setIngresos(prev => prev.map(item => item.concepto === 'Ingresos x Cuotas de Condominio' ? {...item, real: totalPayments} : item));
 
             // 2. Sincronizar Gastos (Egresos)
-            const expensesQuery = query(collection(db, 'condominios', workingCondoId, 'gastos'),
+            const mainExpensesQuery = query(collection(db, 'condominios', workingCondoId, 'gastos'),
                 where('date', '>=', currentPeriodStart),
-                where('date', '<=', currentPeriodEnd)
+                where('date', '<=', currentPeriodEnd),
+                where('category', '!=', 'Caja Chica')
             );
-            const expensesSnap = await getDocs(expensesQuery);
-            const syncedEgresos = expensesSnap.docs.map(doc => {
+            const mainExpensesSnap = await getDocs(mainExpensesQuery);
+            const syncedMainEgresos = mainExpensesSnap.docs.map(doc => {
                 const data = doc.data();
                 return {
                     categoria: data.category,
@@ -162,12 +156,32 @@ export default function FinancialBalancePage() {
                     concepto: data.description,
                 };
             });
-            setEgresos(syncedEgresos);
+
+            const pettyCashExpensesQuery = query(collection(db, 'condominios', workingCondoId, 'cajaChica_movimientos'),
+                where('type', '==', 'egreso'),
+                where('date', '>=', currentPeriodStart),
+                where('date', '<=', currentPeriodEnd)
+            );
+            const pettyCashExpensesSnap = await getDocs(pettyCashExpensesQuery);
+            const syncedPettyCashEgresos = pettyCashExpensesSnap.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    categoria: 'Caja Chica',
+                    descripcion: data.description,
+                    pago: 'Efectivo',
+                    monto: data.amount,
+                    dia: format(data.date.toDate(), 'dd/MM/yyyy'),
+                    concepto: data.description,
+                };
+            });
+            
+            const combinedEgresos = [...syncedMainEgresos, ...syncedPettyCashEgresos];
+            setEgresos(combinedEgresos);
             
             // 3. Sincronizar Caja Chica (CON CORRECCIÓN DE TIPOS)
             const allMovementsSnap = await getDocs(query(collection(db, 'condominios', workingCondoId, 'cajaChica_movimientos')));
             
-            const movements = allMovementsSnap.docs.map(d => {
+            const movements: { amount: number; type: 'ingreso' | 'egreso'; date: Date; }[] = allMovementsSnap.docs.map(d => {
                 const data = d.data();
                 return {
                     amount: data.amount || 0,
@@ -478,3 +492,4 @@ export default function FinancialBalancePage() {
         </div>
     );
 }
+
