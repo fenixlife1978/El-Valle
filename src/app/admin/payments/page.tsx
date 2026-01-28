@@ -989,29 +989,62 @@ function ReportPaymentTab() {
                     </form>
                 </Card>
 
-                <BankSelectionModal isOpen={isBankModalOpen} onOpenChange={setIsBankModalOpen} selectedValue={bank} onSelect={(value) => { setBank(value); if (value !== 'Otro') setOtherBank(''); setIsBankModalOpen(false); }} />
-                
-                <Dialog open={isInfoDialogOpen} onOpenChange={setIsInfoDialogOpen}>
-                    <DialogContent>
-                        <DialogHeader>
-                            <DialogTitle className="flex items-center gap-2">
-                                <Info className="h-6 w-6 text-primary" />
-                                Reporte Enviado para Revisión
-                            </DialogTitle>
-                             <div className="pt-4 text-sm text-muted-foreground space-y-4">
-                               <p>¡Gracias! Hemos recibido tu reporte de pago. El tiempo máximo para la aprobación es de <strong>24 horas</strong>.</p>
-                               <p>Te invitamos a ingresar nuevamente después de este lapso para:</p>
-                               <ul className="list-disc list-inside space-y-1">
-                                   <li>Verificar si el monto enviado cubrió completamente tu deuda.</li>
-                                   <li>Descargar tu recibo de pago una vez que sea aprobado.</li>
-                               </ul>
-                            </div>
-                        </DialogHeader>
-                        <DialogFooter>
-                            <Button onClick={() => setIsInfoDialogOpen(false)}>Entendido</Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
+            <BankSelectionModal isOpen={isBankModalOpen} onOpenChange={setIsBankModalOpen} selectedValue={bank} onSelect={(value) => { setBank(value); if (value !== 'Otro') setOtherBank(''); setIsBankModalOpen(false); }} />
+            
+            <Dialog open={isInfoDialogOpen} onOpenChange={setIsInfoDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Info className="h-6 w-6 text-primary" />
+                            Reporte Enviado para Revisión
+                        </DialogTitle>
+                         <div className="pt-4 text-sm text-muted-foreground space-y-4">
+                           <p>¡Gracias! Hemos recibido tu reporte de pago. El tiempo máximo para la aprobación es de <strong>24 horas</strong>.</p>
+                           <p>Te invitamos a ingresar nuevamente después de este lapso para:</p>
+                           <ul className="list-disc list-inside space-y-1">
+                               <li>Verificar si el monto enviado cubrió completamente tu deuda.</li>
+                               <li>Descargar tu recibo de pago una vez que sea aprobado.</li>
+                           </ul>
+                        </div>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button onClick={() => setIsInfoDialogOpen(false)}>Entendido</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        </div>
+    );
+}
+
+// ===================================================================================
+// MAIN PAGE COMPONENT (DEFAULT EXPORT)
+// ===================================================================================
+export default function PaymentsPage() {
+    return (
+        <div className="space-y-6">
+            <div className="mb-10">
+                <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">
+                    Gestión de <span className="text-primary">Pagos</span>
+                </h2>
+                <div className="h-1.5 w-20 bg-yellow-400 mt-2 rounded-full"></div>
+                <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">
+                    Verificación de pagos reportados y registro manual.
+                </p>
             </div>
+            <Tabs defaultValue="verify" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="verify">Verificar Pagos de Propietarios</TabsTrigger>
+                    <TabsTrigger value="report">Registrar un Pago Manualmente</TabsTrigger>
+                </TabsList>
+                <TabsContent value="verify" className="mt-4">
+                    <Suspense fallback={<Loader2 className="animate-spin" />}>
+                        <VerifyPaymentsTab />
+                    </Suspense>
+                </TabsContent>
+                <TabsContent value="report" className="mt-4">
+                    <ReportPaymentTab />
+                </TabsContent>
+            </Tabs>
+        </div>
     );
 }
