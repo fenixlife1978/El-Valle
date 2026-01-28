@@ -124,14 +124,12 @@ export default function FinancialBalancePage() {
                 orderBy('date', 'asc')
             ));
             
-            setEgresos(expensesSnap.docs
-                .map(d => ({
-                    id: d.id,
-                    descripcion: d.data().description || 'Sin descripción',
-                    monto: d.data().amount || 0,
-                    fecha: format(d.data().date.toDate(), 'dd/MM/yyyy')
-                }))
-            );
+            setEgresos(expensesSnap.docs.filter(d => d.data().category !== 'Caja Chica').map(d => ({
+                id: d.id,
+                descripcion: d.data().description || 'Sin descripción',
+                monto: d.data().amount || 0,
+                fecha: format(d.data().date.toDate(), 'dd/MM/yyyy')
+            })));
             
             // --- CÁLCULOS DE CAJA CHICA ---
             const ccMovesQuery = query(collection(db, 'condominios', workingCondoId, 'cajaChica_movimientos'));
@@ -193,10 +191,10 @@ export default function FinancialBalancePage() {
     if (loading || dataLoading) return <div className="h-screen flex items-center justify-center bg-white"><Loader2 className="animate-spin h-10 w-10 text-blue-600"/></div>;
 
     const generatePDF = async () => {
-        if (!workingCondoId) {
-             toast({ variant: 'destructive', title: 'Error', description: 'ID de condominio no encontrado.' });
-            return;
-        }
+        if (!workingCondoId) return;
+        const { default: jsPDF } = await import('jspdf');
+        const { default: autoTable } = await import('jspdf-autotable');
+        
         const docPDF = new jsPDF();
         const pageWidth = docPDF.internal.pageSize.getWidth();
         const margin = 14;
@@ -330,7 +328,7 @@ export default function FinancialBalancePage() {
                 <CardFooter className="p-0 flex justify-end">
                     <Button className="bg-green-600 hover:bg-green-700 rounded-full px-12 h-14 font-black text-white" onClick={async () => {
                         if (!workingCondoId) {
-                             toast({ variant: 'destructive', title: 'Error', description: 'No se ha seleccionado un condominio activo.' });
+                            toast({ variant: 'destructive', title: 'Error', description: 'No se ha seleccionado un condominio activo.' });
                             return;
                         }
                         const periodId = `${selectedYear}-${selectedMonth.padStart(2, '0')}`;
