@@ -1,258 +1,207 @@
 
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { db } from '@/lib/firebase';
 import { 
     collection, query, orderBy, onSnapshot, addDoc, 
-    deleteDoc, doc, updateDoc, Timestamp, setDoc, where, getDocs, getDoc
+    deleteDoc, doc, updateDoc, Timestamp, getDoc, where, getDocs, writeBatch, setDoc
 } from 'firebase/firestore';
 import { 
-    FileText, Save, Trash2, Eye, EyeOff, 
-    TrendingUp, TrendingDown, Wallet, History,
-    CheckCircle2, AlertCircle, Loader2, Building2,
-    PlusCircle, X, Download, RefreshCcw
+    Trash2, Eye, EyeOff, History, Download, Loader2, FileText, FilePlus, Info, Sync, Edit
 } from 'lucide-react';
-import { format } from 'date-fns';
-import { es } from 'date-fns/locale';
 import { useAuth } from '@/hooks/use-auth';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import QRCode from 'qrcode';
+import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
 
+// UI Components
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
+import { Dialog, DialogContent, DialogTrigger, DialogFooter, DialogHeader, DialogTitle, DialogDescription, DialogClose } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useToast } from '@/hooks/use-toast';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 
-// --- DEFINICIÓN DE TIPOS ---
+
+// --- TYPE DEFINITIONS ---
 interface FinancialItem {
-    id: string;
-    dia: string;
-    concepto: string;
-    monto: number;
-    categoria: string;
+  id: string;
+  dia: string;
+  concepto: string;
+  categoria: string;
+  monto: number;
 }
 
 interface SavedBalance {
-    id: string;
-    nombrePeriodo?: string;
-    totalIngresos?: number;
-    totalEgresos?: number;
-    saldoNeto?: number;
-    fechaCierre?: Timestamp;
-    publicado: boolean;
-    ingresos: FinancialItem[];
-    egresos: FinancialItem[];
-    notas?: string;
-    companyInfo?: any;
-    createdAt: Timestamp;
+  id: string;
+  nombrePeriodo?: string;
+  ingresos: FinancialItem[];
+  egresos: FinancialItem[];
+  notas: string;
+  estadoFinanciero: {
+    saldoNeto: number;
+  };
+  fechaCierre?: Timestamp;
+  publicado?: boolean;
+  companyInfo?: CompanyInfo;
 }
 
-const formatCurrency = (num: number) => {
-    return (num || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+interface AutomaticExpense {
+    id: string;
+    description: string;
+    amount: number;
+    category: string;
+    date: Timestamp;
+}
+
+interface CompanyInfo {
+    name: string; address: string; phone: string; email: string; logo: string; rif: string;
+}
+
+
+const months = Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: format(new Date(2000, i), 'MMMM', { locale: es }) }));
+const years = Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear() - i));
+
+// --- HELPER FUNCTIONS ---
+const formatCurrency = (amount: number | null | undefined): string => {
+    if (typeof amount !== 'number') return '0,00';
+    return amount.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-const months = Array.from({ length: 12 }, (_, i) => ({
-  value: String(i + 1),
-  label: format(new Date(2000, i), 'MMMM', { locale: es }),
-}));
-
-const currentYear = new Date().getFullYear();
-const years = Array.from({ length: 5 }, (_, i) => String(currentYear - i));
-
 export default function FinancialBalance() {
-    const { companyInfo, activeCondoId } = useAuth();
-    const { toast } = useToast();
+    const { user, activeCondoId, companyInfo } = useAuth();
     
-    const [statements, setStatements] = useState<SavedBalance[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [isSyncing, setIsSyncing] = useState(false);
+    // --- STATE MANAGEMENT ---
+    const sId = typeof window !== 'undefined' ? localStorage.getItem('support_mode_id') : null;
+    const workingCondoId = (sId && user?.email === 'vallecondo@gmail.com') ? sId : activeCondoId;
 
-    const [selectedMonth, setSelectedMonth] = useState<string>(String(new Date().getMonth() + 1));
-    const [selectedYear, setSelectedYear] = useState<string>(String(new Date().getFullYear()));
-    const [periodName, setPeriodName] = useState('');
+    const [statements, setStatements] = useState<SavedBalance[]>([]);
     const [ingresos, setIngresos] = useState<FinancialItem[]>([]);
     const [egresos, setEgresos] = useState<FinancialItem[]>([]);
     const [notas, setNotas] = useState('');
+    const [selectedMonth, setSelectedMonth] = useState(String(new Date().getMonth() + 1));
+    const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
+    const [loading, setLoading] = useState(true);
+    const [editingItem, setEditingItem] = useState<{ type: 'ingreso' | 'egreso', item: FinancialItem } | null>(null);
 
-    // Carga historial
+    // --- DATA FETCHING ---
     useEffect(() => {
-        if (!activeCondoId) return;
-    
-        const q = query(
-            collection(db, "condominios", activeCondoId, "financial_statements"), 
-            orderBy("createdAt", "desc")
-        );
-    
+        if (!workingCondoId) return;
+        const q = query(collection(db, 'condominios', workingCondoId, 'financial_statements'), orderBy('fechaCierre', 'desc'));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             setStatements(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SavedBalance)));
             setLoading(false);
-        }, (err) => {
-            console.error(err);
-            setLoading(false);
         });
-    
         return () => unsubscribe();
-    }, [activeCondoId]);
+    }, [workingCondoId]);
 
-    // Carga datos al cambiar mes/año
     useEffect(() => {
-        if (!activeCondoId || !selectedYear || !selectedMonth) return;
-        
-        const loadStatement = async () => {
-            const docId = `${selectedYear}-${selectedMonth.padStart(2, '0')}`;
-            const docRef = doc(db, 'condominios', activeCondoId, 'financial_statements', docId);
-            const docSnap = await getDoc(docRef);
-            
-            const monthLabel = months.find(m => m.value === selectedMonth)?.label || '';
-            setPeriodName(`${monthLabel} ${selectedYear}`.toUpperCase());
-
-            if (docSnap.exists()) {
-                const data = docSnap.data();
-                setIngresos(data.ingresos || []);
-                setEgresos(data.egresos || []);
-                setNotas(data.notas || '');
-            } else {
-                setIngresos([]);
-                setEgresos([]);
-                setNotas('');
-            }
-        };
-
-        loadStatement();
-    }, [activeCondoId, selectedYear, selectedMonth]);
-
-    // --- SINCRONIZACIÓN CORREGIDA ---
-    const handleSyncData = async () => {
-        if (!activeCondoId) {
-            toast({ variant: 'destructive', title: 'Error', description: 'No hay un condominio seleccionado.' });
-            return;
+        const periodId = `${selectedYear}-${selectedMonth}`;
+        const found = statements.find(s => s.id === periodId);
+        if (found) {
+            setIngresos(found.ingresos || []);
+            setEgresos(found.egresos || []);
+            setNotas(found.notas || '');
+        } else {
+            setIngresos([]);
+            setEgresos([]);
+            setNotas('');
         }
-        setIsSyncing(true);
+    }, [selectedMonth, selectedYear, statements]);
 
-        const year = parseInt(selectedYear);
-        const month = parseInt(selectedMonth);
-        const startDate = new Date(year, month - 1, 1);
-        const endDate = new Date(year, month, 1);
+    // --- HANDLERS ---
+    const handleSyncData = async () => {
+        if (!workingCondoId) return;
+        setLoading(true);
+
+        const startDate = new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1, 1);
+        const endDate = new Date(parseInt(selectedYear), parseInt(selectedMonth), 0, 23, 59, 59);
 
         try {
-            // 1. Sincronizar Ingresos (Pagos Aprobados)
+            // Sincronizar Ingresos
             const paymentsQuery = query(
-                collection(db, "condominios", activeCondoId, "payments"),
-                where("status", "==", "aprobado"),
-                where("paymentDate", ">=", Timestamp.fromDate(startDate)),
-                where("paymentDate", "<", Timestamp.fromDate(endDate))
+                collection(db, 'condominios', workingCondoId, 'payments'),
+                where('status', '==', 'aprobado'),
+                where('paymentDate', '>=', startDate),
+                where('paymentDate', '<=', endDate)
             );
+            const paymentsSnap = await getDocs(paymentsQuery);
+            const totalPayments = paymentsSnap.docs.reduce((sum, doc) => sum + doc.data().totalAmount, 0);
+
+            const syncedIngresos = [{
+                id: `ing-${Date.now()}`,
+                dia: format(endDate, 'dd'),
+                concepto: 'Recaudación por Cuotas de Condominio',
+                categoria: 'cuotas_ordinarias',
+                monto: totalPayments
+            }];
+            setIngresos(syncedIngresos);
             
-            const paymentsSnapshot = await getDocs(paymentsQuery);
-            const totalPayments = paymentsSnapshot.docs.reduce((sum, doc) => sum + (doc.data().totalAmount || 0), 0);
-
-            setIngresos([{
-                id: `auto-income-${Date.now()}`,
-                dia: '28',
-                concepto: 'Recaudación por Cuotas de Condominio (Sincronizado)',
-                monto: totalPayments,
-                categoria: 'Ingresos por Cuotas'
-            }]);
-
-            // 2. Sincronizar Egresos (Gastos Registrados)
-            const mainExpensesQuery = query(
-                collection(db, "condominios", activeCondoId, "gastos"),
-                where("date", ">=", Timestamp.fromDate(startDate)),
-                where("date", "<", Timestamp.fromDate(endDate)),
+            // Sincronizar Egresos
+            const expensesQuery = query(
+                collection(db, 'condominios', workingCondoId, 'gastos'),
+                where('date', '>=', startDate),
+                where('date', '<=', endDate)
             );
-            
-            const mainExpensesSnap = await getDocs(mainExpensesQuery);
-            const fetchedExpenses: FinancialItem[] = [];
-            
-            mainExpensesSnap.forEach(docSnap => {
-                const data = docSnap.data();
-                fetchedExpenses.push({
-                    id: docSnap.id,
+            const expensesSnap = await getDocs(expensesQuery);
+            const syncedEgresos = expensesSnap.docs.map(doc => {
+                const data = doc.data() as AutomaticExpense;
+                return {
+                    id: doc.id,
                     dia: format(data.date.toDate(), 'dd'),
-                    concepto: data.description || 'Sin descripción',
-                    monto: data.amount || 0,
-                    categoria: data.category || 'General',
-                });
+                    concepto: data.description,
+                    categoria: data.category,
+                    monto: data.amount,
+                };
             });
-
-            setEgresos(fetchedExpenses.sort((a,b) => parseInt(a.dia) - parseInt(b.dia)));
-
-            toast({ title: 'Datos Actualizados', description: 'Los ingresos y egresos del mes han sido sincronizados.' });
+            setEgresos(syncedEgresos);
 
         } catch (error) {
             console.error(error);
-            toast({ variant: 'destructive', title: 'Error', description: 'Fallo al sincronizar datos desde Firebase.' });
         } finally {
-            setIsSyncing(false);
+            setLoading(false);
         }
     };
+    
+    const handleSaveStatement = async () => {
+        if (!workingCondoId) return;
 
-    const totalIngresos = useMemo(() => ingresos.reduce((acc, item) => acc + (Number(item.monto) || 0), 0), [ingresos]);
-    const totalEgresos = useMemo(() => egresos.reduce((acc, item) => acc + (Number(item.monto) || 0), 0), [egresos]);
-    const saldoNeto = totalIngresos - totalEgresos;
+        const periodId = `${selectedYear}-${selectedMonth}`;
+        const totalIngresos = ingresos.reduce((sum, item) => sum + item.monto, 0);
+        const totalEgresos = egresos.reduce((sum, item) => sum + item.monto, 0);
 
-    const addItem = (type: 'ingresos' | 'egresos') => {
-        const newItem: FinancialItem = { id: Date.now().toString(), dia: format(new Date(), 'dd'), concepto: '', monto: 0, categoria: 'Otros' };
-        if (type === 'ingresos') setIngresos([...ingresos, newItem]);
-        else setEgresos([...egresos, newItem]);
-    };
+        const statementData: Omit<SavedBalance, 'id'> = {
+            ingresos,
+            egresos,
+            notas,
+            estadoFinanciero: { saldoNeto: totalIngresos - totalEgresos },
+            fechaCierre: Timestamp.now(),
+        };
 
-    const updateItem = (type: 'ingresos' | 'egresos', id: string, field: keyof FinancialItem, value: any) => {
-        const updater = (items: FinancialItem[]) => items.map(item => item.id === id ? { ...item, [field]: value } : item);
-        if (type === 'ingresos') setIngresos(updater);
-        else setEgresos(updater);
-    };
-
-    const removeItem = (type: 'ingresos' | 'egresos', id: string) => {
-        if (type === 'ingresos') setIngresos(ingresos.filter(item => item.id !== id));
-        else setEgresos(egresos.filter(item => item.id !== id));
-    };
-
-    const handleCreateCierre = async () => {
-        if (!activeCondoId) return;
-        const docId = `${selectedYear}-${selectedMonth.padStart(2, '0')}`;
-        setIsSubmitting(true);
         try {
-            await setDoc(doc(db, 'condominios', activeCondoId, 'financial_statements', docId), {
-                ingresos,
-                egresos,
-                notas,
-                createdAt: Timestamp.now(),
-                publicado: false,
-                companyInfo: companyInfo || null,
-            }, { merge: true });
-
-            toast({ title: "Guardado en Historial", description: "El balance se guardó correctamente." });
+            await setDoc(doc(db, 'condominios', workingCondoId, 'financial_statements', periodId), statementData, { merge: true });
         } catch (error) {
-            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo guardar.' });
-        } finally {
-            setIsSubmitting(false);
+            console.error(error);
         }
     };
-
-    const togglePublish = async (id: string, currentState: boolean) => {
-        if (!activeCondoId) return;
-        try {
-            await updateDoc(doc(db, 'condominios', activeCondoId, 'financial_statements', id), { publicado: !currentState });
-            toast({ title: 'Estado actualizado' });
-        } catch (e) { console.error(e); }
-    };
-
-    const handleDeleteBalance = async (id: string) => {
-        if (!activeCondoId || !confirm("¿Eliminar balance?")) return;
-        try {
-            await deleteDoc(doc(db, 'condominios', activeCondoId, 'financial_statements', id));
-            toast({ title: 'Eliminado' });
-        } catch (e) { console.error(e); }
+    
+    const handleItemAction = (action: 'add' | 'update' | 'delete', type: 'ingreso' | 'egreso', item?: FinancialItem) => {
+        const updateState = type === 'ingreso' ? setIngresos : setEgresos;
+        
+        updateState(currentItems => {
+            if (action === 'add' && item) return [...currentItems, item];
+            if (action === 'update' && item) return currentItems.map(i => i.id === item.id ? item : i);
+            if (action === 'delete' && item) return currentItems.filter(i => i.id !== item.id);
+            return currentItems;
+        });
+        
+        setEditingItem(null);
     };
 
     const generatePDF = async (statement: SavedBalance) => {
@@ -341,13 +290,11 @@ export default function FinancialBalance() {
         
         const saldoFinal = totalIn - totalOut;
         docPDF.setFontSize(14).setFont('helvetica', 'bold');
-        
         if (saldoFinal >= 0) {
             docPDF.setTextColor(0, 129, 201);
         } else {
             docPDF.setTextColor(239, 68, 68);
         }
-        
         docPDF.text(`Bs. ${formatCurrency(saldoFinal)}`, pageWidth - margin - 5, startY + 22, { align: 'right' });
 
         // Notas al pie
@@ -365,149 +312,132 @@ export default function FinancialBalance() {
         docPDF.save(`Balance_EFAS_${statement.id}.pdf`);
     };
 
+    const totalIngresos = ingresos.reduce((sum, item) => sum + item.monto, 0);
+    const totalEgresos = egresos.reduce((sum, item) => sum + item.monto, 0);
+    const saldoNeto = totalIngresos - totalEgresos;
 
     return (
-        <div className="space-y-8 pb-10">
-            {/* Header */}
-            <div>
+        <div className="space-y-6">
+            <header className="mb-10">
                 <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">
                     Balance <span className="text-[#0081c9]">Financiero</span>
                 </h2>
                 <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
-                <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide flex items-center gap-2">
-                    <Building2 className="h-4 w-4" /> Consolidación de Cuentas
-                </p>
-            </div>
-            
-            <Card className="shadow-lg border-l-4 border-[#0081c9]">
+            </header>
+
+            <Card>
                 <CardHeader>
-                    <div className="flex flex-wrap items-center justify-between gap-4">
-                        <CardTitle className="text-sm uppercase font-black">Control de Período</CardTitle>
-                        <div className="flex items-center gap-2">
-                             <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                                <SelectTrigger className="w-[180px] font-bold uppercase text-xs"><SelectValue /></SelectTrigger>
-                                <SelectContent>{months.map(m => <SelectItem key={m.value} value={m.value} className="uppercase text-xs">{m.label}</SelectItem>)}</SelectContent>
-                            </Select>
-                            <Select value={selectedYear} onValueChange={setSelectedYear}>
-                                <SelectTrigger className="w-[120px] font-bold text-xs"><SelectValue /></SelectTrigger>
-                                <SelectContent>{years.map(y => <SelectItem key={y} value={y} className="text-xs">{y}</SelectItem>)}</SelectContent>
-                            </Select>
-                            <Button onClick={handleSyncData} disabled={isSyncing} className="bg-[#f59e0b] hover:bg-orange-600 font-black uppercase text-[10px]">
-                                {isSyncing ? <Loader2 className="mr-2 h-3 w-3 animate-spin"/> : <RefreshCcw className="mr-2 h-3 w-3"/>}
-                                Sincronizar
-                            </Button>
-                        </div>
-                    </div>
+                    <CardTitle>Selección del Período</CardTitle>
                 </CardHeader>
-            </Card>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="lg:col-span-2 space-y-6">
-                    {/* TABLA INGRESOS */}
-                    <Card className="border-t-4 border-green-500 shadow-md">
-                        <CardHeader className="pb-2">
-                            <h3 className="font-black flex items-center gap-2 text-green-600 uppercase text-sm"><TrendingUp className="h-4 w-4"/> Ingresos Detallados</h3>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
-                            {ingresos.map(item => (
-                                <div key={item.id} className="grid grid-cols-[60px_1fr_120px_auto] gap-2 items-center">
-                                    <Input value={item.dia} onChange={(e) => updateItem('ingresos', item.id, 'dia', e.target.value)} className="text-center font-bold" maxLength={2}/>
-                                    <Input value={item.concepto} onChange={(e) => updateItem('ingresos', item.id, 'concepto', e.target.value)} placeholder="Concepto del ingreso" className="uppercase text-xs font-medium"/>
-                                    <Input type="number" value={item.monto} onChange={(e) => updateItem('ingresos', item.id, 'monto', parseFloat(e.target.value))} className="font-black text-green-600"/>
-                                    <Button size="icon" variant="ghost" onClick={() => removeItem('ingresos', item.id)} className="text-red-300 hover:text-red-600"><X className="h-4 w-4"/></Button>
-                                </div>
-                            ))}
-                            <Button size="sm" variant="outline" onClick={() => addItem('ingresos')} className="w-full border-dashed"><PlusCircle className="mr-2 h-4 w-4"/> Añadir Ingreso Manual</Button>
-                        </CardContent>
-                    </Card>
-
-                    {/* TABLA EGRESOS */}
-                    <Card className="border-t-4 border-red-500 shadow-md">
-                        <CardHeader className="pb-2">
-                            <h3 className="font-black flex items-center gap-2 text-red-600 uppercase text-sm"><TrendingDown className="h-4 w-4"/> Egresos Detallados</h3>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
-                            {egresos.map(item => (
-                                <div key={item.id} className="grid grid-cols-[60px_1fr_100px_120px_auto] gap-2 items-center">
-                                    <Input value={item.dia} onChange={(e) => updateItem('egresos', item.id, 'dia', e.target.value)} className="text-center font-bold"/>
-                                    <Input value={item.concepto} onChange={(e) => updateItem('egresos', item.id, 'concepto', e.target.value)} className="uppercase text-xs font-medium"/>
-                                    <Input value={item.categoria} onChange={(e) => updateItem('egresos', item.id, 'categoria', e.target.value)} className="text-[10px] uppercase bg-slate-50"/>
-                                    <Input type="number" value={item.monto} onChange={(e) => updateItem('egresos', item.id, 'monto', parseFloat(e.target.value))} className="font-black text-red-600"/>
-                                    <Button size="icon" variant="ghost" onClick={() => removeItem('egresos', item.id)} className="text-red-300 hover:text-red-600"><X className="h-4 w-4"/></Button>
-                                </div>
-                            ))}
-                            <Button size="sm" variant="outline" onClick={() => addItem('egresos')} className="w-full border-dashed"><PlusCircle className="mr-2 h-4 w-4"/> Añadir Egreso Manual</Button>
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader><CardTitle className="text-xs font-black uppercase">Notas del Administrador</CardTitle></CardHeader>
-                        <CardContent><Textarea value={notas} onChange={e => setNotas(e.target.value)} className="min-h-[100px]" /></CardContent>
-                    </Card>
-                </div>
-
-                <div className="lg:col-span-1 space-y-6">
-                    <Card className="sticky top-4 shadow-xl border-t-8 border-slate-900">
-                        <CardHeader>
-                            <CardTitle className="text-xl font-black uppercase italic text-center">Resumen del Balance</CardTitle>
-                             <CardDescription className="text-center font-bold">Período: {periodName}</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="flex justify-between items-center"><p className="text-[10px] font-black uppercase text-slate-400">Total Ingresos</p><p className="font-black text-green-600">Bs. {formatCurrency(totalIngresos)}</p></div>
-                            <div className="flex justify-between items-center"><p className="text-[10px] font-black uppercase text-slate-400">Total Egresos</p><p className="font-black text-red-600">Bs. {formatCurrency(totalEgresos)}</p></div>
-                             <Separator/>
-                            <div className="flex justify-between items-center text-lg pt-2"><p className="font-black uppercase italic">Saldo Neto</p><p className="font-black text-slate-900 underline">Bs. {formatCurrency(saldoNeto)}</p></div>
-                        </CardContent>
-                        <CardFooter>
-                            <Button onClick={handleCreateCierre} disabled={isSubmitting || !periodName} className="w-full bg-slate-900 hover:bg-black font-black uppercase">
-                                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                                Guardar en Historial
-                            </Button>
-                        </CardFooter>
-                    </Card>
-                </div>
-            </div>
-
-            {/* LISTADO HISTÓRICO */}
-            <Card className="shadow-md mt-8">
-                <CardHeader><CardTitle className="text-sm font-black uppercase tracking-widest">Balances Guardados</CardTitle></CardHeader>
-                <CardContent>
-                    <Table>
-                        <TableHeader className="bg-slate-50">
-                            <TableRow>
-                                <TableHead className="font-black text-[10px] uppercase">ID Período</TableHead>
-                                <TableHead className="font-black text-[10px] uppercase">Ingresos</TableHead>
-                                <TableHead className="font-black text-[10px] uppercase">Egresos</TableHead>
-                                <TableHead className="font-black text-[10px] uppercase">Estado</TableHead>
-                                <TableHead className="text-right font-black text-[10px] uppercase">Acciones</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {loading ? (
-                                <TableRow><TableCell colSpan={5} className="h-24 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-[#0081c9]"/></TableCell></TableRow>
-                            ) : statements.length === 0 ? (
-                                <TableRow><TableCell colSpan={5} className="h-32 text-center text-slate-400 italic">No hay registros históricos.</TableCell></TableRow>
-                            ) : (
-                                statements.map((b) => (
-                                    <TableRow key={b.id} className="hover:bg-slate-50">
-                                        <TableCell className="font-black uppercase text-xs">{b.id}</TableCell>
-                                        <TableCell className="text-green-600 font-bold">Bs. {formatCurrency(b.ingresos?.reduce((s,i) => s + i.monto, 0) || 0)}</TableCell>
-                                        <TableCell className="text-red-600 font-bold">Bs. {formatCurrency(b.egresos?.reduce((s,i) => s + i.monto, 0) || 0)}</TableCell>
-                                        <TableCell><Badge variant={b.publicado ? "default" : "secondary"} className={b.publicado ? "bg-blue-100 text-blue-700 hover:bg-blue-100" : ""}>{b.publicado ? "Publicado" : "Borrador"}</Badge></TableCell>
-                                        <TableCell className="text-right space-x-1">
-                                            <Button variant="outline" size="sm" onClick={() => generatePDF(b)}><Download className="mr-2 h-4 w-4"/> PDF</Button>
-                                            <Button variant="ghost" size="icon" onClick={() => togglePublish(b.id, b.publicado)}>{b.publicado ? <EyeOff className="h-4 w-4 text-orange-500"/> : <Eye className="h-4 w-4 text-blue-500"/>}</Button>
-                                            <Button variant="ghost" size="icon" onClick={() => handleDeleteBalance(b.id)} className="text-red-300 hover:text-red-600"><Trash2 className="h-4 w-4" /></Button>
-                                        </TableCell>
-                                    </TableRow>
-                                ))
-                            )}
-                        </TableBody>
-                    </Table>
+                <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                        <SelectTrigger><SelectValue/></SelectTrigger>
+                        <SelectContent>{months.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent>
+                    </Select>
+                    <Select value={selectedYear} onValueChange={setSelectedYear}>
+                        <SelectTrigger><SelectValue/></SelectTrigger>
+                        <SelectContent>{years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
+                    </Select>
+                    <Button onClick={handleSyncData} className="md:col-start-4">
+                        <Sync className="mr-2 h-4 w-4"/> Cargar y Sincronizar Datos
+                    </Button>
                 </CardContent>
             </Card>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <EditableTable type="ingreso" title="Ingresos" items={ingresos} onAction={handleItemAction} setEditingItem={setEditingItem} />
+                <EditableTable type="egreso" title="Egresos" items={egresos} onAction={handleItemAction} setEditingItem={setEditingItem} />
+            </div>
+
+            <Card>
+                <CardHeader><CardTitle>Resumen y Cierre</CardTitle></CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="grid grid-cols-3 gap-4 text-center">
+                        <div className="p-4 bg-green-50 rounded-lg"><p className="text-xs font-bold uppercase text-green-700">Total Ingresos</p><p className="text-2xl font-bold text-green-700">Bs. {formatCurrency(totalIngresos)}</p></div>
+                        <div className="p-4 bg-red-50 rounded-lg"><p className="text-xs font-bold uppercase text-red-700">Total Egresos</p><p className="text-2xl font-bold text-red-700">Bs. {formatCurrency(totalEgresos)}</p></div>
+                        <div className="p-4 bg-blue-50 rounded-lg"><p className="text-xs font-bold uppercase text-blue-700">Saldo Neto</p><p className="text-2xl font-bold text-blue-700">Bs. {formatCurrency(saldoNeto)}</p></div>
+                    </div>
+                    <Textarea placeholder="Notas adicionales del período..." value={notas} onChange={e => setNotas(e.target.value)} />
+                </CardContent>
+                <CardFooter className="justify-end gap-2">
+                    <Button onClick={handleSaveStatement} disabled={loading}>Guardar Cierre Mensual</Button>
+                </CardFooter>
+            </Card>
+
+            {editingItem && (
+                <ItemEditorDialog
+                    item={editingItem.item}
+                    type={editingItem.type}
+                    isOpen={!!editingItem}
+                    onClose={() => setEditingItem(null)}
+                    onSave={(item) => handleItemAction('update', editingItem.type, item)}
+                />
+            )}
         </div>
     );
 }
 
-    
+const EditableTable = ({ type, title, items, onAction, setEditingItem }: { type: 'ingreso' | 'egreso', title: string, items: FinancialItem[], onAction: Function, setEditingItem: Function }) => {
+    const handleAddNew = () => {
+        const newItem: FinancialItem = { id: `manual-${Date.now()}`, dia: format(new Date(), 'dd'), concepto: '', categoria: 'otros', monto: 0 };
+        onAction('add', type, newItem);
+        setEditingItem({ type, item: newItem });
+    };
+
+    return (
+        <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>{title}</CardTitle>
+                <Button size="sm" variant="outline" onClick={handleAddNew}><FilePlus className="mr-2 h-4 w-4"/> Añadir</Button>
+            </CardHeader>
+            <CardContent>
+                <Table>
+                    <TableHeader><TableRow><TableHead>Día</TableHead><TableHead>Concepto</TableHead><TableHead className="text-right">Monto</TableHead><TableHead className="w-[80px]"></TableHead></TableRow></TableHeader>
+                    <TableBody>
+                        {items.map((item: FinancialItem) => (
+                            <TableRow key={item.id}>
+                                <TableCell>{item.dia}</TableCell>
+                                <TableCell>{item.concepto}</TableCell>
+                                <TableCell className="text-right">{formatCurrency(item.monto)}</TableCell>
+                                <TableCell className="text-right">
+                                    <Button variant="ghost" size="icon" onClick={() => setEditingItem({ type, item })}><Edit className="h-4 w-4"/></Button>
+                                    <Button variant="ghost" size="icon" onClick={() => onAction('delete', type, item)}><Trash2 className="h-4 w-4 text-red-500"/></Button>
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </CardContent>
+        </Card>
+    );
+};
+
+const ItemEditorDialog = ({ item, type, isOpen, onClose, onSave }: { item: FinancialItem, type: 'ingreso' | 'egreso', isOpen: boolean, onClose: Function, onSave: Function }) => {
+    const [currentItem, setCurrentItem] = useState(item);
+
+    useEffect(() => {
+        setCurrentItem(item);
+    }, [item]);
+
+    const handleSave = () => {
+        onSave(currentItem);
+        onClose();
+    };
+
+    return (
+        <Dialog open={isOpen} onOpenChange={() => onClose()}>
+            <DialogContent>
+                <DialogHeader><DialogTitle>Editar {type === 'ingreso' ? 'Ingreso' : 'Egreso'}</DialogTitle></DialogHeader>
+                <div className="space-y-4 py-4">
+                    <div className="space-y-2"><Label>Día</Label><Input value={currentItem.dia} onChange={e => setCurrentItem({...currentItem, dia: e.target.value})} /></div>
+                    <div className="space-y-2"><Label>Concepto</Label><Input value={currentItem.concepto} onChange={e => setCurrentItem({...currentItem, concepto: e.target.value})} /></div>
+                    <div className="space-y-2"><Label>Monto (Bs.)</Label><Input type="number" value={currentItem.monto} onChange={e => setCurrentItem({...currentItem, monto: Number(e.target.value)})} /></div>
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => onClose()}>Cancelar</Button>
+                    <Button onClick={handleSave}>Guardar</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+};
