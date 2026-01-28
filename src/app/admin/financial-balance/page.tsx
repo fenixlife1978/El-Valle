@@ -8,13 +8,14 @@ import {
     deleteDoc, doc, updateDoc, Timestamp, getDoc, where, getDocs, writeBatch, setDoc
 } from 'firebase/firestore';
 import { 
-    Trash2, Eye, EyeOff, History, Download, Loader2, FileText, FilePlus, Info, Sync, Edit, DollarSign, TrendingUp, TrendingDown, Wallet, Scale
+    Trash2, Eye, EyeOff, History, Download, Loader2, FileText, FilePlus, Info, 
+    RefreshCw, Edit, DollarSign, TrendingUp, TrendingDown, Wallet, Scale 
 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import QRCode from 'qrcode';
-import { format, startOfMonth, endOfMonth, subMonths, getYear, getMonth } from 'date-fns';
+import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 // UI Components
@@ -27,12 +28,14 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
 
-
 // --- Type Definitions ---
 interface IncomeItem {
     concepto: string;
     estimado: number;
     real: number;
+    categoria?: string; // Add this for PDF generation if needed
+    dia?: string; // Add this
+    monto?: number; // Add this
 }
 
 interface ExpenseItem {
@@ -40,6 +43,8 @@ interface ExpenseItem {
     descripcion: string;
     pago: string;
     monto: number;
+    dia?: string; // Add this
+    concepto?: string; // Add this
 }
 
 interface PettyCashSummary {
@@ -69,6 +74,7 @@ interface FinancialStatementDoc {
     companyInfo?: any;
 }
 
+
 const months = Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: format(new Date(2000, i), 'MMMM', { locale: es }) }));
 const years = Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear() - i));
 
@@ -80,7 +86,7 @@ const formatCurrency = (amount: number | null | undefined): string => {
 
 // --- Main Component ---
 export default function FinancialBalancePage() {
-    const { user, activeCondoId: workingCondoId, companyInfo } = useAuth();
+    const { user, activeCondoId, companyInfo } = useAuth();
     const { toast } = useToast();
 
     // State
@@ -91,10 +97,8 @@ export default function FinancialBalancePage() {
     const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
 
     const [ingresos, setIngresos] = useState<IncomeItem[]>([
-        { concepto: 'Cuotas de Mantenimiento', estimado: 0, real: 0 },
-        { concepto: 'Cuotas de Reserva / Fondo de Emergencia', estimado: 0, real: 0 },
-        { concepto: 'Multas e Intereses de Mora', estimado: 0, real: 0 },
-        { concepto: 'Alquiler de Áreas Comunes (Salones/Gym)', estimado: 0, real: 0 },
+        { concepto: 'Ingresos x Cuotas de Condominio', estimado: 0, real: 0 },
+        { concepto: 'Ingresos Extraordinarios', estimado: 0, real: 0 },
     ]);
     const [egresos, setEgresos] = useState<ExpenseItem[]>([]);
     const [cajaChica, setCajaChica] = useState<PettyCashSummary>({ saldoInicial: 0, reposiciones: 0, gastos: 0, saldoFinal: 0 });
@@ -108,7 +112,7 @@ export default function FinancialBalancePage() {
     };
 
     const handleSyncData = useCallback(async (showToast = true) => {
-        if (!workingCondoId) return;
+        if (!activeCondoId) return;
         setSyncing(true);
         if(showToast) toast({ title: "Sincronizando...", description: "Cargando datos del período." });
 
@@ -117,11 +121,11 @@ export default function FinancialBalancePage() {
             const currentPeriodEnd = endOfMonth(currentPeriodStart);
             
             const prevPeriodDate = subMonths(currentPeriodStart, 1);
-            const prevPeriodId = format(prevPeriodDate, 'yyyy-MM');
-            const prevStatementSnap = await getDoc(doc(db, 'condominios', workingCondoId, 'financial_statements', prevPeriodId));
+            const prevPeriodId = format(prevPeriodDate, 'yyyy-MM').padStart(7, '0');
+            const prevStatementSnap = await getDoc(doc(db, 'condominios', activeCondoId, 'financial_statements', prevPeriodId));
             const saldoAnterior = prevStatementSnap.exists() ? (prevStatementSnap.data() as FinancialStatementDoc).estadoFinal.disponibilidadTotal : 0;
             
-            const paymentsQuery = query(collection(db, 'condominios', workingCondoId, 'payments'), 
+            const paymentsQuery = query(collection(db, 'condominios', activeCondoId, 'payments'), 
                 where('status', '==', 'aprobado'), 
                 where('paymentDate', '>=', currentPeriodStart), 
                 where('paymentDate', '<=', currentPeriodEnd)
@@ -129,9 +133,9 @@ export default function FinancialBalancePage() {
             const paymentsSnap = await getDocs(paymentsQuery);
             const totalPayments = paymentsSnap.docs.reduce((sum, doc) => sum + doc.data().totalAmount, 0);
             
-            setIngresos(prev => prev.map(item => item.concepto === 'Cuotas de Mantenimiento' ? {...item, real: totalPayments} : item));
+            setIngresos(prev => prev.map(item => item.concepto === 'Ingresos x Cuotas de Condominio' ? {...item, real: totalPayments} : item));
 
-            const expensesQuery = query(collection(db, 'condominios', workingCondoId, 'gastos'),
+            const expensesQuery = query(collection(db, 'condominios', activeCondoId, 'gastos'),
                 where('date', '>=', currentPeriodStart),
                 where('date', '<=', currentPeriodEnd)
             );
@@ -143,11 +147,13 @@ export default function FinancialBalancePage() {
                     descripcion: data.description,
                     pago: 'Transferencia',
                     monto: data.amount,
+                    dia: format(data.date.toDate(), 'dd/MM/yyyy'),
+                    concepto: data.description,
                 };
             });
             setEgresos(syncedEgresos);
             
-            const allMovementsSnap = await getDocs(query(collection(db, 'condominios', workingCondoId, 'cajaChica_movimientos')));
+            const allMovementsSnap = await getDocs(query(collection(db, 'condominios', activeCondoId, 'cajaChica_movimientos')));
             const movements = allMovementsSnap.docs.map(d => ({...d.data(), date: d.data().date.toDate()}));
             
             const saldoInicialCaja = movements
@@ -174,11 +180,16 @@ export default function FinancialBalancePage() {
         } finally {
             setSyncing(false);
         }
-    }, [selectedYear, selectedMonth, workingCondoId, toast]);
+    }, [selectedYear, selectedMonth, activeCondoId, toast]);
 
     useEffect(() => {
-        if(workingCondoId) handleSyncData(false);
-    }, [selectedMonth, selectedYear, workingCondoId, handleSyncData]);
+        if(activeCondoId) {
+            setLoading(true);
+            handleSyncData(false).finally(() => setLoading(false));
+        } else {
+            setLoading(false);
+        }
+    }, [selectedMonth, selectedYear, activeCondoId, handleSyncData]);
     
     useEffect(() => {
         const totalIngresos = ingresos.reduce((sum, item) => sum + item.real, 0);
@@ -196,15 +207,30 @@ export default function FinancialBalancePage() {
     }, [ingresos, egresos, cajaChica.saldoFinal, estadoFinal.saldoAnterior]);
 
     const handleSaveStatement = async () => {
-        if (!workingCondoId) return;
+        if (!activeCondoId) return;
         setLoading(true);
         const periodId = `${selectedYear}-${selectedMonth.padStart(2, '0')}`;
+        
+        // Ensure ingresos has all needed fields for PDF
+        const finalIngresos = ingresos.map(i => ({
+            ...i,
+            dia: format(new Date(), 'dd/MM/yyyy'),
+            categoria: 'Ingresos',
+            monto: i.real
+        }));
+
         const statementData: FinancialStatementDoc = {
-            id: periodId, ingresos, egresos, cajaChica, estadoFinal, notas,
-            fechaCierre: Timestamp.now(), companyInfo,
+            id: periodId, 
+            ingresos: finalIngresos, 
+            egresos, 
+            cajaChica, 
+            estadoFinal, 
+            notas,
+            fechaCierre: Timestamp.now(), 
+            companyInfo,
         };
         try {
-            await setDoc(doc(db, 'condominios', workingCondoId, 'financial_statements', periodId), statementData);
+            await setDoc(doc(db, 'condominios', activeCondoId, 'financial_statements', periodId), statementData);
             toast({ title: "Balance Guardado", description: "El cierre del período se ha guardado exitosamente." });
         } catch(e) {
             toast({ variant: "destructive", title: "Error al guardar." });
@@ -214,8 +240,6 @@ export default function FinancialBalancePage() {
     };
     
     const generatePDF = async () => {
-        if (!workingCondoId) return;
-        
         const info = companyInfo || {
             name: "EFAS CondoSys", rif: "J-00000000-0", address: "Administración", phone: "Soporte", logo: ""
         };
@@ -243,7 +267,7 @@ export default function FinancialBalancePage() {
         docPDF.setFontSize(12).setFont('helvetica', 'italic').text(`PERÍODO: ${periodText}`, pageWidth / 2, 63, { align: 'center' });
 
         try {
-            const qrCodeUrl = await QRCode.toDataURL(`https://efas-condosys.com/verify/balance/${workingCondoId}/${selectedYear}-${selectedMonth}`);
+            const qrCodeUrl = await QRCode.toDataURL(`https://efas-condosys.com/verify/balance/${activeCondoId}/${selectedYear}-${selectedMonth}`);
             docPDF.addImage(qrCodeUrl, 'PNG', pageWidth - margin - 25, 45, 25, 25);
             docPDF.setFontSize(7).text("VALIDACIÓN DIGITAL", pageWidth - margin - 12.5, 72, { align: 'center' });
         } catch (e) { console.error("QR Error", e); }
@@ -323,13 +347,6 @@ export default function FinancialBalancePage() {
         docPDF.save(`Balance_EFAS_${selectedYear}-${selectedMonth}.pdf`);
     };
 
-    // This useEffect will run once on mount to set the initial loading state.
-    useEffect(() => {
-        setLoading(true);
-        if(workingCondoId) handleSyncData(false).finally(() => setLoading(false));
-        else setLoading(false);
-    }, [workingCondoId]);
-
     if (loading && !syncing) return <div className="flex h-[80vh] items-center justify-center"><Loader2 className="animate-spin text-blue-500 h-12 w-12" /></div>;
 
     return (
@@ -351,7 +368,7 @@ export default function FinancialBalancePage() {
                     <Select value={selectedYear} onValueChange={setSelectedYear}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent></Select>
                     <div className="col-span-2 flex gap-2">
                         <Button onClick={() => handleSyncData(true)} className="w-full" disabled={syncing}>
-                            {syncing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Sync className="mr-2 h-4 w-4"/>} Cargar y Sincronizar Datos
+                            {syncing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <RefreshCw className="mr-2 h-4 w-4"/>} Cargar y Sincronizar Datos
                         </Button>
                          <Button onClick={generatePDF} variant="outline" className="w-full">
                             <Download className="mr-2 h-4 w-4" /> Exportar a PDF
@@ -438,3 +455,4 @@ export default function FinancialBalancePage() {
         </div>
     );
 }
+
