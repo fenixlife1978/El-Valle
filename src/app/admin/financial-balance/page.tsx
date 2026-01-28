@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -14,7 +15,6 @@ import { es } from 'date-fns/locale';
 
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import QRCode from 'qrcode';
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from "@/components/ui/card";
@@ -37,7 +37,7 @@ const years = Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear(
 
 export default function FinancialBalancePage() {
     const { toast } = useToast();
-    const { activeCondoId, loading: authLoading } = useAuth(); // Correctly get authLoading
+    const { activeCondoId, loading } = useAuth();
     const workingCondoId = activeCondoId;
 
     const [dataLoading, setDataLoading] = useState(true);
@@ -168,10 +168,10 @@ export default function FinancialBalancePage() {
     }, [workingCondoId, selectedMonth, selectedYear, toast, loadCondoConfig]);
 
     useEffect(() => {
-        if (!authLoading && workingCondoId) {
+        if (!loading && workingCondoId) {
              handleSyncData(false);
         }
-    }, [workingCondoId, authLoading, selectedMonth, selectedYear, handleSyncData]);
+    }, [workingCondoId, loading, selectedMonth, selectedYear, handleSyncData]);
 
     useEffect(() => {
         const totalI = ingresos.reduce((s, i) => s + i.real, 0);
@@ -190,7 +190,7 @@ export default function FinancialBalancePage() {
         }));
     }, [ingresos, egresos, estadoFinal.saldoAnterior, cajaChica]);
     
-    if (authLoading || dataLoading) return <div className="h-screen flex items-center justify-center bg-white"><Loader2 className="animate-spin h-10 w-10 text-blue-600"/></div>;
+    if (loading || dataLoading) return <div className="h-screen flex items-center justify-center bg-white"><Loader2 className="animate-spin h-10 w-10 text-blue-600"/></div>;
 
     const generatePDF = async () => {
         if (!workingCondoId) {
@@ -201,7 +201,13 @@ export default function FinancialBalancePage() {
         const pageWidth = docPDF.internal.pageSize.getWidth();
         const margin = 14;
 
-        if (companyInfo?.logo) docPDF.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25);
+        if (companyInfo?.logo) {
+            try {
+                docPDF.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25);
+            } catch(e) {
+                console.error("Error al agregar el logo al PDF:", e);
+            }
+        }
         
         docPDF.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo?.name || '', margin + 30, margin + 8);
         docPDF.setFontSize(9).setFont('helvetica', 'normal');
@@ -212,9 +218,6 @@ export default function FinancialBalancePage() {
         const period = `${months.find(m => m.value === selectedMonth)?.label} ${selectedYear}`;
         docPDF.setFontSize(16).setFont('helvetica', 'bold').text('ESTADO DE RESULTADOS', pageWidth / 2, margin + 45, { align: 'center' });
         docPDF.setFontSize(12).setFont('helvetica', 'normal').text(`Período: ${period}`, pageWidth / 2, margin + 52, { align: 'center' });
-
-        const qrCodeUrl = await QRCode.toDataURL(`${window.location.href}`, { errorCorrectionLevel: 'M', margin: 2, scale: 4 });
-        if(qrCodeUrl) docPDF.addImage(qrCodeUrl, 'PNG', pageWidth - margin - 30, margin + 40, 30, 30);
         
         autoTable(docPDF, {
             head: [['INGRESOS', 'MONTO Bs.']],
