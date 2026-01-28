@@ -76,15 +76,6 @@ const CustomHeader = ({
   return (
     <header className="sticky top-4 z-10 mx-4 flex h-20 items-center justify-between gap-2 rounded-xl border bg-card/80 px-4 shadow-lg backdrop-blur-sm sm:px-6 text-card-foreground">
       <div className="flex items-center gap-4">
-        {/* LOGO REDONDO OPTIMIZADO */}
-        <div className="w-14 h-14 rounded-full overflow-hidden bg-white border-2 border-primary/20 flex items-center justify-center shadow-md shrink-0">
-          <img 
-            src={companyInfo?.logo || "/logo-efas.png"} 
-            alt="Logo" 
-            className="w-full h-full object-contain p-1.5" 
-          />
-        </div>
-
         <div className="flex flex-col">
           <div className="flex items-center gap-1 leading-none">
             <span className="font-black text-2xl tracking-tighter text-amber-500">EFAS</span>
