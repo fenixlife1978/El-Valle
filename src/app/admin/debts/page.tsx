@@ -19,6 +19,7 @@ import { Badge } from '@/components/ui/badge';
 import { differenceInCalendarMonths, format, addMonths, startOfMonth, isBefore } from 'date-fns';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import Decimal from 'decimal.js';
+import { useAuth } from '@/hooks/use-auth';
 
 
 type Owner = {
@@ -111,6 +112,10 @@ const getSortKeys = (owner: Owner) => {
 };
 
 export default function DebtManagementPage() {
+    const { user: currentUser, activeCondoId } = useAuth();
+    const sId = typeof window !== 'undefined' ? localStorage.getItem('support_mode_id') : null;
+    const workingCondoId = (sId && currentUser?.email === 'vallecondo@gmail.com') ? sId : activeCondoId;
+
     const [view, setView] = useState<View>('list');
     const [owners, setOwners] = useState<Owner[]>([]);
     const [loading, setLoading] = useState(true);
@@ -139,9 +144,10 @@ export default function DebtManagementPage() {
     const { toast } = useToast();
     
     const forceUpdateDebtState = useCallback(async (showToast = false) => {
+        if (!workingCondoId) return;
         if(showToast) toast({ title: "Sincronizando...", description: "Recalculando todas las deudas pendientes." });
         
-        const debtsQuery = query(collection(db, "debts"), where("status", "==", "pending"));
+        const debtsQuery = query(collection(db, 'condominios', workingCondoId, 'debts'), where("status", "==", "pending"));
         const snapshot = await getDocs(debtsQuery);
         
         setOwners(prevOwners => {
@@ -164,16 +170,20 @@ export default function DebtManagementPage() {
         });
         if(showToast) toast({ title: "Saldos Sincronizados", description: "Las deudas pendientes se han actualizado.", className: "bg-blue-100 border-blue-400 text-blue-800" });
 
-    }, [toast]);
+    }, [toast, workingCondoId]);
 
 
     // Fetch All Owners and initial data
     useEffect(() => {
+        if (!workingCondoId) {
+            setLoading(false);
+            return;
+        }
         setLoading(true);
 
         const fetchInitialSettings = async () => {
              try {
-                const settingsRef = doc(db, 'config', 'mainSettings');
+                const settingsRef = doc(db, 'condominios', workingCondoId, 'config', 'mainSettings');
                 const settingsSnap = await getDoc(settingsRef);
                 if (settingsSnap.exists()) {
                     const settings = settingsSnap.data();
@@ -194,7 +204,7 @@ export default function DebtManagementPage() {
             }
         };
 
-        const ownersQuery = query(collection(db, "owners"));
+        const ownersQuery = query(collection(db, "condominios", workingCondoId, "owners"));
         const ownersUnsubscribe = onSnapshot(ownersQuery, async (snapshot) => {
             let ownersData: Owner[] = snapshot.docs.map(doc => {
                 const data = doc.data();
@@ -228,12 +238,13 @@ export default function DebtManagementPage() {
 
         return () => ownersUnsubscribe();
 
-    }, [toast]);
+    }, [workingCondoId, toast]);
 
     // REAL-TIME DEBT LISTENER
     useEffect(() => {
+        if (!workingCondoId) return;
         const firestore = db;
-        const debtsQuery = query(collection(firestore, "debts"), where("status", "==", "pending"));
+        const debtsQuery = query(collection(firestore, 'condominios', workingCondoId, 'debts'), where("status", "==", "pending"));
         
         const unsubscribe = onSnapshot(debtsQuery, (snapshot) => {
             setOwners(prevOwners => {
@@ -264,9 +275,14 @@ export default function DebtManagementPage() {
         });
 
         return () => unsubscribe();
-    }, [toast]);
+    }, [workingCondoId, toast]);
 
      const handleReconcileAll = useCallback(async () => {
+        if (!workingCondoId) {
+            toast({ variant: 'destructive', title: 'Error', description: 'No se ha seleccionado un condominio.' });
+            return;
+        }
+
         if (activeRate <= 0 || condoFee <= 0) {
             toast({ variant: 'destructive', title: 'Error de Configuración', description: 'Tasa de cambio y cuota de condominio deben estar configuradas. No se puede conciliar.' });
             return;
@@ -291,14 +307,14 @@ export default function DebtManagementPage() {
             processedOwners++;
             try {
                 await runTransaction(firestore, async (transaction) => {
-                    const ownerRef = doc(firestore, 'owners', owner.id);
+                    const ownerRef = doc(firestore, 'condominios', workingCondoId, 'owners', owner.id);
                     const ownerDoc = await transaction.get(ownerRef);
                     if (!ownerDoc.exists()) throw new Error(`Propietario ${owner.id} no encontrado.`);
                     
                     let availableFunds = new Decimal(ownerDoc.data().balance || 0);
                     if (availableFunds.lessThanOrEqualTo(0)) return;
 
-                    const allDebtsQuery = query(collection(firestore, 'debts'), where('ownerId', '==', owner.id));
+                    const allDebtsQuery = query(collection(firestore, 'condominios', workingCondoId, 'debts'), where('ownerId', '==', owner.id));
                     const allDebtsSnapshot = await getDocs(allDebtsQuery);
                     const allOwnerDebts = allDebtsSnapshot.docs.map(d => ({ ref: d.ref, id: d.id, ...d.data() } as Debt & { ref: any }));
                     
@@ -312,7 +328,7 @@ export default function DebtManagementPage() {
                         if (availableFunds.gte(debtAmountBs)) {
                             availableFunds = availableFunds.minus(debtAmountBs);
 
-                            const paymentRef = doc(collection(firestore, "payments"));
+                            const paymentRef = doc(collection(firestore, "condominios", workingCondoId, "payments"));
                             transaction.set(paymentRef, {
                                 reportedBy: owner.id,
                                 beneficiaries: [{ ownerId: owner.id, ownerName: owner.name, ...debt.property, amount: debtAmountBs.toNumber() }],
@@ -363,7 +379,7 @@ export default function DebtManagementPage() {
                                 availableFunds = availableFunds.minus(condoFeeBs);
 
                                 const paymentDate = Timestamp.now();
-                                const paymentRef = doc(collection(firestore, 'payments'));
+                                const paymentRef = doc(collection(firestore, 'condominios', workingCondoId, 'payments'));
                                 transaction.set(paymentRef, {
                                     reportedBy: owner.id, beneficiaries: [{ ownerId: owner.id, ownerName: owner.name, ...property, amount: condoFeeBs.toNumber() }],
                                     totalAmount: condoFeeBs.toNumber(), exchangeRate: activeRate, paymentDate: paymentDate, reportedAt: paymentDate,
@@ -371,7 +387,7 @@ export default function DebtManagementPage() {
                                     observations: `Cuota de ${months.find(m=>m.value === futureMonth)?.label} ${futureYear} para ${property.street} - ${property.house} pagada por adelanto automático.`
                                 });
 
-                                const debtRef = doc(collection(firestore, 'debts'));
+                                const debtRef = doc(collection(firestore, 'condominios', workingCondoId, 'debts'));
                                 transaction.set(debtRef, {
                                     ownerId: owner.id, property: property, year: futureYear, month: futureMonth, amountUSD: condoFee,
                                     description: "Cuota de Condominio (Pagada por adelantado)", status: 'paid', paidAmountUSD: condoFee,
@@ -402,10 +418,11 @@ export default function DebtManagementPage() {
         }
 
         setIsReconciling(false);
-    }, [toast, activeRate, condoFee, owners]);
+    }, [toast, activeRate, condoFee, owners, workingCondoId]);
 
     
     const handleGenerateMonthlyDebt = async () => {
+        if (!workingCondoId) return;
         setIsGeneratingMonthlyDebt(true);
         toast({ title: 'Iniciando proceso...', description: 'Generando deudas para el mes en curso.' });
 
@@ -423,7 +440,7 @@ export default function DebtManagementPage() {
 
             // Query for all debts (pending or paid) for the current month and year.
             const existingDebtsQuery = query(
-                collection(firestore, 'debts'), 
+                collection(firestore, 'condominios', workingCondoId, 'debts'), 
                 where('year', '==', year), 
                 where('month', '==', month)
             );
@@ -450,7 +467,7 @@ export default function DebtManagementPage() {
                             const key = `${owner.id}-${property.street}-${property.house}`;
                             // If the key is not in the set, it means no debt exists for this property this month.
                             if (!ownersWithDebtForProp.has(key)) {
-                                const debtRef = doc(collection(firestore, 'debts'));
+                                const debtRef = doc(collection(firestore, 'condominios', workingCondoId, 'debts'));
                                 batch.set(debtRef, {
                                     ownerId: owner.id,
                                     property: property,
@@ -507,13 +524,13 @@ export default function DebtManagementPage() {
 
     // Fetch Debts for selected owner when view changes to 'detail'
     useEffect(() => {
-        if (view !== 'detail' || !selectedOwner) {
+        if (view !== 'detail' || !selectedOwner || !workingCondoId) {
             setSelectedOwnerDebts([]);
             return;
         }
 
         setLoadingDebts(true);
-        const q = query(collection(db, "debts"), where("ownerId", "==", selectedOwner.id));
+        const q = query(collection(db, 'condominios', workingCondoId, "debts"), where("ownerId", "==", selectedOwner.id));
         const unsubscribe = onSnapshot(q, (querySnapshot) => {
             const debtsData: Debt[] = [];
             querySnapshot.forEach((doc) => {
@@ -527,7 +544,7 @@ export default function DebtManagementPage() {
         });
 
         return () => unsubscribe();
-    }, [view, selectedOwner]);
+    }, [view, selectedOwner, workingCondoId]);
     
     // Group debts by property for the detailed view
     const debtsByProperty = useMemo(() => {
@@ -619,14 +636,14 @@ export default function DebtManagementPage() {
     }
     
     const confirmDelete = async () => {
-        if (!debtToDelete || !selectedOwner) return;
+        if (!debtToDelete || !selectedOwner || !workingCondoId) return;
         const firestore = db;
     
         try {
             await runTransaction(firestore, async (transaction) => {
                 // --- 1. All reads first ---
-                const ownerRef = doc(firestore, "owners", selectedOwner.id);
-                const debtRef = doc(firestore, "debts", debtToDelete.id);
+                const ownerRef = doc(firestore, "condominios", workingCondoId, "owners", selectedOwner.id);
+                const debtRef = doc(firestore, "condominios", workingCondoId, "debts", debtToDelete.id);
 
                 const ownerDoc = await transaction.get(ownerRef);
                 if (!ownerDoc.exists()) {
@@ -650,7 +667,7 @@ export default function DebtManagementPage() {
                 }
     
                 if (debtToDelete.paymentId && debtToDelete.status === 'paid') {
-                    const paymentRef = doc(firestore, "payments", debtToDelete.paymentId);
+                    const paymentRef = doc(firestore, "condominios", workingCondoId, "payments", debtToDelete.paymentId);
                     // Check if payment exists before attempting to delete
                     const paymentDoc = await getDoc(paymentRef); // This is a read outside the transaction, but acceptable for this logic
                     if (paymentDoc.exists()) {
@@ -673,8 +690,8 @@ export default function DebtManagementPage() {
         }
     }
 
-    const handleSaveMassDebt = async () => {
-        if (!selectedOwner || !propertyForMassDebt) return;
+    const handleSaveMassiveDebt = async () => {
+        if (!selectedOwner || !propertyForMassDebt || !workingCondoId) return;
         if (!currentMassDebt.description || currentMassDebt.amountUSD <= 0) {
             toast({ variant: 'destructive', title: 'Error de Validación', description: 'La descripción y un monto mayor a cero son obligatorios.' });
             return;
@@ -696,8 +713,8 @@ export default function DebtManagementPage() {
             if (activeRate <= 0) throw "No hay una tasa de cambio activa o registrada configurada.";
             
             // These reads happen outside the transaction, which is fine.
-            const existingDebtQuery = query(collection(firestore, 'debts'), where('ownerId', '==', selectedOwner.id), where('property.street', '==', propertyForMassDebt.street), where('property.house', '==', propertyForMassDebt.house));
-            const existingHistoricalPaymentQuery = query(collection(firestore, 'historical_payments'), where('ownerId', '==', selectedOwner.id), where('property.street', '==', propertyForMassDebt.street), where('property.house', '==', propertyForMassDebt.house));
+            const existingDebtQuery = query(collection(firestore, 'condominios', workingCondoId, 'debts'), where('ownerId', '==', selectedOwner.id), where('property.street', '==', propertyForMassDebt.street), where('property.house', '==', propertyForMassDebt.house));
+            const existingHistoricalPaymentQuery = query(collection(firestore, 'condominios', workingCondoId, 'historical_payments'), where('ownerId', '==', selectedOwner.id), where('property.street', '==', propertyForMassDebt.street), where('property.house', '==', propertyForMassDebt.house));
             const [existingDebtsSnapshot, existingHistoricalSnapshot] = await Promise.all([ getDocs(existingDebtQuery), getDocs(existingHistoricalPaymentQuery) ]);
             
             const existingDebtPeriods = new Set([...existingDebtsSnapshot.docs.map(d => `${d.data().year}-${d.data().month}`), ...existingHistoricalSnapshot.docs.map(d => `${d.data().referenceYear}-${d.data().referenceMonth}`)]);
@@ -705,7 +722,7 @@ export default function DebtManagementPage() {
             
             await runTransaction(firestore, async (transaction) => {
                 // --- 1. ALL READS FIRST ---
-                const ownerRef = doc(firestore, "owners", selectedOwner.id);
+                const ownerRef = doc(firestore, "condominios", workingCondoId, "owners", selectedOwner.id);
                 const ownerDoc = await transaction.get(ownerRef);
                 if (!ownerDoc.exists()) throw "El documento del propietario no existe.";
                 
@@ -721,14 +738,14 @@ export default function DebtManagementPage() {
 
                     newDebtsCreated++;
                     const debtAmountBs = new Decimal(amountUSD).times(new Decimal(activeRate));
-                    const debtRef = doc(collection(firestore, "debts"));
+                    const debtRef = doc(collection(firestore, "condominios", workingCondoId, "debts"));
                     let debtData: any = { ownerId: selectedOwner.id, property: propertyForMassDebt, year: debtYear, month: debtMonth, amountUSD: amountUSD, description: description, status: 'pending' };
                     
                     if (availableBalance.gte(debtAmountBs)) {
                         availableBalance = availableBalance.minus(debtAmountBs);
                         const paymentDate = Timestamp.now();
 
-                        const paymentRef = doc(collection(firestore, "payments"));
+                        const paymentRef = doc(collection(firestore, "condominios", workingCondoId, "payments"));
                         transaction.set(paymentRef, {
                             reportedBy: selectedOwner.id,
                             beneficiaries: [{ ownerId: selectedOwner.id, ownerName: selectedOwner.name, ...propertyForMassDebt, amount: debtAmountBs.toNumber() }],
@@ -763,13 +780,13 @@ export default function DebtManagementPage() {
     };
     
     const handleSaveSingleDebt = async () => {
-        if (!debtToEdit || !currentDebtData.description || Number(currentDebtData.amountUSD) <= 0) {
+        if (!debtToEdit || !currentDebtData.description || Number(currentDebtData.amountUSD) <= 0 || !workingCondoId) {
              toast({ variant: 'destructive', title: 'Error de Validación', description: 'La descripción y un monto mayor a cero son obligatorios.' });
             return;
         }
 
         try {
-            const debtRef = doc(db, "debts", debtToEdit.id);
+            const debtRef = doc(db, 'condominios', workingCondoId, 'debts', debtToEdit.id);
             await updateDoc(debtRef, {
                 description: currentDebtData.description,
                 amountUSD: Number(currentDebtData.amountUSD)
@@ -1258,3 +1275,4 @@ export default function DebtManagementPage() {
     // Fallback while loading or if view is invalid
     return null;
 }
+
