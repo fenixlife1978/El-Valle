@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -18,7 +19,6 @@ import QRCode from 'qrcode';
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
@@ -37,7 +37,6 @@ const years = Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear(
 export default function FinancialBalancePage() {
     const { toast } = useToast();
     const { activeCondoId, loading } = useAuth();
-    const workingCondoId = activeCondoId;
     
     const [dataLoading, setDataLoading] = useState(true);
     const [syncing, setSyncing] = useState(false);
@@ -68,6 +67,8 @@ export default function FinancialBalancePage() {
         saldoAnterior: 0, totalIngresos: 0, totalEgresos: 0, saldoNeto: 0, saldoBancos: 0, disponibilidadTotal: 0
     });
     const [notas, setNotas] = useState('');
+
+    const workingCondoId = activeCondoId;
 
     const loadCondoConfig = useCallback(async () => {
         if (!workingCondoId) return;
@@ -123,7 +124,6 @@ export default function FinancialBalancePage() {
             ));
             
             setEgresos(expensesSnap.docs
-                .filter(d => d.data().category !== 'Caja Chica') // Excluir las reposiciones
                 .map(d => ({
                     id: d.id,
                     descripcion: d.data().description || 'Sin descripción',
@@ -334,3 +334,4 @@ export default function FinancialBalancePage() {
         </div>
     );
 }
+
