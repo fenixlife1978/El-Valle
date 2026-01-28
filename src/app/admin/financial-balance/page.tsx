@@ -86,10 +86,8 @@ const formatCurrency = (amount: number | null | undefined): string => {
 
 // --- Main Component ---
 export default function FinancialBalancePage() {
-    const { user, activeCondoId, companyInfo } = useAuth();
     const { toast } = useToast();
-
-    // Use the condoId from the authentication context. It correctly handles support mode.
+    const { user, activeCondoId, companyInfo, loading: authLoading } = useAuth();
     const workingCondoId = activeCondoId;
 
     // State
@@ -114,31 +112,39 @@ export default function FinancialBalancePage() {
         setIngresos(newIngresos);
     };
 
+    const handleEstadoFinalChange = (field: keyof FinalStatement, value: string) => {
+        const numericValue = parseFloat(value) || 0;
+        setEstadoFinal(prev => ({
+            ...prev,
+            [field]: numericValue
+        }));
+    };
+
     const handleSyncData = useCallback(async (showToast = true) => {
         if (!workingCondoId) return;
         setSyncing(true);
-        if(showToast) toast({ title: "Sincronizando...", description: "Cargando datos del período." });
-
+        if (showToast) toast({ title: "Sincronizando...", description: "Cargando datos del período." });
+    
         try {
             const currentPeriodStart = startOfMonth(new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1));
             const currentPeriodEnd = endOfMonth(currentPeriodStart);
-            
+    
             const prevPeriodDate = subMonths(currentPeriodStart, 1);
             const prevPeriodId = format(prevPeriodDate, 'yyyy-MM');
             const prevStatementSnap = await getDoc(doc(db, 'condominios', workingCondoId, 'financial_statements', prevPeriodId));
             const saldoAnterior = prevStatementSnap.exists() ? (prevStatementSnap.data() as FinancialStatementDoc).estadoFinal.disponibilidadTotal : 0;
-            
+    
             // 1. Sincronizar Pagos (Ingresos)
-            const paymentsQuery = query(collection(db, 'condominios', workingCondoId, 'payments'), 
-                where('status', '==', 'aprobado'), 
-                where('paymentDate', '>=', currentPeriodStart), 
+            const paymentsQuery = query(collection(db, 'condominios', workingCondoId, 'payments'),
+                where('status', '==', 'aprobado'),
+                where('paymentDate', '>=', currentPeriodStart),
                 where('paymentDate', '<=', currentPeriodEnd)
             );
             const paymentsSnap = await getDocs(paymentsQuery);
             const totalPayments = paymentsSnap.docs.reduce((sum, doc) => sum + doc.data().totalAmount, 0);
-            
-            setIngresos(prev => prev.map(item => item.concepto === 'Ingresos x Cuotas de Condominio' ? {...item, real: totalPayments} : item));
-
+    
+            setIngresos(prev => prev.map(item => item.concepto === 'Ingresos x Cuotas de Condominio' ? { ...item, real: totalPayments } : item));
+    
             // 2. Sincronizar Gastos (Egresos)
             const expensesQuery = query(collection(db, 'condominios', workingCondoId, 'gastos'),
                 where('date', '>=', currentPeriodStart),
@@ -158,17 +164,11 @@ export default function FinancialBalancePage() {
                 };
             });
             setEgresos(syncedEgresos);
-            
+    
             // 3. Sincronizar Caja Chica
             const allMovementsSnap = await getDocs(query(collection(db, 'condominios', workingCondoId, 'cajaChica_movimientos')));
-            
-            interface Movement {
-                amount: number;
-                type: 'ingreso' | 'egreso';
-                date: Date;
-            }
-
-            const movements: Movement[] = allMovementsSnap.docs.map(d => {
+    
+            const movements = allMovementsSnap.docs.map(d => {
                 const data = d.data();
                 return {
                     amount: data.amount || 0,
@@ -176,28 +176,28 @@ export default function FinancialBalancePage() {
                     date: data.date.toDate() as Date
                 };
             });
-            
+    
             const saldoInicialCaja = movements
                 .filter(m => m.date < currentPeriodStart)
                 .reduce((acc, m) => m.type === 'ingreso' ? acc + m.amount : acc - m.amount, 0);
-            
+    
             const reposiciones = movements
                 .filter(m => m.date >= currentPeriodStart && m.date <= currentPeriodEnd && m.type === 'ingreso')
                 .reduce((sum, m) => sum + m.amount, 0);
-            
+    
             const gastos = movements
                 .filter(m => m.date >= currentPeriodStart && m.date <= currentPeriodEnd && m.type === 'egreso')
                 .reduce((sum, m) => sum + m.amount, 0);
-            
+    
             const saldoFinalCaja = saldoInicialCaja + reposiciones - gastos;
-
+    
             setCajaChica({ saldoInicial: saldoInicialCaja, reposiciones, gastos, saldoFinal: saldoFinalCaja });
             setEstadoFinal(prev => ({ ...prev, saldoAnterior, saldoCajaChica: saldoFinalCaja }));
-
-            if(showToast) toast({ title: "Sincronización Completa" });
+    
+            if (showToast) toast({ title: "Sincronización Completa" });
         } catch (error) {
             console.error("Error en sincronización:", error);
-            if(showToast) toast({ variant: "destructive", title: "Error al Sincronizar", description: "Verifique la consola para más detalles." });
+            if (showToast) toast({ variant: "destructive", title: "Error al Sincronizar", description: "Verifique la consola para más detalles." });
         } finally {
             setSyncing(false);
         }
@@ -214,19 +214,16 @@ export default function FinancialBalancePage() {
     
     useEffect(() => {
         const totalIngresos = ingresos.reduce((sum, item) => sum + item.real, 0);
-        const totalEgresos = egresos.reduce((sum, item) => sum + item.monto, 0);
-        
-        // El saldo en banco es el saldo anterior + ingresos - gastos (excluyendo gastos de caja chica que ya se restaron del fondo).
-        // Las reposiciones de caja chica sí son un egreso de la cuenta principal.
+        const totalEgresosBrutos = egresos.reduce((sum, item) => sum + item.monto, 0);
         const reposicionesCajaChica = cajaChica.reposiciones;
 
-        const saldoBancos = estadoFinal.saldoAnterior + totalIngresos - totalEgresos - reposicionesCajaChica;
+        const saldoBancos = estadoFinal.saldoAnterior + totalIngresos - totalEgresosBrutos - reposicionesCajaChica;
         const disponibilidadTotal = saldoBancos + cajaChica.saldoFinal;
 
         setEstadoFinal(prev => ({
             ...prev,
             totalIngresos,
-            totalEgresos: totalEgresos + reposicionesCajaChica, // Egresos totales son los operativos + lo que fue a caja chica
+            totalEgresos: totalEgresosBrutos + reposicionesCajaChica,
             saldoBancos,
             disponibilidadTotal
         }));
@@ -437,7 +434,7 @@ export default function FinancialBalancePage() {
                                 ))}
                                 {egresos.length === 0 && <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground">No hay gastos sincronizados.</TableCell></TableRow>}
                             </TableBody>
-                             <TableFooter><TableRow><TableCell colSpan={2} className="text-right font-bold">Total Gastos Operativos</TableCell><TableCell className="text-right font-bold">{formatCurrency(estadoFinal.totalEgresos)}</TableCell></TableRow></TableFooter>
+                             <TableFooter><TableRow><TableCell colSpan={2} className="text-right font-bold">Total Gastos Operativos</TableCell><TableCell className="text-right font-bold">{formatCurrency(egresos.reduce((sum, item) => sum + item.monto, 0))}</TableCell></TableRow></TableFooter>
                         </Table>
                     </CardContent>
                 </Card>
@@ -458,7 +455,16 @@ export default function FinancialBalancePage() {
                  <Card>
                     <CardHeader><CardTitle className="flex items-center gap-2"><Scale className="text-blue-500"/>4. Estado de Cuenta Final</CardTitle></CardHeader>
                     <CardContent className="space-y-2 text-sm">
-                        <div className="flex justify-between p-2 rounded-md"><span className="text-muted-foreground">Saldo Inicial (Mes Anterior):</span> <span className="font-semibold">{formatCurrency(estadoFinal.saldoAnterior)}</span></div>
+                        <div className="flex justify-between items-center p-2 rounded-md">
+                            <Label htmlFor="saldoAnterior" className="text-muted-foreground">Saldo Inicial (Mes Anterior):</Label>
+                            <Input
+                                id="saldoAnterior"
+                                type="number"
+                                value={estadoFinal.saldoAnterior}
+                                onChange={e => handleEstadoFinalChange('saldoAnterior', e.target.value)}
+                                className="w-40 text-right font-semibold"
+                            />
+                        </div>
                         <div className="flex justify-between p-2 rounded-md"><span className="text-muted-foreground">(+) Total Ingresos del Mes:</span> <span className="font-semibold text-green-600">{formatCurrency(estadoFinal.totalIngresos)}</span></div>
                         <div className="flex justify-between p-2 rounded-md"><span className="text-muted-foreground">(-) Total Gastos del Mes:</span> <span className="font-semibold text-red-600">{formatCurrency(estadoFinal.totalEgresos)}</span></div>
                         <div className="flex justify-between p-2 rounded-md font-bold text-base"><span className="">Saldo Total en Bancos:</span> <span>{formatCurrency(estadoFinal.saldoBancos)}</span></div>
@@ -483,3 +489,4 @@ export default function FinancialBalancePage() {
         </div>
     );
 }
+
