@@ -112,9 +112,13 @@ export default function FinancialBalancePage() {
             ));
             const totalPayments = paymentsSnap.docs.reduce((sum, doc) => sum + (doc.data().totalAmount || 0), 0);
             
-            setIngresos(prev => prev.map(item => 
-                item.category.includes('cuotas_ordinarias') ? { ...item, real: totalPayments } : item
-            ));
+            // CORRECCIÓN: Reconstruir el estado de ingresos para asegurar una actualización limpia.
+            const newIngresos = [
+                { concepto: 'Cobranza del Mes', real: totalPayments, category: 'cuotas_ordinarias' },
+                { concepto: 'Fondo de Reserva', real: 0, category: 'fondo_reserva' },
+                { concepto: 'Otros Ingresos', real: 0, category: 'otros' }
+            ];
+            setIngresos(newIngresos);
 
             const expensesSnap = await getDocs(query(
                 collection(db, 'condominios', activeCondoId, 'gastos'),
