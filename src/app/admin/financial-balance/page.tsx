@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -25,6 +24,8 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from '@/components/ui/separator';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+
 
 const formatCurrency = (amount: number | null | undefined): string => {
     if (typeof amount !== 'number') return '0,00';
@@ -36,8 +37,9 @@ const years = Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear(
 
 export default function FinancialBalancePage() {
     const { toast } = useToast();
-    const { activeCondoId, loading } = useAuth();
-    
+    const { activeCondoId, loading: authLoading } = useAuth(); // Correctly get authLoading
+    const workingCondoId = activeCondoId;
+
     const [dataLoading, setDataLoading] = useState(true);
     const [syncing, setSyncing] = useState(false);
     const [selectedMonth, setSelectedMonth] = useState(String(new Date().getMonth() + 1));
@@ -68,7 +70,6 @@ export default function FinancialBalancePage() {
     });
     const [notas, setNotas] = useState('');
 
-    const workingCondoId = activeCondoId;
 
     const loadCondoConfig = useCallback(async () => {
         if (!workingCondoId) return;
@@ -167,16 +168,16 @@ export default function FinancialBalancePage() {
     }, [workingCondoId, selectedMonth, selectedYear, toast, loadCondoConfig]);
 
     useEffect(() => {
-        if (!loading && workingCondoId) {
+        if (!authLoading && workingCondoId) {
              handleSyncData(false);
         }
-    }, [workingCondoId, loading, selectedMonth, selectedYear, handleSyncData]);
+    }, [workingCondoId, authLoading, selectedMonth, selectedYear, handleSyncData]);
 
     useEffect(() => {
         const totalI = ingresos.reduce((s, i) => s + i.real, 0);
         const totalE = egresos.reduce((s, e) => s + e.monto, 0);
         const saldoBancos = estadoFinal.saldoAnterior + totalI - totalE;
-        const saldoNeto = saldoBancos - cajaChica.gastos; // Esto puede ser confuso, mejor quitarlo
+        const saldoNeto = saldoBancos;
         const disponibilidadTotal = saldoBancos + cajaChica.saldoFinal;
         
         setEstadoFinal(prev => ({
@@ -189,9 +190,13 @@ export default function FinancialBalancePage() {
         }));
     }, [ingresos, egresos, estadoFinal.saldoAnterior, cajaChica]);
     
-    if (loading) return <div className="h-screen flex items-center justify-center bg-white"><Loader2 className="animate-spin h-10 w-10 text-blue-600"/></div>;
+    if (authLoading || dataLoading) return <div className="h-screen flex items-center justify-center bg-white"><Loader2 className="animate-spin h-10 w-10 text-blue-600"/></div>;
 
     const generatePDF = async () => {
+        if (!workingCondoId) {
+             toast({ variant: 'destructive', title: 'Error', description: 'ID de condominio no encontrado.' });
+            return;
+        }
         const docPDF = new jsPDF();
         const pageWidth = docPDF.internal.pageSize.getWidth();
         const margin = 14;
@@ -322,7 +327,7 @@ export default function FinancialBalancePage() {
                 <CardFooter className="p-0 flex justify-end">
                     <Button className="bg-green-600 hover:bg-green-700 rounded-full px-12 h-14 font-black text-white" onClick={async () => {
                         if (!workingCondoId) {
-                            toast({ variant: 'destructive', title: 'Error', description: 'No se ha seleccionado un condominio activo.' });
+                             toast({ variant: 'destructive', title: 'Error', description: 'No se ha seleccionado un condominio activo.' });
                             return;
                         }
                         const periodId = `${selectedYear}-${selectedMonth.padStart(2, '0')}`;
@@ -334,4 +339,3 @@ export default function FinancialBalancePage() {
         </div>
     );
 }
-
