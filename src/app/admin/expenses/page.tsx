@@ -20,6 +20,7 @@ import { es } from 'date-fns/locale';
 import { Badge } from '@/components/ui/badge';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import JsBarcode from 'jsbarcode';
 
 type Expense = {
     id: string;
@@ -238,17 +239,53 @@ export default function ExpensesPage() {
         }
 
         const doc = new jsPDF();
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const headerHeight = 35;
+        const margin = 14;
+
+        // --- NEW HEADER ---
+        doc.setFillColor(28, 43, 58); // #1C2B3A
+        doc.rect(0, 0, pageWidth, headerHeight, 'F');
+        doc.setTextColor(255, 255, 255);
+
+        doc.setFontSize(14).setFont('helvetica', 'bold');
+        doc.text(companyInfo?.name || 'CONDOMINIO', margin, 15);
+        doc.setFontSize(9).setFont('helvetica', 'normal');
+        doc.text(`RIF: ${companyInfo?.rif || 'N/A'}`, margin, 22);
+
+        doc.setFontSize(12).setFont('helvetica', 'bold');
+        doc.text('EFAS CondoSys', pageWidth - margin, 15, { align: 'right' });
+        doc.setFontSize(8).setFont('helvetica', 'normal');
+        doc.text('REPORTE DE EGRESOS', pageWidth - margin, 20, { align: 'right' });
+
+        doc.setTextColor(0, 0, 0);
+        
+        let startY = headerHeight + 30;
+
+        const canvas = document.createElement('canvas');
+        const barcodeValue = `EGR-${filterYear}-${filterMonth}`;
+        try {
+            JsBarcode(canvas, barcodeValue, {
+                format: "CODE128", height: 30, width: 1.5, displayValue: false, margin: 0,
+            });
+            const barcodeDataUrl = canvas.toDataURL("image/png");
+            doc.addImage(barcodeDataUrl, 'PNG', pageWidth - margin - 55, headerHeight + 5, 50, 15);
+            doc.setFontSize(8).text(barcodeValue, pageWidth - margin - 55, headerHeight + 23);
+        } catch (e) {
+            console.error("Barcode generation failed", e);
+        }
+        // --- END HEADER ---
+
         const selectedMonth = monthOptions.find(m => m.value === filterMonth)?.label;
         const title = `Reporte de Egresos - ${selectedMonth} ${filterYear}`;
         
-        doc.setFontSize(18).text(title, 14, 22);
+        doc.setFontSize(18).text(title, 14, startY);
         doc.setFontSize(11);
         doc.setTextColor(100);
-        doc.text(`Generado para: ${companyInfo.name}`, 14, 29);
-        doc.text(`Fecha: ${format(new Date(), 'dd/MM/yyyy')}`, 190, 29, { align: 'right' });
+        doc.text(`Fecha: ${format(new Date(), 'dd/MM/yyyy')}`, 190, startY, { align: 'right' });
 
         autoTable(doc, {
-            startY: 40,
+            startY: startY + 10,
             head: [['Fecha', 'Descripción', 'Referencia', 'Categoría', 'Monto (Bs.)']],
             body: filteredExpenses.map(exp => [
                 format(exp.date.toDate(), 'dd/MM/yyyy'),
@@ -267,11 +304,11 @@ export default function ExpensesPage() {
     
     return (
         <div className="space-y-10 p-8 max-w-7xl mx-auto">
-             <div className="mb-10">
+            <div className="mb-10">
                 <h2 className="text-4xl font-black text-foreground uppercase tracking-tighter italic drop-shadow-sm">
                     Gestión de <span className="text-primary">Egresos</span>
                 </h2>
-                <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
+                <div className="h-1.5 w-20 bg-amber-500 mt-2 rounded-full"></div>
                 <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">
                     Registro y control de todos los gastos del condominio.
                 </p>

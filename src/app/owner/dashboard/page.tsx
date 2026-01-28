@@ -32,6 +32,9 @@ import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import Marquee from "@/components/ui/marquee";
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import JsBarcode from 'jsbarcode';
 
 
 // -------------------------------------------------------------------------
@@ -288,45 +291,46 @@ const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptD
     const { payment, beneficiary, paidDebts, previousBalance, currentBalance, qrCodeUrl, receiptNumber } = data;
     
     try {
-        const { default: jsPDF } = await import('jspdf');
-        const { default: autoTable } = await import('jspdf-autotable');
-
         const doc = new jsPDF();
         const pageWidth = doc.internal.pageSize.getWidth();
+        const headerHeight = 35;
         const margin = 14;
-        let startY = margin;
+        
+        // --- HEADER ---
+        doc.setFillColor(28, 43, 58); // #1C2B3A
+        doc.rect(0, 0, pageWidth, headerHeight, 'F');
+        doc.setTextColor(255, 255, 255);
 
-        // 1. Header
-        if (companyInfo.logo) {
-            try { doc.addImage(companyInfo.logo, 'PNG', margin, startY, 25, 25); }
-            catch(e) { console.error("Error adding logo to PDF", e); }
-        }
-        
-        const infoX = margin + 30;
-        doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, infoX, startY + 5);
+        doc.setFontSize(14).setFont('helvetica', 'bold');
+        doc.text(companyInfo.name, margin, 15);
         doc.setFontSize(9).setFont('helvetica', 'normal');
-        const addressLines = doc.splitTextToSize(companyInfo.address, 90);
-        doc.text(`${companyInfo.rif}`, infoX, startY + 11);
-        doc.text(addressLines, infoX, startY + 16);
-        const addressHeight = addressLines.length * 4;
-        doc.text(`Teléfono: ${companyInfo.phone}`, infoX, startY + 16 + addressHeight);
-        
-        doc.setFontSize(9).text(`Fecha de Emisión: ${format(new Date(), 'dd/MM/yyyy')}`, pageWidth - margin, startY + 5, { align: 'right' });
-        
-        startY += 32;
-        doc.setLineWidth(0.5).line(margin, startY, pageWidth - margin, startY);
-        startY += 12;
+        doc.text(`RIF: ${companyInfo.rif}`, margin, 22);
+
+        doc.setFontSize(12).setFont('helvetica', 'bold');
+        doc.text('EFAS CondoSys', pageWidth - margin, 15, { align: 'right' });
+        doc.setFontSize(8).setFont('helvetica', 'normal');
+        doc.text('RECIBO DE PAGO', pageWidth - margin, 20, { align: 'right' });
+
+        doc.setTextColor(0, 0, 0);
+
+        // --- BARCODE ---
+        let startY = headerHeight + 30;
+        const canvas = document.createElement('canvas');
+        const barcodeValue = `REC-${receiptNumber}`;
+        try {
+            JsBarcode(canvas, barcodeValue, {
+                format: "CODE128", height: 30, width: 1.5, displayValue: false, margin: 0,
+            });
+            const barcodeDataUrl = canvas.toDataURL("image/png");
+            doc.addImage(barcodeDataUrl, 'PNG', pageWidth - margin - 55, headerHeight + 5, 50, 15);
+            doc.setFontSize(8).text(barcodeValue, pageWidth - margin - 55, headerHeight + 23);
+        } catch (e) {
+            console.error("Barcode generation failed", e);
+        }
 
         // 2. Title Section
         doc.setFontSize(16).setFont('helvetica', 'bold').text("RECIBO DE PAGO", pageWidth / 2, startY, { align: 'center' });
-        
-        const qrSize = 30;
-        const qrX = pageWidth - margin - qrSize;
-        doc.setFontSize(9).setFont('helvetica', 'normal').text(`N° de recibo: ${receiptNumber}`, qrX + qrSize, startY + 8, { align: 'right' });
-        if(qrCodeUrl) {
-            doc.addImage(qrCodeUrl, 'PNG', qrX, startY + 10, qrSize, qrSize);
-        }
-        
+        doc.setFontSize(9).setFont('helvetica', 'normal').text(`N° de recibo: ${receiptNumber}`, pageWidth - margin, startY, { align: 'right' });
         startY += 8;
 
         // 3. Details Section

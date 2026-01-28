@@ -18,6 +18,7 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import jsPDF from 'jspdf';
+import JsBarcode from 'jsbarcode';
 import QRCode from 'qrcode';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -376,45 +377,54 @@ export default function CertificatesPage() {
   
       const docPDF = new jsPDF();
       const pageWidth = docPDF.internal.pageSize.getWidth();
-      const margin = 20;
-  
-      if (companyInfo.logo) {
-          try { docPDF.addImage(companyInfo.logo, 'PNG', margin, 15, 30, 30); }
-          catch(e){ console.error("Error adding logo to PDF", e); }
+      const headerHeight = 35;
+      const margin = 14;
+
+      // --- HEADER ---
+      docPDF.setFillColor(28, 43, 58); // #1C2B3A
+      docPDF.rect(0, 0, pageWidth, headerHeight, 'F');
+      docPDF.setTextColor(255, 255, 255);
+
+      docPDF.setFontSize(14).setFont('helvetica', 'bold');
+      docPDF.text(companyInfo?.name || 'CONDOMINIO', margin, 15);
+      docPDF.setFontSize(9).setFont('helvetica', 'normal');
+      docPDF.text(`RIF: ${companyInfo?.rif || 'N/A'}`, margin, 22);
+
+      docPDF.setFontSize(12).setFont('helvetica', 'bold');
+      docPDF.text('EFAS CondoSys', pageWidth - margin, 15, { align: 'right' });
+      docPDF.setFontSize(8).setFont('helvetica', 'normal');
+      docPDF.text('DOCUMENTO OFICIAL', pageWidth - margin, 20, { align: 'right' });
+
+      docPDF.setTextColor(0, 0, 0);
+
+      // --- BARCODE ---
+      let startY = headerHeight + 30;
+      const canvas = document.createElement('canvas');
+      const barcodeValue = `CERT-${certificate.id.slice(0, 4)}-${certificate.ownerId?.slice(0, 4)}`;
+      try {
+          JsBarcode(canvas, barcodeValue, {
+              format: "CODE128", height: 30, width: 1.5, displayValue: false, margin: 0,
+          });
+          const barcodeDataUrl = canvas.toDataURL("image/png");
+          docPDF.addImage(barcodeDataUrl, 'PNG', pageWidth - margin - 55, headerHeight + 5, 50, 15);
+          docPDF.setFontSize(8).text(barcodeValue, pageWidth - margin - 55, headerHeight + 23);
+      } catch (e) {
+          console.error("Barcode generation failed", e);
       }
-  
-      docPDF.setFontSize(10).setFont('helvetica', 'normal');
-      docPDF.text(companyInfo.name, margin + 35, 20);
-      docPDF.text(companyInfo.rif, margin + 35, 25);
-      const addressLines = docPDF.splitTextToSize(companyInfo.address, pageWidth - (margin + 40) - margin);
-      docPDF.text(addressLines, margin + 35, 30);
-      docPDF.text(`Fecha: ${format(new Date(), 'dd/MM/yyyy')}`, pageWidth - margin, 20, { align: 'right' });
-  
+      
       const template = templates.find((t) => t.id === certificate.type);
       const title = template ? template.title : 'DOCUMENTO';
-      docPDF.setFontSize(16).setFont('helvetica', 'bold').text(title, pageWidth / 2, 70, { align: 'center' });
+      docPDF.setFontSize(16).setFont('helvetica', 'bold').text(title, pageWidth / 2, startY, { align: 'center' });
   
-      let finalY = 90;
+      startY += 20;
       const textOptions = { align: 'justify' as const, lineHeightFactor: 1.6, maxWidth: pageWidth - (margin * 2) };
       docPDF.setFontSize(12).setFont('helvetica', 'normal');
-      docPDF.text(certificate.body, margin, finalY, textOptions);
+      docPDF.text(certificate.body, margin, startY, textOptions);
       
       const textBlockHeight = docPDF.getTextDimensions(certificate.body, textOptions).h;
-      finalY += textBlockHeight + 15;
+      startY += textBlockHeight + 15;
 
-      const qrSize = 30;
       const signatureY = finalY > 230 ? 250 : finalY + 40;
-      const qrX = pageWidth - margin - qrSize;
-      const qrY = signatureY - qrSize;
-  
-      const qrContent = `ID:${certificate.id}\nFecha:${format(certificate.createdAt.toDate(), 'yyyy-MM-dd')}\nPropietario:${certificate.ownerName}`;
-      try {
-          const qrCodeUrl = await QRCode.toDataURL(qrContent, { errorCorrectionLevel: 'M', width: qrSize });
-          docPDF.addImage(qrCodeUrl, 'PNG', qrX, qrY, qrSize, qrSize);
-      } catch (err) {
-          console.error('Error generating QR Code', err);
-      }
-  
       const signatureWidth = 80;
       const signatureX = (pageWidth / 2) - (signatureWidth / 2);
   
@@ -449,7 +459,7 @@ export default function CertificatesPage() {
           <h2 className="text-4xl font-black text-foreground uppercase tracking-tighter italic drop-shadow-sm">
               Constancias y <span className="text-primary">Permisos</span>
           </h2>
-          <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
+          <div className="h-1.5 w-20 bg-amber-500 mt-2 rounded-full"></div>
           <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">
               Generación y gestión de documentos para propietarios.
           </p>

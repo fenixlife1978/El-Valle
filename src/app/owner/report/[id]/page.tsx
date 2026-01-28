@@ -15,6 +15,10 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/hooks/use-auth';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import JsBarcode from 'jsbarcode';
+
 
 // --- Type Definitions ---
 type FinancialItem = {
@@ -161,16 +165,7 @@ export default function ReportViewerPage() {
   
   const generateBalancePdf = async () => {
     if (!reportData || !companyInfo) return;
-    const { default: jsPDF } = await import('jspdf');
-    const { default: autoTable } = await import('jspdf-autotable');
-    const QRCode = await import('qrcode');
     const statement = reportData as FinancialStatement;
-
-    const qrCodeUrl = await QRCode.toDataURL(`${window.location.href}`, {
-      errorCorrectionLevel: 'M',
-      margin: 2,
-      scale: 4,
-    });
 
     const totalIngresos = statement.ingresos.reduce((sum, item) => sum + item.monto, 0);
     const totalEgresos = statement.egresos.reduce((sum, item) => sum + item.monto, 0);
@@ -182,26 +177,37 @@ export default function ReportViewerPage() {
 
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
+    const headerHeight = 35;
     const margin = 14;
 
-    if (companyInfo?.logo) doc.addImage(companyInfo.logo, 'PNG', margin, margin, 25, 25);
-    doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo?.name || '', margin + 30, margin + 8);
-    doc.setFontSize(9).setFont('helvetica', 'normal');
-    doc.text(companyInfo?.rif || '', margin + 30, margin + 14);
-    doc.text(companyInfo?.address || '', margin + 30, margin + 19);
-    doc.text(`Teléfono: ${companyInfo?.phone || ''}`, margin + 30, margin + 24);
-
-    doc.text(`Emitido: ${format(new Date(), 'dd/MM/yyyy')}`, pageWidth - margin, margin + 8, { align: 'right' });
+    // --- HEADER ---
+    doc.setFillColor(28, 43, 58); // #1C2B3A
+    doc.rect(0, 0, pageWidth, headerHeight, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(14).setFont('helvetica', 'bold').text(companyInfo.name, margin, 15);
+    doc.setFontSize(9).setFont('helvetica', 'normal').text(`RIF: ${companyInfo.rif}`, margin, 22);
+    doc.setFontSize(12).setFont('helvetica', 'bold').text('EFAS CondoSys', pageWidth - margin, 15, { align: 'right' });
+    doc.setFontSize(8).setFont('helvetica', 'normal').text('BALANCE FINANCIERO OFICIAL', pageWidth - margin, 20, { align: 'right' });
+    doc.setTextColor(0, 0, 0);
     
-    doc.setFontSize(16).setFont('helvetica', 'bold').text('Balance Financiero', pageWidth / 2, margin + 52, { align: 'center' });
-    doc.setFontSize(12).setFont('helvetica', 'normal').text(`Correspondiente al período de ${period}`, pageWidth / 2, margin + 59, { align: 'center' });
+    let startY = headerHeight + 30;
     
-    if (qrCodeUrl) {
-        const qrSize = 30;
-        doc.addImage(qrCodeUrl, 'PNG', pageWidth - margin - qrSize, margin + 50, qrSize, qrSize);
+    // --- BARCODE ---
+    const canvas = document.createElement('canvas');
+    const barcodeValue = `BF-${statement.id}`;
+    try {
+        JsBarcode(canvas, barcodeValue, { format: "CODE128", height: 30, width: 1.5, displayValue: false, margin: 0 });
+        const barcodeDataUrl = canvas.toDataURL("image/png");
+        doc.addImage(barcodeDataUrl, 'PNG', pageWidth - margin - 55, headerHeight + 5, 50, 15);
+        doc.setFontSize(8).text(barcodeValue, pageWidth - margin - 55, headerHeight + 23);
+    } catch (e) {
+        console.error("Barcode generation failed", e);
     }
 
-    let startY = margin + 85;
+    doc.setFontSize(16).setFont('helvetica', 'bold').text('ESTADO DE RESULTADOS', pageWidth / 2, startY, { align: 'center' });
+    doc.setFontSize(12).setFont('helvetica', 'normal').text(`Correspondiente al período de ${period}`, pageWidth / 2, startY + 7, { align: 'center' });
+    
+    startY += 25;
 
     autoTable(doc, {
       head: [['DÍA', 'INGRESOS', 'MONTO (Bs.)']],
@@ -260,20 +266,39 @@ export default function ReportViewerPage() {
 
   const generateIntegralPdf = async () => {
     if (!reportData || !companyInfo) return;
-    const { default: jsPDF } = await import('jspdf');
-    const { default: autoTable } = await import('jspdf-autotable');
     const data = reportData.data as IntegralReportRow[];
     const doc = new jsPDF({ orientation: 'landscape' });
-    let startY = 15;
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const headerHeight = 35;
+    const margin = 14;
 
-    if (companyInfo?.logo) doc.addImage(companyInfo.logo, 'PNG', 15, startY, 20, 20);
-    if (companyInfo) doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, 40, startY + 5);
+    // --- HEADER ---
+    doc.setFillColor(28, 43, 58); // #1C2B3A
+    doc.rect(0, 0, pageWidth, headerHeight, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(14).setFont('helvetica', 'bold').text(companyInfo.name, margin, 15);
+    doc.setFontSize(9).setFont('helvetica', 'normal').text(`RIF: ${companyInfo.rif}`, margin, 22);
+    doc.setFontSize(12).setFont('helvetica', 'bold').text('EFAS CondoSys', pageWidth - margin, 15, { align: 'right' });
+    doc.setFontSize(8).setFont('helvetica', 'normal').text('REPORTE INTEGRAL', pageWidth - margin, 20, { align: 'right' });
+    doc.setTextColor(0, 0, 0);
+    
+    let startY = headerHeight + 30;
 
-    doc.setFontSize(16).setFont('helvetica', 'bold').text('Reporte Integral de Propietarios', doc.internal.pageSize.getWidth() / 2, startY + 15, { align: 'center'});
+    // --- BARCODE ---
+    const canvas = document.createElement('canvas');
+    const barcodeValue = `INT-${reportData.id.slice(0, 8)}`;
+    try {
+        JsBarcode(canvas, barcodeValue, { format: "CODE128", height: 30, width: 1.5, displayValue: false, margin: 0 });
+        const barcodeDataUrl = canvas.toDataURL("image/png");
+        doc.addImage(barcodeDataUrl, 'PNG', pageWidth - margin - 55, headerHeight + 5, 50, 15);
+        doc.setFontSize(8).text(barcodeValue, pageWidth - margin - 55, headerHeight + 23);
+    } catch (e) { console.error("Barcode generation failed", e); }
 
-    startY += 25;
+
+    doc.setFontSize(16).setFont('helvetica', 'bold').text('Reporte Integral de Propietarios', doc.internal.pageSize.getWidth() / 2, startY, { align: 'center'});
+    startY += 7;
     doc.setFontSize(9).setFont('helvetica', 'normal');
-    doc.text(`Fecha de Emisión: ${format(new Date(), "dd/MM/yyyy 'a las' HH:mm:ss")}`, doc.internal.pageSize.getWidth() - 15, startY, { align: 'right'});
+    doc.text(`Fecha de Emisión: ${format(new Date(), "dd/MM/yyyy 'a las' HH:mm:ss")}`, doc.internal.pageSize.getWidth() / 2, startY, { align: 'center'});
 
     startY += 10;
 
