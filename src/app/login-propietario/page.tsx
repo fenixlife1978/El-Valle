@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -30,7 +31,7 @@ export default function OwnerLoginPage() {
             </div>
           </Link>
           <h1 className="font-montserrat text-3xl font-black italic tracking-tighter leading-none mb-2">
-            <span className="text-[#f59e0b]">EFAS</span><span className="text-[#0081c9]">CondoSys</span>
+            <span className="text-orange-500">EFAS</span><span className="text-slate-800">CONDOSYS</span>
           </h1>
           <div className="flex items-center justify-center gap-2 text-[#0081c9]">
             <Home className="w-4 h-4" />

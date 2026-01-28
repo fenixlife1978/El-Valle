@@ -24,7 +24,7 @@ export default function WelcomePage() {
     {
       title: "Panel Inteligente",
       desc: "Visualización clara de gastos, fondos de reserva y estados de cuenta en tiempo real.",
-      icon: <LayoutDashboard className="w-8 h-8 text-[#f59e0b]" />,
+      icon: <LayoutDashboard className="w-8 h-8 text-orange-500" />,
       bgColor: "bg-amber-500/5"
     },
     {
@@ -45,9 +45,9 @@ export default function WelcomePage() {
             <img src="/logo-efas.png" alt="EFAS Logo" className="w-full h-full object-contain" />
           </div>
           <div className="flex flex-col">
-            <h1 className="text-2xl font-black italic tracking-tighter leading-none">
-              <span className="text-[#f59e0b]">EFAS</span>
-              <span className="text-primary">CondoSys</span>
+            <h1 className="text-2xl font-black italic uppercase tracking-tighter">
+              <span className="text-orange-500">EFAS</span>
+              <span className="text-slate-800 dark:text-slate-100">CONDOSYS</span>
             </h1>
             <span className="text-[7px] sm:text-[9px] font-black uppercase tracking-widest text-muted-foreground">
               Sistema de Autogestión de Condominios
@@ -86,13 +86,16 @@ export default function WelcomePage() {
             </div>
           </div>
 
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-amber-500/10 text-amber-500 text-[10px] font-black uppercase tracking-[0.25em] mb-8 border border-amber-500/20 shadow-sm">
-            <Zap className="w-4 h-4 fill-amber-500" /> Tecnología Residencial de Vanguardia
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-orange-500/10 text-orange-500 text-[10px] font-black uppercase tracking-[0.25em] mb-8 border border-orange-500/20 shadow-sm">
+            <Zap className="w-4 h-4 fill-orange-500" /> Tecnología Residencial de Vanguardia
           </div>
 
           <h1 className="text-5xl md:text-7xl font-black tracking-tight text-foreground mb-8 leading-[1.05]">
             Potencia tu comunidad con <br />
-            <span className="text-[#f59e0b]">EFAS</span> <span className="text-primary">CondoSys</span>
+            <span className="italic uppercase">
+              <span className="text-orange-500">EFAS</span>
+              <span className="text-slate-800 dark:text-slate-100">CONDOSYS</span>
+            </span>
           </h1>
 
           <p className="text-xl text-muted-foreground mb-12 max-w-3xl mx-auto leading-relaxed font-medium">
@@ -120,7 +123,7 @@ export default function WelcomePage() {
           <div className="max-w-6xl mx-auto px-6">
             <div className="text-center mb-16">
               <h2 className="text-3xl font-black text-foreground uppercase tracking-tighter">Módulos Integrados</h2>
-              <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full mx-auto" />
+              <div className="h-1.5 w-20 bg-orange-500 mt-2 rounded-full mx-auto" />
             </div>
 
             <div className="grid md:grid-cols-3 gap-12">
@@ -147,9 +150,9 @@ export default function WelcomePage() {
         <div className="max-w-6xl mx-auto px-6">
           <div className="flex flex-col md:flex-row justify-between items-center gap-10">
             <div className="flex flex-col items-center md:items-start text-center md:text-left">
-              <div className="flex items-center gap-2 text-3xl font-black tracking-tighter">
-                <span className="text-amber-500">EFAS</span>
-                <span className="text-primary">CondoSys</span>
+              <div className="flex items-center gap-2 text-3xl font-black tracking-tighter italic uppercase">
+                <span className="text-orange-500">EFAS</span>
+                <span className="text-slate-800 dark:text-slate-100">CONDOSYS</span>
               </div>
               <p className="text-xs font-black uppercase tracking-[0.3em] text-muted-foreground mt-2">
                 Sistema de Autogestión de Condominios

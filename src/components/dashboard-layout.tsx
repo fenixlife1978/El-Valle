@@ -77,11 +77,10 @@ const CustomHeader = ({
     <header className="sticky top-4 z-10 mx-4 flex h-20 items-center justify-between gap-2 rounded-xl border bg-card/80 px-4 shadow-lg backdrop-blur-sm sm:px-6 text-card-foreground">
       <div className="flex items-center gap-4">
         <div className="flex flex-col">
-          <div className="flex items-center gap-1 leading-none">
-            <span className="font-black text-2xl tracking-tighter text-amber-500">EFAS</span>
-            <span className="font-bold text-2xl tracking-tighter text-primary">CondoSys</span>
-          </div>
-          {/* FRASE DESCRIPTIVA ACTUALIZADA */}
+          <h1 className="text-2xl font-black italic uppercase tracking-tighter">
+              <span className="text-orange-500">EFAS</span>
+              <span className="text-slate-800 dark:text-slate-100">CONDOSYS</span>
+          </h1>
           <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-80 leading-tight">
             Sistema de Autogestión de Condominios
           </span>
@@ -226,7 +225,7 @@ export function DashboardLayout({
       <div className="h-screen w-screen bg-background flex flex-col items-center justify-center gap-4">
         <Loader2 className="animate-spin h-12 w-12 text-primary"/>
         <div className="flex items-center gap-1 text-lg font-black uppercase tracking-widest animate-pulse">
-            <span className="text-amber-500">EFAS</span>
+            <span className="text-orange-500">EFAS</span>
             <span className="text-primary">CondoSys</span>
         </div>
       </div>
@@ -247,8 +246,8 @@ export function DashboardLayout({
       <footer className="p-8 text-center border-t bg-card/50">
         <div className="flex flex-col items-center gap-1">
           <div className="flex items-center gap-1 text-base">
-            <span className="font-black text-amber-500">EFAS</span>
-            <span className="font-bold text-primary">CondoSys</span>
+            <span className="font-black text-orange-500">EFAS</span>
+            <span className="font-bold text-slate-800 dark:text-slate-100">CondoSys</span>
             <span className="text-muted-foreground ml-1 text-xs">© {new Date().getFullYear()}</span>
           </div>
           <p className="text-[10px] text-muted-foreground uppercase tracking-[0.25em] font-black">

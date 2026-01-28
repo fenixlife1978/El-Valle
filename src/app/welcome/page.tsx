@@ -28,8 +28,8 @@ export default function WelcomePage() {
                 <div className="w-24 h-24 rounded-full mx-auto overflow-hidden bg-card border flex items-center justify-center mb-4">
                      <img src="/logo-efas.png" alt="EFAS Logo" className="w-16 h-16 object-contain" />
                 </div>
-                <h1 className="text-4xl font-bold font-headline">
-                    Bienvenido a <span className="text-[#f59e0b]">EFAS</span><span className="text-primary">CondoSys</span>
+                <h1 className="text-4xl font-black italic uppercase tracking-tighter">
+                    Bienvenido a <span className="text-orange-500">EFAS</span><span className="text-slate-800 dark:text-slate-100">CondoSys</span>
                 </h1>
                 <p className="text-muted-foreground mt-2">Seleccione su tipo de acceso para continuar.</p>
             </div>

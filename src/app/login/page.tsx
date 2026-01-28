@@ -127,9 +127,9 @@ function LoginPage() {
             <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-amber-500/5 blur-[100px] rounded-full"></div>
 
             <div className="text-center mb-8 relative z-10">
-                 <h1 className="text-4xl font-black italic uppercase tracking-tighter text-foreground">
-                    <span className="text-[#f59e0b]">EFAS</span>
-                    <span className="text-primary"> CondoSys</span>
+                 <h1 className="text-4xl font-black italic uppercase tracking-tighter">
+                    <span className="text-orange-500">EFAS</span>
+                    <span className="text-slate-800 dark:text-slate-100">CONDOSYS</span>
                 </h1>
                 <p className="text-[9px] text-muted-foreground font-black tracking-[0.4em] uppercase mt-2 italic">Autogestión de Condominios</p>
             </div>

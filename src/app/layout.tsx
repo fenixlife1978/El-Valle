@@ -51,9 +51,9 @@ function AuthGuard({ children }: { children: ReactNode }) {
       <div className="flex h-screen w-full items-center justify-center bg-background">
         <div className="text-center">
             <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto" />
-            <p className="mt-6 font-black italic tracking-tighter text-3xl uppercase font-montserrat">
-              <span className="text-[#f59e0b]">EFAS</span>
-              <span className="text-primary">CondoSys</span>
+            <p className="mt-6 font-black italic tracking-tighter text-3xl uppercase">
+              <span className="text-orange-500">EFAS</span>
+              <span className="text-slate-800 dark:text-slate-100">CONDOSYS</span>
             </p>
             <p className="text-[9px] text-muted-foreground font-bold tracking-[0.4em] uppercase mt-2">
               Autogestión de Condominios
