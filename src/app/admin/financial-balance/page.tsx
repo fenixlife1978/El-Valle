@@ -89,6 +89,10 @@ export default function FinancialBalancePage() {
     const { user, activeCondoId, companyInfo } = useAuth();
     const { toast } = useToast();
 
+    // Correctly determine the workingCondoId, including support mode
+    const sId = typeof window !== 'undefined' ? localStorage.getItem('support_mode_id') : null;
+    const workingCondoId = (sId && user?.email === 'vallecondo@gmail.com') ? sId : activeCondoId;
+
     // State
     const [loading, setLoading] = useState(true);
     const [syncing, setSyncing] = useState(false);
@@ -104,8 +108,6 @@ export default function FinancialBalancePage() {
     const [cajaChica, setCajaChica] = useState<PettyCashSummary>({ saldoInicial: 0, reposiciones: 0, gastos: 0, saldoFinal: 0 });
     const [estadoFinal, setEstadoFinal] = useState<FinalStatement>({ saldoAnterior: 0, totalIngresos: 0, totalEgresos: 0, saldoBancos: 0, saldoCajaChica: 0, disponibilidadTotal: 0 });
     const [notas, setNotas] = useState('');
-    
-    const workingCondoId = activeCondoId;
 
     const handleIncomeChange = (index: number, value: string) => {
         const newIngresos = [...ingresos];
@@ -142,7 +144,7 @@ export default function FinancialBalancePage() {
             const expensesQuery = query(collection(db, 'condominios', workingCondoId, 'gastos'),
                 where('date', '>=', currentPeriodStart),
                 where('date', '<=', currentPeriodEnd),
-                where('category', '!=', 'Caja Chica') // Excluir la reposición de caja chica
+                where('category', '!=', 'Caja Chica')
             );
             const expensesSnap = await getDocs(expensesQuery);
             const syncedEgresos = expensesSnap.docs.map(doc => {
@@ -158,7 +160,7 @@ export default function FinancialBalancePage() {
             });
             setEgresos(syncedEgresos);
             
-            // 3. Sincronizar Caja Chica (CON CORRECCIÓN DE TIPOS)
+            // 3. Sincronizar Caja Chica
             const allMovementsSnap = await getDocs(query(collection(db, 'condominios', workingCondoId, 'cajaChica_movimientos')));
             
             interface Movement {
@@ -333,8 +335,8 @@ export default function FinancialBalancePage() {
         
         const finalStatementData = [
             { label: 'Saldo Inicial (Mes Anterior)', value: formatCurrency(estadoFinal.saldoAnterior) },
-            { label: '(+) Total Ingresos del Mes', value: formatCurrency(estadoFinal.totalIngresos), color: [34,197,94] as const },
-            { label: '(-) Total Gastos del Mes', value: formatCurrency(estadoFinal.totalEgresos), color: [239,68,68] as const },
+            { label: '(+) Total Ingresos del Mes', value: formatCurrency(estadoFinal.totalIngresos), color: [34,197,94] as [number, number, number] },
+            { label: '(-) Total Gastos del Mes', value: formatCurrency(estadoFinal.totalEgresos), color: [239,68,68] as [number, number, number] },
             { label: 'Saldo Total en Bancos', value: formatCurrency(estadoFinal.saldoBancos), bold: true },
             { label: 'Saldo en Caja Chica (Efectivo)', value: formatCurrency(cajaChica.saldoFinal) },
             { label: 'DISPONIBILIDAD TOTAL', value: `Bs. ${formatCurrency(estadoFinal.disponibilidadTotal)}`, bold: true, highlight: true },
