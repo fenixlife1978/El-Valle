@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -25,6 +24,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from '@/components/ui/separator';
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 
 const formatCurrency = (amount: number | null | undefined): string => {
@@ -301,7 +301,7 @@ export default function FinancialBalancePage() {
                     <h2 className="text-4xl font-black text-foreground uppercase tracking-tighter italic drop-shadow-sm">
                         Balance <span className="text-primary">Financiero</span>
                     </h2>
-                    <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
+                    <div className="h-1.5 w-20 bg-amber-500 mt-2 rounded-full"></div>
                     <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">
                         Revisión de estado de resultados y flujos de caja.
                     </p>
