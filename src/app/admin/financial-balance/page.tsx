@@ -38,7 +38,6 @@ const years = Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear(
 export default function FinancialBalancePage() {
     const { toast } = useToast();
     const { activeCondoId, loading } = useAuth();
-    const workingCondoId = activeCondoId;
 
     const [dataLoading, setDataLoading] = useState(true);
     const [syncing, setSyncing] = useState(false);
@@ -72,9 +71,9 @@ export default function FinancialBalancePage() {
 
 
     const loadCondoConfig = useCallback(async () => {
-        if (!workingCondoId) return;
+        if (!activeCondoId) return;
         try {
-            const configRef = doc(db, 'condominios', workingCondoId, 'config', 'mainSettings');
+            const configRef = doc(db, 'condominios', activeCondoId, 'config', 'mainSettings');
             const snap = await getDoc(configRef);
             if (snap.exists()) {
                 const data = snap.data();
@@ -87,10 +86,10 @@ export default function FinancialBalancePage() {
         } catch (error) {
             console.error("EFAS Error:", error);
         }
-    }, [workingCondoId]);
+    }, [activeCondoId]);
 
     const handleSyncData = useCallback(async (showToast = true) => {
-        if (!workingCondoId) return;
+        if (!activeCondoId) return;
         setSyncing(true);
         if (showToast) toast({ title: "Sincronizando..." });
 
@@ -101,12 +100,12 @@ export default function FinancialBalancePage() {
             
             const prevPeriodDate = subMonths(currentPeriodStart, 1);
             const prevPeriodId = format(prevPeriodDate, 'yyyy-MM');
-            const prevSnap = await getDoc(doc(db, 'condominios', workingCondoId, 'financial_statements', prevPeriodId));
+            const prevSnap = await getDoc(doc(db, 'condominios', activeCondoId, 'financial_statements', prevPeriodId));
             const saldoAnterior = prevSnap.exists() ? (prevSnap.data() as any).estadoFinal.saldoBancos : 0;
             setEstadoFinal(prev => ({...prev, saldoAnterior}));
             
             const paymentsSnap = await getDocs(query(
-                collection(db, 'condominios', workingCondoId, 'payments'),
+                collection(db, 'condominios', activeCondoId, 'payments'),
                 where('status', '==', 'aprobado'),
                 where('paymentDate', '>=', Timestamp.fromDate(currentPeriodStart)),
                 where('paymentDate', '<=', Timestamp.fromDate(currentPeriodEnd))
@@ -118,13 +117,13 @@ export default function FinancialBalancePage() {
             ));
 
             const expensesSnap = await getDocs(query(
-                collection(db, 'condominios', workingCondoId, 'gastos'),
+                collection(db, 'condominios', activeCondoId, 'gastos'),
                 where('date', '>=', Timestamp.fromDate(currentPeriodStart)),
                 where('date', '<=', Timestamp.fromDate(currentPeriodEnd)),
                 orderBy('date', 'asc')
             ));
             
-            setEgresos(expensesSnap.docs.filter(d => d.data().category !== 'Caja Chica').map(d => ({
+            setEgresos(expensesSnap.docs.map(d => ({
                 id: d.id,
                 descripcion: d.data().description || 'Sin descripción',
                 monto: d.data().amount || 0,
@@ -132,7 +131,7 @@ export default function FinancialBalancePage() {
             })));
             
             // --- CÁLCULOS DE CAJA CHICA ---
-            const ccMovesQuery = query(collection(db, 'condominios', workingCondoId, 'cajaChica_movimientos'));
+            const ccMovesQuery = query(collection(db, 'condominios', activeCondoId, 'cajaChica_movimientos'));
             const ccMovesSnap = await getDocs(ccMovesQuery);
             
             let saldoInicialCC = 0;
@@ -163,13 +162,13 @@ export default function FinancialBalancePage() {
             setSyncing(false);
             setDataLoading(false);
         }
-    }, [workingCondoId, selectedMonth, selectedYear, toast, loadCondoConfig]);
+    }, [activeCondoId, selectedMonth, selectedYear, toast, loadCondoConfig]);
 
     useEffect(() => {
-        if (!loading && workingCondoId) {
+        if (!loading && activeCondoId) {
              handleSyncData(false);
         }
-    }, [workingCondoId, loading, selectedMonth, selectedYear, handleSyncData]);
+    }, [activeCondoId, loading, selectedMonth, selectedYear, handleSyncData]);
 
     useEffect(() => {
         const totalI = ingresos.reduce((s, i) => s + i.real, 0);
@@ -188,10 +187,10 @@ export default function FinancialBalancePage() {
         }));
     }, [ingresos, egresos, estadoFinal.saldoAnterior, cajaChica]);
     
-    if (loading || dataLoading) return <div className="h-screen flex items-center justify-center bg-white"><Loader2 className="animate-spin h-10 w-10 text-blue-600"/></div>;
+    if (loading || dataLoading) return <div className="h-screen flex items-center justify-center bg-background"><Loader2 className="animate-spin h-10 w-10 text-primary"/></div>;
 
     const generatePDF = async () => {
-        if (!workingCondoId) return;
+        if (!activeCondoId) return;
         const { default: jsPDF } = await import('jspdf');
         const { default: autoTable } = await import('jspdf-autotable');
         
@@ -244,35 +243,40 @@ export default function FinancialBalancePage() {
     };
     
     return (
-        <div className="max-w-7xl mx-auto p-6 space-y-6 bg-slate-50 min-h-screen">
-            <header className="flex justify-between items-center bg-white p-6 rounded-3xl shadow-sm">
+        <div className="max-w-7xl mx-auto space-y-6">
+            <div className="flex flex-wrap justify-between items-center gap-4 mb-10">
                 <div>
-                    <h1 className="text-3xl font-black italic text-slate-900 uppercase">EFAS <span className="text-blue-600">Balance</span></h1>
-                    <p className="text-blue-600 font-bold text-xs uppercase tracking-tighter">{companyInfo?.name}</p>
+                    <h2 className="text-4xl font-black text-foreground uppercase tracking-tighter italic drop-shadow-sm">
+                        Balance <span className="text-primary">Financiero</span>
+                    </h2>
+                    <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
+                    <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">
+                        Revisión de estado de resultados y flujos de caja.
+                    </p>
                 </div>
                 <div className="flex gap-2">
                     <Button variant="outline" onClick={() => handleSyncData(true)} disabled={syncing} className="rounded-2xl"><RefreshCw className={`mr-2 h-4 w-4 ${syncing && 'animate-spin'}`}/> Sincronizar</Button>
-                    <Button className="bg-blue-600 rounded-2xl" onClick={generatePDF}><Download className="mr-2 h-4 w-4"/> PDF</Button>
+                    <Button className="bg-primary rounded-2xl" onClick={generatePDF}><Download className="mr-2 h-4 w-4"/> PDF</Button>
                 </div>
-            </header>
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card className="rounded-[2.5rem] bg-white shadow-sm border">
-                    <CardHeader className="pb-2"><CardTitle className="text-sm font-bold text-slate-400">PERÍODO DE REPORTE</CardTitle></CardHeader>
+                <Card className="rounded-[2.5rem] bg-card shadow-sm border">
+                    <CardHeader className="pb-2"><CardTitle className="text-sm font-bold text-muted-foreground">PERÍODO DE REPORTE</CardTitle></CardHeader>
                     <CardContent className="flex gap-2">
                         <Select value={selectedMonth} onValueChange={setSelectedMonth}><SelectTrigger className="rounded-xl font-bold"><SelectValue/></SelectTrigger><SelectContent>{months.map(m => <SelectItem key={m.value} value={m.value}>{m.label.toUpperCase()}</SelectItem>)}</SelectContent></Select>
                         <Select value={selectedYear} onValueChange={setSelectedYear}><SelectTrigger className="rounded-xl font-bold"><SelectValue/></SelectTrigger><SelectContent>{years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent></Select>
                     </CardContent>
                 </Card>
                 <div className="grid grid-cols-2 gap-6 md:col-span-2">
-                    <Card className="rounded-[2.5rem] bg-green-500 text-white"><CardContent className="p-6"><p className="text-sm font-bold opacity-80">Total Ingresos</p><p className="text-4xl font-black">{formatCurrency(estadoFinal.totalIngresos)}</p></CardContent></Card>
-                    <Card className="rounded-[2.5rem] bg-red-500 text-white"><CardContent className="p-6"><p className="text-sm font-bold opacity-80">Total Egresos</p><p className="text-4xl font-black">{formatCurrency(estadoFinal.totalEgresos)}</p></CardContent></Card>
+                    <Card className="rounded-[2.5rem] bg-success/10 text-success-foreground"><CardContent className="p-6"><p className="text-sm font-bold text-success">Total Ingresos</p><p className="text-4xl font-black text-success-foreground">{formatCurrency(estadoFinal.totalIngresos)}</p></CardContent></Card>
+                    <Card className="rounded-[2.5rem] bg-destructive/10 text-destructive-foreground"><CardContent className="p-6"><p className="text-sm font-bold text-destructive">Total Egresos</p><p className="text-4xl font-black text-destructive-foreground">{formatCurrency(estadoFinal.totalEgresos)}</p></CardContent></Card>
                 </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card className="rounded-[2.5rem] p-2 bg-white border-2 border-slate-50 shadow-xl space-y-6">
-                    <CardHeader className="bg-slate-50 rounded-2xl">
+                <Card className="rounded-[2.5rem] p-2 bg-card border-2 border-border shadow-xl space-y-6">
+                    <CardHeader className="bg-secondary/20 rounded-2xl">
                         <CardTitle>Detalle de Gastos (Salidas)</CardTitle>
                         <CardDescription>Movimientos de egreso desde las cuentas principales.</CardDescription>
                     </CardHeader>
@@ -281,58 +285,58 @@ export default function FinancialBalancePage() {
                         <Table><TableHeader><TableRow><TableHead>FECHA</TableHead><TableHead>CONCEPTO</TableHead><TableHead className="text-right">MONTO Bs.</TableHead></TableRow></TableHeader>
                             <TableBody>
                                 {egresos.map(e => (
-                                <TableRow key={e.id}><TableCell className="font-bold text-slate-400">{e.fecha}</TableCell><TableCell className="font-bold uppercase">{e.descripcion}</TableCell><TableCell className="text-right font-bold text-red-600">-{formatCurrency(e.monto)}</TableCell></TableRow>
+                                <TableRow key={e.id}><TableCell className="font-bold text-muted-foreground">{e.fecha}</TableCell><TableCell className="font-bold uppercase text-foreground">{e.descripcion}</TableCell><TableCell className="text-right font-bold text-destructive">-{formatCurrency(e.monto)}</TableCell></TableRow>
                                 ))}
                             </TableBody>
                         </Table>
-                        ) : (<p className="text-center text-slate-400 font-bold p-8">No hay egresos en este período.</p>)}
+                        ) : (<p className="text-center text-muted-foreground font-bold p-8">No hay egresos en este período.</p>)}
                     </CardContent>
                 </Card>
 
-                <Card className="rounded-[2.5rem] p-2 bg-white border-2 border-slate-50 shadow-xl space-y-6">
-                    <CardHeader className="bg-slate-50 rounded-2xl">
+                <Card className="rounded-[2.5rem] p-2 bg-card border-2 border-border shadow-xl space-y-6">
+                    <CardHeader className="bg-secondary/20 rounded-2xl">
                         <CardTitle>Control de Caja Chica</CardTitle>
                         <CardDescription>Movimiento de efectivo para gastos menores.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        <div className="flex justify-between items-center"><span className="font-bold text-slate-400">Saldo Inicial</span><span className="font-bold">{formatCurrency(cajaChica.saldoInicial)}</span></div>
-                        <div className="flex justify-between items-center"><span className="font-bold text-green-600">(+) Reposiciones del Mes</span><span className="font-bold text-green-600">+{formatCurrency(cajaChica.reposiciones)}</span></div>
-                        <div className="flex justify-between items-center"><span className="font-bold text-red-600">(-) Gastos del Mes</span><span className="font-bold text-red-600">-{formatCurrency(cajaChica.gastos)}</span></div>
+                        <div className="flex justify-between items-center"><span className="font-bold text-muted-foreground">Saldo Inicial</span><span className="font-bold text-foreground">{formatCurrency(cajaChica.saldoInicial)}</span></div>
+                        <div className="flex justify-between items-center"><span className="font-bold text-success">(+) Reposiciones del Mes</span><span className="font-bold text-success">+{formatCurrency(cajaChica.reposiciones)}</span></div>
+                        <div className="flex justify-between items-center"><span className="font-bold text-destructive">(-) Gastos del Mes</span><span className="font-bold text-destructive">-{formatCurrency(cajaChica.gastos)}</span></div>
                         <Separator />
-                        <div className="flex justify-between items-center"><span className="font-black text-slate-800">Saldo Final en Caja</span><span className="font-black text-xl text-blue-600">{formatCurrency(cajaChica.saldoFinal)}</span></div>
+                        <div className="flex justify-between items-center"><span className="font-black text-foreground">Saldo Final en Caja</span><span className="font-black text-xl text-primary">{formatCurrency(cajaChica.saldoFinal)}</span></div>
                     </CardContent>
                 </Card>
             </div>
 
-            <Card className="rounded-[2.5rem] p-8 bg-slate-900 border-2 border-slate-50 shadow-xl space-y-6">
+            <Card className="rounded-[2.5rem] p-8 bg-card border-2 border-border shadow-xl space-y-6">
                 <CardHeader className="p-0 mb-4">
-                    <CardTitle className="text-white text-2xl font-black uppercase">Estado de Cuenta Final</CardTitle>
+                    <CardTitle className="text-foreground text-2xl font-black uppercase">Estado de Cuenta Final</CardTitle>
                 </CardHeader>
                 <CardContent className="p-0 space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-2">
-                            <Label className="text-[10px] font-bold uppercase text-slate-400 ml-2">Saldo Anterior en Bancos</Label>
-                            <Input type="number" value={estadoFinal.saldoAnterior} onChange={e => setEstadoFinal(prev => ({...prev, saldoAnterior: parseFloat(e.target.value) || 0}))} className="h-14 rounded-2xl bg-slate-800 border-slate-700 text-2xl font-black text-white px-6"/>
+                            <Label className="text-[10px] font-bold uppercase text-muted-foreground ml-2">Saldo Anterior en Bancos</Label>
+                            <Input type="number" value={estadoFinal.saldoAnterior} onChange={e => setEstadoFinal(prev => ({...prev, saldoAnterior: parseFloat(e.target.value) || 0}))} className="h-14 rounded-2xl bg-input border-border text-2xl font-black text-foreground px-6"/>
                         </div>
-                        <div className="p-4 rounded-2xl bg-slate-800/50 flex items-center justify-between">
-                            <span className="font-bold text-slate-300">Saldo Total en Bancos</span>
-                            <span className="text-3xl font-black text-white">{formatCurrency(estadoFinal.saldoBancos)}</span>
+                        <div className="p-4 rounded-2xl bg-secondary/30 flex items-center justify-between">
+                            <span className="font-bold text-muted-foreground">Saldo Total en Bancos</span>
+                            <span className="text-3xl font-black text-foreground">{formatCurrency(estadoFinal.saldoBancos)}</span>
                         </div>
                     </div>
-                     <div className="p-4 rounded-2xl bg-blue-600/20 border border-blue-500/50 flex items-center justify-between">
-                        <span className="font-black text-blue-300 uppercase tracking-wider">Disponibilidad Total (Bancos + Caja)</span>
-                        <span className="text-4xl font-black text-white italic">{formatCurrency(estadoFinal.disponibilidadTotal)}</span>
+                     <div className="p-4 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-between">
+                        <span className="font-black text-primary/80 uppercase tracking-wider">Disponibilidad Total (Bancos + Caja)</span>
+                        <span className="text-4xl font-black text-primary italic">{formatCurrency(estadoFinal.disponibilidadTotal)}</span>
                     </div>
-                    <Textarea placeholder="Observaciones..." value={notas} onChange={e => setNotas(e.target.value)} className="rounded-3xl bg-slate-800 border-slate-700 min-h-[100px] p-6 font-bold text-white"/>
+                    <Textarea placeholder="Observaciones..." value={notas} onChange={e => setNotas(e.target.value)} className="rounded-3xl bg-input border-border min-h-[100px] p-6 font-bold text-foreground"/>
                 </CardContent>
                 <CardFooter className="p-0 flex justify-end">
-                    <Button className="bg-green-600 hover:bg-green-700 rounded-full px-12 h-14 font-black text-white" onClick={async () => {
-                        if (!workingCondoId) {
+                    <Button className="bg-primary hover:bg-primary/90 rounded-full px-12 h-14 font-black text-primary-foreground" onClick={async () => {
+                        if (!activeCondoId) {
                             toast({ variant: 'destructive', title: 'Error', description: 'No se ha seleccionado un condominio activo.' });
                             return;
                         }
                         const periodId = `${selectedYear}-${selectedMonth.padStart(2, '0')}`;
-                        await setDoc(doc(db, 'condominios', workingCondoId, 'financial_statements', periodId), { id: periodId, estadoFinal, notas, fechaCierre: Timestamp.now() });
+                        await setDoc(doc(db, 'condominios', activeCondoId, 'financial_statements', periodId), { id: periodId, estadoFinal, notas, fechaCierre: Timestamp.now() });
                         toast({ title: "BALANCE GUARDADO" });
                     }}>GUARDAR CIERRE</Button>
                 </CardFooter>
