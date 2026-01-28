@@ -1,3 +1,4 @@
+
 // @ts-nocheck
 
 
@@ -1077,7 +1078,7 @@ export default function ReportsPage() {
         doc.setFontSize(10).setFont('helvetica', 'bold').text(companyInfo.name, margin + 25, margin + 8);
         doc.setFontSize(8).setFont('helvetica', 'normal').text(companyInfo.rif, margin + 25, margin + 13);
         doc.setFontSize(8).setFont('helvetica', 'normal').text(`Propietario: ${selectedStatementOwner.name}`, margin + 25, margin + 18);
-        doc.setFontSize(8).setFont('helvetica', 'normal').text(`Propiedad(es): ${(selectedStatementOwner.properties || []).map(p => `${p.street}-${p.house}`).join(', ')}`, margin + 25, margin + 23);
+        doc.setFontSize(8).setFont('helvetica', 'normal').text(`Propiedad(es): ${(selectedStatementOwner.properties || []).map(p => `${p.street} - ${p.house}`).join(', ')}`, margin + 25, margin + 23);
 
         doc.setFontSize(16).setFont('helvetica', 'bold').text('ESTADO DE CUENTA', pageWidth - margin, margin + 15, { align: 'right' });
         const dateText = `Fecha: ${format(new Date(), "dd/MM/yyyy 'a las' HH:mm:ss")}`;
@@ -1337,9 +1338,14 @@ export default function ReportsPage() {
 
     return (
         <div className="space-y-8">
-            <div>
-                <h1 className="text-3xl font-bold font-headline">Módulo de Informes</h1>
-                <p className="text-muted-foreground">Genere y exporte reportes detallados sobre la gestión del condominio.</p>
+            <div className="mb-10">
+                <h2 className="text-4xl font-black text-foreground uppercase tracking-tighter italic drop-shadow-sm">
+                    Módulo de <span className="text-primary">Informes</span>
+                </h2>
+                <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
+                <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">
+                    Genere y exporte reportes detallados sobre la gestión del condominio.
+                </p>
             </div>
             
             <Tabs defaultValue="integral" className="w-full">
