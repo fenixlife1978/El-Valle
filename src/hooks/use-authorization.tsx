@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { doc, getDoc, addDoc, collection, serverTimestamp, setDoc } from 'firebase/firestore';
@@ -26,7 +26,9 @@ export function AuthorizationProvider({ children }: { children: ReactNode }) {
   const [action, setAction] = useState<(() => Promise<void>) | null>(null);
   const [isVerifying, setIsVerifying] = useState(false);
   const { toast } = useToast();
-  const { user } = useAuth();
+  
+  // Obtenemos el usuario y el ID del condominio activo del hook de EFAS
+  const { user, activeCondoId } = useAuth();
 
   const requestAuthorization = useCallback((actionToExecute: () => Promise<void>) => {
     setAction(() => actionToExecute);
@@ -38,36 +40,45 @@ export function AuthorizationProvider({ children }: { children: ReactNode }) {
     setAction(null);
   };
 
-  const createLog = async (result: 'success' | 'failure') => {
-    if (!user) return;
+  const createLog = async (result: 'success' | 'failure', detail: string) => {
+    // REGLA: Los logs deben estar enraizados en el condominio específico para evitar mezcla de datos
+    if (!user || !activeCondoId) return;
+    
     try {
-      await addDoc(collection(db, 'logs'), {
+      await addDoc(collection(db, 'condominios', activeCondoId, 'logs'), {
         userId: user.uid,
         userName: user.displayName || user.email,
         action: 'authorization_attempt',
+        detail: detail,
         result,
         timestamp: serverTimestamp(),
       });
     } catch (error) {
-      console.error("Error creating log:", error);
+      console.error("Error creating EFAS log:", error);
     }
   };
 
   const handleVerify = async (enteredKey: string) => {
+    if (!activeCondoId) {
+        toast({ variant: 'destructive', title: 'Error', description: 'No hay un condominio seleccionado.' });
+        return;
+    }
+
     setIsVerifying(true);
     try {
-      const keyDocRef = doc(db, 'config', 'authorization');
+      // REGLA: La clave se busca dentro de la configuración específica del condominio
+      const keyDocRef = doc(db, 'condominios', activeCondoId, 'config', 'authorization');
       const keyDoc = await getDoc(keyDocRef);
 
       if (!keyDoc.exists()) {
-        // If key doesn't exist, set the default one and deny this attempt
+        // Si no existe clave para este condominio, creamos la de soporte por defecto
         await setDoc(keyDocRef, { key: '180578' });
         toast({
           variant: 'destructive',
-          title: 'Clave no configurada',
-          description: 'Se ha establecido una clave por defecto. Intente de nuevo.',
+          title: 'Clave inicial establecida',
+          description: 'Se ha configurado la clave por defecto para este condominio. Intente de nuevo.',
         });
-        await createLog('failure');
+        await createLog('failure', 'Se generó clave por defecto para el condominio');
         return;
       }
 
@@ -75,14 +86,19 @@ export function AuthorizationProvider({ children }: { children: ReactNode }) {
 
       if (enteredKey === correctKey) {
         toast({ title: 'Autorización concedida', className: 'bg-green-100' });
-        await createLog('success');
+        await createLog('success', 'Autorización aprobada con clave del condominio');
+        
         if (action) {
           await action();
         }
         handleClose();
       } else {
-        toast({ variant: 'destructive', title: 'Clave incorrecta', description: 'La acción ha sido cancelada.' });
-        await createLog('failure');
+        toast({ 
+          variant: 'destructive', 
+          title: 'Clave incorrecta', 
+          description: 'La clave ingresada no coincide con los registros del condominio.' 
+        });
+        await createLog('failure', 'Clave de condominio incorrecta');
       }
     } catch (error) {
       console.error('Error verifying key:', error);
