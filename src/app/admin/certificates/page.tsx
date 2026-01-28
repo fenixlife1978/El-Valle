@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { collection, query, onSnapshot, addDoc, doc, getDoc, orderBy, serverTimestamp, Timestamp, deleteDoc, updateDoc } from 'firebase/firestore';
+import { collection, query, onSnapshot, addDoc, doc, getDoc, orderBy, serverTimestamp, Timestamp, deleteDoc, updateDoc, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { PlusCircle, Trash2, Loader2, Search, XCircle, FileText, Award, User, Home, Info, Stamp, MoreHorizontal } from 'lucide-react';
 import { format } from 'date-fns';
@@ -25,6 +25,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useAuth } from '@/hooks/use-auth';
 
 
 type Owner = {
@@ -55,6 +56,7 @@ type Certificate = {
   body: string;
   createdAt: Timestamp;
   status?: 'solicitud' | 'generado';
+  condominioId: string;
 };
 
 type Template = {
@@ -284,6 +286,8 @@ const CertificateForm = ({
 export default function CertificatesPage() {
   const { toast } = useToast();
   const { requestAuthorization } = useAuthorization();
+  const { activeCondoId } = useAuth();
+
   const [owners, setOwners] = useState<Owner[]>([]);
   const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
@@ -295,18 +299,23 @@ export default function CertificatesPage() {
   const [certificateToDelete, setCertificateToDelete] = useState<Certificate | null>(null);
 
   useEffect(() => {
-    const ownersQuery = query(collection(db, 'owners'));
+    if (!activeCondoId) {
+        setLoading(false);
+        return;
+    };
+    
+    const ownersQuery = query(collection(db, 'condominios', activeCondoId, 'owners'));
     const ownersUnsubscribe = onSnapshot(ownersQuery, (snapshot) => {
       setOwners(snapshot.docs.map((d) => ({ id: d.id, ...(d.data() as any) } as Owner)));
     });
 
-    const certsQuery = query(collection(db, 'certificates'), orderBy('createdAt', 'desc'));
+    const certsQuery = query(collection(db, 'condominios', activeCondoId, 'certificates'), orderBy('createdAt', 'desc'));
     const certsUnsubscribe = onSnapshot(certsQuery, (snapshot) => {
       setCertificates(snapshot.docs.map((d) => ({ id: d.id, ...(d.data() as any) } as Certificate)));
     });
 
     const fetchSettings = async () => {
-      const settingsRef = doc(db, 'config', 'mainSettings');
+      const settingsRef = doc(db, 'condominios', activeCondoId, 'config', 'mainSettings');
       const snap = await getDoc(settingsRef);
       if (snap.exists()) {
         setCompanyInfo((snap.data() as any).companyInfo as CompanyInfo);
@@ -320,7 +329,7 @@ export default function CertificatesPage() {
       ownersUnsubscribe();
       certsUnsubscribe();
     };
-  }, []);
+  }, [activeCondoId]);
   
   const filteredCertificates = useMemo(() => {
     if (!historySearchTerm) return certificates;
@@ -332,22 +341,24 @@ export default function CertificatesPage() {
   }, [historySearchTerm, certificates]);
   
 
-  const handleGenerateAndSave = async (docData: Omit<Certificate, 'id'>, personData: any) => {
+  const handleGenerateAndSave = async (docData: Omit<Certificate, 'id' | 'condominioId'>, personData: any) => {
+    if (!activeCondoId) return;
     requestAuthorization(async () => {
         setIsSubmitting(true);
         try {
-            // If the document is from a request, update it instead of creating a new one
+            const dataToSave = { ...docData, condominioId: activeCondoId };
+            
             const request = certificates.find(c => c.status === 'solicitud' && c.ownerId === docData.ownerId && c.type === docData.type);
             
             let docRef;
             if (request) {
-                docRef = doc(db, 'certificates', request.id);
-                await updateDoc(docRef, docData);
+                docRef = doc(db, 'condominios', activeCondoId, 'certificates', request.id);
+                await updateDoc(docRef, dataToSave);
             } else {
-                docRef = await addDoc(collection(db, 'certificates'), docData);
+                docRef = await addDoc(collection(db, 'condominios', activeCondoId, 'certificates'), dataToSave);
             }
 
-            await generatePDF({ ...docData, id: docRef.id, createdAt: Timestamp.now() } as Certificate, personData);
+            await generatePDF({ ...dataToSave, id: docRef.id, createdAt: Timestamp.now() } as Certificate, personData);
             toast({ title: 'Constancia Generada', description: 'El documento PDF ha sido creado y guardado en el historial.' });
           } catch (error) {
             console.error(error);
@@ -364,32 +375,32 @@ export default function CertificatesPage() {
           return;
       }
   
-      const doc = new jsPDF();
-      const pageWidth = doc.internal.pageSize.getWidth();
+      const docPDF = new jsPDF();
+      const pageWidth = docPDF.internal.pageSize.getWidth();
       const margin = 20;
   
       if (companyInfo.logo) {
-          try { doc.addImage(companyInfo.logo, 'PNG', margin, 15, 30, 30); }
+          try { docPDF.addImage(companyInfo.logo, 'PNG', margin, 15, 30, 30); }
           catch(e){ console.error("Error adding logo to PDF", e); }
       }
   
-      doc.setFontSize(10).setFont('helvetica', 'normal');
-      doc.text(companyInfo.name, margin + 35, 20);
-      doc.text(companyInfo.rif, margin + 35, 25);
-      const addressLines = doc.splitTextToSize(companyInfo.address, pageWidth - (margin + 40) - margin);
-      doc.text(addressLines, margin + 35, 30);
-      doc.text(`Fecha: ${format(new Date(), 'dd/MM/yyyy')}`, pageWidth - margin, 20, { align: 'right' });
+      docPDF.setFontSize(10).setFont('helvetica', 'normal');
+      docPDF.text(companyInfo.name, margin + 35, 20);
+      docPDF.text(companyInfo.rif, margin + 35, 25);
+      const addressLines = docPDF.splitTextToSize(companyInfo.address, pageWidth - (margin + 40) - margin);
+      docPDF.text(addressLines, margin + 35, 30);
+      docPDF.text(`Fecha: ${format(new Date(), 'dd/MM/yyyy')}`, pageWidth - margin, 20, { align: 'right' });
   
       const template = templates.find((t) => t.id === certificate.type);
       const title = template ? template.title : 'DOCUMENTO';
-      doc.setFontSize(16).setFont('helvetica', 'bold').text(title, pageWidth / 2, 70, { align: 'center' });
+      docPDF.setFontSize(16).setFont('helvetica', 'bold').text(title, pageWidth / 2, 70, { align: 'center' });
   
       let finalY = 90;
       const textOptions = { align: 'justify' as const, lineHeightFactor: 1.6, maxWidth: pageWidth - (margin * 2) };
-      doc.setFontSize(12).setFont('helvetica', 'normal');
-      doc.text(certificate.body, margin, finalY, textOptions);
+      docPDF.setFontSize(12).setFont('helvetica', 'normal');
+      docPDF.text(certificate.body, margin, finalY, textOptions);
       
-      const textBlockHeight = doc.getTextDimensions(certificate.body, textOptions).h;
+      const textBlockHeight = docPDF.getTextDimensions(certificate.body, textOptions).h;
       finalY += textBlockHeight + 15;
 
       const qrSize = 30;
@@ -400,7 +411,7 @@ export default function CertificatesPage() {
       const qrContent = `ID:${certificate.id}\nFecha:${format(certificate.createdAt.toDate(), 'yyyy-MM-dd')}\nPropietario:${certificate.ownerName}`;
       try {
           const qrCodeUrl = await QRCode.toDataURL(qrContent, { errorCorrectionLevel: 'M', width: qrSize });
-          doc.addImage(qrCodeUrl, 'PNG', qrX, qrY, qrSize, qrSize);
+          docPDF.addImage(qrCodeUrl, 'PNG', qrX, qrY, qrSize, qrSize);
       } catch (err) {
           console.error('Error generating QR Code', err);
       }
@@ -408,18 +419,18 @@ export default function CertificatesPage() {
       const signatureWidth = 80;
       const signatureX = (pageWidth / 2) - (signatureWidth / 2);
   
-      doc.setLineWidth(0.5);
-      doc.line(signatureX, signatureY, signatureX + signatureWidth, signatureY); 
-      doc.setFontSize(10).setFont('helvetica', 'bold').text('Presidente de la Junta de Condominio', pageWidth / 2, signatureY + 8, { align: 'center' });
+      docPDF.setLineWidth(0.5);
+      docPDF.line(signatureX, signatureY, signatureX + signatureWidth, signatureY); 
+      docPDF.setFontSize(10).setFont('helvetica', 'bold').text('Presidente de la Junta de Condominio', pageWidth / 2, signatureY + 8, { align: 'center' });
   
-      doc.save(`constancia_${certificate.type}_${certificate.ownerName.replace(/\s/g, '_')}.pdf`);
+      docPDF.save(`constancia_${certificate.type}_${certificate.ownerName.replace(/\s/g, '_')}.pdf`);
   };
 
   const handleDeleteCertificate = async () => {
-      if (!certificateToDelete) return;
+      if (!certificateToDelete || !activeCondoId) return;
       requestAuthorization(async () => {
           try {
-              await deleteDoc(doc(db, 'certificates', certificateToDelete.id));
+              await deleteDoc(doc(db, 'condominios', activeCondoId, 'certificates', certificateToDelete.id));
               toast({ title: 'Constancia Eliminada', description: 'El registro ha sido eliminado exitosamente.' });
           } catch (error) {
               console.error('Error deleting certificate: ', error);
@@ -539,3 +550,4 @@ export default function CertificatesPage() {
     </div>
   );
 }
+
