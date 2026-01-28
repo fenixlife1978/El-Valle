@@ -80,7 +80,7 @@ const formatCurrency = (amount: number | null | undefined): string => {
 
 // --- Main Component ---
 export default function FinancialBalancePage() {
-    const { user, activeCondoId, companyInfo } = useAuth();
+    const { user, activeCondoId: workingCondoId, companyInfo } = useAuth();
     const { toast } = useToast();
 
     // State
@@ -101,8 +101,6 @@ export default function FinancialBalancePage() {
     const [estadoFinal, setEstadoFinal] = useState<FinalStatement>({ saldoAnterior: 0, totalIngresos: 0, totalEgresos: 0, saldoBancos: 0, saldoCajaChica: 0, disponibilidadTotal: 0 });
     const [notas, setNotas] = useState('');
     
-    const workingCondoId = activeCondoId;
-
     const handleIncomeChange = (index: number, value: string) => {
         const newIngresos = [...ingresos];
         newIngresos[index].real = parseFloat(value) || 0;
@@ -303,9 +301,7 @@ export default function FinancialBalancePage() {
                 docPDF.roundedRect(margin, startY - 4, pageWidth - (margin * 2), 9, 3, 3, 'F');
             }
             if(item.color) {
-                const r = item.color[0]
-                const g = item.color[1]
-                const b = item.color[2]
+                const [r, g, b] = item.color;
                 docPDF.setTextColor(r, g, b);
             }
             docPDF.setFontSize(10).setFont('helvetica', item.bold ? 'bold' : 'normal').text(item.label, margin + 5, startY);
