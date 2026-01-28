@@ -87,11 +87,11 @@ const formatCurrency = (amount: number | null | undefined): string => {
 // --- Main Component ---
 export default function FinancialBalancePage() {
     const { toast } = useToast();
-    const { user, activeCondoId, companyInfo, loading: authLoading } = useAuth();
+    const { user, activeCondoId, companyInfo, loading } = useAuth();
     const workingCondoId = activeCondoId;
 
     // State
-    const [loading, setLoading] = useState(true);
+    const [dataLoading, setDataLoading] = useState(true);
     const [syncing, setSyncing] = useState(false);
     
     const [selectedMonth, setSelectedMonth] = useState(String(new Date().getMonth() + 1));
@@ -121,7 +121,10 @@ export default function FinancialBalancePage() {
     };
 
     const handleSyncData = useCallback(async (showToast = true) => {
-        if (!workingCondoId) return;
+        if (!workingCondoId) {
+            if(showToast) toast({ variant: "destructive", title: "Error", description: "No hay un condominio seleccionado." });
+            return;
+        }
         setSyncing(true);
         if (showToast) toast({ title: "Sincronizando...", description: "Cargando datos del período." });
     
@@ -148,8 +151,7 @@ export default function FinancialBalancePage() {
             // 2. Sincronizar Gastos (Egresos)
             const expensesQuery = query(collection(db, 'condominios', workingCondoId, 'gastos'),
                 where('date', '>=', currentPeriodStart),
-                where('date', '<=', currentPeriodEnd),
-                where('category', '!=', 'Caja Chica') // Excluir la reposición para no duplicar
+                where('date', '<=', currentPeriodEnd)
             );
             const expensesSnap = await getDocs(expensesQuery);
             const syncedEgresos = expensesSnap.docs.map(doc => {
@@ -162,7 +164,7 @@ export default function FinancialBalancePage() {
                     dia: format(data.date.toDate(), 'dd/MM/yyyy'),
                     concepto: data.description,
                 };
-            });
+            }).filter(gasto => gasto.categoria !== 'Caja Chica');
             setEgresos(syncedEgresos);
     
             // 3. Sincronizar Caja Chica
@@ -204,13 +206,11 @@ export default function FinancialBalancePage() {
     }, [selectedYear, selectedMonth, workingCondoId, toast]);
 
     useEffect(() => {
-        if (workingCondoId) {
-            setLoading(true);
-            handleSyncData(false).finally(() => setLoading(false));
-        } else if (!authLoading && !user) {
-            setLoading(false);
-        }
-    }, [selectedMonth, selectedYear, workingCondoId, user, authLoading, handleSyncData]);
+        if (!workingCondoId || loading) return;
+            
+        setDataLoading(true);
+        handleSyncData(false).finally(() => setDataLoading(false));
+    }, [selectedMonth, selectedYear, workingCondoId, loading, handleSyncData]);
     
     useEffect(() => {
         const totalIngresos = ingresos.reduce((sum, item) => sum + item.real, 0);
@@ -227,11 +227,11 @@ export default function FinancialBalancePage() {
             saldoBancos,
             disponibilidadTotal
         }));
-    }, [ingresos, egresos, cajaChica.saldoFinal, estadoFinal.saldoAnterior, cajaChica.reposiciones]);
+    }, [ingresos, egresos, cajaChica, estadoFinal.saldoAnterior]);
 
     const handleSaveStatement = async () => {
         if (!workingCondoId) return;
-        setLoading(true);
+        setDataLoading(true);
         const periodId = `${selectedYear}-${selectedMonth.padStart(2, '0')}`;
         
         const finalIngresos = ingresos.map(i => ({
@@ -257,7 +257,7 @@ export default function FinancialBalancePage() {
         } catch(e) {
             toast({ variant: "destructive", title: "Error al guardar." });
         } finally {
-            setLoading(false);
+            setDataLoading(false);
         }
     };
     
@@ -265,6 +265,10 @@ export default function FinancialBalancePage() {
         const info = companyInfo || {
             name: "EFAS CondoSys", rif: "J-00000000-0", address: "Administración", phone: "Soporte", logo: ""
         };
+
+        const { default: jsPDF } = await import('jspdf');
+        const { default: autoTable } = await import('jspdf-autotable');
+        const QRCode = await import('qrcode');
 
         const docPDF = new jsPDF();
         const pageWidth = (docPDF as any).internal.pageSize.getWidth();
@@ -328,7 +332,7 @@ export default function FinancialBalancePage() {
         docPDF.setFontSize(11).setFont('helvetica', 'bold').text("3. Control de Caja Chica", margin, startY);
         startY += 8;
         summaryData.forEach(item => {
-            docPDF.setFontSize(10).setFont('helvetica', 'normal').text(item.label, margin + 5, startY);
+            docPDF.setFontSize(10).setFont('helvetica', item.bold ? 'bold' : 'normal').text(item.label, margin + 5, startY);
             docPDF.text(item.value, pageWidth / 2, startY, { align: 'right' });
             startY += 6;
         });
@@ -336,8 +340,8 @@ export default function FinancialBalancePage() {
         
         const finalStatementData = [
             { label: 'Saldo Inicial (Mes Anterior)', value: formatCurrency(estadoFinal.saldoAnterior) },
-            { label: '(+) Total Ingresos del Mes', value: formatCurrency(estadoFinal.totalIngresos), color: [34,197,94] as [number, number, number] },
-            { label: '(-) Total Gastos del Mes', value: formatCurrency(estadoFinal.totalEgresos), color: [239,68,68] as [number, number, number] },
+            { label: '(+) Total Ingresos del Mes', value: formatCurrency(estadoFinal.totalIngresos), color: [34,197,94] },
+            { label: '(-) Total Gastos del Mes', value: formatCurrency(estadoFinal.totalEgresos), color: [239,68,68] },
             { label: 'Saldo Total en Bancos', value: formatCurrency(estadoFinal.saldoBancos), bold: true },
             { label: 'Saldo en Caja Chica (Efectivo)', value: formatCurrency(cajaChica.saldoFinal) },
             { label: 'DISPONIBILIDAD TOTAL', value: `Bs. ${formatCurrency(estadoFinal.disponibilidadTotal)}`, bold: true, highlight: true },
@@ -372,7 +376,7 @@ export default function FinancialBalancePage() {
         docPDF.save(`Balance_EFAS_${selectedYear}-${selectedMonth}.pdf`);
     };
 
-    if (loading && !syncing) return <div className="flex h-[80vh] items-center justify-center"><Loader2 className="animate-spin text-blue-500 h-12 w-12" /></div>;
+    if (loading || dataLoading) return <div className="flex h-[80vh] items-center justify-center"><Loader2 className="animate-spin text-blue-500 h-12 w-12" /></div>;
 
     return (
         <div className="space-y-6 pb-20">
@@ -480,8 +484,8 @@ export default function FinancialBalancePage() {
                     <Textarea placeholder="Añada cualquier nota aclaratoria o información relevante sobre este cierre de mes..." value={notas} onChange={e => setNotas(e.target.value)} rows={4}/>
                 </CardContent>
                 <CardFooter className="justify-end">
-                    <Button onClick={handleSaveStatement} disabled={loading} size="lg">
-                        {loading ? <Loader2 className="animate-spin mr-2"/> : <FileText className="mr-2"/>}
+                    <Button onClick={handleSaveStatement} disabled={dataLoading} size="lg">
+                        {dataLoading ? <Loader2 className="animate-spin mr-2"/> : <FileText className="mr-2"/>}
                         Guardar Cierre Mensual Definitivo
                     </Button>
                 </CardFooter>
