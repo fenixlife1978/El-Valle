@@ -89,9 +89,8 @@ export default function FinancialBalancePage() {
     const { user, activeCondoId, companyInfo } = useAuth();
     const { toast } = useToast();
 
-    // Correctly determine the workingCondoId, including support mode
-    const sId = typeof window !== 'undefined' ? localStorage.getItem('support_mode_id') : null;
-    const workingCondoId = (sId && user?.email === 'vallecondo@gmail.com') ? sId : activeCondoId;
+    // Use the condoId from the authentication context. It correctly handles support mode.
+    const workingCondoId = activeCondoId;
 
     // State
     const [loading, setLoading] = useState(true);
@@ -144,7 +143,7 @@ export default function FinancialBalancePage() {
             const expensesQuery = query(collection(db, 'condominios', workingCondoId, 'gastos'),
                 where('date', '>=', currentPeriodStart),
                 where('date', '<=', currentPeriodEnd),
-                where('category', '!=', 'Caja Chica')
+                where('category', '!=', 'Caja Chica') // Excluir la reposición para no duplicar
             );
             const expensesSnap = await getDocs(expensesQuery);
             const syncedEgresos = expensesSnap.docs.map(doc => {
@@ -205,28 +204,33 @@ export default function FinancialBalancePage() {
     }, [selectedYear, selectedMonth, workingCondoId, toast]);
 
     useEffect(() => {
-        if(workingCondoId) {
+        if (workingCondoId) {
             setLoading(true);
             handleSyncData(false).finally(() => setLoading(false));
-        } else if (!user) {
+        } else if (!authLoading && !user) {
             setLoading(false);
         }
-    }, [selectedMonth, selectedYear, workingCondoId, user, handleSyncData]);
+    }, [selectedMonth, selectedYear, workingCondoId, user, authLoading, handleSyncData]);
     
     useEffect(() => {
         const totalIngresos = ingresos.reduce((sum, item) => sum + item.real, 0);
         const totalEgresos = egresos.reduce((sum, item) => sum + item.monto, 0);
-        const saldoBancos = estadoFinal.saldoAnterior + totalIngresos - totalEgresos;
+        
+        // El saldo en banco es el saldo anterior + ingresos - gastos (excluyendo gastos de caja chica que ya se restaron del fondo).
+        // Las reposiciones de caja chica sí son un egreso de la cuenta principal.
+        const reposicionesCajaChica = cajaChica.reposiciones;
+
+        const saldoBancos = estadoFinal.saldoAnterior + totalIngresos - totalEgresos - reposicionesCajaChica;
         const disponibilidadTotal = saldoBancos + cajaChica.saldoFinal;
 
         setEstadoFinal(prev => ({
             ...prev,
             totalIngresos,
-            totalEgresos,
+            totalEgresos: totalEgresos + reposicionesCajaChica, // Egresos totales son los operativos + lo que fue a caja chica
             saldoBancos,
             disponibilidadTotal
         }));
-    }, [ingresos, egresos, cajaChica.saldoFinal, estadoFinal.saldoAnterior]);
+    }, [ingresos, egresos, cajaChica.saldoFinal, estadoFinal.saldoAnterior, cajaChica.reposiciones]);
 
     const handleSaveStatement = async () => {
         if (!workingCondoId) return;
@@ -314,7 +318,7 @@ export default function FinancialBalancePage() {
             startY,
             theme: 'striped',
             headStyles: { fillColor: [239, 68, 68], fontStyle: 'bold' },
-            foot: [[ { content: 'TOTAL GASTOS OPERATIVOS', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } }, { content: formatCurrency(estadoFinal.totalEgresos), styles: { halign: 'right', fontStyle: 'bold' } }]],
+            foot: [[ { content: 'TOTAL GASTOS OPERATIVOS', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } }, { content: formatCurrency(egresos.reduce((sum, item) => sum + item.monto, 0)), styles: { halign: 'right', fontStyle: 'bold' } }]],
         });
         startY = (docPDF as any).lastAutoTable.finalY + 15;
 
@@ -327,7 +331,7 @@ export default function FinancialBalancePage() {
         docPDF.setFontSize(11).setFont('helvetica', 'bold').text("3. Control de Caja Chica", margin, startY);
         startY += 8;
         summaryData.forEach(item => {
-            docPDF.setFontSize(10).setFont('helvetica', item.bold ? 'bold' : 'normal').text(item.label, margin + 5, startY);
+            docPDF.setFontSize(10).setFont('helvetica', 'normal').text(item.label, margin + 5, startY);
             docPDF.text(item.value, pageWidth / 2, startY, { align: 'right' });
             startY += 6;
         });
@@ -349,7 +353,8 @@ export default function FinancialBalancePage() {
                 docPDF.roundedRect(margin, startY - 4, pageWidth - (margin * 2), 9, 3, 3, 'F');
             }
             if(item.color) {
-                docPDF.setTextColor(item.color[0], item.color[1], item.color[2]);
+                const [r, g, b] = item.color;
+                docPDF.setTextColor(r, g, b);
             }
             docPDF.setFontSize(10).setFont('helvetica', item.bold ? 'bold' : 'normal').text(item.label, margin + 5, startY);
             docPDF.text(item.value, pageWidth - margin - 5, startY, { align: 'right' });
