@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -28,11 +27,11 @@ type CertificateRequest = {
     type: 'residencia' | 'solvencia';
     createdAt: Timestamp;
     status: 'solicitud';
-    condominioId: string; // Campo obligatorio ahora
+    condominioId: string;
 };
 
 export default function OwnerCertificatesPage() {
-    const { user, ownerData, loading: authLoading } = useAuth();
+    const { user, ownerData, loading: authLoading, activeCondoId } = useAuth();
     const { toast } = useToast();
     const router = useRouter();
 
@@ -49,17 +48,14 @@ export default function OwnerCertificatesPage() {
     }, [debts]);
 
     useEffect(() => {
-        if (authLoading) return;
-        if (!user) {
-            router.push('/login');
+        if (authLoading || !user || !activeCondoId) {
+            if (!authLoading) setLoading(false);
             return;
-        }
-
-        // CORRECCIÓN: Filtramos deudas por usuario Y por condominio asignado
+        };
+        
         const debtsQuery = query(
-            collection(db, "debts"), 
-            where("ownerId", "==", user.uid),
-            where("condominioId", "==", ownerData?.condominioId)
+            collection(db, "condominios", activeCondoId, "debts"), 
+            where("ownerId", "==", user.uid)
         );
 
         const unsubscribe = onSnapshot(debtsQuery, (snapshot) => {
@@ -73,10 +69,10 @@ export default function OwnerCertificatesPage() {
         }
 
         return () => unsubscribe();
-    }, [user, authLoading, router, ownerData]);
+    }, [user, authLoading, router, ownerData, activeCondoId]);
 
     const handleSubmitRequest = async () => {
-        if (!user || !ownerData || !selectedProperty || !certificateType || !ownerData.condominioId) {
+        if (!user || !ownerData || !selectedProperty || !certificateType || !activeCondoId) {
             toast({ variant: 'destructive', title: 'Datos incompletos', description: 'Faltan datos del perfil o del condominio.' });
             return;
         }
@@ -88,19 +84,18 @@ export default function OwnerCertificatesPage() {
         
         setIsSubmitting(true);
         try {
-            // CORRECCIÓN: La solicitud ahora incluye el condominioId del dueño
-            const requestData = {
+            const requestData: CertificateRequest = {
                 ownerId: user.uid,
                 ownerName: ownerData.name,
                 ownerCedula: ownerData.cedula,
                 property: selectedProperty,
                 type: certificateType,
                 status: 'solicitud',
-                condominioId: ownerData.condominioId, 
-                createdAt: serverTimestamp(),
+                condominioId: activeCondoId, 
+                createdAt: serverTimestamp() as Timestamp,
             };
 
-            await addDoc(collection(db, "certificates"), requestData);
+            await addDoc(collection(db, "condominios", activeCondoId, "certificates"), requestData);
 
             toast({
                 title: 'Solicitud Enviada',

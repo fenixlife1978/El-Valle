@@ -13,6 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import Link from 'next/link';
+import { useAuth } from '@/hooks/use-auth';
 
 type PublishedReport = {
     id: string; // e.g., 'balance-2025-10' or 'integral-...'
@@ -27,15 +28,21 @@ const monthsLocale: { [key: number]: string } = {
 
 export default function OwnerHistoryPage() {
     const { toast } = useToast();
+    const { activeCondoId } = useAuth();
     const [loading, setLoading] = useState(true);
     const [reports, setReports] = useState<PublishedReport[]>([]);
     
     useEffect(() => {
+        if (!activeCondoId) {
+            setLoading(false);
+            return;
+        }
+
         const fetchReports = async () => {
             setLoading(true);
             try {
                 const reportsQuery = query(
-                    collection(db, "published_reports"), 
+                    collection(db, "condominios", activeCondoId, "published_reports"), 
                     orderBy('createdAt', 'desc')
                 );
                 const snapshot = await getDocs(reportsQuery);
@@ -61,7 +68,7 @@ export default function OwnerHistoryPage() {
         };
 
         fetchReports();
-    }, [toast]);
+    }, [activeCondoId, toast]);
     
     const getReportNameAndPeriod = (report: PublishedReport) => {
         const parts = report.id.split('-');

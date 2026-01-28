@@ -66,16 +66,16 @@ const formatToTwoDecimals = (num: number) => { if (typeof num !== 'number' || is
 // VERIFY PAYMENTS COMPONENT
 // ===================================================================================
 function VerifyPaymentsTab() {
+    const { toast } = useToast();
+    const { requestAuthorization } = useAuthorization();
+    const { activeCondoId, companyInfo, loading: authLoading } = useAuth();
+
     const [payments, setPayments] = useState<FullPayment[]>([]);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState<PaymentStatus | 'todos'>('todos');
-    const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
     const [condoFee, setCondoFee] = useState(0);
     const [paymentToDelete, setPaymentToDelete] = useState<FullPayment | null>(null);
     const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
-    const { toast } = useToast();
-    const { requestAuthorization } = useAuthorization();
-    const { ownerData, loading: authLoading } = useAuth();
     const [ownersMap, setOwnersMap] = useState<Map<string, Owner>>(new Map());
     const [isReceiptPreviewOpen, setIsReceiptPreviewOpen] = useState(false);
     const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
@@ -85,100 +85,83 @@ function VerifyPaymentsTab() {
     const [isBeneficiarySelectionOpen, setIsBeneficiarySelectionOpen] = useState(false);
     const [paymentForBeneficiarySelection, setPaymentForBeneficiarySelection] = useState<FullPayment | null>(null);
 
-
     useEffect(() => {
-        const unsub = onSnapshot(query(collection(db, "owners")), (snapshot) => {
+        if (!activeCondoId) return;
+        const ownersCollectionRef = collection(db, "condominios", activeCondoId, "owners");
+        const unsub = onSnapshot(query(ownersCollectionRef), (snapshot) => {
             const newOwnersMap = new Map<string, Owner>();
             snapshot.forEach(doc => newOwnersMap.set(doc.id, { id: doc.id, ...doc.data() } as Owner));
             setOwnersMap(newOwnersMap);
         });
         return () => unsub();
-    }, []);
+    }, [activeCondoId]);
 
     useEffect(() => {
-        if (authLoading || !ownerData?.condominioId || ownersMap.size === 0) {
+        if (authLoading || !activeCondoId || ownersMap.size === 0) {
             if (!authLoading) setLoading(false);
             return;
         }
     
-        let unsubscribe: (() => void) | undefined;
-    
-        const fetchPayments = () => {
-            setLoading(true);
-            try {
-                const q = query(
-                    collection(db, "payments"),
-                    where("condominioId", "==", ownerData.condominioId),
-                    orderBy('reportedAt', 'desc')
-                );
-    
-                unsubscribe = onSnapshot(q, (snapshot) => {
-                    const paymentsData: FullPayment[] = snapshot.docs.map(doc => {
-                        const data = doc.data();
-                        const firstBeneficiary = data.beneficiaries?.[0];
-                        let userName = 'Beneficiario no identificado';
-                        let unit = 'Propiedad no especificada';
-                        if (firstBeneficiary?.ownerId) {
-                            const owner = ownersMap.get(firstBeneficiary.ownerId);
-                            if (owner) {
-                                userName = owner.name;
-                                if (data.beneficiaries?.length > 1) {
-                                    unit = "Múltiples Propiedades";
-                                } else if (firstBeneficiary.street && firstBeneficiary.house) {
-                                    unit = `${firstBeneficiary.street} - ${firstBeneficiary.house}`;
-                                } else if (owner.properties && owner.properties.length > 0) {
-                                    unit = `${owner.properties[0].street} - ${owner.properties[0].house}`;
-                                }
-                            }
+        setLoading(true);
+        const paymentsCollectionRef = collection(db, "condominios", activeCondoId, "payments");
+        const q = query(paymentsCollectionRef, orderBy('reportedAt', 'desc'));
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const paymentsData: FullPayment[] = snapshot.docs.map(doc => {
+                const data = doc.data();
+                const firstBeneficiary = data.beneficiaries?.[0];
+                let userName = 'Beneficiario no identificado';
+                let unit = 'Propiedad no especificada';
+                if (firstBeneficiary?.ownerId) {
+                    const owner = ownersMap.get(firstBeneficiary.ownerId);
+                    if (owner) {
+                        userName = owner.name;
+                        if (data.beneficiaries?.length > 1) {
+                            unit = "Múltiples Propiedades";
+                        } else if (firstBeneficiary.street && firstBeneficiary.house) {
+                            unit = `${firstBeneficiary.street} - ${firstBeneficiary.house}`;
+                        } else if (owner.properties && owner.properties.length > 0) {
+                            unit = `${owner.properties[0].street} - ${owner.properties[0].house}`;
                         }
-                        return { 
-                            id: doc.id, 
-                            user: userName, 
-                            unit: unit, 
-                            amount: data.totalAmount, 
-                            date: new Date(data.paymentDate.seconds * 1000).toISOString(), 
-                            bank: data.bank, 
-                            type: data.paymentMethod, 
-                            reference: data.reference, 
-                            ...data 
-                        } as FullPayment;
-                    });
-                    setPayments(paymentsData);
-                    setLoading(false);
-                }, (error) => {
-                    console.error("Error fetching payments:", error);
-                    toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron cargar los pagos.' });
-                    setLoading(false);
-                });
-            } catch (error) {
-                console.error("Error setting up payment fetch:", error);
-                setLoading(false);
-            }
-        };
+                    }
+                }
+                return { 
+                    id: doc.id, 
+                    user: userName, 
+                    unit: unit, 
+                    amount: data.totalAmount, 
+                    date: new Date(data.paymentDate.seconds * 1000).toISOString(), 
+                    bank: data.bank, 
+                    type: data.paymentMethod, 
+                    reference: data.reference, 
+                    ...data 
+                } as FullPayment;
+            });
+            setPayments(paymentsData);
+            setLoading(false);
+        }, (error) => {
+            console.error("Error fetching payments:", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron cargar los pagos.' });
+            setLoading(false);
+        });
     
-        fetchPayments();
-    
-        const fetchSettings = async () => {
-            const settingsRef = doc(db, 'config', 'mainSettings');
-            const docSnap = await getDoc(settingsRef);
+        const settingsRef = doc(db, 'condominios', activeCondoId, 'config', 'mainSettings');
+        const settingsUnsub = onSnapshot(settingsRef, (docSnap) => {
             if (docSnap.exists()) {
-                const settings = docSnap.data();
-                setCompanyInfo(settings.companyInfo as CompanyInfo);
-                setCondoFee(settings.condoFee || 0);
+                setCondoFee(docSnap.data().condoFee || 0);
             }
-        };
-        fetchSettings();
+        });
 
         return () => {
-            if (unsubscribe) {
-                unsubscribe();
-            }
+            unsubscribe();
+            settingsUnsub();
         };
-    }, [ownerData?.condominioId, authLoading, ownersMap, toast]);
+    }, [activeCondoId, authLoading, ownersMap, toast]);
 
 
     const handleStatusChange = async (id: string, newStatus: PaymentStatus) => {
-        const paymentRef = doc(db, 'payments', id);
+        if (!activeCondoId) return;
+        const paymentRef = doc(db, 'condominios', activeCondoId, 'payments', id);
       
         requestAuthorization(async () => {
             if (newStatus === 'rechazado') {
@@ -199,7 +182,7 @@ function VerifyPaymentsTab() {
                         if (!paymentDoc.exists() || paymentDoc.data().status === 'aprobado') throw new Error('El pago no existe o ya fue aprobado anteriormente.');
                         const paymentData = { id: paymentDoc.id, ...paymentDoc.data() } as FullPayment;
         
-                        const settingsRef = doc(db, 'config', 'mainSettings');
+                        const settingsRef = doc(db, 'condominios', activeCondoId, 'config', 'mainSettings');
                         const settingsSnap = await transaction.get(settingsRef);
                         if (!settingsSnap.exists()) throw new Error('No se encontró el documento de configuración.');
                         
@@ -219,7 +202,7 @@ function VerifyPaymentsTab() {
                         const allBeneficiaryIds = Array.from(new Set(paymentData.beneficiaries.map(b => b.ownerId)));
                         if (allBeneficiaryIds.length === 0) throw new Error("El pago no tiene beneficiarios definidos.");
         
-                        const ownerDocs = await Promise.all(allBeneficiaryIds.map(ownerId => transaction.get(doc(db, 'owners', ownerId))));
+                        const ownerDocs = await Promise.all(allBeneficiaryIds.map(ownerId => transaction.get(doc(db, 'condominios', activeCondoId!, 'owners', ownerId))));
                         const ownerDataMap = new Map<string, any>();
                         ownerDocs.forEach((ownerDoc) => {
                             if (!ownerDoc.exists()) throw new Error(`El propietario ${ownerDoc.id} no fue encontrado.`);
@@ -233,7 +216,7 @@ function VerifyPaymentsTab() {
                             const ownerData = ownerDataMap.get(ownerId);
                             if (!ownerData) continue;
         
-                            const ownerRef = doc(db, 'owners', ownerId);
+                            const ownerRef = doc(db, 'condominios', activeCondoId, 'owners', ownerId);
                             const receiptCounter = ownerData.receiptCounter || 0;
                             const newReceiptCounter = receiptCounter + 1;
                             const receiptNumber = `REC-${ownerId.substring(0, 4).toUpperCase()}-${String(newReceiptCounter).padStart(5, '0')}`;
@@ -241,14 +224,14 @@ function VerifyPaymentsTab() {
         
                             let availableFunds = new Decimal(beneficiary.amount).plus(new Decimal(ownerData.balance || 0));
                             
-                            const debtsQuery = query(collection(db, 'debts'), where('ownerId', '==', ownerId));
+                            const debtsQuery = query(collection(db, 'condominios', activeCondoId, 'debts'), where('ownerId', '==', ownerId));
                             const debtsSnapshot = await getDocs(debtsQuery); 
                             
                             const allOwnerDebts = debtsSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Debt));
                             const pendingDebts = allOwnerDebts.filter(d => d.status === 'pending').sort((a, b) => a.year - b.year || a.month - b.month);
                             
                             for (const debt of pendingDebts) {
-                                const debtRef = doc(db, 'debts', debt.id);
+                                const debtRef = doc(db, 'condominios', activeCondoId, 'debts', debt.id);
                                 const debtAmountBs = new Decimal(debt.amountUSD).times(exchangeRate);
                                 if (availableFunds.greaterThanOrEqualTo(debtAmountBs)) {
                                     availableFunds = availableFunds.minus(debtAmountBs);
@@ -273,7 +256,7 @@ function VerifyPaymentsTab() {
                                         const periodKey = `${futureYear}-${futureMonth}`;
                                         if (allPaidPeriods.has(periodKey)) { nextPeriodDate = addMonths(nextPeriodDate, 1); continue; }
                                         availableFunds = availableFunds.minus(condoFeeBs);
-                                        const debtRef = doc(collection(db, 'debts'));
+                                        const debtRef = doc(collection(db, 'condominios', activeCondoId, 'debts'));
                                         transaction.set(debtRef, { ownerId: ownerId, property: property, year: futureYear, month: futureMonth, amountUSD: currentCondoFee.toNumber(), description: "Cuota de Condominio (Pagada por adelantado)", status: 'paid', paidAmountUSD: currentCondoFee.toNumber(), paymentDate: paymentData.paymentDate, paymentId: paymentData.id });
                                         allPaidPeriods.add(periodKey);
                                         nextPeriodDate = addMonths(nextPeriodDate, 1);
@@ -302,14 +285,14 @@ function VerifyPaymentsTab() {
       };
     
     const confirmDelete = async () => {
-        if (!paymentToDelete) return;
+        if (!paymentToDelete || !activeCondoId) return;
         requestAuthorization(async () => {
-            const paymentRef = doc(db, "payments", paymentToDelete.id);
+            const paymentRef = doc(db, 'condominios', activeCondoId, 'payments', paymentToDelete.id);
             try {
                 if (paymentToDelete.status === 'aprobado') {
                      const batch = writeBatch(db);
                     for (const beneficiary of paymentToDelete.beneficiaries) {
-                        const ownerRef = doc(db, 'owners', beneficiary.ownerId);
+                        const ownerRef = doc(db, 'condominios', activeCondoId, 'owners', beneficiary.ownerId);
                         const ownerDoc = await getDoc(ownerRef);
                         if (ownerDoc.exists()) {
                             const currentBalance = ownerDoc.data().balance || 0;
@@ -317,7 +300,7 @@ function VerifyPaymentsTab() {
                             batch.update(ownerRef, { balance: currentBalance + amountToRevert });
                         }
                     }
-                    const debtsToRevertQuery = query(collection(db, 'debts'), where('paymentId', '==', paymentToDelete.id));
+                    const debtsToRevertQuery = query(collection(db, 'condominios', activeCondoId, 'debts'), where('paymentId', '==', paymentToDelete.id));
                     const debtsToRevertSnapshot = await getDocs(debtsToRevertQuery);
                     debtsToRevertSnapshot.forEach(debtDoc => {
                         if (debtDoc.data().description.includes('Pagada por adelantado')) batch.delete(debtDoc.ref);
@@ -508,7 +491,7 @@ function VerifyPaymentsTab() {
     };
 
     const openReceiptForBeneficiary = async (payment: FullPayment, beneficiary: Beneficiary) => {
-        if (!companyInfo) {
+        if (!companyInfo || !activeCondoId) {
             toast({ variant: "destructive", title: "Error", description: "Datos de la compañía no cargados." });
             return;
         }
@@ -524,13 +507,13 @@ function VerifyPaymentsTab() {
             const { default: QRCode } = await import('qrcode');
 
             const paidDebtsSnapshot = await getDocs(
-                query(collection(db, 'debts'), where('paymentId', '==', payment.id), where('ownerId', '==', beneficiary.ownerId))
+                query(collection(db, 'condominios', activeCondoId, 'debts'), where('paymentId', '==', payment.id), where('ownerId', '==', beneficiary.ownerId))
             );
             const paidDebts = paidDebtsSnapshot.docs.map(d => d.data() as Debt);
             
             const totalDebtPaidWithPayment = paidDebts.reduce((sum, debt) => sum + ((debt.paidAmountUSD || debt.amountUSD) * payment.exchangeRate), 0);
             
-            const ownerDoc = await getDoc(doc(db, 'owners', beneficiary.ownerId));
+            const ownerDoc = await getDoc(doc(db, 'condominios', activeCondoId, 'owners', beneficiary.ownerId));
             const currentBalance = ownerDoc.exists() ? (ownerDoc.data().balance || 0) : 0;
             const previousBalance = currentBalance - (beneficiary.amount - totalDebtPaidWithPayment);
 
@@ -730,7 +713,7 @@ function VerifyPaymentsTab() {
 // ===================================================================================
 function ReportPaymentTab() {
     const { toast } = useToast();
-    const { user: authUser, ownerData: authOwnerData } = useAuth();
+    const { user: authUser, ownerData: authOwnerData, activeCondoId } = useAuth();
     const [allOwners, setAllOwners] = useState<Owner[]>([]);
     const [loading, setLoading] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -750,20 +733,21 @@ function ReportPaymentTab() {
     const [openSections, setOpenSections] = useState({ details: true, beneficiaries: true });
 
     useEffect(() => {
-        const q = query(collection(db, "owners"), where("role", "==", "propietario"));
+        if (!activeCondoId) return;
+        const q = query(collection(db, 'condominios', activeCondoId, "owners"), where("role", "==", "propietario"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const ownersData: Owner[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner));
             setAllOwners(ownersData.sort((a, b) => (a.name || '').localeCompare(b.name || '')));
         });
         return () => unsubscribe();
-    }, []);
+    }, [activeCondoId]);
 
     useEffect(() => {
         setPaymentDate(new Date());
-        if (authOwnerData) {
+        if (authOwnerData && authUser) {
             setBeneficiaryRows([{
                 id: Date.now().toString(),
-                owner: { id: authUser!.uid, name: authOwnerData.name, properties: authOwnerData.properties, balance: authOwnerData.balance },
+                owner: { id: authUser.uid, name: authOwnerData.name, properties: authOwnerData.properties, balance: authOwnerData.balance },
                 searchTerm: '',
                 amount: '',
                 selectedProperty: authOwnerData.properties?.[0] || null
@@ -772,9 +756,10 @@ function ReportPaymentTab() {
     }, [authOwnerData, authUser]);
     
     useEffect(() => {
+        if (!activeCondoId) return;
         const fetchRate = async () => {
              try {
-                const settingsRef = doc(db, 'config', 'mainSettings');
+                const settingsRef = doc(db, 'condominios', activeCondoId, 'config', 'mainSettings');
                 const docSnap = await getDoc(settingsRef);
                 if (docSnap.exists()) {
                     const settings = docSnap.data();
@@ -793,7 +778,7 @@ function ReportPaymentTab() {
             } catch (e) { setExchangeRateMessage('Error al buscar tasa.'); }
         }
         fetchRate();
-    }, [paymentDate]);
+    }, [paymentDate, activeCondoId]);
 
     useEffect(() => {
         if (exchangeRate && exchangeRate > 0) {
@@ -843,9 +828,9 @@ function ReportPaymentTab() {
         const validationResult = await validateForm();
         if (!validationResult.isValid) { toast({ variant: 'destructive', title: 'Error de Validación', description: validationResult.error, duration: 6000 }); setIsSubmitting(false); return; }
         try {
+            if (!activeCondoId) throw new Error("ID de condominio no encontrado");
             const beneficiaries = beneficiaryRows.map(row => ({ ownerId: row.owner!.id, ownerName: row.owner!.name, ...(row.selectedProperty || {}), amount: Number(row.amount) }));
             const paymentData = { 
-                condominioId: authOwnerData.condominioId,
                 paymentDate: Timestamp.fromDate(paymentDate!), 
                 exchangeRate, 
                 paymentMethod, 
@@ -859,7 +844,7 @@ function ReportPaymentTab() {
                 reportedBy: authUser?.uid || 'unknown_admin', 
                 receiptUrl: receiptImage 
             };
-            await addDoc(collection(db, "payments"), paymentData);
+            await addDoc(collection(db, 'condominios', activeCondoId, "payments"), paymentData);
             resetForm(); setIsInfoDialogOpen(true);
         } catch (error) { console.error("Error submitting payment:", error); toast({ variant: "destructive", title: "Error Inesperado", description: "No se pudo enviar el reporte." });
         } finally { setIsSubmitting(false); }
@@ -871,10 +856,10 @@ function ReportPaymentTab() {
         }
         if (beneficiaryRows.some(row => !row.owner || !row.amount || Number(row.amount) <= 0 || !row.selectedProperty)) return { isValid: false, error: 'Por favor, complete todos los campos para cada beneficiario.' };
         if (Math.abs(balance) > 0.01) return { isValid: false, error: 'El monto total no coincide con la suma de los montos asignados.' };
+        if (!activeCondoId) return { isValid: false, error: 'No se pudo identificar el condominio activo.' };
         try {
             const q = query(
-                collection(db, "payments"),
-                where("condominioId", "==", authOwnerData.condominioId),
+                collection(db, 'condominios', activeCondoId, "payments"),
                 where("reference", "==", reference), 
                 where("totalAmount", "==", Number(totalAmount)), 
                 where("paymentDate", "==", Timestamp.fromDate(paymentDate))

@@ -65,7 +65,7 @@ const getSurveyStatus = (survey: Survey): { status: 'Programada' | 'Activa' | 'C
 };
 
 export default function OwnerSurveysPage() {
-    const { user, loading: authLoading } = useAuth();
+    const { user, loading: authLoading, activeCondoId } = useAuth();
     const { toast } = useToast();
     const router = useRouter();
 
@@ -77,19 +77,22 @@ export default function OwnerSurveysPage() {
 
     useEffect(() => {
         if (authLoading) return;
-        if (!user) {
+        if (!user || !activeCondoId) {
             setLoading(false);
             return;
         }
 
-        const surveysQuery = query(collection(db, "surveys"), orderBy("createdAt", "desc"));
+        const surveysQuery = query(collection(db, "condominios", activeCondoId, "surveys"), orderBy("createdAt", "desc"));
         const surveysUnsubscribe = onSnapshot(surveysQuery, (snapshot) => {
             const surveysData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Survey));
             setSurveys(surveysData);
             setLoading(false);
+        }, (error) => {
+            console.error("Error fetching surveys:", error);
+            setLoading(false);
         });
 
-        const responsesQuery = query(collection(db, "survey_responses"), where("userId", "==", user.uid));
+        const responsesQuery = query(collection(db, "condominios", activeCondoId, "survey_responses"), where("userId", "==", user.uid));
         const responsesUnsubscribe = onSnapshot(responsesQuery, (snapshot) => {
             const votes: { [key: string]: SurveyResponse } = {};
             snapshot.forEach(doc => {
@@ -103,10 +106,10 @@ export default function OwnerSurveysPage() {
             surveysUnsubscribe();
             responsesUnsubscribe();
         };
-    }, [user, authLoading]);
+    }, [user, authLoading, activeCondoId]);
 
     const handleVote = async (survey: Survey, responses: { [questionId: string]: string }) => {
-        if (!user) {
+        if (!user || !activeCondoId) {
             toast({ variant: 'destructive', title: 'Error de autenticación' });
             return;
         }
@@ -124,8 +127,8 @@ export default function OwnerSurveysPage() {
 
         try {
             await runTransaction(db, async (transaction) => {
-                const surveyRef = doc(db, 'surveys', survey.id);
-                const responseRef = doc(db, 'survey_responses', `${user.uid}_${survey.id}`);
+                const surveyRef = doc(db, 'condominios', activeCondoId, 'surveys', survey.id);
+                const responseRef = doc(db, 'condominios', activeCondoId, 'survey_responses', `${user.uid}_${survey.id}`);
 
                 const responseDoc = await transaction.get(responseRef);
                 if (responseDoc.exists()) {
@@ -322,7 +325,3 @@ function SurveyForm({ survey, onVote, status }: { survey: Survey, onVote: (surve
         </form>
     );
 }
-
-    
-
-    

@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Label } from '@/components/ui/label';
+import { useAuth } from '@/hooks/use-auth';
 
 // --- Type Definitions ---
 type FinancialItem = {
@@ -82,6 +83,7 @@ export default function ReportViewerPage() {
   const { toast } = useToast();
   const params = useParams();
   const router = useRouter();
+  const { activeCondoId } = useAuth();
   const reportId: string = Array.isArray(params?.id) ? params?.id[0] : params?.id ?? '';
 
   const [loading, setLoading] = useState(true);
@@ -91,12 +93,12 @@ export default function ReportViewerPage() {
   const [reportDate, setReportDate] = useState<Date | null>(null);
 
   useEffect(() => {
-    if (!reportId) return;
+    if (!reportId || !activeCondoId) return;
 
     const fetchReport = async () => {
       setLoading(true);
       try {
-        const publishedReportRef = doc(db, "published_reports", reportId);
+        const publishedReportRef = doc(db, "condominios", activeCondoId, "published_reports", reportId);
         const publishedReportSnap = await getDoc(publishedReportRef);
 
         if (!publishedReportSnap.exists()) {
@@ -107,7 +109,7 @@ export default function ReportViewerPage() {
 
         const pubData = publishedReportSnap.data();
         const reportType = pubData.type;
-        const sourceId = pubData.sourceId; // This is the ID of the actual report document
+        const sourceId = pubData.sourceId;
         const createdAtData = pubData.createdAt;
 
         if (createdAtData instanceof Timestamp) {
@@ -118,7 +120,7 @@ export default function ReportViewerPage() {
 
         setReportType(reportType);
         
-        const settingsRef = doc(db, 'config', 'mainSettings');
+        const settingsRef = doc(db, 'condominios', activeCondoId, 'config', 'mainSettings');
         const settingsSnap = await getDoc(settingsRef);
         if (settingsSnap.exists()) {
           setCompanyInfo(settingsSnap.data().companyInfo as CompanyInfo);
@@ -126,10 +128,10 @@ export default function ReportViewerPage() {
 
         let reportSnap;
         if (reportType === 'balance') {
-          const docRef = doc(db, "financial_statements", sourceId);
+          const docRef = doc(db, 'condominios', activeCondoId, "financial_statements", sourceId);
           reportSnap = await getDoc(docRef);
         } else if (reportType === 'integral') {
-          const docRef = doc(db, "integral_reports", sourceId);
+          const docRef = doc(db, 'condominios', activeCondoId, "integral_reports", sourceId);
           reportSnap = await getDoc(docRef);
         }
 
@@ -147,7 +149,7 @@ export default function ReportViewerPage() {
     };
 
     fetchReport();
-  }, [reportId, toast]);
+  }, [reportId, activeCondoId, toast]);
 
   const handleGeneratePdf = async () => {
     if (reportType === 'balance') {
@@ -475,7 +477,7 @@ export default function ReportViewerPage() {
               <TableBody>
                 {integralData.map((row: any) => (
                   <TableRow key={row.ownerId}>
-                    <TableCell className="font-medium">{row.name}</TableCell>
+                    <TableCell className="font-medium">{row.name}<br/><span className="text-xs text-muted-foreground">{row.properties}</span></TableCell>
                     <TableCell>
                       <span
                         className={`font-semibold ${

@@ -46,29 +46,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const fetchUserData = async () => {
             if (isSuper) {
-                const supportId = typeof window !== 'undefined' ? localStorage.getItem('support_condo_id') : null;
-                setOwnerData({ role: 'super-admin', name: 'Super Admin', condominioId: supportId });
+                const supportId = typeof window !== 'undefined' ? localStorage.getItem('support_mode_id') : null;
+                setOwnerData({ role: 'super-admin', name: 'Super Admin' });
                 setActiveCondoId(supportId);
                 setLoading(false);
                 return;
             }
-
-            // Intentamos buscar en 'owners' (tu colección principal según captura)
+            
+            // Para usuarios normales, su perfil está en la raíz de 'owners' y contiene su 'condominioId'
             const ownerRef = doc(db, 'owners', user.uid);
             
             unsubscribeSnap = onSnapshot(ownerRef, (docSnap) => {
                 if (docSnap.exists()) {
                     const data = docSnap.data();
-                    console.log("AuthProvider: Perfil encontrado en 'owners':", data);
                     setOwnerData(data);
-                    // IMPORTANTE: Asegúrate que en Firestore el campo se llame exactamente 'condominioId'
+                    // El ID del condominio activo para un usuario normal es el que está en su perfil.
                     setActiveCondoId(data.condominioId || null);
                 } else {
-                    console.error("AuthProvider: No existe el documento en 'owners' para el UID:", user.uid);
+                    console.error("AuthProvider: No se encontró el documento del propietario para el UID:", user.uid);
                 }
                 setLoading(false);
             }, (err) => {
-                console.error("AuthProvider: Error leyendo perfil:", err);
+                console.error("AuthProvider: Error leyendo el perfil del propietario:", err);
                 setLoading(false);
             });
         };
@@ -78,26 +77,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, [user]);
 
     useEffect(() => {
-        if (!activeCondoId) return;
+        // Si no hay un condominio activo, no hay nada que buscar.
+        if (!activeCondoId) {
+            setCompanyInfo(null); // Limpiar info si se sale de un modo soporte
+            return;
+        };
 
-        console.log("AuthProvider: Buscando config para condo:", activeCondoId);
         const configRef = doc(db, 'condominios', activeCondoId, 'config', 'mainSettings');
         
         const unsubscribeConfig = onSnapshot(configRef, (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
-                console.log("AuthProvider: Datos de empresa recibidos:", data);
-                setCompanyInfo({
-                    name: data.nombre || data.name || "Sin Nombre",
-                    rif: data.rif || "",
-                    logo: data.logo || ""
-                });
+                setCompanyInfo(data.companyInfo || null);
             } else {
-                console.warn("AuthProvider: El documento 'config/mainSettings' NO EXISTE en la ruta.");
+                console.warn(`AuthProvider: No se encontró configuración ('mainSettings') para el condominio ${activeCondoId}.`);
                 setCompanyInfo(null);
             }
         }, (error) => {
-            console.error("AuthProvider: Error de permisos/lectura en mainSettings:", error);
+            console.error(`AuthProvider: Error de permisos/lectura en la configuración del condominio ${activeCondoId}:`, error);
+            setCompanyInfo(null);
         });
         
         return () => unsubscribeConfig();

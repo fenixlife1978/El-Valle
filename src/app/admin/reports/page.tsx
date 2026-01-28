@@ -1,5 +1,3 @@
-
-
 // @ts-nocheck
 
 
@@ -30,6 +28,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { useRouter } from 'next/navigation';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useAuthorization } from '@/hooks/use-authorization';
+import { useAuth } from '@/hooks/use-auth';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -341,6 +340,8 @@ export default function ReportsPage() {
     const { toast } = useToast();
     const { requestAuthorization } = useAuthorization();
     const router = useRouter();
+    const { activeCondoId, companyInfo: authCompanyInfo } = useAuth();
+
     const [loading, setLoading] = useState(true);
     const [generatingReport, setGeneratingReport] = useState(false);
     
@@ -398,16 +399,19 @@ export default function ReportsPage() {
 
 
     const fetchData = useCallback(async () => {
+        if (!activeCondoId) {
+            setLoading(false);
+            return;
+        }
         setLoading(true);
         try {
-            const settingsRef = doc(db, 'config', 'mainSettings');
-            const ownersQuery = query(collection(db, 'owners'));
-            const paymentsQuery = query(collection(db, 'payments'));
-            const debtsQuery = query(collection(db, 'debts'));
-            const historicalPaymentsQuery = query(collection(db, 'historical_payments'));
-             // Listen for real-time updates on saved and published reports
-            const savedReportsQuery = query(collection(db, 'integral_reports'), orderBy('createdAt', 'desc'));
-            const publishedReportsQuery = query(collection(db, 'published_reports'));
+            const settingsRef = doc(db, 'condominios', activeCondoId, 'config', 'mainSettings');
+            const ownersQuery = query(collection(db, 'condominios', activeCondoId, 'owners'));
+            const paymentsQuery = query(collection(db, 'condominios', activeCondoId, 'payments'));
+            const debtsQuery = query(collection(db, 'condominios', activeCondoId, 'debts'));
+            const historicalPaymentsQuery = query(collection(db, 'condominios', activeCondoId, 'historical_payments'));
+            const savedReportsQuery = query(collection(db, 'condominios', activeCondoId, 'integral_reports'), orderBy('createdAt', 'desc'));
+            const publishedReportsQuery = query(collection(db, 'condominios', activeCondoId, 'published_reports'));
             
             const unsubs: (() => void)[] = [];
 
@@ -415,7 +419,7 @@ export default function ReportsPage() {
             let rate = 0;
             if (settingsSnap.exists()){
                  const settings = settingsSnap.data();
-                 setCompanyInfo(settings.companyInfo);
+                 setCompanyInfo(settings.companyInfo as CompanyInfo);
                  setCondoFee(settings.condoFee || 0);
                  const rates = settings.exchangeRates || [];
                  const activeRateObj = rates.find((r: any) => r.active);
@@ -450,7 +454,7 @@ export default function ReportsPage() {
 
             // --- Delinquency Data Calculation (Corrected Logic) ---
             const debtsByOwner = new Map<string, { totalUSD: number, uniqueMonths: Set<string> }>();
-            const delinquencyDebtsQuery = query(collection(db, 'debts'), where('status', 'in', ['pending', 'vencida']));
+            const delinquencyDebtsQuery = query(collection(db, 'condominios', activeCondoId, 'debts'), where('status', 'in', ['pending', 'vencida']));
             const delinquencyDebtsSnapshot = await getDocs(delinquencyDebtsQuery);
 
             delinquencyDebtsSnapshot.docs.forEach(doc => {
@@ -507,12 +511,12 @@ export default function ReportsPage() {
         } finally {
             setLoading(false);
         }
-    }, [toast]);
+    }, [toast, activeCondoId]);
     
     useEffect(() => {
-        const unsub = fetchData();
+        const unsubPromise = fetchData();
         return () => {
-            unsub.then(cleanup => cleanup && cleanup());
+            unsubPromise.then(cleanup => cleanup && cleanup());
         }
     }, [fetchData]);
 
@@ -589,7 +593,7 @@ export default function ReportsPage() {
                 const properties = (owner?.properties || []).map(p => `${p.street}-${p.house}`).join(', ');
 
                 const paidDebts = allDebts.filter(debt => debt.paymentId === payment.id && debt.ownerId === ownerId)
-                                          .sort((a,b) => a.year - b.year || a.month - b.month);
+                                          .sort((a,b) => a.year - b.year || a.month - a.month);
                 
                 let paidMonths = 'Abono a Saldo';
                 if (paidDebts.length > 0) {
@@ -717,17 +721,18 @@ export default function ReportsPage() {
     };
     
     const handleGenerateAndSaveIntegral = async () => {
+        if (!activeCondoId) return;
         setGeneratingReport(true);
         try {
             // Refetch all data to ensure it's current
-            const ownersData = (await getDocs(collection(db, 'owners'))).docs.map(d => ({ id: d.id, ...d.data() } as Owner));
-            const debtsData = (await getDocs(collection(db, 'debts'))).docs.map(d => ({ id: d.id, ...d.data() } as Debt));
-            const paymentsData = (await getDocs(collection(db, 'payments'))).docs.map(d => ({ id: d.id, ...d.data() } as Payment));
-            const historicalData = (await getDocs(collection(db, 'historical_payments'))).docs.map(d => d.data() as HistoricalPayment);
+            const ownersData = (await getDocs(collection(db, 'condominios', activeCondoId, 'owners'))).docs.map(d => ({ id: d.id, ...d.data() } as Owner));
+            const debtsData = (await getDocs(collection(db, 'condominios', activeCondoId, 'debts'))).docs.map(d => ({ id: d.id, ...d.data() } as Debt));
+            const paymentsData = (await getDocs(collection(db, 'condominios', activeCondoId, 'payments'))).docs.map(d => ({ id: d.id, ...d.data() } as Payment));
+            const historicalData = (await getDocs(collection(db, 'condominios', activeCondoId, 'historical_payments'))).docs.map(d => d.data() as HistoricalPayment);
             
             const dataToSave = buildIntegralReportData(ownersData, debtsData, paymentsData, historicalData, integralDateRange);
 
-            const reportRef = doc(collection(db, "integral_reports"));
+            const reportRef = doc(collection(db, 'condominios', activeCondoId, 'integral_reports'));
             await setDoc(reportRef, {
                 createdAt: Timestamp.now(),
                 data: dataToSave,
@@ -749,21 +754,22 @@ export default function ReportsPage() {
     };
     
     const handlePublishIntegralReport = async (reportId: string, report: SavedIntegralReport) => {
+        if (!activeCondoId) return;
         requestAuthorization(async () => {
             setGeneratingReport(true);
             try {
                 const publicationId = `integral-${report.id}`;
-                const reportRef = doc(db, 'published_reports', publicationId);
+                const reportRef = doc(db, 'condominios', activeCondoId, 'published_reports', publicationId);
                 await setDoc(reportRef, {
                     type: 'integral',
                     sourceId: report.id,
                     createdAt: Timestamp.now(),
                 });
 
-                const ownersSnapshot = await getDocs(query(collection(db, 'owners'), where('role', '==', 'propietario')));
+                const ownersSnapshot = await getDocs(query(collection(db, 'condominios', activeCondoId, 'owners'), where('role', '==', 'propietario')));
                 const batch = writeBatch(db);
                 ownersSnapshot.forEach(ownerDoc => {
-                    const notificationsRef = doc(collection(db, `owners/${ownerDoc.id}/notifications`));
+                    const notificationsRef = doc(collection(db, `condominios/${activeCondoId}/owners/${ownerDoc.id}/notifications`));
                     batch.set(notificationsRef, {
                         title: 'Nuevo Reporte Publicado',
                         body: 'El reporte integral de propietarios ya está disponible para su consulta.',
@@ -785,11 +791,12 @@ export default function ReportsPage() {
     };
 
     const handleDeleteIntegralPublication = async (reportId: string) => {
+        if (!activeCondoId) return;
         requestAuthorization(async () => {
             setGeneratingReport(true);
             try {
                 const publicationId = `integral-${reportId}`;
-                const pubDocRef = doc(db, 'published_reports', publicationId);
+                const pubDocRef = doc(db, 'condominios', activeCondoId, 'published_reports', publicationId);
                 await deleteDoc(pubDocRef);
                 toast({ title: 'Publicación Eliminada' });
             } catch (error) {
@@ -802,14 +809,15 @@ export default function ReportsPage() {
     };
 
     const handleDeleteSavedIntegralReport = async (reportId: string) => {
+        if (!activeCondoId) return;
         requestAuthorization(async () => {
             setGeneratingReport(true);
             try {
                 const batch = writeBatch(db);
-                batch.delete(doc(db, 'integral_reports', reportId));
+                batch.delete(doc(db, 'condominios', activeCondoId, 'integral_reports', reportId));
                 
                 const publicationId = `integral-${reportId}`;
-                const pubDocRef = doc(db, 'published_reports', publicationId);
+                const pubDocRef = doc(db, 'condominios', activeCondoId, 'published_reports', publicationId);
                 batch.delete(pubDocRef); 
                 
                 await batch.commit();

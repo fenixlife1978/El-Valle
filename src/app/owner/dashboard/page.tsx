@@ -109,14 +109,13 @@ const formatToTwoDecimals = (num: number) => {
 // -------------------------------------------------------------------------
 
 export default function OwnerDashboardPage() {
-    const { user, ownerData, loading: authLoading } = useAuth();
+    const { user, ownerData, activeCondoId, companyInfo, loading: authLoading } = useAuth();
     const { toast } = useToast();
     
     // Estados del componente
     const [loading, setLoading] = useState(true);
     const [debts, setDebts] = useState<Debt[]>([]);
     const [payments, setPayments] = useState<Payment[]>([]);
-    const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
     const [isGenerating, setIsGenerating] = useState(false);
     const [receiptData, setReceiptData] = useState<ReceiptData>(null);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -131,7 +130,7 @@ export default function OwnerDashboardPage() {
     useEffect(() => {
         setNow(new Date());
 
-        if (authLoading || !ownerId) {
+        if (authLoading || !ownerId || !activeCondoId) {
             if (!authLoading) setLoading(false);
             return;
         }
@@ -140,37 +139,28 @@ export default function OwnerDashboardPage() {
             setLoading(true);
             try {
                  // Suscripción a anuncios
-                const anunciosQuery = query(collection(db, "billboard_announcements"), orderBy("createdAt", "desc"));
+                const anunciosQuery = query(collection(db, "condominios", activeCondoId, "billboard_announcements"), orderBy("createdAt", "desc"));
                 const unsubAnuncios = onSnapshot(anunciosQuery, (snapshot) => {
                   setAnuncios(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Anuncio)));
                 });
 
-
-                // Fetch de información de la compañía
-                const configRef = doc(db, 'config', 'mainSettings');
-                const configSnap = await getDoc(configRef);
-                if (configSnap.exists()) {
-                    setCompanyInfo(configSnap.data().companyInfo as CompanyInfo);
-                }
-
                 // Suscripción a deudas
-                const debtsQuery = query(collection(db, 'debts'), where('ownerId', '==', ownerId), orderBy('year', 'desc'), orderBy('month', 'desc'));
+                const debtsQuery = query(collection(db, 'condominios', activeCondoId, 'debts'), where('ownerId', '==', ownerId), orderBy('year', 'desc'), orderBy('month', 'desc'));
                 const unsubDebts = onSnapshot(debtsQuery, (snapshot) => {
                     const debtsList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Debt));
                     setDebts(debtsList);
                 });
 
                 // Suscripción a pagos
-                const paymentsQuery = query(collection(db, 'payments'), where('beneficiaryIds', 'array-contains', ownerId));
+                const paymentsQuery = query(collection(db, 'condominios', activeCondoId, 'payments'), where('beneficiaryIds', 'array-contains', ownerId));
                 const unsubPayments = onSnapshot(paymentsQuery, (snapshot) => {
                     const paymentsList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Payment));
-                    // Ordenar en el cliente
                     paymentsList.sort((a, b) => b.paymentDate.toMillis() - a.paymentDate.toMillis());
                     setPayments(paymentsList);
                 });
                 
                 // Suscripción a feedback
-                const feedbackQuery = query(collection(db, 'app_feedback'), where('ownerId', '==', ownerId), limit(1));
+                const feedbackQuery = query(collection(db, 'condominios', activeCondoId, 'app_feedback'), where('ownerId', '==', ownerId), limit(1));
                 const unsubFeedback = onSnapshot(feedbackQuery, (snapshot) => {
                     if (!snapshot.empty) {
                         setFeedbackSent(true);
@@ -203,7 +193,7 @@ export default function OwnerDashboardPage() {
             cleanupPromise.then(cleanup => cleanup && cleanup());
         };
 
-    }, [ownerId, authLoading, toast]);
+    }, [ownerId, authLoading, toast, activeCondoId]);
 
 
     // Memoización de estadísticas calculadas
@@ -264,13 +254,13 @@ export default function OwnerDashboardPage() {
     // -------------------------------------------------------------------------
 
     const handleFeedback = async (response: 'liked' | 'disliked') => {
-        if (!ownerId || feedbackSent) return;
+        if (!ownerId || feedbackSent || !activeCondoId) return;
 
         setLastFeedback(response); // Optimistic update
         setFeedbackSent(true);
 
         try {
-            await addDoc(collection(db, 'app_feedback'), {
+            await addDoc(collection(db, 'condominios', activeCondoId, 'app_feedback'), {
                 ownerId,
                 response,
                 timestamp: serverTimestamp()
@@ -409,7 +399,7 @@ const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptD
         doc.text('Saldo a Favor Actual:', rightColX - 50, startY, { align: 'right' });
         doc.text(`Bs. ${formatToTwoDecimals(currentBalance)}`, rightColX, startY, { align: 'right' });
         startY += 8;
-
+    
         doc.setFont('helvetica', 'bold');
         doc.text('TOTAL PAGADO:', rightColX - 50, startY, { align: 'right' });
         doc.text(`Bs. ${formatToTwoDecimals(beneficiary.amount)}`, rightColX, startY, { align: 'right' });
@@ -471,7 +461,7 @@ const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptD
 
 
     const openReceipt = async (payment: Payment) => {
-        if (!ownerId || !ownerData || !companyInfo) {
+        if (!ownerId || !ownerData || !companyInfo || !activeCondoId) {
             toast({ variant: "destructive", title: "Error", description: "Datos insuficientes para generar el recibo." });
             return;
         }
@@ -486,7 +476,7 @@ const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptD
         try {
             const QRCode = await import('qrcode');
             const paidDebtsSnapshot = await getDocs(
-                query(collection(db, 'debts'), where('paymentId', '==', payment.id), where('ownerId', '==', ownerId))
+                query(collection(db, 'condominios', activeCondoId, 'debts'), where('paymentId', '==', payment.id), where('ownerId', '==', ownerId))
             );
             const paidDebts = paidDebtsSnapshot.docs.map(d => d.data() as Debt);
             
@@ -506,7 +496,7 @@ const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptD
                 beneficiary,
                 ownerName: ownerData.name,
                 ownerUnit: `${ownerData.properties?.[0]?.street} - ${ownerData.properties?.[0]?.house}`,
-                paidDebts: paidDebts.sort((a,b) => a.year - b.year || a.month - b.month),
+                paidDebts: paidDebts.sort((a,b) => a.year - b.year || a.month - a.month),
                 previousBalance: previousBalance,
                 currentBalance: ownerData.balance || 0,
                 receiptNumber: receiptNumber,

@@ -6,7 +6,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, Info, Calculator, Minus, Equal, Check, Receipt } from 'lucide-react';
+import { Loader2, Info, Calculator, Minus, Equal, Check, Receipt, ArrowLeft } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { collection, query, onSnapshot, where, doc, getDoc, writeBatch, Timestamp, addDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -52,7 +52,7 @@ const monthsLocale: { [key: number]: string } = {
 
 
 export default function OwnerPaymentCalculatorPage() {
-    const { user, ownerData, loading: authLoading } = useAuth();
+    const { user, ownerData, loading: authLoading, activeCondoId } = useAuth();
     const router = useRouter();
     const [ownerDebts, setOwnerDebts] = useState<Debt[]>([]);
     const [loadingDebts, setLoadingDebts] = useState(true);
@@ -73,9 +73,12 @@ export default function OwnerPaymentCalculatorPage() {
     }, []);
 
     useEffect(() => {
-        if (authLoading || !user || !ownerData) return;
+        if (authLoading || !user || !ownerData || !activeCondoId) {
+            setLoadingDebts(false);
+            return;
+        };
 
-        const settingsRef = doc(db, 'config', 'mainSettings');
+        const settingsRef = doc(db, 'condominios', activeCondoId, 'config', 'mainSettings');
         const settingsUnsubscribe = onSnapshot(settingsRef, (settingsSnap) => {
             if (settingsSnap.exists()) {
                 const settings = settingsSnap.data();
@@ -90,7 +93,7 @@ export default function OwnerPaymentCalculatorPage() {
             }
         });
         
-        const debtsQuery = query(collection(db, "debts"), where("ownerId", "==", user.uid));
+        const debtsQuery = query(collection(db, "condominios", activeCondoId, "debts"), where("ownerId", "==", user.uid));
         const debtsUnsubscribe = onSnapshot(debtsQuery, (snapshot) => {
             const debtsData: Debt[] = [];
             snapshot.forEach(d => debtsData.push({ id: d.id, ...d.data() } as Debt));
@@ -103,7 +106,7 @@ export default function OwnerPaymentCalculatorPage() {
             debtsUnsubscribe();
         };
 
-    }, [user, ownerData, authLoading]);
+    }, [user, ownerData, authLoading, activeCondoId]);
     
     const pendingDebts = useMemo(() => {
         return ownerDebts
@@ -176,7 +179,7 @@ export default function OwnerPaymentCalculatorPage() {
         }
 
         setProcessingPayment(true);
-        if (!ownerData || !user) return;
+        if (!ownerData || !user || !activeCondoId) return;
 
         try {
             const paymentAmountBs = paymentCalculator.totalToPay;
@@ -201,7 +204,7 @@ export default function OwnerPaymentCalculatorPage() {
                 observations: `Pago desde calculadora para ${paymentCalculator.dueMonthsCount} deuda(s) y ${paymentCalculator.advanceMonthsCount} adelanto(s).`
             };
 
-            await addDoc(collection(db, 'payments'), paymentData);
+            await addDoc(collection(db, 'condominios', activeCondoId, 'payments'), paymentData);
 
             toast({ title: 'Pago Reportado Exitosamente', description: 'Tu pago ha sido enviado para verificación.', className: 'bg-green-100 border-green-400 text-green-800' });
             setIsPaymentDialogOpen(false);
@@ -224,14 +227,9 @@ export default function OwnerPaymentCalculatorPage() {
     
     return (
         <div className="space-y-6">
-            <div className="mb-10">
-                <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">
-                    Calculadora de <span className="text-[#0081c9]">Pagos</span>
-                </h2>
-                <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
-                <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">
-                    Selecciona las deudas a pagar y calcula el monto total.
-                </p>
+            <div>
+                <h1 className="text-3xl font-bold font-headline">Calculadora de Pagos</h1>
+                <p className="text-muted-foreground">Selecciona las deudas que deseas pagar para calcular el monto total.</p>
             </div>
             
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
@@ -246,8 +244,9 @@ export default function OwnerPaymentCalculatorPage() {
                                         <TableRow><TableCell colSpan={5} className="h-24 text-center"><Info className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />No tiene deudas pendientes.</TableCell></TableRow>
                                     ) : (
                                         pendingDebts.map((debt) => {
+                                            if (!now) return null;
                                             const debtMonthDate = startOfMonth(new Date(debt.year, debt.month - 1));
-                                            const isOverdue = isBefore(debtMonthDate, startOfMonth(new Date()));
+                                            const isOverdue = isBefore(debtMonthDate, startOfMonth(now));
                                             const status = debt.status === 'vencida' || (debt.status === 'pending' && isOverdue) ? 'Vencida' : 'Pendiente';
 
                                             return (

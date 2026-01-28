@@ -158,12 +158,6 @@ export default function SettingsPage() {
 
 
 
-    const condoId = activeCondoId || (user as any)?.condominioId || "condo_01";
-
-
-
-    // ESTILO COMÚN PARA INPUTS (FUERZA TEXTO OSCURO)
-
     const inputStyle = "rounded-xl h-12 bg-slate-100 border-none font-bold text-slate-900 placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-blue-500";
 
 
@@ -172,11 +166,14 @@ export default function SettingsPage() {
 
         async function fetchSettings() {
 
-            if (!condoId) return;
+            if (!activeCondoId) {
+                setLoading(false);
+                return;
+            };
 
             try {
 
-                const docSnap = await getDoc(doc(db, 'condominios', condoId, 'config', 'mainSettings'));
+                const docSnap = await getDoc(doc(db, 'condominios', activeCondoId, 'config', 'mainSettings'));
 
                 if (docSnap.exists()) {
 
@@ -210,19 +207,19 @@ export default function SettingsPage() {
 
         fetchSettings();
 
-    }, [condoId, toast]);
+    }, [activeCondoId, toast]);
 
 
 
     const handleSave = async (section: string, dataToUpdate: Partial<Settings>) => {
 
-        if (!condoId) return;
+        if (!activeCondoId) return;
 
         setSaving(prev => ({ ...prev, [section]: true }));
 
         try {
 
-            await setDoc(doc(db, 'condominios', condoId, 'config', 'mainSettings'), dataToUpdate, { merge: true });
+            await setDoc(doc(db, 'condominios', activeCondoId, 'config', 'mainSettings'), dataToUpdate, { merge: true });
 
             toast({ title: "Guardado", description: "Configuración actualizada." });
 
@@ -242,7 +239,7 @@ export default function SettingsPage() {
 
     const handleSaveSecurity = async (key: string) => {
 
-        if (!condoId) return;
+        if (!activeCondoId) return;
 
         requestAuthorization(async () => {
 
@@ -250,7 +247,7 @@ export default function SettingsPage() {
 
              try {
 
-                await setDoc(doc(db, 'condominios', condoId, 'config', 'authorization'), { key, updatedAt: new Date().toISOString() }, { merge: true });
+                await setDoc(doc(db, 'condominios', activeCondoId, 'config', 'authorization'), { key, updatedAt: new Date().toISOString() }, { merge: true });
 
                 toast({ title: "PIN Seguro actualizado" });
 

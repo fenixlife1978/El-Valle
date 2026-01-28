@@ -27,7 +27,6 @@ export function AuthorizationProvider({ children }: { children: ReactNode }) {
   const [isVerifying, setIsVerifying] = useState(false);
   const { toast } = useToast();
   
-  // Obtenemos el usuario y el ID del condominio activo del hook de EFAS
   const { user, activeCondoId } = useAuth();
 
   const requestAuthorization = useCallback((actionToExecute: () => Promise<void>) => {
@@ -41,7 +40,6 @@ export function AuthorizationProvider({ children }: { children: ReactNode }) {
   };
 
   const createLog = async (result: 'success' | 'failure', detail: string) => {
-    // REGLA: Los logs deben estar enraizados en el condominio específico para evitar mezcla de datos
     if (!user || !activeCondoId) return;
     
     try {
@@ -66,12 +64,10 @@ export function AuthorizationProvider({ children }: { children: ReactNode }) {
 
     setIsVerifying(true);
     try {
-      // REGLA: La clave se busca dentro de la configuración específica del condominio
       const keyDocRef = doc(db, 'condominios', activeCondoId, 'config', 'authorization');
       const keyDoc = await getDoc(keyDocRef);
 
       if (!keyDoc.exists()) {
-        // Si no existe clave para este condominio, creamos la de soporte por defecto
         await setDoc(keyDocRef, { key: '180578' });
         toast({
           variant: 'destructive',

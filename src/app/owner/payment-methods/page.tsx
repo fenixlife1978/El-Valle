@@ -19,13 +19,6 @@ type CompanyInfo = {
 export default function PaymentMethodsPage() {
     const { toast } = useToast();
     const { companyInfo, loading } = useAuth();
-    const [info, setInfo] = useState<CompanyInfo | null>(null);
-
-    useEffect(() => {
-        if (companyInfo) {
-            setInfo(companyInfo as CompanyInfo);
-        }
-    }, [companyInfo]);
 
     const handleCopy = (textToCopy: string, fieldName: string) => {
         navigator.clipboard.writeText(textToCopy).then(() => {
@@ -52,8 +45,8 @@ export default function PaymentMethodsPage() {
         );
     }
     
-    if (!info) {
-        return <div className="text-center">No se encontró la información de pago. Contacte a la administración.</div>
+    if (!companyInfo) {
+        return <div className="text-center p-8">No se encontró la información de pago del condominio. Contacte a la administración.</div>
     }
 
     return (
@@ -81,22 +74,22 @@ export default function PaymentMethodsPage() {
                         <div className="flex items-center justify-between p-3 rounded-lg hover:bg-muted">
                             <span className="font-medium text-muted-foreground">Teléfono:</span>
                             <div className="flex items-center gap-2">
-                                <span className="font-bold">{info.phone}</span>
-                                <Button variant="ghost" size="icon" onClick={() => handleCopy(info.phone, 'Teléfono')}><Copy className="h-4 w-4"/></Button>
+                                <span className="font-bold">{companyInfo.phone}</span>
+                                <Button variant="ghost" size="icon" onClick={() => handleCopy(companyInfo.phone, 'Teléfono')}><Copy className="h-4 w-4"/></Button>
                             </div>
                         </div>
                         <div className="flex items-center justify-between p-3 rounded-lg hover:bg-muted">
                             <span className="font-medium text-muted-foreground">Banco:</span>
                             <div className="flex items-center gap-2">
-                                <span className="font-bold">{info.bankName}</span>
-                                <Button variant="ghost" size="icon" onClick={() => handleCopy(info.bankName, 'Banco')}><Copy className="h-4 w-4"/></Button>
+                                <span className="font-bold">{companyInfo.bankName}</span>
+                                <Button variant="ghost" size="icon" onClick={() => handleCopy(companyInfo.bankName, 'Banco')}><Copy className="h-4 w-4"/></Button>
                             </div>
                         </div>
                         <div className="flex items-center justify-between p-3 rounded-lg hover:bg-muted">
                             <span className="font-medium text-muted-foreground">RIF:</span>
                             <div className="flex items-center gap-2">
-                                <span className="font-bold">{info.rif}</span>
-                                <Button variant="ghost" size="icon" onClick={() => handleCopy(info.rif, 'RIF')}><Copy className="h-4 w-4"/></Button>
+                                <span className="font-bold">{companyInfo.rif}</span>
+                                <Button variant="ghost" size="icon" onClick={() => handleCopy(companyInfo.rif, 'RIF')}><Copy className="h-4 w-4"/></Button>
                             </div>
                         </div>
                     </CardContent>
@@ -114,29 +107,29 @@ export default function PaymentMethodsPage() {
                         <div className="flex items-center justify-between p-3 rounded-lg hover:bg-muted">
                             <span className="font-medium text-muted-foreground">Beneficiario:</span>
                             <div className="flex items-center gap-2">
-                                <span className="font-bold">{info.name}</span>
-                                <Button variant="ghost" size="icon" onClick={() => handleCopy(info.name, 'Beneficiario')}><Copy className="h-4 w-4"/></Button>
+                                <span className="font-bold">{companyInfo.name}</span>
+                                <Button variant="ghost" size="icon" onClick={() => handleCopy(companyInfo.name, 'Beneficiario')}><Copy className="h-4 w-4"/></Button>
                             </div>
                         </div>
                         <div className="flex items-center justify-between p-3 rounded-lg hover:bg-muted">
                             <span className="font-medium text-muted-foreground">RIF:</span>
                             <div className="flex items-center gap-2">
-                                <span className="font-bold">{info.rif}</span>
-                                <Button variant="ghost" size="icon" onClick={() => handleCopy(info.rif, 'RIF')}><Copy className="h-4 w-4"/></Button>
+                                <span className="font-bold">{companyInfo.rif}</span>
+                                <Button variant="ghost" size="icon" onClick={() => handleCopy(companyInfo.rif, 'RIF')}><Copy className="h-4 w-4"/></Button>
                             </div>
                         </div>
                         <div className="flex items-center justify-between p-3 rounded-lg hover:bg-muted">
                             <span className="font-medium text-muted-foreground">Banco:</span>
                              <div className="flex items-center gap-2">
-                                <span className="font-bold">{info.bankName}</span>
-                                <Button variant="ghost" size="icon" onClick={() => handleCopy(info.bankName, 'Banco')}><Copy className="h-4 w-4"/></Button>
+                                <span className="font-bold">{companyInfo.bankName}</span>
+                                <Button variant="ghost" size="icon" onClick={() => handleCopy(companyInfo.bankName, 'Banco')}><Copy className="h-4 w-4"/></Button>
                             </div>
                         </div>
                         <div className="flex items-center justify-between p-3 rounded-lg hover:bg-muted">
                             <span className="font-medium text-muted-foreground">Nº de Cuenta:</span>
                             <div className="flex items-center gap-2">
-                                <span className="font-bold">{info.accountNumber}</span>
-                                <Button variant="ghost" size="icon" onClick={() => handleCopy(info.accountNumber, 'Nº de Cuenta')}><Copy className="h-4 w-4"/></Button>
+                                <span className="font-bold">{companyInfo.accountNumber}</span>
+                                <Button variant="ghost" size="icon" onClick={() => handleCopy(companyInfo.accountNumber, 'Nº de Cuenta')}><Copy className="h-4 w-4"/></Button>
                             </div>
                         </div>
                     </CardContent>

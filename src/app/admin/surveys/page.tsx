@@ -20,6 +20,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { useRouter } from 'next/navigation';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { useAuth } from '@/hooks/use-auth';
 
 type SurveyQuestion = {
     id: string;
@@ -59,6 +60,7 @@ const getSurveyStatus = (survey: Survey): { status: 'Programada' | 'Activa' | 'C
 
 export default function SurveysPage() {
     const { toast } = useToast();
+    const { activeCondoId } = useAuth();
     const [surveys, setSurveys] = useState<Survey[]>([]);
     const [loading, setLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -83,7 +85,14 @@ export default function SurveysPage() {
     const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
     
     useEffect(() => {
-        const q = query(collection(db, "surveys"), orderBy("createdAt", "desc"));
+        if (!activeCondoId) {
+            setLoading(false);
+            return;
+        };
+
+        const surveysCollectionRef = collection(db, "condominios", activeCondoId, "surveys");
+        const q = query(surveysCollectionRef, orderBy("createdAt", "desc"));
+
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const surveysData = snapshot.docs.map(doc => ({
                 id: doc.id,
@@ -91,9 +100,13 @@ export default function SurveysPage() {
             } as Survey));
             setSurveys(surveysData);
             setLoading(false);
+        }, (error) => {
+            console.error("Error fetching surveys: ", error);
+            setLoading(false);
+            toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron cargar las encuestas.' });
         });
         return () => unsubscribe();
-    }, []);
+    }, [activeCondoId, toast]);
 
     const resetDialog = () => {
         setIsDialogOpen(false);
@@ -118,14 +131,13 @@ export default function SurveysPage() {
         if (survey.questions && survey.questions.length > 0) {
             editableQuestions = survey.questions.map(q => ({
                 ...q,
-                options: q.options ? q.options.map((opt, index) => 
+                options: q.options ? (Array.isArray(q.options) ? q.options.map((opt: any, index: number) => 
                     typeof opt === 'string' 
                     ? { id: `opt-${q.id}-${index}`, text: opt } 
                     : { id: opt.id || `opt-${q.id}-${index}`, text: opt.text || '' }
-                ) : [{ id: `opt-${q.id}-0`, text: '' }, { id: `opt-${q.id}-1`, text: '' }]
+                ) : []) : [{ id: `opt-${q.id}-0`, text: '' }, { id: `opt-${q.id}-1`, text: '' }]
             }));
         } else {
-            // Provide a default question if none exist
             editableQuestions = [{ id: `q-${Date.now()}`, questionText: '', options: [{ id: `opt-${Date.now()}-1`, text: '' }, { id: `opt-${Date.now()}-2`, text: '' }] }];
         }
 
@@ -190,6 +202,10 @@ export default function SurveysPage() {
     };
     
     const handleSaveSurvey = async () => {
+        if (!activeCondoId) {
+            toast({ variant: 'destructive', title: 'Error', description: 'No se ha seleccionado un condominio.' });
+            return;
+        }
         requestAuthorization(async () => {
             if (!title.trim()) {
                 toast({ variant: 'destructive', title: 'Título requerido', description: 'Por favor, ingrese un título para la encuesta.' });
@@ -217,7 +233,7 @@ export default function SurveysPage() {
             }
             
             setIsSubmitting(true);
-            const firestore = db; 
+            const surveysCollectionRef = collection(db, "condominios", activeCondoId, "surveys");
             try {
                 const finalQuestions = questions.map(q => ({
                     id: q.id,
@@ -226,7 +242,7 @@ export default function SurveysPage() {
                 }));
     
                 if (isEditing && editingSurveyId) {
-                    const surveyRef = doc(firestore, 'surveys', editingSurveyId);
+                    const surveyRef = doc(surveysCollectionRef, editingSurveyId);
                     await updateDoc(surveyRef, {
                         title,
                         questions: finalQuestions.map(q => ({id: q.id, questionText: q.questionText, options: q.options.map(o => o.text) })), // Store as string array
@@ -243,7 +259,7 @@ export default function SurveysPage() {
                         }, {} as { [key: string]: number });
                     });
     
-                    const surveyRef = await addDoc(collection(firestore, 'surveys'), {
+                    const surveyRef = await addDoc(surveysCollectionRef, {
                         title,
                         questions: finalQuestions.map(q => ({id: q.id, questionText: q.questionText, options: q.options.map(o => o.text) })),
                         createdAt: serverTimestamp(),
@@ -252,11 +268,11 @@ export default function SurveysPage() {
                         results: initialResults,
                         totalVotes: 0,
                     });
-                     // Notify all owners
-                    const ownersSnapshot = await getDocs(query(collection(firestore, 'owners'), where('role', '==', 'propietario')));
-                    const batch = writeBatch(firestore);
+                    
+                    const ownersSnapshot = await getDocs(query(collection(db, 'condominios', activeCondoId, 'owners'), where('role', '==', 'propietario')));
+                    const batch = writeBatch(db);
                     ownersSnapshot.forEach(ownerDoc => {
-                        const notificationsRef = doc(collection(firestore, `owners/${ownerDoc.id}/notifications`));
+                        const notificationsRef = doc(collection(db, `condominios/${activeCondoId}/owners/${ownerDoc.id}/notifications`));
                         batch.set(notificationsRef, {
                             title: 'Nueva Encuesta Disponible',
                             body: `Participa en la encuesta: "${title}"`,
@@ -281,10 +297,10 @@ export default function SurveysPage() {
     };
 
     const handleDeleteSurvey = async () => {
-        if (!surveyToDelete) return;
+        if (!surveyToDelete || !activeCondoId) return;
         requestAuthorization(async () => {
             try {
-                await deleteDoc(doc(db, "surveys", surveyToDelete.id)); 
+                await deleteDoc(doc(db, "condominios", activeCondoId, "surveys", surveyToDelete.id)); 
                 toast({ title: 'Encuesta Eliminada' });
             } catch (error) {
                 console.error("Error deleting survey:", error);
