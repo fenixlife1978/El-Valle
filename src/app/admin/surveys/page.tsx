@@ -315,10 +315,15 @@ export default function SurveysPage() {
     return (
         <div className="space-y-8">
             
-            <div className="flex items-center justify-between gap-4 flex-wrap">
+             <div className="flex flex-wrap items-start justify-between gap-4 mb-10">
                 <div>
-                    <h1 className="text-3xl font-bold font-headline">Gestión de Encuestas</h1>
-                    <p className="text-muted-foreground">Crea y gestiona encuestas para la comunidad.</p>
+                    <h2 className="text-4xl font-black text-foreground uppercase tracking-tighter italic drop-shadow-sm">
+                        Gestión de <span className="text-primary">Encuestas</span>
+                    </h2>
+                    <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
+                    <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">
+                        Crea y gestiona encuestas para la comunidad.
+                    </p>
                 </div>
                 <Button onClick={() => { resetDialog(); setIsDialogOpen(true); }}>
                     <PlusCircle className="mr-2 h-4 w-4" />
