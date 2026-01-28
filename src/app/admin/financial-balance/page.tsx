@@ -181,7 +181,13 @@ export default function FinancialBalancePage() {
             // 3. Sincronizar Caja Chica (CON CORRECCIÓN DE TIPOS)
             const allMovementsSnap = await getDocs(query(collection(db, 'condominios', workingCondoId, 'cajaChica_movimientos')));
             
-            const movements: { amount: number; type: 'ingreso' | 'egreso'; date: Date; }[] = allMovementsSnap.docs.map(d => {
+            interface Movement {
+                amount: number;
+                type: 'ingreso' | 'egreso';
+                date: Date;
+            }
+
+            const movements: Movement[] = allMovementsSnap.docs.map(d => {
                 const data = d.data();
                 return {
                     amount: data.amount || 0,
@@ -362,8 +368,7 @@ export default function FinancialBalancePage() {
                 docPDF.roundedRect(margin, startY - 4, pageWidth - (margin * 2), 9, 3, 3, 'F');
             }
             if(item.color) {
-                const [r, g, b] = item.color;
-                docPDF.setTextColor(r, g, b);
+                docPDF.setTextColor.apply(docPDF, item.color);
             }
             docPDF.setFontSize(10).setFont('helvetica', item.bold ? 'bold' : 'normal').text(item.label, margin + 5, startY);
             docPDF.text(item.value, pageWidth - margin - 5, startY, { align: 'right' });
@@ -492,4 +497,3 @@ export default function FinancialBalancePage() {
         </div>
     );
 }
-
