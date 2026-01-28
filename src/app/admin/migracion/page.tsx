@@ -60,19 +60,19 @@ export default function MigrationPage() {
   return (
     <div className="p-8 space-y-6 max-w-4xl mx-auto">
       <div className="mb-10">
-          <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">
-              Sistema de <span className="text-[#0081c9]">Migración</span>
+          <h2 className="text-4xl font-black text-foreground uppercase tracking-tighter italic drop-shadow-sm">
+              Sistema de <span className="text-primary">Migración</span>
           </h2>
           <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
-          <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">
+          <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">
               Herramienta para la transición de datos a la nueva estructura multi-condominio.
           </p>
       </div>
 
-      <div className="bg-amber-50 border-l-4 border-amber-400 p-4 mb-6">
+      <div className="bg-amber-900/20 border-l-4 border-amber-500 p-4 mb-6 text-amber-300">
         <div className="flex items-center">
           <AlertTriangle className="text-amber-400 mr-3" />
-          <p className="text-sm text-amber-700">
+          <p className="text-sm">
             <strong>Atención:</strong> Esta herramienta mueve datos de la raíz a la estructura interna de <strong>{ownerData?.condominioId}</strong>.
           </p>
         </div>
@@ -110,15 +110,15 @@ export default function MigrationPage() {
 
 function MigrationCard({ title, icon, loading, onClick }: any) {
   return (
-    <Card className="hover:shadow-lg transition-shadow border-slate-100">
+    <Card className="hover:shadow-lg transition-shadow border-border">
       <CardHeader className="pb-2">
-        <CardTitle className="text-xs uppercase tracking-widest text-slate-400">{title}</CardTitle>
+        <CardTitle className="text-xs uppercase tracking-widest text-muted-foreground">{title}</CardTitle>
       </CardHeader>
       <CardContent>
         <Button 
           onClick={onClick} 
           disabled={loading !== null}
-          className="w-full bg-[#0081c9] hover:bg-[#006da8] text-white font-bold rounded-xl"
+          className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-xl"
         >
           {loading === icon ? <Loader2 className="animate-spin mr-2 h-4 w-4"/> : <DatabaseZap className="mr-2 h-4 w-4" />}
           Migrar ahora

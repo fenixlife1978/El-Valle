@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -100,7 +101,7 @@ export default function OwnerCertificatesPage() {
             toast({
                 title: 'Solicitud Enviada',
                 description: 'La administración de su condominio revisará su solicitud pronto.',
-                className: 'bg-blue-100 border-blue-400 text-blue-800'
+                className: 'bg-primary/20 border-primary'
             });
 
             setCertificateType('');
@@ -143,11 +144,11 @@ export default function OwnerCertificatesPage() {
     return (
         <div className="space-y-8">
             <div className="mb-10">
-                <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">
-                    Solicitud de <span className="text-[#0081c9]">Constancias</span>
+                <h2 className="text-4xl font-black text-foreground uppercase tracking-tighter italic drop-shadow-sm">
+                    Solicitud de <span className="text-primary">Constancias</span>
                 </h2>
                 <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
-                <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">
+                <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">
                     Genera una solicitud para tus documentos de residencia o solvencia.
                 </p>
             </div>
@@ -163,7 +164,7 @@ export default function OwnerCertificatesPage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                     <div className="p-4 bg-blue-100/50 border border-blue-300 rounded-md text-sm text-blue-800 flex items-start gap-2">
+                     <div className="p-4 bg-primary/10 border border-primary/20 rounded-md text-sm text-primary flex items-start gap-2">
                         <Info className="h-4 w-4 mt-0.5 shrink-0" />
                         <span>Su solicitud será procesada por la administración de su condominio.</span>
                     </div>

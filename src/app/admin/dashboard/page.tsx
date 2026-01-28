@@ -128,9 +128,9 @@ export default function AdminDashboardPage() {
 
     if (authLoading || loading) {
         return (
-            <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center">
-                <Loader2 className="h-10 w-10 animate-spin text-[#0081c9] mb-4" />
-                <p className="text-slate-500 font-black uppercase tracking-[0.3em] text-[10px]">Sincronizando Datos...</p>
+            <div className="min-h-screen bg-background flex flex-col items-center justify-center">
+                <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
+                <p className="text-muted-foreground font-black uppercase tracking-[0.3em] text-[10px]">Sincronizando Datos...</p>
             </div>
         );
     }
@@ -138,38 +138,38 @@ export default function AdminDashboardPage() {
     return (
         <div className="space-y-6">
             <div className="mb-10">
-                <h2 className="text-4xl font-black uppercase tracking-tighter italic drop-shadow-sm text-slate-900">
-                    Panel de <span className="text-[#0081c9]">Control</span>
+                <h2 className="text-4xl font-black uppercase tracking-tighter italic drop-shadow-sm text-foreground">
+                    Panel de <span className="text-primary">Control</span>
                 </h2>
                 <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
-                <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">
+                <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">
                     Resumen operativo y financiero en tiempo real.
                 </p>
             </div>
             
-            <div className="bg-white border border-slate-200 rounded-[2rem] p-4 shadow-sm">
+            <div className="bg-card border-border rounded-[2rem] p-4 shadow-sm">
                 <CarteleraDigital anuncios={anuncios} />
             </div>
 
             <div className="grid gap-6 md:grid-cols-3">
-                <Card className="bg-blue-100 border-none text-blue-800 shadow-md shadow-blue-500/10 rounded-[1.5rem]">
-                    <CardHeader className="pb-2"><CardTitle className="text-[10px] font-black uppercase tracking-widest opacity-80">Ingresos Aprobados (Mes)</CardTitle></CardHeader>
+                <Card className="bg-blue-900/20 border-blue-500/30 text-foreground shadow-md rounded-[1.5rem]">
+                    <CardHeader className="pb-2"><CardTitle className="text-[10px] font-black uppercase tracking-widest text-blue-400">Ingresos Aprobados (Mes)</CardTitle></CardHeader>
                     <CardContent>
                         <div className="text-3xl font-black">Bs. {formatToTwoDecimals(stats.monthlyIncome)}</div>
                         <p className="text-xs font-bold opacity-70 mt-1">Ref: ${formatToTwoDecimals(stats.monthlyIncomeUSD)} USD</p>
                     </CardContent>
                 </Card>
 
-                <Card className="bg-amber-100 border-none text-amber-800 shadow-md shadow-amber-500/10 rounded-[1.5rem]">
-                    <CardHeader className="pb-2"><CardTitle className="text-[10px] font-black uppercase tracking-widest opacity-80">Validaciones Pendientes</CardTitle></CardHeader>
+                <Card className="bg-amber-900/20 border-amber-500/30 text-foreground shadow-md rounded-[1.5rem]">
+                    <CardHeader className="pb-2"><CardTitle className="text-[10px] font-black uppercase tracking-widest text-amber-400">Validaciones Pendientes</CardTitle></CardHeader>
                     <CardContent>
                         <div className="text-3xl font-black">{stats.pendingPayments}</div>
                         <p className="text-xs font-bold opacity-70 mt-1">Pagos por revisar</p>
                     </CardContent>
                 </Card>
 
-                <Card className="bg-slate-100 border-none text-slate-800 shadow-md rounded-[1.5rem]">
-                    <CardHeader className="pb-2"><CardTitle className="text-[10px] font-black uppercase tracking-widest opacity-80">Total Propietarios</CardTitle></CardHeader>
+                <Card className="bg-secondary/50 border-border text-foreground shadow-md rounded-[1.5rem]">
+                    <CardHeader className="pb-2"><CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total Propietarios</CardTitle></CardHeader>
                     <CardContent>
                         <div className="text-3xl font-black">{stats.totalOwners}</div>
                         <p className="text-xs font-bold opacity-70 mt-1">Unidades registradas</p>
@@ -177,37 +177,37 @@ export default function AdminDashboardPage() {
                 </Card>
             </div>
 
-            <Card className="bg-white border-slate-100 text-slate-900 rounded-[2rem] overflow-hidden shadow-sm">
-                <CardHeader className="border-b border-slate-100 flex flex-row items-center justify-between">
-                    <CardTitle className="text-xs font-black uppercase tracking-widest text-[#0081c9]">Últimos Pagos Verificados</CardTitle>
-                    <Receipt className="w-4 h-4 text-slate-400" />
+            <Card className="bg-card border-border text-foreground rounded-[2rem] overflow-hidden shadow-sm">
+                <CardHeader className="border-b border-border/50 flex flex-row items-center justify-between">
+                    <CardTitle className="text-xs font-black uppercase tracking-widest text-primary">Últimos Pagos Verificados</CardTitle>
+                    <Receipt className="w-4 h-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent className="p-0">
                     <Table>
-                        <TableHeader className="bg-slate-50/50">
-                            <TableRow className="border-slate-100 hover:bg-transparent">
-                                <TableHead className="text-[10px] uppercase font-black text-slate-500">Propietario</TableHead>
-                                <TableHead className="text-[10px] uppercase font-black text-slate-500">Monto</TableHead>
-                                <TableHead className="text-[10px] uppercase font-black text-slate-500">Fecha Pago</TableHead>
+                        <TableHeader className="bg-secondary/30">
+                            <TableRow className="border-border/50 hover:bg-transparent">
+                                <TableHead className="text-[10px] uppercase font-black text-muted-foreground">Propietario</TableHead>
+                                <TableHead className="text-[10px] uppercase font-black text-muted-foreground">Monto</TableHead>
+                                <TableHead className="text-[10px] uppercase font-black text-muted-foreground">Fecha Pago</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {recentPayments.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={3} className="text-center py-16 text-slate-400 font-bold uppercase text-[10px] tracking-widest">
+                                    <TableCell colSpan={3} className="text-center py-16 text-muted-foreground font-bold uppercase text-[10px] tracking-widest">
                                         No se han detectado pagos aprobados recientemente
                                     </TableCell>
                                 </TableRow>
                             ) : (
                                 recentPayments.map(p => (
-                                    <TableRow key={p.id} className="border-slate-100 hover:bg-slate-50/30 transition-colors">
-                                        <TableCell className="font-bold text-xs uppercase tracking-tighter text-slate-700">
+                                    <TableRow key={p.id} className="border-border/50 hover:bg-secondary/20 transition-colors">
+                                        <TableCell className="font-bold text-xs uppercase tracking-tighter text-foreground">
                                             {p.ownerName || p.beneficiaries?.[0]?.ownerName || 'Residente'}
                                         </TableCell>
-                                        <TableCell className="text-[#0081c9] font-black italic">
+                                        <TableCell className="text-primary font-black italic">
                                             Bs. {formatToTwoDecimals(p.totalAmount)}
                                         </TableCell>
-                                        <TableCell className="text-[10px] font-bold text-slate-400 uppercase">
+                                        <TableCell className="text-[10px] font-bold text-muted-foreground uppercase">
                                             {p.paymentDate ? format(p.paymentDate.toDate(), 'dd MMM yyyy') : '---'}
                                         </TableCell>
                                     </TableRow>

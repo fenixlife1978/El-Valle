@@ -25,7 +25,7 @@ export default function PaymentMethodsPage() {
             toast({
                 title: `${fieldName} copiado`,
                 description: `El dato "${textToCopy}" ha sido copiado a tu portapapeles.`,
-                className: 'bg-green-100 border-green-400 text-green-800'
+                className: 'bg-primary/20 border-primary/50'
             });
         }).catch(err => {
             console.error('Error copying text: ', err);
@@ -52,11 +52,11 @@ export default function PaymentMethodsPage() {
     return (
         <div className="space-y-8">
             <div className="mb-10">
-                <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">
-                    Métodos de <span className="text-[#0081c9]">Pago</span>
+                <h2 className="text-4xl font-black text-foreground uppercase tracking-tighter italic drop-shadow-sm">
+                    Métodos de <span className="text-primary">Pago</span>
                 </h2>
                 <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
-                <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">
+                <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">
                     Datos bancarios para realizar tus pagos de condominio.
                 </p>
             </div>

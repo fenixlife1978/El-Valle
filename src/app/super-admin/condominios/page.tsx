@@ -57,30 +57,28 @@ export default function SuperAdminPage() {
 
   return (
     <div className="p-8 space-y-6 max-w-7xl mx-auto">
-      <div className="flex justify-between items-center">
         <div className="mb-10">
-          <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">
-            Panel <span className="text-[#0081c9]">Maestro</span>
-          </h2>
-          <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
-          <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">
-            Control total de acceso y condominios activos.
-          </p>
+            <h2 className="text-4xl font-black text-foreground uppercase tracking-tighter italic drop-shadow-sm">
+                Panel <span className="text-primary">Maestro</span>
+            </h2>
+            <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
+            <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">
+                Control total de acceso y condominios activos.
+            </p>
         </div>
-      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="border-l-4 border-l-blue-600 shadow-md">
+        <Card className="border-l-4 border-l-primary shadow-md">
           <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Condominios Totales</CardTitle></CardHeader>
           <CardContent><div className="text-3xl font-bold">{condos.length}</div></CardContent>
         </Card>
-        <Card className="border-l-4 border-l-green-600 shadow-md">
+        <Card className="border-l-4 border-l-success shadow-md">
           <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Servicios Activos</CardTitle></CardHeader>
-          <CardContent><div className="text-3xl font-bold text-green-600">{condos.filter(c => c.status === 'active').length}</div></CardContent>
+          <CardContent><div className="text-3xl font-bold text-success">{condos.filter(c => c.status === 'active').length}</div></CardContent>
         </Card>
-        <Card className="border-l-4 border-l-red-600 shadow-md">
+        <Card className="border-l-4 border-l-destructive shadow-md">
           <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Suspendidos / Deuda</CardTitle></CardHeader>
-          <CardContent><div className="text-3xl font-bold text-red-600">{condos.filter(c => c.status === 'suspended').length}</div></CardContent>
+          <CardContent><div className="text-3xl font-bold text-destructive">{condos.filter(c => c.status === 'suspended').length}</div></CardContent>
         </Card>
       </div>
 
@@ -103,10 +101,10 @@ export default function SuperAdminPage() {
                 <TableRow key={condo.id} className="hover:bg-muted/30 transition-colors">
                   <TableCell className="font-semibold text-lg">
                     <div className="flex items-center gap-2">
-                      <Building2 className="h-5 w-5 text-blue-500" /> {condo.nombre}
+                      <Building2 className="h-5 w-5 text-primary" /> {condo.nombre}
                     </div>
                   </TableCell>
-                  <TableCell><code className="bg-slate-100 px-2 py-1 rounded text-xs">{condo.id}</code></TableCell>
+                  <TableCell><code className="bg-secondary/50 px-2 py-1 rounded text-xs">{condo.id}</code></TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       {editingKey?.id === condo.id ? (
@@ -116,13 +114,13 @@ export default function SuperAdminPage() {
                             value={editingKey.key} 
                             onChange={(e) => setEditingKey({...editingKey, key: e.target.value})}
                           />
-                          <Button size="icon" variant="ghost" className="h-8 w-8 text-green-600" onClick={() => updateAccessKey(condo.id)}>
+                          <Button size="icon" variant="ghost" className="h-8 w-8 text-success" onClick={() => updateAccessKey(condo.id)}>
                             <Save className="h-4 w-4" />
                           </Button>
                         </>
                       ) : (
                         <>
-                          <span className="font-mono bg-yellow-50 px-2 py-1 border border-yellow-200 rounded">{condo.accessKey || 'SIN CLAVE'}</span>
+                          <span className="font-mono bg-amber-900/20 text-amber-300 px-2 py-1 border border-amber-500/30 rounded">{condo.accessKey || 'SIN CLAVE'}</span>
                           <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setEditingKey({id: condo.id, key: condo.accessKey})}>
                             <Key className="h-4 w-4" />
                           </Button>
@@ -131,7 +129,7 @@ export default function SuperAdminPage() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={condo.status === 'active' ? 'default' : 'destructive'} className="capitalize">
+                    <Badge variant={condo.status === 'active' ? 'success' : 'destructive'} className="capitalize">
                       {condo.status === 'active' ? 'En Línea' : 'Suspendido'}
                     </Badge>
                   </TableCell>

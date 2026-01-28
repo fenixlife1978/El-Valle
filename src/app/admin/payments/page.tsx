@@ -961,8 +961,8 @@ function ReportPaymentTab() {
                             </Collapsible>
                         </CardContent>
 
-                    <CardFooter className="bg-card/90 p-6 flex justify-end gap-4">
-                        <Button type="button" variant="ghost" onClick={resetForm} disabled={isSubmitting}>
+                    <CardFooter className="bg-background/10 p-6 flex justify-end gap-4">
+                        <Button type="button" variant="ghost" className="text-muted-foreground hover:text-white" onClick={resetForm} disabled={isSubmitting}>
                             CANCELAR
                         </Button>
                         <Button type="submit" className="bg-primary hover:bg-primary/90 text-primary-foreground px-6 py-6 text-base font-bold rounded-xl" disabled={isSubmitting}>
@@ -1007,15 +1007,16 @@ export default function PaymentsPage() {
     return (
         <div className="space-y-6">
             <div className="mb-10">
-                <h2 className="text-4xl font-black uppercase tracking-tighter italic drop-shadow-sm">
-                    Gestión de Pagos
+                 <h2 className="text-4xl font-black text-foreground uppercase tracking-tighter italic drop-shadow-sm">
+                    Gestión de <span className="text-primary">Pagos</span>
                 </h2>
+                <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
                 <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">
                     Registre, verifique y gestione los pagos de los propietarios.
                 </p>
             </div>
             <Tabs defaultValue="verify" className="w-full">
-                <TabsList className="grid w-full grid-cols-2 bg-transparent border-b border-border p-0">
+                <TabsList className="grid w-full grid-cols-2 bg-secondary/30 border-border p-0">
                     <TabsTrigger value="verify" className="rounded-none data-[state=active]:bg-card data-[state=active]:shadow-none data-[state=active]:font-bold">Verificar Pagos</TabsTrigger>
                     <TabsTrigger value="report" className="rounded-none data-[state=active]:bg-card data-[state=active]:shadow-none data-[state=active]:font-bold">Reportar Pago (Admin)</TabsTrigger>
                 </TabsList>

@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -111,7 +110,7 @@ export default function OwnerSettingsPage() {
             toast({
                 title: 'Perfil Actualizado',
                 description: 'Tu foto de perfil ha sido guardada.',
-                className: 'bg-blue-100 border-blue-400 text-blue-800'
+                className: 'bg-primary/20 border-primary'
             });
 
         } catch(error) {
@@ -139,11 +138,11 @@ export default function OwnerSettingsPage() {
         <div className="space-y-8 max-w-4xl mx-auto">
              
             <div className="mb-10">
-                <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">
-                    Configuración de <span className="text-[#0081c9]">Cuenta</span>
+                <h2 className="text-4xl font-black text-foreground uppercase tracking-tighter italic drop-shadow-sm">
+                    Configuración de <span className="text-primary">Cuenta</span>
                 </h2>
                 <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
-                <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">
+                <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">
                     Gestiona tu información personal y seguridad.
                 </p>
             </div>

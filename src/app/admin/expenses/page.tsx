@@ -121,32 +121,32 @@ function RegisterExpenseForm({ workingCondoId, onSave }: { workingCondoId: strin
   }
 
   return (
-    <Card className="bg-white border-none shadow-2xl rounded-[2.5rem] overflow-hidden">
-      <CardHeader className="bg-slate-50 pb-8">
-        <CardTitle className="flex items-center gap-3 text-slate-900 font-black uppercase italic">
-            <PlusCircle className="text-blue-600 h-6 w-6"/> Nuevo Registro de Egreso
+    <Card className="bg-card border-none shadow-2xl rounded-[2.5rem] overflow-hidden">
+      <CardHeader className="bg-secondary/20 pb-8">
+        <CardTitle className="flex items-center gap-3 text-foreground font-black uppercase italic">
+            <PlusCircle className="text-primary h-6 w-6"/> Nuevo Registro de Egreso
         </CardTitle>
-        <CardDescription className="font-bold text-slate-400">Complete los datos del comprobante o factura.</CardDescription>
+        <CardDescription className="font-bold text-muted-foreground">Complete los datos del comprobante o factura.</CardDescription>
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="p-8 space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Descripción del Gasto</label>
-                    <Input name="description" placeholder="Ej: PAGO DE VIGILANCIA" className="bg-slate-100 border-none h-14 rounded-2xl font-bold text-slate-900" required />
+                    <label className="text-[10px] font-black uppercase text-muted-foreground ml-2">Descripción del Gasto</label>
+                    <Input name="description" placeholder="Ej: PAGO DE VIGILANCIA" className="bg-input border-none h-14 rounded-2xl font-bold text-foreground" required />
                 </div>
                 <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Nº Factura / Referencia</label>
-                    <Input name="reference" placeholder="000123" className="bg-slate-100 border-none h-14 rounded-2xl font-bold text-slate-900" required />
+                    <label className="text-[10px] font-black uppercase text-muted-foreground ml-2">Nº Factura / Referencia</label>
+                    <Input name="reference" placeholder="000123" className="bg-input border-none h-14 rounded-2xl font-bold text-foreground" required />
                 </div>
                 <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Monto Bs.</label>
-                    <Input name="amount" type="number" step="0.01" className="bg-slate-100 border-none h-14 rounded-2xl font-bold text-blue-600 text-xl" required />
+                    <label className="text-[10px] font-black uppercase text-muted-foreground ml-2">Monto Bs.</label>
+                    <Input name="amount" type="number" step="0.01" className="bg-input border-none h-14 rounded-2xl font-bold text-primary text-xl" required />
                 </div>
                 <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Categoría</label>
+                    <label className="text-[10px] font-black uppercase text-muted-foreground ml-2">Categoría</label>
                     <Select name="category" required>
-                        <SelectTrigger className="bg-slate-100 border-none h-14 rounded-2xl font-bold text-slate-900">
+                        <SelectTrigger className="bg-input border-none h-14 rounded-2xl font-bold text-foreground">
                             <SelectValue placeholder="Seleccione Categoría" />
                         </SelectTrigger>
                         <SelectContent>
@@ -163,13 +163,13 @@ function RegisterExpenseForm({ workingCondoId, onSave }: { workingCondoId: strin
                     </Select>
                 </div>
                 <div className="space-y-2 md:col-span-2">
-                    <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Fecha del Movimiento</label>
-                    <Input name="date" type="date" defaultValue={format(new Date(), 'yyyy-MM-dd')} className="bg-slate-100 border-none h-14 rounded-2xl font-bold text-slate-900" required />
+                    <label className="text-[10px] font-black uppercase text-muted-foreground ml-2">Fecha del Movimiento</label>
+                    <Input name="date" type="date" defaultValue={format(new Date(), 'yyyy-MM-dd')} className="bg-input border-none h-14 rounded-2xl font-bold text-foreground" required />
                 </div>
             </div>
         </CardContent>
-        <CardFooter className="bg-slate-50 p-8">
-            <Button type="submit" disabled={loading || !workingCondoId} className="w-full h-16 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-2xl text-lg shadow-xl uppercase tracking-widest transition-all">
+        <CardFooter className="bg-secondary/20 p-8">
+            <Button type="submit" disabled={loading || !workingCondoId} className="w-full h-16 bg-primary hover:bg-primary/90 text-primary-foreground font-black rounded-2xl text-lg shadow-xl uppercase tracking-widest transition-all">
                 {loading ? <Loader2 className="mr-2 h-6 w-6 animate-spin"/> : <Save className="mr-2 h-6 w-6"/>}
                 Guardar Egreso
             </Button>
@@ -267,26 +267,23 @@ export default function ExpensesPage() {
     
     return (
         <div className="space-y-10 p-8 max-w-7xl mx-auto">
-            <div className="flex justify-between items-end">
-                <div className="space-y-2">
-                    <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic leading-none">
-                        Gestión de <span className="text-blue-600">Egresos</span>
-                    </h2>
-                    <div className="h-1.5 w-20 bg-yellow-400 rounded-full" />
-                    <p className="text-slate-400 font-bold text-[10px] uppercase flex items-center gap-2 pt-2">
-                        <Building2 className="h-3 w-3 text-blue-500"/>
-                        Condominio: <span className="text-slate-900">{workingCondoId || "---"}</span>
-                    </p>
-                </div>
+             <div className="mb-10">
+                <h2 className="text-4xl font-black text-foreground uppercase tracking-tighter italic drop-shadow-sm">
+                    Gestión de <span className="text-primary">Egresos</span>
+                </h2>
+                <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
+                <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">
+                    Registro y control de todos los gastos del condominio.
+                </p>
             </div>
 
             <RegisterExpenseForm workingCondoId={workingCondoId} onSave={() => {}} />
 
-            <Card className="rounded-[2.5rem] shadow-2xl overflow-hidden border-none bg-white">
-                <CardHeader className="border-b border-slate-50 p-8">
+            <Card className="rounded-[2.5rem] shadow-2xl overflow-hidden border-none bg-card">
+                <CardHeader className="border-b border-border/50 p-8">
                     <div className="flex justify-between items-center flex-wrap gap-4">
-                        <CardTitle className="text-slate-900 font-black uppercase italic flex items-center gap-2">
-                            <CreditCard className="text-blue-600"/> Historial de Movimientos
+                        <CardTitle className="text-foreground font-black uppercase italic flex items-center gap-2">
+                            <CreditCard className="text-primary"/> Historial de Movimientos
                         </CardTitle>
                         <div className="flex items-center gap-2">
                             <Select value={filterMonth} onValueChange={setFilterMonth}>
@@ -306,43 +303,43 @@ export default function ExpensesPage() {
                 </CardHeader>
                 <CardContent className="p-0">
                      {loading ? (
-                        <div className="flex justify-center items-center h-40"><Loader2 className="h-10 w-10 animate-spin text-blue-600"/></div>
+                        <div className="flex justify-center items-center h-40"><Loader2 className="h-10 w-10 animate-spin text-primary"/></div>
                     ) : (
                         <Table>
-                            <TableHeader className="bg-slate-900">
-                                <TableRow className="h-16 hover:bg-slate-900">
-                                    <TableHead className="text-white px-8 font-bold text-xs uppercase">Fecha</TableHead>
-                                    <TableHead className="text-white font-bold text-xs uppercase">Descripción</TableHead>
-                                    <TableHead className="text-white font-bold text-xs uppercase">Categoría</TableHead>
-                                    <TableHead className="text-right text-white font-bold text-xs uppercase">Monto (Bs.)</TableHead>
-                                    <TableHead className="text-right text-white px-8 font-bold text-xs uppercase">Acción</TableHead>
+                            <TableHeader className="bg-secondary/30">
+                                <TableRow className="h-16 hover:bg-transparent border-border/50">
+                                    <TableHead className="text-muted-foreground px-8 font-bold text-xs uppercase">Fecha</TableHead>
+                                    <TableHead className="text-muted-foreground font-bold text-xs uppercase">Descripción</TableHead>
+                                    <TableHead className="text-muted-foreground font-bold text-xs uppercase">Categoría</TableHead>
+                                    <TableHead className="text-right text-muted-foreground font-bold text-xs uppercase">Monto (Bs.)</TableHead>
+                                    <TableHead className="text-right text-muted-foreground px-8 font-bold text-xs uppercase">Acción</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {filteredExpenses.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={5} className="text-center py-20 text-slate-300 font-black uppercase italic tracking-widest">No hay egresos registrados para este período</TableCell>
+                                        <TableCell colSpan={5} className="text-center py-20 text-muted-foreground/50 font-black uppercase italic tracking-widest">No hay egresos registrados para este período</TableCell>
                                     </TableRow>
                                 ) : (
                                     filteredExpenses.map(expense => (
-                                        <TableRow key={expense.id} className="h-20 hover:bg-slate-50 transition-colors border-b border-slate-50">
-                                            <TableCell className="px-8 font-bold text-slate-500">
+                                        <TableRow key={expense.id} className="h-20 hover:bg-secondary/20 transition-colors border-b border-border/50">
+                                            <TableCell className="px-8 font-bold text-muted-foreground">
                                                 {expense.date ? format(expense.date.toDate(), 'dd/MM/yyyy') : '---'}
                                             </TableCell>
                                             <TableCell>
-                                                <p className="font-black text-slate-800 uppercase italic">{expense.description}</p>
-                                                <p className="text-[9px] text-slate-400 font-bold">REF: {expense.reference}</p>
+                                                <p className="font-black text-foreground uppercase italic">{expense.description}</p>
+                                                <p className="text-[9px] text-muted-foreground font-bold">REF: {expense.reference}</p>
                                             </TableCell>
                                             <TableCell>
-                                                <Badge className="bg-blue-50 text-blue-600 border-none shadow-none font-black text-[9px] uppercase px-3">
+                                                <Badge className="bg-primary/10 text-primary border-none shadow-none font-black text-[9px] uppercase px-3">
                                                     {expense.category}
                                                 </Badge>
                                             </TableCell>
-                                            <TableCell className="text-right font-black text-red-500 text-xl italic tracking-tighter">
+                                            <TableCell className="text-right font-black text-destructive text-xl italic tracking-tighter">
                                                 - Bs. {formatToTwoDecimals(expense.amount)}
                                             </TableCell>
                                             <TableCell className="text-right px-8">
-                                                <Button variant="ghost" size="icon" onClick={() => handleDelete(expense.id)} className="text-red-200 hover:text-red-600 hover:bg-red-50 rounded-full">
+                                                <Button variant="ghost" size="icon" onClick={() => handleDelete(expense.id)} className="text-red-300/50 hover:text-red-500 hover:bg-destructive/10 rounded-full">
                                                     <Trash2 className="h-5 w-5"/>
                                                 </Button>
                                             </TableCell>

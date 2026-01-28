@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -227,9 +226,14 @@ export default function OwnerPaymentCalculatorPage() {
     
     return (
         <div className="space-y-6">
-            <div>
-                <h1 className="text-3xl font-bold font-headline">Calculadora de Pagos</h1>
-                <p className="text-muted-foreground">Selecciona las deudas que deseas pagar para calcular el monto total.</p>
+            <div className="mb-10">
+                <h2 className="text-4xl font-black text-foreground uppercase tracking-tighter italic drop-shadow-sm">
+                    Calculadora de <span className="text-primary">Pagos</span>
+                </h2>
+                <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
+                <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">
+                    Selecciona las deudas que deseas pagar para calcular el monto total.
+                </p>
             </div>
             
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
@@ -298,7 +302,7 @@ export default function OwnerPaymentCalculatorPage() {
                                 </div>
                                 <div className="flex justify-between items-center text-md">
                                     <span className="text-muted-foreground flex items-center"><Minus className="mr-2 h-4 w-4"/> Saldo a Favor:</span>
-                                    <span className="font-medium text-green-500">Bs. {formatToTwoDecimals(paymentCalculator.balanceInFavor)}</span>
+                                    <span className="font-medium text-success">Bs. {formatToTwoDecimals(paymentCalculator.balanceInFavor)}</span>
                                 </div>
                                 <hr className="my-2"/>
                                 <div className="flex justify-between items-center text-2xl font-bold">

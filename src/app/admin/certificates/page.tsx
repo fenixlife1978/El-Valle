@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -447,11 +446,11 @@ export default function CertificatesPage() {
   return (
     <div className="space-y-8">
       <div className="mb-10">
-          <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">
-              Constancias y <span className="text-[#0081c9]">Permisos</span>
+          <h2 className="text-4xl font-black text-foreground uppercase tracking-tighter italic drop-shadow-sm">
+              Constancias y <span className="text-primary">Permisos</span>
           </h2>
           <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
-          <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">
+          <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">
               Generación y gestión de documentos para propietarios.
           </p>
       </div>
@@ -550,4 +549,3 @@ export default function CertificatesPage() {
     </div>
   );
 }
-

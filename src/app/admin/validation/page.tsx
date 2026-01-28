@@ -62,56 +62,56 @@ export default function ValidationPage() {
         }
     };
 
-    if (loading) return <div className="flex h-screen items-center justify-center bg-[#020617]"><Loader2 className="animate-spin text-[#0081c9] h-10 w-10" /></div>;
+    if (loading) return <div className="flex h-screen items-center justify-center bg-background"><Loader2 className="animate-spin text-primary h-10 w-10" /></div>;
 
     return (
         <div className="p-6 md:p-8 space-y-8">
             <div className="mb-10">
-                <h2 className="text-4xl font-black text-white uppercase tracking-tighter italic drop-shadow-sm">
-                    Control de <span className="text-[#0081c9]">Accesos</span>
+                <h2 className="text-4xl font-black text-foreground uppercase tracking-tighter italic drop-shadow-sm">
+                    Control de <span className="text-primary">Accesos</span>
                 </h2>
                 <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
-                <p className="text-slate-400 font-bold mt-3 text-sm uppercase tracking-wide">
+                <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">
                     {isSuperAdmin ? "Validación Global de Administradores" : "Aprobación de nuevos Residentes"}
                 </p>
             </div>
 
-            <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-sm">
+            <Card className="bg-card border-border backdrop-blur-sm">
                 <CardHeader>
-                    <CardTitle className="text-white flex items-center gap-2">
-                        <UserCheck className="text-[#0081c9]" /> 
+                    <CardTitle className="text-foreground flex items-center gap-2">
+                        <UserCheck className="text-primary" /> 
                         Solicitudes Pendientes
                     </CardTitle>
-                    <CardDescription className="text-slate-400">
+                    <CardDescription className="text-muted-foreground">
                         Solo los usuarios activos podrán visualizar balances y reportar pagos.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div className="rounded-md border border-slate-800 overflow-hidden">
+                    <div className="rounded-md border border-border overflow-hidden">
                         <Table>
-                            <TableHeader className="bg-slate-950">
-                                <TableRow className="border-slate-800">
-                                    <TableHead className="text-slate-400">Nombre / Propietario</TableHead>
-                                    <TableHead className="text-slate-400">Email</TableHead>
-                                    {isSuperAdmin && <TableHead className="text-slate-400">ID Condominio</TableHead>}
-                                    <TableHead className="text-right text-slate-400">Acción</TableHead>
+                            <TableHeader className="bg-secondary/30">
+                                <TableRow className="border-border">
+                                    <TableHead className="text-muted-foreground">Nombre / Propietario</TableHead>
+                                    <TableHead className="text-muted-foreground">Email</TableHead>
+                                    {isSuperAdmin && <TableHead className="text-muted-foreground">ID Condominio</TableHead>}
+                                    <TableHead className="text-right text-muted-foreground">Acción</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {pendingUsers.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={isSuperAdmin ? 4 : 3} className="text-center py-12 text-slate-600 font-bold italic">
+                                        <TableCell colSpan={isSuperAdmin ? 4 : 3} className="text-center py-12 text-muted-foreground font-bold italic">
                                             No hay registros esperando aprobación en este momento.
                                         </TableCell>
                                     </TableRow>
                                 ) : (
                                     pendingUsers.map((u) => (
-                                        <TableRow key={u.id} className="border-slate-800 hover:bg-slate-800/30 transition-colors">
-                                            <TableCell className="text-white font-bold uppercase text-sm tracking-tight">{u.name || '---'}</TableCell>
-                                            <TableCell className="text-slate-400 font-mono text-xs">{u.email}</TableCell>
+                                        <TableRow key={u.id} className="border-border hover:bg-secondary/20 transition-colors">
+                                            <TableCell className="text-foreground font-bold uppercase text-sm tracking-tight">{u.name || '---'}</TableCell>
+                                            <TableCell className="text-muted-foreground font-mono text-xs">{u.email}</TableCell>
                                             {isSuperAdmin && (
                                                 <TableCell>
-                                                    <Badge variant="outline" className="text-amber-500 border-amber-500/30 bg-amber-500/5">
+                                                    <Badge variant="outline" className="text-amber-400 border-amber-500/30 bg-amber-900/20">
                                                         <Building className="h-3 w-3 mr-1" /> {u.condoId || 'Sin ID'}
                                                     </Badge>
                                                 </TableCell>
@@ -119,7 +119,7 @@ export default function ValidationPage() {
                                             <TableCell className="text-right space-x-2">
                                                 <Button 
                                                     size="sm" 
-                                                    className="bg-green-600 hover:bg-green-500 text-white font-bold"
+                                                    className="bg-success hover:bg-success/90 text-success-foreground font-bold"
                                                     onClick={() => handleAction(u.id, 'active')}
                                                 >
                                                     Activar
@@ -127,7 +127,7 @@ export default function ValidationPage() {
                                                 <Button 
                                                     size="sm" 
                                                     variant="ghost" 
-                                                    className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                                                    className="text-destructive/80 hover:text-destructive hover:bg-destructive/10"
                                                     onClick={() => handleAction(u.id, 'rejected')}
                                                 >
                                                     Rechazar
