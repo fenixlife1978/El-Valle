@@ -25,7 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Textarea } from '@/components/ui/textarea';
+import { Textarea } from "@/components/ui/textarea";
 
 
 // --- Type Definitions ---
@@ -179,7 +179,7 @@ export default function FinancialBalancePage() {
     }, [selectedYear, selectedMonth, workingCondoId, toast]);
 
     useEffect(() => {
-        handleSyncData(false);
+        if(workingCondoId) handleSyncData(false);
     }, [selectedMonth, selectedYear, workingCondoId, handleSyncData]);
     
     useEffect(() => {
@@ -217,6 +217,7 @@ export default function FinancialBalancePage() {
     
     const generatePDF = async () => {
         if (!workingCondoId) return;
+        
         const info = companyInfo || {
             name: "EFAS CondoSys", rif: "J-00000000-0", address: "Administración", phone: "Soporte", logo: ""
         };
@@ -291,7 +292,7 @@ export default function FinancialBalancePage() {
             { label: '(+) Total Ingresos del Mes', value: formatCurrency(estadoFinal.totalIngresos), color: [34,197,94] },
             { label: '(-) Total Gastos del Mes', value: formatCurrency(estadoFinal.totalEgresos), color: [239,68,68] },
             { label: 'Saldo Total en Bancos', value: formatCurrency(estadoFinal.saldoBancos), bold: true },
-            { label: 'Saldo en Caja Chica (Efectivo)', value: formatCurrency(estadoFinal.saldoCajaChica) },
+            { label: 'Saldo en Caja Chica (Efectivo)', value: formatCurrency(cajaChica.saldoFinal) },
             { label: 'DISPONIBILIDAD TOTAL', value: `Bs. ${formatCurrency(estadoFinal.disponibilidadTotal)}`, bold: true, highlight: true },
         ];
         docPDF.setFontSize(11).setFont('helvetica', 'bold').text("4. Estado de Cuenta Final", margin, startY);
@@ -302,7 +303,10 @@ export default function FinancialBalancePage() {
                 docPDF.roundedRect(margin, startY - 4, pageWidth - (margin * 2), 9, 3, 3, 'F');
             }
             if(item.color) {
-                docPDF.setTextColor(item.color[0], item.color[1], item.color[2]);
+                const r = item.color[0]
+                const g = item.color[1]
+                const b = item.color[2]
+                docPDF.setTextColor(r, g, b);
             }
             docPDF.setFontSize(10).setFont('helvetica', item.bold ? 'bold' : 'normal').text(item.label, margin + 5, startY);
             docPDF.text(item.value, pageWidth - margin - 5, startY, { align: 'right' });
@@ -326,8 +330,9 @@ export default function FinancialBalancePage() {
     // This useEffect will run once on mount to set the initial loading state.
     useEffect(() => {
         setLoading(true);
-        handleSyncData(false).finally(() => setLoading(false));
-    }, []);
+        if(workingCondoId) handleSyncData(false).finally(() => setLoading(false));
+        else setLoading(false);
+    }, [workingCondoId]);
 
     if (loading && !syncing) return <div className="flex h-[80vh] items-center justify-center"><Loader2 className="animate-spin text-blue-500 h-12 w-12" /></div>;
 
