@@ -29,13 +29,20 @@ import { useToast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
 
 // --- Type Definitions ---
+interface FinancialItem {
+    concepto: string;
+    monto: number;
+    dia: string;
+    categoria: string;
+}
+
 interface IncomeItem {
     concepto: string;
     estimado: number;
     real: number;
-    categoria?: string; // Add this for PDF generation if needed
-    dia?: string; // Add this
-    monto?: number; // Add this
+    categoria?: string;
+    dia?: string;
+    monto?: number;
 }
 
 interface ExpenseItem {
@@ -43,8 +50,8 @@ interface ExpenseItem {
     descripcion: string;
     pago: string;
     monto: number;
-    dia?: string; // Add this
-    concepto?: string; // Add this
+    dia?: string;
+    concepto?: string;
 }
 
 interface PettyCashSummary {
@@ -105,6 +112,8 @@ export default function FinancialBalancePage() {
     const [estadoFinal, setEstadoFinal] = useState<FinalStatement>({ saldoAnterior: 0, totalIngresos: 0, totalEgresos: 0, saldoBancos: 0, saldoCajaChica: 0, disponibilidadTotal: 0 });
     const [notas, setNotas] = useState('');
     
+    const workingCondoId = activeCondoId;
+
     const handleIncomeChange = (index: number, value: string) => {
         const newIngresos = [...ingresos];
         newIngresos[index].real = parseFloat(value) || 0;
@@ -112,7 +121,7 @@ export default function FinancialBalancePage() {
     };
 
     const handleSyncData = useCallback(async (showToast = true) => {
-        if (!activeCondoId) return;
+        if (!workingCondoId) return;
         setSyncing(true);
         if(showToast) toast({ title: "Sincronizando...", description: "Cargando datos del período." });
 
@@ -122,11 +131,11 @@ export default function FinancialBalancePage() {
             
             const prevPeriodDate = subMonths(currentPeriodStart, 1);
             const prevPeriodId = format(prevPeriodDate, 'yyyy-MM');
-            const prevStatementSnap = await getDoc(doc(db, 'condominios', activeCondoId, 'financial_statements', prevPeriodId));
+            const prevStatementSnap = await getDoc(doc(db, 'condominios', workingCondoId, 'financial_statements', prevPeriodId));
             const saldoAnterior = prevStatementSnap.exists() ? (prevStatementSnap.data() as FinancialStatementDoc).estadoFinal.disponibilidadTotal : 0;
             
             // 1. Sincronizar Pagos (Ingresos)
-            const paymentsQuery = query(collection(db, 'condominios', activeCondoId, 'payments'), 
+            const paymentsQuery = query(collection(db, 'condominios', workingCondoId, 'payments'), 
                 where('status', '==', 'aprobado'), 
                 where('paymentDate', '>=', currentPeriodStart), 
                 where('paymentDate', '<=', currentPeriodEnd)
@@ -137,7 +146,7 @@ export default function FinancialBalancePage() {
             setIngresos(prev => prev.map(item => item.concepto === 'Ingresos x Cuotas de Condominio' ? {...item, real: totalPayments} : item));
 
             // 2. Sincronizar Gastos (Egresos)
-            const expensesQuery = query(collection(db, 'condominios', activeCondoId, 'gastos'),
+            const expensesQuery = query(collection(db, 'condominios', workingCondoId, 'gastos'),
                 where('date', '>=', currentPeriodStart),
                 where('date', '<=', currentPeriodEnd)
             );
@@ -156,7 +165,7 @@ export default function FinancialBalancePage() {
             setEgresos(syncedEgresos);
             
             // 3. Sincronizar Caja Chica (CON CORRECCIÓN DE TIPOS)
-            const allMovementsSnap = await getDocs(query(collection(db, 'condominios', activeCondoId, 'cajaChica_movimientos')));
+            const allMovementsSnap = await getDocs(query(collection(db, 'condominios', workingCondoId, 'cajaChica_movimientos')));
             
             const movements = allMovementsSnap.docs.map(d => {
                 const data = d.data();
@@ -191,7 +200,7 @@ export default function FinancialBalancePage() {
         } finally {
             setSyncing(false);
         }
-    }, [selectedYear, selectedMonth, activeCondoId, toast]);
+    }, [selectedYear, selectedMonth, workingCondoId, toast]);
 
     useEffect(() => {
         if(activeCondoId) {
@@ -200,7 +209,8 @@ export default function FinancialBalancePage() {
         } else {
             setLoading(false);
         }
-    }, [selectedMonth, selectedYear, activeCondoId, handleSyncData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedMonth, selectedYear, activeCondoId]);
     
     useEffect(() => {
         const totalIngresos = ingresos.reduce((sum, item) => sum + item.real, 0);
@@ -218,11 +228,10 @@ export default function FinancialBalancePage() {
     }, [ingresos, egresos, cajaChica.saldoFinal, estadoFinal.saldoAnterior]);
 
     const handleSaveStatement = async () => {
-        if (!activeCondoId) return;
+        if (!workingCondoId) return;
         setLoading(true);
         const periodId = `${selectedYear}-${selectedMonth.padStart(2, '0')}`;
         
-        // Ensure ingresos has all needed fields for PDF
         const finalIngresos = ingresos.map(i => ({
             ...i,
             dia: format(new Date(), 'dd/MM/yyyy'),
@@ -241,7 +250,7 @@ export default function FinancialBalancePage() {
             companyInfo,
         };
         try {
-            await setDoc(doc(db, 'condominios', activeCondoId, 'financial_statements', periodId), statementData);
+            await setDoc(doc(db, 'condominios', workingCondoId, 'financial_statements', periodId), statementData);
             toast({ title: "Balance Guardado", description: "El cierre del período se ha guardado exitosamente." });
         } catch(e) {
             toast({ variant: "destructive", title: "Error al guardar." });
@@ -264,6 +273,7 @@ export default function FinancialBalancePage() {
         docPDF.setTextColor(255, 255, 255);
         docPDF.setFontSize(22).setFont('helvetica', 'bold').text("EFAS CondoSys", margin, 20);
         docPDF.setFontSize(10).setFont('helvetica', 'normal').text("SISTEMA DE GESTIÓN FINANCIERA", margin, 28);
+        
         docPDF.setFontSize(9);
         docPDF.text(info.name, pageWidth - margin, 15, { align: 'right' });
         docPDF.text(info.rif, pageWidth - margin, 20, { align: 'right' });
