@@ -139,13 +139,12 @@ export default function FinancialBalancePage() {
             setIngresos(prev => prev.map(item => item.concepto === 'Ingresos x Cuotas de Condominio' ? {...item, real: totalPayments} : item));
 
             // 2. Sincronizar Gastos (Egresos)
-            const mainExpensesQuery = query(collection(db, 'condominios', workingCondoId, 'gastos'),
+            const expensesQuery = query(collection(db, 'condominios', workingCondoId, 'gastos'),
                 where('date', '>=', currentPeriodStart),
-                where('date', '<=', currentPeriodEnd),
-                where('category', '!=', 'Caja Chica')
+                where('date', '<=', currentPeriodEnd)
             );
-            const mainExpensesSnap = await getDocs(mainExpensesQuery);
-            const syncedMainEgresos = mainExpensesSnap.docs.map(doc => {
+            const expensesSnap = await getDocs(expensesQuery);
+            const syncedEgresos = expensesSnap.docs.map(doc => {
                 const data = doc.data();
                 return {
                     categoria: data.category,
@@ -156,27 +155,7 @@ export default function FinancialBalancePage() {
                     concepto: data.description,
                 };
             });
-
-            const pettyCashExpensesQuery = query(collection(db, 'condominios', workingCondoId, 'cajaChica_movimientos'),
-                where('type', '==', 'egreso'),
-                where('date', '>=', currentPeriodStart),
-                where('date', '<=', currentPeriodEnd)
-            );
-            const pettyCashExpensesSnap = await getDocs(pettyCashExpensesQuery);
-            const syncedPettyCashEgresos = pettyCashExpensesSnap.docs.map(doc => {
-                const data = doc.data();
-                return {
-                    categoria: 'Caja Chica',
-                    descripcion: data.description,
-                    pago: 'Efectivo',
-                    monto: data.amount,
-                    dia: format(data.date.toDate(), 'dd/MM/yyyy'),
-                    concepto: data.description,
-                };
-            });
-            
-            const combinedEgresos = [...syncedMainEgresos, ...syncedPettyCashEgresos];
-            setEgresos(combinedEgresos);
+            setEgresos(syncedEgresos);
             
             // 3. Sincronizar Caja Chica (CON CORRECCIÓN DE TIPOS)
             const allMovementsSnap = await getDocs(query(collection(db, 'condominios', workingCondoId, 'cajaChica_movimientos')));
@@ -229,8 +208,7 @@ export default function FinancialBalancePage() {
         } else {
             setLoading(false);
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedMonth, selectedYear, activeCondoId]);
+    }, [selectedMonth, selectedYear, activeCondoId, handleSyncData]);
     
     useEffect(() => {
         const totalIngresos = ingresos.reduce((sum, item) => sum + item.real, 0);
@@ -354,8 +332,8 @@ export default function FinancialBalancePage() {
         
         const finalStatementData = [
             { label: 'Saldo Inicial (Mes Anterior)', value: formatCurrency(estadoFinal.saldoAnterior) },
-            { label: '(+) Total Ingresos del Mes', value: formatCurrency(estadoFinal.totalIngresos), color: [34,197,94] },
-            { label: '(-) Total Gastos del Mes', value: formatCurrency(estadoFinal.totalEgresos), color: [239,68,68] },
+            { label: '(+) Total Ingresos del Mes', value: formatCurrency(estadoFinal.totalIngresos), color: [34,197,94] as const },
+            { label: '(-) Total Gastos del Mes', value: formatCurrency(estadoFinal.totalEgresos), color: [239,68,68] as const },
             { label: 'Saldo Total en Bancos', value: formatCurrency(estadoFinal.saldoBancos), bold: true },
             { label: 'Saldo en Caja Chica (Efectivo)', value: formatCurrency(cajaChica.saldoFinal) },
             { label: 'DISPONIBILIDAD TOTAL', value: `Bs. ${formatCurrency(estadoFinal.disponibilidadTotal)}`, bold: true, highlight: true },
@@ -368,7 +346,7 @@ export default function FinancialBalancePage() {
                 docPDF.roundedRect(margin, startY - 4, pageWidth - (margin * 2), 9, 3, 3, 'F');
             }
             if(item.color) {
-                docPDF.setTextColor.apply(docPDF, item.color);
+                docPDF.setTextColor(...item.color);
             }
             docPDF.setFontSize(10).setFont('helvetica', item.bold ? 'bold' : 'normal').text(item.label, margin + 5, startY);
             docPDF.text(item.value, pageWidth - margin - 5, startY, { align: 'right' });
