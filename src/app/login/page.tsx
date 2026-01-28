@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
@@ -48,7 +49,6 @@ function LoginPage() {
         console.log("--- Iniciando Proceso de Login EFAS ---");
 
         try {
-            // 1. BYPASS SUPER ADMIN (Tu acceso directo)
             if (cleanEmail === ADMIN_EMAIL) {
                 console.log("Detectado Super Admin. Redirigiendo...");
                 await signInWithEmailAndPassword(auth, cleanEmail, password);
@@ -57,22 +57,18 @@ function LoginPage() {
                 return;
             }
 
-            // 2. AUTENTICACIÓN FIREBASE
             const userCredential = await signInWithEmailAndPassword(auth, cleanEmail, password);
             const user = userCredential.user;
             console.log("Auth exitosa. UID:", user.uid);
 
-            // 3. BÚSQUEDA DE PERFIL EN FIRESTORE
             let userData = null;
             
-            // Intento 1: Colección 'owners' (Donde están la mayoría de tus admins/propietarios)
             const ownerDoc = await getDoc(doc(db, "owners", user.uid));
             
             if (ownerDoc.exists()) {
                 userData = ownerDoc.data();
                 console.log("Datos encontrados en 'owners'");
             } else {
-                // Intento 2: Colección 'users' (Respaldo por si se guardaron allí)
                 const userDoc = await getDoc(doc(db, "users", user.uid));
                 if (userDoc.exists()) {
                     userData = userDoc.data();
@@ -80,7 +76,6 @@ function LoginPage() {
                 }
             }
 
-            // 4. VALIDACIONES DE PERFIL Y ROL
             if (!userData) {
                 console.error("No se encontró el perfil en Firestore para el UID:", user.uid);
                 throw new Error("user-not-found");
@@ -94,7 +89,6 @@ function LoginPage() {
                 throw new Error("role-mismatch");
             }
 
-            // 5. REDIRECCIÓN SEGÚN ROL
             toast({ title: 'Acceso Concedido', description: `Iniciando sesión como ${dbRole}...` });
             
             if (role === 'admin') {
@@ -121,29 +115,28 @@ function LoginPage() {
    
     if (!role) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-[#020617]">
+            <div className="min-h-screen flex items-center justify-center bg-slate-50">
                 <Loader2 className="h-8 w-8 animate-spin text-[#0081c9]" />
             </div>
         );
     }
 
     return (
-        <main className="min-h-screen flex flex-col items-center justify-center bg-[#020617] p-4 font-montserrat relative overflow-hidden">
-            {/* Fondo con gradientes sutiles */}
-            <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-[#0081c9]/10 blur-[100px] rounded-full"></div>
-            <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-[#f59e0b]/5 blur-[100px] rounded-full"></div>
+        <main className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-4 font-montserrat relative overflow-hidden">
+            <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 blur-[100px] rounded-full"></div>
+            <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-amber-500/5 blur-[100px] rounded-full"></div>
 
             <div className="text-center mb-8 relative z-10">
-                 <h1 className="text-4xl font-black italic uppercase tracking-tighter">
+                 <h1 className="text-4xl font-black italic uppercase tracking-tighter text-slate-800">
                     <span className="text-[#f59e0b]">EFAS</span>
                     <span className="text-[#0081c9]"> CondoSys</span>
                 </h1>
-                <p className="text-[9px] text-slate-500 font-black tracking-[0.4em] uppercase mt-2 italic">Autogestión de Condominios</p>
+                <p className="text-[9px] text-slate-400 font-black tracking-[0.4em] uppercase mt-2 italic">Autogestión de Condominios</p>
             </div>
 
-            <Card className="w-full max-w-sm border-slate-800 shadow-2xl rounded-[2.5rem] overflow-hidden bg-slate-900/50 backdrop-blur-xl text-white relative z-10">
+            <Card className="w-full max-w-sm border-slate-200 shadow-2xl rounded-[2.5rem] overflow-hidden bg-white/80 backdrop-blur-xl text-slate-800 relative z-10">
                 <CardHeader className="text-center pb-2 pt-8">
-                    <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-sky-500/10 text-sky-400 text-[10px] font-black uppercase tracking-wider mb-2 mx-auto border border-sky-500/20">
+                    <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-blue-100 text-blue-700 text-[10px] font-black uppercase tracking-wider mb-2 mx-auto border border-blue-200">
                         <AlertCircle className="w-3.5 h-3.5" /> Acceso {role === 'admin' ? 'Administrativo' : 'Propietario'}
                     </div>
                 </CardHeader>
@@ -151,10 +144,10 @@ function LoginPage() {
                 <form onSubmit={handleLogin}>
                     <CardContent className="space-y-5 pt-4 px-8">
                         <div className="space-y-2">
-                            <Label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">E-mail Corporativo</Label>
+                            <Label className="text-[10px] font-black uppercase text-slate-500 ml-1 tracking-widest">E-mail</Label>
                             <Input 
                                 type="email" 
-                                className="h-12 rounded-2xl border-slate-700 bg-slate-950/50 text-white focus-visible:ring-[#0081c9] transition-all"
+                                className="h-12 rounded-2xl border-slate-200 bg-slate-100 text-slate-800 focus-visible:ring-[#0081c9] transition-all"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
@@ -162,11 +155,11 @@ function LoginPage() {
                         </div>
 
                         <div className="space-y-2">
-                            <Label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Contraseña</Label>
+                            <Label className="text-[10px] font-black uppercase text-slate-500 ml-1 tracking-widest">Contraseña</Label>
                             <div className="relative">
                                 <Input 
                                     type={showPassword ? "text" : "password"}
-                                    className="h-12 rounded-2xl border-slate-700 bg-slate-950/50 text-white focus-visible:ring-[#0081c9] pr-12 transition-all"
+                                    className="h-12 rounded-2xl border-slate-200 bg-slate-100 text-slate-800 focus-visible:ring-[#0081c9] pr-12 transition-all"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
                                     required
@@ -174,7 +167,7 @@ function LoginPage() {
                                 <button 
                                     type="button" 
                                     onClick={() => setShowPassword(!showPassword)} 
-                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors"
+                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-800 transition-colors"
                                 >
                                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                                 </button>
@@ -183,7 +176,7 @@ function LoginPage() {
                     </CardContent>
 
                     <CardFooter className="flex flex-col gap-4 pb-10 pt-6 px-8">
-                        <Button type="submit" disabled={loading} className="w-full h-14 bg-[#0081c9] hover:bg-sky-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-sky-900/20 transition-all">
+                        <Button type="submit" disabled={loading} className="w-full h-14 bg-[#0081c9] hover:bg-sky-700 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-sky-500/20 transition-all">
                             {loading ? <Loader2 className="animate-spin w-5 h-5" /> : 'Acceder al Sistema'}
                         </Button>
                         <div className="flex justify-between w-full px-1">
@@ -195,7 +188,7 @@ function LoginPage() {
                             </Link>
                             <Link 
                                 href="/welcome" 
-                                className="text-[10px] font-black uppercase text-slate-500 hover:text-[#f59e0b] tracking-[0.2em] transition-colors"
+                                className="text-[10px] font-black uppercase text-slate-400 hover:text-[#f59e0b] tracking-[0.2em] transition-colors"
                             >
                                 ← Volver
                             </Link>
@@ -210,7 +203,7 @@ function LoginPage() {
 export default function LoginPageWithSuspense() {
     return (
         <Suspense fallback={
-            <div className="min-h-screen flex items-center justify-center bg-[#020617]">
+            <div className="min-h-screen flex items-center justify-center bg-slate-50">
                 <Loader2 className="h-8 w-8 animate-spin text-[#0081c9]" />
             </div>
         }>

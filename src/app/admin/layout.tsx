@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -75,20 +76,16 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         const mode = localStorage.getItem('support_condo_id');
         setSupportCondoId(mode);
 
-        // SOLO validamos cuando loading es false Y ya tenemos el rol (o estamos seguros de que no vendrá)
         if (!loading) {
-            // Si no hay usuario en absoluto
             if (!user) {
                 router.replace('/login?role=admin');
                 return;
             }
 
-            // Normalizamos el rol para evitar fallos por mayúsculas
             const userRole = role?.toLowerCase();
             const isSuperAdmin = user.email === 'vallecondo@gmail.com';
             const isAdmin = userRole === 'administrador' || userRole === 'super-admin';
 
-            // Si ya cargó y definitivamente no tiene acceso
             if (!isSuperAdmin && !isAdmin) {
                 console.warn("Acceso denegado: Usuario sin rol administrativo");
                 router.replace('/welcome');
@@ -101,15 +98,13 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         router.push('/super-admin');
     };
 
-    // Lógica de visualización
     const isSuperAdmin = user?.email === 'vallecondo@gmail.com';
     const isAdmin = role?.toLowerCase() === 'administrador' || role?.toLowerCase() === 'super-admin';
     const authorized = isSuperAdmin || isAdmin;
 
-    // Mientras carga o si no está autorizado, mostramos la pantalla de carga
     if (loading || !user || !authorized) {
         return (
-            <div className="flex h-screen w-full flex-col items-center justify-center bg-[#020617]">
+            <div className="flex h-screen w-full flex-col items-center justify-center bg-slate-50">
                 <Loader2 className="h-10 w-10 animate-spin text-[#0081c9]" />
                 <p className="ml-2 mt-4 text-slate-500 font-black text-[10px] uppercase tracking-[0.3em] italic">
                     EFAS CondoSys: Validando...
@@ -119,7 +114,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     }
 
     return (
-        <div className="flex flex-col min-h-screen bg-[#020617]">
+        <div className="flex flex-col min-h-screen bg-slate-50">
             {supportCondoId && (
                 <div className="bg-[#f59e0b] text-[#020617] py-2 px-4 shadow-lg border-b border-amber-600 flex justify-between items-center z-[110] sticky top-0">
                     <div className="flex items-center gap-3">
@@ -149,7 +144,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                     navItems={adminNavItems} 
                     mobileNavItems={adminNavItems}
                 >
-                    {/* Contenedor blanco para el contenido */}
                     <div className="pb-24 sm:pb-8 px-4 sm:px-6 pt-6 bg-slate-50 min-h-full rounded-t-[2.5rem] sm:rounded-none">
                         {children}
                     </div>

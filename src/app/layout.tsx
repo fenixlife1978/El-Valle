@@ -1,3 +1,4 @@
+
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
@@ -28,7 +29,6 @@ function AuthGuard({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (loading) return;
     
-    // Si eres Super Admin, tienes paso libre por toda la app
     if (isSuperAdmin) return;
 
     const isPublic = publicPaths.includes(pathname);
@@ -48,7 +48,7 @@ function AuthGuard({ children }: { children: ReactNode }) {
 
   if (loading) {
     return (
-      <div className="flex h-screen w-full items-center justify-center bg-[#020617]">
+      <div className="flex h-screen w-full items-center justify-center bg-slate-50">
         <div className="text-center">
             <Loader2 className="h-10 w-10 animate-spin text-[#0081c9] mx-auto" />
             <p className="mt-6 font-black italic tracking-tighter text-3xl uppercase font-montserrat">
@@ -92,12 +92,12 @@ export default function RootLayout({
           <AuthorizationProvider>
             <ThemeProvider
               attribute="class"
-              defaultTheme="dark"
+              defaultTheme="light"
               enableSystem={false}
               disableTransitionOnChange
             >
               <AuthGuard>
-                <div className="min-h-screen bg-[#020617] text-slate-200">
+                <div className="min-h-screen bg-slate-50 text-slate-800">
                     {children}
                 </div>
               </AuthGuard>

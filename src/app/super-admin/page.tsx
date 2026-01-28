@@ -48,7 +48,6 @@ export default function SuperAdminPage() {
         registrationKey: `KEY-${Math.floor(1000 + Math.random() * 9000)}`,
         status: 'active',
         createdAt: new Date().toISOString(),
-        // CAMPOS BASE PARA EVITAR ERRORES EN EL HEADER
         rif: "", 
         logo: "", 
         direccion: "",
@@ -80,7 +79,7 @@ export default function SuperAdminPage() {
   };
 
   if (loading) return (
-    <div className="flex h-screen items-center justify-center bg-slate-950">
+    <div className="flex h-screen items-center justify-center bg-slate-50">
         <Loader2 className="animate-spin text-amber-500 h-10 w-10" />
     </div>
   );
@@ -98,14 +97,14 @@ export default function SuperAdminPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button onClick={() => signOut(auth)} className="bg-red-800 hover:bg-red-900 text-white font-bold rounded-xl px-6 uppercase italic">
+          <Button onClick={() => signOut(auth)} className="bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl px-6 uppercase italic">
             <LogOut className="w-4 h-4 mr-2" /> Salir
           </Button>
         </div>
       </div>
 
       <div className="max-w-6xl mx-auto mb-10">
-        <div className="bg-[#0f172a] text-white p-3 rounded-t-3xl flex items-center gap-2">
+        <div className="bg-slate-800 text-white p-3 rounded-t-3xl flex items-center gap-2">
           <span className="text-orange-500 font-bold ml-4">+</span>
           <span className="text-[11px] font-black uppercase tracking-wider">Activar Nuevo Condominio</span>
         </div>
@@ -114,9 +113,9 @@ export default function SuperAdminPage() {
             placeholder="Nombre del Condominio" 
             value={newCondoName}
             onChange={(e) => setNewCondoName(e.target.value)}
-            className="flex-1 bg-slate-50 border-slate-200 h-14 rounded-2xl px-6 font-bold"
+            className="flex-1 bg-slate-100 border-slate-200 h-14 rounded-2xl px-6 font-bold"
           />
-          <Button onClick={handleCreate} className="bg-[#58b1e1] hover:bg-[#409cd0] text-slate-800 font-black h-14 px-12 rounded-2xl uppercase italic">
+          <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700 text-white font-black h-14 px-12 rounded-2xl uppercase italic">
             Activar Servicio
           </Button>
         </div>
@@ -141,7 +140,7 @@ export default function SuperAdminPage() {
                   ) : (
                     <>
                       <div className="font-black text-slate-700 uppercase italic leading-none">{condo.name || condo.nombre}</div>
-                      <div className="text-[10px] font-bold text-blue-400 mt-1">{condo.id}</div>
+                      <div className="text-[10px] font-bold text-blue-500 mt-1">{condo.id}</div>
                     </>
                   )}
                 </td>
@@ -149,7 +148,7 @@ export default function SuperAdminPage() {
                   {editingId === condo.id ? (
                     <Input value={editForm.key} onChange={(e) => setEditForm({...editForm, key: e.target.value})} className="h-10 font-mono" />
                   ) : (
-                    <span className="font-mono text-xs font-black text-slate-400 bg-slate-100 px-2 py-1 rounded">{condo.registrationKey}</span>
+                    <span className="font-mono text-xs font-black text-slate-500 bg-slate-100 px-2 py-1 rounded">{condo.registrationKey}</span>
                   )}
                 </td>
                 <td className="p-8">
@@ -165,8 +164,8 @@ export default function SuperAdminPage() {
                       <Button onClick={() => handleSupport(condo.id)} variant="outline" className="border-slate-200 font-black text-[10px] uppercase rounded-xl h-10">
                         <Settings2 className="w-3 h-3 mr-2" /> Gestionar
                       </Button>
-                      <Button onClick={() => { setEditingId(condo.id); setEditForm({ name: condo.name || condo.nombre, key: condo.registrationKey }); }} variant="ghost" size="icon" className="text-slate-400"><Edit2 className="w-4 h-4" /></Button>
-                      <Button onClick={() => deleteDoc(doc(db, 'condominios', condo.id))} variant="ghost" size="icon" className="text-slate-200 hover:text-red-500"><Trash2 className="w-4 h-4" /></Button>
+                      <Button onClick={() => { setEditingId(condo.id); setEditForm({ name: condo.name || condo.nombre, key: condo.registrationKey }); }} variant="ghost" size="icon" className="text-slate-400 hover:text-slate-800"><Edit2 className="w-4 h-4" /></Button>
+                      <Button onClick={() => deleteDoc(doc(db, 'condominios', condo.id))} variant="ghost" size="icon" className="text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></Button>
                     </>
                   )}
                 </td>
