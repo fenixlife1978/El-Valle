@@ -39,7 +39,7 @@ type Owner = {
     id: string;
     name: string;
     balance: number;
-    properties: { street: string, house: string }[];
+    properties?: { street: string, house: string }[];
     receiptCounter?: number;
 };
 type ExchangeRate = { id: string; date: string; rate: number; active: boolean; };
@@ -556,8 +556,8 @@ function VerifyPaymentsTab() {
     const filteredPayments = payments.filter(p => filter === 'todos' || p.status === filter);
     
     return (
-        <Card>
-            <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl">
+        <Card className="bg-card">
+            <CardHeader className="bg-card">
                 <div className="flex justify-between items-center">
                     <CardTitle>Pagos Registrados</CardTitle>
                     <DropdownMenu>
@@ -747,7 +747,7 @@ function ReportPaymentTab() {
         if (authOwnerData && authUser) {
             setBeneficiaryRows([{
                 id: Date.now().toString(),
-                owner: { id: authUser.uid, name: authOwnerData.name, properties: authOwnerData.properties, balance: authOwnerData.balance },
+                owner: { id: authUser.uid, name: authOwnerData.name, properties: authOwnerData.properties },
                 searchTerm: '',
                 amount: '',
                 selectedProperty: authOwnerData.properties?.[0] || null
@@ -871,8 +871,8 @@ function ReportPaymentTab() {
 
     return (
         <div>
-            <Card className="w-full max-w-4xl border-2 border-white overflow-hidden shadow-2xl rounded-2xl">
-                <CardHeader className="bg-primary text-primary-foreground p-4 flex flex-row items-center justify-between rounded-t-2xl">
+            <Card className="w-full max-w-4xl border-2 border-card overflow-hidden shadow-2xl rounded-2xl">
+                <CardHeader className="bg-card p-4 flex flex-row items-center justify-between rounded-t-2xl">
                      <div className="flex items-center gap-3">
                         <Banknote className="w-7 h-7" />
                         <CardTitle>Reportar Pago</CardTitle>
@@ -961,41 +961,41 @@ function ReportPaymentTab() {
                             </Collapsible>
                         </CardContent>
 
-                        <CardFooter className="bg-background/10 p-6 flex justify-end gap-4">
-                            <Button type="button" variant="ghost" className="text-muted-foreground hover:text-white" onClick={resetForm} disabled={isSubmitting}>
-                                CANCELAR
-                            </Button>
-                            <Button type="submit" className="bg-primary hover:bg-primary/90 text-primary-foreground px-6 py-6 text-base font-bold rounded-xl" disabled={isSubmitting}>
-                                {isSubmitting ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Save className="mr-2 h-5 w-5" />}
-                                Enviar Reporte
-                            </Button>
-                        </CardFooter>
-                    </form>
-                </Card>
+                    <CardFooter className="bg-card/90 p-6 flex justify-end gap-4">
+                        <Button type="button" variant="ghost" onClick={resetForm} disabled={isSubmitting}>
+                            CANCELAR
+                        </Button>
+                        <Button type="submit" className="bg-primary hover:bg-primary/90 text-primary-foreground px-6 py-6 text-base font-bold rounded-xl" disabled={isSubmitting}>
+                            {isSubmitting ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Save className="mr-2 h-5 w-5" />}
+                            Enviar Reporte
+                        </Button>
+                    </CardFooter>
+                </form>
+            </Card>
     
-                <BankSelectionModal isOpen={isBankModalOpen} onOpenChange={setIsBankModalOpen} selectedValue={bank} onSelect={(value) => { setBank(value); if (value !== 'Otro') setOtherBank(''); setIsBankModalOpen(false); }} />
-                
-                <Dialog open={isInfoDialogOpen} onOpenChange={setIsInfoDialogOpen}>
-                    <DialogContent>
-                        <DialogHeader>
-                            <DialogTitle className="flex items-center gap-2">
-                                <Info className="h-6 w-6 text-primary" />
-                                Reporte Enviado para Revisión
-                            </DialogTitle>
-                             <div className="pt-4 text-sm text-muted-foreground space-y-4">
-                               <p>¡Gracias! Hemos recibido tu reporte de pago. El tiempo máximo para la aprobación es de <strong>24 horas</strong>.</p>
-                               <p>Te invitamos a ingresar nuevamente después de este lapso para:</p>
-                               <ul className="list-disc list-inside space-y-1">
-                                   <li>Verificar si el monto enviado cubrió completamente tu deuda.</li>
-                                   <li>Descargar tu recibo de pago una vez que sea aprobado.</li>
-                               </ul>
-                            </div>
-                        </DialogHeader>
-                        <DialogFooter>
-                            <Button onClick={() => setIsInfoDialogOpen(false)}>Entendido</Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
+            <BankSelectionModal isOpen={isBankModalOpen} onOpenChange={setIsBankModalOpen} selectedValue={bank} onSelect={(value) => { setBank(value); if (value !== 'Otro') setOtherBank(''); setIsBankModalOpen(false); }} />
+            
+            <Dialog open={isInfoDialogOpen} onOpenChange={setIsInfoDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Info className="h-6 w-6 text-primary" />
+                            Reporte Enviado para Revisión
+                        </DialogTitle>
+                         <div className="pt-4 text-sm text-muted-foreground space-y-4">
+                           <p>¡Gracias! Hemos recibido tu reporte de pago. El tiempo máximo para la aprobación es de <strong>24 horas</strong>.</p>
+                           <p>Te invitamos a ingresar nuevamente después de este lapso para:</p>
+                           <ul className="list-disc list-inside space-y-1">
+                               <li>Verificar si el monto enviado cubrió completamente tu deuda.</li>
+                               <li>Descargar tu recibo de pago una vez que sea aprobado.</li>
+                           </ul>
+                        </div>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button onClick={() => setIsInfoDialogOpen(false)}>Entendido</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
@@ -1007,25 +1007,24 @@ export default function PaymentsPage() {
     return (
         <div className="space-y-6">
             <div className="mb-10">
-                <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">
-                    Gestión de <span className="text-primary">Pagos</span>
+                <h2 className="text-4xl font-black uppercase tracking-tighter italic drop-shadow-sm">
+                    Gestión de Pagos
                 </h2>
-                <div className="h-1.5 w-20 bg-yellow-400 mt-2 rounded-full"></div>
-                <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">
-                    Verificación de pagos reportados y registro manual.
+                <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">
+                    Registre, verifique y gestione los pagos de los propietarios.
                 </p>
             </div>
             <Tabs defaultValue="verify" className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="verify">Verificar Pagos de Propietarios</TabsTrigger>
-                    <TabsTrigger value="report">Registrar un Pago Manualmente</TabsTrigger>
+                <TabsList className="grid w-full grid-cols-2 bg-transparent border-b border-border p-0">
+                    <TabsTrigger value="verify" className="rounded-none data-[state=active]:bg-card data-[state=active]:shadow-none data-[state=active]:font-bold">Verificar Pagos</TabsTrigger>
+                    <TabsTrigger value="report" className="rounded-none data-[state=active]:bg-card data-[state=active]:shadow-none data-[state=active]:font-bold">Reportar Pago (Admin)</TabsTrigger>
                 </TabsList>
-                <TabsContent value="verify" className="mt-4">
+                <TabsContent value="verify" className="mt-0">
                     <Suspense fallback={<Loader2 className="animate-spin" />}>
                         <VerifyPaymentsTab />
                     </Suspense>
                 </TabsContent>
-                <TabsContent value="report" className="mt-4">
+                <TabsContent value="report" className="mt-0">
                     <ReportPaymentTab />
                 </TabsContent>
             </Tabs>

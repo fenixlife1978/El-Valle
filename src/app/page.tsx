@@ -18,38 +18,38 @@ export default function WelcomePage() {
     {
       title: "Cobranza Multidivisa",
       desc: "Gestión automática basada en tasas oficiales para una contabilidad transparente y sin errores.",
-      icon: <Wallet className="w-8 h-8 text-[#0081c9]" />,
-      bgColor: "bg-[#f0f9ff]"
+      icon: <Wallet className="w-8 h-8 text-primary" />,
+      bgColor: "bg-primary/5"
     },
     {
       title: "Panel Inteligente",
       desc: "Visualización clara de gastos, fondos de reserva y estados de cuenta en tiempo real.",
       icon: <LayoutDashboard className="w-8 h-8 text-[#f59e0b]" />,
-      bgColor: "bg-[#fffbeb]"
+      bgColor: "bg-amber-500/5"
     },
     {
       title: "Seguridad y Respaldo",
       desc: "Toda la información protegida y disponible para auditorías en cualquier momento.",
-      icon: <ShieldCheck className="w-8 h-8 text-[#0081c9]" />,
-      bgColor: "bg-[#f0f9ff]"
+      icon: <ShieldCheck className="w-8 h-8 text-primary" />,
+      bgColor: "bg-primary/5"
     }
   ];
 
   return (
-    <div className="min-h-screen bg-white flex flex-col font-sans">
+    <div className="min-h-screen bg-background flex flex-col font-sans">
       {/* NAVBAR */}
-      <nav className="flex items-center justify-between px-6 py-5 border-b bg-white/80 backdrop-blur-md sticky top-0 z-50">
+      <nav className="flex items-center justify-between px-6 py-5 border-b bg-card/80 backdrop-blur-md sticky top-0 z-50">
         <div className="flex items-center gap-3">
           {/* LOGO NAV */}
-          <div className="w-10 h-10 rounded-lg overflow-hidden border shadow-sm flex items-center justify-center p-1 bg-white">
+          <div className="w-10 h-10 rounded-lg overflow-hidden border shadow-sm flex items-center justify-center p-1 bg-background">
             <img src="/logo-efas.png" alt="EFAS Logo" className="w-full h-full object-contain" />
           </div>
           <div className="flex flex-col">
             <h1 className="text-2xl font-black italic tracking-tighter leading-none">
               <span className="text-[#f59e0b]">EFAS</span>
-              <span className="text-[#0081c9]">CondoSys</span>
+              <span className="text-primary">CondoSys</span>
             </h1>
-            <span className="text-[7px] sm:text-[9px] font-black uppercase tracking-widest text-slate-400">
+            <span className="text-[7px] sm:text-[9px] font-black uppercase tracking-widest text-muted-foreground">
               Sistema de Autogestión de Condominios
             </span>
           </div>
@@ -57,12 +57,12 @@ export default function WelcomePage() {
         
         <div className="flex items-center gap-3">
           <Link href="/login?role=owner">
-            <Button variant="ghost" className="hidden md:flex font-bold text-slate-600 hover:text-sky-600">
+            <Button variant="ghost" className="hidden md:flex font-bold text-foreground hover:text-primary">
               Propietarios
             </Button>
           </Link>
           <Link href="/login?role=admin">
-            <Button className="bg-sky-600 hover:bg-sky-700 font-bold shadow-md shadow-sky-100 text-white px-6">
+            <Button className="bg-primary hover:bg-primary/90 font-bold shadow-md shadow-primary/10 text-primary-foreground px-6">
               Acceso Admin
             </Button>
           </Link>
@@ -73,11 +73,11 @@ export default function WelcomePage() {
         {/* HERO SECTION */}
         <section className="relative px-6 py-20 md:py-28 text-center max-w-6xl mx-auto overflow-hidden">
           {/* Fondo Decorativo */}
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[600px] bg-sky-50/50 rounded-[100%] blur-3xl -z-10" />
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[600px] bg-primary/5 rounded-[100%] blur-3xl -z-10" />
 
           <div className="mb-12 flex justify-center">
             {/* LOGO MAXIMIZADO Y OPTIMIZADO */}
-            <div className="w-32 h-32 md:w-44 md:h-44 rounded-[2rem] overflow-hidden bg-white border-4 border-white shadow-2xl flex items-center justify-center p-2 transform -rotate-2 hover:rotate-0 transition-all duration-500">
+            <div className="w-32 h-32 md:w-44 md:h-44 rounded-[2rem] overflow-hidden bg-card border-4 border-card shadow-2xl flex items-center justify-center p-2 transform -rotate-2 hover:rotate-0 transition-all duration-500">
               <img 
                 src="/logo-efas.png" 
                 alt="EFAS CondoSys Logo" 
@@ -86,29 +86,29 @@ export default function WelcomePage() {
             </div>
           </div>
 
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-amber-50 text-amber-700 text-[10px] font-black uppercase tracking-[0.25em] mb-8 border border-amber-100 shadow-sm">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-amber-500/10 text-amber-500 text-[10px] font-black uppercase tracking-[0.25em] mb-8 border border-amber-500/20 shadow-sm">
             <Zap className="w-4 h-4 fill-amber-500" /> Tecnología Residencial de Vanguardia
           </div>
 
-          <h1 className="text-5xl md:text-7xl font-black tracking-tight text-slate-900 mb-8 leading-[1.05]">
+          <h1 className="text-5xl md:text-7xl font-black tracking-tight text-foreground mb-8 leading-[1.05]">
             Potencia tu comunidad con <br />
-            <span className="text-[#f59e0b]">EFAS</span> <span className="text-[#0081c9]">CondoSys</span>
+            <span className="text-[#f59e0b]">EFAS</span> <span className="text-primary">CondoSys</span>
           </h1>
 
-          <p className="text-xl text-slate-500 mb-12 max-w-3xl mx-auto leading-relaxed font-medium">
+          <p className="text-xl text-muted-foreground mb-12 max-w-3xl mx-auto leading-relaxed font-medium">
             El más robusto <strong>Sistema de Autogestión de Condominios</strong> pensado para la transparencia, 
             el control financiero y la comodidad de cada propietario.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-5 justify-center items-center">
             <Link href="/login?role=admin">
-              <Button className="bg-sky-600 hover:bg-sky-700 h-16 px-10 text-xl font-black rounded-2xl shadow-xl shadow-sky-200 gap-3 group transition-all text-white w-full sm:w-auto">
+              <Button className="bg-primary hover:bg-primary/90 h-16 px-10 text-xl font-black rounded-2xl shadow-xl shadow-primary/20 gap-3 group transition-all text-primary-foreground w-full sm:w-auto">
                 Panel Administrativo <ChevronRight className="w-6 h-6 group-hover:translate-x-1 transition-transform" />
               </Button>
             </Link>
             
             <Link href="/login?role=owner">
-              <Button variant="outline" className="h-16 px-10 text-xl font-bold rounded-2xl border-2 border-slate-200 hover:bg-slate-50 text-slate-700 w-full sm:w-auto">
+              <Button variant="outline" className="h-16 px-10 text-xl font-bold rounded-2xl border-2 border-border hover:bg-accent text-foreground w-full sm:w-auto">
                 Acceso Propietario
               </Button>
             </Link>
@@ -116,23 +116,23 @@ export default function WelcomePage() {
         </section>
 
         {/* MÓDULOS DEL SISTEMA */}
-        <section className="bg-slate-50/50 py-24 border-y border-slate-100">
+        <section className="bg-card/50 py-24 border-y border-border">
           <div className="max-w-6xl mx-auto px-6">
             <div className="text-center mb-16">
-              <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">Módulos Integrados</h2>
-              <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full" />
+              <h2 className="text-3xl font-black text-foreground uppercase tracking-tighter">Módulos Integrados</h2>
+              <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full mx-auto" />
             </div>
 
             <div className="grid md:grid-cols-3 gap-12">
               {modules.map((module, i) => (
-              <div key={i} className="flex flex-col items-center text-center group p-8 bg-white rounded-3xl shadow-sm border border-slate-100 hover:shadow-xl transition-all">
-                <div className="w-16 h-16 bg-sky-50 rounded-2xl flex items-center justify-center text-sky-600 mb-6 group-hover:bg-sky-600 group-hover:text-white transition-colors">
+              <div key={i} className="flex flex-col items-center text-center group p-8 bg-card rounded-3xl shadow-sm border border-border hover:shadow-xl transition-all">
+                <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center text-primary mb-6 group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
                   {module.icon}
                 </div>
-                <h3 className="font-montserrat text-xl font-black text-slate-900 uppercase tracking-tight italic mb-3">
+                <h3 className="font-montserrat text-xl font-black text-foreground uppercase tracking-tight italic mb-3">
                   {module.title}
                 </h3>
-                <p className="text-slate-500 font-medium text-sm leading-relaxed">
+                <p className="text-muted-foreground font-medium text-sm leading-relaxed">
                   {module.desc}
                 </p>
               </div>
@@ -143,28 +143,28 @@ export default function WelcomePage() {
       </main>
 
       {/* FOOTER */}
-      <footer className="py-16 bg-white border-t">
+      <footer className="py-16 bg-card border-t">
         <div className="max-w-6xl mx-auto px-6">
           <div className="flex flex-col md:flex-row justify-between items-center gap-10">
             <div className="flex flex-col items-center md:items-start text-center md:text-left">
               <div className="flex items-center gap-2 text-3xl font-black tracking-tighter">
                 <span className="text-amber-500">EFAS</span>
-                <span className="text-sky-500">CondoSys</span>
+                <span className="text-primary">CondoSys</span>
               </div>
-              <p className="text-xs font-black uppercase tracking-[0.3em] text-slate-400 mt-2">
+              <p className="text-xs font-black uppercase tracking-[0.3em] text-muted-foreground mt-2">
                 Sistema de Autogestión de Condominios
               </p>
             </div>
 
-            <div className="flex flex-wrap justify-center gap-10 text-sm font-bold text-slate-500">
-              <button className="hover:text-sky-600 transition-colors">Características</button>
-              <button className="hover:text-sky-600 transition-colors">Soporte</button>
-              <button className="hover:text-sky-600 transition-colors">Términos</button>
+            <div className="flex flex-wrap justify-center gap-10 text-sm font-bold text-muted-foreground">
+              <button className="hover:text-primary transition-colors">Características</button>
+              <button className="hover:text-primary transition-colors">Soporte</button>
+              <button className="hover:text-primary transition-colors">Términos</button>
             </div>
 
             <div className="text-center md:text-right">
-              <p className="text-sm font-bold text-slate-900">© {new Date().getFullYear()} EFAS CondoSys</p>
-              <p className="text-[10px] font-medium text-slate-400 uppercase tracking-widest mt-1">Desarrollado para la excelencia</p>
+              <p className="text-sm font-bold text-foreground">© {new Date().getFullYear()} EFAS CondoSys</p>
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-widest mt-1">Desarrollado para la excelencia</p>
             </div>
           </div>
         </div>

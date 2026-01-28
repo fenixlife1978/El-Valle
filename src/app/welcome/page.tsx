@@ -29,7 +29,7 @@ export default function WelcomePage() {
                      <img src="/logo-efas.png" alt="EFAS Logo" className="w-16 h-16 object-contain" />
                 </div>
                 <h1 className="text-4xl font-bold font-headline">
-                    Bienvenido a <span className="text-[#f59e0b]">EFAS</span><span className="text-[#0081c9]">CondoSys</span>
+                    Bienvenido a <span className="text-[#f59e0b]">EFAS</span><span className="text-primary">CondoSys</span>
                 </h1>
                 <p className="text-muted-foreground mt-2">Seleccione su tipo de acceso para continuar.</p>
             </div>
@@ -62,4 +62,3 @@ export default function WelcomePage() {
         </main>
     );
 }
-

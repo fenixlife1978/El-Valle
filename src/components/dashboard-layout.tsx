@@ -1,3 +1,4 @@
+
 'use client';
 
 import Link from 'next/link';
@@ -76,7 +77,7 @@ const CustomHeader = ({
     <header className="sticky top-4 z-10 mx-4 flex h-20 items-center justify-between gap-2 rounded-xl border bg-card/80 px-4 shadow-lg backdrop-blur-sm sm:px-6 text-card-foreground">
       <div className="flex items-center gap-4">
         {/* LOGO REDONDO OPTIMIZADO */}
-        <div className="w-14 h-14 rounded-full overflow-hidden bg-white border-2 border-sky-500/20 flex items-center justify-center shadow-md shrink-0">
+        <div className="w-14 h-14 rounded-full overflow-hidden bg-white border-2 border-primary/20 flex items-center justify-center shadow-md shrink-0">
           <img 
             src={companyInfo?.logo || "/logo-efas.png"} 
             alt="Logo" 
@@ -87,7 +88,7 @@ const CustomHeader = ({
         <div className="flex flex-col">
           <div className="flex items-center gap-1 leading-none">
             <span className="font-black text-2xl tracking-tighter text-amber-500">EFAS</span>
-            <span className="font-bold text-2xl tracking-tighter text-sky-500">CondoSys</span>
+            <span className="font-bold text-2xl tracking-tighter text-primary">CondoSys</span>
           </div>
           {/* FRASE DESCRIPTIVA ACTUALIZADA */}
           <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-80 leading-tight">
@@ -141,9 +142,9 @@ const CustomHeader = ({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="relative h-12 w-12 rounded-full focus-visible:ring-0">
-              <Avatar className="h-12 w-12 border-2 border-sky-500/20 shadow-sm">
+              <Avatar className="h-12 w-12 border-2 border-primary/20 shadow-sm">
                 <AvatarImage src={avatarSrc || ''} alt={userName} />
-                <AvatarFallback className="bg-sky-500 text-white font-bold">{userName.charAt(0)}</AvatarFallback>
+                <AvatarFallback className="bg-primary text-primary-foreground font-bold">{userName.charAt(0)}</AvatarFallback>
               </Avatar>
             </Button>
           </DropdownMenuTrigger>
@@ -178,7 +179,7 @@ const CustomHeader = ({
                   <div className="flex flex-col leading-none">
                     <div className="flex items-center gap-0.5">
                       <span className="font-black text-xl text-amber-500">EFAS</span>
-                      <span className="font-bold text-xl text-sky-500">CondoSys</span>
+                      <span className="font-bold text-xl text-primary">CondoSys</span>
                     </div>
                   </div>
                 </div>
@@ -200,7 +201,7 @@ const CustomHeader = ({
                 ) : (
                   <Link key={item.label} href={item.href}>
                     <Button variant={pathname === item.href ? "secondary" : "ghost"} className="w-full justify-start py-6 text-base font-bold">
-                      <item.icon className="mr-3 h-5 w-5 text-sky-500"/>
+                      <item.icon className="mr-3 h-5 w-5 text-primary"/>
                       {item.label}
                     </Button>
                   </Link>
@@ -232,17 +233,17 @@ export function DashboardLayout({
   if (loading) {
     return (
       <div className="h-screen w-screen bg-background flex flex-col items-center justify-center gap-4">
-        <Loader2 className="animate-spin h-12 w-12 text-sky-500"/>
+        <Loader2 className="animate-spin h-12 w-12 text-primary"/>
         <div className="flex items-center gap-1 text-lg font-black uppercase tracking-widest animate-pulse">
             <span className="text-amber-500">EFAS</span>
-            <span className="text-sky-500">CondoSys</span>
+            <span className="text-primary">CondoSys</span>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen w-full bg-slate-50/40 flex flex-col">
+    <div className="min-h-screen w-full bg-background flex flex-col">
       <CustomHeader 
         ownerData={ownerData} 
         userRole={userRole} 
@@ -252,11 +253,11 @@ export function DashboardLayout({
       <main className="flex-1 p-4 md:p-8 max-w-7xl mx-auto w-full">
         {children}
       </main>
-      <footer className="p-8 text-center border-t bg-white/50">
+      <footer className="p-8 text-center border-t bg-card/50">
         <div className="flex flex-col items-center gap-1">
           <div className="flex items-center gap-1 text-base">
             <span className="font-black text-amber-500">EFAS</span>
-            <span className="font-bold text-sky-600">CondoSys</span>
+            <span className="font-bold text-primary">CondoSys</span>
             <span className="text-muted-foreground ml-1 text-xs">© {new Date().getFullYear()}</span>
           </div>
           <p className="text-[10px] text-muted-foreground uppercase tracking-[0.25em] font-black">

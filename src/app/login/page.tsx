@@ -4,7 +4,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
@@ -115,28 +115,28 @@ function LoginPage() {
    
     if (!role) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-slate-50">
-                <Loader2 className="h-8 w-8 animate-spin text-[#0081c9]" />
+            <div className="min-h-screen flex items-center justify-center bg-background">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
         );
     }
 
     return (
-        <main className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-4 font-montserrat relative overflow-hidden">
-            <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 blur-[100px] rounded-full"></div>
+        <main className="min-h-screen flex flex-col items-center justify-center bg-background p-4 font-montserrat relative overflow-hidden">
+            <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/10 blur-[100px] rounded-full"></div>
             <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-amber-500/5 blur-[100px] rounded-full"></div>
 
             <div className="text-center mb-8 relative z-10">
-                 <h1 className="text-4xl font-black italic uppercase tracking-tighter text-slate-800">
+                 <h1 className="text-4xl font-black italic uppercase tracking-tighter text-foreground">
                     <span className="text-[#f59e0b]">EFAS</span>
-                    <span className="text-[#0081c9]"> CondoSys</span>
+                    <span className="text-primary"> CondoSys</span>
                 </h1>
-                <p className="text-[9px] text-slate-400 font-black tracking-[0.4em] uppercase mt-2 italic">Autogestión de Condominios</p>
+                <p className="text-[9px] text-muted-foreground font-black tracking-[0.4em] uppercase mt-2 italic">Autogestión de Condominios</p>
             </div>
 
-            <Card className="w-full max-w-sm border-slate-200 shadow-2xl rounded-[2.5rem] overflow-hidden bg-white/80 backdrop-blur-xl text-slate-800 relative z-10">
+            <Card className="w-full max-w-sm border-border shadow-2xl rounded-[2.5rem] overflow-hidden bg-card/80 backdrop-blur-xl text-card-foreground relative z-10">
                 <CardHeader className="text-center pb-2 pt-8">
-                    <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-blue-100 text-blue-700 text-[10px] font-black uppercase tracking-wider mb-2 mx-auto border border-blue-200">
+                    <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 text-primary text-[10px] font-black uppercase tracking-wider mb-2 mx-auto border border-primary/20">
                         <AlertCircle className="w-3.5 h-3.5" /> Acceso {role === 'admin' ? 'Administrativo' : 'Propietario'}
                     </div>
                 </CardHeader>
@@ -144,10 +144,10 @@ function LoginPage() {
                 <form onSubmit={handleLogin}>
                     <CardContent className="space-y-5 pt-4 px-8">
                         <div className="space-y-2">
-                            <Label className="text-[10px] font-black uppercase text-slate-500 ml-1 tracking-widest">E-mail</Label>
+                            <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1 tracking-widest">E-mail</Label>
                             <Input 
                                 type="email" 
-                                className="h-12 rounded-2xl border-slate-200 bg-slate-100 text-slate-800 focus-visible:ring-[#0081c9] transition-all"
+                                className="h-12 rounded-2xl border-border bg-input text-foreground focus-visible:ring-primary transition-all"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
@@ -155,11 +155,11 @@ function LoginPage() {
                         </div>
 
                         <div className="space-y-2">
-                            <Label className="text-[10px] font-black uppercase text-slate-500 ml-1 tracking-widest">Contraseña</Label>
+                            <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1 tracking-widest">Contraseña</Label>
                             <div className="relative">
                                 <Input 
                                     type={showPassword ? "text" : "password"}
-                                    className="h-12 rounded-2xl border-slate-200 bg-slate-100 text-slate-800 focus-visible:ring-[#0081c9] pr-12 transition-all"
+                                    className="h-12 rounded-2xl border-border bg-input text-foreground focus-visible:ring-primary pr-12 transition-all"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
                                     required
@@ -167,7 +167,7 @@ function LoginPage() {
                                 <button 
                                     type="button" 
                                     onClick={() => setShowPassword(!showPassword)} 
-                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-800 transition-colors"
+                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                                 >
                                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                                 </button>
@@ -176,19 +176,19 @@ function LoginPage() {
                     </CardContent>
 
                     <CardFooter className="flex flex-col gap-4 pb-10 pt-6 px-8">
-                        <Button type="submit" disabled={loading} className="w-full h-14 bg-[#0081c9] hover:bg-sky-700 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-sky-500/20 transition-all">
+                        <Button type="submit" disabled={loading} className="w-full h-14 bg-primary hover:bg-primary/90 text-primary-foreground rounded-2xl font-black text-sm uppercase tracking-widest shadow-lg shadow-primary/20 transition-all">
                             {loading ? <Loader2 className="animate-spin w-5 h-5" /> : 'Acceder al Sistema'}
                         </Button>
                         <div className="flex justify-between w-full px-1">
                             <Link 
                                 href="/forgot-password" 
-                                className="text-[11px] font-bold text-[#0081c9] hover:underline uppercase tracking-widest"
+                                className="text-[11px] font-bold text-primary hover:underline uppercase tracking-widest"
                             >
                                 ¿Olvidaste tu clave?
                             </Link>
                             <Link 
                                 href="/welcome" 
-                                className="text-[10px] font-black uppercase text-slate-400 hover:text-[#f59e0b] tracking-[0.2em] transition-colors"
+                                className="text-[10px] font-black uppercase text-muted-foreground hover:text-[#f59e0b] tracking-[0.2em] transition-colors"
                             >
                                 ← Volver
                             </Link>
@@ -203,8 +203,8 @@ function LoginPage() {
 export default function LoginPageWithSuspense() {
     return (
         <Suspense fallback={
-            <div className="min-h-screen flex items-center justify-center bg-slate-50">
-                <Loader2 className="h-8 w-8 animate-spin text-[#0081c9]" />
+            <div className="min-h-screen flex items-center justify-center bg-background">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
         }>
             <LoginPage />

@@ -72,33 +72,33 @@ export default function Header() {
     const cId = isSupport ? localStorage.getItem('support_mode_id') : authCondoId;
 
     return (
-        <header className="bg-white text-slate-800 p-4 shadow-sm border-b border-slate-200 sticky top-[6px] z-50 mx-4 mt-2 rounded-2xl">
+        <header className="bg-card text-card-foreground p-4 shadow-sm border-b border-border sticky top-[6px] z-50 mx-4 mt-2 rounded-2xl">
             <div className="container mx-auto flex items-center justify-between">
                 
                 <div className="flex items-center gap-4">
-                    <div className="relative w-12 h-12 rounded-full overflow-hidden bg-slate-100 border border-slate-200 flex items-center justify-center shadow-inner">
+                    <div className="relative w-12 h-12 rounded-full overflow-hidden bg-background border border-border flex items-center justify-center shadow-inner">
                         {info?.logo ? (
                             <img src={info.logo} alt="Logo" className="object-cover w-full h-full" />
                         ) : (
-                            <span className="text-[8px] font-black text-slate-400 uppercase text-center leading-tight">Sin<br/>Logo</span>
+                            <span className="text-[8px] font-black text-muted-foreground uppercase text-center leading-tight">Sin<br/>Logo</span>
                         )}
                     </div>
 
                     <div className="flex flex-col">
                         <div className="flex items-center gap-2">
-                            <h1 className="text-lg font-black uppercase tracking-tight leading-tight text-[#0081c9]">
+                            <h1 className="text-lg font-black uppercase tracking-tight leading-tight text-primary">
                                 {isLoading ? "Cargando..." : (info?.name || info?.nombre || "No identificado")}
                             </h1>
                         </div>
-                        <p className="text-[10px] font-bold text-slate-400 tracking-[0.2em] uppercase">
+                        <p className="text-[10px] font-bold text-muted-foreground tracking-[0.2em] uppercase">
                             {info?.rif ? `RIF: ${info.rif}` : (cId ? `ID: ${cId}` : "Sin Identificación")}
                         </p>
                     </div>
                 </div>
 
                 <div className="flex items-center gap-6">
-                    <div className="flex items-center gap-3 border-r border-slate-200 pr-6">
-                        <div className="w-10 h-10 rounded-full overflow-hidden border border-slate-200 bg-white flex-shrink-0 shadow-lg">
+                    <div className="flex items-center gap-3 border-r border-border pr-6">
+                        <div className="w-10 h-10 rounded-full overflow-hidden border border-border bg-background flex-shrink-0 shadow-lg">
                             <img 
                                 src="/logo-bcv.png" 
                                 alt="BCV" 
@@ -107,9 +107,9 @@ export default function Header() {
                         </div>
                         
                         <div className="flex flex-col items-end">
-                            <span className="text-[9px] font-black uppercase tracking-widest text-green-600">Tasa Oficial BCV</span>
-                            <div className="text-xl font-black italic text-slate-900 tracking-tighter leading-none flex items-baseline gap-1">
-                                {tasaBCV} <span className="text-[10px] text-slate-500 not-italic font-bold">VES</span>
+                            <span className="text-[9px] font-black uppercase tracking-widest text-green-500">Tasa Oficial BCV</span>
+                            <div className="text-xl font-black italic text-foreground tracking-tighter leading-none flex items-baseline gap-1">
+                                {tasaBCV} <span className="text-[10px] text-muted-foreground not-italic font-bold">VES</span>
                             </div>
                         </div>
                     </div>

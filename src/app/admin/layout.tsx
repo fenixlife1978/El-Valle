@@ -104,9 +104,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
     if (loading || !user || !authorized) {
         return (
-            <div className="flex h-screen w-full flex-col items-center justify-center bg-slate-50">
-                <Loader2 className="h-10 w-10 animate-spin text-[#0081c9]" />
-                <p className="ml-2 mt-4 text-slate-500 font-black text-[10px] uppercase tracking-[0.3em] italic">
+            <div className="flex h-screen w-full flex-col items-center justify-center bg-background">
+                <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                <p className="ml-2 mt-4 text-muted-foreground font-black text-[10px] uppercase tracking-[0.3em] italic">
                     EFAS CondoSys: Validando...
                 </p>
             </div>
@@ -114,7 +114,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     }
 
     return (
-        <div className="flex flex-col min-h-screen bg-slate-50">
+        <div className="flex flex-col min-h-screen bg-background">
             {supportCondoId && (
                 <div className="bg-[#f59e0b] text-[#020617] py-2 px-4 shadow-lg border-b border-amber-600 flex justify-between items-center z-[110] sticky top-0">
                     <div className="flex items-center gap-3">
@@ -144,7 +144,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                     navItems={adminNavItems} 
                     mobileNavItems={adminNavItems}
                 >
-                    <div className="pb-24 sm:pb-8 px-4 sm:px-6 pt-6 bg-slate-50 min-h-full rounded-t-[2.5rem] sm:rounded-none">
+                    <div className="pb-24 sm:pb-8 px-4 sm:px-6 pt-6 bg-background min-h-full rounded-t-[2.5rem] sm:rounded-none">
                         {children}
                     </div>
                     

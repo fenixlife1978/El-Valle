@@ -48,14 +48,14 @@ function AuthGuard({ children }: { children: ReactNode }) {
 
   if (loading) {
     return (
-      <div className="flex h-screen w-full items-center justify-center bg-slate-50">
+      <div className="flex h-screen w-full items-center justify-center bg-background">
         <div className="text-center">
-            <Loader2 className="h-10 w-10 animate-spin text-[#0081c9] mx-auto" />
+            <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto" />
             <p className="mt-6 font-black italic tracking-tighter text-3xl uppercase font-montserrat">
               <span className="text-[#f59e0b]">EFAS</span>
-              <span className="text-[#0081c9]">CondoSys</span>
+              <span className="text-primary">CondoSys</span>
             </p>
-            <p className="text-[9px] text-slate-500 font-bold tracking-[0.4em] uppercase mt-2">
+            <p className="text-[9px] text-muted-foreground font-bold tracking-[0.4em] uppercase mt-2">
               Autogestión de Condominios
             </p>
         </div>
@@ -75,29 +75,29 @@ export default function RootLayout({
     <html lang="es" suppressHydrationWarning className={montserrat.variable}>
       <head>
         <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#0081c9" />
+        <meta name="theme-color" content="#1A1D23" />
         <link rel="apple-touch-icon" href="/og-banner.png?v=2" />
         <link rel="icon" href="/og-banner.png?v=2" type="image/png" />
         <title>EFAS CondoSys | Autogestión de Condominios</title>
       </head>
       <body suppressHydrationWarning className={cn(
-          "antialiased selection:bg-[#0081c9] selection:text-white font-body",
+          "antialiased selection:bg-primary selection:text-primary-foreground font-body",
           montserrat.className
         )}>
         
-        <div className="w-full h-1 bg-[#0081c9] fixed top-0 z-[110] shadow-lg shadow-blue-500/20" />
+        <div className="w-full h-1 bg-primary fixed top-0 z-[110] shadow-lg shadow-blue-500/20" />
         
         <AuthProvider>
           <SupportBanner />
           <AuthorizationProvider>
             <ThemeProvider
               attribute="class"
-              defaultTheme="light"
+              defaultTheme="dark"
               enableSystem={false}
               disableTransitionOnChange
             >
               <AuthGuard>
-                <div className="min-h-screen bg-slate-50 text-slate-800">
+                <div className="min-h-screen bg-background text-foreground">
                     {children}
                 </div>
               </AuthGuard>
