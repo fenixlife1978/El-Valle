@@ -180,7 +180,7 @@ export default function FinancialBalancePage() {
 
     useEffect(() => {
         handleSyncData(false);
-    }, [selectedMonth, selectedYear, workingCondoId]);
+    }, [selectedMonth, selectedYear, workingCondoId, handleSyncData]);
     
     useEffect(() => {
         const totalIngresos = ingresos.reduce((sum, item) => sum + item.real, 0);
@@ -216,6 +216,7 @@ export default function FinancialBalancePage() {
     };
     
     const generatePDF = async () => {
+        if (!workingCondoId) return;
         const info = companyInfo || {
             name: "EFAS CondoSys", rif: "J-00000000-0", address: "Administración", phone: "Soporte", logo: ""
         };
@@ -243,7 +244,7 @@ export default function FinancialBalancePage() {
         docPDF.setFontSize(12).setFont('helvetica', 'italic').text(`PERÍODO: ${periodText}`, pageWidth / 2, 63, { align: 'center' });
 
         try {
-            const qrCodeUrl = await QRCode.toDataURL(`https://efas-condosys.com/verify/balance/${selectedYear}-${selectedMonth}`);
+            const qrCodeUrl = await QRCode.toDataURL(`https://efas-condosys.com/verify/balance/${workingCondoId}/${selectedYear}-${selectedMonth}`);
             docPDF.addImage(qrCodeUrl, 'PNG', pageWidth - margin - 25, 45, 25, 25);
             docPDF.setFontSize(7).text("VALIDACIÓN DIGITAL", pageWidth - margin - 12.5, 72, { align: 'center' });
         } catch (e) { console.error("QR Error", e); }
@@ -266,7 +267,7 @@ export default function FinancialBalancePage() {
             startY,
             theme: 'striped',
             headStyles: { fillColor: [239, 68, 68], fontStyle: 'bold' },
-            foot: [[ { content: 'TOTAL GASTOS', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } }, { content: formatCurrency(estadoFinal.totalEgresos), styles: { halign: 'right', fontStyle: 'bold' } }]],
+            foot: [[ { content: 'TOTAL GASTOS OPERATIVOS', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } }, { content: formatCurrency(estadoFinal.totalEgresos), styles: { halign: 'right', fontStyle: 'bold' } }]],
         });
         startY = (docPDF as any).lastAutoTable.finalY + 15;
 
@@ -300,7 +301,9 @@ export default function FinancialBalancePage() {
                 docPDF.setFillColor(245, 245, 245);
                 docPDF.roundedRect(margin, startY - 4, pageWidth - (margin * 2), 9, 3, 3, 'F');
             }
-            if(item.color) docPDF.setTextColor(item.color[0], item.color[1], item.color[2]);
+            if(item.color) {
+                docPDF.setTextColor(item.color[0], item.color[1], item.color[2]);
+            }
             docPDF.setFontSize(10).setFont('helvetica', item.bold ? 'bold' : 'normal').text(item.label, margin + 5, startY);
             docPDF.text(item.value, pageWidth - margin - 5, startY, { align: 'right' });
             docPDF.setTextColor(0,0,0);
@@ -320,7 +323,13 @@ export default function FinancialBalancePage() {
         docPDF.save(`Balance_EFAS_${selectedYear}-${selectedMonth}.pdf`);
     };
 
-    if (loading) return <div className="flex h-[80vh] items-center justify-center"><Loader2 className="animate-spin text-blue-500 h-12 w-12" /></div>;
+    // This useEffect will run once on mount to set the initial loading state.
+    useEffect(() => {
+        setLoading(true);
+        handleSyncData(false).finally(() => setLoading(false));
+    }, []);
+
+    if (loading && !syncing) return <div className="flex h-[80vh] items-center justify-center"><Loader2 className="animate-spin text-blue-500 h-12 w-12" /></div>;
 
     return (
         <div className="space-y-6 pb-20">
