@@ -141,7 +141,8 @@ export default function FinancialBalancePage() {
             // 2. Sincronizar Gastos (Egresos)
             const expensesQuery = query(collection(db, 'condominios', workingCondoId, 'gastos'),
                 where('date', '>=', currentPeriodStart),
-                where('date', '<=', currentPeriodEnd)
+                where('date', '<=', currentPeriodEnd),
+                where('category', '!=', 'Caja Chica') // Excluir la reposición de caja chica
             );
             const expensesSnap = await getDocs(expensesQuery);
             const syncedEgresos = expensesSnap.docs.map(doc => {
@@ -202,13 +203,13 @@ export default function FinancialBalancePage() {
     }, [selectedYear, selectedMonth, workingCondoId, toast]);
 
     useEffect(() => {
-        if(activeCondoId) {
+        if(workingCondoId) {
             setLoading(true);
             handleSyncData(false).finally(() => setLoading(false));
-        } else {
+        } else if (!user) {
             setLoading(false);
         }
-    }, [selectedMonth, selectedYear, activeCondoId, handleSyncData]);
+    }, [selectedMonth, selectedYear, workingCondoId, user, handleSyncData]);
     
     useEffect(() => {
         const totalIngresos = ingresos.reduce((sum, item) => sum + item.real, 0);
@@ -346,7 +347,7 @@ export default function FinancialBalancePage() {
                 docPDF.roundedRect(margin, startY - 4, pageWidth - (margin * 2), 9, 3, 3, 'F');
             }
             if(item.color) {
-                docPDF.setTextColor(...item.color);
+                docPDF.setTextColor(item.color[0], item.color[1], item.color[2]);
             }
             docPDF.setFontSize(10).setFont('helvetica', item.bold ? 'bold' : 'normal').text(item.label, margin + 5, startY);
             docPDF.text(item.value, pageWidth - margin - 5, startY, { align: 'right' });
