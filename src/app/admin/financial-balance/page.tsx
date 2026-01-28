@@ -121,10 +121,11 @@ export default function FinancialBalancePage() {
             const currentPeriodEnd = endOfMonth(currentPeriodStart);
             
             const prevPeriodDate = subMonths(currentPeriodStart, 1);
-            const prevPeriodId = format(prevPeriodDate, 'yyyy-MM').padStart(7, '0');
+            const prevPeriodId = format(prevPeriodDate, 'yyyy-MM');
             const prevStatementSnap = await getDoc(doc(db, 'condominios', activeCondoId, 'financial_statements', prevPeriodId));
             const saldoAnterior = prevStatementSnap.exists() ? (prevStatementSnap.data() as FinancialStatementDoc).estadoFinal.disponibilidadTotal : 0;
             
+            // 1. Sincronizar Pagos (Ingresos)
             const paymentsQuery = query(collection(db, 'condominios', activeCondoId, 'payments'), 
                 where('status', '==', 'aprobado'), 
                 where('paymentDate', '>=', currentPeriodStart), 
@@ -135,6 +136,7 @@ export default function FinancialBalancePage() {
             
             setIngresos(prev => prev.map(item => item.concepto === 'Ingresos x Cuotas de Condominio' ? {...item, real: totalPayments} : item));
 
+            // 2. Sincronizar Gastos (Egresos)
             const expensesQuery = query(collection(db, 'condominios', activeCondoId, 'gastos'),
                 where('date', '>=', currentPeriodStart),
                 where('date', '<=', currentPeriodEnd)
@@ -153,8 +155,17 @@ export default function FinancialBalancePage() {
             });
             setEgresos(syncedEgresos);
             
+            // 3. Sincronizar Caja Chica (CON CORRECCIÓN DE TIPOS)
             const allMovementsSnap = await getDocs(query(collection(db, 'condominios', activeCondoId, 'cajaChica_movimientos')));
-            const movements = allMovementsSnap.docs.map(d => ({...d.data(), date: d.data().date.toDate()}));
+            
+            const movements = allMovementsSnap.docs.map(d => {
+                const data = d.data();
+                return {
+                    amount: data.amount || 0,
+                    type: data.type as 'ingreso' | 'egreso',
+                    date: data.date.toDate() as Date
+                };
+            });
             
             const saldoInicialCaja = movements
                 .filter(m => m.date < currentPeriodStart)
@@ -175,8 +186,8 @@ export default function FinancialBalancePage() {
 
             if(showToast) toast({ title: "Sincronización Completa" });
         } catch (error) {
-            console.error(error);
-            if(showToast) toast({ variant: "destructive", title: "Error al Sincronizar" });
+            console.error("Error en sincronización:", error);
+            if(showToast) toast({ variant: "destructive", title: "Error al Sincronizar", description: "Verifique la consola para más detalles." });
         } finally {
             setSyncing(false);
         }
@@ -267,9 +278,11 @@ export default function FinancialBalancePage() {
         docPDF.setFontSize(12).setFont('helvetica', 'italic').text(`PERÍODO: ${periodText}`, pageWidth / 2, 63, { align: 'center' });
 
         try {
-            const qrCodeUrl = await QRCode.toDataURL(`https://efas-condosys.com/verify/balance/${activeCondoId}/${selectedYear}-${selectedMonth}`);
-            docPDF.addImage(qrCodeUrl, 'PNG', pageWidth - margin - 25, 45, 25, 25);
-            docPDF.setFontSize(7).text("VALIDACIÓN DIGITAL", pageWidth - margin - 12.5, 72, { align: 'center' });
+            if (activeCondoId) {
+                const qrCodeUrl = await QRCode.toDataURL(`https://efas-condosys.com/verify/balance/${activeCondoId}/${selectedYear}-${selectedMonth}`);
+                docPDF.addImage(qrCodeUrl, 'PNG', pageWidth - margin - 25, 45, 25, 25);
+                docPDF.setFontSize(7).text("VALIDACIÓN DIGITAL", pageWidth - margin - 12.5, 72, { align: 'center' });
+            }
         } catch (e) { console.error("QR Error", e); }
 
         let startY = 80;
@@ -455,4 +468,3 @@ export default function FinancialBalancePage() {
         </div>
     );
 }
-
