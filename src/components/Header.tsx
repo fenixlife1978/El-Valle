@@ -102,7 +102,7 @@ export default function Header() {
                             <img 
                                 src="/logo-bcv.png" 
                                 alt="BCV" 
-                                className="w-full h-full object-contain p-0.5"
+                                className="w-full h-full object-contain"
                             />
                         </div>
                         
