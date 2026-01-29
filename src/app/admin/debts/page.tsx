@@ -1212,7 +1212,7 @@ export default function DebtManagementPage() {
                         </div>
                         <DialogFooter className="mt-auto pt-4 border-t">
                             <Button variant="outline" onClick={() => setIsMassDebtDialogOpen(false)}>Cancelar</Button>
-                            <Button onClick={handleSaveMassDebt}>Generar Deudas</Button>
+                            <Button onClick={handleSaveMassiveDebt}>Generar Deudas</Button>
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
