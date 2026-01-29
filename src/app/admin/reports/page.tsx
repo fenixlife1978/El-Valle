@@ -1414,7 +1414,7 @@ export default function ReportsPage() {
             
             <Tabs defaultValue="history" className="w-full">
                  <TabsList className="grid w-full grid-cols-1 md:grid-cols-4 lg:grid-cols-7 h-auto flex-wrap">
-                    <TabsTrigger value="history">Historial y Publicaciones</TabsTrigger>
+                    <TabsTrigger value="history">Reporte Integral</TabsTrigger>
                     <TabsTrigger value="individual">Ficha Individual</TabsTrigger>
                     <TabsTrigger value="estado-de-cuenta">Estado de Cuenta</TabsTrigger>
                     <TabsTrigger value="delinquency">Morosidad</TabsTrigger>
