@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -116,6 +117,8 @@ export default function FinancialBalancePage() {
                 { concepto: 'Fondo de Reserva', real: 0, category: 'fondo_reserva' },
                 { concepto: 'Otros Ingresos', real: 0, category: 'otros' }
             ];
+            setIngresos(newIngresos);
+
 
             const expensesSnap = await getDocs(query(
                 collection(db, 'condominios', activeCondoId, 'gastos'),
@@ -147,7 +150,6 @@ export default function FinancialBalancePage() {
             const saldoFinalCC = saldoInicialCC + reposicionesCC - gastosCC;
 
             setEstadoFinal(prev => ({...prev, saldoAnterior}));
-            setIngresos(newIngresos);
             setEgresos(expensesSnap.docs.map(d => ({
                 id: d.id,
                 descripcion: d.data().description || 'Sin descripción',
@@ -230,6 +232,7 @@ export default function FinancialBalancePage() {
         // --- Brand Identity (right side) ---
         const endX = pageWidth - margin;
         const efasColor = '#F97316'; // orange-500
+        const condoSysColor = '#FFFFFF'; // White for dark background
         const efasText = "EFAS";
         const condoSysText = "CONDOSYS";
         const subtitleText = "SISTEMA DE AUTOGESTIÓN DE CONDOMINIOS";
@@ -240,12 +243,12 @@ export default function FinancialBalancePage() {
         const condoSysWidth = docPDF.getStringUnitWidth(condoSysText) * 12 / docPDF.internal.scaleFactor;
         
         // Draw CONDOSYS in white
-        docPDF.setTextColor(255, 255, 255);
+        docPDF.setTextColor(condoSysColor);
         docPDF.text(condoSysText, endX, 15, { align: 'right' });
         
         // Draw EFAS in orange
         docPDF.setTextColor(efasColor);
-        docPDF.text(efasText, endX - condoSysWidth, 15, { align: 'right' });
+        docPDF.text(efasText, endX - condoSysWidth - 2, 15, { align: 'right' });
         
         // Draw Subtitle
         docPDF.setFont('helvetica', 'normal');
@@ -253,21 +256,22 @@ export default function FinancialBalancePage() {
         docPDF.setTextColor(200, 200, 200); // Lighter gray
         docPDF.text(subtitleText, endX, 22, { align: 'right' });
         
-        // Reset text color for the rest of the document
         docPDF.setTextColor(0, 0, 0); 
         
         let startY = headerHeight + 5;
 
-        // --- BARCODE ---
+        // --- BARCODE (Centered, smaller) ---
         const canvas = document.createElement('canvas');
         const periodId = `${selectedYear}-${selectedMonth.padStart(2, '0')}`;
         const barcodeValue = `BF-${periodId}`;
         try {
             JsBarcode(canvas, barcodeValue, {
-                format: "CODE128", height: 40, width: 1.5, displayValue: true, margin: 0, fontSize: 10
+                format: "CODE128", height: 30, width: 1.2, displayValue: true, margin: 0, fontSize: 8
             });
             const barcodeDataUrl = canvas.toDataURL("image/png");
-            docPDF.addImage(barcodeDataUrl, 'PNG', (pageWidth / 2) - 30, startY, 60, 20);
+            const barcodeWidth = 50;
+            const barcodeHeight = 20;
+            docPDF.addImage(barcodeDataUrl, 'PNG', (pageWidth / 2) - (barcodeWidth / 2), startY, barcodeWidth, barcodeHeight);
         } catch (e) {
             console.error("Barcode generation failed", e);
         }
@@ -279,6 +283,7 @@ export default function FinancialBalancePage() {
         
         startY += 25;
         
+        // FIX: Added bodyStyles to force black text color
         autoTable(docPDF, {
             head: [['INGRESOS', 'MONTO (Bs.)']],
             body: ingresos.map(i => [
@@ -291,12 +296,14 @@ export default function FinancialBalancePage() {
             ]],
             startY,
             theme: 'striped',
-            headStyles: { fillColor: [59, 130, 246], halign: 'center' }, // Tailwind blue-500
-            footStyles: { fillColor: [30, 64, 175], textColor: 255, fontStyle: 'bold' }, // Tailwind blue-800
+            headStyles: { fillColor: [59, 130, 246], halign: 'center' },
+            footStyles: { fillColor: [30, 64, 175], textColor: 255, fontStyle: 'bold' },
+            bodyStyles: { textColor: [0, 0, 0] }
         });
         
         startY = (docPDF as any).lastAutoTable.finalY + 10;
         
+        // FIX: Added bodyStyles to force black text color
         autoTable(docPDF, {
             head: [['FECHA', 'EGRESOS (GASTOS)', 'MONTO Bs.']],
             body: egresos.map(e => [
@@ -311,17 +318,18 @@ export default function FinancialBalancePage() {
             ]],
             startY: startY,
             theme: 'striped',
-            headStyles: { fillColor: [239, 68, 68], halign: 'center' }, // Tailwind red-500
-            footStyles: { fillColor: [185, 28, 28], textColor: 255, fontStyle: 'bold' }, // Tailwind red-800
+            headStyles: { fillColor: [239, 68, 68], halign: 'center' },
+            footStyles: { fillColor: [185, 28, 28], textColor: 255, fontStyle: 'bold' },
+            bodyStyles: { textColor: [0, 0, 0] }
         });
 
         startY = (docPDF as any).lastAutoTable.finalY + 10;
         
         docPDF.setFontSize(11).setFont('helvetica', 'bold');
         const totalEfectivoY = startY + 10;
-        docPDF.setFillColor(239, 246, 255); // Tailwind blue-50
+        docPDF.setFillColor(239, 246, 255);
         docPDF.rect(margin, totalEfectivoY - 5, pageWidth - margin * 2, 10, 'F');
-        docPDF.setTextColor(30, 64, 175); // Tailwind blue-800
+        docPDF.setTextColor(30, 64, 175);
         docPDF.text('SALDO NETO O SALDO FINAL DEL MES EN BANCO (Ingresos - Egresos)', margin + 2, totalEfectivoY);
         docPDF.text(formatCurrency(estadoFinal.saldoNeto), pageWidth - margin - 2, totalEfectivoY, { align: 'right' });
         startY = totalEfectivoY + 10;
