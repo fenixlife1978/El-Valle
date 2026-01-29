@@ -283,7 +283,6 @@ export default function FinancialBalancePage() {
         
         startY += 25;
         
-        // FIX: Added bodyStyles to force black text color
         autoTable(docPDF, {
             head: [['INGRESOS', 'MONTO (Bs.)']],
             body: ingresos.map(i => [
@@ -303,7 +302,6 @@ export default function FinancialBalancePage() {
         
         startY = (docPDF as any).lastAutoTable.finalY + 10;
         
-        // FIX: Added bodyStyles to force black text color
         autoTable(docPDF, {
             head: [['FECHA', 'EGRESOS (GASTOS)', 'MONTO Bs.']],
             body: egresos.map(e => [
