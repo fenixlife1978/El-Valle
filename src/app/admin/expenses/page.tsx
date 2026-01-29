@@ -271,7 +271,7 @@ export default function ExpensesPage() {
         // --- BRAND & BARCODE (RIGHT) ---
         const endX = pageWidth - margin;
         const efasColor = '#F97316';
-        const condoSysColor = '#3B82F6';
+        const condoSysColor = '#FFFFFF';
         
         doc.setFont('helvetica', 'bolditalic');
         doc.setFontSize(10);
@@ -313,7 +313,7 @@ export default function ExpensesPage() {
         }
         
         // --- MAIN CONTENT ---
-        doc.setTextColor(0, 0, 0); // Reset text color
+        doc.setTextColor(0, 0, 0); // Reset text color to black for the rest of the document
         let startY = headerHeight + 15;
         
         const selectedMonthLabel = monthOptions.find(m => m.value === filterMonth)?.label;
@@ -321,7 +321,7 @@ export default function ExpensesPage() {
         
         doc.setFontSize(18).text(title, 14, startY);
         doc.setFontSize(11);
-        doc.setTextColor(100);
+        doc.setTextColor(0, 0, 0);
         doc.text(`Fecha: ${format(new Date(), 'dd/MM/yyyy')}`, 190, startY, { align: 'right' });
 
         autoTable(doc, {
@@ -336,7 +336,8 @@ export default function ExpensesPage() {
             ]),
             foot: [['', '', '', 'Total Egresos', formatToTwoDecimals(totalFilteredAmount)]],
             headStyles: { fillColor: [239, 68, 68] },
-            footStyles: { fillColor: [185, 28, 28], textColor: 255, fontStyle: 'bold' }
+            footStyles: { fillColor: [185, 28, 28], textColor: 255, fontStyle: 'bold' },
+            bodyStyles: { textColor: [0, 0, 0] } // Explicitly set body text to black
         });
 
         doc.save(`reporte_egresos_${filterYear}_${filterMonth}.pdf`);
