@@ -5,18 +5,38 @@
   "theme_color": "#0284c7",
   "background_color": "#ffffff",
   "display": "standalone",
+  "orientation": "portrait",
   "scope": "/",
   "start_url": "/auth/login?role=admin",
+  "id": "/?source=pwa",
   "icons": [
     {
       "src": "/icon-192x192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
     },
     {
       "src": "/icon-512x512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     }
-  ]
+  ],
+  "screenshots": [
+    {
+      "src": "/og-banner.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Panel de Administración EFAS"
+    }
+  ],
+  "categories": ["business", "productivity", "utilities"]
 }
