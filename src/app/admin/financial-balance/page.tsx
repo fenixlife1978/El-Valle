@@ -207,6 +207,11 @@ export default function FinancialBalancePage() {
         if (!currentCondoId || !companyInfo) return;
     
         const doc = new jsPDF();
+        // FORZAR RESET DE ESTADO INICIAL
+        doc.setTextColor(0, 0, 0); 
+        doc.setDrawColor(0, 0, 0);
+        doc.setFillColor(255, 255, 255);
+
         const pageWidth = doc.internal.pageSize.getWidth();
         const margin = 14;
 
@@ -513,4 +518,6 @@ export default function FinancialBalancePage() {
     );
 }
  
+    
+
     
