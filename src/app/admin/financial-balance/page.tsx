@@ -206,8 +206,12 @@ export default function FinancialBalancePage() {
     const generatePDF = (data: any) => {
         if (!data || !data.ingresos) return;
         const docPDF = new jsPDF();
+        docPDF.setTextColor(0, 0, 0); 
+        docPDF.setDrawColor(0, 0, 0);
+        docPDF.setFillColor(255, 255, 255);
         const pageWidth = docPDF.internal.pageSize.getWidth();
-        
+        const margin = 14;
+    
         // --- 1. ENCABEZADO (FONDO OSCURO) ---
         docPDF.setFillColor(30, 41, 59);
         docPDF.rect(0, 0, pageWidth, 45, 'F');
@@ -228,6 +232,7 @@ export default function FinancialBalancePage() {
     
         docPDF.setTextColor(255, 255, 255); // Blanco solo para el header
         docPDF.setFontSize(14);
+        docPDF.setFont('helvetica', 'bold');
         docPDF.text(companyInfo.name.toUpperCase(), 42, 22);
         docPDF.setFontSize(9);
         docPDF.text(`RIF: ${companyInfo.rif}`, 42, 28);
@@ -237,8 +242,8 @@ export default function FinancialBalancePage() {
         docPDF.text("CONDOSYS", pageWidth - 42, 18);
     
         // --- 2. RESET OBLIGATORIO A NEGRO ---
-        docPDF.setTextColor(0, 0, 0); // <--- ESTO ES VITAL
-        docPDF.setDrawColor(0, 0, 0);
+        docPDF.setTextColor(0, 0, 0); 
+        docPDF.setFont('helvetica', 'normal');
     
         docPDF.setFontSize(22);
         docPDF.text("BALANCE", 14, 65);
@@ -253,10 +258,13 @@ export default function FinancialBalancePage() {
         // --- 3. TABLAS CON COLORES FORZADOS ---
         autoTable(docPDF, {
             head: [['CONCEPTO DE INGRESO', 'MONTO (Bs.)']],
-            body: data.ingresos.map((i: any) => [i.concepto.toUpperCase(), formatCurrency(i.monto)]),
+            body: data.ingresos.map((i: any) => [
+                i.concepto.toUpperCase(), 
+                formatCurrency(i.monto)
+            ]),
             startY: 85,
             theme: 'grid',
-            headStyles: { fillColor: [16, 185, 129], textColor: [255, 255, 255] },
+            headStyles: { fillColor: [16, 185, 129], textColor: [255, 255, 255], fontStyle: 'bold' },
             styles: { 
                 textColor: [0, 0, 0], // FORZAR TEXTO NEGRO EN FILAS
                 lineColor: [200, 200, 200] 
@@ -264,14 +272,17 @@ export default function FinancialBalancePage() {
             columnStyles: { 1: { halign: 'right' } }
         });
     
+        const nextY = (docPDF as any).lastAutoTable.finalY + 10;
+        docPDF.setTextColor(0, 0, 0); // Re-confirmamos negro antes de la siguiente tabla
+        
         autoTable(docPDF, {
             head: [['FECHA', 'CONCEPTO DE EGRESO / GASTO', 'MONTO (Bs.)']],
             body: data.egresos.length > 0 
                 ? data.egresos.map((e: any) => [e.fecha, e.descripcion.toUpperCase(), formatCurrency(e.monto)]) 
                 : [['-', 'SIN GASTOS REGISTRADOS', '0,00']],
-            startY: (docPDF as any).lastAutoTable.finalY + 10,
+            startY: nextY,
             theme: 'grid',
-            headStyles: { fillColor: [225, 29, 72], textColor: [255, 255, 255] },
+            headStyles: { fillColor: [225, 29, 72], textColor: [255, 255, 255], fontStyle: 'bold' },
             styles: { 
                 textColor: [0, 0, 0], // FORZAR TEXTO NEGRO EN FILAS
                 lineColor: [200, 200, 200] 
@@ -281,15 +292,19 @@ export default function FinancialBalancePage() {
     
         // --- 4. CUADRO FINAL ---
         const finalY = (docPDF as any).lastAutoTable.finalY + 15;
+        
         docPDF.setFillColor(245, 158, 11);
-        docPDF.roundedRect(14, finalY, pageWidth - 28, 25, 4, 4, 'F');
-        docPDF.setTextColor(255, 255, 255); // Blanco para el cuadro ámbar
-        docPDF.setFontSize(10);
-        docPDF.text("DISPONIBILIDAD TOTAL REAL:", 20, finalY + 10);
-        docPDF.setFontSize(18);
-        docPDF.text(`${formatCurrency(data.disponibilidad)} Bs.`, 20, finalY + 18);
+        docPDF.roundedRect(margin, finalY, pageWidth - (margin * 2), 22, 3, 3, 'F');
+        
+        docPDF.setTextColor(255, 255, 255);
+        docPDF.setFontSize(11);
+        docPDF.text("DISPONIBILIDAD TOTAL EN CAJA/BANCO:", margin + 5, finalY + 9);
+        docPDF.setFontSize(16);
+        docPDF.setFont('helvetica', 'bold');
+        docPDF.text(`${formatCurrency(data.disponibilidad)} Bs.`, margin + 5, finalY + 17);
     
-        window.open(docPDF.output('bloburl'), '_blank');
+        const fileName = `Balance_${data.year || selectedYear}_${data.month || selectedMonth}.pdf`;
+        docPDF.save(fileName);
     };
 
     if (authLoading || dataLoading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin h-10 w-10 text-primary" /></div>;
@@ -472,5 +487,7 @@ export default function FinancialBalancePage() {
         </div>
     );
 }
+
+    
 
     
