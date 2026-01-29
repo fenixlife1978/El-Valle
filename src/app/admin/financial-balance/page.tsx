@@ -6,7 +6,7 @@ import {
     collection, query, orderBy, doc, Timestamp, getDoc, where, getDocs, setDoc, serverTimestamp 
 } from 'firebase/firestore';
 import { 
-    Download, Loader2, RefreshCw, TrendingUp, TrendingDown, Wallet, Box, Save, FileText 
+    Download, Loader2, RefreshCw, TrendingUp, TrendingDown, Wallet, Box, Save, FileText, Eye
 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
@@ -149,7 +149,7 @@ export default function FinancialBalancePage() {
 
     useEffect(() => { if (!authLoading && currentCondoId) loadData(); }, [authLoading, currentCondoId, loadData, selectedMonth, selectedYear]);
 
-    const generatePDF = async () => {
+    const generatePDF = async (outputType: 'download' | 'preview' = 'download') => {
         if (!currentCondoId || !companyInfo) return;
     
         const docPDF = new jsPDF();
@@ -163,29 +163,21 @@ export default function FinancialBalancePage() {
         // 2. LOGO REDONDO (Si existe)
         if (companyInfo.logo) {
             try {
-                // Coordenadas para el logo circular
                 const centerX = 26;
                 const centerY = 22.5;
                 const radius = 12;
     
-                // 1. Dibujamos el círculo que servirá de máscara
-                // Usamos 'S' (stroke) pero lo importante es el clipping posterior
-                docPDF.setDrawColor(245, 158, 11); // Color Ámbar
-                docPDF.setLineWidth(0.8);
-                docPDF.circle(centerX, centerY, radius, 'S'); 
-    
-                // 2. Aplicamos el recorte (clipping)
-                // Accedemos al contexto de dibujo interno de jsPDF para mayor compatibilidad
                 (docPDF as any).saveGraphicsState();
-                (docPDF as any).circle(centerX, centerY, radius, 'f'); // 'f' para fill (necesario para clip)
+                docPDF.circle(centerX, centerY, radius, 'S'); 
                 (docPDF as any).clip();
     
-                // 3. Insertamos la imagen (quedará recortada por el círculo)
                 docPDF.addImage(companyInfo.logo, 'PNG', centerX - radius, centerY - radius, radius * 2, radius * 2);
     
-                // 4. Restauramos el estado para que el resto del PDF no salga circular
                 (docPDF as any).restoreGraphicsState();
                 
+                 docPDF.setDrawColor(245, 158, 11); // Amber-500
+                 docPDF.setLineWidth(0.8);
+                 docPDF.circle(centerX, centerY, radius, 'S');
             } catch (e) {
                 console.error("Error al procesar el logo circular en el PDF:", e);
             }
@@ -242,13 +234,13 @@ export default function FinancialBalancePage() {
     
         // TABLA DE INGRESOS
         autoTable(docPDF, {
-            head: [['DÍA', 'CONCEPTO DE INGRESO', 'MONTO (Bs.)']],
-            body: ingresos.map(i => [i.dia, i.concepto.toUpperCase(), formatCurrency(i.monto)]),
+            head: [['CONCEPTO DE INGRESO', 'MONTO (Bs.)']],
+            body: ingresos.map(i => [i.concepto.toUpperCase(), formatCurrency(i.monto)]),
             startY: startY + 15,
             theme: 'grid',
             headStyles: { fillColor: [16, 185, 129], fontStyle: 'bold' },
             bodyStyles: { textColor: [0, 0, 0] },
-            columnStyles: { 2: { halign: 'right', fontStyle: 'bold' } }
+            columnStyles: { 1: { halign: 'right', fontStyle: 'bold' } }
         });
     
         // TABLA DE EGRESOS
@@ -282,8 +274,14 @@ export default function FinancialBalancePage() {
             docPDF.text(notas, margin, finalY + 40, { maxWidth: pageWidth - 30 });
         }
     
-        // Guardar
-        docPDF.save(`EFAS_Balance_${currentCondoId}_${selectedYear}_${selectedMonth}.pdf`);
+        // Guardar o previsualizar
+        if (outputType === 'download') {
+            docPDF.save(`EFAS_Balance_${currentCondoId}_${selectedYear}_${selectedMonth}.pdf`);
+        } else {
+            const blobUrl = docPDF.output('bloburl');
+            window.open(blobUrl, '_blank');
+            toast({ title: "Vista Previa Generada", description: "Se ha abierto el PDF en una nueva pestaña." });
+        }
     };
 
     if (authLoading || dataLoading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin h-10 w-10 text-primary" /></div>;
@@ -304,8 +302,11 @@ export default function FinancialBalancePage() {
                 <Button variant="outline" onClick={loadData} disabled={syncing} className="rounded-2xl">
                     <RefreshCw className={`mr-2 h-4 w-4 ${syncing && 'animate-spin'}`}/> Sincronizar
                 </Button>
-                <Button className="bg-primary rounded-2xl" onClick={generatePDF}>
-                    <Download className="mr-2 h-4 w-4"/> Generar PDF Premium
+                 <Button variant="outline" onClick={() => generatePDF('preview')} className="rounded-2xl">
+                    <Eye className="mr-2 h-4 w-4"/> Vista Previa
+                </Button>
+                <Button className="bg-primary rounded-2xl" onClick={() => generatePDF('download')}>
+                    <Download className="mr-2 h-4 w-4"/> Descargar PDF
                 </Button>
             </div>
 
