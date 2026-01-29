@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -18,10 +17,12 @@ import autoTable from 'jspdf-autotable';
 import JsBarcode from 'jsbarcode';
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 const formatCurrency = (amount: number | null | undefined): string => {
     if (typeof amount !== 'number') return '0,00';
@@ -46,16 +47,13 @@ export default function FinancialBalancePage() {
     const [ingresos, setIngresos] = useState<{ concepto: string, real: number, category: string }[]>([]);
     const [egresos, setEgresos] = useState<any[]>([]);
     const [cajaChica, setCajaChica] = useState({ saldoInicial: 0, reposiciones: 0, gastos: 0, saldoFinal: 0 });
-    const [estadoFinal, setEstadoFinal] = useState({ saldoAnteriorBancos: 0, totalIngresos: 0, totalEgresos: 0, saldoBancos: 0, disponibilidadTotal: 0 });
+    const [estadoFinal, setEstadoFinal] = useState({ saldoAnterior: 0, totalIngresos: 0, totalEgresos: 0, saldoBancos: 0, disponibilidadTotal: 0 });
     const [notas, setNotas] = useState('');
 
     const loadData = useCallback(async () => {
         if (!currentCondoId) return;
         setSyncing(true);
         try {
-            const fromDate = startOfMonth(new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1));
-            const toDate = endOfMonth(fromDate);
-
             const configRef = doc(db, 'condominios', currentCondoId, 'config', 'mainSettings');
             const snap = await getDoc(configRef);
             if (snap.exists()) {
@@ -67,10 +65,10 @@ export default function FinancialBalancePage() {
                 });
             }
 
-            const prevPaymentsSnap = await getDocs(query(collection(db, 'condominios', currentCondoId, 'payments'), where('paymentDate', '<', fromDate), where('status', '==', 'aprobado')));
-            const prevExpensesSnap = await getDocs(query(collection(db, 'condominios', currentCondoId, 'gastos'), where('date', '<', fromDate)));
-            const saldoAnteriorBancos = prevPaymentsSnap.docs.reduce((sum, doc) => sum + doc.data().totalAmount, 0) - prevExpensesSnap.docs.reduce((sum, doc) => sum + doc.data().amount, 0);
-
+            const fromDate = startOfMonth(new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1));
+            const toDate = endOfMonth(fromDate);
+            
+            // --- CÁLCULO DE INGRESOS Y EGRESOS DEL PERÍODO ---
             const paymentsSnap = await getDocs(query(collection(db, 'condominios', currentCondoId, 'payments'), where('paymentDate', '>=', fromDate), where('paymentDate', '<=', toDate), where('status', '==', 'aprobado')));
             const totalIngresos = paymentsSnap.docs.reduce((sum, doc) => sum + doc.data().totalAmount, 0);
             
@@ -78,6 +76,7 @@ export default function FinancialBalancePage() {
             const listaEgresos = expensesSnap.docs.map(d => ({ fecha: format(d.data().date.toDate(), 'dd/MM/yyyy'), descripcion: d.data().description, monto: d.data().amount }));
             const totalEgresos = listaEgresos.reduce((sum, item) => sum + item.monto, 0);
 
+            // --- CÁLCULO DE CAJA CHICA ---
             const prevPettyCashSnap = await getDocs(query(collection(db, 'condominios', currentCondoId, 'cajaChica_movimientos'), where('date', '<', fromDate)));
             const saldoInicialCajaChica = prevPettyCashSnap.docs.reduce((sum, doc) => sum + (doc.data().type === 'ingreso' ? doc.data().amount : -doc.data().amount), 0);
             
@@ -90,57 +89,62 @@ export default function FinancialBalancePage() {
             setEgresos(listaEgresos);
             setCajaChica({ saldoInicial: saldoInicialCajaChica, reposiciones: reposicionesCajaChica, gastos: gastosCajaChica, saldoFinal: saldoFinalCajaChica });
 
-            const saldoBancos = saldoAnteriorBancos + totalIngresos - totalEgresos;
-            setEstadoFinal({
-                saldoAnteriorBancos,
+            // --- CÁLCULO FINAL USANDO SALDO ANTERIOR MANUAL ---
+            const saldoBancos = estadoFinal.saldoAnterior + totalIngresos - totalEgresos;
+
+            setEstadoFinal(prev => ({
+                ...prev,
                 totalIngresos,
                 totalEgresos,
                 saldoBancos,
                 disponibilidadTotal: saldoBancos + saldoFinalCajaChica
-            });
+            }));
 
-            setDataLoading(false);
         } catch (e) {
             console.error("Error EFAS:", e);
+            toast({ variant: 'destructive', title: 'Error de Sincronización' });
         } finally {
             setSyncing(false);
+            setDataLoading(false);
         }
-    }, [currentCondoId, selectedMonth, selectedYear]);
+    }, [currentCondoId, selectedMonth, selectedYear, estadoFinal.saldoAnterior, toast]);
 
     useEffect(() => {
-        if (!authLoading && currentCondoId) {
-            loadData();
-        }
+        const fetchData = async () => {
+            if (!authLoading && currentCondoId) {
+                await loadData();
+            }
+        };
+        fetchData();
     }, [authLoading, currentCondoId, loadData]);
 
-    const generatePDF = async () => {
+    const generatePDF = async (outputType: 'preview' | 'download' = 'download') => {
         if (!currentCondoId || !companyInfo) return;
     
         const docPDF = new jsPDF();
         const pageWidth = docPDF.internal.pageSize.getWidth();
         const margin = 14;
 
+        // ENCABEZADO OSCURO (Diseño Premium solicitado)
         docPDF.setFillColor(30, 41, 59); 
         docPDF.rect(0, 0, pageWidth, 45, 'F');
 
+        // LOGO REDONDO
         if (companyInfo.logo) {
             try {
                 const centerX = 26;
                 const centerY = 22.5;
                 const radius = 12;
-    
-                docPDF.setDrawColor(245, 158, 11);
-                docPDF.setLineWidth(0.8);
-                docPDF.circle(centerX, centerY, radius, 'S'); 
-    
+
                 (docPDF as any).saveGraphicsState();
-                (docPDF as any).circle(centerX, centerY, radius, 'f');
+                (docPDF as any).circle(centerX, centerY, radius);
                 (docPDF as any).clip();
-    
                 docPDF.addImage(companyInfo.logo, 'PNG', centerX - radius, centerY - radius, radius * 2, radius * 2);
-    
                 (docPDF as any).restoreGraphicsState();
                 
+                docPDF.setDrawColor(245, 158, 11);
+                docPDF.setLineWidth(0.8);
+                docPDF.circle(centerX, centerY, radius, 'S');
             } catch (e) {
                 console.error("Error al procesar el logo circular en el PDF:", e);
             }
@@ -152,12 +156,15 @@ export default function FinancialBalancePage() {
         docPDF.setFontSize(10).setTextColor(203, 213, 225);
         docPDF.text(`RIF: ${companyInfo.rif}`, 42, 28);
 
+        // BRANDING EFAS
         docPDF.setTextColor(245, 158, 11);
-        docPDF.setFont('helvetica', 'bold').setFontSize(14);
+        docPDF.setFont('helvetica', 'bold');
+        docPDF.setFontSize(14);
         docPDF.text("EFAS", pageWidth - 55, 20);
         docPDF.setTextColor(255, 255, 255);
         docPDF.text("CONDOSYS", pageWidth - 41, 20);
 
+        // CÓDIGO DE BARRAS
         const canvas = document.createElement('canvas');
         const barcodeVal = `BF-${currentCondoId}-${selectedYear}${selectedMonth}`;
         JsBarcode(canvas, barcodeVal, { format: "CODE128", displayValue: true, fontSize: 14 });
@@ -174,26 +181,51 @@ export default function FinancialBalancePage() {
         docPDF.setFontSize(10).setTextColor(100, 116, 139);
         docPDF.text(`PERIODO: ${monthLabel.toUpperCase()} ${selectedYear}`, margin, startY + 8);
 
+        // TABLA DE INGRESOS
         autoTable(docPDF, {
             head: [['INGRESOS', 'MONTO (Bs.)']],
             body: ingresos.map(i => [i.concepto.toUpperCase(), formatCurrency(i.real)]),
+            foot: [[{content: 'TOTAL INGRESOS', styles: {halign: 'right'}}, {content: formatCurrency(estadoFinal.totalIngresos), styles: {halign: 'right'}}]],
             startY: startY + 15,
             theme: 'grid',
             headStyles: { fillColor: [16, 185, 129] },
+            footStyles: { fillColor: [16, 185, 129], textColor: 255, fontStyle: 'bold' },
             columnStyles: { 1: { halign: 'right' } }
         });
 
+        // TABLA DE EGRESOS
         autoTable(docPDF, {
             head: [['FECHA', 'EGRESOS', 'MONTO (Bs.)']],
             body: egresos.map(e => [e.fecha, e.descripcion.toUpperCase(), formatCurrency(e.monto)]),
+            foot: [[{content: 'TOTAL EGRESOS', colSpan: 2, styles: {halign: 'right'}}, {content: formatCurrency(estadoFinal.totalEgresos), styles: {halign: 'right'}}]],
             startY: (docPDF as any).lastAutoTable.finalY + 10,
             theme: 'grid',
             headStyles: { fillColor: [225, 29, 72] },
+            footStyles: { fillColor: [225, 29, 72], textColor: 255, fontStyle: 'bold' },
             columnStyles: { 2: { halign: 'right' } }
         });
         
-        const finalY = (docPDF as any).lastAutoTable.finalY + 10;
+        let finalY = (docPDF as any).lastAutoTable.finalY + 10;
         
+        // --- NUEVA TABLA DE RESUMEN BANCARIO ---
+        autoTable(docPDF, {
+            head: [['RESUMEN BANCARIO', 'MONTO (Bs.)']],
+            body: [
+                ['(+) Saldo del Mes Anterior (Manual)', formatCurrency(estadoFinal.saldoAnterior)],
+                ['(+) Total Ingresos del Mes', formatCurrency(estadoFinal.totalIngresos)],
+                ['(-) Total Egresos del Mes', `-${formatCurrency(estadoFinal.totalEgresos)}`],
+            ],
+            foot: [[{content:'(=) SALDO FINAL EN BANCOS', styles:{halign:'right'}}, {content: formatCurrency(estadoFinal.saldoBancos), styles:{halign:'right'}}]],
+            startY: finalY,
+            theme: 'grid',
+            headStyles: { fillColor: [100, 116, 139] },
+            footStyles: { fillColor: [100, 116, 139], textColor: 255, fontStyle: 'bold' },
+            columnStyles: { 1: { halign: 'right' } }
+        });
+        finalY = (docPDF as any).lastAutoTable.finalY + 10;
+
+
+        // TABLA DE CAJA CHICA
         autoTable(docPDF, {
             head: [['CAJA CHICA', 'MONTO (Bs.)']],
             body: [
@@ -226,7 +258,11 @@ export default function FinancialBalancePage() {
             docPDF.text(notas, margin, finalTableY + 40, { maxWidth: pageWidth - 30 });
         }
     
-        docPDF.save(`EFAS_Balance_${currentCondoId}_${selectedYear}_${selectedMonth}.pdf`);
+        if (outputType === 'download') {
+            docPDF.save(`EFAS_Balance_${currentCondoId}_${selectedYear}_${selectedMonth}.pdf`);
+        } else {
+            docPDF.output('dataurlnewwindow');
+        }
     };
 
     if (authLoading || dataLoading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin h-10 w-10 text-primary" /></div>;
@@ -245,10 +281,13 @@ export default function FinancialBalancePage() {
 
             <div className="flex gap-2">
                 <Button variant="outline" onClick={loadData} disabled={syncing} className="rounded-2xl">
-                    <RefreshCw className={`mr-2 h-4 w-4 ${syncing && 'animate-spin'}`}/> Sincronizar Datos
+                    <RefreshCw className={`mr-2 h-4 w-4 ${syncing && 'animate-spin'}`}/> Sincronizar
                 </Button>
-                <Button className="bg-primary rounded-2xl" onClick={generatePDF}>
-                    <Download className="mr-2 h-4 w-4"/> Generar PDF
+                <Button onClick={() => generatePDF('preview')} className="rounded-2xl">
+                   <FileText className="mr-2 h-4 w-4"/> Vista Previa
+                </Button>
+                <Button className="bg-primary rounded-2xl" onClick={() => generatePDF('download')}>
+                    <Download className="mr-2 h-4 w-4"/> Descargar PDF
                 </Button>
             </div>
             
@@ -260,9 +299,25 @@ export default function FinancialBalancePage() {
                         <Select value={selectedYear} onValueChange={setSelectedYear}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent></Select>
                     </div>
                 </Card>
+                <Card className="rounded-[2.5rem] p-6 shadow-xl border-2">
+                    <CardHeader className="p-0 mb-4">
+                        <CardTitle className="text-sm font-bold text-muted-foreground uppercase">Saldo Anterior (Bancos)</CardTitle>
+                        <CardDescription className="text-xs">Saldo final del mes anterior.</CardDescription>
+                    </CardHeader>
+                    <div className="relative">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground font-bold">Bs.</span>
+                         <Input 
+                            type="number"
+                            value={estadoFinal.saldoAnterior}
+                            onChange={(e) => setEstadoFinal(prev => ({...prev, saldoAnterior: parseFloat(e.target.value) || 0 }))}
+                            className="pl-12 text-xl font-black h-14 rounded-xl bg-input"
+                            placeholder="0.00"
+                        />
+                    </div>
+                </Card>
+
                 <Card className="rounded-[2.5rem] bg-emerald-50 text-emerald-700 p-6 border-none"><p className="font-bold">Total Ingresos</p><p className="text-3xl font-black">{formatCurrency(estadoFinal.totalIngresos)}</p></Card>
                 <Card className="rounded-[2.5rem] bg-rose-50 text-rose-700 p-6 border-none"><p className="font-bold">Total Egresos</p><p className="text-3xl font-black">{formatCurrency(estadoFinal.totalEgresos)}</p></Card>
-                <Card className="rounded-[2.5rem] bg-blue-50 text-blue-700 p-6 border-none"><p className="font-bold">Saldo en Bancos</p><p className="text-3xl font-black">{formatCurrency(estadoFinal.saldoBancos)}</p></Card>
             </div>
             
              <Card className="rounded-[2.5rem] bg-card border-2">
