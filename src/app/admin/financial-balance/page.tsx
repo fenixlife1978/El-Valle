@@ -109,11 +109,11 @@ export default function FinancialBalancePage() {
             const paymentsInPeriodQuery = query(
                 collection(db, 'condominios', activeCondoId, 'payments'),
                 where('paymentDate', '>=', Timestamp.fromDate(currentPeriodStart)),
-                where('paymentDate', '<=', Timestamp.fromDate(currentPeriodEnd))
+                where('paymentDate', '<=', Timestamp.fromDate(currentPeriodEnd)),
+                where('status', '==', 'aprobado')
             );
             const paymentsSnap = await getDocs(paymentsInPeriodQuery);
             const totalPayments = paymentsSnap.docs
-                .filter(doc => doc.data().status === 'aprobado')
                 .reduce((sum, doc) => sum + (doc.data().totalAmount || 0), 0);
             
             const newIngresos = [
@@ -220,15 +220,14 @@ export default function FinancialBalancePage() {
         let textX = margin;
         if (companyInfo.logo) {
             try {
-                // Circular logo logic
                 const logoSize = 20;
                 const logoX = margin + logoSize / 2;
                 const logoY = 7 + logoSize / 2;
                 docPDF.saveGraphicsState();
-                docPDF.circle(logoX, logoY, logoSize / 2);
+                docPDF.circle(logoX, logoY, logoSize / 2); // Create a circular clipping path
                 docPDF.clip();
                 docPDF.addImage(companyInfo.logo, 'PNG', margin, 7, logoSize, logoSize);
-                docPDF.restoreGraphicsState();
+                docPDF.restoreGraphicsState(); // Restore state to remove clipping
                 textX += logoSize + 5;
             } catch(e) { console.error("Error adding logo to PDF", e); }
         }
@@ -262,6 +261,9 @@ export default function FinancialBalancePage() {
         docPDF.setTextColor(200, 200, 200);
         docPDF.text(subtitleText, endX, 22, { align: 'right' });
         
+        // Reset text color for the rest of the document
+        docPDF.setTextColor(0, 0, 0); 
+        
         let startY = headerHeight + 5;
 
         // --- BARCODE (Centered, smaller) ---
@@ -282,10 +284,13 @@ export default function FinancialBalancePage() {
         startY += 25;
         
         const period = `${months.find(m => m.value === selectedMonth)?.label} ${selectedYear}`;
-        docPDF.setFontSize(16).setFont('helvetica', 'bold').setTextColor(0,0,0).text('ESTADO DE RESULTADOS', pageWidth / 2, startY, { align: 'center' });
+        docPDF.setFontSize(16).setFont('helvetica', 'bold').text('ESTADO DE RESULTADOS', pageWidth / 2, startY, { align: 'center' });
         docPDF.setFontSize(12).setFont('helvetica', 'normal').text(`Correspondiente al período de ${period}`, pageWidth / 2, startY + 7, { align: 'center' });
         
         startY += 25;
+        
+        // Ensure table text is black
+        const tableBodyStyles = { textColor: [0, 0, 0] };
         
         autoTable(docPDF, {
             head: [['INGRESOS', 'MONTO (Bs.)']],
@@ -301,7 +306,7 @@ export default function FinancialBalancePage() {
             theme: 'striped',
             headStyles: { fillColor: [59, 130, 246], halign: 'center', textColor: 255 },
             footStyles: { fillColor: [30, 64, 175], textColor: 255, fontStyle: 'bold' },
-            bodyStyles: { textColor: [0, 0, 0] }
+            bodyStyles: tableBodyStyles
         });
         
         startY = (docPDF as any).lastAutoTable.finalY + 10;
@@ -322,7 +327,7 @@ export default function FinancialBalancePage() {
             theme: 'striped',
             headStyles: { fillColor: [239, 68, 68], halign: 'center', textColor: 255 },
             footStyles: { fillColor: [185, 28, 28], textColor: 255, fontStyle: 'bold' },
-            bodyStyles: { textColor: [0, 0, 0] }
+            bodyStyles: tableBodyStyles
         });
 
         startY = (docPDF as any).lastAutoTable.finalY + 10;
@@ -334,8 +339,9 @@ export default function FinancialBalancePage() {
         docPDF.setTextColor(30, 64, 175);
         docPDF.text('SALDO NETO O SALDO FINAL DEL MES EN BANCO (Ingresos - Egresos)', margin + 2, totalEfectivoY);
         docPDF.text(formatCurrency(estadoFinal.saldoNeto), pageWidth - margin - 2, totalEfectivoY, { align: 'right' });
+        docPDF.setTextColor(0, 0, 0); // Reset again for safety
+
         startY = totalEfectivoY + 10;
-        docPDF.setTextColor(0, 0, 0);
 
         startY += 10;
         docPDF.setFontSize(10).text('Notas:', margin, startY);
