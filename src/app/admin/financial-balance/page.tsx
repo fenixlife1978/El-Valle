@@ -93,24 +93,28 @@ export default function FinancialBalancePage() {
         if (!activeCondoId) return;
         setSyncing(true);
         if (showToast) toast({ title: "Sincronizando..." });
-
+    
         try {
             await loadCondoConfig();
             const currentPeriodStart = startOfMonth(new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1));
             const currentPeriodEnd = endOfMonth(currentPeriodStart);
             
+            // --- Saldo Anterior ---
             const prevPeriodDate = subMonths(currentPeriodStart, 1);
             const prevPeriodId = format(prevPeriodDate, 'yyyy-MM');
             const prevSnap = await getDoc(doc(db, 'condominios', activeCondoId, 'financial_statements', prevPeriodId));
             const saldoAnterior = prevSnap.exists() ? (prevSnap.data() as any).estadoFinal.saldoBancos : 0;
             
-            const paymentsSnap = await getDocs(query(
+            // --- Ingresos del Mes --- (CORREGIDO)
+            const paymentsInPeriodQuery = query(
                 collection(db, 'condominios', activeCondoId, 'payments'),
-                where('status', '==', 'aprobado'),
                 where('paymentDate', '>=', Timestamp.fromDate(currentPeriodStart)),
                 where('paymentDate', '<=', Timestamp.fromDate(currentPeriodEnd))
-            ));
-            const totalPayments = paymentsSnap.docs.reduce((sum, doc) => sum + (doc.data().totalAmount || 0), 0);
+            );
+            const paymentsSnap = await getDocs(paymentsInPeriodQuery);
+            const totalPayments = paymentsSnap.docs
+                .filter(doc => doc.data().status === 'aprobado')
+                .reduce((sum, doc) => sum + (doc.data().totalAmount || 0), 0);
             
             const newIngresos = [
                 { concepto: 'Cobranza del Mes', real: totalPayments, category: 'cuotas_ordinarias' },
@@ -118,8 +122,8 @@ export default function FinancialBalancePage() {
                 { concepto: 'Otros Ingresos', real: 0, category: 'otros' }
             ];
             setIngresos(newIngresos);
-
-
+    
+            // --- Egresos del Mes ---
             const expensesSnap = await getDocs(query(
                 collection(db, 'condominios', activeCondoId, 'gastos'),
                 where('date', '>=', Timestamp.fromDate(currentPeriodStart)),
@@ -127,28 +131,33 @@ export default function FinancialBalancePage() {
                 orderBy('date', 'asc')
             ));
             
-            const ccMovesQuery = query(collection(db, 'condominios', activeCondoId, 'cajaChica_movimientos'));
-            const ccMovesSnap = await getDocs(ccMovesQuery);
+            // --- Caja Chica (CORREGIDO Y OPTIMIZADO) ---
+            const priorMovesQuery = query(
+                collection(db, 'condominios', activeCondoId, 'cajaChica_movimientos'),
+                where('date', '<', Timestamp.fromDate(currentPeriodStart))
+            );
+            const priorMovesSnap = await getDocs(priorMovesQuery);
+            const saldoInicialCC = priorMovesSnap.docs.reduce((acc, doc) => {
+                const move = doc.data();
+                return acc + (move.type === 'ingreso' ? move.amount : -move.amount);
+            }, 0);
             
-            let saldoInicialCC = 0;
-            ccMovesSnap.docs.forEach(d => {
-                const move = d.data();
-                if (move.date.toDate() < currentPeriodStart) {
-                    saldoInicialCC += move.type === 'ingreso' ? move.amount : -move.amount;
-                }
-            });
-
+            const periodMovesQuery = query(
+                collection(db, 'condominios', activeCondoId, 'cajaChica_movimientos'),
+                where('date', '>=', Timestamp.fromDate(currentPeriodStart)),
+                where('date', '<=', Timestamp.fromDate(currentPeriodEnd))
+            );
+            const periodMovesSnap = await getDocs(periodMovesQuery);
             let reposicionesCC = 0;
             let gastosCC = 0;
-            ccMovesSnap.docs.forEach(d => {
-                const move = d.data();
-                if (move.date.toDate() >= currentPeriodStart && move.date.toDate() <= currentPeriodEnd) {
-                    if (move.type === 'ingreso') reposicionesCC += move.amount;
-                    if (move.type === 'egreso') gastosCC += move.amount;
-                }
+            periodMovesSnap.docs.forEach(doc => {
+                const move = doc.data();
+                if (move.type === 'ingreso') reposicionesCC += move.amount;
+                if (move.type === 'egreso') gastosCC += move.amount;
             });
+    
             const saldoFinalCC = saldoInicialCC + reposicionesCC - gastosCC;
-
+    
             setEstadoFinal(prev => ({...prev, saldoAnterior}));
             setEgresos(expensesSnap.docs.map(d => ({
                 id: d.id,
@@ -157,7 +166,7 @@ export default function FinancialBalancePage() {
                 fecha: format(d.data().date.toDate(), 'dd/MM/yyyy')
             })));
             setCajaChica({ saldoInicial: saldoInicialCC, reposiciones: reposicionesCC, gastos: gastosCC, saldoFinal: saldoFinalCC });
-
+    
         } catch (e) {
             console.error(e);
             toast({variant: 'destructive', title: 'Error de Sincronización', description: "No se pudieron cargar todos los datos."});
@@ -242,21 +251,16 @@ export default function FinancialBalancePage() {
 
         const condoSysWidth = docPDF.getStringUnitWidth(condoSysText) * 12 / docPDF.internal.scaleFactor;
         
-        // Draw CONDOSYS in white
-        docPDF.setTextColor(condoSysColor);
-        docPDF.text(condoSysText, endX, 15, { align: 'right' });
-        
-        // Draw EFAS in orange
         docPDF.setTextColor(efasColor);
         docPDF.text(efasText, endX - condoSysWidth - 2, 15, { align: 'right' });
         
-        // Draw Subtitle
+        docPDF.setTextColor(condoSysColor);
+        docPDF.text(condoSysText, endX, 15, { align: 'right' });
+        
         docPDF.setFont('helvetica', 'normal');
         docPDF.setFontSize(7);
-        docPDF.setTextColor(200, 200, 200); // Lighter gray
+        docPDF.setTextColor(200, 200, 200);
         docPDF.text(subtitleText, endX, 22, { align: 'right' });
-        
-        docPDF.setTextColor(0, 0, 0); 
         
         let startY = headerHeight + 5;
 
@@ -278,7 +282,7 @@ export default function FinancialBalancePage() {
         startY += 25;
         
         const period = `${months.find(m => m.value === selectedMonth)?.label} ${selectedYear}`;
-        docPDF.setFontSize(16).setFont('helvetica', 'bold').text('ESTADO DE RESULTADOS', pageWidth / 2, startY, { align: 'center' });
+        docPDF.setFontSize(16).setFont('helvetica', 'bold').setTextColor(0,0,0).text('ESTADO DE RESULTADOS', pageWidth / 2, startY, { align: 'center' });
         docPDF.setFontSize(12).setFont('helvetica', 'normal').text(`Correspondiente al período de ${period}`, pageWidth / 2, startY + 7, { align: 'center' });
         
         startY += 25;
@@ -295,7 +299,7 @@ export default function FinancialBalancePage() {
             ]],
             startY,
             theme: 'striped',
-            headStyles: { fillColor: [59, 130, 246], halign: 'center' },
+            headStyles: { fillColor: [59, 130, 246], halign: 'center', textColor: 255 },
             footStyles: { fillColor: [30, 64, 175], textColor: 255, fontStyle: 'bold' },
             bodyStyles: { textColor: [0, 0, 0] }
         });
@@ -316,7 +320,7 @@ export default function FinancialBalancePage() {
             ]],
             startY: startY,
             theme: 'striped',
-            headStyles: { fillColor: [239, 68, 68], halign: 'center' },
+            headStyles: { fillColor: [239, 68, 68], halign: 'center', textColor: 255 },
             footStyles: { fillColor: [185, 28, 28], textColor: 255, fontStyle: 'bold' },
             bodyStyles: { textColor: [0, 0, 0] }
         });
