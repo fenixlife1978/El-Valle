@@ -13,6 +13,7 @@ import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
 import Link from 'next/link';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
+import { SYSTEM_LOGO } from '@/lib/constants';
 
 const ADMIN_EMAIL = 'vallecondo@gmail.com';
 
@@ -130,11 +131,7 @@ function LoginPage() {
             <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-amber-500/5 blur-[100px] rounded-full"></div>
 
             <div className="text-center mb-8 relative z-10">
-                 <h1 className="text-4xl font-black italic uppercase tracking-tighter">
-                    <span className="text-orange-500">EFAS</span>
-                    <span className="text-slate-800 dark:text-slate-100">CONDOSYS</span>
-                </h1>
-                <p className="text-[9px] text-muted-foreground font-black tracking-[0.4em] uppercase mt-2 italic">Autogestión de Condominios</p>
+                <img src={SYSTEM_LOGO} alt="EFAS CondoSys Logo" className="w-64 mx-auto" />
             </div>
 
             <Card className="w-full max-w-sm border-border shadow-2xl rounded-[2.5rem] overflow-hidden bg-card/80 backdrop-blur-xl text-card-foreground relative z-10">
