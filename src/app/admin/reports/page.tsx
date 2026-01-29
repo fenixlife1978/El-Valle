@@ -1361,53 +1361,86 @@ export default function ReportsPage() {
                 
                 <TabsContent value="integral-report">
                     <div className="space-y-6">
-                        {/* --- Tarjeta de Reportes Integrales --- */}
                         <Card>
                             <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl">
-                                <CardTitle>Reportes Integrales</CardTitle>
-                                <CardDescription className="text-primary-foreground/90">Genere, guarde y publique una vista consolidada del estado de todos los propietarios.</CardDescription>
+                                <CardTitle>Reporte Integral</CardTitle>
+                                <CardDescription className="text-primary-foreground/90">Genere una vista consolidada del estado de todos los propietarios para un período específico.</CardDescription>
                             </CardHeader>
-                            <CardContent className="space-y-4 pt-6">
-                                <div className="flex justify-end gap-2 mb-4">
-                                    <Button onClick={handleGenerateAndSaveIntegral} disabled={generatingReport}>
-                                        <FileText className="mr-2 h-4 w-4" /> Generar y Guardar Reporte
-                                    </Button>
+                            <CardContent className="space-y-6 pt-6">
+                                <div className="p-4 border rounded-lg bg-muted/50">
+                                    <h4 className="font-semibold mb-3">Filtros para Nuevo Reporte</h4>
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                                        <div className="space-y-2">
+                                            <Label>Desde</Label>
+                                            <Popover>
+                                                <PopoverTrigger asChild>
+                                                    <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !integralDateRange.from && "text-muted-foreground")}>
+                                                        <CalendarIcon className="mr-2 h-4 w-4" />
+                                                        {integralDateRange.from ? format(integralDateRange.from, "PPP", { locale: es }) : <span>Seleccione fecha</span>}
+                                                    </Button>
+                                                </PopoverTrigger>
+                                                <PopoverContent className="w-auto p-0" align="start">
+                                                    <Calendar mode="single" selected={integralDateRange.from} onSelect={date => setIntegralDateRange(prev => ({...prev, from: date || undefined}))} initialFocus />
+                                                </PopoverContent>
+                                            </Popover>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Hasta</Label>
+                                            <Popover>
+                                                <PopoverTrigger asChild>
+                                                    <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !integralDateRange.to && "text-muted-foreground")}>
+                                                        <CalendarIcon className="mr-2 h-4 w-4" />
+                                                        {integralDateRange.to ? format(integralDateRange.to, "PPP", { locale: es }) : <span>Seleccione fecha</span>}
+                                                    </Button>
+                                                </PopoverTrigger>
+                                                <PopoverContent className="w-auto p-0" align="start">
+                                                    <Calendar mode="single" selected={integralDateRange.to} onSelect={date => setIntegralDateRange(prev => ({...prev, to: date || undefined}))} initialFocus />
+                                                </PopoverContent>
+                                            </Popover>
+                                        </div>
+                                        <Button onClick={handleGenerateAndSaveIntegral} disabled={generatingReport} className="h-10">
+                                            <FileText className="mr-2 h-4 w-4" /> Generar y Guardar
+                                        </Button>
+                                    </div>
                                 </div>
-                                <h3 className="text-lg font-semibold mb-2">Historial de Reportes Integrales</h3>
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>Fecha de Creación</TableHead>
-                                            <TableHead>Estado</TableHead>
-                                            <TableHead className="text-right">Acciones</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {savedIntegralReports.map(report => {
-                                            const isPublished = publishedReports.some(p => p.sourceId === report.id);
-                                            return (
-                                                <TableRow key={report.id}>
-                                                    <TableCell>{format(report.createdAt.toDate(), "dd/MM/yyyy HH:mm")}</TableCell>
-                                                    <TableCell>
-                                                        <Badge variant={isPublished ? "success" : "outline"}>{isPublished ? "Publicado" : "No Publicado"}</Badge>
-                                                    </TableCell>
-                                                    <TableCell className="text-right">
-                                                        <DropdownMenu>
-                                                            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4"/></Button></DropdownMenuTrigger>
-                                                            <DropdownMenuContent>
-                                                                <DropdownMenuItem onClick={() => handlePreviewIntegralReport(report)}><Eye className="mr-2 h-4 w-4" /> Ver</DropdownMenuItem>
-                                                                <DropdownMenuItem onClick={() => handleExportIntegralPdf(report)}><Download className="mr-2 h-4 w-4" /> Exportar PDF</DropdownMenuItem>
-                                                                {!isPublished && <DropdownMenuItem onClick={() => handlePublishIntegralReport(report.id, report)}><Megaphone className="mr-2 h-4 w-4"/> Publicar</DropdownMenuItem>}
-                                                                {isPublished && <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteIntegralPublication(report.id)}><Trash2 className="mr-2 h-4 w-4"/> Quitar Publicación</DropdownMenuItem>}
-                                                                <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteSavedIntegralReport(report.id)}><Trash2 className="mr-2 h-4 w-4"/> Eliminar</DropdownMenuItem>
-                                                            </DropdownMenuContent>
-                                                        </DropdownMenu>
-                                                    </TableCell>
-                                                </TableRow>
-                                            );
-                                        })}
-                                    </TableBody>
-                                </Table>
+
+                                <div>
+                                    <h3 className="text-lg font-semibold mb-2">Historial de Reportes Guardados</h3>
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>Fecha de Creación</TableHead>
+                                                <TableHead>Estado</TableHead>
+                                                <TableHead className="text-right">Acciones</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {savedIntegralReports.map(report => {
+                                                const isPublished = publishedReports.some(p => p.sourceId === report.id);
+                                                return (
+                                                    <TableRow key={report.id}>
+                                                        <TableCell>{format(report.createdAt.toDate(), "dd/MM/yyyy HH:mm")}</TableCell>
+                                                        <TableCell>
+                                                            <Badge variant={isPublished ? "success" : "outline"}>{isPublished ? "Publicado" : "No Publicado"}</Badge>
+                                                        </TableCell>
+                                                        <TableCell className="text-right">
+                                                            <DropdownMenu>
+                                                                <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4"/></Button></DropdownMenuTrigger>
+                                                                <DropdownMenuContent>
+                                                                    <DropdownMenuItem onClick={() => handlePreviewIntegralReport(report)}><Eye className="mr-2 h-4 w-4" /> Ver</DropdownMenuItem>
+                                                                    <DropdownMenuItem onClick={() => handleExportIntegralPdf(report)}><Download className="mr-2 h-4 w-4" /> Exportar PDF</DropdownMenuItem>
+                                                                    {!isPublished && <DropdownMenuItem onClick={() => handlePublishIntegralReport(report.id, report)}><Megaphone className="mr-2 h-4 w-4"/> Publicar</DropdownMenuItem>}
+                                                                    {isPublished && <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteIntegralPublication(report.id)}><Trash2 className="mr-2 h-4 w-4"/> Quitar Publicación</DropdownMenuItem>}
+                                                                    <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteSavedIntegralReport(report.id)}><Trash2 className="mr-2 h-4 w-4"/> Eliminar</DropdownMenuItem>
+                                                                </DropdownMenuContent>
+                                                            </DropdownMenu>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                );
+                                            })}
+                                        </TableBody>
+                                    </Table>
+                                </div>
                             </CardContent>
                         </Card>
                     </div>
