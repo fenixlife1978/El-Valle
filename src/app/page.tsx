@@ -5,10 +5,7 @@ import React from 'react';
 import Link from 'next/link';
 import { Button } from "@/components/ui/button";
 import { Wallet, LayoutDashboard, ShieldCheck, ArrowRight } from 'lucide-react';
-
-// LOGO DE LA MARCA EN BASE64 (Incrustado directamente para que no falle)
-const BRAND_LOGO = "https://firebasestorage.googleapis.com/v0/b/valles-del-condo.appspot.com/o/assets%2Fefas-condosys-logo.png?alt=media";
-const COMPANY_NAME = "EFAS CondoSys";
+import { SYSTEM_LOGO, COMPANY_NAME } from '@/lib/constants';
 
 export default function LandingPage() {
   return (
@@ -19,7 +16,7 @@ export default function LandingPage() {
         <div className="flex items-center gap-4">
           <div className="border border-white/10 rounded-xl p-1 bg-white/5 shadow-inner">
             <img 
-              src={BRAND_LOGO} 
+              src={SYSTEM_LOGO} 
               alt={COMPANY_NAME} 
               className="h-10 w-auto object-contain rounded-lg"
               onError={(e) => { e.currentTarget.src = 'https://via.placeholder.com/40?text=EFAS'; }}
@@ -48,7 +45,7 @@ export default function LandingPage() {
         <div className="relative mb-14">
           <div className="absolute inset-0 bg-[#F28705]/20 blur-3xl rounded-full" />
           <img 
-            src={BRAND_LOGO} 
+            src={SYSTEM_LOGO} 
             alt="Logo Central" 
             className="relative h-auto w-72 md:w-80 object-contain shadow-2xl"
           />
@@ -135,7 +132,7 @@ export default function LandingPage() {
       <footer className="py-20 text-center border-t border-white/5 bg-[#1A1D23]">
         <div className="flex flex-col items-center gap-6">
           <div className="flex items-center gap-3 opacity-50">
-            <img src={BRAND_LOGO} alt="EFAS" className="h-6 w-auto grayscale object-contain" />
+            <img src={SYSTEM_LOGO} alt="EFAS" className="h-6 w-auto grayscale object-contain" />
           </div>
           <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.5em]">
             © 2026 {COMPANY_NAME} - Elevando el estándar de gestión
