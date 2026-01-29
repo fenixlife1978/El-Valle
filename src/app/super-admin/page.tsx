@@ -14,6 +14,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
+import { Switch } from '@/components/ui/switch';
 
 export default function SuperAdminPage() {
   const { user, loading: authLoading } = useAuth();
@@ -78,6 +79,16 @@ export default function SuperAdminPage() {
     router.push('/admin/dashboard');
   };
 
+  const toggleStatus = async (id: string, currentStatus: string) => {
+    const newStatus = currentStatus === 'active' ? 'suspended' : 'active';
+    try {
+      await updateDoc(doc(db, 'condominios', id), { status: newStatus });
+      toast({ title: "Estado actualizado", description: `Condominio ${newStatus === 'active' ? 'activado' : 'suspendido'}` });
+    } catch (e) {
+      toast({ variant: 'destructive', title: "Error de permisos", description: "No se pudo actualizar el estado." });
+    }
+  };
+
   if (loading) return (
     <div className="flex h-screen items-center justify-center bg-background">
         <Loader2 className="animate-spin text-[#f59e0b] h-10 w-10" />
@@ -128,6 +139,7 @@ export default function SuperAdminPage() {
               <th className="p-8">Cliente / ID</th>
               <th className="p-8">Key de Acceso</th>
               <th className="p-8">Estatus</th>
+              <th className="p-8">Control de Acceso</th>
               <th className="p-8 text-right">Acciones</th>
             </tr>
           </thead>
@@ -155,6 +167,15 @@ export default function SuperAdminPage() {
                   <span className={`px-4 py-1 rounded-full text-[10px] font-black uppercase ${condo.status === 'active' ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>
                     {condo.status === 'active' ? '● Activo' : '● Suspendido'}
                   </span>
+                </td>
+                <td className="p-8">
+                  <div className="flex items-center gap-2">
+                      <Switch 
+                          checked={condo.status === 'active'} 
+                          onCheckedChange={() => toggleStatus(condo.id, condo.status)}
+                          aria-label={`Estado del condominio ${condo.name}`}
+                      />
+                  </div>
                 </td>
                 <td className="p-8 text-right flex justify-end gap-2">
                   {editingId === condo.id ? (
