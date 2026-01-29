@@ -747,7 +747,7 @@ function ReportPaymentTab() {
         if (authOwnerData && authUser) {
             setBeneficiaryRows([{
                 id: Date.now().toString(),
-                owner: { id: authUser.uid, name: authOwnerData.name, properties: authOwnerData.properties },
+                owner: { id: authUser.uid, name: authOwnerData.name, properties: authOwnerData.properties, balance: authOwnerData.balance, receiptCounter: authOwnerData.receiptCounter },
                 searchTerm: '',
                 amount: '',
                 selectedProperty: authOwnerData.properties?.[0] || null
@@ -945,7 +945,31 @@ function ReportPaymentTab() {
                                                         </div>
                                                         <div className="space-y-2"><Label htmlFor={`amount-${row.id}`}>Monto Asignado (Bs.)</Label><Input id={`amount-${row.id}`} type="number" placeholder="0.00" value={row.amount} onChange={(e) => updateBeneficiaryRow(row.id, { amount: e.target.value })} disabled={loading || !row.owner} /></div>
                                                     </div>
-                                                    {row.owner && <div className="mt-4 space-y-2"><Label>Asignar a Propiedad</Label><Select onValueChange={(v) => updateBeneficiaryRow(row.id, { selectedProperty: row.owner!.properties?.find(p => `${p.street}-${p.house}` === v) || null })} value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''} disabled={loading || !row.owner}><SelectTrigger><SelectValue placeholder="Seleccione una propiedad..." /></SelectTrigger><SelectContent>{row.owner.properties.map(p => (<SelectItem key={`${p.street}-${p.house}`} value={`${p.street}-${p.house}`}>{`${p.street} - ${p.house}`}</SelectItem>))}</SelectContent></Select></div>}
+                                                    {row.owner && (
+                                                    <div className="mt-4 space-y-2">
+                                                        <Label>Asignar a Propiedad</Label>
+                                                        <Select 
+                                                        onValueChange={(v) => 
+                                                            updateBeneficiaryRow(row.id, { 
+                                                            selectedProperty: row.owner?.properties?.find(p => `${p.street}-${p.house}` === v) || null 
+                                                            })
+                                                        } 
+                                                        value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''} 
+                                                        disabled={loading || !row.owner}
+                                                        >
+                                                        <SelectTrigger>
+                                                            <SelectValue placeholder="Seleccione una propiedad..." />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            {(row.owner.properties || []).map(p => (
+                                                            <SelectItem key={`${p.street}-${p.house}`} value={`${p.street}-${p.house}`}>
+                                                                {`${p.street} - ${p.house}`}
+                                                            </SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                    )}
                                                     {index > 0 && <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive" onClick={() => removeBeneficiaryRow(row.id)} disabled={loading}><Trash2 className="h-4 w-4"/></Button>}
                                                 </Card>
                                             ))}
@@ -1173,4 +1197,3 @@ export default function PaymentsPage() {
         </div>
     );
 }
-
