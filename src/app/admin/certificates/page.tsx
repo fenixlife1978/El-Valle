@@ -381,36 +381,60 @@ export default function CertificatesPage() {
       const margin = 14;
 
       // --- HEADER ---
-      docPDF.setFillColor(28, 43, 58); // #1C2B3A
-      docPDF.rect(0, 0, pageWidth, headerHeight, 'F');
-      docPDF.setTextColor(255, 255, 255);
+        docPDF.setFillColor(28, 43, 58); // #1C2B3A
+        docPDF.rect(0, 0, pageWidth, headerHeight, 'F');
+        docPDF.setTextColor(255, 255, 255);
 
-      docPDF.setFontSize(14).setFont('helvetica', 'bold');
-      docPDF.text(companyInfo?.name || 'CONDOMINIO', margin, 15);
-      docPDF.setFontSize(9).setFont('helvetica', 'normal');
-      docPDF.text(`RIF: ${companyInfo?.rif || 'N/A'}`, margin, 22);
+        let textX = margin;
+        if (companyInfo?.logo) {
+            try { docPDF.addImage(companyInfo.logo, 'PNG', margin, 7, 20, 20); textX += 25; }
+            catch(e) { console.error("Error adding logo:", e); }
+        }
 
-      docPDF.setFontSize(12).setFont('helvetica', 'bold');
-      docPDF.text('EFAS CondoSys', pageWidth - margin, 15, { align: 'right' });
-      docPDF.setFontSize(8).setFont('helvetica', 'normal');
-      docPDF.text('DOCUMENTO OFICIAL', pageWidth - margin, 20, { align: 'right' });
+        docPDF.setFontSize(14).setFont('helvetica', 'bold');
+        docPDF.text(companyInfo?.name || 'CONDOMINIO', textX, 15);
+        docPDF.setFontSize(9).setFont('helvetica', 'normal');
+        docPDF.text(`RIF: ${companyInfo?.rif || 'N/A'}`, textX, 22);
 
-      docPDF.setTextColor(0, 0, 0);
+        // --- Brand Identity ---
+        const efasColor = '#F97316';
+        const condoSysColor = '#3B82F6';
+        docPDF.setFont('helvetica', 'blackitalic');
+        
+        docPDF.setFontSize(12);
+        const condoSysText = 'CONDOSYS';
+        const efasText = 'EFAS';
+        const condoSysWidth = docPDF.getStringUnitWidth(condoSysText) * 12 / docPDF.internal.scaleFactor;
+        
+        const endX = pageWidth - margin;
+        
+        docPDF.setTextColor(efasColor);
+        docPDF.text(efasText, endX - condoSysWidth, 15, { align: 'right' });
+        
+        docPDF.setTextColor(condoSysColor);
+        docPDF.text(condoSysText, endX, 15, { align: 'right' });
+        
+        docPDF.setFont('helvetica', 'normal');
+        docPDF.setFontSize(8).setTextColor(200, 200, 200);
+        docPDF.text('DOCUMENTO OFICIAL', pageWidth - margin, 22, { align: 'right' });
+        
+        docPDF.setTextColor(0, 0, 0); // Reset text color
+      
+        let startY = headerHeight + 5;
 
       // --- BARCODE ---
-      let startY = headerHeight + 30;
       const canvas = document.createElement('canvas');
       const barcodeValue = `CERT-${certificate.id.slice(0, 4)}-${certificate.ownerId?.slice(0, 4)}`;
       try {
           JsBarcode(canvas, barcodeValue, {
-              format: "CODE128", height: 30, width: 1.5, displayValue: false, margin: 0,
+              format: "CODE128", height: 40, width: 1.5, displayValue: true, margin: 0, fontSize: 10
           });
           const barcodeDataUrl = canvas.toDataURL("image/png");
-          docPDF.addImage(barcodeDataUrl, 'PNG', pageWidth - margin - 55, headerHeight + 5, 50, 15);
-          docPDF.setFontSize(8).text(barcodeValue, pageWidth - margin - 55, headerHeight + 23);
+          docPDF.addImage(barcodeDataUrl, 'PNG', (pageWidth / 2) - 30, startY, 60, 20);
       } catch (e) {
           console.error("Barcode generation failed", e);
       }
+      startY += 25;
       
       const template = templates.find((t) => t.id === certificate.type);
       const title = template ? template.title : 'DOCUMENTO';
@@ -419,10 +443,11 @@ export default function CertificatesPage() {
       startY += 20;
       const textOptions = { align: 'justify' as const, lineHeightFactor: 1.6, maxWidth: pageWidth - (margin * 2) };
       docPDF.setFontSize(12).setFont('helvetica', 'normal');
-      docPDF.text(certificate.body, margin, startY, textOptions);
+      const textLines = docPDF.splitTextToSize(certificate.body, textOptions.maxWidth);
+      docPDF.text(textLines, margin, startY, textOptions);
       
       const textBlockHeight = docPDF.getTextDimensions(certificate.body, textOptions).h;
-      startY += textBlockHeight + 15;
+      let finalY = startY + textBlockHeight;
 
       const signatureY = finalY > 230 ? 250 : finalY + 40;
       const signatureWidth = 80;

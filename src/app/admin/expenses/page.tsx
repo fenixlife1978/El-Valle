@@ -232,7 +232,7 @@ export default function ExpensesPage() {
         }
     };
 
-    const handleExportPDF = () => {
+    const handleExportPDF = async () => {
         if (!companyInfo) {
             toast({ variant: 'destructive', title: 'Error', description: 'Información de la empresa no cargada.' });
             return;
@@ -243,41 +243,59 @@ export default function ExpensesPage() {
         const headerHeight = 35;
         const margin = 14;
 
-        // --- NEW HEADER ---
+        // --- HEADER ---
         doc.setFillColor(28, 43, 58); // #1C2B3A
         doc.rect(0, 0, pageWidth, headerHeight, 'F');
         doc.setTextColor(255, 255, 255);
 
+        let textX = margin;
+        if (companyInfo?.logo) {
+            try { doc.addImage(companyInfo.logo, 'PNG', margin, 7, 20, 20); textX += 25; }
+            catch(e) { console.error("Error adding logo:", e); }
+        }
+
         doc.setFontSize(14).setFont('helvetica', 'bold');
-        doc.text(companyInfo?.name || 'CONDOMINIO', margin, 15);
+        doc.text(companyInfo?.name || 'CONDOMINIO', textX, 15);
         doc.setFontSize(9).setFont('helvetica', 'normal');
-        doc.text(`RIF: ${companyInfo?.rif || 'N/A'}`, margin, 22);
+        doc.text(`RIF: ${companyInfo?.rif || 'N/A'}`, textX, 22);
 
-        doc.setFontSize(12).setFont('helvetica', 'bold');
-        doc.text('EFAS CondoSys', pageWidth - margin, 15, { align: 'right' });
-        doc.setFontSize(8).setFont('helvetica', 'normal');
-        doc.text('REPORTE DE EGRESOS', pageWidth - margin, 20, { align: 'right' });
+        // --- Brand Identity ---
+        const efasColor = '#F97316';
+        const condoSysColor = '#3B82F6';
+        doc.setFont('helvetica', 'blackitalic');
+        doc.setFontSize(12);
+        const condoSysText = 'CONDOSYS';
+        const efasText = 'EFAS';
+        const condoSysWidth = doc.getStringUnitWidth(condoSysText) * 12 / doc.internal.scaleFactor;
+        const endX = pageWidth - margin;
+        doc.setTextColor(efasColor);
+        doc.text(efasText, endX - condoSysWidth, 15, { align: 'right' });
+        doc.setTextColor(condoSysColor);
+        doc.text(condoSysText, endX, 15, { align: 'right' });
 
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8).setTextColor(200, 200, 200);
+        doc.text('REPORTE DE EGRESOS', pageWidth - margin, 22, { align: 'right' });
         doc.setTextColor(0, 0, 0);
         
-        let startY = headerHeight + 30;
-
+        let startY = headerHeight + 5;
+        
+        // --- BARCODE ---
         const canvas = document.createElement('canvas');
         const barcodeValue = `EGR-${filterYear}-${filterMonth}`;
         try {
             JsBarcode(canvas, barcodeValue, {
-                format: "CODE128", height: 30, width: 1.5, displayValue: false, margin: 0,
+                format: "CODE128", height: 40, width: 1.5, displayValue: true, margin: 0, fontSize: 10
             });
             const barcodeDataUrl = canvas.toDataURL("image/png");
-            doc.addImage(barcodeDataUrl, 'PNG', pageWidth - margin - 55, headerHeight + 5, 50, 15);
-            doc.setFontSize(8).text(barcodeValue, pageWidth - margin - 55, headerHeight + 23);
+            doc.addImage(barcodeDataUrl, 'PNG', (pageWidth / 2) - 30, startY, 60, 20);
         } catch (e) {
             console.error("Barcode generation failed", e);
         }
-        // --- END HEADER ---
+        startY += 25;
 
-        const selectedMonth = monthOptions.find(m => m.value === filterMonth)?.label;
-        const title = `Reporte de Egresos - ${selectedMonth} ${filterYear}`;
+        const selectedMonthLabel = monthOptions.find(m => m.value === filterMonth)?.label;
+        const title = `Reporte de Egresos - ${selectedMonthLabel} ${filterYear}`;
         
         doc.setFontSize(18).text(title, 14, startY);
         doc.setFontSize(11);
@@ -295,8 +313,8 @@ export default function ExpensesPage() {
                 formatToTwoDecimals(exp.amount)
             ]),
             foot: [['', '', '', 'Total Egresos', formatToTwoDecimals(totalFilteredAmount)]],
-            headStyles: { fillColor: [22, 163, 74] },
-            footStyles: { fillColor: [22, 163, 74], textColor: 255, fontStyle: 'bold' }
+            headStyles: { fillColor: [239, 68, 68] },
+            footStyles: { fillColor: [185, 28, 28], textColor: 255, fontStyle: 'bold' }
         });
 
         doc.save(`reporte_egresos_${filterYear}_${filterMonth}.pdf`);

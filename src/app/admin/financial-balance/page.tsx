@@ -199,6 +199,7 @@ export default function FinancialBalancePage() {
 
         const { default: jsPDF } = await import('jspdf');
         const { default: autoTable } = await import('jspdf-autotable');
+        const { default: JsBarcode } = await import('jsbarcode');
         
         const docPDF = new jsPDF();
         const pageWidth = docPDF.internal.pageSize.getWidth();
@@ -209,14 +210,43 @@ export default function FinancialBalancePage() {
         docPDF.setFillColor(28, 43, 58); // #1C2B3A
         docPDF.rect(0, 0, pageWidth, headerHeight, 'F');
         docPDF.setTextColor(255, 255, 255);
-        docPDF.setFontSize(14).setFont('helvetica', 'bold').text(companyInfo.name, margin, 15);
-        docPDF.setFontSize(9).setFont('helvetica', 'normal').text(`RIF: ${companyInfo.rif}`, margin, 22);
 
-        docPDF.setFontSize(12).setFont('helvetica', 'bold').text('EFASCONDOSYS', pageWidth - margin, 15, { align: 'right' });
-        docPDF.setFontSize(8).setFont('helvetica', 'normal').text('BALANCE FINANCIERO OFICIAL', pageWidth - margin, 20, { align: 'right' });
-        docPDF.setTextColor(0, 0, 0);
+        let textX = margin;
+        if (companyInfo.logo) {
+            try {
+                docPDF.addImage(companyInfo.logo, 'PNG', margin, 7, 20, 20);
+                textX += 25; // Add space for the logo
+            } catch(e) { console.error("Error adding logo to PDF", e); }
+        }
+
+        docPDF.setFontSize(14).setFont('helvetica', 'bold').text(companyInfo.name, textX, 15);
+        docPDF.setFontSize(9).setFont('helvetica', 'normal').text(`RIF: ${companyInfo.rif}`, textX, 22);
+
+        // --- Brand Identity ---
+        const efasColor = '#F97316'; // orange-500
+        const condoSysColor = '#3B82F6'; // blue-500
+        docPDF.setFont('helvetica', 'blackitalic');
         
-        let startY = headerHeight + 30;
+        docPDF.setFontSize(12);
+        const condoSysText = 'CONDOSYS';
+        const efasText = 'EFAS';
+        const condoSysWidth = docPDF.getStringUnitWidth(condoSysText) * 12 / docPDF.internal.scaleFactor;
+        
+        const endX = pageWidth - margin;
+        
+        docPDF.setTextColor(efasColor);
+        docPDF.text(efasText, endX - condoSysWidth, 15, { align: 'right' });
+        
+        docPDF.setTextColor(condoSysColor);
+        docPDF.text(condoSysText, endX, 15, { align: 'right' });
+        
+        docPDF.setFont('helvetica', 'normal');
+        docPDF.setFontSize(8).setTextColor(200, 200, 200);
+        docPDF.text('BALANCE FINANCIERO OFICIAL', pageWidth - margin, 22, { align: 'right' });
+        
+        docPDF.setTextColor(0, 0, 0); // Reset text color
+        
+        let startY = headerHeight + 5;
 
         // --- BARCODE ---
         const canvas = document.createElement('canvas');
@@ -224,14 +254,14 @@ export default function FinancialBalancePage() {
         const barcodeValue = `BF-${periodId}`;
         try {
             JsBarcode(canvas, barcodeValue, {
-                format: "CODE128", height: 30, width: 1.5, displayValue: false, margin: 0,
+                format: "CODE128", height: 40, width: 1.5, displayValue: true, margin: 0, fontSize: 10
             });
             const barcodeDataUrl = canvas.toDataURL("image/png");
-            docPDF.addImage(barcodeDataUrl, 'PNG', pageWidth - margin - 55, headerHeight + 5, 50, 15);
-            docPDF.setFontSize(8).text(barcodeValue, pageWidth - margin - 55, headerHeight + 23);
+            docPDF.addImage(barcodeDataUrl, 'PNG', (pageWidth / 2) - 30, startY, 60, 20);
         } catch (e) {
             console.error("Barcode generation failed", e);
         }
+        startY += 25;
         
         const period = `${months.find(m => m.value === selectedMonth)?.label} ${selectedYear}`;
         docPDF.setFontSize(16).setFont('helvetica', 'bold').text('ESTADO DE RESULTADOS', pageWidth / 2, startY, { align: 'center' });
@@ -251,8 +281,8 @@ export default function FinancialBalancePage() {
             ]],
             startY,
             theme: 'striped',
-            headStyles: { fillColor: [30, 80, 180], halign: 'center' },
-            footStyles: { fillColor: [30, 80, 180], textColor: 255, fontStyle: 'bold' },
+            headStyles: { fillColor: [59, 130, 246], halign: 'center' }, // Tailwind blue-500
+            footStyles: { fillColor: [30, 64, 175], textColor: 255, fontStyle: 'bold' }, // Tailwind blue-800
         });
         
         startY = (docPDF as any).lastAutoTable.finalY + 10;
@@ -271,17 +301,17 @@ export default function FinancialBalancePage() {
             ]],
             startY: startY,
             theme: 'striped',
-            headStyles: { fillColor: [220, 38, 38], halign: 'center' },
-            footStyles: { fillColor: [220, 38, 38], textColor: 255, fontStyle: 'bold' },
+            headStyles: { fillColor: [239, 68, 68], halign: 'center' }, // Tailwind red-500
+            footStyles: { fillColor: [185, 28, 28], textColor: 255, fontStyle: 'bold' }, // Tailwind red-800
         });
 
         startY = (docPDF as any).lastAutoTable.finalY + 10;
         
         docPDF.setFontSize(11).setFont('helvetica', 'bold');
         const totalEfectivoY = startY + 10;
-        docPDF.setFillColor(230, 240, 255);
+        docPDF.setFillColor(239, 246, 255); // Tailwind blue-50
         docPDF.rect(margin, totalEfectivoY - 5, pageWidth - margin * 2, 10, 'F');
-        docPDF.setTextColor(30, 80, 180);
+        docPDF.setTextColor(30, 64, 175); // Tailwind blue-800
         docPDF.text('SALDO NETO O SALDO FINAL DEL MES EN BANCO (Ingresos - Egresos)', margin + 2, totalEfectivoY);
         docPDF.text(formatCurrency(estadoFinal.saldoNeto), pageWidth - margin - 2, totalEfectivoY, { align: 'right' });
         startY = totalEfectivoY + 10;
