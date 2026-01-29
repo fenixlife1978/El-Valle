@@ -202,89 +202,51 @@ export default function FinancialBalancePage() {
     };
 
     const generatePDF = (data: any) => {
+        // ESTO CONFIRMA SI EL CÓDIGO CARGÓ
+        alert("INICIANDO PDF V4 - VERIFICANDO CAMBIOS"); 
+        
         if (!data || !data.ingresos) return;
+        
         const docPDF = new jsPDF();
         const pageWidth = docPDF.internal.pageSize.getWidth();
-        
-        // Reseteo total de estilos al inicio
-        docPDF.setTextColor(0, 0, 0);
-        docPDF.setDrawColor(0, 0, 0);
-
-        // 1. ENCABEZADO OSCURO
+    
+        // 1. FONDO OSCURO
         docPDF.setFillColor(30, 41, 59);
         docPDF.rect(0, 0, pageWidth, 45, 'F');
-
-        if (companyInfo.logo) {
-            try {
-                const pdfCtx = docPDF as any;
-                pdfCtx.saveGraphicsState();
-                pdfCtx.circle(22, 22.5, 13, 'f');
-                pdfCtx.clip();
-                docPDF.addImage(companyInfo.logo, 'PNG', 9, 9.5, 26, 26);
-                pdfCtx.restoreGraphicsState();
-                docPDF.setDrawColor(245, 158, 11);
-                docPDF.setLineWidth(1);
-                docPDF.circle(22, 22.5, 13, 'S');
-            } catch (e) { console.error(e); }
-        }
-
+    
+        // 2. TEXTO BLANCO (SOLO AQUÍ)
         docPDF.setTextColor(255, 255, 255);
         docPDF.setFontSize(14);
-        docPDF.setFont('helvetica', 'bold');
         docPDF.text(companyInfo.name.toUpperCase(), 42, 22);
-        docPDF.setFontSize(9);
-        docPDF.text(`RIF: ${companyInfo.rif}`, 42, 28);
-        docPDF.setTextColor(245, 158, 11);
-        docPDF.text("EFAS", pageWidth - 55, 18);
-        docPDF.setTextColor(255, 255, 255);
-        docPDF.text("CONDOSYS", pageWidth - 42, 18);
-
-
-        // 2. RESET A NEGRO PARA EL CUERPO (FORZADO)
+    
+        // 3. RESET TOTAL A NEGRO (PARA EL RESTO DEL DOCUMENTO)
         docPDF.setTextColor(0, 0, 0); 
-        docPDF.setFontSize(22);
-        docPDF.text("BALANCE FINANCIERO", 14, 65);
-
-        docPDF.setFontSize(10);
-        const periodo = `${months.find(m => m.value === (data.month || selectedMonth))?.label.toUpperCase()} ${data.year || selectedYear}`;
-        docPDF.text(`PERIODO: ${periodo}`, 14, 70);
-
-        // 3. TABLAS (FORZANDO TEXTO NEGRO)
+        docPDF.setFontSize(20);
+        docPDF.text("BALANCE FINANCIERO", 14, 60);
+    
+        // 4. TABLA FORZANDO NEGRO
         autoTable(docPDF, {
-            head: [['CONCEPTO DE INGRESO', 'MONTO (Bs.)']],
+            head: [['CONCEPTO', 'MONTO (Bs.)']],
             body: data.ingresos.map((i: any) => [i.concepto.toUpperCase(), formatCurrency(i.monto)]),
-            startY: 85,
-            theme: 'grid',
-            headStyles: { fillColor: [16, 185, 129], textColor: [255, 255, 255] },
-            styles: { textColor: [0, 0, 0] },
-            columnStyles: { 1: { halign: 'right' } }
+            startY: 70,
+            styles: { textColor: [0, 0, 0], fontSize: 10 }, // NEGRO FORZADO
+            headStyles: { fillColor: [16, 185, 129] }
         });
-        
+    
+        // 5. SEGUNDA TABLA FORZANDO NEGRO
         autoTable(docPDF, {
-            head: [['FECHA', 'CONCEPTO DE EGRESO / GASTO', 'MONTO (Bs.)']],
+            head: [['FECHA', 'CONCEPTO', 'MONTO']],
             body: data.egresos.length > 0 
                 ? data.egresos.map((e: any) => [e.fecha, e.descripcion.toUpperCase(), formatCurrency(e.monto)]) 
-                : [['-', 'SIN GASTOS REGISTRADOS', '0,00']],
+                : [['-', 'SIN MOVIMIENTOS', '0,00']],
             startY: (docPDF as any).lastAutoTable.finalY + 10,
-            theme: 'grid',
-            headStyles: { fillColor: [225, 29, 72], textColor: [255, 255, 255] },
-            styles: { textColor: [0, 0, 0] },
-            columnStyles: { 2: { halign: 'right' } }
+            styles: { textColor: [0, 0, 0] }, // NEGRO FORZADO
+            headStyles: { fillColor: [225, 29, 72] }
         });
-
-        // 4. CUADRO FINAL
-        const finalY = (docPDF as any).lastAutoTable.finalY + 15;
-        docPDF.setFillColor(245, 158, 11);
-        docPDF.roundedRect(14, finalY, pageWidth - 28, 25, 4, 4, 'F');
-        docPDF.setTextColor(255, 255, 255);
-        docPDF.setFontSize(10);
-        docPDF.text("DISPONIBILIDAD TOTAL REAL:", 20, finalY + 10);
-        docPDF.setFontSize(18);
-        docPDF.text(`${formatCurrency(data.disponibilidad)} Bs.`, 20, finalY + 18);
-
-        // 5. FORZAR DESCARGA EN LUGAR DE ABRIR PESTAÑA
-        const name = `Balance_${data.month}_${data.year}.pdf`;
-        docPDF.save(name);
+    
+        // 6. NOMBRE ÚNICO PARA EVITAR CACHÉ
+        const uniqueID = Math.floor(Date.now() / 1000);
+        docPDF.save(`Reporte_${uniqueID}.pdf`);
     };
 
     if (authLoading || dataLoading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin h-10 w-10 text-primary" /></div>;
@@ -306,7 +268,7 @@ export default function FinancialBalancePage() {
                     <RefreshCw className={`mr-2 h-4 w-4 ${syncing && 'animate-spin'}`}/> Sincronizar
                 </Button>
                 <Button className="bg-primary rounded-2xl" onClick={() => generatePDF({
-                        ingresos: ingresos.map(i => ({...i, monto: i.real})),
+                        ingresos: ingresos.map(i => ({...i, monto: i.real, concepto: i.concepto})),
                         egresos,
                         disponibilidad: estadoFinal.disponibilidadTotal,
                         month: selectedMonth,
