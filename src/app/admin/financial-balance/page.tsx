@@ -63,7 +63,7 @@ export default function FinancialBalancePage() {
 
     const [companyInfo, setCompanyInfo] = useState({ name: "RESIDENCIAS", rif: "J-00000000-0", logo: null as string | null });
     const [ingresos, setIngresos] = useState<FinancialItem[]>([]);
-    const [egresos, setEgresos] = useState<FinancialItem[]>([]);
+    const [egresos, setEgresos] = useState<any[]>([]);
     const [cajaChica, setCajaChica] = useState({ saldoInicial: 0, reposiciones: 0, gastos: 0, saldoFinal: 0 });
     const [estadoFinal, setEstadoFinal] = useState({ saldoAnterior: 0, totalIngresos: 0, totalEgresos: 0, saldoBancos: 0, disponibilidadTotal: 0 });
     const [notas, setNotas] = useState('');
@@ -109,7 +109,7 @@ export default function FinancialBalancePage() {
             
             const newEgresos = expensesSnap.docs.map(doc => {
                 const data = doc.data();
-                return { id: doc.id, dia: format(data.date.toDate(), 'dd'), concepto: data.description, monto: data.amount };
+                return { id: doc.id, dia: format(data.date.toDate(), 'dd'), concepto: data.description, monto: data.amount, fecha: format(data.date.toDate(), 'dd/MM/yyyy'), descripcion: data.description };
             });
             setEgresos(newEgresos);
             const totalEgresos = newEgresos.reduce((sum, item) => sum + item.monto, 0);
@@ -167,17 +167,24 @@ export default function FinancialBalancePage() {
                 const centerY = 22.5;
                 const radius = 12;
     
-                (docPDF as any).saveGraphicsState();
-                docPDF.circle(centerX, centerY, radius, 'S'); 
-                (docPDF as any).clip();
+                // 1. Guardar el estado actual del lienzo
+                docPDF.saveGraphicsState();
     
+                // 2. Crear la ruta circular para el recorte (clipping)
+                docPDF.circle(centerX, centerY, radius);
+                docPDF.clip();
+    
+                // 3. Añadir la imagen. Se mostrará solo dentro del círculo.
                 docPDF.addImage(companyInfo.logo, 'PNG', centerX - radius, centerY - radius, radius * 2, radius * 2);
     
-                (docPDF as any).restoreGraphicsState();
-                
-                 docPDF.setDrawColor(245, 158, 11); // Amber-500
-                 docPDF.setLineWidth(0.8);
-                 docPDF.circle(centerX, centerY, radius, 'S');
+                // 4. Restaurar el lienzo para que el resto del PDF no se recorte
+                docPDF.restoreGraphicsState();
+    
+                // 5. Dibujar el borde circular ámbar sobre la imagen ya recortada
+                docPDF.setDrawColor(245, 158, 11); // Amber-500
+                docPDF.setLineWidth(0.8);
+                docPDF.circle(centerX, centerY, radius, 'S');
+    
             } catch (e) {
                 console.error("Error al procesar el logo circular en el PDF:", e);
             }
@@ -201,7 +208,6 @@ export default function FinancialBalancePage() {
         docPDF.text("EFAS", pageWidth - 55, 20);
         docPDF.setTextColor(255, 255, 255);
         docPDF.text("CONDOSYS", pageWidth - 41, 20);
-        docPDF.setFont('helvetica', 'normal');
         docPDF.setFontSize(7);
         docPDF.text("SISTEMA DE AUTOGESTIÓN", pageWidth - 55, 24);
     
@@ -245,8 +251,8 @@ export default function FinancialBalancePage() {
     
         // TABLA DE EGRESOS
         autoTable(docPDF, {
-            head: [['DÍA', 'CONCEPTO DE GASTO / EGRESO', 'MONTO (Bs.)']],
-            body: egresos.map(e => [e.dia, e.concepto.toUpperCase(), formatCurrency(e.monto)]),
+            head: [['FECHA', 'CONCEPTO DE GASTO / EGRESO', 'MONTO (Bs.)']],
+            body: egresos.map(e => [e.fecha, e.descripcion.toUpperCase(), formatCurrency(e.monto)]),
             startY: (docPDF as any).lastAutoTable.finalY + 10,
             theme: 'grid',
             headStyles: { fillColor: [225, 29, 72], fontStyle: 'bold' },
