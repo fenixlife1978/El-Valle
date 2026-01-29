@@ -25,7 +25,7 @@ import { BankSelectionModal } from '@/components/bank-selection-modal';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from "@/components/ui/dropdown-menu";
 import { useAuthorization } from '@/hooks/use-authorization';
 import Decimal from 'decimal.js';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -490,58 +490,6 @@ function VerifyPaymentsTab() {
         }
     };
 
-    const openReceiptForBeneficiary = async (payment: FullPayment, beneficiary: Beneficiary) => {
-        if (!companyInfo || !activeCondoId) {
-            toast({ variant: "destructive", title: "Error", description: "Datos de la compañía no cargados." });
-            return;
-        }
-
-        const owner = ownersMap.get(beneficiary.ownerId);
-        if (!owner) {
-            toast({ variant: "destructive", title: "Error", description: "No se encontró al propietario." });
-            return;
-        }
-
-        setIsGenerating(true);
-        try {
-            const { default: QRCode } = await import('qrcode');
-
-            const paidDebtsSnapshot = await getDocs(
-                query(collection(db, 'condominios', activeCondoId, 'debts'), where('paymentId', '==', payment.id), where('ownerId', '==', beneficiary.ownerId))
-            );
-            const paidDebts = paidDebtsSnapshot.docs.map(d => d.data() as Debt);
-            
-            const totalDebtPaidWithPayment = paidDebts.reduce((sum, debt) => sum + ((debt.paidAmountUSD || debt.amountUSD) * payment.exchangeRate), 0);
-            
-            const ownerDoc = await getDoc(doc(db, 'condominios', activeCondoId, 'owners', beneficiary.ownerId));
-            const currentBalance = ownerDoc.exists() ? (ownerDoc.data().balance || 0) : 0;
-            const previousBalance = currentBalance - (beneficiary.amount - totalDebtPaidWithPayment);
-
-            const receiptNumber = payment.receiptNumbers?.[beneficiary.ownerId] || `N/A-${payment.id.slice(-5)}`;
-            const receiptUrl = `${window.location.origin}/receipt/${payment.id}/${beneficiary.ownerId}`;
-            const qrDataContent = JSON.stringify({ receiptNumber, date: format(new Date(), 'yyyy-MM-dd'), amount: beneficiary.amount, ownerId: beneficiary.ownerId, url: receiptUrl });
-            const qrCodeUrl = await QRCode.toDataURL(qrDataContent, { errorCorrectionLevel: 'M', margin: 2, scale: 4, color: { dark: '#000000', light: '#FFFFFF' } });
-
-            const ownerUnit = (beneficiary.street && beneficiary.house) 
-                ? `${beneficiary.street} - ${beneficiary.house}` 
-                : (owner.properties?.[0] ? `${owner.properties[0].street} - ${owner.properties[0].house}`: 'N/A');
-
-            setReceiptData({
-                payment, beneficiary, ownerName: owner.name,
-                ownerUnit: ownerUnit,
-                paidDebts: paidDebts.sort((a,b) => a.year - b.year || a.month - a.month),
-                previousBalance, currentBalance: currentBalance,
-                receiptNumber, qrCodeUrl
-            });
-            setIsReceiptPreviewOpen(true);
-        } catch (error) {
-            console.error("Error preparing receipt preview:", error);
-            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo generar la vista previa del recibo.' });
-        } finally {
-            setIsGenerating(false);
-        }
-    };
-
     const handlePreviewReceipt = async (payment: FullPayment) => {
         if (payment.beneficiaries.length > 1) {
             setPaymentForBeneficiarySelection(payment);
@@ -734,7 +682,7 @@ function ReportPaymentTab() {
 
     useEffect(() => {
         if (!activeCondoId) return;
-        const q = query(collection(db, 'condominios', activeCondoId, "owners"), where("role", "==", "propietario"));
+        const q = query(collection(db, 'condominios', activeCondoId, "owners"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const ownersData: Owner[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner));
             setAllOwners(ownersData.sort((a, b) => (a.name || '').localeCompare(b.name || '')));
@@ -946,29 +894,47 @@ function ReportPaymentTab() {
                                                         <div className="space-y-2"><Label htmlFor={`amount-${row.id}`}>Monto Asignado (Bs.)</Label><Input id={`amount-${row.id}`} type="number" placeholder="0.00" value={row.amount} onChange={(e) => updateBeneficiaryRow(row.id, { amount: e.target.value })} disabled={loading || !row.owner} /></div>
                                                     </div>
                                                     {row.owner && (
-                                                    <div className="mt-4 space-y-2">
+                                                      <div className="mt-4 space-y-2">
                                                         <Label>Asignar a Propiedad</Label>
                                                         <Select 
-                                                        onValueChange={(v) => 
-                                                            updateBeneficiaryRow(row.id, { 
-                                                            selectedProperty: row.owner?.properties?.find(p => `${p.street}-${p.house}` === v) || null 
-                                                            })
-                                                        } 
-                                                        value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''} 
-                                                        disabled={loading || !row.owner}
+                                                          onValueChange={(v) => {
+                                                            // Validamos que sea array antes de buscar
+                                                            const props = Array.isArray(row.owner?.properties) ? row.owner.properties : [];
+                                                            const found = props.find(p => `${p.street}-${p.house}` === v);
+                                                            updateBeneficiaryRow(row.id, { selectedProperty: found || null });
+                                                          }} 
+                                                          value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''} 
+                                                          // Si no hay propiedades (Admin/SuperAdmin), deshabilitamos el selector
+                                                          disabled={loading || !row.owner || !Array.isArray(row.owner.properties)}
                                                         >
-                                                        <SelectTrigger>
-                                                            <SelectValue placeholder="Seleccione una propiedad..." />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            {(row.owner.properties || []).map(p => (
-                                                            <SelectItem key={`${p.street}-${p.house}`} value={`${p.street}-${p.house}`}>
-                                                                {`${p.street} - ${p.house}`}
-                                                            </SelectItem>
-                                                            ))}
-                                                        </SelectContent>
+                                                          <SelectTrigger className="rounded-xl">
+                                                            <SelectValue 
+                                                              placeholder={
+                                                                Array.isArray(row.owner.properties) 
+                                                                  ? "Seleccione una propiedad..." 
+                                                                  : "Usuario sin propiedades (Admin)"
+                                                              } 
+                                                            />
+                                                          </SelectTrigger>
+                                                          <SelectContent>
+                                                            {/* Usamos el operador de encadenamiento opcional ?. y validamos tipo Array */}
+                                                            {Array.isArray(row.owner?.properties) ? (
+                                                              row.owner.properties.map((p, pIdx) => (
+                                                                <SelectItem 
+                                                                  key={`${p.street}-${p.house}-${pIdx}`} 
+                                                                  value={`${p.street}-${p.house}`}
+                                                                >
+                                                                  {`${p.street} - ${p.house}`}
+                                                                </SelectItem>
+                                                              ))
+                                                            ) : (
+                                                              <SelectItem value="none" disabled>
+                                                                No hay propiedades disponibles
+                                                              </SelectItem>
+                                                            )}
+                                                          </SelectContent>
                                                         </Select>
-                                                    </div>
+                                                      </div>
                                                     )}
                                                     {index > 0 && <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive" onClick={() => removeBeneficiaryRow(row.id)} disabled={loading}><Trash2 className="h-4 w-4"/></Button>}
                                                 </Card>
