@@ -26,13 +26,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
-
 // --- Types ---
 type FinancialItem = {
     id: string;
     concepto: string;
     monto: number;
     dia: string;
+    category?: string;
 };
 
 type CajaChicaMovement = {
@@ -61,9 +61,9 @@ export default function FinancialBalancePage() {
     const [selectedMonth, setSelectedMonth] = useState(String(new Date().getMonth() + 1));
     const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
 
-    const [companyInfo, setCompanyInfo] = useState({ name: "RESIDENCIAS", rif: "J-00000000-0", logo: null });
-    const [ingresos, setIngresos] = useState<{ concepto: string, real: number, category: string }[]>([]);
-    const [egresos, setEgresos] = useState<any[]>([]);
+    const [companyInfo, setCompanyInfo] = useState({ name: "RESIDENCIAS", rif: "J-00000000-0", logo: null as string | null });
+    const [ingresos, setIngresos] = useState<FinancialItem[]>([]);
+    const [egresos, setEgresos] = useState<FinancialItem[]>([]);
     const [cajaChica, setCajaChica] = useState({ saldoInicial: 0, reposiciones: 0, gastos: 0, saldoFinal: 0 });
     const [estadoFinal, setEstadoFinal] = useState({ saldoAnterior: 0, totalIngresos: 0, totalEgresos: 0, saldoBancos: 0, disponibilidadTotal: 0 });
     const [notas, setNotas] = useState('');
@@ -72,10 +72,6 @@ export default function FinancialBalancePage() {
         if (!currentCondoId) return;
         setSyncing(true);
         try {
-            const periodId = `${selectedYear}-${selectedMonth.padStart(2, '0')}`;
-            const statementRef = doc(db, 'condominios', currentCondoId, 'financial_statements', periodId);
-            const statementSnap = await getDoc(statementRef);
-
             const configRef = doc(db, 'condominios', currentCondoId, 'config', 'mainSettings');
             const snap = await getDoc(configRef);
             if (snap.exists()) {
@@ -87,68 +83,61 @@ export default function FinancialBalancePage() {
                 });
             }
 
-            if (statementSnap.exists()) {
-                const data = statementSnap.data();
-                setIngresos(data.ingresos.map((i: FinancialItem) => ({ concepto: i.concepto, real: i.monto, category: 'cuotas' })));
-                setEgresos(data.egresos.map((e: FinancialItem) => ({ fecha: e.dia, descripcion: e.concepto, monto: e.monto, id: e.id })));
-                setCajaChica(data.cajaChica || { saldoInicial: 0, reposiciones: 0, gastos: 0, saldoFinal: 0 });
-                setEstadoFinal(data.estadoFinanciero);
-                setNotas(data.notas || '');
-            } else {
-                const fromDate = startOfMonth(new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1));
-                const toDate = endOfMonth(fromDate);
-                const fromDateTimestamp = Timestamp.fromDate(fromDate);
-                const toDateTimestamp = Timestamp.fromDate(toDate);
+            const fromDate = startOfMonth(new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1));
+            const toDate = endOfMonth(fromDate);
+            const fromDateTimestamp = Timestamp.fromDate(fromDate);
+            const toDateTimestamp = Timestamp.fromDate(toDate);
 
-                const paymentsQuery = query(collection(db, 'condominios', currentCondoId, 'payments'), where('status', '==', 'aprobado'), where('paymentDate', '>=', fromDateTimestamp), where('paymentDate', '<=', toDateTimestamp));
-                const expensesQuery = query(collection(db, 'condominios', currentCondoId, 'gastos'), where('date', '>=', fromDateTimestamp), where('date', '<=', toDateTimestamp));
-                const lastMonth = subMonths(fromDate, 1);
-                const lastMonthId = `${lastMonth.getFullYear()}-${String(lastMonth.getMonth() + 1).padStart(2, '0')}`;
-                const lastMonthStatementRef = doc(db, 'condominios', currentCondoId, 'financial_statements', lastMonthId);
-                const movementsQuery = query(collection(db, 'condominios', currentCondoId, 'cajaChica_movimientos'));
+            const paymentsQuery = query(collection(db, 'condominios', currentCondoId, 'payments'), where('status', '==', 'aprobado'), where('paymentDate', '>=', fromDateTimestamp), where('paymentDate', '<=', toDateTimestamp));
+            const expensesQuery = query(collection(db, 'condominios', currentCondoId, 'gastos'), where('date', '>=', fromDateTimestamp), where('date', '<=', toDateTimestamp));
+            
+            const lastMonth = subMonths(fromDate, 1);
+            const lastMonthId = `${lastMonth.getFullYear()}-${String(lastMonth.getMonth() + 1).padStart(2, '0')}`;
+            const lastMonthStatementRef = doc(db, 'condominios', currentCondoId, 'financial_statements', lastMonthId);
+            const movementsQuery = query(collection(db, 'condominios', currentCondoId, 'cajaChica_movimientos'));
 
-                const [paymentsSnap, expensesSnap, movementsSnap, lastStatementSnap] = await Promise.all([
-                    getDocs(paymentsQuery),
-                    getDocs(expensesQuery),
-                    getDocs(movementsQuery),
-                    getDoc(lastMonthStatementRef)
-                ]);
+            const [paymentsSnap, expensesSnap, movementsSnap, lastStatementSnap] = await Promise.all([
+                getDocs(paymentsQuery),
+                getDocs(expensesQuery),
+                getDocs(movementsQuery),
+                getDoc(lastMonthStatementRef)
+            ]);
 
-                const totalIngresos = paymentsSnap.docs.reduce((sum, doc) => sum + doc.data().totalAmount, 0);
-                const newIngresos = [{ concepto: 'Cobranza del Mes', real: totalIngresos, category: 'cuotas' }];
-                setIngresos(newIngresos);
-                
-                const newEgresos = expensesSnap.docs.map(doc => {
-                    const data = doc.data();
-                    return { id: doc.id, fecha: format(data.date.toDate(), 'dd'), descripcion: data.description, monto: data.amount };
-                });
-                setEgresos(newEgresos);
-                const totalEgresos = newEgresos.reduce((sum, item) => sum + item.monto, 0);
-                
-                const allMovements = movementsSnap.docs.map(doc => doc.data() as CajaChicaMovement);
-                const priorMovements = allMovements.filter(m => m.date.toDate() < fromDate);
-                const periodMovements = allMovements.filter(m => {
-                    const moveDate = m.date.toDate();
-                    return moveDate >= fromDate && moveDate <= toDate;
-                });
+            const totalIngresos = paymentsSnap.docs.reduce((sum, doc) => sum + doc.data().totalAmount, 0);
+            const newIngresos = [{ id: 'cobranza-mes', concepto: 'Cobranza del Mes', monto: totalIngresos, dia: format(new Date(), 'dd'), category: 'cuotas' }];
+            setIngresos(newIngresos);
+            
+            const newEgresos = expensesSnap.docs.map(doc => {
+                const data = doc.data();
+                return { id: doc.id, dia: format(data.date.toDate(), 'dd'), concepto: data.description, monto: data.amount };
+            });
+            setEgresos(newEgresos);
+            const totalEgresos = newEgresos.reduce((sum, item) => sum + item.monto, 0);
+            
+            const allMovements = movementsSnap.docs.map(doc => doc.data() as CajaChicaMovement);
+            const priorMovements = allMovements.filter(m => m.date.toDate() < fromDate);
+            const periodMovements = allMovements.filter(m => {
+                const moveDate = m.date.toDate();
+                return moveDate >= fromDate && moveDate <= toDate;
+            });
 
-                const saldoInicialCaja = priorMovements.reduce((acc, m) => m.type === 'ingreso' ? acc + m.amount : acc - m.amount, 0);
-                const reposicionesCaja = periodMovements.filter(m => m.type === 'ingreso').reduce((acc, m) => acc + m.amount, 0);
-                const gastosCaja = periodMovements.filter(m => m.type === 'egreso').reduce((acc, m) => acc + m.amount, 0);
-                const saldoFinalCaja = saldoInicialCaja + reposicionesCaja - gastosCaja;
-                setCajaChica({ saldoInicial: saldoInicialCaja, reposiciones: reposicionesCaja, gastos: gastosCaja, saldoFinal: saldoFinalCaja });
-                
-                let saldoAnterior = 0;
-                if (lastStatementSnap.exists()) {
-                    const lastData = lastStatementSnap.data();
-                    saldoAnterior = lastData.estadoFinanciero?.disponibilidadTotal || 0;
-                }
-
-                const saldoBancos = saldoAnterior + totalIngresos - totalEgresos;
-                const disponibilidadTotal = saldoBancos + saldoFinalCaja;
-                setEstadoFinal({ saldoAnterior, totalIngresos, totalEgresos, saldoBancos, disponibilidadTotal });
-                setNotas('Generado automáticamente por el sistema.');
+            const saldoInicialCaja = priorMovements.reduce((acc, m) => m.type === 'ingreso' ? acc + m.amount : acc - m.amount, 0);
+            const reposicionesCaja = periodMovements.filter(m => m.type === 'ingreso').reduce((acc, m) => acc + m.amount, 0);
+            const gastosCaja = periodMovements.filter(m => m.type === 'egreso').reduce((acc, m) => acc + m.amount, 0);
+            const saldoFinalCaja = saldoInicialCaja + reposicionesCaja - gastosCaja;
+            setCajaChica({ saldoInicial: saldoInicialCaja, reposiciones: reposicionesCaja, gastos: gastosCaja, saldoFinal: saldoFinalCaja });
+            
+            let saldoAnterior = 0;
+            if (lastStatementSnap.exists()) {
+                const lastData = lastStatementSnap.data();
+                saldoAnterior = lastData.estadoFinanciero?.disponibilidadTotal || 0;
             }
+
+            const saldoBancos = saldoAnterior + totalIngresos - totalEgresos;
+            const disponibilidadTotal = saldoBancos + saldoFinalCaja;
+            setEstadoFinal({ saldoAnterior, totalIngresos, totalEgresos, saldoBancos, disponibilidadTotal });
+            setNotas('Generado automáticamente por el sistema.');
+
         } catch (e) {
             console.error("EFAS Error:", e);
             toast({ variant: 'destructive', title: "Error de Sincronización", description: "No se pudieron cargar los datos del balance." });
@@ -174,26 +163,31 @@ export default function FinancialBalancePage() {
         // 2. LOGO REDONDO (Si existe)
         if (companyInfo.logo) {
             try {
-                // Guardar estado para clipping
-                docPDF.saveGraphicsState();
-                docPDF.setGState(new (docPDF as any).GState({ opacity: 1 }));
-                
-                // Dibujar círculo para el clip
-                docPDF.arc(26, 22.5, 12, 0, 360, false);
-                docPDF.clip();
-                
-                // Insertar imagen (ajustada al círculo)
-                docPDF.addImage(companyInfo.logo, 'PNG', 14, 10.5, 24, 24);
-                
-                // Restaurar para que el resto no sea circular
-                docPDF.restoreGraphicsState();
-                
-                // Borde ámbar decorativo alrededor del círculo
-                docPDF.setDrawColor(245, 158, 11); // Amber-500
+                // Coordenadas para el logo circular
+                const centerX = 26;
+                const centerY = 22.5;
+                const radius = 12;
+    
+                // 1. Dibujamos el círculo que servirá de máscara
+                // Usamos 'S' (stroke) pero lo importante es el clipping posterior
+                docPDF.setDrawColor(245, 158, 11); // Color Ámbar
                 docPDF.setLineWidth(0.8);
-                docPDF.circle(26, 22.5, 12, 'S');
+                docPDF.circle(centerX, centerY, radius, 'S'); 
+    
+                // 2. Aplicamos el recorte (clipping)
+                // Accedemos al contexto de dibujo interno de jsPDF para mayor compatibilidad
+                (docPDF as any).saveGraphicsState();
+                (docPDF as any).circle(centerX, centerY, radius, 'f'); // 'f' para fill (necesario para clip)
+                (docPDF as any).clip();
+    
+                // 3. Insertamos la imagen (quedará recortada por el círculo)
+                docPDF.addImage(companyInfo.logo, 'PNG', centerX - radius, centerY - radius, radius * 2, radius * 2);
+    
+                // 4. Restauramos el estado para que el resto del PDF no salga circular
+                (docPDF as any).restoreGraphicsState();
+                
             } catch (e) {
-                console.error("Error cargando logo al PDF", e);
+                console.error("Error al procesar el logo circular en el PDF:", e);
             }
         }
     
@@ -248,19 +242,19 @@ export default function FinancialBalancePage() {
     
         // TABLA DE INGRESOS
         autoTable(docPDF, {
-            head: [['CONCEPTO DE INGRESO', 'MONTO (Bs.)']],
-            body: ingresos.map(i => [i.concepto.toUpperCase(), formatCurrency(i.real)]),
+            head: [['DÍA', 'CONCEPTO DE INGRESO', 'MONTO (Bs.)']],
+            body: ingresos.map(i => [i.dia, i.concepto.toUpperCase(), formatCurrency(i.monto)]),
             startY: startY + 15,
             theme: 'grid',
             headStyles: { fillColor: [16, 185, 129], fontStyle: 'bold' },
             bodyStyles: { textColor: [0, 0, 0] },
-            columnStyles: { 1: { halign: 'right', fontStyle: 'bold' } }
+            columnStyles: { 2: { halign: 'right', fontStyle: 'bold' } }
         });
     
         // TABLA DE EGRESOS
         autoTable(docPDF, {
-            head: [['FECHA', 'CONCEPTO DE GASTO / EGRESO', 'MONTO (Bs.)']],
-            body: egresos.map(e => [e.fecha, e.descripcion.toUpperCase(), formatCurrency(e.monto)]),
+            head: [['DÍA', 'CONCEPTO DE GASTO / EGRESO', 'MONTO (Bs.)']],
+            body: egresos.map(e => [e.dia, e.concepto.toUpperCase(), formatCurrency(e.monto)]),
             startY: (docPDF as any).lastAutoTable.finalY + 10,
             theme: 'grid',
             headStyles: { fillColor: [225, 29, 72], fontStyle: 'bold' },
@@ -347,8 +341,8 @@ export default function FinancialBalancePage() {
                             
                             const statementDataToSave = {
                                 id: periodId,
-                                ingresos: ingresos.map(i => ({ concepto: i.concepto, monto: i.real, dia: format(new Date(), 'dd'), id: i.category })),
-                                egresos: egresos.map(e => ({ concepto: e.descripcion, monto: e.monto, dia: e.fecha, id: e.id || Date.now().toString() })),
+                                ingresos: ingresos,
+                                egresos: egresos,
                                 cajaChica: cajaChica,
                                 estadoFinanciero: estadoFinal,
                                 notas,
