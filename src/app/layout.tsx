@@ -1,8 +1,7 @@
-
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
-import { type ReactNode, useEffect, useState } from 'react';
+import { type ReactNode, useEffect } from 'react';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from '@/components/theme-provider';
@@ -12,6 +11,7 @@ import { SupportBanner } from '@/components/support-banner';
 import { Loader2 } from 'lucide-react';
 import { Montserrat } from 'next/font/google';
 import { cn } from '@/lib/utils';
+import { SYSTEM_LOGO, COMPANY_NAME } from '@/lib/constants';
 
 const montserrat = Montserrat({
   subsets: ['latin'],
@@ -28,7 +28,6 @@ function AuthGuard({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (loading) return;
-    
     if (isSuperAdmin) return;
 
     const isPublic = publicPaths.includes(pathname);
@@ -49,11 +48,18 @@ function AuthGuard({ children }: { children: ReactNode }) {
   if (loading) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background">
-        <div className="text-center">
-            <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto" />
-            <p className="mt-6 font-black italic tracking-tighter text-3xl uppercase">
+        <div className="text-center flex flex-col items-center">
+            <img 
+              src={SYSTEM_LOGO} 
+              alt={COMPANY_NAME} 
+              className="h-24 w-24 rounded-2xl shadow-2xl mb-6 animate-pulse object-cover border-2 border-primary/20"
+            />
+            
+            <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+            
+            <p className="font-black italic tracking-tighter text-3xl uppercase">
               <span className="text-orange-500">EFAS</span>
-              <span className="text-slate-800 dark:text-slate-100">CONDOSYS</span>
+              <span className="text-slate-800 dark:text-slate-100"> CONDOSYS</span>
             </p>
             <p className="text-[9px] text-muted-foreground font-bold tracking-[0.4em] uppercase mt-2">
               Autogestión de Condominios
@@ -76,9 +82,9 @@ export default function RootLayout({
       <head>
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#1A1D23" />
-        <link rel="apple-touch-icon" href="/efas-condosys-logo.png?v=2" />
-        <link rel="icon" href="/efas-condosys-logo.png?v=2" type="image/png" />
-        <title>EFAS CondoSys | Autogestión de Condominios</title>
+        <link rel="apple-touch-icon" href={SYSTEM_LOGO} />
+        <link rel="icon" href={SYSTEM_LOGO} type="image/jpeg" />
+        <title>{COMPANY_NAME} | Autogestión de Condominios</title>
       </head>
       <body suppressHydrationWarning className={cn(
           "antialiased selection:bg-primary selection:text-primary-foreground font-body",
