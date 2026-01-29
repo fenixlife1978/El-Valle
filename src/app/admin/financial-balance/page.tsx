@@ -203,127 +203,117 @@ export default function FinancialBalancePage() {
     };
 
     const generatePDF = (data: any) => {
-        if (!data || !data.ingresos || !companyInfo) return;
-
+        if (!data || !data.ingresos) return;
         const docPDF = new jsPDF({
             orientation: 'p',
             unit: 'mm',
             format: 'a4'
         });
-
+    
         const pageWidth = docPDF.internal.pageSize.getWidth();
-        const headerHeight = 35;
         const margin = 14;
-
-        // --- ENCABEZADO ---
-        docPDF.setFillColor(30, 41, 59); // Dark blue/slate
-        docPDF.rect(0, 0, pageWidth, headerHeight, 'F');
-
-        // Logo Circular
+    
+        // --- ENCABEZADO (FONDO AZUL OSCURO) ---
+        docPDF.setFillColor(30, 41, 59);
+        docPDF.rect(0, 0, pageWidth, 40, 'F');
+    
+        // Logo
         if (companyInfo.logo) {
             try {
-                const pdfCtx = docPDF as any;
-                pdfCtx.saveGraphicsState();
-                pdfCtx.circle(margin + 12, 17.5, 12, 'S'); // Draw circle path for clipping
-                pdfCtx.clip();
-                docPDF.addImage(companyInfo.logo, 'PNG', margin, 5.5, 24, 24);
-                pdfCtx.restoreGraphicsState();
-            } catch (e) {
-                console.error("Error adding logo to PDF:", e);
-            }
+                docPDF.addImage(companyInfo.logo, 'PNG', 10, 5, 25, 25);
+            } catch (e) { console.error("Error al cargar logo en PDF", e); }
         }
-
-        // Textos del Encabezado
+    
+        // Nombre del Condominio y RIF (FORZAR BLANCO)
         docPDF.setTextColor(255, 255, 255);
         docPDF.setFontSize(14);
         docPDF.setFont('helvetica', 'bold');
-        docPDF.text(companyInfo.name.toUpperCase(), margin + 28, 15);
+        docPDF.text(companyInfo.name.toUpperCase(), 40, 18);
         
-        docPDF.setFontSize(9);
-        docPDF.setFont('helvetica', 'normal');
-        docPDF.text(`RIF: ${companyInfo.rif}`, margin + 28, 22);
-
-        docPDF.setTextColor(245, 158, 11); // Amber for EFAS
-        docPDF.setFont('helvetica', 'bold');
         docPDF.setFontSize(10);
-        docPDF.text("EFAS", pageWidth - margin - 35, 15, { align: 'right' });
-        docPDF.setTextColor(255, 255, 255);
-        docPDF.text("CONDOSYS", pageWidth - margin, 15, { align: 'right' });
-
-        docPDF.setFontSize(8);
         docPDF.setFont('helvetica', 'normal');
-        docPDF.text("BALANCE FINANCIERO OFICIAL", pageWidth - margin, 20, { align: 'right' });
-
-        // Código de Barras
-        const canvas = document.createElement('canvas');
-        const barcodeValue = `BF-${data.year}-${data.month}`;
-        try {
-            JsBarcode(canvas, barcodeValue, {
-                format: "CODE128",
-                height: 25,
-                width: 1.5,
-                displayValue: false,
-                margin: 0,
-                background: "#1e293b", // Header bg color
-                lineColor: "#ffffff" // White lines
-            });
-            const barcodeDataUrl = canvas.toDataURL("image/png");
-            docPDF.addImage(barcodeDataUrl, 'PNG', pageWidth - margin - 55, 24, 50, 12);
-        } catch (e) {
-            console.error("Barcode generation failed", e);
-        }
-
-        // --- CUERPO ---
-        docPDF.setTextColor(0, 0, 0); // Reset a negro
-        let startY = headerHeight + 20;
-
+        docPDF.text(`RIF: ${companyInfo.rif}`, 40, 25);
+    
+        // Branding EFAS CondoSys
+        docPDF.setTextColor(245, 158, 11); // Ámbar
+        docPDF.setFont('helvetica', 'bold');
+        docPDF.text("EFAS CondoSys", pageWidth - 50, 18, { align: 'right' });
+        docPDF.setTextColor(255, 255, 255);
+        docPDF.setFontSize(8);
+        docPDF.text("BALANCE FINANCIERO OFICIAL", pageWidth - 50, 23, { align: 'right' });
+    
+        // --- CUERPO DEL DOCUMENTO (FORZAR RESET A NEGRO) ---
+        docPDF.setTextColor(0, 0, 0); 
         docPDF.setFontSize(18);
         docPDF.setFont('helvetica', 'bold');
-        docPDF.text("ESTADO DE RESULTADOS", margin, startY);
-        startY += 8;
-
+        docPDF.text("ESTADO DE RESULTADOS", margin, 55);
+    
         docPDF.setFontSize(10);
         docPDF.setFont('helvetica', 'normal');
-        const periodo = `${months.find(m => m.value === (data.month || selectedMonth))?.label.toUpperCase()} ${data.year || selectedYear}`;
-        docPDF.text(`PERÍODO: ${periodo}`, margin, startY);
-        startY += 10;
-
-        // Tablas
+        const period = `${months.find(m => m.value === (data.month || selectedMonth))?.label.toUpperCase()} ${data.year || selectedYear}`;
+        docPDF.text(`PERÍODO: ${period}`, margin, 62);
+    
+    
+        // --- TABLA DE INGRESOS (FORZANDO ESTILOS EN CADA FILA) ---
         autoTable(docPDF, {
             head: [['CONCEPTO DE INGRESO', 'MONTO (Bs.)']],
-            body: data.ingresos.map((i: any) => [i.concepto.toUpperCase(), formatCurrency(i.monto)]),
-            startY,
+            body: data.ingresos && data.ingresos.length > 0 
+                ? data.ingresos.map((i: any) => [i.concepto.toUpperCase(), formatCurrency(i.monto)])
+                : [['SIN INGRESOS REGISTRADOS', '0,00']],
+            startY: 70,
             theme: 'grid',
-            headStyles: { fillColor: [16, 185, 129], textColor: [255, 255, 255] },
-            styles: { textColor: [0, 0, 0], fontSize: 9 },
-            columnStyles: { 1: { halign: 'right' } }
+            headStyles: { 
+                fillColor: [16, 185, 129], 
+                textColor: [255, 255, 255],
+                fontStyle: 'bold' 
+            },
+            styles: { 
+                textColor: [0, 0, 0], // ESTO ES LO QUE CORRIGE EL TEXTO INVISIBLE
+                fontSize: 10,
+                cellPadding: 3
+            },
+            columnStyles: {
+                1: { halign: 'right', fontStyle: 'bold' }
+            }
         });
-        startY = (docPDF as any).lastAutoTable.finalY + 10;
-
+    
+        // --- TABLA DE EGRESOS ---
+        const finalYIngresos = (docPDF as any).lastAutoTable.finalY + 10;
+        
         autoTable(docPDF, {
-            head: [['FECHA', 'CONCEPTO DE EGRESO / GASTO', 'MONTO (Bs.)']],
-            body: data.egresos.length > 0 ? data.egresos.map((e: any) => [e.fecha, e.descripcion.toUpperCase(), formatCurrency(e.monto)]) : [['-', 'SIN GASTOS REGISTRADOS', '0,00']],
-            startY,
+            head: [['CONCEPTO DE EGRESO / GASTO', 'MONTO (Bs.)']],
+            body: data.egresos && data.egresos.length > 0
+                ? data.egresos.map((e: any) => [e.descripcion.toUpperCase(), formatCurrency(e.monto)])
+                : [['SIN EGRESOS REGISTRADOS', '0,00']],
+            startY: finalYIngresos,
             theme: 'grid',
-            headStyles: { fillColor: [225, 29, 72], textColor: [255, 255, 255] },
-            styles: { textColor: [0, 0, 0], fontSize: 9 },
-            columnStyles: { 2: { halign: 'right' } }
+            headStyles: { 
+                fillColor: [225, 29, 72], 
+                textColor: [255, 255, 255] 
+            },
+            styles: { textColor: [0, 0, 0] },
+            columnStyles: {
+                1: { halign: 'right', fontStyle: 'bold' }
+            }
         });
-        startY = (docPDF as any).lastAutoTable.finalY + 15;
-
-        // Cuadro de Total
+    
+        // --- TOTAL FINAL ---
+        const finalYTotal = (docPDF as any).lastAutoTable.finalY + 15;
         docPDF.setFillColor(245, 158, 11);
-        docPDF.roundedRect(margin, startY, pageWidth - (margin * 2), 22, 3, 3, 'F');
+        docPDF.roundedRect(margin, finalYTotal, pageWidth - (margin * 2), 20, 3, 3, 'F');
+        
         docPDF.setTextColor(255, 255, 255);
-        docPDF.setFontSize(11);
-        docPDF.text("DISPONIBILIDAD TOTAL REAL:", margin + 5, startY + 9);
-        docPDF.setFontSize(16);
+        docPDF.setFontSize(10);
+        docPDF.text("DISPONIBILIDAD TOTAL EN CAJA/BANCO:", margin + 5, finalYTotal + 8);
+        docPDF.setFontSize(14);
         docPDF.setFont('helvetica', 'bold');
-        docPDF.text(`${formatCurrency(data.disponibilidad)} Bs.`, margin + 5, startY + 17);
-
-        // --- SALIDA ---
-        const uniqueID = Math.floor(Date.now() / 1000);
-        docPDF.save(`Reporte_Balance_${uniqueID}.pdf`);
+        docPDF.text(`${formatCurrency(data.disponibilidad)} Bs.`, margin + 5, finalYTotal + 15);
+    
+        const timestamp = new Date().getTime();
+    
+        // --- SALIDA DEFINITIVA ---
+        // Guardar con nombre único para forzar al navegador a no usar el caché
+        docPDF.save(`Balance_EFAS_${timestamp}.pdf`);
     };
 
     if (authLoading || dataLoading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin h-10 w-10 text-primary" /></div>;
