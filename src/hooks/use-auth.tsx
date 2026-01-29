@@ -1,8 +1,9 @@
+
 'use client';
 
 import React, { useState, useEffect, createContext, useContext, ReactNode } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot, collection, getDocs } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
 
 export interface AuthContextType {
@@ -40,52 +41,77 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, []);
 
     useEffect(() => {
-        if (!user) return;
+        if (!user) {
+            setLoading(false);
+            return;
+        };
 
         const isSuper = user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
-        let unsubscribeSnap: () => void;
+        let unsubscribeSnap: () => void | undefined;
 
-        const fetchUserData = async () => {
+        const findAndSubscribe = async () => {
+            setLoading(true);
             if (isSuper) {
-                // Buscamos el ID seleccionado en localStorage. 
-                // Si no hay ninguno, forzamos 'condo_01' para ver tus datos históricos.
                 const storedId = typeof window !== 'undefined' ? localStorage.getItem('activeCondoId') : null;
                 const supportId = typeof window !== 'undefined' ? localStorage.getItem('support_mode_id') : null;
-                
-                const finalId = storedId || supportId || 'condo_01';
+                const finalId = supportId || storedId || 'condo_01';
                 
                 setOwnerData({ role: 'super-admin', name: 'Super Admin' });
                 setActiveCondoId(finalId);
                 setLoading(false);
                 return;
             }
-            
-            const ownerRef = doc(db, 'owners', user.uid);
-            unsubscribeSnap = onSnapshot(ownerRef, (docSnap) => {
-                if (docSnap.exists()) {
-                    const data = docSnap.data();
-                    setOwnerData(data);
-                    setActiveCondoId(data.condominioId || null);
+
+            const condominiosSnapshot = await getDocs(collection(db, "condominios"));
+            let userFound = false;
+
+            for (const condoDoc of condominiosSnapshot.docs) {
+                const condoId = condoDoc.id;
+                const ownerRef = doc(db, 'condominios', condoId, 'owners', user.uid);
+                const ownerSnap = await getDoc(ownerRef);
+
+                if (ownerSnap.exists()) {
+                    unsubscribeSnap = onSnapshot(ownerRef, (docSnap) => {
+                        if (docSnap.exists()) {
+                            const data = docSnap.data();
+                            setOwnerData(data);
+                            setActiveCondoId(data.condominioId || condoId);
+                        } else {
+                            setOwnerData(null);
+                            setActiveCondoId(null);
+                        }
+                    });
+                    userFound = true;
+                    break;
                 }
-                setLoading(false);
-            }, () => setLoading(false));
+            }
+
+            if (!userFound) {
+                console.warn(`Auth-Hook: No profile found for user ${user.uid}`);
+                setOwnerData(null);
+                setActiveCondoId(null);
+            }
+            setLoading(false);
         };
 
-        fetchUserData();
-        return () => { if (unsubscribeSnap) unsubscribeSnap(); };
+        findAndSubscribe();
+
+        return () => {
+            if (unsubscribeSnap) {
+                unsubscribeSnap();
+            }
+        };
     }, [user]);
 
     // EFAS CondoSys: Sincronización de configuración del condominio
     useEffect(() => {
         if (!activeCondoId) return;
 
-        // CORRECCIÓN: Ruta exacta según tu DB: mainSettings (con S mayúscula)
         const configRef = doc(db, 'condominios', activeCondoId, 'config', 'mainSettings');
         
         const unsubscribeConfig = onSnapshot(configRef, (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
-                // Si la data viene envuelta en companyInfo la extraemos, si no, tomamos el doc completo
                 setCompanyInfo(data.companyInfo || data);
             } else {
                 setCompanyInfo(null);

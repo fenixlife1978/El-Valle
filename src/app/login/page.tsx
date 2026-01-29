@@ -61,20 +61,23 @@ function LoginPage() {
             const user = userCredential.user;
             console.log("Auth exitosa. UID:", user.uid);
 
+            // --- Multi-tenant User Lookup ---
             let userData = null;
-            
-            const ownerDoc = await getDoc(doc(db, "owners", user.uid));
-            
-            if (ownerDoc.exists()) {
-                userData = ownerDoc.data();
-                console.log("Datos encontrados en 'owners'");
-            } else {
-                const userDoc = await getDoc(doc(db, "users", user.uid));
-                if (userDoc.exists()) {
-                    userData = userDoc.data();
-                    console.log("Datos encontrados en 'users'");
+            let userCondoId = null;
+
+            const condominiosSnapshot = await getDocs(collection(db, "condominios"));
+            for (const condoDoc of condominiosSnapshot.docs) {
+                const condoId = condoDoc.id;
+                const ownerRef = doc(db, 'condominios', condoId, 'owners', user.uid);
+                const ownerSnap = await getDoc(ownerRef);
+                if (ownerSnap.exists()) {
+                    userData = ownerSnap.data();
+                    userCondoId = condoId;
+                    console.log(`Usuario encontrado en condominio: ${condoId}`);
+                    break; // Found the user, exit loop
                 }
             }
+
 
             if (!userData) {
                 console.error("No se encontró el perfil en Firestore para el UID:", user.uid);
@@ -94,7 +97,7 @@ function LoginPage() {
             if (role === 'admin') {
                 router.push('/admin/dashboard');
             } else {
-                router.push('/dashboard');
+                router.push('/owner/dashboard');
             }
 
         } catch (error: any) {
