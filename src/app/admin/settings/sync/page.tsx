@@ -3,18 +3,18 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useAuth } from '@/hooks/use-auth';
+import { db, auth } from '@/lib/firebase';
+import { collection, query, where, getDocs, doc, updateDoc, deleteDoc, Timestamp, addDoc } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { collection, query, where, getDocs, doc, updateDoc, deleteDoc, Timestamp, addDoc } from 'firebase/firestore';
-import { db, auth } from '@/lib/firebase';
 import { Loader2, AlertTriangle, ShieldCheck, Search, Info } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { ensureAdminProfile } from '@/lib/user-sync';
 import { cn } from "@/lib/utils";
-import { useAuth } from '@/hooks/use-auth';
 
 type MissingProfileResult = {
     checked: number;
@@ -39,7 +39,7 @@ export default function SyncProfilesPage() {
     const checkAdminProfile = async () => {
         setLoadingAdmin(true);
         try {
-            const exists = await ensureAdminProfile(toast);
+            const exists = await ensureAdminProfile(adminUser);
             setAdminProfileExists(exists);
         } catch (error) {
             console.error("Error checking admin profile:", error);
