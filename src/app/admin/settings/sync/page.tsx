@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -36,23 +35,28 @@ export default function SyncProfilesPage() {
 
     const [missingProfileResult, setMissingProfileResult] = useState<MissingProfileResult | null>(null);
 
-    const checkAdminProfile = async () => {
-        setLoadingAdmin(true);
-        try {
-            const exists = await ensureAdminProfile(adminUser);
-            setAdminProfileExists(exists);
-        } catch (error) {
-            console.error("Error checking admin profile:", error);
-            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo verificar el perfil del administrador.' });
-        } finally {
-            setLoadingAdmin(false);
-        }
-    };
-
     useEffect(() => {
+        const checkAdminProfile = async () => {
+            if (!adminUser) {
+                setAdminProfileExists(false);
+                setLoadingAdmin(false);
+                return;
+            }
+
+            setLoadingAdmin(true);
+            try {
+                const exists = await ensureAdminProfile(adminUser);
+                setAdminProfileExists(exists);
+            } catch (error) {
+                console.error("Error checking admin profile:", error);
+                toast({ variant: 'destructive', title: 'Error', description: 'No se pudo verificar el perfil del administrador.' });
+            } finally {
+                setLoadingAdmin(false);
+            }
+        };
+
         checkAdminProfile();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [adminUser, toast]);
 
     const searchOwner = async () => {
         if (!ownerSearchTerm) return;
