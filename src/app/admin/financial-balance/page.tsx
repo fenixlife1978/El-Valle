@@ -36,12 +36,6 @@ const formatCurrency = (amount: number | null | undefined): string => {
     return amount.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-const formatToTwoDecimals = (num: number | null | undefined): string => {
-    if (typeof num !== 'number') return '0,00';
-    return num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-};
-
-
 const months = Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: format(new Date(2000, i), 'MMMM', { locale: es }) }));
 const years = Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear() - i));
 
@@ -135,7 +129,7 @@ export default function FinancialBalancePage() {
             setDataLoading(false);
         }
     }, [currentCondoId, selectedMonth, selectedYear, estadoFinal.saldoAnterior, toast]);
-
+    
     useEffect(() => {
         let unsubStatements: () => void = () => {};
         let unsubPublished: () => void = () => {};
@@ -209,22 +203,15 @@ export default function FinancialBalancePage() {
         });
     };
 
-    const generatePDF = () => {
-        if (!ingresos || !companyInfo) return;
+    const generatePDF = (data: any) => {
+        if (!data || !data.ingresos) return;
         const docPDF = new jsPDF();
-        // FORZAR RESET DE ESTADO INICIAL
-        docPDF.setTextColor(0, 0, 0); 
-        docPDF.setDrawColor(0, 0, 0);
-        docPDF.setFillColor(255, 255, 255);
-    
         const pageWidth = docPDF.internal.pageSize.getWidth();
-        const margin = 14;
-    
-        // 1. ENCABEZADO OSCURO (Slate-900)
+        
+        // --- 1. ENCABEZADO (FONDO OSCURO) ---
         docPDF.setFillColor(30, 41, 59);
         docPDF.rect(0, 0, pageWidth, 45, 'F');
     
-        // Logo Circular
         if (companyInfo.logo) {
             try {
                 const pdfCtx = docPDF as any;
@@ -233,83 +220,74 @@ export default function FinancialBalancePage() {
                 pdfCtx.clip();
                 docPDF.addImage(companyInfo.logo, 'PNG', 9, 9.5, 26, 26);
                 pdfCtx.restoreGraphicsState();
-                // Anillo Ámbar
                 docPDF.setDrawColor(245, 158, 11);
-                docPDF.setLineWidth(0.8);
+                docPDF.setLineWidth(1);
                 docPDF.circle(22, 22.5, 13, 'S');
-            } catch (e) { console.warn("Error logo:", e); }
+            } catch (e) { console.error(e); }
         }
     
-        // Texto del Encabezado (Blanco)
-        docPDF.setTextColor(255, 255, 255);
+        docPDF.setTextColor(255, 255, 255); // Blanco solo para el header
         docPDF.setFontSize(14);
-        docPDF.setFont('helvetica', 'bold');
         docPDF.text(companyInfo.name.toUpperCase(), 42, 22);
         docPDF.setFontSize(9);
         docPDF.text(`RIF: ${companyInfo.rif}`, 42, 28);
-    
-        // Branding EFAS
         docPDF.setTextColor(245, 158, 11);
         docPDF.text("EFAS", pageWidth - 55, 18);
         docPDF.setTextColor(255, 255, 255);
         docPDF.text("CONDOSYS", pageWidth - 42, 18);
     
-        // --- REFUERZO DE COLOR: RESET A NEGRO AQUÍ ---
-        docPDF.setTextColor(0, 0, 0); 
-        docPDF.setFont('helvetica', 'normal');
+        // --- 2. RESET OBLIGATORIO A NEGRO ---
+        docPDF.setTextColor(0, 0, 0); // <--- ESTO ES VITAL
+        docPDF.setDrawColor(0, 0, 0);
     
-        // Titulo del Reporte
-        docPDF.setFontSize(18);
-        docPDF.setFont('helvetica', 'bold');
-        docPDF.text("ESTADO DE RESULTADOS", margin, 60);
-        
+        docPDF.setFontSize(22);
+        docPDF.text("BALANCE", 14, 65);
+        docPDF.setTextColor(245, 158, 11);
+        docPDF.text("FINANCIERO", 56, 65);
+    
+        docPDF.setTextColor(0, 0, 0); // Volver a negro para el resto
         docPDF.setFontSize(10);
-        docPDF.setFont('helvetica', 'normal');
-        const mesNombre = months.find(m => m.value === selectedMonth)?.label || "N/A";
-        docPDF.text(`PERIODO: ${mesNombre.toUpperCase()} ${selectedYear || ''}`, margin, 68);
+        const periodo = `${months.find(m => m.value === (data.month || selectedMonth))?.label.toUpperCase()} ${data.year || selectedYear}`;
+        docPDF.text(`PERIODO: ${periodo}`, 14, 75);
     
-        // TABLA DE INGRESOS
+        // --- 3. TABLAS CON COLORES FORZADOS ---
         autoTable(docPDF, {
             head: [['CONCEPTO DE INGRESO', 'MONTO (Bs.)']],
-            body: ingresos.map((i: any) => [
-                i.concepto.toUpperCase(), 
-                formatToTwoDecimals(i.real)
-            ]),
-            startY: 75,
+            body: data.ingresos.map((i: any) => [i.concepto.toUpperCase(), formatCurrency(i.monto)]),
+            startY: 85,
             theme: 'grid',
-            headStyles: { fillColor: [16, 185, 129], textColor: [255, 255, 255], fontStyle: 'bold' },
-            styles: { textColor: [0, 0, 0], fontSize: 9 },
+            headStyles: { fillColor: [16, 185, 129], textColor: [255, 255, 255] },
+            styles: { 
+                textColor: [0, 0, 0], // FORZAR TEXTO NEGRO EN FILAS
+                lineColor: [200, 200, 200] 
+            },
             columnStyles: { 1: { halign: 'right' } }
         });
     
-        // TABLA DE EGRESOS
-        const nextY = (docPDF as any).lastAutoTable.finalY + 10;
-        docPDF.setTextColor(0, 0, 0);
-        
         autoTable(docPDF, {
             head: [['FECHA', 'CONCEPTO DE EGRESO / GASTO', 'MONTO (Bs.)']],
-            body: egresos.length > 0 
-                ? egresos.map((e: any) => [e.fecha, e.descripcion.toUpperCase(), formatToTwoDecimals(e.monto)]) 
-                : [['-', 'SIN MOVIMIENTOS REGISTRADOS', '0,00']],
-            startY: nextY,
+            body: data.egresos.length > 0 
+                ? data.egresos.map((e: any) => [e.fecha, e.descripcion.toUpperCase(), formatCurrency(e.monto)]) 
+                : [['-', 'SIN GASTOS REGISTRADOS', '0,00']],
+            startY: (docPDF as any).lastAutoTable.finalY + 10,
             theme: 'grid',
-            headStyles: { fillColor: [225, 29, 72], textColor: [255, 255, 255], fontStyle: 'bold' },
-            styles: { textColor: [0, 0, 0], fontSize: 9 },
+            headStyles: { fillColor: [225, 29, 72], textColor: [255, 255, 255] },
+            styles: { 
+                textColor: [0, 0, 0], // FORZAR TEXTO NEGRO EN FILAS
+                lineColor: [200, 200, 200] 
+            },
             columnStyles: { 2: { halign: 'right' } }
         });
     
-        // TOTAL FINAL (DISPONIBILIDAD)
+        // --- 4. CUADRO FINAL ---
         const finalY = (docPDF as any).lastAutoTable.finalY + 15;
-        
         docPDF.setFillColor(245, 158, 11);
-        docPDF.roundedRect(margin, finalY, pageWidth - (margin * 2), 22, 3, 3, 'F');
-        
-        docPDF.setTextColor(255, 255, 255);
-        docPDF.setFontSize(11);
-        docPDF.text("DISPONIBILIDAD TOTAL EN CAJA/BANCO:", margin + 5, finalY + 9);
-        docPDF.setFontSize(16);
-        docPDF.setFont('helvetica', 'bold');
-        docPDF.text(`${formatToTwoDecimals(estadoFinal.disponibilidadTotal)} Bs.`, margin + 5, finalY + 17);
+        docPDF.roundedRect(14, finalY, pageWidth - 28, 25, 4, 4, 'F');
+        docPDF.setTextColor(255, 255, 255); // Blanco para el cuadro ámbar
+        docPDF.setFontSize(10);
+        docPDF.text("DISPONIBILIDAD TOTAL REAL:", 20, finalY + 10);
+        docPDF.setFontSize(18);
+        docPDF.text(`${formatCurrency(data.disponibilidad)} Bs.`, 20, finalY + 18);
     
         window.open(docPDF.output('bloburl'), '_blank');
     };
@@ -332,7 +310,13 @@ export default function FinancialBalancePage() {
                 <Button variant="outline" onClick={loadData} disabled={syncing} className="rounded-2xl">
                     <RefreshCw className={`mr-2 h-4 w-4 ${syncing && 'animate-spin'}`}/> Sincronizar
                 </Button>
-                <Button className="bg-primary rounded-2xl" onClick={generatePDF}>
+                <Button className="bg-primary rounded-2xl" onClick={() => generatePDF({
+                        ingresos: ingresos.map(i => ({...i, monto: i.real})),
+                        egresos,
+                        disponibilidad: estadoFinal.disponibilidadTotal,
+                        month: selectedMonth,
+                        year: selectedYear,
+                    })}>
                     <Download className="mr-2 h-4 w-4"/> Descargar PDF
                 </Button>
             </div>
@@ -488,7 +472,5 @@ export default function FinancialBalancePage() {
         </div>
     );
 }
- 
-    
 
     
