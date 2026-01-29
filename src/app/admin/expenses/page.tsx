@@ -248,9 +248,18 @@ export default function ExpensesPage() {
         doc.rect(0, 0, pageWidth, headerHeight, 'F');
         doc.setTextColor(255, 255, 255);
 
+        // --- LOGO (LEFT) ---
         let textX = margin;
         if (companyInfo?.logo) {
-            try { doc.addImage(companyInfo.logo, 'PNG', margin, 7, 20, 20); textX += 25; }
+            try {
+                const logoSize = 20;
+                doc.saveGraphicsState();
+                doc.circle(margin + logoSize / 2, 7 + logoSize / 2, logoSize / 2);
+                doc.clip();
+                doc.addImage(companyInfo.logo, 'PNG', margin, 7, logoSize, logoSize);
+                doc.restoreGraphicsState();
+                textX += logoSize + 5;
+            }
             catch(e) { console.error("Error adding logo:", e); }
         }
 
@@ -259,41 +268,54 @@ export default function ExpensesPage() {
         doc.setFontSize(9).setFont('helvetica', 'normal');
         doc.text(`RIF: ${companyInfo?.rif || 'N/A'}`, textX, 22);
 
-        // --- Brand Identity ---
+        // --- BRAND & BARCODE (RIGHT) ---
+        const endX = pageWidth - margin;
         const efasColor = '#F97316';
         const condoSysColor = '#3B82F6';
-        doc.setFont('helvetica', 'blackitalic');
-        doc.setFontSize(12);
-        const condoSysText = 'CONDOSYS';
-        const efasText = 'EFAS';
-        const condoSysWidth = doc.getStringUnitWidth(condoSysText) * 12 / doc.internal.scaleFactor;
-        const endX = pageWidth - margin;
+        
+        doc.setFont('helvetica', 'bolditalic');
+        doc.setFontSize(10);
+        
+        const efasText = "EFAS";
+        const condoSysText = "CONDOSYS";
+        const condoSysWidth = doc.getStringUnitWidth(condoSysText) * 10 / doc.internal.scaleFactor;
+        
+        const brandY = 12;
         doc.setTextColor(efasColor);
-        doc.text(efasText, endX - condoSysWidth, 15, { align: 'right' });
+        doc.text(efasText, endX - condoSysWidth - 1, brandY, { align: 'right' });
         doc.setTextColor(condoSysColor);
-        doc.text(condoSysText, endX, 15, { align: 'right' });
-
+        doc.text(condoSysText, endX, brandY, { align: 'right' });
+        
         doc.setFont('helvetica', 'normal');
-        doc.setFontSize(8).setTextColor(200, 200, 200);
-        doc.text('REPORTE DE EGRESOS', pageWidth - margin, 22, { align: 'right' });
-        doc.setTextColor(0, 0, 0);
-        
-        let startY = headerHeight + 5;
-        
-        // --- BARCODE ---
+        doc.setFontSize(7);
+        doc.setTextColor(200, 200, 200);
+        doc.text('REPORTE DE EGRESOS', endX, brandY + 5, { align: 'right' });
+
+        // --- BARCODE (Inside Header) ---
         const canvas = document.createElement('canvas');
         const barcodeValue = `EGR-${filterYear}-${filterMonth}`;
         try {
             JsBarcode(canvas, barcodeValue, {
-                format: "CODE128", height: 40, width: 1.5, displayValue: true, margin: 0, fontSize: 10
+                format: "CODE128", 
+                height: 25,
+                width: 1,
+                displayValue: false, 
+                margin: 0,
+                background: "#1c2b3a",
+                lineColor: "#ffffff"
             });
             const barcodeDataUrl = canvas.toDataURL("image/png");
-            doc.addImage(barcodeDataUrl, 'PNG', (pageWidth / 2) - 30, startY, 60, 20);
+            const barcodeWidth = 40;
+            const barcodeHeight = 10;
+            doc.addImage(barcodeDataUrl, 'PNG', endX - barcodeWidth, brandY + 8, barcodeWidth, barcodeHeight);
         } catch (e) {
             console.error("Barcode generation failed", e);
         }
-        startY += 25;
-
+        
+        // --- MAIN CONTENT ---
+        doc.setTextColor(0, 0, 0); // Reset text color
+        let startY = headerHeight + 15;
+        
         const selectedMonthLabel = monthOptions.find(m => m.value === filterMonth)?.label;
         const title = `Reporte de Egresos - ${selectedMonthLabel} ${filterYear}`;
         
