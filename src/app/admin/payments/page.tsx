@@ -11,7 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
-import { CalendarIcon, CheckCircle2, Trash2, PlusCircle, Loader2, Search, XCircle, Wand2, UserPlus, Banknote, Info, Receipt, Calculator, Minus, Equal, Check, MoreHorizontal, Filter, Eye, AlertTriangle, Paperclip, Upload, DollarSign, ChevronDown, Save, FileUp, Hash, Share2, Download } from 'lucide-react';
+import { CalendarIcon, CheckCircle2, Trash2, PlusCircle, Loader2, Search, XCircle, Wand2, UserPlus, Banknote, Info, Receipt, Calculator, Minus, Equal, Check, MoreHorizontal, Filter, Eye, AlertTriangle, Paperclip, Upload, DollarSign, ChevronDown, Save, FileUp, Hash, Share2, Download, Building } from 'lucide-react';
 import { format, parseISO, isBefore, startOfMonth, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn, compressImage } from '@/lib/utils';
@@ -945,7 +945,7 @@ function ReportPaymentTab() {
                                                         </div>
                                                         <div className="space-y-2"><Label htmlFor={`amount-${row.id}`}>Monto Asignado (Bs.)</Label><Input id={`amount-${row.id}`} type="number" placeholder="0.00" value={row.amount} onChange={(e) => updateBeneficiaryRow(row.id, { amount: e.target.value })} disabled={loading || !row.owner} /></div>
                                                     </div>
-                                                    {row.owner && <div className="mt-4 space-y-2"><Label>Asignar a Propiedad</Label><Select onValueChange={(v) => updateBeneficiaryRow(row.id, { selectedProperty: row.owner!.properties?.find(p => `${p.street}-${p.house}` === v) || null })} value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''} disabled={loading || !row.owner}><SelectTrigger><SelectValue placeholder="Seleccione una propiedad..." /></SelectTrigger><SelectContent>{row.owner.properties?.map(p => (<SelectItem key={`${p.street}-${p.house}`} value={`${p.street}-${p.house}`}>{`${p.street} - ${p.house}`}</SelectItem>))}</SelectContent></Select></div>}
+                                                    {row.owner && <div className="mt-4 space-y-2"><Label>Asignar a Propiedad</Label><Select onValueChange={(v) => updateBeneficiaryRow(row.id, { selectedProperty: row.owner!.properties?.find(p => `${p.street}-${p.house}` === v) || null })} value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''} disabled={loading || !row.owner}><SelectTrigger><SelectValue placeholder="Seleccione una propiedad..." /></SelectTrigger><SelectContent>{row.owner.properties.map(p => (<SelectItem key={`${p.street}-${p.house}`} value={`${p.street}-${p.house}`}>{`${p.street} - ${p.house}`}</SelectItem>))}</SelectContent></Select></div>}
                                                     {index > 0 && <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive" onClick={() => removeBeneficiaryRow(row.id)} disabled={loading}><Trash2 className="h-4 w-4"/></Button>}
                                                 </Card>
                                             ))}
@@ -1001,6 +1001,143 @@ function ReportPaymentTab() {
 }
 
 // ===================================================================================
+// CALCULATOR TAB COMPONENT
+// ===================================================================================
+function AdminCalculatorTab() {
+    const { activeCondoId } = useAuth();
+    
+    // States for this tab
+    const [allOwners, setAllOwners] = useState<Owner[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [selectedOwner, setSelectedOwner] = useState<Owner | null>(null);
+    const [ownerDebts, setOwnerDebts] = useState<Debt[]>([]);
+    const [loadingDebts, setLoadingDebts] = useState(false);
+    const [activeRate, setActiveRate] = useState(0);
+    const [condoFee, setCondoFee] = useState(0);
+    const [selectedPendingDebts, setSelectedPendingDebts] = useState<string[]>([]);
+    const [selectedAdvanceMonths, setSelectedAdvanceMonths] = useState<string[]>([]);
+    const [now, setNow] = useState<Date | null>(null);
+
+    useEffect(() => {
+        setNow(new Date());
+    }, []);
+
+    // Fetch all owners and global settings
+    useEffect(() => {
+        if (!activeCondoId) {
+            setLoading(false);
+            return;
+        }
+        const ownersQuery = query(collection(db, 'condominios', activeCondoId, 'owners'), where("role", "==", "propietario"));
+        const unsubOwners = onSnapshot(ownersQuery, (snap) => {
+            setAllOwners(snap.docs.map(d => ({id: d.id, ...d.data()} as Owner)).sort((a, b) => (a.name || '').localeCompare(b.name || '')));
+            setLoading(false);
+        });
+
+        const settingsRef = doc(db, 'condominios', activeCondoId, 'config', 'mainSettings');
+        const unsubSettings = onSnapshot(settingsRef, (docSnap) => {
+            if (docSnap.exists()) {
+                const settings = docSnap.data();
+                setCondoFee(settings.condoFee || 0);
+                const rates = settings.exchangeRates || [];
+                const activeRateObj = rates.find((r: any) => r.active);
+                if (activeRateObj) setActiveRate(activeRateObj.rate);
+            }
+        });
+
+        return () => { unsubOwners(); unsubSettings(); };
+    }, [activeCondoId]);
+
+    // Fetch debts when an owner is selected
+    useEffect(() => {
+        if (!selectedOwner || !activeCondoId) {
+            setOwnerDebts([]);
+            return;
+        }
+        setLoadingDebts(true);
+        const debtsQuery = query(collection(db, "condominios", activeCondoId, "debts"), where("ownerId", "==", selectedOwner.id));
+        const unsubDebts = onSnapshot(debtsQuery, (snapshot) => {
+            setOwnerDebts(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Debt)).sort((a, b) => a.year - b.year || a.month - b.month));
+            setLoadingDebts(false);
+        });
+        return () => unsubDebts();
+    }, [selectedOwner, activeCondoId]);
+
+    const handleOwnerSelect = (owner: Owner) => {
+        setSelectedOwner(owner);
+        setSearchTerm('');
+        setSelectedPendingDebts([]);
+        setSelectedAdvanceMonths([]);
+    };
+
+    const filteredOwners = useMemo(() => {
+        if (!searchTerm || searchTerm.length < 2) return [];
+        return allOwners.filter(owner => owner.name?.toLowerCase().includes(searchTerm.toLowerCase()));
+    }, [searchTerm, allOwners]);
+
+    const pendingDebts = useMemo(() => ownerDebts.filter(d => d.status === 'pending' || d.status === 'vencida'), [ownerDebts]);
+
+    const futureMonths = useMemo(() => {
+        if (!now) return [];
+        const paidAdvanceMonths = ownerDebts.filter(d => d.status === 'paid' && d.description.includes('Adelantado')).map(d => `${d.year}-${String(d.month).padStart(2, '0')}`);
+        return Array.from({ length: 12 }, (_, i) => {
+            const date = addMonths(now, i);
+            const value = format(date, 'yyyy-MM');
+            return { value, label: format(date, 'MMMM yyyy', { locale: es }), disabled: paidAdvanceMonths.includes(value) };
+        });
+    }, [ownerDebts, now]);
+
+    const paymentCalculator = useMemo(() => {
+        if (!selectedOwner) return { totalToPay: 0, hasSelection: false, dueMonthsCount: 0, advanceMonthsCount: 0, totalDebtBs: 0, balanceInFavor: 0 };
+        const dueMonthsTotalUSD = pendingDebts.filter(d => selectedPendingDebts.includes(d.id)).reduce((sum, d) => sum + d.amountUSD, 0);
+        const advanceMonthsTotalUSD = selectedAdvanceMonths.length * condoFee;
+        const totalDebtUSD = dueMonthsTotalUSD + advanceMonthsTotalUSD;
+        const totalDebtBs = totalDebtUSD * activeRate;
+        const totalToPay = Math.max(0, totalDebtBs - (selectedOwner.balance || 0));
+        return { totalToPay, hasSelection: selectedPendingDebts.length > 0 || selectedAdvanceMonths.length > 0, dueMonthsCount: selectedPendingDebts.length, advanceMonthsCount: selectedAdvanceMonths.length, totalDebtBs, balanceInFavor: selectedOwner.balance || 0, condoFee };
+    }, [selectedPendingDebts, selectedAdvanceMonths, pendingDebts, activeRate, condoFee, selectedOwner]);
+    
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Calculadora de Pagos para Propietarios</CardTitle>
+                <CardDescription>Busque un propietario para calcular sus deudas pendientes o pagos por adelantado.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+                {!selectedOwner ? (
+                    <div className="space-y-4">
+                        <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Buscar por nombre de propietario..." className="pl-9" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} disabled={loading}/></div>
+                        {loading ? <Loader2 className="mx-auto my-4 h-6 w-6 animate-spin" /> : (searchTerm && filteredOwners.length > 0) && (
+                            <Card className="border rounded-md"><ScrollArea className="h-48">{filteredOwners.map(owner => (<div key={owner.id} onClick={() => handleOwnerSelect(owner)} className="p-3 hover:bg-muted cursor-pointer border-b last:border-b-0"><p className="font-medium text-sm">{owner.name}</p></div>))}</ScrollArea></Card>
+                        )}
+                    </div>
+                ) : (
+                    <div className="space-y-6">
+                        <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                            <p>Calculando para: <span className="font-bold text-primary">{selectedOwner.name}</span></p>
+                            <Button variant="outline" size="sm" onClick={() => setSelectedOwner(null)}><XCircle className="mr-2 h-4 w-4"/>Cambiar Propietario</Button>
+                        </div>
+                        {loadingDebts ? <Loader2 className="mx-auto my-4 h-6 w-6 animate-spin" /> : (
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+                                <div className="lg:col-span-2 space-y-4">
+                                     <Card><CardHeader><CardTitle>1. Deudas Pendientes</CardTitle></CardHeader><CardContent><Table><TableHeader><TableRow><TableHead>Pagar</TableHead><TableHead>Período</TableHead><TableHead>Estado</TableHead><TableHead className="text-right">Monto (Bs.)</TableHead></TableRow></TableHeader><TableBody>{pendingDebts.length > 0 ? pendingDebts.map(d => <TableRow key={d.id}><TableCell><Checkbox onCheckedChange={() => setSelectedPendingDebts(p => p.includes(d.id) ? p.filter(id => id !== d.id) : [...p, d.id])} checked={selectedPendingDebts.includes(d.id)} /></TableCell><TableCell>{monthsLocale[d.month]} {d.year}</TableCell><TableCell><Badge variant={isBefore(startOfMonth(new Date(d.year, d.month - 1)), startOfMonth(new Date())) ? 'destructive' : 'warning'}>{isBefore(startOfMonth(new Date(d.year, d.month - 1)), startOfMonth(new Date())) ? 'Vencida' : 'Pendiente'}</Badge></TableCell><TableCell className="text-right">Bs. {formatToTwoDecimals(d.amountUSD * activeRate)}</TableCell></TableRow>) : <TableRow><TableCell colSpan={4} className="h-24 text-center">No hay deudas pendientes.</TableCell></TableRow>}</TableBody></Table></CardContent></Card>
+                                     <Card><CardHeader><CardTitle>2. Pagar Meses por Adelantado</CardTitle></CardHeader><CardContent><div className="grid grid-cols-2 sm:grid-cols-4 gap-4">{futureMonths.map(m => <Button key={m.value} variant={selectedAdvanceMonths.includes(m.value) ? "default" : "outline"} onClick={() => setSelectedAdvanceMonths(p => p.includes(m.value) ? p.filter(id => id !== m.value) : [...p, m.value])} disabled={m.disabled}>{m.label}</Button>)}</div></CardContent></Card>
+                                </div>
+                                <div className="lg:sticky lg:top-20">
+                                    {paymentCalculator.hasSelection && <Card><CardHeader><CardTitle>3. Resumen de Pago</CardTitle></CardHeader><CardContent className="space-y-3"><div className="flex justify-between items-center"><span className="text-muted-foreground">Sub-Total Deuda:</span><span className="font-medium">Bs. {formatToTwoDecimals(paymentCalculator.totalDebtBs)}</span></div><div className="flex justify-between items-center"><span className="text-muted-foreground">Saldo a Favor:</span><span className="font-medium text-success">Bs. {formatToTwoDecimals(paymentCalculator.balanceInFavor)}</span></div><Separator /><div className="flex justify-between items-center text-xl font-bold"><span className="flex items-center">TOTAL A PAGAR:</span><span className="text-primary">Bs. {formatToTwoDecimals(paymentCalculator.totalToPay)}</span></div></CardContent></Card>}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+            </CardContent>
+        </Card>
+    );
+}
+
+
+// ===================================================================================
 // MAIN PAGE COMPONENT (DEFAULT EXPORT)
 // ===================================================================================
 export default function PaymentsPage() {
@@ -1016,9 +1153,10 @@ export default function PaymentsPage() {
                 </p>
             </div>
             <Tabs defaultValue="verify" className="w-full">
-                <TabsList className="grid w-full grid-cols-2 bg-secondary/30 border-border p-0">
+                <TabsList className="grid w-full grid-cols-3 bg-secondary/30 border-border p-0">
                     <TabsTrigger value="verify" className="rounded-none data-[state=active]:bg-card data-[state=active]:shadow-none data-[state=active]:font-bold">Verificar Pagos</TabsTrigger>
                     <TabsTrigger value="report" className="rounded-none data-[state=active]:bg-card data-[state=active]:shadow-none data-[state=active]:font-bold">Reportar Pago (Admin)</TabsTrigger>
+                    <TabsTrigger value="calculator" className="rounded-none data-[state=active]:bg-card data-[state=active]:shadow-none data-[state=active]:font-bold">Calculadora</TabsTrigger>
                 </TabsList>
                 <TabsContent value="verify" className="mt-0">
                     <Suspense fallback={<Loader2 className="animate-spin" />}>
@@ -1028,7 +1166,11 @@ export default function PaymentsPage() {
                 <TabsContent value="report" className="mt-0">
                     <ReportPaymentTab />
                 </TabsContent>
+                <TabsContent value="calculator" className="mt-0">
+                    <AdminCalculatorTab />
+                </TabsContent>
             </Tabs>
         </div>
     );
 }
+
