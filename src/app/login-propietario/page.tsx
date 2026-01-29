@@ -27,7 +27,7 @@ export default function OwnerLoginPage() {
         <div className="text-center mb-10">
           <Link href="/welcome" className="inline-block group transition-transform hover:scale-105 duration-300">
             <div className="bg-white p-4 rounded-[2rem] shadow-xl border border-slate-100 mb-6 inline-block">
-              <img src="/og-banner.png" alt="EFAS Logo" className="w-20 h-20 object-contain" />
+              <img src="/efas-condosys-logo.png" alt="EFAS Logo" className="w-20 h-20 object-contain" />
             </div>
           </Link>
           <h1 className="font-montserrat text-3xl font-black italic tracking-tighter leading-none mb-2">

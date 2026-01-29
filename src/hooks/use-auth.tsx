@@ -1,9 +1,14 @@
-
 'use client';
 
 import React, { useState, useEffect, createContext, useContext, ReactNode } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, onSnapshot, collection, getDocs } from 'firebase/firestore';
+import { 
+    doc, 
+    onSnapshot, 
+    collection, 
+    getDocs, 
+    getDoc // Se agregó esta importación faltante
+} from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
 
 export interface AuthContextType {
@@ -14,7 +19,7 @@ export interface AuthContextType {
     isSuperAdmin: boolean;
     companyInfo: any | null;
     activeCondoId: string | null;
-    workingCondoId: string | null; // Unificado para evitar errores entre módulos
+    workingCondoId: string | null; 
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -44,62 +49,65 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!user) {
             setLoading(false);
             return;
-        };
+        }
 
         const isSuper = user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
-        let unsubscribeSnap: () => void | undefined;
+        let unsubscribeSnap: (() => void) | undefined;
 
         const findAndSubscribe = async () => {
             setLoading(true);
-            if (isSuper) {
-                const storedId = typeof window !== 'undefined' ? localStorage.getItem('activeCondoId') : null;
-                const supportId = typeof window !== 'undefined' ? localStorage.getItem('support_mode_id') : null;
-                const finalId = supportId || storedId || 'condo_01';
-                
-                setOwnerData({ role: 'super-admin', name: 'Super Admin' });
-                setActiveCondoId(finalId);
-                setLoading(false);
-                return;
-            }
-
-            const condominiosSnapshot = await getDocs(collection(db, "condominios"));
-            let userFound = false;
-
-            for (const condoDoc of condominiosSnapshot.docs) {
-                const condoId = condoDoc.id;
-                const ownerRef = doc(db, 'condominios', condoId, 'owners', user.uid);
-                const ownerSnap = await getDoc(ownerRef);
-
-                if (ownerSnap.exists()) {
-                    unsubscribeSnap = onSnapshot(ownerRef, (docSnap) => {
-                        if (docSnap.exists()) {
-                            const data = docSnap.data();
-                            setOwnerData(data);
-                            setActiveCondoId(data.condominioId || condoId);
-                        } else {
-                            setOwnerData(null);
-                            setActiveCondoId(null);
-                        }
-                    });
-                    userFound = true;
-                    break;
+            try {
+                if (isSuper) {
+                    const storedId = typeof window !== 'undefined' ? localStorage.getItem('activeCondoId') : null;
+                    const supportId = typeof window !== 'undefined' ? localStorage.getItem('support_mode_id') : null;
+                    const finalId = supportId || storedId || 'condo_01';
+                    
+                    setOwnerData({ role: 'super-admin', name: 'Super Admin' });
+                    setActiveCondoId(finalId);
+                    setLoading(false);
+                    return;
                 }
-            }
 
-            if (!userFound) {
-                console.warn(`Auth-Hook: No profile found for user ${user.uid}`);
-                setOwnerData(null);
-                setActiveCondoId(null);
+                const condominiosSnapshot = await getDocs(collection(db, "condominios"));
+                let userFound = false;
+
+                for (const condoDoc of condominiosSnapshot.docs) {
+                    const condoId = condoDoc.id;
+                    const ownerRef = doc(db, 'condominios', condoId, 'owners', user.uid);
+                    const ownerSnap = await getDoc(ownerRef);
+
+                    if (ownerSnap.exists()) {
+                        unsubscribeSnap = onSnapshot(ownerRef, (docSnap) => {
+                            if (docSnap.exists()) {
+                                const data = docSnap.data();
+                                setOwnerData(data);
+                                setActiveCondoId(data.condominioId || condoId);
+                            } else {
+                                setOwnerData(null);
+                                setActiveCondoId(null);
+                            }
+                        });
+                        userFound = true;
+                        break;
+                    }
+                }
+
+                if (!userFound) {
+                    console.warn(`Auth-Hook: No profile found for user ${user.uid}`);
+                    setOwnerData(null);
+                    setActiveCondoId(null);
+                }
+            } catch (error) {
+                console.error("Error en findAndSubscribe:", error);
+            } finally {
+                setLoading(false);
             }
-            setLoading(false);
         };
 
         findAndSubscribe();
 
         return () => {
-            if (unsubscribeSnap) {
-                unsubscribeSnap();
-            }
+            if (unsubscribeSnap) unsubscribeSnap();
         };
     }, [user]);
 
@@ -131,7 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isSuperAdmin: user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase(),
         companyInfo,
         activeCondoId,
-        workingCondoId: activeCondoId // Mapeamos workingCondoId al mismo ID activo
+        workingCondoId: activeCondoId 
     };
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

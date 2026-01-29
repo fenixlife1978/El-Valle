@@ -26,7 +26,7 @@ export default function WelcomePage() {
         <main className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
             <div className="text-center mb-8">
                 <div className="w-24 h-24 rounded-full mx-auto overflow-hidden bg-card border flex items-center justify-center mb-4">
-                     <img src="/logo-efas.png" alt="EFAS Logo" className="w-16 h-16 object-contain" />
+                     <img src="/efas-condosys-logo.png" alt="EFAS Logo" className="w-16 h-16 object-contain" />
                 </div>
                 <h1 className="text-4xl font-black italic uppercase tracking-tighter">
                     Bienvenido a <span className="text-orange-500">EFAS</span><span className="text-slate-800 dark:text-slate-100">CondoSys</span>

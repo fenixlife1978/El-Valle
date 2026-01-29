@@ -76,8 +76,8 @@ export default function RootLayout({
       <head>
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#1A1D23" />
-        <link rel="apple-touch-icon" href="/og-banner.png?v=2" />
-        <link rel="icon" href="/og-banner.png?v=2" type="image/png" />
+        <link rel="apple-touch-icon" href="/efas-condosys-logo.png?v=2" />
+        <link rel="icon" href="/efas-condosys-logo.png?v=2" type="image/png" />
         <title>EFAS CondoSys | Autogestión de Condominios</title>
       </head>
       <body suppressHydrationWarning className={cn(

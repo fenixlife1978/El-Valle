@@ -42,7 +42,7 @@ export default function WelcomePage() {
         <div className="flex items-center gap-3">
           {/* LOGO NAV */}
           <div className="w-10 h-10 rounded-lg overflow-hidden border shadow-sm flex items-center justify-center p-1 bg-background">
-            <img src="/logo-efas.png" alt="EFAS Logo" className="w-full h-full object-contain" />
+            <img src="/efas-condosys-logo.png" alt="EFAS Logo" className="w-full h-full object-contain" />
           </div>
           <div className="flex flex-col">
             <h1 className="text-2xl font-black italic uppercase tracking-tighter">
@@ -79,7 +79,7 @@ export default function WelcomePage() {
             {/* LOGO MAXIMIZADO Y OPTIMIZADO */}
             <div className="w-32 h-32 md:w-44 md:h-44 rounded-[2rem] overflow-hidden bg-card border-4 border-card shadow-2xl flex items-center justify-center p-2 transform -rotate-2 hover:rotate-0 transition-all duration-500">
               <img 
-                src="/logo-efas.png" 
+                src="/efas-condosys-logo.png" 
                 alt="EFAS CondoSys Logo" 
                 className="w-full h-full object-contain" 
               />

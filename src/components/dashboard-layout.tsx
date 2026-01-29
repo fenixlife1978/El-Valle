@@ -164,7 +164,7 @@ const CustomHeader = ({
               <SheetTitle>
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 rounded-full overflow-hidden bg-white border p-1 shadow-sm flex items-center justify-center">
-                    <img src={companyInfo?.logo || "/logo-efas.png"} alt="Logo" className="w-full h-full object-contain" />
+                    <img src={companyInfo?.logo || "/efas-condosys-logo.png"} alt="Logo" className="w-full h-full object-contain" />
                   </div>
                   <div className="flex flex-col leading-none">
                     <div className="flex items-center gap-0.5">
