@@ -358,7 +358,6 @@ export default function ReportsPage() {
 
     // New state for saved integral reports
     const [savedIntegralReports, setSavedIntegralReports] = useState<SavedIntegralReport[]>([]);
-    const [savedFinancialStatements, setSavedFinancialStatements] = useState<any[]>([]);
     const [publishedReports, setPublishedReports] = useState<PublishedReport[]>([]);
     const [reportToPreview, setReportToPreview] = useState<SavedIntegralReport | null>(null);
 
@@ -415,7 +414,6 @@ export default function ReportsPage() {
             const historicalPaymentsQuery = query(collection(db, 'condominios', activeCondoId, 'historical_payments'));
             const savedReportsQuery = query(collection(db, 'condominios', activeCondoId, 'integral_reports'), orderBy('createdAt', 'desc'));
             const publishedReportsQuery = query(collection(db, 'condominios', activeCondoId, 'published_reports'));
-            const savedStatementsQuery = query(collection(db, 'condominios', activeCondoId, 'financial_statements'), orderBy('createdAt', 'desc'));
             
             const unsubs: (() => void)[] = [];
 
@@ -438,11 +436,6 @@ export default function ReportsPage() {
             unsubs.push(onSnapshot(publishedReportsQuery, (snapshot) => {
                 setPublishedReports(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PublishedReport)));
             }));
-
-            unsubs.push(onSnapshot(savedStatementsQuery, (snapshot) => {
-                setSavedFinancialStatements(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-            }));
-
 
             const ownersSnapshot = await getDocs(ownersQuery);
             const ownersData = ownersSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Owner));
@@ -688,7 +681,7 @@ export default function ReportsPage() {
         const paymentsWithDebts: PaymentWithDebts[] = [];
         for (const payment of allApprovedPayments) {
             const liquidatedDebts = allDebts.filter(d => d.paymentId === payment.id)
-                .sort((a,b) => a.year - b.year || a.month - b.month);
+                .sort((a,b) => a.year - a.year || a.month - b.month);
             
             paymentsWithDebts.push({
                 ...payment,
@@ -842,63 +835,6 @@ export default function ReportsPage() {
     const handlePreviewIntegralReport = (report: SavedIntegralReport) => {
         setReportToPreview(report);
     };
-
-    const handlePublishBalanceReport = async (statementId: string) => {
-        if (!activeCondoId) return;
-        requestAuthorization(async () => {
-            setGeneratingReport(true);
-            try {
-                const publicationId = `balance-${statementId}`;
-                await setDoc(doc(db, 'condominios', activeCondoId, 'published_reports', publicationId), {
-                    type: 'balance',
-                    sourceId: statementId,
-                    createdAt: serverTimestamp(),
-                });
-                toast({ title: 'Balance Publicado', description: 'El balance ahora es visible para los propietarios.' });
-            } catch (error) {
-                console.error('Error publishing balance report:', error);
-                toast({ variant: 'destructive', title: 'Error de Publicación' });
-            } finally {
-                setGeneratingReport(false);
-            }
-        });
-    };
-
-    const handleUnpublishBalanceReport = async (statementId: string) => {
-        if (!activeCondoId) return;
-        requestAuthorization(async () => {
-            setGeneratingReport(true);
-            try {
-                await deleteDoc(doc(db, 'condominios', activeCondoId, 'published_reports', `balance-${statementId}`));
-                toast({ title: 'Publicación Retirada' });
-            } catch (error) {
-                console.error('Error unpublishing balance report:', error);
-                toast({ variant: 'destructive', title: 'Error' });
-            } finally {
-                setGeneratingReport(false);
-            }
-        });
-    };
-
-    const handleDeleteSavedBalanceReport = async (statementId: string) => {
-        if (!activeCondoId) return;
-        requestAuthorization(async () => {
-            setGeneratingReport(true);
-            try {
-                const batch = writeBatch(db);
-                batch.delete(doc(db, 'condominios', activeCondoId, 'financial_statements', statementId));
-                batch.delete(doc(db, 'condominios', activeCondoId, 'published_reports', `balance-${statementId}`));
-                await batch.commit();
-                toast({ title: 'Balance Eliminado' });
-            } catch (error) {
-                console.error("Error deleting saved balance report:", error);
-                toast({ variant: 'destructive', title: 'Error al eliminar' });
-            } finally {
-                setGeneratingReport(false);
-            }
-        });
-    };
-
 
     const handleExportIntegralPdf = async (report: SavedIntegralReport) => {
         if (!report || !companyInfo) return;
@@ -1412,9 +1348,9 @@ export default function ReportsPage() {
                 </p>
             </div>
             
-            <Tabs defaultValue="history" className="w-full">
+            <Tabs defaultValue="integral-report" className="w-full">
                  <TabsList className="grid w-full grid-cols-1 md:grid-cols-4 lg:grid-cols-7 h-auto flex-wrap">
-                    <TabsTrigger value="history">Reporte Integral</TabsTrigger>
+                    <TabsTrigger value="integral-report">Reporte Integral</TabsTrigger>
                     <TabsTrigger value="individual">Ficha Individual</TabsTrigger>
                     <TabsTrigger value="estado-de-cuenta">Estado de Cuenta</TabsTrigger>
                     <TabsTrigger value="delinquency">Morosidad</TabsTrigger>
@@ -1423,7 +1359,7 @@ export default function ReportsPage() {
                     <TabsTrigger value="income">Ingresos</TabsTrigger>
                 </TabsList>
                 
-                <TabsContent value="history">
+                <TabsContent value="integral-report">
                     <div className="space-y-6">
                         {/* --- Tarjeta de Reportes Integrales --- */}
                         <Card>
@@ -1464,62 +1400,6 @@ export default function ReportsPage() {
                                                                 {!isPublished && <DropdownMenuItem onClick={() => handlePublishIntegralReport(report.id, report)}><Megaphone className="mr-2 h-4 w-4"/> Publicar</DropdownMenuItem>}
                                                                 {isPublished && <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteIntegralPublication(report.id)}><Trash2 className="mr-2 h-4 w-4"/> Quitar Publicación</DropdownMenuItem>}
                                                                 <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteSavedIntegralReport(report.id)}><Trash2 className="mr-2 h-4 w-4"/> Eliminar</DropdownMenuItem>
-                                                            </DropdownMenuContent>
-                                                        </DropdownMenu>
-                                                    </TableCell>
-                                                </TableRow>
-                                            );
-                                        })}
-                                    </TableBody>
-                                </Table>
-                            </CardContent>
-                        </Card>
-
-                        {/* --- Tarjeta de Balances Financieros --- */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Balances Financieros Guardados</CardTitle>
-                                <CardDescription>Gestione los balances mensuales que ha guardado.</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                 <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>Período</TableHead>
-                                            <TableHead>Fecha de Guardado</TableHead>
-                                            <TableHead>Estado</TableHead>
-                                            <TableHead className="text-right">Acciones</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {savedFinancialStatements.map(statement => {
-                                            const isPublished = publishedReports.some(p => p.id === `balance-${statement.id}`);
-                                            const periodDate = parse(statement.id, 'yyyy-MM', new Date());
-                                            const periodLabel = format(periodDate, 'MMMM yyyy', { locale: es });
-                                            return (
-                                                <TableRow key={statement.id}>
-                                                    <TableCell className="capitalize">{periodLabel}</TableCell>
-                                                    <TableCell>{format(statement.createdAt.toDate(), "dd/MM/yyyy HH:mm")}</TableCell>
-                                                    <TableCell><Badge variant={isPublished ? 'success' : 'outline'}>{isPublished ? 'Publicado' : 'No Publicado'}</Badge></TableCell>
-                                                    <TableCell className="text-right">
-                                                        <DropdownMenu>
-                                                            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4"/></Button></DropdownMenuTrigger>
-                                                            <DropdownMenuContent>
-                                                                <Link href={`/owner/report/balance-${statement.id}`} passHref target="_blank">
-                                                                    <DropdownMenuItem><Eye className="mr-2 h-4 w-4"/> Ver como Propietario</DropdownMenuItem>
-                                                                </Link>
-                                                                {isPublished ? (
-                                                                    <DropdownMenuItem className="text-destructive" onClick={() => handleUnpublishBalanceReport(statement.id)}>
-                                                                        <Trash2 className="mr-2 h-4 w-4"/> Quitar Publicación
-                                                                    </DropdownMenuItem>
-                                                                ) : (
-                                                                    <DropdownMenuItem onClick={() => handlePublishBalanceReport(statement.id)}>
-                                                                        <Megaphone className="mr-2 h-4 w-4"/> Publicar
-                                                                    </DropdownMenuItem>
-                                                                )}
-                                                                <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteSavedBalanceReport(statement.id)}>
-                                                                    <Trash2 className="mr-2 h-4 w-4"/> Eliminar
-                                                                </DropdownMenuItem>
                                                             </DropdownMenuContent>
                                                         </DropdownMenu>
                                                     </TableCell>
