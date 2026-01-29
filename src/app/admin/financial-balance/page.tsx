@@ -206,22 +206,18 @@ export default function FinancialBalancePage() {
     const generatePDF = async () => {
         if (!currentCondoId || !companyInfo) return;
     
-        const { default: jsPDF } = await import('jspdf');
-        const { default: autoTable } = await import('jspdf-autotable');
-        const { default: JsBarcode } = await import('jsbarcode');
-    
         const doc = new jsPDF();
         const pageWidth = doc.internal.pageSize.getWidth();
         const margin = 14;
 
         // Colores del diseño
-        const headerBg = '#1C2B3A'; // Azul oscuro/casi negro
+        const headerBg = '#1C2B3A';
         const headerText = '#FFFFFF';
         const primaryText = '#000000';
-        const incomeHeaderBg = '#10B981'; // Verde
-        const expenseHeaderBg = '#EF4444'; // Rojo
-        const finalBoxBg = '#EFF6FF'; // Azul claro
-        const finalBoxText = '#1D4ED8'; // Azul oscuro del texto
+        const incomeHeaderBg = '#10B981';
+        const expenseHeaderBg = '#EF4444';
+        const finalBoxBg = '#EFF6FF';
+        const finalBoxText = '#1D4ED8';
 
         // --- ENCABEZADO OSCURO ---
         doc.setFillColor(headerBg);
@@ -517,3 +513,4 @@ export default function FinancialBalancePage() {
     );
 }
  
+    
