@@ -842,22 +842,38 @@ export default function ReportsPage() {
         const { default: autoTable } = await import('jspdf-autotable');
         const data = report.data;
         const doc = new jsPDF({ orientation: 'landscape' });
-        let startY = 15;
-
-        if (companyInfo?.logo) doc.addImage(companyInfo.logo, 'PNG', 15, startY, 20, 20);
-        if (companyInfo) doc.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, 40, startY + 5);
-
-        doc.setFontSize(16).setFont('helvetica', 'bold').text('Reporte Integral de Propietarios', doc.internal.pageSize.getWidth() / 2, startY + 15, { align: 'center'});
-
-        startY += 25;
-        doc.setFontSize(9).setFont('helvetica', 'normal');
-        doc.text(`Fecha de Emisión: ${format(new Date(), "dd/MM/yyyy 'a las' HH:mm:ss")}`, doc.internal.pageSize.getWidth() - 15, startY, { align: 'right'});
-
-        startY += 10;
-
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+        const margin = 14;
+        let startY = 20;
+    
+        // 1. Header
+        if (companyInfo?.logo) {
+            try {
+                doc.addImage(companyInfo.logo, 'PNG', margin, startY, 20, 20);
+            } catch (e) {
+                console.error("Error adding logo to PDF:", e);
+            }
+        }
+        
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(14);
+        doc.text(companyInfo.name, margin + 25, startY + 8);
+    
+        doc.setFontSize(18);
+        doc.text("Reporte Integral de Propietarios", pageWidth / 2, startY + 18, { align: 'center' });
+    
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
+        const emissionDateText = `Fecha de Emisión: ${format(new Date(), "dd/MM/yyyy 'a las' HH:mm:ss")}`;
+        doc.text(emissionDateText, pageWidth - margin, startY + 25, { align: 'right' });
+        
+        startY = startY + 40; // Space after header
+    
+        // 2. Table
         autoTable(doc, {
             head: [["Propietario", "Propiedad", "Fecha Últ. Pago", "Monto Pagado (Bs)", "Tasa BCV", "Saldo a Favor (Bs)", "Estado", "Periodo", "Meses Adeudados", "Deuda por Ajuste ($)"]],
-            body: data.map((row: any) => [
+            body: data.map((row: IntegralReportRow) => [
                 row.name,
                 row.properties,
                 row.lastPaymentDate,
@@ -870,17 +886,33 @@ export default function ReportsPage() {
                 row.adjustmentDebtUSD > 0 ? `$${row.adjustmentDebtUSD.toFixed(2)}` : '',
             ]),
             startY,
-            headStyles: { fillColor: [30, 80, 180] },
-            styles: { fontSize: 7, cellPadding: 1.5, overflow: 'linebreak' },
+            theme: 'striped',
+            headStyles: { 
+                fillColor: [30, 80, 180], // Dark blue
+                textColor: [255, 255, 255],
+                fontStyle: 'bold',
+                fontSize: 8,
+            },
+            styles: { 
+                fontSize: 8, 
+                cellPadding: 2, 
+                overflow: 'linebreak',
+                valign: 'middle'
+            },
             columnStyles: {
-                3: { halign: 'right' },
-                4: { halign: 'right' },
-                5: { halign: 'right' },
-                8: { halign: 'center' },
-                9: { halign: 'right' },
+                0: { cellWidth: 30 }, // Propietario
+                1: { cellWidth: 30 }, // Propiedad
+                2: { halign: 'left' }, // Fecha Últ. Pago
+                3: { halign: 'right' }, // Monto Pagado
+                4: { halign: 'right' }, // Tasa BCV
+                5: { halign: 'right' }, // Saldo a Favor
+                6: { halign: 'left' }, // Estado
+                7: { halign: 'left' }, // Periodo
+                8: { halign: 'center' }, // Meses Adeudados
+                9: { halign: 'right' }, // Deuda por Ajuste
             },
         });
-
+    
         doc.save(`Reporte_Integral_${format(report.createdAt.toDate(), 'yyyy-MM-dd')}.pdf`);
     };
 
@@ -1362,9 +1394,9 @@ export default function ReportsPage() {
                 <TabsContent value="integral-report">
                     <div className="space-y-6">
                         <Card>
-                            <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl">
+                            <CardHeader>
                                 <CardTitle>Reporte Integral</CardTitle>
-                                <CardDescription className="text-primary-foreground/90">Genere una vista consolidada del estado de todos los propietarios para un período específico.</CardDescription>
+                                <CardDescription>Genere una vista consolidada del estado de todos los propietarios para un período específico.</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-6 pt-6">
                                 <div className="p-4 border rounded-lg bg-muted/50">
@@ -1448,9 +1480,9 @@ export default function ReportsPage() {
 
                  <TabsContent value="individual">
                      <Card>
-                        <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl">
+                        <CardHeader>
                             <CardTitle>Ficha Individual de Pagos</CardTitle>
-                            <CardDescription className="text-primary-foreground/90">Busque un propietario para ver su historial detallado de pagos y los meses que liquida cada uno.</CardDescription>
+                            <CardDescription>Busque un propietario para ver su historial detallado de pagos y los meses que liquida cada uno.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div className="relative max-w-sm">
@@ -1569,9 +1601,9 @@ export default function ReportsPage() {
 
                 <TabsContent value="estado-de-cuenta">
                      <Card>
-                        <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl">
+                        <CardHeader>
                             <CardTitle>Estado de Cuenta</CardTitle>
-                            <CardDescription className="text-primary-foreground/90">Busque un propietario para ver su estado de cuenta.</CardDescription>
+                            <CardDescription>Busque un propietario para ver su estado de cuenta.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div className="relative max-w-sm">
@@ -1682,9 +1714,9 @@ export default function ReportsPage() {
 
                  <TabsContent value="delinquency">
                      <Card>
-                        <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl">
+                        <CardHeader>
                             <CardTitle>Reporte Interactivo de Morosidad</CardTitle>
-                            <CardDescription className="text-primary-foreground/90">Filtre, seleccione y exporte la lista de propietarios con deudas pendientes.</CardDescription>
+                            <CardDescription>Filtre, seleccione y exporte la lista de propietarios con deudas pendientes.</CardDescription>
                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-4 items-end">
                                 <div className="space-y-2">
                                     <Label>Antigüedad de Deuda</Label>
@@ -1799,9 +1831,9 @@ export default function ReportsPage() {
 
                  <TabsContent value="balance">
                      <Card>
-                        <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl">
+                        <CardHeader>
                             <CardTitle>Consulta de Saldos a Favor</CardTitle>
-                            <CardDescription className="text-primary-foreground/90">Lista de todos los propietarios con saldo positivo en sus cuentas.</CardDescription>
+                            <CardDescription>Lista de todos los propietarios con saldo positivo en sus cuentas.</CardDescription>
                              <div className="flex items-center justify-between mt-4">
                                 <div className="relative max-w-sm">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -1841,9 +1873,9 @@ export default function ReportsPage() {
                  </TabsContent>
                  <TabsContent value="monthly">
                     <Card>
-                        <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl">
+                        <CardHeader>
                             <CardTitle>Reporte de Pagos Mensual</CardTitle>
-                            <CardDescription className="text-primary-foreground/90">Ver los pagos aprobados para un período específico.</CardDescription>
+                            <CardDescription>Ver los pagos aprobados para un período específico.</CardDescription>
                             <div className="flex gap-4 pt-4">
                                 <div className="space-y-2">
                                     <Label>Año</Label>
@@ -1900,9 +1932,9 @@ export default function ReportsPage() {
 
                 <TabsContent value="income">
                     <Card>
-                        <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl">
+                        <CardHeader>
                             <CardTitle>Reporte de Ingresos</CardTitle>
-                            <CardDescription className="text-primary-foreground/90">Analice los ingresos totales por período.</CardDescription>
+                            <CardDescription>Analice los ingresos totales por período.</CardDescription>
                             <div className="flex gap-4 pt-4">
                                 <div className="space-y-2">
                                     <Label>Desde</Label>
