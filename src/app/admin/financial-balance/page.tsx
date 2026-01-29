@@ -260,37 +260,39 @@ export default function FinancialBalancePage() {
         docPDF.setFontSize(7);
         docPDF.setTextColor(200, 200, 200);
         docPDF.text(subtitleText, endX, 22, { align: 'right' });
-        
-        // Reset text color for the rest of the document
-        docPDF.setTextColor(0, 0, 0); 
-        
-        let startY = headerHeight + 5;
 
-        // --- BARCODE (Centered, smaller) ---
+        // --- BARCODE (Inside Header, right side) ---
         const canvas = document.createElement('canvas');
         const periodId = `${selectedYear}-${selectedMonth.padStart(2, '0')}`;
         const barcodeValue = `BF-${periodId}`;
         try {
             JsBarcode(canvas, barcodeValue, {
-                format: "CODE128", height: 30, width: 1.2, displayValue: true, margin: 0, fontSize: 8
+                format: "CODE128", 
+                height: 25,
+                width: 1,
+                displayValue: false, 
+                margin: 0,
+                background: "#1c2b3a", // Azul oscuro
+                lineColor: "#ffffff" // Blanco
             });
             const barcodeDataUrl = canvas.toDataURL("image/png");
-            const barcodeWidth = 50;
-            const barcodeHeight = 20;
-            docPDF.addImage(barcodeDataUrl, 'PNG', (pageWidth / 2) - (barcodeWidth / 2), startY, barcodeWidth, barcodeHeight);
+            const barcodeWidth = 40;
+            const barcodeHeight = 10;
+            docPDF.addImage(barcodeDataUrl, 'PNG', endX - barcodeWidth, headerHeight - barcodeHeight - 2, barcodeWidth, barcodeHeight);
         } catch (e) {
             console.error("Barcode generation failed", e);
         }
-        startY += 25;
+        
+        // Reset text color for the rest of the document
+        docPDF.setTextColor(0, 0, 0); 
+        
+        let startY = headerHeight + 15;
         
         const period = `${months.find(m => m.value === selectedMonth)?.label} ${selectedYear}`;
         docPDF.setFontSize(16).setFont('helvetica', 'bold').text('ESTADO DE RESULTADOS', pageWidth / 2, startY, { align: 'center' });
         docPDF.setFontSize(12).setFont('helvetica', 'normal').text(`Correspondiente al período de ${period}`, pageWidth / 2, startY + 7, { align: 'center' });
         
         startY += 25;
-        
-        // Ensure table text is black
-        const tableBodyStyles = { textColor: [0, 0, 0] };
         
         autoTable(docPDF, {
             head: [['INGRESOS', 'MONTO (Bs.)']],
@@ -306,7 +308,7 @@ export default function FinancialBalancePage() {
             theme: 'striped',
             headStyles: { fillColor: [59, 130, 246], halign: 'center', textColor: 255 },
             footStyles: { fillColor: [30, 64, 175], textColor: 255, fontStyle: 'bold' },
-            bodyStyles: tableBodyStyles
+            bodyStyles: { textColor: 0 }
         });
         
         startY = (docPDF as any).lastAutoTable.finalY + 10;
@@ -327,7 +329,7 @@ export default function FinancialBalancePage() {
             theme: 'striped',
             headStyles: { fillColor: [239, 68, 68], halign: 'center', textColor: 255 },
             footStyles: { fillColor: [185, 28, 28], textColor: 255, fontStyle: 'bold' },
-            bodyStyles: tableBodyStyles
+            bodyStyles: { textColor: 0 }
         });
 
         startY = (docPDF as any).lastAutoTable.finalY + 10;
