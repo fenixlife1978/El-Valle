@@ -1,16 +1,11 @@
-
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { db } from '@/lib/firebase';
-import { 
-    collection, query, orderBy, doc, Timestamp, getDoc, where, getDocs, setDoc
-} from 'firebase/firestore';
-import { 
-    Download, Loader2, FileText, RefreshCw, TrendingUp, TrendingDown, Wallet, Box, Coins, Landmark
-} from 'lucide-react';
+import { collection, query, orderBy, doc, Timestamp, getDoc, where, getDocs, setDoc, limit } from 'firebase/firestore';
+import { Download, Loader2, RefreshCw, Wallet, Box, TrendingUp, TrendingDown } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
-import { format, startOfMonth, endOfMonth, subMonths, isBefore } from 'date-fns';
+import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 import jsPDF from 'jspdf';
@@ -18,7 +13,7 @@ import autoTable from 'jspdf-autotable';
 import JsBarcode from 'jsbarcode';
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
@@ -27,6 +22,40 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
+// --- Types ---
+type FinancialItem = {
+    id: string;
+    concepto: string;
+    monto: number;
+    dia: string;
+};
+
+type CajaChicaMovement = {
+    id: string;
+    date: Timestamp;
+    description: string;
+    amount: number;
+    type: 'ingreso' | 'egreso';
+}
+
+type CompanyInfo = {
+    name: string;
+    rif: string;
+    logo: string | null;
+};
+
+type FinancialStatement = {
+  id: string; // YYYY-MM
+  ingresos: FinancialItem[];
+  egresos: FinancialItem[];
+  cajaChica: { saldoInicial: number; reposiciones: number; gastos: number; saldoFinal: number; };
+  estadoFinanciero: { saldoAnterior: number, totalIngresos: number; totalEgresos: number, saldoBancos: number, disponibilidadTotal: number };
+  notas: string;
+  createdAt: string;
+};
+
+
+// --- Helpers ---
 const formatCurrency = (amount: number | null | undefined): string => {
     if (typeof amount !== 'number') return '0,00';
     return amount.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -35,233 +64,204 @@ const formatCurrency = (amount: number | null | undefined): string => {
 const months = Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: format(new Date(2000, i), 'MMMM', { locale: es }) }));
 const years = Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear() - i));
 
+
+// --- Main Component ---
 export default function FinancialBalancePage() {
     const { toast } = useToast();
-    const { activeCondoId, workingCondoId, loading: authLoading } = useAuth();
-    const currentCondoId = activeCondoId || workingCondoId;
+    const { activeCondoId } = useAuth();
+    const barcodeRef = useRef<SVGSVGElement>(null);
 
+    // --- State ---
     const [dataLoading, setDataLoading] = useState(true);
     const [syncing, setSyncing] = useState(false);
     const [selectedMonth, setSelectedMonth] = useState(String(new Date().getMonth() + 1));
     const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
 
-    const [companyInfo, setCompanyInfo] = useState<{name: string, rif: string, logo: string | null}>({
-        name: "RESIDENCIAS",
-        rif: "J-00000000-0",
-        logo: null
-    });
+    const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
+    const [statement, setStatement] = useState<FinancialStatement | null>(null);
 
-    const [ingresos, setIngresos] = useState([
-        { concepto: 'Cobranza del Mes', real: 0, category: 'cuotas_ordinarias' }, 
-        { concepto: 'Fondo de Reserva', real: 0, category: 'fondo_reserva' }, 
-        { concepto: 'Otros Ingresos', real: 0, category: 'otros' }
-    ]);
-    const [egresos, setEgresos] = useState<any[]>([]);
-    
-    const [cajaChica, setCajaChica] = useState({
-        saldoInicial: 0,
-        reposiciones: 0,
-        gastos: 0,
-        saldoFinal: 0,
-    });
-    
-    const [estadoFinal, setEstadoFinal] = useState({ 
-        saldoAnterior: 0, totalIngresos: 0, totalEgresos: 0, saldoNeto: 0, saldoBancos: 0, disponibilidadTotal: 0
-    });
-    const [notas, setNotas] = useState('');
-
-    const loadCondoConfig = useCallback(async () => {
-        if (!currentCondoId) return;
-        try {
-            const configRef = doc(db, 'condominios', currentCondoId, 'config', 'mainSettings');
-            const snap = await getDoc(configRef);
-            if (snap.exists()) {
-                const data = snap.data();
-                setCompanyInfo({
-                    name: data.companyInfo?.name || data.name || "CONDOMINIO",
-                    rif: data.companyInfo?.rif || data.rif || "N/A",
-                    logo: data.companyInfo?.logo || data.logo || null
-                });
-            }
-        } catch (error) {
-            console.error("EFAS Error:", error);
+    // --- Barcode Generation ---
+    useEffect(() => {
+        if (barcodeRef.current && activeCondoId) {
+            const barcodeValue = `BF-${activeCondoId}-${selectedYear}${selectedMonth.padStart(2, '0')}`;
+            JsBarcode(barcodeRef.current, barcodeValue, {
+                format: "CODE128", width: 1.5, height: 40, displayValue: true, fontSize: 10
+            });
         }
-    }, [currentCondoId]);
+    }, [activeCondoId, selectedMonth, selectedYear]);
 
-    const handleSyncData = useCallback(async (showToast = true) => {
-        if (!currentCondoId) return;
+    // --- Data Loading Logic ---
+    const loadData = useCallback(async () => {
+        if (!activeCondoId) return;
         setSyncing(true);
-        if (showToast) toast({ title: `Sincronizando: ${currentCondoId}` });
-    
+
+        const periodId = `${selectedYear}-${selectedMonth.padStart(2, '0')}`;
+
         try {
-            await loadCondoConfig();
-            const currentPeriodStart = startOfMonth(new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1));
-            const currentPeriodEnd = endOfMonth(currentPeriodStart);
-            
-            const prevPeriodDate = subMonths(currentPeriodStart, 1);
-            const prevPeriodId = format(prevPeriodDate, 'yyyy-MM');
-            const prevSnap = await getDoc(doc(db, 'condominios', currentCondoId, 'financial_statements', prevPeriodId));
-            const saldoAnterior = prevSnap.exists() ? (prevSnap.data() as any).estadoFinal?.saldoBancos || 0 : 0;
-            
-            const paymentsQuery = query(
-                collection(db, 'condominios', currentCondoId, 'payments'),
-                where('paymentDate', '>=', Timestamp.fromDate(currentPeriodStart)),
-                where('paymentDate', '<=', Timestamp.fromDate(currentPeriodEnd)),
-                where('status', '==', 'aprobado')
-            );
-            const paymentsSnap = await getDocs(paymentsQuery);
-            const totalPayments = paymentsSnap.docs.reduce((sum, doc) => sum + (doc.data().totalAmount || 0), 0);
-            
-            setIngresos([
-                { concepto: 'Cobranza del Mes', real: totalPayments, category: 'cuotas_ordinarias' },
-                { concepto: 'Fondo de Reserva', real: 0, category: 'fondo_reserva' },
-                { concepto: 'Otros Ingresos', real: 0, category: 'otros' }
-            ]);
-    
-            const expensesSnap = await getDocs(query(
-                collection(db, 'condominios', currentCondoId, 'gastos'),
-                where('date', '>=', Timestamp.fromDate(currentPeriodStart)),
-                where('date', '<=', Timestamp.fromDate(currentPeriodEnd)),
-                orderBy('date', 'asc')
-            ));
-            
-            setEgresos(expensesSnap.docs.map(d => ({
-                id: d.id,
-                descripcion: d.data().description || 'Sin descripción',
-                monto: d.data().amount || 0,
-                fecha: format(d.data().date.toDate(), 'dd/MM/yyyy')
-            })));
+            // Check for existing saved statement
+            const statementRef = doc(db, 'condominios', activeCondoId, 'financial_statements', periodId);
+            const statementSnap = await getDoc(statementRef);
 
-            // --- Caja Chica (Lógica Corregida) ---
-            const allCcMovesQuery = query(
-                collection(db, 'condominios', currentCondoId, 'cajaChica_movimientos'),
-                orderBy('date', 'asc')
-            );
+            if (statementSnap.exists()) {
+                setStatement(statementSnap.data() as FinancialStatement);
+            } else {
+                // Generate a new one if not found
+                const generatedStatement = await generateNewStatement(activeCondoId, selectedYear, selectedMonth);
+                setStatement(generatedStatement);
+            }
 
-            const allCcMovesSnap = await getDocs(allCcMovesQuery);
+            const configRef = doc(db, 'condominios', activeCondoId, 'config', 'mainSettings');
+            const configSnap = await getDoc(configRef);
+            if (configSnap.exists()) {
+                setCompanyInfo(configSnap.data().companyInfo as CompanyInfo);
+            }
 
-            let saldoInicialCc = 0;
-            let reposPeriodo = 0;
-            let gastosPeriodo = 0;
-
-            allCcMovesSnap.docs.forEach(doc => {
-                const movimiento = doc.data();
-                const fechaMovimiento = movimiento.date.toDate();
-
-                if (isBefore(fechaMovimiento, currentPeriodStart)) {
-                    if (movimiento.type === 'ingreso') {
-                        saldoInicialCc += movimiento.amount;
-                    } else {
-                        saldoInicialCc -= movimiento.amount;
-                    }
-                } else if (fechaMovimiento <= currentPeriodEnd) {
-                    if (movimiento.type === 'ingreso') {
-                        reposPeriodo += movimiento.amount;
-                    } else {
-                        gastosPeriodo += movimiento.amount;
-                    }
-                }
-            });
-
-            const saldoFinalCc = saldoInicialCc + reposPeriodo - gastosPeriodo;
-
-            setCajaChica({
-                saldoInicial: saldoInicialCc,
-                reposiciones: reposPeriodo,
-                gastos: gastosPeriodo,
-                saldoFinal: saldoFinalCc,
-            });
-
-            setEstadoFinal(prev => ({ ...prev, saldoAnterior }));
-    
         } catch (e) {
             console.error(e);
-            toast({variant: 'destructive', title: 'Error de Sincronización'});
+            toast({ variant: "destructive", title: "Error", description: "No se pudo cargar o generar el balance." });
         } finally {
             setSyncing(false);
             setDataLoading(false);
         }
-    }, [currentCondoId, selectedMonth, selectedYear, toast, loadCondoConfig]);
+    }, [activeCondoId, selectedMonth, selectedYear, toast]);
 
-    useEffect(() => {
-        if (!authLoading && currentCondoId) {
-             handleSyncData(false);
-        } else if (!authLoading && !currentCondoId) {
-            setDataLoading(false);
-        }
-    }, [currentCondoId, authLoading, selectedMonth, selectedYear, handleSyncData]);
+    const generateNewStatement = async (condoId: string, year: string, month: string) => {
+        const fromDate = startOfMonth(new Date(parseInt(year), parseInt(month) - 1));
+        const toDate = endOfMonth(fromDate);
+        const fromDateTimestamp = Timestamp.fromDate(fromDate);
+        const toDateTimestamp = Timestamp.fromDate(toDate);
 
-    useEffect(() => {
-        const totalI = ingresos.reduce((s, i) => s + i.real, 0);
-        const totalE = egresos.reduce((s, e) => s + e.monto, 0);
-        const saldoBancos = estadoFinal.saldoAnterior + totalI - totalE;
+        // Fetching all data
+        const paymentsQuery = query(collection(db, 'condominios', condoId, 'payments'), where('status', '==', 'aprobado'), where('paymentDate', '>=', fromDateTimestamp), where('paymentDate', '<=', toDateTimestamp));
+        const expensesQuery = query(collection(db, 'condominios', condoId, 'gastos'), where('date', '>=', fromDateTimestamp), where('date', '<=', toDateTimestamp));
+        const movementsQuery = query(collection(db, 'condominios', condoId, 'cajaChica_movimientos'), where('date', '<=', toDateTimestamp));
+        const lastMonthStatementQuery = query(collection(db, 'condominios', condoId, 'financial_statements'), orderBy('createdAt', 'desc'), limit(1));
+
+        const [paymentsSnap, expensesSnap, movementsSnap, lastStatementSnap] = await Promise.all([
+            getDocs(paymentsQuery),
+            getDocs(expensesQuery),
+            getDocs(movementsQuery),
+            getDocs(lastMonthStatementQuery)
+        ]);
         
-        setEstadoFinal(prev => ({
-            ...prev,
-            totalIngresos: totalI,
-            totalEgresos: totalE,
-            saldoNeto: saldoBancos,
-            saldoBancos: saldoBancos,
-            disponibilidadTotal: saldoBancos + cajaChica.saldoFinal
-        }));
-    }, [ingresos, egresos, estadoFinal.saldoAnterior, cajaChica.saldoFinal]);
+        // Processing Incomes
+        const totalIngresos = paymentsSnap.docs.reduce((sum, doc) => sum + doc.data().totalAmount, 0);
+        const ingresos: FinancialItem[] = [{
+            id: 'cobranza', dia: format(new Date(), 'dd'), concepto: 'COBRANZA DEL MES', monto: totalIngresos
+        }];
+
+        // Processing Expenses
+        const egresos: FinancialItem[] = expensesSnap.docs.map(doc => {
+            const data = doc.data();
+            return { id: doc.id, dia: format(data.date.toDate(), 'dd'), concepto: data.description, monto: data.amount };
+        });
+        const totalEgresos = egresos.reduce((sum, item) => sum + item.monto, 0);
+        
+        // Processing Petty Cash
+        const allMovements = movementsSnap.docs.map(doc => doc.data() as CajaChicaMovement);
+        const priorMovements = allMovements.filter(m => m.date.toDate() < fromDate);
+        const periodMovements = allMovements.filter(m => m.date.toDate() >= fromDate);
+
+        const saldoInicialCaja = priorMovements.reduce((acc, m) => m.type === 'ingreso' ? acc + m.amount : acc - m.amount, 0);
+        const reposicionesCaja = periodMovements.filter(m => m.type === 'ingreso').reduce((acc, m) => acc + m.amount, 0);
+        const gastosCaja = periodMovements.filter(m => m.type === 'egreso').reduce((acc, m) => acc + m.amount, 0);
+        const saldoFinalCaja = saldoInicialCaja + reposicionesCaja - gastosCaja;
+        
+        // Processing Financial State
+        let saldoAnterior = 0;
+        if (!lastStatementSnap.empty) {
+            const lastData = lastStatementSnap.docs[0].data();
+            saldoAnterior = lastData.estadoFinanciero?.disponibilidadTotal || 0;
+        }
+
+        const saldoBancos = saldoAnterior + totalIngresos - totalEgresos;
+        const disponibilidadTotal = saldoBancos + saldoFinalCaja;
+
+        return {
+            id: `${year}-${month.padStart(2, '0')}`,
+            ingresos,
+            egresos,
+            cajaChica: { saldoInicial: saldoInicialCaja, reposiciones: reposicionesCaja, gastos: gastosCaja, saldoFinal: saldoFinalCaja },
+            estadoFinanciero: { saldoAnterior, totalIngresos, totalEgresos, saldoBancos, disponibilidadTotal },
+            notas: 'Generado automáticamente por el sistema.',
+            createdAt: new Date().toISOString()
+        };
+    };
+
+    const handleSaveStatement = async () => {
+        if (!statement || !activeCondoId) return;
+        setSyncing(true);
+        try {
+            const ref = doc(db, 'condominios', activeCondoId, 'financial_statements', statement.id);
+            await setDoc(ref, { ...statement, createdAt: serverTimestamp() });
+            toast({ title: "Guardado", description: "Balance guardado en la base de datos." });
+        } catch (e) {
+            console.error(e);
+            toast({ variant: "destructive", title: "Error", description: "No se pudo guardar el balance." });
+        } finally {
+            setSyncing(false);
+        }
+    };
     
-    const generatePDF = async () => {
-        if (!currentCondoId || !companyInfo) return;
-    
-        const docPDF = new jsPDF();
-        const pageWidth = docPDF.internal.pageSize.getWidth();
+    // --- PDF Generation ---
+    const handleExportPDF = async () => {
+        if (!statement || !companyInfo) return;
+        
+        const doc = new jsPDF();
+        const pageWidth = doc.internal.pageSize.getWidth();
         const headerHeight = 35;
         const margin = 14;
-    
+
         // --- HEADER ---
-        docPDF.setFillColor(28, 43, 58); // #1C2B3A
-        docPDF.rect(0, 0, pageWidth, headerHeight, 'F');
-        docPDF.setTextColor(255, 255, 255);
-    
+        doc.setFillColor(28, 43, 58); // #1C2B3A
+        doc.rect(0, 0, pageWidth, headerHeight, 'F');
+        doc.setTextColor(255, 255, 255);
+
+        // --- LOGO (LEFT) ---
         if (companyInfo.logo) {
             try {
                 const logoSize = 20;
-                docPDF.saveGraphicsState();
-                docPDF.circle(margin + logoSize / 2, 7 + logoSize / 2, logoSize / 2);
-                docPDF.clip();
-                docPDF.addImage(companyInfo.logo, 'PNG', margin, 7, logoSize, logoSize);
-                docPDF.restoreGraphicsState();
-            } catch (e) { console.error("Error al añadir logo:", e); }
+                doc.saveGraphicsState();
+                doc.circle(margin + logoSize / 2, 7 + logoSize / 2, logoSize / 2);
+                doc.clip();
+                doc.addImage(companyInfo.logo, 'PNG', margin, 7, logoSize, logoSize);
+                doc.restoreGraphicsState();
+            }
+            catch(e) { console.error("Error adding logo to PDF", e); }
         }
-    
+        
         const infoX = companyInfo.logo ? margin + 25 : margin;
-        docPDF.setFontSize(14).setFont('helvetica', 'bold');
-        docPDF.text(companyInfo.name, infoX, 15);
-        docPDF.setFontSize(9).setFont('helvetica', 'normal');
-        docPDF.text(`RIF: ${companyInfo.rif}`, infoX, 22);
-    
-        // --- BRAND ---
+        doc.setFontSize(14).setFont('helvetica', 'bold');
+        doc.text(companyInfo.name, infoX, 15);
+        doc.setFontSize(9).setFont('helvetica', 'normal');
+        doc.text(`RIF: ${companyInfo.rif}`, infoX, 22);
+
+        // --- BRAND & BARCODE (RIGHT) ---
         const endX = pageWidth - margin;
         const efasColor = '#F97316';
         const condoSysColor = '#FFFFFF';
         
-        docPDF.setFont('helvetica', 'bolditalic');
-        docPDF.setFontSize(10);
+        doc.setFont('helvetica', 'bolditalic');
+        doc.setFontSize(10);
         
         const efasText = "EFAS";
         const condoSysText = "CONDOSYS";
-        const condoSysWidth = docPDF.getStringUnitWidth(condoSysText) * 10 / docPDF.internal.scaleFactor;
+        const condoSysWidth = doc.getStringUnitWidth(condoSysText) * 10 / doc.internal.scaleFactor;
         
         const brandY = 12;
-        docPDF.setTextColor(efasColor);
-        docPDF.text(efasText, endX - condoSysWidth - 1, brandY, { align: 'right' });
-        docPDF.setTextColor(condoSysColor);
-        docPDF.text(condoSysText, endX, brandY, { align: 'right' });
+        doc.setTextColor(efasColor);
+        doc.text(efasText, endX - condoSysWidth - 1, brandY, { align: 'right' });
+        doc.setTextColor(condoSysColor);
+        doc.text(condoSysText, endX, brandY, { align: 'right' });
         
-        docPDF.setFont('helvetica', 'normal');
-        docPDF.setFontSize(7);
-        docPDF.setTextColor(200, 200, 200);
-        docPDF.text('SISTEMA DE AUTOGESTIÓN DE CONDOMINIOS', endX, brandY + 5, { align: 'right' });
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        doc.setTextColor(200, 200, 200);
+        doc.text('BALANCE FINANCIERO', endX, brandY + 5, { align: 'right' });
 
-        // --- BARCODE ---
+        // --- BARCODE (Inside Header) ---
         const canvas = document.createElement('canvas');
-        const barcodeValue = `BF-${selectedYear}-${selectedMonth}`;
+        const barcodeValue = `BF-${activeCondoId}-${selectedYear}${selectedMonth.padStart(2, '0')}`;
         try {
             JsBarcode(canvas, barcodeValue, {
                 format: "CODE128", 
@@ -275,204 +275,182 @@ export default function FinancialBalancePage() {
             const barcodeDataUrl = canvas.toDataURL("image/png");
             const barcodeWidth = 40;
             const barcodeHeight = 10;
-            docPDF.addImage(barcodeDataUrl, 'PNG', endX - barcodeWidth, brandY + 8, barcodeWidth, barcodeHeight);
+            doc.addImage(barcodeDataUrl, 'PNG', endX - barcodeWidth, brandY + 8, barcodeWidth, barcodeHeight);
         } catch (e) {
-            console.error("Fallo al generar código de barras:", e);
+            console.error("Barcode generation failed", e);
         }
-        
-        docPDF.setTextColor(0, 0, 0); // Reset a negro para el cuerpo del doc
-    
+
         // --- MAIN CONTENT ---
+        doc.setTextColor(0, 0, 0);
         let startY = headerHeight + 20;
-    
-        const monthLabel = months.find(m => m.value === selectedMonth)?.label;
-        const period = `${monthLabel} ${selectedYear}`;
-        docPDF.setFontSize(16).setFont('helvetica', 'bold').text(`BALANCE FINANCIERO - ${period.toUpperCase()}`, pageWidth / 2, startY, { align: 'center' });
-        
-        startY += 20;
 
-        autoTable(docPDF, {
-            head: [['FECHA', 'INGRESOS', 'MONTO (Bs.)']],
-            body: ingresos.map(i => [
-                'Varias',
-                i.concepto,
-                { content: formatCurrency(i.real), styles: { halign: 'right' } }
-            ]),
-            foot: [[
-                { content: 'TOTAL INGRESOS', colSpan: 2, styles: { halign: 'right' } },
-                { content: formatCurrency(estadoFinal.totalIngresos), styles: { halign: 'right' } }
-            ]],
-            startY: startY,
-            theme: 'striped',
-            headStyles: { fillColor: [30, 80, 180] },
-            footStyles: { fillColor: [30, 80, 180], textColor: [255, 255, 255], fontStyle: 'bold' },
-        });
-    
-        startY = (docPDF as any).lastAutoTable.finalY + 10;
-    
-        autoTable(docPDF, {
-            head: [['FECHA', 'EGRESOS', 'MONTO (Bs.)']],
-            body: egresos.map(e => [
-                e.fecha,
-                e.descripcion,
-                { content: formatCurrency(e.monto), styles: { halign: 'right' } }
-            ]),
-            foot: [[
-                { content: 'TOTAL EGRESOS', colSpan: 2, styles: { halign: 'right' } },
-                { content: formatCurrency(estadoFinal.totalEgresos), styles: { halign: 'right' } }
-            ]],
-            startY: startY,
-            theme: 'striped',
-            headStyles: { fillColor: [220, 53, 69] },
-            footStyles: { fillColor: [220, 53, 69], textColor: [255, 255, 255], fontStyle: 'bold' },
-        });
-    
-        startY = (docPDF as any).lastAutoTable.finalY + 15;
-
-        // --- Caja Chica y Resumen ---
-        const rightColX = pageWidth / 2 + 10;
-        const leftColX = margin;
-
-        docPDF.setFontSize(10).setFont('helvetica', 'bold').text('RESUMEN DE CAJA CHICA', leftColX, startY);
-        startY += 6;
-        docPDF.setFontSize(9).setFont('helvetica', 'normal');
-        docPDF.text('Saldo Inicial del Período:', leftColX, startY);
-        docPDF.text(formatCurrency(cajaChica.saldoInicial), rightColX - 10, startY, { align: 'right' });
-        startY += 5;
-        docPDF.text('(+) Reposiciones en el Período:', leftColX, startY);
-        docPDF.text(`+${formatCurrency(cajaChica.reposiciones)}`, rightColX - 10, startY, { align: 'right' });
-        startY += 5;
-        docPDF.text('(-) Gastos en el Período:', leftColX, startY);
-        docPDF.text(`-${formatCurrency(cajaChica.gastos)}`, rightColX - 10, startY, { align: 'right' });
-        startY += 3;
-        docPDF.setLineWidth(0.2).line(leftColX, startY, rightColX - 10, startY);
-        startY += 5;
-        docPDF.setFont('helvetica', 'bold');
-        docPDF.text('SALDO FINAL EN CAJA CHICA:', leftColX, startY);
-        docPDF.text(formatCurrency(cajaChica.saldoFinal), rightColX - 10, startY, { align: 'right' });
+        const period = `${months.find(m => m.value === selectedMonth)?.label} ${selectedYear}`;
+        doc.setFontSize(16).setFont('helvetica', 'bold').text("ESTADO DE RESULTADOS", pageWidth / 2, startY, { align: 'center' });
+        startY += 7;
+        doc.setFontSize(12).setFont('helvetica', 'normal').text(`Correspondiente al período de ${period}`, pageWidth / 2, startY, { align: 'center' });
         
         startY += 15;
-        docPDF.setFontSize(10).setFont('helvetica', 'bold').text('CIERRE DE CUENTAS', leftColX, startY);
-        startY += 6;
-        docPDF.setFontSize(9).setFont('helvetica', 'normal');
-        docPDF.text('Saldo en Bancos (Mes Anterior):', leftColX, startY);
-        docPDF.text(formatCurrency(estadoFinal.saldoAnterior), rightColX - 10, startY, { align: 'right' });
-        startY += 5;
-        docPDF.text('(+) Total Ingresos del Período:', leftColX, startY);
-        docPDF.text(`+${formatCurrency(estadoFinal.totalIngresos)}`, rightColX - 10, startY, { align: 'right' });
-        startY += 5;
-        docPDF.text('(-) Total Egresos del Período:', leftColX, startY);
-        docPDF.text(`-${formatCurrency(estadoFinal.totalEgresos)}`, rightColX - 10, startY, { align: 'right' });
-        startY += 3;
-        docPDF.setLineWidth(0.2).line(leftColX, startY, rightColX - 10, startY);
-        startY += 5;
-        docPDF.setFont('helvetica', 'bold');
-        docPDF.text('SALDO FINAL EN BANCOS:', leftColX, startY);
-        docPDF.text(formatCurrency(estadoFinal.saldoBancos), rightColX - 10, startY, { align: 'right' });
+
+        // Incomes Table
+        autoTable(doc, {
+            head: [['DÍA', 'INGRESOS', 'MONTO (Bs.)']],
+            body: statement.ingresos.map(i => [i.dia, i.concepto, { content: formatCurrency(i.monto), styles: { halign: 'right' } }]),
+            foot: [[{ content: 'TOTAL INGRESOS', colSpan: 2, styles: { halign: 'right' } }, { content: formatCurrency(statement.estadoFinanciero.totalIngresos), styles: { halign: 'right' } }]],
+            startY,
+            theme: 'striped',
+            headStyles: { fillColor: [30, 80, 180], halign: 'center' },
+            footStyles: { fillColor: [30, 80, 180], textColor: [255,255,255], fontStyle: 'bold' },
+            bodyStyles: { textColor: [0, 0, 0] }
+        });
+        startY = (doc as any).lastAutoTable.finalY + 10;
+
+        // Expenses Table
+        autoTable(doc, {
+            head: [['DÍA', 'EGRESOS', 'MONTO (Bs.)']],
+            body: statement.egresos.map(e => [e.dia, e.concepto, { content: formatCurrency(e.monto), styles: { halign: 'right' } }]),
+            foot: [[{ content: 'TOTAL EGRESOS', colSpan: 2, styles: { halign: 'right' } }, { content: formatCurrency(statement.estadoFinanciero.totalEgresos), styles: { halign: 'right' } }]],
+            startY,
+            theme: 'striped',
+            headStyles: { fillColor: [220, 53, 69], halign: 'center' },
+            footStyles: { fillColor: [220, 53, 69], textColor: [255,255,255], fontStyle: 'bold' },
+            bodyStyles: { textColor: [0, 0, 0] }
+        });
+        startY = (doc as any).lastAutoTable.finalY + 15;
         
-        // --- Disponibilidad Total ---
-        const totalX = pageWidth - margin;
-        startY -= 20; // Alineamos con el Cierre de Cuentas
-        docPDF.setFontSize(12).setFont('helvetica', 'bold');
-        docPDF.text('DISPONIBILIDAD TOTAL REAL', totalX, startY, { align: 'right' });
-        startY += 8;
-        docPDF.setFontSize(22).setFont('helvetica', 'black');
-        docPDF.setTextColor(30, 80, 180);
-        docPDF.text(`Bs. ${formatCurrency(estadoFinal.disponibilidadTotal)}`, totalX, startY, { align: 'right' });
-        docPDF.setTextColor(0,0,0);
-    
-        docPDF.save(`Balance_${selectedYear}_${selectedMonth}.pdf`);
+        // Final State Section
+        const finalStateX = 130;
+        doc.setFontSize(10).setFont('helvetica', 'bold');
+        doc.text('SALDO EN BANCOS MES ANTERIOR', finalStateX, startY, { align: 'right' });
+        doc.setFont('helvetica', 'normal').text(formatCurrency(statement.estadoFinanciero.saldoAnterior), finalStateX + 5, startY, { align: 'left' });
+        startY += 7;
+
+        doc.setFont('helvetica', 'bold').text('(+) INGRESOS DEL MES', finalStateX, startY, { align: 'right' });
+        doc.setFont('helvetica', 'normal').text(formatCurrency(statement.estadoFinanciero.totalIngresos), finalStateX + 5, startY, { align: 'left' });
+        startY += 7;
+
+        doc.setFont('helvetica', 'bold').text('(-) EGRESOS DEL MES', finalStateX, startY, { align: 'right' });
+        doc.setFont('helvetica', 'normal').text(formatCurrency(statement.estadoFinanciero.totalEgresos), finalStateX + 5, startY, { align: 'left' });
+        startY += 7;
+        
+        doc.setLineWidth(0.5);
+        doc.line(finalStateX - 80, startY - 2, finalStateX + 40, startY - 2);
+
+        doc.setFont('helvetica', 'bold').text('SALDO EN BANCOS', finalStateX, startY, { align: 'right' });
+        doc.setFont('helvetica', 'bold').text(formatCurrency(statement.estadoFinanciero.saldoBancos), finalStateX + 5, startY, { align: 'left' });
+        startY += 7;
+
+        doc.setFont('helvetica', 'bold').text('(+) SALDO EN CAJA CHICA', finalStateX, startY, { align: 'right' });
+        doc.setFont('helvetica', 'bold').text(formatCurrency(statement.cajaChica.saldoFinal), finalStateX + 5, startY, { align: 'left' });
+        startY += 7;
+
+        doc.setLineWidth(0.5);
+        doc.line(finalStateX - 80, startY - 2, finalStateX + 40, startY - 2);
+
+        doc.setFontSize(12).setFont('helvetica', 'bold');
+        doc.setFillColor(230, 240, 255);
+        doc.rect(finalStateX - 85, startY - 1, 125, 10, 'F');
+        doc.text('DISPONIBILIDAD TOTAL', finalStateX, startY + 5, { align: 'right' });
+        doc.text(formatCurrency(statement.estadoFinanciero.disponibilidadTotal), finalStateX + 5, startY + 5, { align: 'left' });
+
+        doc.save(`Balance_Financiero_${statement.id}.pdf`);
     };
 
-    if (authLoading || dataLoading) return <div className="h-screen flex items-center justify-center bg-background"><Loader2 className="animate-spin h-10 w-10 text-primary"/></div>;
+    // --- Side Effects ---
+    useEffect(() => { loadData(); }, [loadData]);
 
-    if (!currentCondoId) return <div className="p-20 text-center font-black uppercase italic text-slate-400">Seleccione un Condominio</div>;
+
+    // --- Render ---
+    if (dataLoading) {
+        return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin h-10 w-10 text-primary" /></div>;
+    }
+
+    if (!statement) {
+        return <div className="text-center p-8">No se encontraron datos para el período seleccionado.</div>;
+    }
+
+    const { ingresos, egresos, cajaChica, estadoFinanciero, notas } = statement;
 
     return (
-        <div className="max-w-7xl mx-auto space-y-6">
-             <div className="mb-10">
-                <h2 className="text-4xl font-black text-foreground uppercase tracking-tighter italic drop-shadow-sm">
-                    Balance <span className="text-primary">Financiero</span>
-                </h2>
-                <div className="h-1.5 w-20 bg-amber-500 mt-2 rounded-full"></div>
-                <span className="inline-block mt-3 px-3 py-1 bg-secondary text-secondary-foreground text-[10px] font-bold rounded-full tracking-widest uppercase">
-                    ID: {currentCondoId}
-                </span>
-            </div>
+        <div className="max-w-6xl mx-auto pb-20 space-y-8 bg-slate-50/50 min-h-screen p-4 md:p-8 rounded-[3rem]">
+            {/* Header with brand */}
+            <header className="bg-[#1e293b] rounded-[2.5rem] p-6 md:p-10 text-white shadow-2xl flex flex-col md:flex-row items-center justify-between gap-6">
+                <div className="flex items-center gap-6">
+                    <div className="h-24 w-24 rounded-full border-4 border-amber-500 overflow-hidden bg-white flex-shrink-0 flex items-center justify-center shadow-inner">
+                        {companyInfo?.logo ? <img src={companyInfo.logo} alt="logo" className="h-full w-full object-cover" /> : <Box className="h-12 w-12 text-slate-300" />}
+                    </div>
+                    <div>
+                        <h1 className="text-3xl font-black tracking-tighter uppercase italic">{companyInfo?.name}</h1>
+                        <p className="text-slate-400 font-bold tracking-widest text-sm">RIF: {companyInfo?.rif}</p>
+                    </div>
+                </div>
+                <div className="text-center md:text-right">
+                    <div className="flex items-center justify-center md:justify-end gap-2 mb-1">
+                        <span className="text-amber-500 font-black text-2xl tracking-tighter italic">EFAS</span><span className="text-white font-black text-2xl tracking-tighter italic">CONDOSYS</span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em]">Sistema de Autogestión de Condominios</p>
+                </div>
+                <div className="bg-white p-3 rounded-2xl shadow-lg border-2 border-slate-700">
+                    <svg ref={barcodeRef}></svg>
+                </div>
+            </header>
 
-            <div className="flex flex-wrap justify-between items-center gap-4">
+            {/* Controls */}
+            <div className="flex flex-wrap gap-4 px-4 items-center justify-between">
+                <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-500 uppercase text-sm">Periodo:</span>
+                    <Select value={selectedMonth} onValueChange={setSelectedMonth}><SelectTrigger className="w-[140px] rounded-xl font-bold bg-white border-none shadow-sm capitalize"><SelectValue /></SelectTrigger><SelectContent>{months.map(m => <SelectItem key={m.value} value={m.value} className="capitalize">{m.label}</SelectItem>)}</SelectContent></Select>
+                    <Select value={selectedYear} onValueChange={setSelectedYear}><SelectTrigger className="w-[100px] rounded-xl font-bold bg-white border-none shadow-sm"><SelectValue /></SelectTrigger><SelectContent>{years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent></Select>
+                    <Button variant="ghost" onClick={loadData} className="rounded-full hover:bg-amber-100 text-amber-600"><RefreshCw className={syncing ? 'animate-spin' : ''} /></Button>
+                </div>
                 <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => handleSyncData(true)} disabled={syncing} className="rounded-2xl"><RefreshCw className={`mr-2 h-4 w-4 ${syncing && 'animate-spin'}`}/> Sincronizar</Button>
-                    <Button className="bg-primary rounded-2xl" onClick={generatePDF}><Download className="mr-2 h-4 w-4"/> PDF</Button>
+                    <Button onClick={handleSaveStatement} variant="outline" disabled={syncing}><Save className="mr-2 h-4 w-4"/> Guardar en DB</Button>
+                    <Button onClick={handleExportPDF} disabled={syncing}><Download className="mr-2 h-4 w-4" /> Exportar PDF</Button>
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card className="rounded-[2.5rem] bg-card shadow-sm border">
-                    <CardHeader className="pb-2"><CardTitle className="text-sm font-bold text-muted-foreground">PERÍODO</CardTitle></CardHeader>
-                    <CardContent className="flex gap-2">
-                        <Select value={selectedMonth} onValueChange={setSelectedMonth}><SelectTrigger className="rounded-xl font-bold"><SelectValue/></SelectTrigger><SelectContent>{months.map(m => <SelectItem key={m.value} value={m.value}>{m.label.toUpperCase()}</SelectItem>)}</SelectContent></Select>
-                        <Select value={selectedYear} onValueChange={setSelectedYear}><SelectTrigger className="rounded-xl font-bold"><SelectValue/></SelectTrigger><SelectContent>{years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent></Select>
-                    </CardContent>
-                </Card>
-                <div className="grid grid-cols-2 gap-6 md:col-span-2">
-                    <Card className="rounded-[2.5rem] bg-emerald-500/10 text-emerald-600 border-none shadow-none"><CardContent className="p-6"><p className="text-sm font-bold uppercase">Ingresos</p><p className="text-4xl font-black">{formatCurrency(estadoFinal.totalIngresos)}</p></CardContent></Card>
-                    <Card className="rounded-[2.5rem] bg-rose-500/10 text-rose-600 border-none shadow-none"><CardContent className="p-6"><p className="text-sm font-bold uppercase">Egresos</p><p className="text-4xl font-black">{formatCurrency(estadoFinal.totalEgresos)}</p></CardContent></Card>
-                </div>
+            {/* Totals */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 px-2">
+                <Card className="rounded-[2.5rem] border-2 border-emerald-500/20 shadow-xl overflow-hidden group"><div className="bg-emerald-500/5 p-8 text-center group-hover:bg-emerald-500/10 transition-colors"><p className="text-emerald-600 font-black uppercase tracking-widest text-sm mb-2">Total Ingresos</p><p className="text-5xl font-black text-emerald-700 tracking-tighter">{formatCurrency(estadoFinanciero.totalIngresos)}</p></div></Card>
+                <Card className="rounded-[2.5rem] border-2 border-rose-500/20 shadow-xl overflow-hidden group"><div className="bg-rose-500/5 p-8 text-center group-hover:bg-rose-500/10 transition-colors"><p className="text-rose-600 font-black uppercase tracking-widest text-sm mb-2">Total Egresos</p><p className="text-5xl font-black text-rose-700 tracking-tighter">{formatCurrency(estadoFinanciero.totalEgresos)}</p></div></Card>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card className="rounded-[2.5rem] p-2 bg-card border shadow-xl">
-                    <CardHeader><CardTitle className="text-xl font-black uppercase">Gastos Detallados</CardTitle></CardHeader>
-                    <CardContent>
-                         <Table><TableHeader><TableRow><TableHead>FECHA</TableHead><TableHead>CONCEPTO</TableHead><TableHead className="text-right">MONTO</TableHead></TableRow></TableHeader>
-                            <TableBody>
-                                {egresos.map(e => (
-                                    <TableRow key={e.id}><TableCell className="text-xs font-bold">{e.fecha}</TableCell><TableCell className="uppercase font-bold text-sm">{e.descripcion}</TableCell><TableCell className="text-right font-black text-rose-500">-{formatCurrency(e.monto)}</TableCell></TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </CardContent>
+            {/* Tables */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 px-2">
+                <Card className="rounded-[2.5rem] bg-white border-none shadow-xl overflow-hidden">
+                    <CardHeader className="bg-slate-100/50 border-b"><CardTitle className="text-lg text-primary">Ingresos del Mes</CardTitle></CardHeader>
+                    <CardContent className="p-0"><Table><TableHeader><TableRow><TableHead>Día</TableHead><TableHead>Concepto</TableHead><TableHead className="text-right">Monto</TableHead></TableRow></TableHeader><TableBody>{ingresos.map((i, idx) => (<TableRow key={idx}><TableCell className="font-bold">{i.dia}</TableCell><TableCell>{i.concepto}</TableCell><TableCell className="text-right font-bold">{formatCurrency(i.monto)}</TableCell></TableRow>))}</TableBody></Table></CardContent>
                 </Card>
-
-                <Card className="rounded-[2.5rem] p-2 bg-card border shadow-xl">
-                    <CardHeader><CardTitle className="text-xl font-black uppercase tracking-tighter">Caja Chica</CardTitle></CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="flex justify-between font-bold"><span>Saldo Inicial</span><span>{formatCurrency(cajaChica.saldoInicial)}</span></div>
-                        <div className="flex justify-between font-bold text-emerald-600"><span>(+) Reposiciones</span><span>+{formatCurrency(cajaChica.reposiciones)}</span></div>
-                        <div className="flex justify-between font-bold text-rose-600"><span>(-) Gastos</span><span>-{formatCurrency(cajaChica.gastos)}</span></div>
-                        <Separator />
-                        <div className="flex justify-between font-black text-2xl"><span>Saldo Caja</span><span className="text-primary">{formatCurrency(cajaChica.saldoFinal)}</span></div>
-                    </CardContent>
+                <Card className="rounded-[2.5rem] bg-white border-none shadow-xl overflow-hidden">
+                    <CardHeader className="bg-slate-100/50 border-b"><CardTitle className="text-lg text-destructive">Egresos del Mes</CardTitle></CardHeader>
+                    <CardContent className="p-0"><Table><TableHeader><TableRow><TableHead>Día</TableHead><TableHead>Concepto</TableHead><TableHead className="text-right">Monto</TableHead></TableRow></TableHeader><TableBody>{egresos.map(e => (<TableRow key={e.id}><TableCell className="font-bold">{e.dia}</TableCell><TableCell>{e.concepto}</TableCell><TableCell className="text-right font-bold">{formatCurrency(e.monto)}</TableCell></TableRow>))}</TableBody></Table></CardContent>
                 </Card>
             </div>
 
-            <Card className="rounded-[2.5rem] p-8 bg-card border-2 border-primary/20 shadow-2xl space-y-6">
-                <CardHeader className="p-0"><CardTitle className="text-3xl font-black uppercase italic tracking-tighter">Cierre de Cuenta</CardTitle></CardHeader>
-                <CardContent className="p-0 space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <Label className="text-xs font-bold uppercase ml-2 text-muted-foreground">Saldo Anterior Banco (Bs.)</Label>
-                            <Input type="number" value={estadoFinal.saldoAnterior} onChange={e => setEstadoFinal(prev => ({...prev, saldoAnterior: parseFloat(e.target.value) || 0}))} className="h-16 rounded-2xl text-3xl font-black px-6"/>
+            {/* Final State */}
+            <Card className="rounded-[3rem] border-4 border-amber-500 bg-white shadow-2xl overflow-hidden">
+                <CardContent className="p-0">
+                    <div className="p-8 grid grid-cols-1 md:grid-cols-3 gap-6 items-center border-b-2 border-slate-100">
+                        <div className="md:col-span-2 space-y-2">
+                            <Label className="text-xs font-black uppercase text-slate-400">Estado de Cuenta Final</Label>
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                                <span className="font-bold text-slate-500">Saldo Mes Anterior:</span><span className="font-mono text-right">{formatCurrency(estadoFinanciero.saldoAnterior)}</span>
+                                <span className="font-bold text-slate-500">(+) Ingresos:</span><span className="font-mono text-right text-emerald-600">{formatCurrency(estadoFinanciero.totalIngresos)}</span>
+                                <span className="font-bold text-slate-500">(-) Egresos:</span><span className="font-mono text-right text-rose-600">{formatCurrency(estadoFinanciero.totalEgresos)}</span>
+                                <Separator className="col-span-2 my-1" />
+                                <span className="font-black text-slate-800">SALDO EN BANCOS:</span><span className="font-black text-slate-800 text-right">{formatCurrency(estadoFinanciero.saldoBancos)}</span>
+                                <span className="font-black text-slate-800">(+) SALDO CAJA CHICA:</span><span className="font-black text-slate-800 text-right">{formatCurrency(cajaChica.saldoFinal)}</span>
+                            </div>
                         </div>
-                        <div className="p-6 rounded-2xl bg-secondary/30 flex flex-col justify-center">
-                            <span className="text-xs font-bold uppercase text-muted-foreground mb-1">Total en Bancos</span>
-                            <span className="text-4xl font-black">{formatCurrency(estadoFinal.saldoBancos)}</span>
+                        <div className="bg-slate-50 p-6 rounded-2xl flex flex-col justify-center text-center">
+                            <span className="font-black uppercase text-slate-500 text-sm">Disponibilidad Real</span>
+                            <span className="text-4xl font-black text-slate-800 tracking-tighter">{formatCurrency(estadoFinanciero.disponibilidadTotal)} Bs.</span>
                         </div>
                     </div>
-                     <div className="p-8 rounded-[2rem] bg-primary text-primary-foreground flex items-center justify-between shadow-lg shadow-primary/20">
-                        <span className="font-black text-xl uppercase italic tracking-widest">Disponibilidad Real</span>
-                        <span className="text-5xl font-black italic">{formatCurrency(estadoFinal.disponibilidadTotal)}</span>
+                    <div className="p-8 bg-slate-50">
+                        <Label className="text-xs font-black uppercase text-slate-400">Observaciones</Label>
+                        <Textarea placeholder="Observaciones de este balance..." value={notas} onChange={e => setStatement(s => s ? {...s, notas: e.target.value} : null)} className="flex-1 rounded-2xl border-none shadow-inner bg-white min-h-[100px] p-4 font-medium mt-2"/>
                     </div>
-                    <Textarea placeholder="Observaciones del cierre..." value={notas} onChange={e => setNotas(e.target.value)} className="rounded-[2rem] min-h-[120px] p-6 text-lg font-bold border-2 focus:border-primary"/>
                 </CardContent>
-                <CardFooter className="p-0 flex justify-end">
-                    <Button className="rounded-full px-16 h-16 font-black text-xl shadow-xl hover:scale-105 transition-transform" onClick={async () => {
-                        const periodId = `${selectedYear}-${selectedMonth.padStart(2, '0')}`;
-                        await setDoc(doc(db, 'condominios', currentCondoId, 'financial_statements', periodId), { id: periodId, estadoFinal, notas, fechaCierre: Timestamp.now() });
-                        toast({ title: "BALANCE GUARDADO CORRECTAMENTE" });
-                    }}>GUARDAR BALANCE</Button>
-                </CardFooter>
             </Card>
         </div>
     );
