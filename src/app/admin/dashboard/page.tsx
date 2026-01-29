@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -22,7 +21,6 @@ export default function AdminDashboardPage() {
     const { user, role, ownerData, activeCondoId, loading: authLoading } = useAuth();
     const router = useRouter();
     const [loading, setLoading] = useState(true);
-    const [activeRate, setActiveRate] = useState(0);
     const [stats, setStats] = useState({
         monthlyIncome: 0,
         monthlyIncomeUSD: 0,
@@ -31,6 +29,7 @@ export default function AdminDashboardPage() {
     });
     const [recentPayments, setRecentPayments] = useState<any[]>([]);
     const [anuncios, setAnuncios] = useState<any[]>([]);
+    const [condoId, setCondoId] = useState<string | null>(null);
 
     // 1. Verificación de Seguridad y Roles
     useEffect(() => {
@@ -48,83 +47,99 @@ export default function AdminDashboardPage() {
         }
     }, [user, role, authLoading, router]);
 
-    // 2. Carga de Datos Dinámica (Soporte o Real)
+    // 2. Determinar el ID del condominio a usar
     useEffect(() => {
-        // Detectar si estamos en modo soporte
         const sId = localStorage.getItem('support_mode_id');
-        const condoId = (sId && user?.email === 'vallecondo@gmail.com') ? sId : activeCondoId;
+        const id = (sId && user?.email === 'vallecondo@gmail.com') ? sId : activeCondoId;
+        setCondoId(id);
+    }, [user, activeCondoId]);
 
+
+    // 3. Carga de Datos (un solo efecto que depende del condoId)
+    useEffect(() => {
         if (!condoId) {
             if (!authLoading) setLoading(false);
             return;
         }
 
-        // --- CARGA DE TASA BCV ---
-        const fetchRate = async () => {
+        setLoading(true);
+
+        // --- CARGA DE ANUNCIOS ---
+        const unsubAnuncios = onSnapshot(
+            query(collection(db, "condominios", condoId, "billboard_announcements"), orderBy("createdAt", "desc"), limit(5)),
+            (snap) => {
+                setAnuncios(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+            },
+            (err) => console.warn("Error anuncios dashboard:", err)
+        );
+
+        // --- CARGA DE PROPIETARIOS ---
+        const unsubOwners = onSnapshot(
+            collection(db, 'condominios', condoId, 'owners'),
+            (snap) => {
+                setStats(prev => ({ ...prev, totalOwners: snap.size }));
+            }
+        );
+
+        // --- CARGA DE TASA Y PAGOS ---
+        let unsubPayments: () => void;
+        const fetchRateAndPayments = async () => {
+            let rate = 0;
             try {
                 const snap = await getDoc(doc(db, 'condominios', condoId, 'config', 'mainSettings'));
                 if (snap.exists()) {
                     const rates = snap.data().exchangeRates || [];
                     const active = rates.find((r: any) => r.active === true || r.status === 'active');
-                    if (active) setActiveRate(active.rate || active.value || 0);
-                }
-            } catch (e) { console.error("Error tasa dashboard:", e); }
-        };
-        fetchRate();
-
-        // --- CARGA DE ANUNCIOS (RUTA CORREGIDA) ---
-        const unsubAnuncios = onSnapshot(
-            query(collection(db, "condominios", condoId, "billboard_announcements"), orderBy("createdAt", "desc"), limit(5)), 
-            (snap) => setAnuncios(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
-            (err) => console.warn("Error anuncios dashboard:", err)
-        );
-
-        // --- CARGA DE PAGOS (RUTA CORREGIDA) ---
-        const startOfMonth = new Date();
-        startOfMonth.setDate(1);
-        startOfMonth.setHours(0,0,0,0);
-
-        const unsubPayments = onSnapshot(
-            collection(db, 'condominios', condoId, 'payments'), 
-            (snap) => {
-                let bs = 0; let usd = 0; let pending = 0;
-                const paymentsList: any[] = [];
-
-                snap.docs.forEach(d => {
-                    const data = d.data();
-                    const status = data.status?.toLowerCase();
-                    const pDate = data.paymentDate?.toDate();
-
-                    if (status === 'pendiente') pending++;
-                    
-                    if (status === 'aprobado' && pDate >= startOfMonth) {
-                        const amount = data.totalAmount || 0;
-                        bs += amount;
-                        const rate = data.exchangeRate || activeRate || 1;
-                        usd += amount / rate;
-                        paymentsList.push({ id: d.id, ...data });
+                    if (active) {
+                        rate = active.rate || active.value || 0;
                     }
-                });
+                }
+            } catch (e) {
+                console.error("Error tasa dashboard:", e);
+            }
 
-                setStats(prev => ({ ...prev, monthlyIncome: bs, monthlyIncomeUSD: usd, pendingPayments: pending }));
-                setRecentPayments(paymentsList.sort((a,b) => b.paymentDate - a.paymentDate).slice(0, 5));
-                setLoading(false);
-            },
-            (err) => { console.error("Error pagos dashboard:", err); setLoading(false); }
-        );
+            const startOfMonth = new Date();
+            startOfMonth.setDate(1);
+            startOfMonth.setHours(0, 0, 0, 0);
 
-        // --- CARGA DE PROPIETARIOS (RUTA CORREGIDA) ---
-        const unsubOwners = onSnapshot(
-            collection(db, 'condominios', condoId, 'owners'), 
-            (snap) => setStats(prev => ({ ...prev, totalOwners: snap.size }))
-        );
+            unsubPayments = onSnapshot(
+                collection(db, 'condominios', condoId, 'payments'),
+                (snap) => {
+                    let bs = 0; let usd = 0; let pending = 0;
+                    const paymentsList: any[] = [];
 
-        return () => { 
-            unsubAnuncios(); 
-            unsubPayments(); 
-            unsubOwners(); 
+                    snap.docs.forEach(d => {
+                        const data = d.data();
+                        const status = data.status?.toLowerCase();
+                        const pDate = data.paymentDate?.toDate();
+
+                        if (status === 'pendiente') pending++;
+                        
+                        if (status === 'aprobado' && pDate >= startOfMonth) {
+                            const amount = data.totalAmount || 0;
+                            bs += amount;
+                            const exchangeRate = data.exchangeRate || rate || 1;
+                            usd += amount / exchangeRate;
+                            paymentsList.push({ id: d.id, ...data });
+                        }
+                    });
+
+                    setStats(prev => ({ ...prev, monthlyIncome: bs, monthlyIncomeUSD: usd, pendingPayments: pending }));
+                    setRecentPayments(paymentsList.sort((a, b) => b.paymentDate.toMillis() - a.paymentDate.toMillis()).slice(0, 5));
+                    setLoading(false);
+                },
+                (err) => { console.error("Error pagos dashboard:", err); setLoading(false); }
+            );
         };
-    }, [user, activeCondoId, activeRate, authLoading]);
+
+        fetchRateAndPayments();
+
+        return () => {
+            unsubAnuncios();
+            unsubOwners();
+            if (unsubPayments) unsubPayments();
+        };
+    }, [condoId, authLoading]);
 
     if (authLoading || loading) {
         return (
