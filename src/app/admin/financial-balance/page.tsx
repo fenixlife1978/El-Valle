@@ -102,7 +102,6 @@ export default function FinancialBalancePage() {
             const prevPeriodId = format(prevPeriodDate, 'yyyy-MM');
             const prevSnap = await getDoc(doc(db, 'condominios', activeCondoId, 'financial_statements', prevPeriodId));
             const saldoAnterior = prevSnap.exists() ? (prevSnap.data() as any).estadoFinal.saldoBancos : 0;
-            setEstadoFinal(prev => ({...prev, saldoAnterior}));
             
             const paymentsSnap = await getDocs(query(
                 collection(db, 'condominios', activeCondoId, 'payments'),
@@ -117,7 +116,6 @@ export default function FinancialBalancePage() {
                 { concepto: 'Fondo de Reserva', real: 0, category: 'fondo_reserva' },
                 { concepto: 'Otros Ingresos', real: 0, category: 'otros' }
             ];
-            setIngresos(newIngresos);
 
             const expensesSnap = await getDocs(query(
                 collection(db, 'condominios', activeCondoId, 'gastos'),
@@ -125,13 +123,6 @@ export default function FinancialBalancePage() {
                 where('date', '<=', Timestamp.fromDate(currentPeriodEnd)),
                 orderBy('date', 'asc')
             ));
-            
-            setEgresos(expensesSnap.docs.map(d => ({
-                id: d.id,
-                descripcion: d.data().description || 'Sin descripción',
-                monto: d.data().amount || 0,
-                fecha: format(d.data().date.toDate(), 'dd/MM/yyyy')
-            })));
             
             const ccMovesQuery = query(collection(db, 'condominios', activeCondoId, 'cajaChica_movimientos'));
             const ccMovesSnap = await getDocs(ccMovesQuery);
@@ -155,6 +146,14 @@ export default function FinancialBalancePage() {
             });
             const saldoFinalCC = saldoInicialCC + reposicionesCC - gastosCC;
 
+            setEstadoFinal(prev => ({...prev, saldoAnterior}));
+            setIngresos(newIngresos);
+            setEgresos(expensesSnap.docs.map(d => ({
+                id: d.id,
+                descripcion: d.data().description || 'Sin descripción',
+                monto: d.data().amount || 0,
+                fecha: format(d.data().date.toDate(), 'dd/MM/yyyy')
+            })));
             setCajaChica({ saldoInicial: saldoInicialCC, reposiciones: reposicionesCC, gastos: gastosCC, saldoFinal: saldoFinalCC });
 
         } catch (e) {
@@ -196,10 +195,6 @@ export default function FinancialBalancePage() {
             toast({ variant: 'destructive', title: 'Error', description: 'No se ha cargado la información del condominio.' });
             return;
         };
-
-        const { default: jsPDF } = await import('jspdf');
-        const { default: autoTable } = await import('jspdf-autotable');
-        const { default: JsBarcode } = await import('jsbarcode');
         
         const docPDF = new jsPDF();
         const pageWidth = docPDF.internal.pageSize.getWidth();
@@ -214,37 +209,52 @@ export default function FinancialBalancePage() {
         let textX = margin;
         if (companyInfo.logo) {
             try {
-                docPDF.addImage(companyInfo.logo, 'PNG', margin, 7, 20, 20);
-                textX += 25; // Add space for the logo
+                // Circular logo logic
+                const logoSize = 20;
+                const logoX = margin + logoSize / 2;
+                const logoY = 7 + logoSize / 2;
+                docPDF.saveGraphicsState();
+                docPDF.circle(logoX, logoY, logoSize / 2);
+                docPDF.clip();
+                docPDF.addImage(companyInfo.logo, 'PNG', margin, 7, logoSize, logoSize);
+                docPDF.restoreGraphicsState();
+                textX += logoSize + 5;
             } catch(e) { console.error("Error adding logo to PDF", e); }
         }
 
-        docPDF.setFontSize(14).setFont('helvetica', 'bold').text(companyInfo.name, textX, 15);
-        docPDF.setFontSize(9).setFont('helvetica', 'normal').text(`RIF: ${companyInfo.rif}`, textX, 22);
+        docPDF.setFontSize(14).setFont('helvetica', 'bold');
+        docPDF.text(companyInfo.name, textX, 15);
+        docPDF.setFontSize(9).setFont('helvetica', 'normal');
+        docPDF.text(`RIF: ${companyInfo.rif}`, textX, 22);
 
-        // --- Brand Identity ---
+        // --- Brand Identity (right side) ---
+        const endX = pageWidth - margin;
         const efasColor = '#F97316'; // orange-500
-        const condoSysColor = '#3B82F6'; // blue-500
-        docPDF.setFont('helvetica', 'blackitalic');
+        const efasText = "EFAS";
+        const condoSysText = "CONDOSYS";
+        const subtitleText = "SISTEMA DE AUTOGESTIÓN DE CONDOMINIOS";
         
+        docPDF.setFont('helvetica', 'bolditalic');
         docPDF.setFontSize(12);
-        const condoSysText = 'CONDOSYS';
-        const efasText = 'EFAS';
+
         const condoSysWidth = docPDF.getStringUnitWidth(condoSysText) * 12 / docPDF.internal.scaleFactor;
         
-        const endX = pageWidth - margin;
+        // Draw CONDOSYS in white
+        docPDF.setTextColor(255, 255, 255);
+        docPDF.text(condoSysText, endX, 15, { align: 'right' });
         
+        // Draw EFAS in orange
         docPDF.setTextColor(efasColor);
         docPDF.text(efasText, endX - condoSysWidth, 15, { align: 'right' });
         
-        docPDF.setTextColor(condoSysColor);
-        docPDF.text(condoSysText, endX, 15, { align: 'right' });
-        
+        // Draw Subtitle
         docPDF.setFont('helvetica', 'normal');
-        docPDF.setFontSize(8).setTextColor(200, 200, 200);
-        docPDF.text('BALANCE FINANCIERO OFICIAL', pageWidth - margin, 22, { align: 'right' });
+        docPDF.setFontSize(7);
+        docPDF.setTextColor(200, 200, 200); // Lighter gray
+        docPDF.text(subtitleText, endX, 22, { align: 'right' });
         
-        docPDF.setTextColor(0, 0, 0); // Reset text color
+        // Reset text color for the rest of the document
+        docPDF.setTextColor(0, 0, 0); 
         
         let startY = headerHeight + 5;
 
@@ -326,16 +336,16 @@ export default function FinancialBalancePage() {
     
     return (
         <div className="max-w-7xl mx-auto space-y-6">
-            <div className="flex flex-wrap justify-between items-center gap-4 mb-10">
-                <div>
-                    <h2 className="text-4xl font-black text-foreground uppercase tracking-tighter italic drop-shadow-sm">
-                        Balance <span className="text-primary">Financiero</span>
-                    </h2>
-                    <div className="h-1.5 w-20 bg-amber-500 mt-2 rounded-full"></div>
-                    <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">
-                        Revisión de estado de resultados y flujos de caja.
-                    </p>
-                </div>
+             <div className="mb-10">
+                <h2 className="text-4xl font-black text-foreground uppercase tracking-tighter italic drop-shadow-sm">
+                    Balance <span className="text-primary">Financiero</span>
+                </h2>
+                <div className="h-1.5 w-20 bg-amber-500 mt-2 rounded-full"></div>
+                <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">
+                    Revisión de estado de resultados y flujos de caja.
+                </p>
+            </div>
+            <div className="flex flex-wrap justify-between items-center gap-4">
                 <div className="flex gap-2">
                     <Button variant="outline" onClick={() => handleSyncData(true)} disabled={syncing} className="rounded-2xl"><RefreshCw className={`mr-2 h-4 w-4 ${syncing && 'animate-spin'}`}/> Sincronizar</Button>
                     <Button className="bg-primary rounded-2xl" onClick={generatePDF}><Download className="mr-2 h-4 w-4"/> PDF</Button>
