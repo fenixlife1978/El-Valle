@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -73,7 +74,7 @@ export default function OwnerPaymentCalculatorPage() {
 
     useEffect(() => {
         if (authLoading || !user || !ownerData || !activeCondoId) {
-            setLoadingDebts(false);
+            if(!authLoading) setLoadingDebts(false);
             return;
         };
 

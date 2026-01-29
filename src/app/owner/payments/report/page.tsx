@@ -51,7 +51,7 @@ const ADMIN_USER_ID = 'valle-admin-main-account';
 
 export default function ReportPaymentPage() {
     const { toast } = useToast();
-    const { user: authUser, ownerData: authOwnerData } = useAuth();
+    const { user: authUser, ownerData: authOwnerData, activeCondoId } = useAuth();
     const [allOwners, setAllOwners] = useState<Owner[]>([]);
     const [loading, setLoading] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -77,19 +77,20 @@ export default function ReportPaymentPage() {
 
     // --- Data Fetching ---
     useEffect(() => {
-        const q = query(collection(db, "owners"), where("role", "==", "propietario"));
+        if (!activeCondoId) return;
+        const q = query(collection(db, "condominios", activeCondoId, "owners"), where("role", "==", "propietario"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const ownersData: Owner[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner));
             setAllOwners(ownersData.sort((a, b) => (a.name || '').localeCompare(b.name || '')));
         });
         return () => unsubscribe();
-    }, []);
+    }, [activeCondoId]);
     
     useEffect(() => {
-         if (authOwnerData) {
+         if (authOwnerData && authUser) {
             setBeneficiaryRows([{
                 id: Date.now().toString(),
-                owner: { id: authUser!.uid, name: authOwnerData.name, properties: authOwnerData.properties },
+                owner: { id: authUser.uid, name: authOwnerData.name, properties: authOwnerData.properties },
                 searchTerm: '',
                 amount: '',
                 selectedProperty: authOwnerData.properties?.[0] || null
@@ -98,9 +99,10 @@ export default function ReportPaymentPage() {
     }, [authOwnerData, authUser]);
 
     useEffect(() => {
+        if (!activeCondoId) return;
         const fetchRate = async () => {
              try {
-                const settingsRef = doc(db, 'config', 'mainSettings');
+                const settingsRef = doc(db, 'condominios', activeCondoId, 'config', 'mainSettings');
                 const docSnap = await getDoc(settingsRef);
                 if (docSnap.exists()) {
                     const settings = docSnap.data();
@@ -129,7 +131,7 @@ export default function ReportPaymentPage() {
             }
         }
         fetchRate();
-    }, [paymentDate]);
+    }, [paymentDate, activeCondoId]);
 
     useEffect(() => {
         const bs = parseFloat(totalAmount);
@@ -149,10 +151,10 @@ export default function ReportPaymentPage() {
         setTotalAmount('');
         setReceiptImage(null);
         setAmountUSD('');
-        if (authOwnerData) {
+        if (authOwnerData && authUser) {
             setBeneficiaryRows([{
                 id: Date.now().toString(),
-                owner: { id: authUser!.uid, name: authOwnerData.name, properties: authOwnerData.properties },
+                owner: { id: authUser.uid, name: authOwnerData.name, properties: authOwnerData.properties },
                 searchTerm: '',
                 amount: '',
                 selectedProperty: authOwnerData.properties?.[0] || null
@@ -207,8 +209,9 @@ export default function ReportPaymentPage() {
         if (Math.abs(balance) > 0.01) {
             return { isValid: false, error: 'El monto total no coincide con la suma de los montos asignados a los beneficiarios.' };
         }
+        if (!activeCondoId) return { isValid: false, error: "No se encontró un condominio activo." };
         try {
-            const q = query(collection(db, "payments"), where("reference", "==", reference), where("totalAmount", "==", Number(totalAmount)), where("paymentDate", "==", Timestamp.fromDate(paymentDate)));
+            const q = query(collection(db, "condominios", activeCondoId, "payments"), where("reference", "==", reference), where("totalAmount", "==", Number(totalAmount)), where("paymentDate", "==", Timestamp.fromDate(paymentDate)));
             if (!(await getDocs(q)).empty) {
                 return { isValid: false, error: 'Ya existe un reporte de pago con esta misma referencia, monto y fecha.' };
             }
@@ -229,7 +232,7 @@ export default function ReportPaymentPage() {
             return;
         }
 
-        if (!authUser || !authOwnerData) {
+        if (!authUser || !authOwnerData || !activeCondoId) {
             toast({ variant: 'destructive', title: 'Error de Autenticación'});
             setIsSubmitting(false);
             return;
@@ -258,7 +261,7 @@ export default function ReportPaymentPage() {
                 receiptUrl: receiptImage,
             };
             
-            const paymentRef = await addDoc(collection(db, "payments"), paymentData);
+            const paymentRef = await addDoc(collection(db, "condominios", activeCondoId, "payments"), paymentData);
             
             const adminDocRef = doc(db, 'owners', ADMIN_USER_ID);
             const notificationsRef = doc(collection(adminDocRef, "notifications"));
