@@ -30,6 +30,7 @@ import { useRouter } from 'next/navigation';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useAuth } from '@/hooks/use-auth';
+import Link from 'next/link';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -357,6 +358,7 @@ export default function ReportsPage() {
 
     // New state for saved integral reports
     const [savedIntegralReports, setSavedIntegralReports] = useState<SavedIntegralReport[]>([]);
+    const [savedFinancialStatements, setSavedFinancialStatements] = useState<any[]>([]);
     const [publishedReports, setPublishedReports] = useState<PublishedReport[]>([]);
     const [reportToPreview, setReportToPreview] = useState<SavedIntegralReport | null>(null);
 
@@ -413,6 +415,7 @@ export default function ReportsPage() {
             const historicalPaymentsQuery = query(collection(db, 'condominios', activeCondoId, 'historical_payments'));
             const savedReportsQuery = query(collection(db, 'condominios', activeCondoId, 'integral_reports'), orderBy('createdAt', 'desc'));
             const publishedReportsQuery = query(collection(db, 'condominios', activeCondoId, 'published_reports'));
+            const savedStatementsQuery = query(collection(db, 'condominios', activeCondoId, 'financial_statements'), orderBy('createdAt', 'desc'));
             
             const unsubs: (() => void)[] = [];
 
@@ -434,6 +437,10 @@ export default function ReportsPage() {
             
             unsubs.push(onSnapshot(publishedReportsQuery, (snapshot) => {
                 setPublishedReports(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PublishedReport)));
+            }));
+
+            unsubs.push(onSnapshot(savedStatementsQuery, (snapshot) => {
+                setSavedFinancialStatements(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
             }));
 
 
@@ -594,7 +601,7 @@ export default function ReportsPage() {
                 const properties = (owner?.properties || []).map(p => `${p.street}-${p.house}`).join(', ');
 
                 const paidDebts = allDebts.filter(debt => debt.paymentId === payment.id && debt.ownerId === ownerId)
-                                          .sort((a,b) => a.year - b.year || a.month - a.month);
+                                          .sort((a,b) => a.year - b.year || a.month - b.month);
                 
                 let paidMonths = 'Abono a Saldo';
                 if (paidDebts.length > 0) {
@@ -835,6 +842,63 @@ export default function ReportsPage() {
     const handlePreviewIntegralReport = (report: SavedIntegralReport) => {
         setReportToPreview(report);
     };
+
+    const handlePublishBalanceReport = async (statementId: string) => {
+        if (!activeCondoId) return;
+        requestAuthorization(async () => {
+            setGeneratingReport(true);
+            try {
+                const publicationId = `balance-${statementId}`;
+                await setDoc(doc(db, 'condominios', activeCondoId, 'published_reports', publicationId), {
+                    type: 'balance',
+                    sourceId: statementId,
+                    createdAt: serverTimestamp(),
+                });
+                toast({ title: 'Balance Publicado', description: 'El balance ahora es visible para los propietarios.' });
+            } catch (error) {
+                console.error('Error publishing balance report:', error);
+                toast({ variant: 'destructive', title: 'Error de Publicación' });
+            } finally {
+                setGeneratingReport(false);
+            }
+        });
+    };
+
+    const handleUnpublishBalanceReport = async (statementId: string) => {
+        if (!activeCondoId) return;
+        requestAuthorization(async () => {
+            setGeneratingReport(true);
+            try {
+                await deleteDoc(doc(db, 'condominios', activeCondoId, 'published_reports', `balance-${statementId}`));
+                toast({ title: 'Publicación Retirada' });
+            } catch (error) {
+                console.error('Error unpublishing balance report:', error);
+                toast({ variant: 'destructive', title: 'Error' });
+            } finally {
+                setGeneratingReport(false);
+            }
+        });
+    };
+
+    const handleDeleteSavedBalanceReport = async (statementId: string) => {
+        if (!activeCondoId) return;
+        requestAuthorization(async () => {
+            setGeneratingReport(true);
+            try {
+                const batch = writeBatch(db);
+                batch.delete(doc(db, 'condominios', activeCondoId, 'financial_statements', statementId));
+                batch.delete(doc(db, 'condominios', activeCondoId, 'published_reports', `balance-${statementId}`));
+                await batch.commit();
+                toast({ title: 'Balance Eliminado' });
+            } catch (error) {
+                console.error("Error deleting saved balance report:", error);
+                toast({ variant: 'destructive', title: 'Error al eliminar' });
+            } finally {
+                setGeneratingReport(false);
+            }
+        });
+    };
+
 
     const handleExportIntegralPdf = async (report: SavedIntegralReport) => {
         if (!report || !companyInfo) return;
@@ -1348,9 +1412,9 @@ export default function ReportsPage() {
                 </p>
             </div>
             
-            <Tabs defaultValue="integral" className="w-full">
-                 <TabsList className="grid w-full grid-cols-1 md:grid-cols-4 lg:grid-cols-6 h-auto flex-wrap">
-                    <TabsTrigger value="integral">Integral</TabsTrigger>
+            <Tabs defaultValue="history" className="w-full">
+                 <TabsList className="grid w-full grid-cols-1 md:grid-cols-4 lg:grid-cols-7 h-auto flex-wrap">
+                    <TabsTrigger value="history">Historial y Publicaciones</TabsTrigger>
                     <TabsTrigger value="individual">Ficha Individual</TabsTrigger>
                     <TabsTrigger value="estado-de-cuenta">Estado de Cuenta</TabsTrigger>
                     <TabsTrigger value="delinquency">Morosidad</TabsTrigger>
@@ -1359,102 +1423,114 @@ export default function ReportsPage() {
                     <TabsTrigger value="income">Ingresos</TabsTrigger>
                 </TabsList>
                 
-                <TabsContent value="integral">
-                    <Card>
-                        <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl">
-                            <CardTitle>Reporte Integral de Propietarios</CardTitle>
-                            <CardDescription className="text-primary-foreground/90">Genere, guarde y publique una vista consolidada del estado de todos los propietarios.</CardDescription>
-                             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-4">
-                                <div className="space-y-2">
-                                    <Label>Buscar Propietario</Label>
-                                    <Input placeholder="Nombre..." value={integralOwnerFilter} onChange={e => setIntegralOwnerFilter(e.target.value)} />
+                <TabsContent value="history">
+                    <div className="space-y-6">
+                        {/* --- Tarjeta de Reportes Integrales --- */}
+                        <Card>
+                            <CardHeader className="bg-primary text-primary-foreground rounded-t-2xl">
+                                <CardTitle>Reportes Integrales</CardTitle>
+                                <CardDescription className="text-primary-foreground/90">Genere, guarde y publique una vista consolidada del estado de todos los propietarios.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4 pt-6">
+                                <div className="flex justify-end gap-2 mb-4">
+                                    <Button onClick={handleGenerateAndSaveIntegral} disabled={generatingReport}>
+                                        <FileText className="mr-2 h-4 w-4" /> Generar y Guardar Reporte
+                                    </Button>
                                 </div>
-                                <div className="space-y-2">
-                                    <Label>Estado</Label>
-                                    <Select value={integralStatusFilter} onValueChange={setIntegralStatusFilter}>
-                                        <SelectTrigger><SelectValue /></SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="todos">Todos</SelectItem>
-                                            <SelectItem value="solvente">Solvente</SelectItem>
-                                            <SelectItem value="nosolvente">No Solvente</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Pagos Desde</Label>
-                                    <Popover>
-                                        <PopoverTrigger asChild>
-                                            <Button variant="outline" className={cn("w-full justify-start", !integralDateRange.from && "text-muted-foreground")}>
-                                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                                {integralDateRange.from ? format(integralDateRange.from, 'P', { locale: es }) : "Fecha"}
-                                            </Button>
-                                        </PopoverTrigger>
-                                        <PopoverContent><Calendar mode="single" selected={integralDateRange.from} onSelect={d => setIntegralDateRange(prev => ({...prev, from: d}))} /></PopoverContent>
-                                    </Popover>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Pagos Hasta</Label>
-                                     <Popover>
-                                        <PopoverTrigger asChild>
-                                            <Button variant="outline" className={cn("w-full justify-start", !integralDateRange.to && "text-muted-foreground")}>
-                                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                                {integralDateRange.to ? format(integralDateRange.to, 'P', { locale: es }) : "Fecha"}
-                                            </Button>
-                                        </PopoverTrigger>
-                                        <PopoverContent><Calendar mode="single" selected={integralDateRange.to} onSelect={d => setIntegralDateRange(prev => ({...prev, to: d}))} /></PopoverContent>
-                                    </Popover>
-                                </div>
-                            </div>
-                        </CardHeader>
-                        <CardContent>
-                             <div className="flex justify-end gap-2 mb-4">
-                                <Button onClick={handleGenerateAndSaveIntegral} disabled={generatingReport}>
-                                    <FileText className="mr-2 h-4 w-4" /> Generar y Guardar Reporte
-                                </Button>
-                            </div>
+                                <h3 className="text-lg font-semibold mb-2">Historial de Reportes Integrales</h3>
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Fecha de Creación</TableHead>
+                                            <TableHead>Estado</TableHead>
+                                            <TableHead className="text-right">Acciones</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {savedIntegralReports.map(report => {
+                                            const isPublished = publishedReports.some(p => p.sourceId === report.id);
+                                            return (
+                                                <TableRow key={report.id}>
+                                                    <TableCell>{format(report.createdAt.toDate(), "dd/MM/yyyy HH:mm")}</TableCell>
+                                                    <TableCell>
+                                                        <Badge variant={isPublished ? "success" : "outline"}>{isPublished ? "Publicado" : "No Publicado"}</Badge>
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                        <DropdownMenu>
+                                                            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4"/></Button></DropdownMenuTrigger>
+                                                            <DropdownMenuContent>
+                                                                <DropdownMenuItem onClick={() => handlePreviewIntegralReport(report)}><Eye className="mr-2 h-4 w-4" /> Ver</DropdownMenuItem>
+                                                                <DropdownMenuItem onClick={() => handleExportIntegralPdf(report)}><Download className="mr-2 h-4 w-4" /> Exportar PDF</DropdownMenuItem>
+                                                                {!isPublished && <DropdownMenuItem onClick={() => handlePublishIntegralReport(report.id, report)}><Megaphone className="mr-2 h-4 w-4"/> Publicar</DropdownMenuItem>}
+                                                                {isPublished && <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteIntegralPublication(report.id)}><Trash2 className="mr-2 h-4 w-4"/> Quitar Publicación</DropdownMenuItem>}
+                                                                <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteSavedIntegralReport(report.id)}><Trash2 className="mr-2 h-4 w-4"/> Eliminar</DropdownMenuItem>
+                                                            </DropdownMenuContent>
+                                                        </DropdownMenu>
+                                                    </TableCell>
+                                                </TableRow>
+                                            );
+                                        })}
+                                    </TableBody>
+                                </Table>
+                            </CardContent>
+                        </Card>
 
-                             <h3 className="text-lg font-semibold mb-2">Reportes Integrales Guardados</h3>
-                             <Table>
-                                 <TableHeader>
-                                     <TableRow>
-                                         <TableHead>Fecha de Creación</TableHead>
-                                         <TableHead>Filtros Aplicados</TableHead>
-                                         <TableHead>Estado</TableHead>
-                                         <TableHead className="text-right">Acciones</TableHead>
-                                     </TableRow>
-                                 </TableHeader>
-                                 <TableBody>
-                                     {savedIntegralReports.map(report => {
-                                         const isPublished = publishedReports.some(p => p.sourceId === report.id);
-                                         return (
-                                             <TableRow key={report.id}>
-                                                 <TableCell>{format(report.createdAt.toDate(), "dd/MM/yyyy HH:mm")}</TableCell>
-                                                 <TableCell className="text-xs text-muted-foreground">
-                                                     <p>Estado: {report.filters.statusFilter}</p>
-                                                     <p>Propietario: {report.filters.ownerFilter || 'Todos'}</p>
-                                                 </TableCell>
-                                                 <TableCell>
-                                                     <Badge variant={isPublished ? "success" : "outline"}>{isPublished ? "Publicado" : "No Publicado"}</Badge>
-                                                 </TableCell>
-                                                 <TableCell className="text-right">
-                                                     <DropdownMenu>
-                                                         <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4"/></Button></DropdownMenuTrigger>
-                                                         <DropdownMenuContent>
-                                                             <DropdownMenuItem onClick={() => handlePreviewIntegralReport(report)}><Eye className="mr-2 h-4 w-4" /> Ver</DropdownMenuItem>
-                                                             <DropdownMenuItem onClick={() => handleExportIntegralPdf(report)}><Download className="mr-2 h-4 w-4" /> Exportar PDF</DropdownMenuItem>
-                                                             {!isPublished && <DropdownMenuItem onClick={() => handlePublishIntegralReport(report.id, report)}><Megaphone className="mr-2 h-4 w-4"/> Publicar</DropdownMenuItem>}
-                                                             {isPublished && <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteIntegralPublication(report.id)}><Trash2 className="mr-2 h-4 w-4"/> Quitar Publicación</DropdownMenuItem>}
-                                                             <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteSavedIntegralReport(report.id)}><Trash2 className="mr-2 h-4 w-4"/> Eliminar</DropdownMenuItem>
-                                                         </DropdownMenuContent>
-                                                     </DropdownMenu>
-                                                 </TableCell>
-                                             </TableRow>
-                                         );
-                                     })}
-                                 </TableBody>
-                             </Table>
-                        </CardContent>
-                    </Card>
+                        {/* --- Tarjeta de Balances Financieros --- */}
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Balances Financieros Guardados</CardTitle>
+                                <CardDescription>Gestione los balances mensuales que ha guardado.</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                 <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Período</TableHead>
+                                            <TableHead>Fecha de Guardado</TableHead>
+                                            <TableHead>Estado</TableHead>
+                                            <TableHead className="text-right">Acciones</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {savedFinancialStatements.map(statement => {
+                                            const isPublished = publishedReports.some(p => p.id === `balance-${statement.id}`);
+                                            const periodDate = parse(statement.id, 'yyyy-MM', new Date());
+                                            const periodLabel = format(periodDate, 'MMMM yyyy', { locale: es });
+                                            return (
+                                                <TableRow key={statement.id}>
+                                                    <TableCell className="capitalize">{periodLabel}</TableCell>
+                                                    <TableCell>{format(statement.createdAt.toDate(), "dd/MM/yyyy HH:mm")}</TableCell>
+                                                    <TableCell><Badge variant={isPublished ? 'success' : 'outline'}>{isPublished ? 'Publicado' : 'No Publicado'}</Badge></TableCell>
+                                                    <TableCell className="text-right">
+                                                        <DropdownMenu>
+                                                            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4"/></Button></DropdownMenuTrigger>
+                                                            <DropdownMenuContent>
+                                                                <Link href={`/owner/report/balance-${statement.id}`} passHref target="_blank">
+                                                                    <DropdownMenuItem><Eye className="mr-2 h-4 w-4"/> Ver como Propietario</DropdownMenuItem>
+                                                                </Link>
+                                                                {isPublished ? (
+                                                                    <DropdownMenuItem className="text-destructive" onClick={() => handleUnpublishBalanceReport(statement.id)}>
+                                                                        <Trash2 className="mr-2 h-4 w-4"/> Quitar Publicación
+                                                                    </DropdownMenuItem>
+                                                                ) : (
+                                                                    <DropdownMenuItem onClick={() => handlePublishBalanceReport(statement.id)}>
+                                                                        <Megaphone className="mr-2 h-4 w-4"/> Publicar
+                                                                    </DropdownMenuItem>
+                                                                )}
+                                                                <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteSavedBalanceReport(statement.id)}>
+                                                                    <Trash2 className="mr-2 h-4 w-4"/> Eliminar
+                                                                </DropdownMenuItem>
+                                                            </DropdownMenuContent>
+                                                        </DropdownMenu>
+                                                    </TableCell>
+                                                </TableRow>
+                                            );
+                                        })}
+                                    </TableBody>
+                                </Table>
+                            </CardContent>
+                        </Card>
+                    </div>
                 </TabsContent>
 
                  <TabsContent value="individual">
@@ -2026,3 +2102,4 @@ export default function ReportsPage() {
         </div>
     );
 }
+
