@@ -6,7 +6,7 @@ import {
     collection, query, doc, Timestamp, getDoc, where, getDocs, setDoc, serverTimestamp 
 } from 'firebase/firestore';
 import { 
-    Download, Loader2, RefreshCw, Save, Eye
+    Download, Loader2, RefreshCw, Save
 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
@@ -117,7 +117,7 @@ export default function FinancialBalancePage() {
         fetchData();
     }, [authLoading, currentCondoId, loadData]);
 
-    const generatePDF = async (outputType: 'download' | 'preview' = 'download') => {
+    const generatePDF = async () => {
         if (!currentCondoId || !companyInfo) return;
         const docPDF = new jsPDF();
         const pageWidth = docPDF.internal.pageSize.getWidth();
@@ -130,22 +130,29 @@ export default function FinancialBalancePage() {
         // LOGO REDONDO
         if (companyInfo.logo) {
             try {
+                // Coordenadas para el logo circular
                 const centerX = 26;
                 const centerY = 22.5;
                 const radius = 12;
-
+        
+                // 1. Dibujamos el círculo que servirá de máscara
+                // Usamos 'S' (stroke) pero lo importante es el clipping posterior
+                docPDF.setDrawColor(245, 158, 11); // Color Ámbar
+                docPDF.setLineWidth(0.8);
+                docPDF.circle(centerX, centerY, radius, 'S'); 
+        
+                // 2. Aplicamos el recorte (clipping)
+                // Accedemos al contexto de dibujo interno de jsPDF para mayor compatibilidad
                 (docPDF as any).saveGraphicsState();
-                (docPDF as any).circle(centerX, centerY, radius, 'f');
+                (docPDF as any).circle(centerX, centerY, radius, 'f'); // 'f' para fill (necesario para clip)
                 (docPDF as any).clip();
-
+        
+                // 3. Insertamos la imagen (quedará recortada por el círculo)
                 docPDF.addImage(companyInfo.logo, 'PNG', centerX - radius, centerY - radius, radius * 2, radius * 2);
-
+        
+                // 4. Restauramos el estado para que el resto del PDF no salga circular
                 (docPDF as any).restoreGraphicsState();
                 
-                docPDF.setDrawColor(245, 158, 11);
-                docPDF.setLineWidth(0.8);
-                docPDF.circle(centerX, centerY, radius, 'S');
-
             } catch (e) {
                 console.error("Error al procesar el logo circular en el PDF:", e);
             }
@@ -237,35 +244,27 @@ export default function FinancialBalancePage() {
             docPDF.text(notas, margin, finalY + 40, { maxWidth: pageWidth - 30 });
         }
 
-        if (outputType === 'download') {
-            docPDF.save(`EFAS_Balance_${currentCondoId}_${selectedYear}_${selectedMonth}.pdf`);
-        } else {
-            window.open(docPDF.output('bloburl'), '_blank');
-        }
+        docPDF.save(`EFAS_Balance_${currentCondoId}_${selectedYear}_${selectedMonth}.pdf`);
     };
 
     if (authLoading || dataLoading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin h-10 w-10 text-primary" /></div>;
 
     return (
         <div className="max-w-7xl mx-auto space-y-6">
-            <div className="flex justify-between items-center">
-                <div>
-                    <h2 className="text-4xl font-black text-foreground uppercase tracking-tighter italic">
-                        Balance <span className="text-primary">Financiero</span>
-                    </h2>
-                    <div className="h-1.5 w-20 bg-amber-500 mt-2 rounded-full"></div>
-                </div>
-                <div className="flex gap-2">
-                    <Button variant="outline" onClick={loadData} disabled={syncing} className="rounded-2xl">
-                        <RefreshCw className={syncing ? 'animate-spin' : ''} />
-                    </Button>
-                    <Button variant="outline" onClick={() => generatePDF('preview')} className="rounded-2xl">
-                        <Eye className="mr-2 h-4 w-4"/> Vista Previa
-                    </Button>
-                    <Button className="bg-primary rounded-2xl" onClick={() => generatePDF('download')}>
-                        <Download className="mr-2 h-4 w-4"/> Descargar
-                    </Button>
-                </div>
+            <div className="mb-10">
+                <h2 className="text-4xl font-black text-foreground uppercase tracking-tighter italic">
+                    Balance <span className="text-primary">Financiero</span>
+                </h2>
+                <div className="h-1.5 w-20 bg-amber-500 mt-2 rounded-full"></div>
+            </div>
+
+            <div className="flex gap-2">
+                <Button variant="outline" onClick={loadData} disabled={syncing} className="rounded-2xl">
+                    <RefreshCw className={syncing ? 'animate-spin' : ''} />
+                </Button>
+                <Button className="bg-primary rounded-2xl" onClick={generatePDF}>
+                    <Download className="mr-2 h-4 w-4"/> Descargar
+                </Button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
