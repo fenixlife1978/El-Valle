@@ -79,8 +79,8 @@ function VerifyPaymentsTab() {
     const [ownersMap, setOwnersMap] = useState<Map<string, Owner>>(new Map());
     const [isReceiptPreviewOpen, setIsReceiptPreviewOpen] = useState(false);
     const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
-    const [receiptImageToView, setReceiptImageToView] = useState<string | null>(null);
     const [isGenerating, setIsGenerating] = useState(false);
+    const [receiptImageToView, setReceiptImageToView] = useState<string | null>(null);
 
     const [isBeneficiarySelectionOpen, setIsBeneficiarySelectionOpen] = useState(false);
     const [paymentForBeneficiarySelection, setPaymentForBeneficiarySelection] = useState<FullPayment | null>(null);
@@ -500,6 +500,62 @@ function VerifyPaymentsTab() {
         }
     };
 
+    const openReceiptForBeneficiary = async (payment: FullPayment, beneficiary: Beneficiary) => {
+        if (!activeCondoId || !companyInfo) {
+            toast({ variant: "destructive", title: "Error", description: "Datos de configuración incompletos." });
+            return;
+        }
+
+        setIsGenerating(true);
+        setReceiptData(null);
+        setIsReceiptPreviewOpen(true);
+
+        try {
+            const ownerId = beneficiary.ownerId;
+            const ownerRef = doc(db, 'condominios', activeCondoId, 'owners', ownerId);
+            const ownerSnap = await getDoc(ownerRef);
+            if (!ownerSnap.exists()) throw new Error(`Propietario ${ownerId} no encontrado.`);
+            const ownerData = { id: ownerSnap.id, ...ownerSnap.data() } as Owner;
+
+            const paidDebtsSnapshot = await getDocs(
+                query(collection(db, 'condominios', activeCondoId, 'debts'), where('paymentId', '==', payment.id), where('ownerId', '==', ownerId))
+            );
+            const paidDebts = paidDebtsSnapshot.docs.map(d => d.data() as Debt);
+
+            const totalDebtPaidWithPayment = paidDebts.reduce((sum, debt) => sum + ((debt.paidAmountUSD || debt.amountUSD) * payment.exchangeRate), 0);
+            const previousBalance = (ownerData.balance || 0) - (beneficiary.amount - totalDebtPaidWithPayment);
+
+            const QRCode = await import('qrcode');
+            const receiptNumber = payment.receiptNumbers?.[ownerId] || `N/A-${payment.id.slice(-5)}`;
+            const receiptUrl = `${window.location.origin}/receipt/${payment.id}/${beneficiary.ownerId}`;
+            const qrDataContent = JSON.stringify({ receiptNumber, date: format(new Date(), 'yyyy-MM-dd'), amount: beneficiary.amount, ownerId: beneficiary.ownerId, url: receiptUrl });
+            const qrCodeUrl = await QRCode.toDataURL(qrDataContent, { errorCorrectionLevel: 'M', margin: 2, scale: 4, color: { dark: '#000000', light: '#FFFFFF' } });
+
+            const ownerUnit = (ownerData.properties && ownerData.properties.length > 0)
+                ? `${ownerData.properties[0].street} - ${ownerData.properties[0].house}`
+                : 'N/A';
+                
+            setReceiptData({
+                payment,
+                beneficiary,
+                ownerName: ownerData.name,
+                ownerUnit: ownerUnit,
+                paidDebts: paidDebts.sort((a, b) => a.year - b.year || a.month - b.month),
+                previousBalance,
+                currentBalance: ownerData.balance || 0,
+                receiptNumber,
+                qrCodeUrl
+            });
+
+        } catch (error: any) {
+            console.error("Error al preparar recibo:", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo cargar la información para el recibo. ' + error.message });
+            setIsReceiptPreviewOpen(false);
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+
 
     const filteredPayments = payments.filter(p => filter === 'todos' || p.status === filter);
     
@@ -898,26 +954,23 @@ function ReportPaymentTab() {
                                                         <Label>Asignar a Propiedad</Label>
                                                         <Select 
                                                           onValueChange={(v) => {
-                                                            // Validamos que sea array antes de buscar
                                                             const props = Array.isArray(row.owner?.properties) ? row.owner.properties : [];
                                                             const found = props.find(p => `${p.street}-${p.house}` === v);
                                                             updateBeneficiaryRow(row.id, { selectedProperty: found || null });
                                                           }} 
                                                           value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''} 
-                                                          // Si no hay propiedades (Admin/SuperAdmin), deshabilitamos el selector
                                                           disabled={loading || !row.owner || !Array.isArray(row.owner.properties)}
                                                         >
                                                           <SelectTrigger className="rounded-xl">
                                                             <SelectValue 
                                                               placeholder={
-                                                                Array.isArray(row.owner.properties) 
+                                                                Array.isArray(row.owner.properties) && row.owner.properties.length > 0
                                                                   ? "Seleccione una propiedad..." 
-                                                                  : "Usuario sin propiedades (Admin)"
+                                                                  : "Usuario sin propiedades"
                                                               } 
                                                             />
                                                           </SelectTrigger>
                                                           <SelectContent>
-                                                            {/* Usamos el operador de encadenamiento opcional ?. y validamos tipo Array */}
                                                             {Array.isArray(row.owner?.properties) ? (
                                                               row.owner.properties.map((p, pIdx) => (
                                                                 <SelectItem 
@@ -962,7 +1015,7 @@ function ReportPaymentTab() {
                     </CardFooter>
                 </form>
             </Card>
-    
+
             <BankSelectionModal isOpen={isBankModalOpen} onOpenChange={setIsBankModalOpen} selectedValue={bank} onSelect={(value) => { setBank(value); if (value !== 'Otro') setOtherBank(''); setIsBankModalOpen(false); }} />
             
             <Dialog open={isInfoDialogOpen} onOpenChange={setIsInfoDialogOpen}>
@@ -986,180 +1039,6 @@ function ReportPaymentTab() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-        </div>
-    );
-}
-
-// ===================================================================================
-// CALCULATOR TAB COMPONENT
-// ===================================================================================
-function AdminCalculatorTab() {
-    const { activeCondoId } = useAuth();
-    
-    // States for this tab
-    const [allOwners, setAllOwners] = useState<Owner[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [selectedOwner, setSelectedOwner] = useState<Owner | null>(null);
-    const [ownerDebts, setOwnerDebts] = useState<Debt[]>([]);
-    const [loadingDebts, setLoadingDebts] = useState(false);
-    const [activeRate, setActiveRate] = useState(0);
-    const [condoFee, setCondoFee] = useState(0);
-    const [selectedPendingDebts, setSelectedPendingDebts] = useState<string[]>([]);
-    const [selectedAdvanceMonths, setSelectedAdvanceMonths] = useState<string[]>([]);
-    const [now, setNow] = useState<Date | null>(null);
-
-    useEffect(() => {
-        setNow(new Date());
-    }, []);
-
-    // Fetch all owners and global settings
-    useEffect(() => {
-        if (!activeCondoId) {
-            setLoading(false);
-            return;
-        }
-        const ownersQuery = query(collection(db, 'condominios', activeCondoId, 'owners'), where("role", "==", "propietario"));
-        const unsubOwners = onSnapshot(ownersQuery, (snap) => {
-            setAllOwners(snap.docs.map(d => ({id: d.id, ...d.data()} as Owner)).sort((a, b) => (a.name || '').localeCompare(b.name || '')));
-            setLoading(false);
-        });
-
-        const settingsRef = doc(db, 'condominios', activeCondoId, 'config', 'mainSettings');
-        const unsubSettings = onSnapshot(settingsRef, (docSnap) => {
-            if (docSnap.exists()) {
-                const settings = docSnap.data();
-                setCondoFee(settings.condoFee || 0);
-                const rates = settings.exchangeRates || [];
-                const activeRateObj = rates.find((r: any) => r.active);
-                if (activeRateObj) setActiveRate(activeRateObj.rate);
-            }
-        });
-
-        return () => { unsubOwners(); unsubSettings(); };
-    }, [activeCondoId]);
-
-    // Fetch debts when an owner is selected
-    useEffect(() => {
-        if (!selectedOwner || !activeCondoId) {
-            setOwnerDebts([]);
-            return;
-        }
-        setLoadingDebts(true);
-        const debtsQuery = query(collection(db, "condominios", activeCondoId, "debts"), where("ownerId", "==", selectedOwner.id));
-        const unsubDebts = onSnapshot(debtsQuery, (snapshot) => {
-            setOwnerDebts(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Debt)).sort((a, b) => a.year - b.year || a.month - b.month));
-            setLoadingDebts(false);
-        });
-        return () => unsubDebts();
-    }, [selectedOwner, activeCondoId]);
-
-    const handleOwnerSelect = (owner: Owner) => {
-        setSelectedOwner(owner);
-        setSearchTerm('');
-        setSelectedPendingDebts([]);
-        setSelectedAdvanceMonths([]);
-    };
-
-    const filteredOwners = useMemo(() => {
-        if (!searchTerm || searchTerm.length < 2) return [];
-        return allOwners.filter(owner => owner.name?.toLowerCase().includes(searchTerm.toLowerCase()));
-    }, [searchTerm, allOwners]);
-
-    const pendingDebts = useMemo(() => ownerDebts.filter(d => d.status === 'pending' || d.status === 'vencida'), [ownerDebts]);
-
-    const futureMonths = useMemo(() => {
-        if (!now) return [];
-        const paidAdvanceMonths = ownerDebts.filter(d => d.status === 'paid' && d.description.includes('Adelantado')).map(d => `${d.year}-${String(d.month).padStart(2, '0')}`);
-        return Array.from({ length: 12 }, (_, i) => {
-            const date = addMonths(now, i);
-            const value = format(date, 'yyyy-MM');
-            return { value, label: format(date, 'MMMM yyyy', { locale: es }), disabled: paidAdvanceMonths.includes(value) };
-        });
-    }, [ownerDebts, now]);
-
-    const paymentCalculator = useMemo(() => {
-        if (!selectedOwner) return { totalToPay: 0, hasSelection: false, dueMonthsCount: 0, advanceMonthsCount: 0, totalDebtBs: 0, balanceInFavor: 0 };
-        const dueMonthsTotalUSD = pendingDebts.filter(d => selectedPendingDebts.includes(d.id)).reduce((sum, d) => sum + d.amountUSD, 0);
-        const advanceMonthsTotalUSD = selectedAdvanceMonths.length * condoFee;
-        const totalDebtUSD = dueMonthsTotalUSD + advanceMonthsTotalUSD;
-        const totalDebtBs = totalDebtUSD * activeRate;
-        const totalToPay = Math.max(0, totalDebtBs - (selectedOwner.balance || 0));
-        return { totalToPay, hasSelection: selectedPendingDebts.length > 0 || selectedAdvanceMonths.length > 0, dueMonthsCount: selectedPendingDebts.length, advanceMonthsCount: selectedAdvanceMonths.length, totalDebtBs, balanceInFavor: selectedOwner.balance || 0, condoFee };
-    }, [selectedPendingDebts, selectedAdvanceMonths, pendingDebts, activeRate, condoFee, selectedOwner]);
-    
-    return (
-        <Card>
-            <CardHeader>
-                <CardTitle>Calculadora de Pagos para Propietarios</CardTitle>
-                <CardDescription>Busque un propietario para calcular sus deudas pendientes o pagos por adelantado.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-                {!selectedOwner ? (
-                    <div className="space-y-4">
-                        <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Buscar por nombre de propietario..." className="pl-9" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} disabled={loading}/></div>
-                        {loading ? <Loader2 className="mx-auto my-4 h-6 w-6 animate-spin" /> : (searchTerm && filteredOwners.length > 0) && (
-                            <Card className="border rounded-md"><ScrollArea className="h-48">{filteredOwners.map(owner => (<div key={owner.id} onClick={() => handleOwnerSelect(owner)} className="p-3 hover:bg-muted cursor-pointer border-b last:border-b-0"><p className="font-medium text-sm">{owner.name}</p></div>))}</ScrollArea></Card>
-                        )}
-                    </div>
-                ) : (
-                    <div className="space-y-6">
-                        <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                            <p>Calculando para: <span className="font-bold text-primary">{selectedOwner.name}</span></p>
-                            <Button variant="outline" size="sm" onClick={() => setSelectedOwner(null)}><XCircle className="mr-2 h-4 w-4"/>Cambiar Propietario</Button>
-                        </div>
-                        {loadingDebts ? <Loader2 className="mx-auto my-4 h-6 w-6 animate-spin" /> : (
-                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-                                <div className="lg:col-span-2 space-y-4">
-                                     <Card><CardHeader><CardTitle>1. Deudas Pendientes</CardTitle></CardHeader><CardContent><Table><TableHeader><TableRow><TableHead>Pagar</TableHead><TableHead>Período</TableHead><TableHead>Estado</TableHead><TableHead className="text-right">Monto (Bs.)</TableHead></TableRow></TableHeader><TableBody>{pendingDebts.length > 0 ? pendingDebts.map(d => <TableRow key={d.id}><TableCell><Checkbox onCheckedChange={() => setSelectedPendingDebts(p => p.includes(d.id) ? p.filter(id => id !== d.id) : [...p, d.id])} checked={selectedPendingDebts.includes(d.id)} /></TableCell><TableCell>{monthsLocale[d.month]} {d.year}</TableCell><TableCell><Badge variant={isBefore(startOfMonth(new Date(d.year, d.month - 1)), startOfMonth(new Date())) ? 'destructive' : 'warning'}>{isBefore(startOfMonth(new Date(d.year, d.month - 1)), startOfMonth(new Date())) ? 'Vencida' : 'Pendiente'}</Badge></TableCell><TableCell className="text-right">Bs. {formatToTwoDecimals(d.amountUSD * activeRate)}</TableCell></TableRow>) : <TableRow><TableCell colSpan={4} className="h-24 text-center">No hay deudas pendientes.</TableCell></TableRow>}</TableBody></Table></CardContent></Card>
-                                     <Card><CardHeader><CardTitle>2. Pagar Meses por Adelantado</CardTitle></CardHeader><CardContent><div className="grid grid-cols-2 sm:grid-cols-4 gap-4">{futureMonths.map(m => <Button key={m.value} variant={selectedAdvanceMonths.includes(m.value) ? "default" : "outline"} onClick={() => setSelectedAdvanceMonths(p => p.includes(m.value) ? p.filter(id => id !== m.value) : [...p, m.value])} disabled={m.disabled}>{m.label}</Button>)}</div></CardContent></Card>
-                                </div>
-                                <div className="lg:sticky lg:top-20">
-                                    {paymentCalculator.hasSelection && <Card><CardHeader><CardTitle>3. Resumen de Pago</CardTitle></CardHeader><CardContent className="space-y-3"><div className="flex justify-between items-center"><span className="text-muted-foreground">Sub-Total Deuda:</span><span className="font-medium">Bs. {formatToTwoDecimals(paymentCalculator.totalDebtBs)}</span></div><div className="flex justify-between items-center"><span className="text-muted-foreground">Saldo a Favor:</span><span className="font-medium text-success">Bs. {formatToTwoDecimals(paymentCalculator.balanceInFavor)}</span></div><Separator /><div className="flex justify-between items-center text-xl font-bold"><span className="flex items-center">TOTAL A PAGAR:</span><span className="text-primary">Bs. {formatToTwoDecimals(paymentCalculator.totalToPay)}</span></div></CardContent></Card>}
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                )}
-            </CardContent>
-        </Card>
-    );
-}
-
-
-// ===================================================================================
-// MAIN PAGE COMPONENT (DEFAULT EXPORT)
-// ===================================================================================
-export default function PaymentsPage() {
-    return (
-        <div className="space-y-6">
-            <div className="mb-10">
-                 <h2 className="text-4xl font-black text-foreground uppercase tracking-tighter italic drop-shadow-sm">
-                    Gestión de <span className="text-primary">Pagos</span>
-                </h2>
-                <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
-                <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">
-                    Registre, verifique y gestione los pagos de los propietarios.
-                </p>
-            </div>
-            <Tabs defaultValue="verify" className="w-full">
-                <TabsList className="grid w-full grid-cols-3 bg-secondary/30 border-border p-0">
-                    <TabsTrigger value="verify" className="rounded-none data-[state=active]:bg-card data-[state=active]:shadow-none data-[state=active]:font-bold">Verificar Pagos</TabsTrigger>
-                    <TabsTrigger value="report" className="rounded-none data-[state=active]:bg-card data-[state=active]:shadow-none data-[state=active]:font-bold">Reportar Pago (Admin)</TabsTrigger>
-                    <TabsTrigger value="calculator" className="rounded-none data-[state=active]:bg-card data-[state=active]:shadow-none data-[state=active]:font-bold">Calculadora</TabsTrigger>
-                </TabsList>
-                <TabsContent value="verify" className="mt-0">
-                    <Suspense fallback={<Loader2 className="animate-spin" />}>
-                        <VerifyPaymentsTab />
-                    </Suspense>
-                </TabsContent>
-                <TabsContent value="report" className="mt-0">
-                    <ReportPaymentTab />
-                </TabsContent>
-                <TabsContent value="calculator" className="mt-0">
-                    <AdminCalculatorTab />
-                </TabsContent>
-            </Tabs>
         </div>
     );
 }
