@@ -33,7 +33,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import JsBarcode from 'jsbarcode';
 import QRCode from 'qrcode';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { Textarea } from '@/components/ui/textarea';
 
 
@@ -48,7 +48,7 @@ type Owner = {
 type BeneficiaryRow = { id: string; owner: Owner | null; searchTerm: string; amount: string; selectedProperty: { street: string, house: string } | null; };
 type PaymentMethod = 'movil' | 'transferencia' | '';
 type Debt = { id: string; ownerId: string; year: number; month: number; amountUSD: number; description: string; status: 'pending' | 'paid' | 'vencida'; property: { street: string; house: string }; paidAmountUSD?: number;};
-type Payment = { id: string; beneficiaries: { ownerId: string; ownerName: string; amount: number; street?: string; house?: string; }[]; beneficiaryIds: string[]; totalAmount: number; exchangeRate: number; paymentDate: Timestamp; reportedAt: Timestamp; paymentMethod: 'transferencia' | 'movil' | 'efectivo' | 'zelle'; bank: string; reference: string; status: 'pendiente' | 'aprobado' | 'rechazado'; receiptUrl?: string; observations?: string; receiptNumbers?: { [ownerId: string]: string }; };
+type Payment = { id: string; beneficiaries: { ownerId: string; ownerName: string; amount: number; street?: string; house?: string; }[]; beneficiaryIds: string[]; totalAmount: number; exchangeRate: number; paymentDate: Timestamp; reportedAt: Timestamp; paymentMethod: 'transferencia' | 'movil' | 'efectivo' | 'zelle'; bank: string; reference: string; status: 'pendiente' | 'aprobado' | 'rechazado'; receiptUrl?: string; observations?: string; receiptNumbers?: { [ownerId: string]: string }; type?: string; };
 type ReceiptData = { payment: Payment; beneficiary: any; ownerName: string; ownerUnit: string; paidDebts: Debt[]; previousBalance: number; currentBalance: number; qrCodeUrl?: string; receiptNumber: string; } | null;
 type PaymentDetails = { paymentMethod: 'movil' | 'transferencia' | ''; bank: string; otherBank: string; reference: string; };
 
@@ -224,6 +224,234 @@ function VerificationComponent() {
             }
         });
     };
+
+    const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptData) => {
+        if (!data || !companyInfo) return;
+        setIsGenerating(true);
+    
+        const { payment, beneficiary, paidDebts, previousBalance, currentBalance, qrCodeUrl, receiptNumber } = data;
+        
+        try {
+            const doc = new jsPDF();
+            const pageWidth = doc.internal.pageSize.getWidth();
+            const headerHeight = 35;
+            const margin = 14;
+            
+            // --- HEADER ---
+            doc.setFillColor(28, 43, 58); // #1C2B3A
+            doc.rect(0, 0, pageWidth, headerHeight, 'F');
+            doc.setTextColor(255, 255, 255);
+    
+            doc.setFontSize(14).setFont('helvetica', 'bold');
+            doc.text(companyInfo.name, margin, 15);
+            doc.setFontSize(9).setFont('helvetica', 'normal');
+            doc.text(`RIF: ${companyInfo.rif}`, margin, 22);
+    
+            doc.setFontSize(12).setFont('helvetica', 'bold');
+            doc.text('EFAS CondoSys', pageWidth - margin, 15, { align: 'right' });
+            doc.setFontSize(8).setFont('helvetica', 'normal');
+            doc.text('RECIBO DE PAGO', pageWidth - margin, 20, { align: 'right' });
+    
+            doc.setTextColor(0, 0, 0);
+    
+            // --- BARCODE ---
+            let startY = headerHeight + 30;
+            const canvas = document.createElement('canvas');
+            const barcodeValue = `REC-${receiptNumber}`;
+            try {
+                JsBarcode(canvas, barcodeValue, {
+                    format: "CODE128", height: 30, width: 1.5, displayValue: false, margin: 0,
+                });
+                const barcodeDataUrl = canvas.toDataURL("image/png");
+                doc.addImage(barcodeDataUrl, 'PNG', pageWidth - margin - 55, headerHeight + 5, 50, 15);
+                doc.setFontSize(8).text(barcodeValue, pageWidth - margin - 55, headerHeight + 23);
+            } catch (e) {
+                console.error("Barcode generation failed", e);
+            }
+    
+            // 2. Title Section
+            doc.setFontSize(16).setFont('helvetica', 'bold').text("RECIBO DE PAGO", pageWidth / 2, startY, { align: 'center' });
+            doc.setFontSize(9).setFont('helvetica', 'normal').text(`N° de recibo: ${receiptNumber}`, pageWidth - margin, startY, { align: 'right' });
+            startY += 8;
+    
+            // 3. Details Section
+            doc.setFontSize(9);
+            const detailsX = margin;
+            doc.text(`Beneficiario: ${beneficiary.ownerName} (${data.ownerUnit})`, detailsX, startY);
+            startY += 5;
+            doc.text(`Método de pago: ${payment.type}`, detailsX, startY);
+            startY += 5;
+            doc.text(`Banco Emisor: ${payment.bank}`, detailsX, startY);
+            startY += 5;
+            doc.text(`N° de Referencia Bancaria: ${payment.reference}`, detailsX, startY);
+            startY += 5;
+            doc.text(`Fecha del pago: ${format(payment.paymentDate.toDate(), 'dd/MM/yyyy')}`, detailsX, startY);
+            startY += 5;
+            doc.text(`Tasa de Cambio Aplicada: Bs. ${formatCurrency(payment.exchangeRate)} por USD`, detailsX, startY);
+            
+            startY += 15;
+    
+            // 4. Main Table
+            let totalPaidInConcepts = 0;
+            const tableBody = paidDebts.map(debt => {
+                const debtAmountBs = (debt.paidAmountUSD || debt.amountUSD) * payment.exchangeRate;
+                totalPaidInConcepts += debtAmountBs;
+                const propertyLabel = debt.property ? `${debt.property.street} - ${debt.property.house}` : 'N/A';
+                const concept = `${debt.description} (${propertyLabel})`;
+                return [ 
+                    `${MONTHS_LOCALE[debt.month]} ${debt.year}`,
+                    concept, 
+                    `$${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}`, 
+                    `Bs. ${formatCurrency(debtAmountBs)}` 
+                ];
+            });
+    
+            if (paidDebts.length === 0) {
+                totalPaidInConcepts = beneficiary.amount;
+                tableBody.push(['', 'Abono a Saldo a Favor', '', `Bs. ${formatCurrency(beneficiary.amount)}`]);
+            }
+    
+            autoTable(doc, { 
+                startY: startY, 
+                head: [['Período', 'Concepto (Propiedad)', 'Monto ($)', 'Monto Pagado (Bs)']], 
+                body: tableBody, 
+                theme: 'striped', 
+                headStyles: { fillColor: [30, 80, 180], textColor: 255 }, 
+                styles: { fontSize: 9, cellPadding: 2.5 },
+                columnStyles: {
+                    2: { halign: 'right' },
+                    3: { halign: 'right' },
+                }
+            });
+            startY = (doc as any).lastAutoTable.finalY + 10;
+            
+            // 5. Summary and Total
+            const rightColX = pageWidth - margin;
+            doc.setFontSize(9);
+            
+            doc.text('Saldo a Favor Anterior:', rightColX - 50, startY, { align: 'right' });
+            doc.text(`Bs. ${formatCurrency(previousBalance)}`, rightColX, startY, { align: 'right' });
+            startY += 5;
+            
+            doc.text('Monto del Pago Recibido:', rightColX - 50, startY, { align: 'right' });
+            doc.text(`Bs. ${formatCurrency(beneficiary.amount)}`, rightColX, startY, { align: 'right' });
+            startY += 5;
+    
+            doc.text('Total Abonado en Deudas:', rightColX - 50, startY, { align: 'right' });
+            doc.text(`Bs. ${formatCurrency(totalPaidInConcepts)}`, rightColX, startY, { align: 'right' });
+            startY += 5;
+    
+            doc.text('Saldo a Favor Actual:', rightColX - 50, startY, { align: 'right' });
+            doc.text(`Bs. ${formatCurrency(currentBalance)}`, rightColX, startY, { align: 'right' });
+            startY += 8;
+        
+            doc.setFont('helvetica', 'bold');
+            doc.text('TOTAL PAGADO:', rightColX - 50, startY, { align: 'right' });
+            doc.text(`Bs. ${formatCurrency(beneficiary.amount)}`, rightColX, startY, { align: 'right' });
+            startY += 10;
+    
+            // 6. Footer Notes
+            startY = Math.max(startY, 220); 
+            doc.setFontSize(8).setFont('helvetica', 'normal');
+    
+            if (payment.observations) {
+                const obsText = `Observaciones: ${payment.observations}`;
+                doc.text(obsText, margin, startY);
+                startY += 5;
+            }
+    
+            const note1 = 'Todo propietario que requiera de firma y sello húmedo deberá imprimir éste recibo y hacerlo llegar al condominio para su respectiva estampa.';
+            const note2 = "Este recibo confirma que el pago ha sido validado para la(s) cuota(s) y propiedad(es) aquí detalladas.";
+            const note3 = `Firma electrónica: '${companyInfo.name} - Condominio'`;
+    
+            doc.text(note1, margin, startY);
+            startY += 4;
+            doc.text(note2, margin, startY);
+            startY += 4;
+            doc.text(note3, margin, startY);
+            startY += 8;
+    
+            doc.setLineWidth(0.2).line(margin, startY, pageWidth - margin, startY);
+            startY += 4;
+            doc.setFont('helvetica', 'italic').text('Este recibo se generó de manera automatica y es válido sin firma manuscrita.', pageWidth / 2, startY, { align: 'center'});
+            
+            const pdfOutput = doc.output('blob');
+            const pdfFile = new File([pdfOutput], `recibo_${receiptNumber}.pdf`, { type: 'application/pdf' });
+    
+            if (action === 'download') {
+                doc.save(`recibo_${receiptNumber}.pdf`);
+            } else if (navigator.share && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+              try {
+                  await navigator.share({
+                      title: `Recibo de Pago ${data.receiptNumber}`, 
+                      text: `Recibo de pago para ${data.ownerName}.`,
+                      files: [pdfFile],
+                  });
+              } catch (error) {
+                console.error('Error al compartir:', error);
+                const url = URL.createObjectURL(pdfFile);
+                window.open(url, '_blank');
+              }
+            } else {
+              const url = URL.createObjectURL(pdfFile);
+              window.open(url, '_blank');
+            }
+        } catch(error) {
+            console.error("Error generating PDF:", error);
+            toast({ variant: "destructive", title: "Error", description: "No se pudo generar el documento PDF." });
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+    
+    const prepareAndGenerateReceipt = async (action: 'download' | 'share', payment: Payment, beneficiary: any) => {
+        if (!beneficiary || !beneficiary.ownerId || !companyInfo || !workingCondoId) {
+            toast({ variant: "destructive", title: "Error", description: "Datos insuficientes para generar el recibo." });
+            return;
+        }
+        
+        setIsGenerating(true);
+        try {
+            const ownerRef = doc(db, 'condominios', workingCondoId, 'owners', beneficiary.ownerId);
+            const ownerSnap = await getDoc(ownerRef);
+            if (!ownerSnap.exists()) {
+                throw new Error('Owner profile not found.');
+            }
+            const ownerData = ownerSnap.data();
+    
+            const paidDebtsSnapshot = await getDocs(
+                query(collection(db, 'condominios', workingCondoId, 'debts'), where('paymentId', '==', payment.id), where('ownerId', '==', beneficiary.ownerId))
+            );
+            const paidDebts = paidDebtsSnapshot.docs.map(d => d.data() as Debt);
+            
+            const totalDebtPaidWithPayment = paidDebts.reduce((sum, debt) => sum + ((debt.paidAmountUSD || debt.amountUSD) * payment.exchangeRate), 0);
+            const previousBalance = (ownerData.balance || 0) - (beneficiary.amount - totalDebtPaidWithPayment);
+            const receiptNumber = payment.receiptNumbers?.[beneficiary.ownerId] || `N/A-${payment.id.slice(-5)}`;
+            const receiptUrl = `${window.location.origin}/receipt/${payment.id}/${beneficiary.ownerId}`;
+            const qrDataContent = JSON.stringify({ receiptNumber, date: format(new Date(), 'yyyy-MM-dd'), amount: beneficiary.amount, ownerId: beneficiary.ownerId, url: receiptUrl });
+            const qrCodeUrl = await QRCode.toDataURL(qrDataContent, { errorCorrectionLevel: 'M', margin: 2, scale: 4, color: { dark: '#000000', light: '#FFFFFF' } });
+    
+            const dataForPdf: ReceiptData = {
+                payment,
+                beneficiary,
+                ownerName: ownerData.name,
+                ownerUnit: `${ownerData.properties?.[0]?.street} - ${ownerData.properties?.[0]?.house}`,
+                paidDebts: paidDebts.sort((a,b) => a.year - b.year || a.month - b.month),
+                previousBalance: previousBalance,
+                currentBalance: ownerData.balance || 0,
+                receiptNumber: receiptNumber,
+                qrCodeUrl: qrCodeUrl
+            };
+            
+            await handleGenerateAndAct(action, dataForPdf);
+    
+        } catch (error: any) {
+            console.error("Error al preparar recibo:", error);
+            toast({ variant: 'destructive', title: 'Error', description: error.message || 'No se pudo cargar la información para el recibo.' });
+        } finally {
+            setIsGenerating(false);
+        }
+    };
     
     return (
         <Card>
@@ -281,7 +509,22 @@ function VerificationComponent() {
                                                     <DropdownMenu>
                                                         <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4"/></Button></DropdownMenuTrigger>
                                                         <DropdownMenuContent>
-                                                            <DropdownMenuItem onClick={() => setSelectedPayment(p)}><Eye className="mr-2 h-4 w-4"/>Ver Recibo</DropdownMenuItem>
+                                                            <DropdownMenuItem onClick={() => setSelectedPayment(p)}><Eye className="mr-2 h-4 w-4"/>Ver Detalles</DropdownMenuItem>
+                                                            <DropdownMenuSeparator />
+                                                            <DropdownMenuItem 
+                                                                onClick={() => prepareAndGenerateReceipt('download', p, p.beneficiaries[0])} 
+                                                                disabled={isGenerating || !p.beneficiaries || p.beneficiaries.length === 0}
+                                                            >
+                                                                {isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Download className="mr-2 h-4 w-4" />} 
+                                                                Exportar PDF
+                                                            </DropdownMenuItem>
+                                                            <DropdownMenuItem 
+                                                                onClick={() => prepareAndGenerateReceipt('share', p, p.beneficiaries[0])} 
+                                                                disabled={isGenerating || !p.beneficiaries || p.beneficiaries.length === 0}
+                                                            >
+                                                                <Share2 className="mr-2 h-4 w-4" /> Compartir
+                                                            </DropdownMenuItem>
+                                                            <DropdownMenuSeparator />
                                                             <DropdownMenuItem className="text-destructive" onClick={() => setPaymentToDelete(p)}><Trash2 className="mr-2 h-4 w-4"/>Eliminar</DropdownMenuItem>
                                                         </DropdownMenuContent>
                                                     </DropdownMenu>
@@ -752,7 +995,7 @@ function PaymentCalculatorUI({ owner, debts, activeRate, condoFee }: { owner: an
                          <CardHeader><CardTitle className="flex items-center"><Calculator className="mr-2 h-5 w-5"/> 3. Resumen de Pago</CardTitle><CardDescription>Cálculo basado en su selección.</CardDescription></CardHeader>
                         <CardContent className="space-y-3">
                             {paymentCalculator.dueMonthsCount > 0 && <p className="text-sm text-muted-foreground">{paymentCalculator.dueMonthsCount} mes(es) adeudado(s) seleccionado(s).</p>}
-                            {paymentCalculator.advanceMonthsCount > 0 && <p className="text-sm text-muted-foreground">{paymentCalculator.advanceMonthsCount} mes(es) por adelanto x ${paymentCalculator.condoFee.toFixed(2)} c/u.</p>}
+                            {paymentCalculator.advanceMonthsCount > 0 && <p className="text-sm text-muted-foreground">{paymentCalculator.advanceMonthsCount} mes(es) por adelanto seleccionado(s) x ${(paymentCalculator.condoFee ?? 0).toFixed(2)} c/u.</p>}
                             <hr className="my-2"/><div className="flex justify-between items-center text-lg"><span className="text-muted-foreground">Sub-Total Deuda:</span><span className="font-medium">Bs. {formatCurrency(paymentCalculator.totalDebtBs)}</span></div>
                             <div className="flex justify-between items-center text-md"><span className="text-muted-foreground flex items-center"><Minus className="mr-2 h-4 w-4"/> Saldo a Favor:</span><span className="font-medium text-green-500">Bs. {formatCurrency(paymentCalculator.balanceInFavor)}</span></div>
                             <hr className="my-2"/><div className="flex justify-between items-center text-2xl font-bold"><span className="flex items-center"><Equal className="mr-2 h-5 w-5"/> TOTAL A PAGAR:</span><span className="text-primary">Bs. {formatCurrency(paymentCalculator.totalToPay)}</span></div>
