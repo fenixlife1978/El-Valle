@@ -703,7 +703,7 @@ function ReportPaymentComponent() {
         if (!file) return;
         setLoading(true);
         try {
-            const compressedBase64 = await compressImage(file, 800, 800);
+            const compressedBase64 = await compressImage(file);
             setReceiptImage(compressedBase64);
             toast({ title: 'Comprobante cargado', description: 'La imagen se ha optimizado.' });
         } catch (error) { toast({ variant: 'destructive', title: 'Error de imagen' }); } 
