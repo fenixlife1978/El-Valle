@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
@@ -13,7 +12,7 @@ import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
 import Link from 'next/link';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
-import { SYSTEM_LOGO, COMPANY_NAME, SYSTEM_WORDMARK } from '@/lib/constants';
+import { SYSTEM_LOGO } from '@/lib/constants';
 
 const ADMIN_EMAIL = 'vallecondo@gmail.com';
 
@@ -129,10 +128,6 @@ function LoginPage() {
         <main className="min-h-screen flex flex-col items-center justify-center bg-background p-4 font-montserrat relative overflow-hidden">
             <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/10 blur-[100px] rounded-full"></div>
             <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-amber-500/5 blur-[100px] rounded-full"></div>
-
-            <div className="text-center mb-8 relative z-10">
-                <img src={SYSTEM_WORDMARK} alt={COMPANY_NAME} className="w-64 mx-auto" />
-            </div>
 
             <Card className="w-full max-w-sm border-border shadow-2xl rounded-[2.5rem] overflow-hidden bg-card/80 backdrop-blur-xl text-card-foreground relative z-10">
                 <CardHeader className="text-center pb-2 pt-8">
