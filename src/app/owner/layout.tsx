@@ -15,9 +15,9 @@ const ownerNavItems: NavItem[] = [
     icon: Landmark, 
     label: "Pagos",
     items: [
-      { href: "/owner/payments/report", label: "Reportar Pago" },
+      { href: "/owner/payments?tab=report", label: "Reportar Pago" },
       { href: "/owner/payment-methods", label: "Métodos de Pago" },
-      { href: "/owner/payments/calculator", label: "Calculadora de Pagos" },
+      { href: "/owner/payments?tab=calculator", label: "Calculadora de Pagos" },
     ]
   },
   { 
@@ -42,8 +42,8 @@ const ownerBottomNavItems: BottomNavItem[] = [
     label: 'Reportar', 
     isCentral: true,
     subMenu: [
-        { href: "/owner/payments/report", icon: Plus, label: "Reportar Pago" },
-        { href: "/owner/payments/calculator", icon: Calculator, label: "Calculadora" },
+        { href: "/owner/payments?tab=report", icon: Plus, label: "Reportar Pago" },
+        { href: "/owner/payments?tab=calculator", icon: Calculator, label: "Calculadora" },
         { href: "/owner/certificates", icon: Award, label: "Constancias" },
         { href: "/owner/surveys", icon: ClipboardList, label: "Encuestas" },
     ]
