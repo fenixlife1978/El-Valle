@@ -10,8 +10,8 @@
     --card-foreground: 210 40% 98%;
     --popover: 220 15% 12%;
     --popover-foreground: 210 40% 98%;
-    --primary: 221 83% 58%; /* Vibrant Blue */
-    --primary-foreground: 210 40% 98%;
+    --primary: 33 94% 50%; /* Vibrant Orange */
+    --primary-foreground: 240 10% 3.9%; /* Dark for contrast */
     --secondary: 220 13% 25%; /* Lighter dark grey for elements */
     --secondary-foreground: 210 40% 98%;
     --muted: 220 13% 25%;
@@ -26,13 +26,13 @@
     --warning-foreground: 215 25% 27%;
     --border: 220 13% 25%; /* Border color */
     --input: 220 13% 30%;
-    --ring: 221 83% 58%;
+    --ring: 33 94% 50%; /* Vibrant Orange */
     --radius: 0.75rem;
 
     --sidebar-background: 220 15% 12%;
     --sidebar-foreground: 210 40% 98%; 
-    --sidebar-accent: 221 83% 58%;
-    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-accent: 33 94% 50%; /* Vibrant Orange */
+    --sidebar-accent-foreground: 240 10% 3.9%; /* Dark for contrast */
     --sidebar-border: 220 13% 25%;
   }
 }

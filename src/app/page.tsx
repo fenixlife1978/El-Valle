@@ -31,7 +31,7 @@ export default function LandingPage() {
             </Link>
           </nav>
           <Link href="/login">
-            <Button className="bg-[#0070f3] hover:bg-[#005bb5] text-white rounded-full px-8 h-10 font-bold text-xs uppercase tracking-widest shadow-lg shadow-blue-600/20 transition-all hover:scale-105">
+            <Button className="rounded-full px-8 h-10 font-bold text-xs uppercase tracking-widest shadow-lg shadow-primary/20 transition-all hover:scale-105">
               Acceso Admin
             </Button>
           </Link>
@@ -40,7 +40,7 @@ export default function LandingPage() {
 
       {/* HERO SECTION - INFORMACIÓN COMPLETA IMAGEN 1 */}
       <main className="flex flex-col items-center justify-center text-center px-6 pt-24 pb-32 relative">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[500px] bg-blue-600/5 blur-[120px] rounded-full -z-10" />
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[500px] bg-primary/10 blur-[120px] rounded-full -z-10" />
         
         <div className="relative mb-14">
           <div className="absolute inset-0 bg-[#F28705]/20 blur-3xl rounded-full" />
@@ -94,7 +94,7 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
             {/* Cobranza */}
             <div className="bg-[#1E2128] p-12 rounded-[3rem] border border-white/5 flex flex-col items-center text-center group transition-all duration-500 hover:border-[#F28705]/50">
-              <div className="w-20 h-20 bg-blue-500/10 rounded-3xl flex items-center justify-center mb-8 text-[#0070f3] group-hover:scale-110 transition-transform">
+              <div className="w-20 h-20 bg-primary/10 rounded-3xl flex items-center justify-center mb-8 text-primary group-hover:scale-110 transition-transform">
                 <Wallet size={40} />
               </div>
               <h3 className="text-2xl font-black text-white mb-5 uppercase tracking-tight italic">Cobranza Multidivisa</h3>
