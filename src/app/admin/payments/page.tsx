@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
@@ -397,19 +396,19 @@ function VerificationComponent() {
                                                                 </>
                                                             )}
                                                             
-                                                            {p.status === 'aprobado' && (
+                                                            {p.status === 'aprobado' && p.beneficiaries?.length > 0 && (
                                                                 <>
                                                                     <DropdownMenuSeparator />
                                                                     <DropdownMenuItem 
                                                                         onClick={() => prepareAndGenerateReceipt('download', p, p.beneficiaries[0])} 
-                                                                        disabled={isGenerating || !p.beneficiaries || p.beneficiaries.length === 0}
+                                                                        disabled={isGenerating}
                                                                     >
                                                                         {isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Download className="mr-2 h-4 w-4" />} 
                                                                         Exportar PDF
                                                                     </DropdownMenuItem>
                                                                     <DropdownMenuItem 
                                                                         onClick={() => prepareAndGenerateReceipt('share', p, p.beneficiaries[0])} 
-                                                                        disabled={isGenerating || !p.beneficiaries || p.beneficiaries.length === 0}
+                                                                        disabled={isGenerating}
                                                                     >
                                                                         <Share2 className="mr-2 h-4 w-4" /> Compartir
                                                                     </DropdownMenuItem>
@@ -753,7 +752,7 @@ function PaymentCalculatorComponent() {
     const paymentCalculator = useMemo(() => {
         if (!ownerData) return { totalToPay: 0, hasSelection: false, dueMonthsCount: 0, advanceMonthsCount: 0, totalDebtBs: 0, balanceInFavor: 0 };
         const pendingDebts = ownerDebts.filter(d => d.status === 'pending' || d.status === 'vencida');
-        const dueMonthsTotalUSD = pendingDebts.filter(d => selectedPendingDebts.includes(d.id)).reduce((sum, debt) => sum + debt.amountUSD, 0);
+        const dueMonthsTotalUSD = pendingDebts.filter(debt => selectedPendingDebts.includes(debt.id)).reduce((sum, debt) => sum + debt.amountUSD, 0);
         const advanceMonthsTotalUSD = selectedAdvanceMonths.length * condoFee;
         const totalDebtUSD = dueMonthsTotalUSD + advanceMonthsTotalUSD;
         const totalDebtBs = totalDebtUSD * activeRate;
@@ -849,7 +848,7 @@ function PaymentCalculatorUI({ owner, debts, activeRate, condoFee }: { owner: an
 
 function PaymentsPage() {
     const searchParams = useSearchParams();
-    const defaultTab = searchParams?.get('tab') || 'report';
+    const defaultTab = searchParams?.get('tab') || 'verify';
     
     return (
         <div className="space-y-6">
@@ -859,14 +858,18 @@ function PaymentsPage() {
                 </h2>
                 <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
                 <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">
-                    Reporta tus pagos y calcula tus deudas pendientes.
+                    Verifica pagos, registra abonos y calcula deudas pendientes.
                 </p>
             </div>
             <Tabs defaultValue={defaultTab} className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="report">Reportar Pago</TabsTrigger>
+                <TabsList className="grid w-full grid-cols-3">
+                    <TabsTrigger value="verify">Verificación de Pagos</TabsTrigger>
+                    <TabsTrigger value="report">Reportar Pago Manual</TabsTrigger>
                     <TabsTrigger value="calculator">Calculadora de Pagos</TabsTrigger>
                 </TabsList>
+                <TabsContent value="verify" className="mt-6">
+                    <VerificationComponent />
+                </TabsContent>
                 <TabsContent value="report" className="mt-6">
                     <ReportPaymentComponent />
                 </TabsContent>
@@ -885,4 +888,3 @@ export default function PaymentsPageWrapper() {
         </Suspense>
     );
 }
-
