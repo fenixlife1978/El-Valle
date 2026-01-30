@@ -387,7 +387,15 @@ export default function CertificatesPage() {
 
         let textX = margin;
         if (companyInfo?.logo) {
-            try { docPDF.addImage(companyInfo.logo, 'PNG', margin, 7, 20, 20); textX += 25; }
+            try {
+                const logoSize = 20;
+                docPDF.saveGraphicsState();
+                docPDF.circle(margin + logoSize / 2, 7 + logoSize / 2, logoSize / 2);
+                docPDF.clip();
+                docPDF.addImage(companyInfo.logo, 'PNG', margin, 7, logoSize, logoSize);
+                docPDF.restoreGraphicsState();
+                textX += logoSize + 5;
+            }
             catch(e) { console.error("Error adding logo:", e); }
         }
 

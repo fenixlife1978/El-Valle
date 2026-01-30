@@ -300,11 +300,26 @@ const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptD
         doc.setFillColor(28, 43, 58); // #1C2B3A
         doc.rect(0, 0, pageWidth, headerHeight, 'F');
         doc.setTextColor(255, 255, 255);
+        
+        let textX = margin;
+        if (companyInfo.logo) {
+            try {
+                const logoSize = 20;
+                doc.saveGraphicsState();
+                doc.circle(margin + logoSize / 2, 7 + logoSize / 2, logoSize / 2);
+                doc.clip();
+                doc.addImage(companyInfo.logo, 'PNG', margin, 7, logoSize, logoSize);
+                doc.restoreGraphicsState();
+                textX += logoSize + 5;
+            } catch (e) {
+                console.error("Error adding logo to PDF:", e);
+            }
+        }
 
         doc.setFontSize(14).setFont('helvetica', 'bold');
-        doc.text(companyInfo.name, margin, 15);
+        doc.text(companyInfo.name, textX, 15);
         doc.setFontSize(9).setFont('helvetica', 'normal');
-        doc.text(`RIF: ${companyInfo.rif}`, margin, 22);
+        doc.text(`RIF: ${companyInfo.rif}`, textX, 22);
 
         doc.setFontSize(12).setFont('helvetica', 'bold');
         doc.text('EFAS CondoSys', pageWidth - margin, 15, { align: 'right' });
