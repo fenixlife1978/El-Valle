@@ -239,18 +239,21 @@ function ReportPaymentComponent() {
     const { toast } = useToast();
     const { user: authUser, activeCondoId } = useAuth();
     const [allOwners, setAllOwners] = useState<Owner[]>([]);
+    const [loading, setLoading] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+
     const [paymentDate, setPaymentDate] = useState<Date | undefined>(new Date());
     const [exchangeRate, setExchangeRate] = useState<number | null>(null);
+    const [exchangeRateMessage, setExchangeRateMessage] = useState('');
     const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('movil');
     const [bank, setBank] = useState('');
     const [otherBank, setOtherBank] = useState('');
     const [reference, setReference] = useState('');
     const [totalAmount, setTotalAmount] = useState<string>('');
     const [receiptImage, setReceiptImage] = useState<string | null>(null);
+    const [amountUSD, setAmountUSD] = useState<string>('');
     const [beneficiaryRows, setBeneficiaryRows] = useState<BeneficiaryRow[]>([{ id: Date.now().toString(), owner: null, searchTerm: '', amount: '', selectedProperty: null }]);
     const [isBankModalOpen, setIsBankModalOpen] = useState(false);
-    const [isInfoDialogOpen, setIsInfoDialogOpen] = useState(false);
 
     useEffect(() => {
         if (!activeCondoId) return;
@@ -261,7 +264,69 @@ function ReportPaymentComponent() {
         });
         return () => unsubscribe();
     }, [activeCondoId]);
+    
+    useEffect(() => {
+        if (!activeCondoId) return;
+        const fetchRate = async () => {
+             try {
+                const settingsRef = doc(db, 'condominios', activeCondoId, 'config', 'mainSettings');
+                const docSnap = await getDoc(settingsRef);
+                if (docSnap.exists()) {
+                    const settings = docSnap.data();
+                    if (paymentDate) {
+                        setExchangeRate(null);
+                        setExchangeRateMessage('Buscando tasa...');
+                        const allRates = (settings.exchangeRates || []) as ExchangeRate[];
+                        const paymentDateString = format(paymentDate, 'yyyy-MM-dd');
+                        const applicableRates = allRates.filter(r => r.date <= paymentDateString).sort((a, b) => b.date.localeCompare(a.date));
+                        if (applicableRates.length > 0) {
+                             setExchangeRate(applicableRates[0].rate);
+                             setExchangeRateMessage('');
+                        } else {
+                           setExchangeRateMessage('No hay tasa para esta fecha.');
+                        }
+                    } else {
+                        setExchangeRate(null);
+                        setExchangeRateMessage('');
+                    }
+                } else {
+                     setExchangeRateMessage('No hay configuraciones.');
+                }
+            } catch (e) {
+                 setExchangeRateMessage('Error al buscar tasa.');
+                 console.error(e);
+            }
+        }
+        fetchRate();
+    }, [paymentDate, activeCondoId]);
 
+    useEffect(() => {
+        const bs = parseFloat(totalAmount);
+        if (!isNaN(bs) && exchangeRate && exchangeRate > 0) {
+            setAmountUSD((bs / exchangeRate).toFixed(2));
+        } else {
+            setAmountUSD('');
+        }
+    }, [totalAmount, exchangeRate]);
+
+    const resetForm = () => {
+        setPaymentDate(new Date()); setPaymentMethod('movil'); setBank(''); setOtherBank('');
+        setReference(''); setTotalAmount(''); setReceiptImage(null); setAmountUSD('');
+        setBeneficiaryRows([{ id: Date.now().toString(), owner: null, searchTerm: '', amount: '', selectedProperty: null }]);
+    };
+
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setLoading(true);
+        try {
+            const compressedBase64 = await compressImage(file, 800, 800);
+            setReceiptImage(compressedBase64);
+            toast({ title: 'Comprobante cargado', description: 'La imagen se ha optimizado.' });
+        } catch (error) { toast({ variant: 'destructive', title: 'Error de imagen' }); } 
+        finally { setLoading(false); }
+    };
+    
     const assignedTotal = useMemo(() => beneficiaryRows.reduce((acc, row) => acc + (Number(row.amount) || 0), 0), [beneficiaryRows]);
     const balance = useMemo(() => (Number(totalAmount) || 0) - assignedTotal, [totalAmount, assignedTotal]);
     const updateBeneficiaryRow = (id: string, updates: Partial<BeneficiaryRow>) => setBeneficiaryRows(rows => rows.map(row => (row.id === id ? { ...row, ...updates } : row)));
@@ -275,42 +340,119 @@ function ReportPaymentComponent() {
         if (!searchTerm || searchTerm.length < 2) return [];
         return allOwners.filter(owner => owner.name?.toLowerCase().includes(searchTerm.toLowerCase()));
     };
-
-    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        try {
-            const compressedBase64 = await compressImage(file, 800, 800);
-            setReceiptImage(compressedBase64);
-        } catch (error) { toast({ variant: 'destructive', title: 'Error de imagen' }); }
-    };
     
-    const resetForm = () => { /* ... reset logic ... */ };
+    const validateForm = async (): Promise<{ isValid: boolean, error?: string }> => {
+        if (!paymentDate || !exchangeRate || !paymentMethod || !bank || !totalAmount || Number(totalAmount) <= 0 || reference.length < 4) return { isValid: false, error: 'Complete todos los campos de la transacción (referencia min. 4 dígitos).' };
+        if (!receiptImage) return { isValid: false, error: 'Debe adjuntar una imagen del comprobante.' };
+        if (beneficiaryRows.some(row => !row.owner || !row.amount || Number(row.amount) <= 0 || !row.selectedProperty)) return { isValid: false, error: 'Complete la información para cada beneficiario.' };
+        if (Math.abs(balance) > 0.01) return { isValid: false, error: 'El monto total no coincide con la suma de los montos asignados.' };
+        if (!activeCondoId) return { isValid: false, error: "No se encontró un condominio activo." };
+        try {
+            const q = query(collection(db, "condominios", activeCondoId, "payments"), where("reference", "==", reference), where("totalAmount", "==", Number(totalAmount)), where("paymentDate", "==", Timestamp.fromDate(paymentDate)));
+            if (!(await getDocs(q)).empty) return { isValid: false, error: 'Ya existe un reporte con esta misma referencia, monto y fecha.' };
+        } catch (dbError) { return { isValid: false, error: "No se pudo verificar si el pago ya existe." }; }
+        return { isValid: true };
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsSubmitting(true);
-        if (!activeCondoId || !authUser) { setIsSubmitting(false); return; }
+
+        const validation = await validateForm();
+        if (!validation.isValid) {
+            toast({ variant: 'destructive', title: 'Error de Validación', description: validation.error, duration: 6000 });
+            setIsSubmitting(false);
+            return;
+        }
+
+        if (!authUser || !activeCondoId) {
+            toast({ variant: 'destructive', title: 'Error de Autenticación'});
+            setIsSubmitting(false);
+            return;
+        }
+
         try {
             const beneficiaries = beneficiaryRows.map(row => ({ ownerId: row.owner!.id, ownerName: row.owner!.name, ...(row.selectedProperty && { street: row.selectedProperty.street, house: row.selectedProperty.house }), amount: Number(row.amount) }));
             const paymentData = { reportedBy: authUser.uid, beneficiaries, beneficiaryIds: beneficiaries.map(b=>b.ownerId), totalAmount: Number(totalAmount), exchangeRate, paymentDate: Timestamp.fromDate(paymentDate!), paymentMethod, bank: bank === 'Otro' ? otherBank : bank, reference, receiptUrl: receiptImage, status: 'pendiente', reportedAt: serverTimestamp() };
+            
             await addDoc(collection(db, "condominios", activeCondoId, "payments"), paymentData);
+
+            const batch = writeBatch(db);
+            beneficiaries.forEach(beneficiary => {
+                const notificationsRef = doc(collection(db, `condominios/${activeCondoId}/owners/${beneficiary.ownerId}/notifications`));
+                batch.set(notificationsRef, {
+                    title: "Pago Registrado por Administración",
+                    body: `La administración ha registrado un pago a su favor por Bs. ${beneficiary.amount.toFixed(2)}. Será verificado y aplicado pronto.`,
+                    createdAt: serverTimestamp(),
+                    read: false,
+                    href: `/owner/dashboard`
+                });
+            });
+            await batch.commit();
+
             resetForm();
-            setIsInfoDialogOpen(true);
-        } catch (error) { /* handle error */ } 
-        finally { setIsSubmitting(false); }
+            toast({ title: 'Pago Reportado', description: 'El pago ha sido registrado y los propietarios notificados.' });
+
+        } catch (error) {
+            console.error("Error submitting payment: ", error);
+            toast({ variant: "destructive", title: "Error Inesperado" });
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     return (
-        <Card><CardHeader><CardTitle>Reportar Pago Manualmente</CardTitle></CardHeader>
-        <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-4">
-             {/* Form fields for admin to report a payment */}
-          </CardContent>
-          <CardFooter>
-            <Button type="submit" disabled={isSubmitting}>{isSubmitting ? <Loader2/> : 'Reportar Pago'}</Button>
-          </CardFooter>
-        </form>
+        <Card>
+            <CardHeader><CardTitle>Reportar Pago Manualmente</CardTitle><CardDescription>Registre un pago en nombre de uno o varios propietarios.</CardDescription></CardHeader>
+            <form onSubmit={handleSubmit}>
+                <CardContent className="space-y-6">
+                    <div className="grid md:grid-cols-2 gap-6">
+                        <div className="space-y-2"><Label>Fecha del Pago</Label><Popover><PopoverTrigger asChild><Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !paymentDate && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{paymentDate ? format(paymentDate, "PPP", { locale: es }) : <span>Seleccione</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar mode="single" selected={paymentDate} onSelect={setPaymentDate} initialFocus locale={es} disabled={(date) => date > new Date()} /></PopoverContent></Popover></div>
+                        <div className="space-y-2"><Label>Tasa de Cambio (Bs.)</Label><Input type="number" value={exchangeRate || ''} onChange={(e) => setExchangeRate(parseFloat(e.target.value) || null)} placeholder="Tasa del día del pago" /><p className="text-xs text-muted-foreground">{exchangeRateMessage}</p></div>
+                        <div className="space-y-2"><Label>Método de Pago</Label><Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="transferencia">Transferencia</SelectItem><SelectItem value="movil">Pago Móvil</SelectItem></SelectContent></Select></div>
+                        <div className="space-y-2"><Label>Banco Emisor</Label><Button type="button" variant="outline" className="w-full justify-start text-left font-normal" onClick={() => setIsBankModalOpen(true)}>{bank || "Seleccione un banco..."}</Button></div>
+                        {bank === 'Otro' && <div className="space-y-2"><Label>Nombre del Otro Banco</Label><Input value={otherBank} onChange={(e) => setOtherBank(e.target.value)} /></div>}
+                        <div className="space-y-2"><Label>Referencia</Label><Input value={reference} onChange={(e) => setReference(e.target.value.replace(/\D/g, ''))}/></div>
+                    </div>
+                    <div className="space-y-2"><Label>Comprobante</Label><Input type="file" onChange={handleImageUpload} />{receiptImage && <p className="text-xs text-green-600">Comprobante cargado.</p>}</div>
+                    <div className="grid md:grid-cols-2 gap-6">
+                        <div className="space-y-2"><Label>Monto Total (Bs.)</Label><Input type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} placeholder="0.00" /></div>
+                        <div className="space-y-2"><Label>Monto Equivalente (USD)</Label><div className="relative"><DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input type="text" value={amountUSD} readOnly className="pl-9 bg-muted"/></div></div>
+                    </div>
+                    <div className="space-y-4"><Label className="font-semibold">Asignación de Montos</Label>
+                        {beneficiaryRows.map((row, index) => (
+                            <Card key={row.id} className="p-4 bg-muted/50 relative">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="space-y-2"><Label htmlFor={`search-${row.id}`}>Beneficiario {index + 1}</Label>
+                                        {!row.owner ? (<><div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input id={`search-${row.id}`} placeholder="Buscar por nombre..." className="pl-9" value={row.searchTerm} onChange={(e) => updateBeneficiaryRow(row.id, { searchTerm: e.target.value })} disabled={loading} /></div>{row.searchTerm.length >= 2 && getFilteredOwners(row.searchTerm).length > 0 && <Card className="border rounded-md"><ScrollArea className="h-32">{getFilteredOwners(row.searchTerm).map(owner => (<div key={owner.id} onClick={() => handleOwnerSelect(row.id, owner)} className="p-2 hover:bg-muted cursor-pointer border-b last:border-b-0"><p className="font-medium text-sm">{owner.name}</p></div>))}</ScrollArea></Card>}</>)
+                                        : (<div className="p-3 bg-background rounded-md flex items-center justify-between"><div><p className="font-semibold text-primary">{row.owner.name}</p></div><Button variant="ghost" size="icon" onClick={() => updateBeneficiaryRow(row.id, { owner: null, selectedProperty: null })} disabled={loading}><XCircle className="h-5 w-5 text-destructive" /></Button></div>)}
+                                    </div>
+                                    <div className="space-y-2"><Label htmlFor={`amount-${row.id}`}>Monto Asignado (Bs.)</Label><Input id={`amount-${row.id}`} type="number" placeholder="0.00" value={row.amount} onChange={(e) => updateBeneficiaryRow(row.id, { amount: e.target.value })} disabled={loading || !row.owner} /></div>
+                                </div>
+                                {row.owner && (
+                                  <div className="mt-4 space-y-2">
+                                    <Label>Asignar a Propiedad</Label>
+                                    <Select onValueChange={(v) => { const props = Array.isArray(row.owner?.properties) ? row.owner.properties : []; const found = props.find(p => `${p.street}-${p.house}` === v); updateBeneficiaryRow(row.id, { selectedProperty: found || null });}} value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''} disabled={loading || !row.owner || !Array.isArray(row.owner.properties)}>
+                                      <SelectTrigger><SelectValue placeholder={Array.isArray(row.owner.properties) ? "Seleccione una propiedad..." : "Usuario sin propiedades"} /></SelectTrigger>
+                                      <SelectContent>{Array.isArray(row.owner?.properties) ? (row.owner.properties.map((p, pIdx) => (<SelectItem key={`${p.street}-${p.house}-${pIdx}`} value={`${p.street}-${p.house}`}>{`${p.street} - ${p.house}`}</SelectItem>))) : (<SelectItem value="none" disabled>No hay propiedades</SelectItem>)}</SelectContent>
+                                    </Select>
+                                  </div>
+                                )}
+                                {beneficiaryRows.length > 1 && <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive" onClick={() => removeBeneficiaryRow(row.id)} disabled={loading}><Trash2 className="h-4 w-4"/></Button>}
+                            </Card>
+                        ))}
+                        <Button type="button" variant="outline" size="sm" onClick={addBeneficiaryRow} disabled={loading}><UserPlus className="mr-2 h-4 w-4"/>Añadir Beneficiario</Button>
+                        <CardFooter className="p-4 bg-muted/50 rounded-lg space-y-2 mt-4 flex-col items-stretch">
+                            <div className="flex justify-between text-sm font-medium"><span>Monto Total del Pago:</span><span>Bs. {Number(totalAmount || 0).toFixed(2)}</span></div>
+                            <div className="flex justify-between text-sm"><span>Total Asignado:</span><span>Bs. {assignedTotal.toFixed(2)}</span></div><hr className="my-1 border-border"/><div className={cn("flex justify-between text-base font-bold", balance !== 0 ? 'text-destructive' : 'text-green-600')}><span>Balance:</span><span>Bs. {balance.toFixed(2)}</span></div>
+                        </CardFooter>
+                    </div>
+                </CardContent>
+                <CardFooter>
+                    <Button type="submit" disabled={isSubmitting}>{isSubmitting ? <Loader2 className="animate-spin"/> : 'Reportar Pago'}</Button>
+                </CardFooter>
+            </form>
+            <BankSelectionModal isOpen={isBankModalOpen} onOpenChange={setIsBankModalOpen} selectedValue={bank} onSelect={(value) => { setBank(value); if (value !== 'Otro') setOtherBank(''); setIsBankModalOpen(false); }} />
         </Card>
     );
 }

@@ -16,7 +16,7 @@ import { CalendarIcon, Check, CheckCircle2, DollarSign, FileText, Hash, Loader2,
 import { format, isBefore, startOfMonth, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn, compressImage } from '@/lib/utils';
-import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc, where, getDocs, Timestamp } from 'firebase/firestore';
+import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc, where, getDocs, Timestamp, writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { BankSelectionModal } from '@/components/bank-selection-modal';
@@ -297,16 +297,22 @@ function ReportPaymentComponent() {
             
             const paymentRef = await addDoc(collection(db, "condominios", activeCondoId, "payments"), paymentData);
             
-            const adminDocRef = doc(db, 'owners', ADMIN_USER_ID);
-            const notificationsRef = doc(collection(adminDocRef, "notifications"));
-            await setDoc(notificationsRef, {
-              title: "Nuevo Pago Reportado",
-              body: `${authOwnerData?.name || 'Un propietario'} ha reportado un nuevo pago de Bs. ${totalAmount}.`,
-              createdAt: serverTimestamp(),
-              read: false,
-              href: `/admin/payments?tab=verify`,
-              paymentId: paymentRef.id
+            const q = query(collection(db, 'condominios', activeCondoId, 'owners'), where('role', '==', 'administrador'));
+            const adminSnapshot = await getDocs(q);
+
+            const batch = writeBatch(db);
+            adminSnapshot.forEach(adminDoc => {
+                const notificationsRef = doc(collection(db, `condominios/${activeCondoId}/owners/${adminDoc.id}/notifications`));
+                batch.set(notificationsRef, {
+                    title: "Nuevo Pago Reportado",
+                    body: `${authOwnerData?.name || 'Un propietario'} ha reportado un nuevo pago por Bs. ${totalAmount}.`,
+                    createdAt: serverTimestamp(),
+                    read: false,
+                    href: `/admin/payments?tab=verify`,
+                    paymentId: paymentRef.id
+                });
             });
+            await batch.commit();
 
             resetForm();
             setIsInfoDialogOpen(true);
@@ -449,14 +455,14 @@ function ReportPaymentComponent() {
                                                       <SelectTrigger className="rounded-xl">
                                                         <SelectValue 
                                                           placeholder={
-                                                            Array.isArray(row.owner.properties) 
+                                                            Array.isArray(row.owner.properties) && row.owner.properties.length > 0
                                                               ? "Seleccione una propiedad..." 
                                                               : "Usuario sin propiedades"
                                                           } 
                                                         />
                                                       </SelectTrigger>
                                                       <SelectContent>
-                                                        {Array.isArray(row.owner?.properties) ? (
+                                                        {Array.isArray(row.owner?.properties) && row.owner.properties.length > 0 ? (
                                                           row.owner.properties.map((p, pIdx) => (
                                                             <SelectItem 
                                                               key={`${p.street}-${p.house}-${pIdx}`} 
@@ -474,7 +480,7 @@ function ReportPaymentComponent() {
                                                     </Select>
                                                   </div>
                                                 )}
-                                                {index > 0 && <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive" onClick={() => removeBeneficiaryRow(row.id)} disabled={loading}><Trash2 className="h-4 w-4"/></Button>}
+                                                {beneficiaryRows.length > 1 && <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive" onClick={() => removeBeneficiaryRow(row.id)} disabled={loading}><Trash2 className="h-4 w-4"/></Button>}
                                             </Card>
                                         ))}
                                         <Button type="button" variant="outline" size="sm" onClick={addBeneficiaryRow} disabled={loading}><UserPlus className="mr-2 h-4 w-4"/>Añadir Otro Beneficiario</Button>
@@ -695,7 +701,8 @@ function PaymentCalculatorComponent() {
             setProcessingPayment(false);
         }
     };
-    
+
+
     if (authLoading || loadingDebts) {
         return <div className="flex justify-center items-center h-64"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>;
     }
