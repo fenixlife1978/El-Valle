@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -78,6 +77,11 @@ export default function SuperAdminPage() {
     localStorage.setItem('support_mode_id', id);
     router.push('/admin/dashboard');
   };
+  
+  const handleLogout = async () => {
+    await signOut(auth);
+    router.replace('/');
+  };
 
   const toggleStatus = async (id: string, currentStatus: string) => {
     const newStatus = currentStatus === 'active' ? 'suspended' : 'active';
@@ -108,7 +112,7 @@ export default function SuperAdminPage() {
             </p>
         </div>
         <div className="flex gap-2">
-          <Button onClick={() => signOut(auth)} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground font-bold rounded-xl px-6 uppercase italic">
+          <Button onClick={handleLogout} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground font-bold rounded-xl px-6 uppercase italic">
             <LogOut className="w-4 h-4 mr-2" /> Salir
           </Button>
         </div>

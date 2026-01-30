@@ -11,7 +11,7 @@ import { SupportBanner } from '@/components/support-banner';
 import { Loader2 } from 'lucide-react';
 import { Montserrat } from 'next/font/google';
 import { cn } from '@/lib/utils';
-import { SYSTEM_LOGO, COMPANY_NAME } from '@/lib/constants';
+import { SYSTEM_LOGO, COMPANY_NAME, SYSTEM_WORDMARK } from '@/lib/constants';
 
 const montserrat = Montserrat({
   subsets: ['latin'],
@@ -41,7 +41,7 @@ function AuthGuard({ children }: { children: ReactNode }) {
     } 
     
     if (!user && !isPublic) {
-      router.replace('/login');
+      router.replace('/');
     }
   }, [user, role, loading, pathname, router, isSuperAdmin]);
 
@@ -58,8 +58,8 @@ function AuthGuard({ children }: { children: ReactNode }) {
             <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
             
             <p className="font-black italic tracking-tighter text-3xl uppercase">
-              <span className="text-orange-500">EFAS</span>
-              <span className="text-slate-800 dark:text-slate-100"> CONDOSYS</span>
+              <span className="text-primary">EFAS</span>
+              <span className="text-foreground">CONDOSYS</span>
             </p>
             <p className="text-[9px] text-muted-foreground font-bold tracking-[0.4em] uppercase mt-2">
               Autogestión de Condominios

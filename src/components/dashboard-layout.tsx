@@ -1,4 +1,3 @@
-
 'use client';
 
 import Link from 'next/link';
@@ -39,6 +38,7 @@ import {
 import { useAuth } from '@/hooks/use-auth';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
+import { SYSTEM_LOGO, SYSTEM_WORDMARK, COMPANY_NAME } from '@/lib/constants';
 
 export type NavItem = {
   href: string;
@@ -67,7 +67,7 @@ const CustomHeader = ({
   
   const handleLogout = async () => {
     await signOut(auth);
-    router.push('/');
+    router.replace('/');
   };
   
   const userName = ownerData?.name || 'Usuario';
@@ -78,8 +78,8 @@ const CustomHeader = ({
       <div className="flex items-center gap-4">
         <div className="flex flex-col">
           <h1 className="text-2xl font-black italic uppercase tracking-tighter">
-              <span className="text-orange-500">EFAS</span>
-              <span className="text-slate-800 dark:text-slate-100">CONDOSYS</span>
+              <span className="text-primary">EFAS</span>
+              <span className="text-foreground">CONDOSYS</span>
           </h1>
           <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-80 leading-tight">
             Sistema de Autogestión de Condominios
@@ -164,12 +164,12 @@ const CustomHeader = ({
               <SheetTitle>
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 rounded-full overflow-hidden bg-white border p-1 shadow-sm flex items-center justify-center">
-                    <img src={companyInfo?.logo || "/efas-condosys-logo.png"} alt="Logo" className="w-full h-full object-contain" />
+                    <img src={companyInfo?.logo || SYSTEM_LOGO} alt="Logo" className="w-full h-full object-contain" />
                   </div>
                   <div className="flex flex-col leading-none">
                     <div className="flex items-center gap-0.5">
-                      <span className="font-black text-xl text-amber-500">EFAS</span>
-                      <span className="font-bold text-xl text-primary">CondoSys</span>
+                      <span className="font-black text-xl text-primary">EFAS</span>
+                      <span className="font-bold text-xl text-foreground">CondoSys</span>
                     </div>
                   </div>
                 </div>
@@ -225,8 +225,8 @@ export function DashboardLayout({
       <div className="h-screen w-screen bg-background flex flex-col items-center justify-center gap-4">
         <Loader2 className="animate-spin h-12 w-12 text-primary"/>
         <div className="flex items-center gap-1 text-lg font-black uppercase tracking-widest animate-pulse">
-            <span className="text-orange-500">EFAS</span>
-            <span className="text-primary">CondoSys</span>
+            <span className="text-primary">EFAS</span>
+            <span className="text-foreground">CondoSys</span>
         </div>
       </div>
     );
@@ -246,8 +246,8 @@ export function DashboardLayout({
       <footer className="p-8 text-center border-t bg-card/50">
         <div className="flex flex-col items-center gap-1">
           <div className="flex items-center gap-1 text-base">
-            <span className="font-black text-orange-500">EFAS</span>
-            <span className="font-bold text-slate-800 dark:text-slate-100">CondoSys</span>
+            <span className="font-black text-primary">EFAS</span>
+            <span className="font-bold text-foreground">CondoSys</span>
             <span className="text-muted-foreground ml-1 text-xs">© {new Date().getFullYear()}</span>
           </div>
           <p className="text-[10px] text-muted-foreground uppercase tracking-[0.25em] font-black">
