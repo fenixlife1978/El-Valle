@@ -1,5 +1,7 @@
-import {genkit} from 'genkit';
-import {googleAI} from '@genkit-ai/google-genai';
+import { genkit } from 'genkit';
+
+// Usamos una declaración de tipo "any" para que el compilador no busque las declaraciones de tipo inexistentes
+const googleAI: any = (require('@genkit-ai/google-genai') as any).googleAI;
 
 export const ai = genkit({
   plugins: [googleAI()],

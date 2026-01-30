@@ -13,7 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
-import { CalendarIcon, Check, CheckCircle2, DollarSign, FileText, Hash, Loader2, Upload, Banknote, Info, X, Save, FileUp, UserPlus, Trash2, XCircle, Search, ChevronDown, Minus, Equal, Receipt } from 'lucide-react';
+import { CalendarIcon, Check, CheckCircle2, DollarSign, FileText, Hash, Loader2, Upload, Banknote, Info, X, Save, FileUp, UserPlus, Trash2, XCircle, Search, ChevronDown, Minus, Equal, Receipt, Calculator } from 'lucide-react';
 import { format, isBefore, startOfMonth, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn, compressImage } from '@/lib/utils';
@@ -610,44 +610,10 @@ function PaymentCalculatorComponent() {
 }
 
 
-// --- MAIN PAGE COMPONENT ---
-
-function PaymentsPage() {
-    const searchParams = useSearchParams();
-    const defaultTab = searchParams?.get('tab') || 'report';
-
-    return (
-        <div className="space-y-8">
-            <div className="mb-10">
-                <h2 className="text-4xl font-black text-foreground uppercase tracking-tighter italic drop-shadow-sm">
-                    Gestión de <span className="text-primary">Pagos</span>
-                </h2>
-                <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
-                <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">
-                    Reporta tus pagos o utiliza la calculadora para saber cuánto debes.
-                </p>
-            </div>
-            <Tabs defaultValue={defaultTab} className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="report">Reportar Pago</TabsTrigger>
-                    <TabsTrigger value="calculator">Calculadora de Pagos</TabsTrigger>
-                </TabsList>
-                <TabsContent value="report" className="mt-6">
-                    <ReportPaymentComponent />
-                </TabsContent>
-                <TabsContent value="calculator" className="mt-6">
-                    <PaymentCalculatorComponent />
-                </TabsContent>
-            </Tabs>
-        </div>
-    );
-}
-
 // --- UI for Calculator (reused) ---
 function PaymentCalculatorUI({ owner, debts, activeRate, condoFee }: { owner: any; debts: Debt[]; activeRate: number; condoFee: number }) {
     const [selectedPendingDebts, setSelectedPendingDebts] = useState<string[]>([]);
     const [selectedAdvanceMonths, setSelectedAdvanceMonths] = useState<string[]>([]);
-    const { toast } = useToast();
     const now = new Date();
     
     const pendingDebts = useMemo(() => debts.filter(d => d.status === 'pending' || d.status === 'vencida').sort((a,b) => a.year - b.year || a.month - b.month), [debts]);
@@ -731,3 +697,4 @@ export default function PaymentsPageWrapper() {
 }
 
     
+
