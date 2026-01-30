@@ -110,8 +110,13 @@ export default function OwnersManagement() {
         
         const { id, name, email, role, balance, properties, password } = currentOwner;
 
-        if (!name || !email) {
-            toast({ variant: 'destructive', title: 'Faltan datos', description: 'Nombre y correo son obligatorios.' });
+        if (!name.trim()) {
+            toast({ variant: 'destructive', title: 'Faltan datos', description: 'El nombre es obligatorio.' });
+            return;
+        }
+
+        if (!id && (!email || !email.trim())) {
+            toast({ variant: 'destructive', title: 'Faltan datos', description: 'El correo es obligatorio para nuevos registros.' });
             return;
         }
 
@@ -131,7 +136,7 @@ export default function OwnersManagement() {
                         return;
                     }
                     
-                    const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
+                    const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email!, password);
                     const newUser = userCredential.user;
 
                     await signOut(secondaryAuth);
