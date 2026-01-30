@@ -1,7 +1,5 @@
-
 'use client';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,7 +7,6 @@ import { Shield, User } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useEffect } from 'react';
 import { useGatekeeper } from '@/hooks/use-gatekeeper';
-import { SYSTEM_WORDMARK } from '@/lib/constants';
 
 
 export default function WelcomePage() {
@@ -26,7 +23,14 @@ export default function WelcomePage() {
     return (
         <main className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
             <div className="text-center mb-8">
-                <img src={SYSTEM_WORDMARK} alt="EFAS CondoSys Logo" className="w-64 mx-auto mb-6" />
+                <div className="mb-6">
+                    <h1 className="text-5xl font-black italic tracking-tighter uppercase">
+                        <span className="text-primary">EFAS</span><span className="text-foreground">CONDOSYS</span>
+                    </h1>
+                    <p className="text-sm text-muted-foreground font-bold tracking-wider mt-2">
+                        Autogestión de Condominios
+                    </p>
+                </div>
                 <h1 className="text-2xl font-bold text-foreground">Bienvenido</h1>
                 <p className="text-muted-foreground mt-2">Seleccione su tipo de acceso para continuar.</p>
             </div>
