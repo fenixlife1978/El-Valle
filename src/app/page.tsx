@@ -14,28 +14,20 @@ export default function LandingPage() {
       {/* HEADER - ESTRUCTURA EXACTA IMAGEN 1 */}
       <header className="flex items-center justify-between px-8 py-5 border-b border-white/5 sticky top-0 bg-[#1A1D23]/95 backdrop-blur-md z-50">
         <div className="flex items-center gap-4">
-          <div className="border border-white/10 rounded-xl p-1 bg-white/5 shadow-inner">
-            <img 
-              src={SYSTEM_LOGO} 
-              alt={COMPANY_NAME} 
-              className="h-10 w-auto object-contain rounded-lg"
-              onError={(e) => { e.currentTarget.src = 'https://via.placeholder.com/40?text=EFAS'; }}
-            />
-          </div>
           <img 
-            src="https://i.supaimg.com/afd3a5b0-7942-4e45-b2b0-cf892310e6ea.png"
-            alt="EFAS Condosys"
+            src={SYSTEM_LOGO} 
+            alt={COMPANY_NAME} 
             className="h-10 w-auto object-contain"
           />
         </div>
 
         <div className="flex items-center gap-8">
           <nav className="hidden md:flex items-center gap-6">
-            <Link href="/login" className="text-xs font-black text-slate-400 hover:text-[#F28705] transition-colors uppercase tracking-widest">
+            <Link href="/login?role=owner" className="text-xs font-black text-slate-400 hover:text-[#F28705] transition-colors uppercase tracking-widest">
               Propietarios
             </Link>
           </nav>
-          <Link href="/login">
+          <Link href="/login?role=admin">
             <Button className="rounded-full px-8 h-10 font-bold text-xs uppercase tracking-widest shadow-lg shadow-primary/20 transition-all hover:scale-105">
               Acceso Admin
             </Button>
@@ -48,11 +40,10 @@ export default function LandingPage() {
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[500px] bg-primary/10 blur-[120px] rounded-full -z-10" />
         
         <div className="relative mb-14">
-          <div className="absolute inset-0 bg-[#F28705]/20 blur-3xl rounded-full" />
           <img 
             src={SYSTEM_LOGO} 
             alt="Logo Central" 
-            className="relative h-auto w-72 md:w-80 object-contain shadow-2xl"
+            className="relative h-auto w-72 md:w-96 object-contain"
           />
         </div>
 
@@ -137,7 +128,7 @@ export default function LandingPage() {
       <footer className="py-20 text-center border-t border-white/5 bg-[#1A1D23]">
         <div className="flex flex-col items-center gap-6">
           <div className="flex items-center gap-3 opacity-50">
-            <img src={SYSTEM_LOGO} alt="EFAS" className="h-6 w-auto grayscale object-contain" />
+            <img src={SYSTEM_LOGO} alt="EFAS" className="h-8 w-auto grayscale object-contain" />
           </div>
           <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.5em]">
             © 2026 {COMPANY_NAME} - Elevando el estándar de gestión
