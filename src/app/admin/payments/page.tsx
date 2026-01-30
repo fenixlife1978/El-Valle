@@ -12,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
-import { CalendarIcon, Check, CheckCircle, Clock, DollarSign, Eye, FileText, Hash, Loader2, Upload, Banknote, Info, X, Save, FileUp, UserPlus, Trash2, XCircle, Search, ChevronDown, Minus, Equal, Receipt, AlertTriangle, User, MoreHorizontal, Download, Share2, Calculator, ArrowLeft } from 'lucide-react';
+import { CalendarIcon, Check, CheckCircle, Clock, DollarSign, Eye, FileText, Hash, Loader2, Upload, Banknote, Info, X, Save, FileUp, UserPlus, Trash2, XCircle, Search, ChevronDown, Minus, Equal, Receipt, AlertTriangle, User, MoreHorizontal, Download, Share2, Calculator } from 'lucide-react';
 import { format, isBefore, startOfMonth, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn, compressImage } from '@/lib/utils';
@@ -85,6 +85,8 @@ function VerificationComponent() {
     const [isGenerating, setIsGenerating] = useState(false);
     const [rejectionReason, setRejectionReason] = useState('');
     const [paymentToDelete, setPaymentToDelete] = useState<Payment | null>(null);
+    const [loadingDetails, setLoadingDetails] = useState(false);
+    const [liquidatedDetails, setLiquidatedDetails] = useState<{ debts: Debt[], balanceCredit: number } | null>(null);
 
     useEffect(() => {
         if (!workingCondoId) { setLoading(false); return; }
@@ -98,6 +100,46 @@ function VerificationComponent() {
         });
         return () => unsubscribe();
     }, [workingCondoId, toast]);
+
+    useEffect(() => {
+        if (!selectedPayment || !workingCondoId || selectedPayment.status !== 'aprobado') {
+            setLiquidatedDetails(null);
+            return;
+        }
+    
+        const fetchLiquidationDetails = async () => {
+            setLoadingDetails(true);
+            try {
+                const debtsQuery = query(
+                    collection(db, 'condominios', workingCondoId, 'debts'),
+                    where('paymentId', '==', selectedPayment.id)
+                );
+                const debtsSnapshot = await getDocs(debtsQuery);
+                const debtsPaid = debtsSnapshot.docs.map(doc => doc.data() as Debt);
+                
+                const totalAllocatedToDebts = debtsPaid.reduce((sum, debt) => {
+                    const debtAmountBs = (debt.paidAmountUSD || debt.amountUSD) * selectedPayment.exchangeRate;
+                    return sum + debtAmountBs;
+                }, 0);
+    
+                const balanceCredit = selectedPayment.totalAmount - totalAllocatedToDebts;
+    
+                setLiquidatedDetails({
+                    debts: debtsPaid.sort((a,b) => a.year - b.year || a.month - b.month),
+                    balanceCredit: balanceCredit > 0.01 ? balanceCredit : 0
+                });
+    
+            } catch (error) {
+                console.error("Error fetching liquidation details:", error);
+                toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron cargar los detalles de la liquidación.' });
+            } finally {
+                setLoadingDetails(false);
+            }
+        };
+    
+        fetchLiquidationDetails();
+    
+    }, [selectedPayment, workingCondoId, toast]);
 
     const filteredPayments = useMemo(() => {
         return payments.filter(p => {
@@ -514,7 +556,52 @@ function VerificationComponent() {
                                     </div>
                                 )}
                             </div>
-                            <div><Label>Comprobante de Pago</Label>{selectedPayment?.receiptUrl ? (<div className="mt-2 border rounded-lg overflow-hidden"><Image src={selectedPayment.receiptUrl} alt="Comprobante" width={400} height={600} className="w-full h-auto" /></div>) : <p className="text-sm text-muted-foreground">No se adjuntó comprobante.</p>}</div>
+                            <div>
+                                <Label>Comprobante de Pago</Label>
+                                {selectedPayment?.receiptUrl ? (<div className="mt-2 border rounded-lg overflow-hidden"><Image src={selectedPayment.receiptUrl} alt="Comprobante" width={400} height={600} className="w-full h-auto" /></div>) : <p className="text-sm text-muted-foreground">No se adjuntó comprobante.</p>}
+                            </div>
+                            {selectedPayment?.status === 'aprobado' && (
+                                <div className="md:col-span-2 mt-4">
+                                    <Card>
+                                        <CardHeader>
+                                            <CardTitle className="text-base flex items-center gap-2">
+                                                <CheckCircle className="h-5 w-5 text-success" />
+                                                Desglose de Liquidación
+                                            </CardTitle>
+                                        </CardHeader>
+                                        <CardContent>
+                                            {loadingDetails ? (
+                                                <div className="flex justify-center p-4">
+                                                    <Loader2 className="animate-spin text-primary"/>
+                                                </div>
+                                            ) : (
+                                                liquidatedDetails && (
+                                                    <ul className="space-y-2 text-sm">
+                                                        {liquidatedDetails.debts.map(debt => (
+                                                            <li key={debt.id} className="flex justify-between items-center p-2 rounded-md hover:bg-muted/50">
+                                                                <div>
+                                                                    <p className="font-medium">{debt.description}</p>
+                                                                    <p className="text-xs text-muted-foreground">{MONTHS_LOCALE[debt.month]} {debt.year}</p>
+                                                                </div>
+                                                                <span className="font-mono font-semibold text-right">Bs. {formatCurrency((debt.paidAmountUSD || debt.amountUSD) * selectedPayment.exchangeRate)}</span>
+                                                            </li>
+                                                        ))}
+                                                        {liquidatedDetails.balanceCredit > 0 && (
+                                                            <li className="flex justify-between items-center p-2 rounded-md bg-green-50 text-green-700">
+                                                                <p className="font-semibold">Abono a Saldo a Favor</p>
+                                                                <span className="font-mono font-bold">Bs. {formatCurrency(liquidatedDetails.balanceCredit)}</span>
+                                                            </li>
+                                                        )}
+                                                        {liquidatedDetails.debts.length === 0 && liquidatedDetails.balanceCredit <= 0 && (
+                                                            <p className="text-muted-foreground italic text-center p-4">Este pago no liquidó conceptos específicos o ya fue revertido.</p>
+                                                        )}
+                                                    </ul>
+                                                )
+                                            )}
+                                        </CardContent>
+                                    </Card>
+                                </div>
+                            )}
                         </div>
                         {selectedPayment?.status === 'pendiente' && (<DialogFooter className="border-t pt-4 gap-2 flex-col sm:flex-row"><Button variant="destructive" onClick={() => handleReject(selectedPayment!)} disabled={isVerifying || !rejectionReason}>{isVerifying ? <Loader2 className="animate-spin" /> : <XCircle className="mr-2"/>} Rechazar</Button><Button onClick={() => handleApprove(selectedPayment!)} disabled={isVerifying} className="bg-green-500 hover:bg-green-600">{isVerifying ? <Loader2 className="animate-spin" /> : <CheckCircle className="mr-2"/>} Aprobar</Button></DialogFooter>)}
                     </DialogContent>
@@ -940,7 +1027,14 @@ function PaymentCalculatorUI({ owner, debts, activeRate, condoFee }: { owner: an
                         <div className="flex justify-between items-center text-md"><span className="text-muted-foreground flex items-center"><Minus className="mr-2 h-4 w-4"/> Saldo a Favor:</span><span className="font-medium text-green-500">Bs. {formatCurrency(paymentCalculator.balanceInFavor)}</span></div>
                         <hr className="my-2"/><div className="flex justify-between items-center text-2xl font-bold"><span className="flex items-center"><Equal className="mr-2 h-5 w-5"/> TOTAL A PAGAR:</span><span className="text-primary">Bs. {formatCurrency(paymentCalculator.totalToPay)}</span></div>
                     </CardContent>
-                    <CardFooter><Button className="w-full" asChild disabled={!paymentCalculator.hasSelection || paymentCalculator.totalToPay <= 0}><Link href="/owner/payments?tab=report"><Receipt className="mr-2 h-4 w-4"/>Proceder al Reporte de Pago</Link></Button></CardFooter>
+                    <CardFooter>
+                        <Button className="w-full" asChild disabled={!paymentCalculator.hasSelection || paymentCalculator.totalToPay <= 0}>
+                            <Link href="/owner/payments?tab=report">
+                                <Receipt className="mr-2 h-4 w-4"/>
+                                Proceder al Reporte de Pago
+                            </Link>
+                        </Button>
+                    </CardFooter>
                 </Card>}
             </div>
         </div>
