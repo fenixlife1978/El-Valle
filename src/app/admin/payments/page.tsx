@@ -33,6 +33,7 @@ import { generatePaymentReceipt } from '@/lib/pdf-generator';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { Textarea } from '@/components/ui/textarea';
 import Link from 'next/link';
+import { processPaymentLiquidation } from '@/lib/payment-processor';
 
 
 // --- TYPES ---
@@ -122,40 +123,107 @@ function VerificationComponent() {
                     const paymentRef = doc(db, 'condominios', workingCondoId, 'payments', payment.id);
                     const receiptNumbers: { [ownerId: string]: string } = {};
 
+                    const settingsRef = doc(db, 'condominios', workingCondoId, 'config', 'mainSettings');
+                    const settingsDoc = await getDoc(settingsRef); // Non-transactional read
+                    if (!settingsDoc.exists()) throw new Error("No se encontró la configuración del condominio (condoFee).");
+                    const condoFeeUSD = settingsDoc.data().condoFee || 0;
+
                     for (const beneficiary of payment.beneficiaries) {
                         const ownerRef = doc(db, 'condominios', workingCondoId, 'owners', beneficiary.ownerId);
                         const ownerDoc = await transaction.get(ownerRef);
                         if (!ownerDoc.exists()) throw new Error(`El propietario ${beneficiary.ownerName} no fue encontrado.`);
 
-                        let ownerBalance = ownerDoc.data().balance || 0;
-                        let paymentAmountLeft = beneficiary.amount;
-                        
-                        receiptNumbers[beneficiary.ownerId] = `REC-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 90000) + 10000)}`;
+                        const saldoAFavorPrevio = ownerDoc.data().balance || 0;
+                        const montoRecibido = beneficiary.amount;
 
                         const debtsQuery = query(collection(db, 'condominios', workingCondoId, 'debts'), where('ownerId', '==', beneficiary.ownerId), where('status', 'in', ['pending', 'vencida']), orderBy('year'), orderBy('month'));
-                        const debtsSnapshot = await getDocs(debtsQuery);
+                        const debtsSnapshot = await getDocs(debtsQuery); // Non-transactional read, but required by Firebase transaction model
 
-                        for (const debtDoc of debtsSnapshot.docs) {
-                            if (paymentAmountLeft <= 0) break;
-                            const debt = debtDoc.data() as Debt;
-                            const debtAmountBs = debt.amountUSD * payment.exchangeRate;
+                        const cuotasPendientes = debtsSnapshot.docs.map(doc => {
+                            const debt = doc.data() as Debt;
+                            return {
+                                id: doc.id,
+                                amountUSD: debt.amountUSD,
+                                monto: debt.amountUSD * payment.exchangeRate,
+                                year: debt.year,
+                                month: debt.month,
+                                description: debt.description
+                            };
+                        });
 
-                            if (paymentAmountLeft >= debtAmountBs) {
-                                transaction.update(debtDoc.ref, { status: 'paid', paymentId: payment.id, paymentDate: payment.paymentDate, paidAmountUSD: debt.amountUSD });
-                                paymentAmountLeft -= debtAmountBs;
+                        const costoCuotaActualBs = condoFeeUSD * payment.exchangeRate;
+
+                        const liquidationResult = processPaymentLiquidation(
+                            montoRecibido,
+                            saldoAFavorPrevio,
+                            cuotasPendientes,
+                            costoCuotaActualBs
+                        );
+
+                        // 1. Update liquidated debts
+                        for (const liquidada of liquidationResult.cuotasLiquidadas) {
+                            const debtRef = doc(db, 'condominios', workingCondoId, 'debts', liquidada.id);
+                            transaction.update(debtRef, {
+                                status: 'paid',
+                                paymentId: payment.id,
+                                paymentDate: payment.paymentDate,
+                                paidAmountUSD: liquidada.amountUSD
+                            });
+                        }
+
+                        // 2. Handle advance payments
+                        if (liquidationResult.cuotasAdelantadas > 0 && condoFeeUSD > 0) {
+                            const allDebtsQuery = query(collection(db, 'condominios', workingCondoId, 'debts'), where('ownerId', '==', beneficiary.ownerId), orderBy('year', 'desc'), orderBy('month', 'desc'));
+                            const allDebtsSnapshot = await getDocs(allDebtsQuery); // Non-transactional read
+                            const allOwnerDebts = allDebtsSnapshot.docs.map(d => ({id: d.id, ...d.data()} as Debt));
+                            
+                            let lastPaidPeriod = { year: 1970, month: 0 };
+                            allOwnerDebts.forEach(d => {
+                                const isNewlyLiquidated = liquidationResult.cuotasLiquidadas.some(l => l.id === d.id);
+                                if (d.status === 'paid' || isNewlyLiquidated) {
+                                    if (d.year > lastPaidPeriod.year || (d.year === lastPaidPeriod.year && d.month > lastPaidPeriod.month)) {
+                                        lastPaidPeriod = { year: d.year, month: d.month };
+                                    }
+                                }
+                            });
+
+                            let nextPeriodDate = lastPaidPeriod.year === 1970 
+                                ? startOfMonth(new Date()) 
+                                : addMonths(new Date(lastPaidPeriod.year, lastPaidPeriod.month - 1), 1);
+
+                            for (let i = 0; i < liquidationResult.cuotasAdelantadas; i++) {
+                                const futureYear = nextPeriodDate.getFullYear();
+                                const futureMonth = nextPeriodDate.getMonth() + 1;
+                                
+                                const debtRef = doc(collection(db, "condominios", workingCondoId, "debts"));
+                                transaction.set(debtRef, {
+                                    ownerId: beneficiary.ownerId,
+                                    property: ownerDoc.data().properties[0],
+                                    year: futureYear,
+                                    month: futureMonth,
+                                    amountUSD: condoFeeUSD,
+                                    description: "Cuota de Condominio (Adelantado)",
+                                    status: 'paid',
+                                    paymentId: payment.id,
+                                    paymentDate: payment.paymentDate,
+                                    paidAmountUSD: condoFeeUSD,
+                                });
+
+                                nextPeriodDate = addMonths(nextPeriodDate, 1);
                             }
                         }
 
-                        if (paymentAmountLeft > 0) {
-                            ownerBalance += paymentAmountLeft;
-                            transaction.update(ownerRef, { balance: ownerBalance });
-                        }
+                        // 3. Update owner's balance
+                        transaction.update(ownerRef, { balance: liquidationResult.nuevoSaldoAFavor });
+                        
+                        // 4. Generate receipt number
+                        receiptNumbers[beneficiary.ownerId] = `REC-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 90000) + 10000)}`;
                     }
 
                     transaction.update(paymentRef, { status: 'aprobado', observations: 'Pago verificado y aplicado por la administración.', receiptNumbers });
                 });
                 
-                toast({ title: 'Pago Aprobado', description: 'El pago ha sido verificado y aplicado correctamente.', className: 'bg-green-100 border-green-400 text-green-800' });
+                toast({ title: 'Pago Aprobado', description: 'El pago ha sido procesado con la nueva lógica de liquidación.', className: 'bg-green-100 border-green-400 text-green-800' });
                 setSelectedPayment(null);
 
             } catch (error: any) {
@@ -692,87 +760,10 @@ function ReportPaymentComponent() {
 
 // --- COMPONENT: PAYMENT CALCULATOR ---
 
-function PaymentCalculatorUI({ owner, debts, activeRate, condoFee }: { owner: any; debts: Debt[]; activeRate: number; condoFee: number }) {
-    const [selectedPendingDebts, setSelectedPendingDebts] = useState<string[]>([]);
-    const [selectedAdvanceMonths, setSelectedAdvanceMonths] = useState<string[]>([]);
-    const now = new Date();
-    
-    const pendingDebts = useMemo(() => debts.filter(d => d.status === 'pending' || d.status === 'vencida').sort((a,b) => a.year - b.year || a.month - b.month), [debts]);
-    const futureMonths = useMemo(() => {
-        const paidAdvanceMonths = debts.filter(d => d.status === 'paid' && d.description.includes('Adelantado')).map(d => `${d.year}-${String(d.month).padStart(2, '0')}`);
-        return Array.from({ length: 12 }, (_, i) => {
-            const date = addMonths(now, i);
-            const value = format(date, 'yyyy-MM');
-            return { value, label: format(date, 'MMMM yyyy', { locale: es }), disabled: paidAdvanceMonths.includes(value) };
-        });
-    }, [debts, now]);
-
-    const paymentCalculator = useMemo(() => {
-        const dueMonthsTotalUSD = pendingDebts.filter(d => selectedPendingDebts.includes(d.id)).reduce((sum, debt) => sum + debt.amountUSD, 0);
-        const advanceMonthsTotalUSD = selectedAdvanceMonths.length * condoFee;
-        const totalDebtUSD = dueMonthsTotalUSD + advanceMonthsTotalUSD;
-        const totalDebtBs = totalDebtUSD * activeRate;
-        const totalToPay = Math.max(0, totalDebtBs - (owner.balance || 0));
-        return { totalToPay, hasSelection: selectedPendingDebts.length > 0 || selectedAdvanceMonths.length > 0, dueMonthsCount: selectedPendingDebts.length, advanceMonthsCount: selectedAdvanceMonths.length, totalDebtBs, balanceInFavor: owner.balance || 0, condoFee };
-    }, [selectedPendingDebts, selectedAdvanceMonths, pendingDebts, activeRate, condoFee, owner]);
-    
-    const formatCurrency = (num: number) => {
-        if (typeof num !== 'number' || isNaN(num)) return '0,00';
-        return num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    };
-
-    return (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-            <div className="lg:col-span-2 space-y-4">
-                <Card>
-                    <CardHeader><CardTitle>1. Deudas Pendientes</CardTitle></CardHeader>
-                    <CardContent className="p-0">
-                       <Table>
-                            <TableHeader><TableRow><TableHead className="w-[50px] text-center">Pagar</TableHead><TableHead>Período</TableHead><TableHead>Concepto</TableHead><TableHead>Estado</TableHead><TableHead className="text-right">Monto (Bs.)</TableHead></TableRow></TableHeader>
-                            <TableBody>
-                                {pendingDebts.length === 0 ? <TableRow><TableCell colSpan={5} className="h-24 text-center"><Info className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />No tiene deudas pendientes.</TableCell></TableRow> : 
-                                 pendingDebts.map((debt) => {
-                                    const debtMonthDate = startOfMonth(new Date(debt.year, debt.month - 1));
-                                    const isOverdue = isBefore(debtMonthDate, startOfMonth(now));
-                                    const status = debt.status === 'vencida' || (debt.status === 'pending' && isOverdue) ? 'Vencida' : 'Pendiente';
-                                    return <TableRow key={debt.id} data-state={selectedPendingDebts.includes(debt.id) ? 'selected' : ''}>
-                                            <TableCell className="text-center"><Checkbox onCheckedChange={() => setSelectedPendingDebts(p => p.includes(debt.id) ? p.filter(id=>id!==debt.id) : [...p, debt.id])} checked={selectedPendingDebts.includes(debt.id)} /></TableCell>
-                                            <TableCell className="font-medium">{MONTHS_LOCALE[debt.month]} {debt.year}</TableCell>
-                                            <TableCell>{debt.description}</TableCell>
-                                            <TableCell><Badge variant={status === 'Vencida' ? 'destructive' : 'warning'}>{status}</Badge></TableCell>
-                                            <TableCell className="text-right">Bs. {formatCurrency(debt.amountUSD * activeRate)}</TableCell>
-                                        </TableRow>
-                                })}
-                            </TableBody>
-                        </Table>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader><CardTitle>2. Pagar Meses por Adelantado</CardTitle><CardDescription>Cuota mensual actual: ${condoFee.toFixed(2)}</CardDescription></CardHeader>
-                    <CardContent><div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">{futureMonths.map(month => <Button key={month.value} type="button" variant={selectedAdvanceMonths.includes(month.value) ? 'default' : 'outline'} className="flex items-center justify-center gap-2 capitalize" onClick={() => setSelectedAdvanceMonths(p => p.includes(month.value) ? p.filter(m=>m!==month.value) : [...p, month.value])} disabled={month.disabled}>{selectedAdvanceMonths.includes(month.value) && <Check className="h-4 w-4" />} {month.label}</Button>)}</div></CardContent>
-                </Card>
-            </div>
-            <div className="lg:sticky lg:top-20">
-                 {paymentCalculator.hasSelection && <Card>
-                     <CardHeader><CardTitle className="flex items-center"><Calculator className="mr-2 h-5 w-5"/> 3. Resumen de Pago</CardTitle><CardDescription>Cálculo basado en su selección.</CardDescription></CardHeader>
-                    <CardContent className="space-y-3">
-                        {paymentCalculator.dueMonthsCount > 0 && <p className="text-sm text-muted-foreground">{paymentCalculator.dueMonthsCount} mes(es) adeudado(s) seleccionado(s).</p>}
-                        {paymentCalculator.advanceMonthsCount > 0 && <p className="text-sm text-muted-foreground">{paymentCalculator.advanceMonthsCount} mes(es) por adelanto seleccionado(s) x ${(paymentCalculator.condoFee ?? 0).toFixed(2)} c/u.</p>}
-                        <hr className="my-2"/><div className="flex justify-between items-center text-lg"><span className="text-muted-foreground">Sub-Total Deuda:</span><span className="font-medium">Bs. {formatCurrency(paymentCalculator.totalDebtBs)}</span></div>
-                        <div className="flex justify-between items-center text-md"><span className="text-muted-foreground flex items-center"><Minus className="mr-2 h-4 w-4"/> Saldo a Favor:</span><span className="font-medium text-green-500">Bs. {formatCurrency(paymentCalculator.balanceInFavor)}</span></div>
-                        <hr className="my-2"/><div className="flex justify-between items-center text-2xl font-bold"><span className="flex items-center"><Equal className="mr-2 h-5 w-5"/> TOTAL A PAGAR:</span><span className="text-primary">Bs. {formatCurrency(paymentCalculator.totalToPay)}</span></div>
-                    </CardContent>
-                    <CardFooter><Button className="w-full" asChild disabled={!paymentCalculator.hasSelection || paymentCalculator.totalToPay <= 0}><Link href="/owner/payments?tab=report"><Receipt className="mr-2 h-4 w-4"/>Proceder al Reporte de Pago</Link></Button></CardFooter>
-                </Card>}
-            </div>
-        </div>
-    );
-}
-
 function PaymentCalculatorComponent() {
     const { toast } = useToast();
     const router = useRouter();
-    const { activeCondoId } = useAuth();
+    const { user: authUser, ownerData: authOwnerData, activeCondoId } = useAuth();
     const [allOwners, setAllOwners] = useState<Owner[]>([]);
     const [loadingOwners, setLoadingOwners] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -882,9 +873,88 @@ function PaymentCalculatorComponent() {
     );
 }
 
+
+// --- UI for Calculator (reused) ---
+function PaymentCalculatorUI({ owner, debts, activeRate, condoFee }: { owner: any; debts: Debt[]; activeRate: number; condoFee: number }) {
+    const [selectedPendingDebts, setSelectedPendingDebts] = useState<string[]>([]);
+    const [selectedAdvanceMonths, setSelectedAdvanceMonths] = useState<string[]>([]);
+    const now = new Date();
+    
+    const pendingDebts = useMemo(() => debts.filter(d => d.status === 'pending' || d.status === 'vencida').sort((a,b) => a.year - b.year || a.month - b.month), [debts]);
+    const futureMonths = useMemo(() => {
+        const paidAdvanceMonths = debts.filter(d => d.status === 'paid' && d.description.includes('Adelantado')).map(d => `${d.year}-${String(d.month).padStart(2, '0')}`);
+        return Array.from({ length: 12 }, (_, i) => {
+            const date = addMonths(now, i);
+            const value = format(date, 'yyyy-MM');
+            return { value, label: format(date, 'MMMM yyyy', { locale: es }), disabled: paidAdvanceMonths.includes(value) };
+        });
+    }, [debts, now]);
+
+    const paymentCalculator = useMemo(() => {
+        const dueMonthsTotalUSD = pendingDebts.filter(d => selectedPendingDebts.includes(d.id)).reduce((sum, debt) => sum + debt.amountUSD, 0);
+        const advanceMonthsTotalUSD = selectedAdvanceMonths.length * condoFee;
+        const totalDebtUSD = dueMonthsTotalUSD + advanceMonthsTotalUSD;
+        const totalDebtBs = totalDebtUSD * activeRate;
+        const totalToPay = Math.max(0, totalDebtBs - (owner.balance || 0));
+        return { totalToPay, hasSelection: selectedPendingDebts.length > 0 || selectedAdvanceMonths.length > 0, dueMonthsCount: selectedPendingDebts.length, advanceMonthsCount: selectedAdvanceMonths.length, totalDebtBs, balanceInFavor: owner.balance || 0, condoFee };
+    }, [selectedPendingDebts, selectedAdvanceMonths, pendingDebts, activeRate, condoFee, owner]);
+    
+    const formatCurrency = (num: number) => {
+        if (typeof num !== 'number' || isNaN(num)) return '0,00';
+        return num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    };
+
+    return (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+            <div className="lg:col-span-2 space-y-4">
+                <Card>
+                    <CardHeader><CardTitle>1. Deudas Pendientes</CardTitle></CardHeader>
+                    <CardContent className="p-0">
+                       <Table>
+                            <TableHeader><TableRow><TableHead className="w-[50px] text-center">Pagar</TableHead><TableHead>Período</TableHead><TableHead>Concepto</TableHead><TableHead>Estado</TableHead><TableHead className="text-right">Monto (Bs.)</TableHead></TableRow></TableHeader>
+                            <TableBody>
+                                {pendingDebts.length === 0 ? <TableRow><TableCell colSpan={5} className="h-24 text-center"><Info className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />No tiene deudas pendientes.</TableCell></TableRow> : 
+                                 pendingDebts.map((debt) => {
+                                    const debtMonthDate = startOfMonth(new Date(debt.year, debt.month - 1));
+                                    const isOverdue = isBefore(debtMonthDate, startOfMonth(now));
+                                    const status = debt.status === 'vencida' || (debt.status === 'pending' && isOverdue) ? 'Vencida' : 'Pendiente';
+                                    return <TableRow key={debt.id} data-state={selectedPendingDebts.includes(debt.id) ? 'selected' : ''}>
+                                            <TableCell className="text-center"><Checkbox onCheckedChange={() => setSelectedPendingDebts(p => p.includes(debt.id) ? p.filter(id=>id!==debt.id) : [...p, debt.id])} checked={selectedPendingDebts.includes(debt.id)} /></TableCell>
+                                            <TableCell className="font-medium">{MONTHS_LOCALE[debt.month]} {debt.year}</TableCell>
+                                            <TableCell>{debt.description}</TableCell>
+                                            <TableCell><Badge variant={status === 'Vencida' ? 'destructive' : 'warning'}>{status}</Badge></TableCell>
+                                            <TableCell className="text-right">Bs. {formatCurrency(debt.amountUSD * activeRate)}</TableCell>
+                                        </TableRow>
+                                })}
+                            </TableBody>
+                        </Table>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader><CardTitle>2. Pagar Meses por Adelantado</CardTitle><CardDescription>Cuota mensual actual: ${condoFee.toFixed(2)}</CardDescription></CardHeader>
+                    <CardContent><div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">{futureMonths.map(month => <Button key={month.value} type="button" variant={selectedAdvanceMonths.includes(month.value) ? 'default' : 'outline'} className="flex items-center justify-center gap-2 capitalize" onClick={() => setSelectedAdvanceMonths(p => p.includes(month.value) ? p.filter(m=>m!==month.value) : [...p, month.value])} disabled={month.disabled}>{selectedAdvanceMonths.includes(month.value) && <Check className="h-4 w-4" />} {month.label}</Button>)}</div></CardContent>
+                </Card>
+            </div>
+            <div className="lg:sticky lg:top-20">
+                 {paymentCalculator.hasSelection && <Card>
+                     <CardHeader><CardTitle className="flex items-center"><Calculator className="mr-2 h-5 w-5"/> 3. Resumen de Pago</CardTitle><CardDescription>Cálculo basado en su selección.</CardDescription></CardHeader>
+                    <CardContent className="space-y-3">
+                        {paymentCalculator.dueMonthsCount > 0 && <p className="text-sm text-muted-foreground">{paymentCalculator.dueMonthsCount} mes(es) adeudado(s) seleccionado(s).</p>}
+                        {paymentCalculator.advanceMonthsCount > 0 && <p className="text-sm text-muted-foreground">{paymentCalculator.advanceMonthsCount} mes(es) por adelanto seleccionado(s) x ${(paymentCalculator.condoFee ?? 0).toFixed(2)} c/u.</p>}
+                        <hr className="my-2"/><div className="flex justify-between items-center text-lg"><span className="text-muted-foreground">Sub-Total Deuda:</span><span className="font-medium">Bs. {formatCurrency(paymentCalculator.totalDebtBs)}</span></div>
+                        <div className="flex justify-between items-center text-md"><span className="text-muted-foreground flex items-center"><Minus className="mr-2 h-4 w-4"/> Saldo a Favor:</span><span className="font-medium text-green-500">Bs. {formatCurrency(paymentCalculator.balanceInFavor)}</span></div>
+                        <hr className="my-2"/><div className="flex justify-between items-center text-2xl font-bold"><span className="flex items-center"><Equal className="mr-2 h-5 w-5"/> TOTAL A PAGAR:</span><span className="text-primary">Bs. {formatCurrency(paymentCalculator.totalToPay)}</span></div>
+                    </CardContent>
+                    <CardFooter><Button className="w-full" asChild disabled={!paymentCalculator.hasSelection || paymentCalculator.totalToPay <= 0}><Link href="/owner/payments?tab=report"><Receipt className="mr-2 h-4 w-4"/>Proceder al Reporte de Pago</Link></Button></CardFooter>
+                </Card>}
+            </div>
+        </div>
+    );
+}
+
 function PaymentsPage() {
     const searchParams = useSearchParams();
-    const defaultTab = searchParams?.get('tab') || 'verify';
+    const defaultTab = searchParams?.get('tab') || 'report';
     
     return (
         <div className="space-y-6">
@@ -894,18 +964,14 @@ function PaymentsPage() {
                 </h2>
                 <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
                 <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">
-                    Verifica pagos, registra abonos y calcula deudas pendientes.
+                    Reporta tus pagos y calcula tus deudas pendientes.
                 </p>
             </div>
             <Tabs defaultValue={defaultTab} className="w-full">
-                <TabsList className="grid w-full grid-cols-3">
-                    <TabsTrigger value="verify">Verificación de Pagos</TabsTrigger>
-                    <TabsTrigger value="report">Reportar Pago Manual</TabsTrigger>
+                <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="report">Reportar Pago</TabsTrigger>
                     <TabsTrigger value="calculator">Calculadora de Pagos</TabsTrigger>
                 </TabsList>
-                <TabsContent value="verify" className="mt-6">
-                    <VerificationComponent />
-                </TabsContent>
                 <TabsContent value="report" className="mt-6">
                     <ReportPaymentComponent />
                 </TabsContent>
@@ -924,5 +990,3 @@ export default function PaymentsPageWrapper() {
         </Suspense>
     );
 }
-
-    
