@@ -1,65 +1,73 @@
-
 'use client';
 
 import React from 'react';
 import Link from 'next/link';
 import { Button } from "@/components/ui/button";
 import { Wallet, LayoutDashboard, ShieldCheck, ArrowRight } from 'lucide-react';
-import { SYSTEM_LOGO, COMPANY_NAME, SYSTEM_WORDMARK } from '@/lib/constants';
+
+const BRAND_LOGO_URL = "https://i.supaimg.com/d4bb1b73-97ce-4af0-9116-e797c018629b.jpg";
+const COMPANY_NAME = "EFAS CondoSys";
 
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-[#1A1D23] text-white font-sans selection:bg-[#F28705] selection:text-white">
       
-      {/* HEADER - ESTRUCTURA EXACTA IMAGEN 1 */}
+      {/* HEADER */}
       <header className="flex items-center justify-between px-8 py-5 border-b border-white/5 sticky top-0 bg-[#1A1D23]/95 backdrop-blur-md z-50">
-        <div className="flex items-center gap-3">
-          <img 
-            src={SYSTEM_LOGO} 
-            alt={COMPANY_NAME} 
-            className="h-9 w-9 object-contain"
-          />
-          <img 
-            src={SYSTEM_WORDMARK}
-            alt={COMPANY_NAME}
-            className="h-5 object-contain"
-          />
+        <div className="flex items-center gap-4">
+          <div className="border border-white/10 rounded-xl p-1 bg-white/5 shadow-inner overflow-hidden">
+            <img 
+              src={BRAND_LOGO_URL} 
+              alt="Logo" 
+              className="h-10 w-10 object-cover rounded-lg"
+            />
+          </div>
+          <div className="flex flex-col">
+            <h1 className="text-2xl font-[900] italic tracking-tighter leading-none uppercase">
+              <span className="text-[#F28705]">EFAS</span>
+              <span className="text-white">CONDOSYS</span>
+            </h1>
+            <p className="text-[9px] uppercase tracking-[0.3em] text-slate-400 font-bold">
+              Sistema de Autogestión de Condominios
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center gap-8">
           <nav className="hidden md:flex items-center gap-6">
-            <Link href="/login?role=owner" className="text-xs font-black text-slate-400 hover:text-[#F28705] transition-colors uppercase tracking-widest">
+            <Link href="/login" className="text-xs font-black text-slate-400 hover:text-[#F28705] transition-colors uppercase tracking-widest">
               Propietarios
             </Link>
           </nav>
-          <Link href="/login?role=admin">
-            <Button className="rounded-full px-8 h-10 font-bold text-xs uppercase tracking-widest shadow-lg shadow-primary/20 transition-all hover:scale-105">
+          <Link href="/login">
+            <Button className="bg-[#0070f3] hover:bg-[#005bb5] text-white rounded-full px-8 h-10 font-bold text-xs uppercase tracking-widest shadow-lg shadow-blue-600/20">
               Acceso Admin
             </Button>
           </Link>
         </div>
       </header>
 
-      {/* HERO SECTION - INFORMACIÓN COMPLETA IMAGEN 1 */}
+      {/* HERO SECTION */}
       <main className="flex flex-col items-center justify-center text-center px-6 pt-24 pb-32 relative">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[500px] bg-primary/10 blur-[120px] rounded-full -z-10" />
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[500px] bg-blue-600/5 blur-[120px] rounded-full -z-10" />
         
         <div className="relative mb-14">
+          <div className="absolute inset-0 bg-[#F28705]/15 blur-[80px] rounded-full" />
           <img 
-            src={SYSTEM_WORDMARK} 
-            alt="Logo Central" 
-            className="relative h-auto w-72 md:w-96 object-contain"
+            src={BRAND_LOGO_URL} 
+            alt="EFAS Logo Central" 
+            className="relative h-64 w-64 md:h-80 md:w-80 rounded-[3rem] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.7)] border border-white/10 object-cover"
           />
         </div>
 
         <div className="inline-flex items-center gap-3 bg-white/5 border border-white/10 rounded-full px-6 py-2 mb-10">
-          <span className="text-[#F28705] animate-pulse">⚡</span>
+          <span className="text-[#F28705] animate-pulse font-bold">⚡</span>
           <span className="text-[10px] font-black uppercase tracking-[0.3em] text-orange-100/80">
             Tecnología Residencial de Vanguardia
           </span>
         </div>
 
-        <h2 className="text-7xl md:text-9xl font-black tracking-tighter text-white mb-8 max-w-5xl leading-[0.85] uppercase italic">
+        <h2 className="text-7xl md:text-9xl font-[900] tracking-tighter text-white mb-8 max-w-5xl leading-[0.85] uppercase italic">
           Potencia tu <br />comunidad
         </h2>
 
@@ -82,7 +90,7 @@ export default function LandingPage() {
         </div>
       </main>
 
-      {/* MÓDULOS INTEGRADOS - INFORMACIÓN EXACTA IMAGEN 2 */}
+      {/* MÓDULOS INTEGRADOS */}
       <section className="bg-[#14161B] py-28 border-t border-white/5">
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex flex-col items-center text-center mb-20">
@@ -93,35 +101,32 @@ export default function LandingPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
-            {/* Cobranza */}
-            <div className="bg-[#1E2128] p-12 rounded-[3rem] border border-white/5 flex flex-col items-center text-center group transition-all duration-500 hover:border-[#F28705]/50">
-              <div className="w-20 h-20 bg-primary/10 rounded-3xl flex items-center justify-center mb-8 text-primary group-hover:scale-110 transition-transform">
+            <div className="bg-[#1E2128] p-12 rounded-[3rem] border border-white/5 flex flex-col items-center text-center group transition-all duration-500 hover:border-[#F28705]/50 shadow-lg shadow-black/20">
+              <div className="w-20 h-20 bg-blue-500/10 rounded-3xl flex items-center justify-center mb-8 text-[#0070f3]">
                 <Wallet size={40} />
               </div>
               <h3 className="text-2xl font-black text-white mb-5 uppercase tracking-tight italic">Cobranza Multidivisa</h3>
-              <p className="text-slate-400 font-medium leading-relaxed text-lg">
+              <p className="text-slate-400 font-medium leading-relaxed text-lg px-2">
                 Gestión automática basada en tasas oficiales para una contabilidad transparente y sin errores.
               </p>
             </div>
 
-            {/* Panel */}
-            <div className="bg-[#1E2128] p-12 rounded-[3rem] border border-white/5 flex flex-col items-center text-center group transition-all duration-500 hover:border-[#F28705]/50">
-              <div className="w-20 h-20 bg-[#F28705]/10 rounded-3xl flex items-center justify-center mb-8 text-[#F28705] group-hover:scale-110 transition-transform">
+            <div className="bg-[#1E2128] p-12 rounded-[3rem] border border-white/5 flex flex-col items-center text-center group transition-all duration-500 hover:border-[#F28705]/50 shadow-lg shadow-black/20">
+              <div className="w-20 h-20 bg-[#F28705]/10 rounded-3xl flex items-center justify-center mb-8 text-[#F28705]">
                 <LayoutDashboard size={40} />
               </div>
               <h3 className="text-2xl font-black text-white mb-5 uppercase tracking-tight italic">Panel Inteligente</h3>
-              <p className="text-slate-400 font-medium leading-relaxed text-lg">
+              <p className="text-slate-400 font-medium leading-relaxed text-lg px-2">
                 Visualización clara de gastos, fondos de reserva y estados de cuenta en tiempo real.
               </p>
             </div>
 
-            {/* Seguridad */}
-            <div className="bg-[#1E2128] p-12 rounded-[3rem] border border-white/5 flex flex-col items-center text-center group transition-all duration-500 hover:border-[#F28705]/50">
-              <div className="w-20 h-20 bg-emerald-500/10 rounded-3xl flex items-center justify-center mb-8 text-emerald-500 group-hover:scale-110 transition-transform">
+            <div className="bg-[#1E2128] p-12 rounded-[3rem] border border-white/5 flex flex-col items-center text-center group transition-all duration-500 hover:border-[#F28705]/50 shadow-lg shadow-black/20">
+              <div className="w-20 h-20 bg-emerald-500/10 rounded-3xl flex items-center justify-center mb-8 text-emerald-500">
                 <ShieldCheck size={40} />
               </div>
               <h3 className="text-2xl font-black text-white mb-5 uppercase tracking-tight italic">Seguridad y Respaldo</h3>
-              <p className="text-slate-400 font-medium leading-relaxed text-lg">
+              <p className="text-slate-400 font-medium leading-relaxed text-lg px-2">
                 Toda la información protegida y disponible para auditorías en cualquier momento.
               </p>
             </div>
@@ -129,11 +134,11 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* FOOTER */}
       <footer className="py-20 text-center border-t border-white/5 bg-[#1A1D23]">
         <div className="flex flex-col items-center gap-6">
           <div className="flex items-center gap-3 opacity-50">
-            <img src={SYSTEM_WORDMARK} alt="EFAS" className="h-8 w-auto grayscale object-contain" />
+            <img src={BRAND_LOGO_URL} alt="EFAS" className="h-6 w-6 grayscale" />
+            <span className="font-black italic tracking-tighter text-sm uppercase">EFAS CONDOSYS</span>
           </div>
           <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.5em]">
             © 2026 {COMPANY_NAME} - Elevando el estándar de gestión
