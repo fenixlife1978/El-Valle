@@ -22,6 +22,11 @@ export default function LandingPage() {
               onError={(e) => { e.currentTarget.src = 'https://via.placeholder.com/40?text=EFAS'; }}
             />
           </div>
+          <img 
+            src="https://i.supaimg.com/afd3a5b0-7942-4e45-b2b0-cf892310e6ea.png"
+            alt="EFAS Condosys"
+            className="h-10 w-auto object-contain"
+          />
         </div>
 
         <div className="flex items-center gap-8">

@@ -131,7 +131,7 @@ function LoginPage() {
             <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-amber-500/5 blur-[100px] rounded-full"></div>
 
             <div className="text-center mb-8 relative z-10">
-                <img src={SYSTEM_LOGO} alt="EFAS CondoSys Logo" className="w-64 mx-auto" />
+                <img src="https://i.supaimg.com/afd3a5b0-7942-4e45-b2b0-cf892310e6ea.png" alt="EFAS CondoSys Logo" className="w-64 mx-auto" />
             </div>
 
             <Card className="w-full max-w-sm border-border shadow-2xl rounded-[2.5rem] overflow-hidden bg-card/80 backdrop-blur-xl text-card-foreground relative z-10">
