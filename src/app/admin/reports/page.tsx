@@ -472,7 +472,7 @@ export default function ReportsPage() {
             const delinquentData: DelinquentOwner[] = [];
             debtsByOwner.forEach((debtInfo, ownerId) => {
                 const owner = ownersData.find(o => o.id === ownerId);
-                if (owner && debtInfo.uniqueMonths.size > 0 && owner.role !== 'administrador') { 
+                if (owner && debtInfo.uniqueMonths.size > 0 && owner.role === 'propietario') { 
                     delinquentData.push({
                         id: ownerId,
                         name: owner.name,
@@ -486,7 +486,7 @@ export default function ReportsPage() {
             setSelectedDelinquentOwners(new Set(delinquentData.map(o => o.id)));
 
             // --- Balance Report Data Calculation ---
-            const ownersWithBalance = ownersData.filter(o => o.role !== 'administrador' && o.balance > 0);
+            const ownersWithBalance = ownersData.filter(o => o.role === 'propietario' && o.balance > 0);
             
             const balanceReportData = ownersWithBalance.map(owner => {
                 const ownerData = {
@@ -2047,4 +2047,3 @@ export default function ReportsPage() {
         </div>
     );
 }
-

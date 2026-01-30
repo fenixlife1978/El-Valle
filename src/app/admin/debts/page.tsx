@@ -28,6 +28,7 @@ type Owner = {
     balance: number;
     pendingDebtUSD: number;
     properties?: { street: string, house: string }[];
+    role?: string;
 };
 
 type Property = {
@@ -214,8 +215,9 @@ export default function DebtManagementPage() {
                     balance: data.balance || 0,
                     pendingDebtUSD: 0, // Will be calculated by the debts listener
                     properties: data.properties,
+                    role: data.role
                 };
-            }).filter(owner => owner.id !== ADMIN_USER_ID); // Exclude admin
+            }).filter(owner => owner.role === 'propietario'); // Exclude admin
 
             ownersData.sort((a, b) => {
                 const aKeys = getSortKeys(a);
@@ -1275,4 +1277,3 @@ export default function DebtManagementPage() {
     // Fallback while loading or if view is invalid
     return null;
 }
-
