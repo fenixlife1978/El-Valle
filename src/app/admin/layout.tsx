@@ -13,7 +13,8 @@ import {
     Loader2,
     ArrowLeftCircle,
     AlertTriangle,
-    FileSearch
+    FileSearch,
+    Receipt
 } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
@@ -27,10 +28,19 @@ const adminNavItems: NavItem[] = [
     { href: "/admin/dashboard", icon: Home, label: "Dashboard" },
     { 
         href: "#", 
+        icon: Landmark, 
+        label: "Gestión de Pagos",
+        items: [
+            { href: "/admin/payments?tab=verify", label: "Verificación de Pagos" },
+            { href: "/admin/payments?tab=report", label: "Reportar Pago Manual" },
+            { href: "/admin/payments?tab=calculator", label: "Calculadora" },
+        ]
+    },
+    { 
+        href: "#", 
         icon: Grid3X3, 
         label: "Utilidades",
         items: [
-            { href: "/admin/payments", label: "Gestión de Pagos" },
             { href: "/admin/debts", label: "Gestión de Deudas" },
             { href: "/admin/financial-balance", label: "Balance Financiero" },
             { href: "/admin/expenses", label: "Gestión de Egresos" },
@@ -49,7 +59,7 @@ const adminNavItems: NavItem[] = [
 
 const adminBottomNavItems: BottomNavItem[] = [
   { href: '/admin/dashboard', icon: Home, label: 'Inicio' },
-  { href: '/admin/payments', icon: Landmark, label: 'Pagos' },
+  { href: '/admin/payments', icon: Receipt, label: 'Pagos' },
   { 
     href: '#', 
     icon: Plus, 
