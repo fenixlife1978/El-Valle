@@ -469,7 +469,7 @@ const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptD
                         <div className="text-center">
                             <p className="text-sm text-muted-foreground">Deuda Pendiente (USD)</p>
                             <p className={cn("text-5xl font-extrabold", stats.isSolvente ? 'text-primary' : 'text-destructive')}>
-                                ${formatToTwoDecimals(stats.totalPendingUSD)}
+                                ${formatCurrency(stats.totalPendingUSD)}
                             </p>
                             {!stats.isSolvente && <p className="text-xs text-muted-foreground mt-1">Deuda más antigua: {stats.oldestDebtDate}</p>}
                         </div>
@@ -493,7 +493,7 @@ const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptD
                     </CardHeader>
                     <CardContent className="flex items-center justify-center">
                         <p className="text-5xl font-extrabold text-primary">
-                             Bs. {formatToTwoDecimals(ownerData.balance || 0)}
+                             Bs. {formatCurrency(ownerData.balance || 0)}
                         </p>
                     </CardContent>
                 </Card>
@@ -667,4 +667,3 @@ const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptD
         </div>
     );
 }
-
