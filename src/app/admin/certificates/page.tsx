@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -377,58 +378,36 @@ export default function CertificatesPage() {
   
       const docPDF = new jsPDF();
       const pageWidth = docPDF.internal.pageSize.getWidth();
-      const headerHeight = 35;
+      const headerHeight = 25;
       const margin = 14;
 
       // --- HEADER ---
-        docPDF.setFillColor(28, 43, 58); // #1C2B3A
+        const headerColor = [28, 43, 58];
+        docPDF.setFillColor(headerColor[0], headerColor[1], headerColor[2]);
         docPDF.rect(0, 0, pageWidth, headerHeight, 'F');
         docPDF.setTextColor(255, 255, 255);
 
         let textX = margin;
         if (companyInfo?.logo) {
             try {
-                const logoSize = 20;
-                docPDF.saveGraphicsState();
-                docPDF.circle(margin + logoSize / 2, 7 + logoSize / 2, logoSize / 2);
-                docPDF.clip();
-                docPDF.addImage(companyInfo.logo, 'PNG', margin, 7, logoSize, logoSize);
-                docPDF.restoreGraphicsState();
+                const logoSize = 18;
+                docPDF.addImage(companyInfo.logo, 'PNG', margin, (headerHeight - logoSize) / 2, logoSize, logoSize);
                 textX += logoSize + 5;
             }
             catch(e) { console.error("Error adding logo:", e); }
         }
 
-        docPDF.setFontSize(14).setFont('helvetica', 'bold');
-        docPDF.text(companyInfo?.name || 'CONDOMINIO', textX, 15);
-        docPDF.setFontSize(9).setFont('helvetica', 'normal');
-        docPDF.text(`RIF: ${companyInfo?.rif || 'N/A'}`, textX, 22);
-
-        // --- Brand Identity ---
-        const efasColor = '#F97316';
-        const condoSysColor = '#3B82F6';
-        docPDF.setFont('helvetica', 'blackitalic');
+        docPDF.setFontSize(11).setFont('helvetica', 'bold');
+        docPDF.text(companyInfo?.name || 'CONDOMINIO', textX, 13);
+        docPDF.setFontSize(8).setFont('helvetica', 'normal');
+        docPDF.text(`RIF: ${companyInfo?.rif || 'N/A'}`, textX, 18);
         
-        docPDF.setFontSize(12);
-        const condoSysText = 'CONDOSYS';
-        const efasText = 'EFAS';
-        const condoSysWidth = docPDF.getStringUnitWidth(condoSysText) * 12 / docPDF.internal.scaleFactor;
-        
-        const endX = pageWidth - margin;
-        
-        docPDF.setTextColor(efasColor);
-        docPDF.text(efasText, endX - condoSysWidth, 15, { align: 'right' });
-        
-        docPDF.setTextColor(condoSysColor);
-        docPDF.text(condoSysText, endX, 15, { align: 'right' });
-        
-        docPDF.setFont('helvetica', 'normal');
-        docPDF.setFontSize(8).setTextColor(200, 200, 200);
-        docPDF.text('DOCUMENTO OFICIAL', pageWidth - margin, 22, { align: 'right' });
+        docPDF.setFontSize(8).setFont('helvetica', 'normal');
+        docPDF.text('DOCUMENTO OFICIAL', pageWidth - margin, headerHeight / 2 + 3, { align: 'right' });
         
         docPDF.setTextColor(0, 0, 0); // Reset text color
       
-        let startY = headerHeight + 5;
+        let startY = headerHeight + 15;
 
       // --- BARCODE ---
       const canvas = document.createElement('canvas');

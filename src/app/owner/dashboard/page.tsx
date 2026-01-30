@@ -71,6 +71,7 @@ type Payment = {
     observations?: string;
     type: string;
     bank: string;
+    paymentMethod: string;
 };
 
 
@@ -101,10 +102,7 @@ const monthsLocale: { [key: number]: string } = {
     7: 'Julio', 8: 'Agosto', 9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre'
 };
 
-const formatToTwoDecimals = (num: number) => {
-    if (typeof num !== 'number' || isNaN(num)) return '0,00';
-    return num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-};
+const formatCurrency = (num: number) => num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 
 // -------------------------------------------------------------------------
@@ -293,67 +291,63 @@ const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptD
     try {
         const doc = new jsPDF();
         const pageWidth = doc.internal.pageSize.getWidth();
-        const headerHeight = 35;
+        const headerHeight = 25;
         const margin = 14;
+        const headerColor = [28, 43, 58]; // #1C2B3A
         
         // --- HEADER ---
-        doc.setFillColor(28, 43, 58); // #1C2B3A
+        doc.setFillColor(headerColor[0], headerColor[1], headerColor[2]);
         doc.rect(0, 0, pageWidth, headerHeight, 'F');
         doc.setTextColor(255, 255, 255);
         
         let textX = margin;
         if (companyInfo.logo) {
             try {
-                const logoSize = 20;
-                doc.saveGraphicsState();
-                doc.circle(margin + logoSize / 2, 7 + logoSize / 2, logoSize / 2);
-                doc.clip();
-                doc.addImage(companyInfo.logo, 'PNG', margin, 7, logoSize, logoSize);
-                doc.restoreGraphicsState();
+                const logoSize = 18;
+                doc.addImage(companyInfo.logo, 'PNG', margin, (headerHeight - logoSize) / 2, logoSize, logoSize);
                 textX += logoSize + 5;
             } catch (e) {
                 console.error("Error adding logo to PDF:", e);
             }
         }
 
-        doc.setFontSize(14).setFont('helvetica', 'bold');
-        doc.text(companyInfo.name, textX, 15);
-        doc.setFontSize(9).setFont('helvetica', 'normal');
-        doc.text(`RIF: ${companyInfo.rif}`, textX, 22);
-
-        doc.setFontSize(12).setFont('helvetica', 'bold');
-        doc.text('EFAS CondoSys', pageWidth - margin, 15, { align: 'right' });
+        doc.setFontSize(11).setFont('helvetica', 'bold');
+        doc.text(companyInfo.name, textX, 13);
         doc.setFontSize(8).setFont('helvetica', 'normal');
-        doc.text('RECIBO DE PAGO', pageWidth - margin, 20, { align: 'right' });
+        doc.text(`RIF: ${companyInfo.rif}`, textX, 18);
 
-        doc.setTextColor(0, 0, 0);
+        doc.setFontSize(8).setFont('helvetica', 'normal');
+        doc.text('RECIBO DE PAGO', pageWidth - margin, headerHeight / 2 + 3, { align: 'right' });
 
-        // --- BARCODE ---
-        let startY = headerHeight + 30;
-        const canvas = document.createElement('canvas');
+        doc.setTextColor(0, 0, 0); // Reset text color
+
+        let startY = headerHeight + 15;
+
+        // --- BARCODE AND RECEIPT NUMBER ---
         const barcodeValue = `REC-${receiptNumber}`;
         try {
+            const canvas = document.createElement('canvas');
             JsBarcode(canvas, barcodeValue, {
-                format: "CODE128", height: 30, width: 1.5, displayValue: false, margin: 0,
+                format: "CODE128", height: 40, width: 1.5, displayValue: false, margin: 0,
             });
             const barcodeDataUrl = canvas.toDataURL("image/png");
-            doc.addImage(barcodeDataUrl, 'PNG', pageWidth - margin - 55, headerHeight + 5, 50, 15);
-            doc.setFontSize(8).text(barcodeValue, pageWidth - margin - 55, headerHeight + 23);
+            doc.addImage(barcodeDataUrl, 'PNG', pageWidth - margin - 60, startY - 5, 60, 20);
+            doc.setFontSize(8).text(barcodeValue, pageWidth - margin, startY + 18, { align: 'right' });
+            doc.setFontSize(10).setFont('helvetica', 'bold').text(`N° de recibo: ${receiptNumber}`, pageWidth - margin, startY + 23, { align: 'right' });
         } catch (e) {
             console.error("Barcode generation failed", e);
         }
 
-        // 2. Title Section
-        doc.setFontSize(16).setFont('helvetica', 'bold').text("RECIBO DE PAGO", pageWidth / 2, startY, { align: 'center' });
-        doc.setFontSize(9).setFont('helvetica', 'normal').text(`N° de recibo: ${receiptNumber}`, pageWidth - margin, startY, { align: 'right' });
-        startY += 8;
+        // --- MAIN TITLE ---
+        doc.setFontSize(16).setFont('helvetica', 'bold').text("RECIBO DE PAGO", margin, startY + 5);
+        startY += 20;
 
-        // 3. Details Section
+        // --- BENEFICIARY DETAILS ---
         doc.setFontSize(9);
         const detailsX = margin;
         doc.text(`Beneficiario: ${beneficiary.ownerName} (${data.ownerUnit})`, detailsX, startY);
         startY += 5;
-        doc.text(`Método de pago: ${payment.type}`, detailsX, startY);
+        doc.text(`Método de pago: ${payment.paymentMethod}`, detailsX, startY);
         startY += 5;
         doc.text(`Banco Emisor: ${payment.bank}`, detailsX, startY);
         startY += 5;
@@ -361,11 +355,11 @@ const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptD
         startY += 5;
         doc.text(`Fecha del pago: ${format(payment.paymentDate.toDate(), 'dd/MM/yyyy')}`, detailsX, startY);
         startY += 5;
-        doc.text(`Tasa de Cambio Aplicada: Bs. ${formatToTwoDecimals(payment.exchangeRate)} por USD`, detailsX, startY);
+        doc.text(`Tasa de Cambio Aplicada: Bs. ${formatCurrency(payment.exchangeRate)} por USD`, detailsX, startY);
         
         startY += 15;
 
-        // 4. Main Table
+        // --- CONCEPTS TABLE ---
         let totalPaidInConcepts = 0;
         const tableBody = paidDebts.map(debt => {
             const debtAmountBs = (debt.paidAmountUSD || debt.amountUSD) * payment.exchangeRate;
@@ -376,13 +370,13 @@ const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptD
                 `${monthsLocale[debt.month]} ${debt.year}`,
                 concept, 
                 `$${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}`, 
-                `Bs. ${formatToTwoDecimals(debtAmountBs)}` 
+                `Bs. ${formatCurrency(debtAmountBs)}` 
             ];
         });
 
-        if (paidDebts.length === 0) {
-            totalPaidInConcepts = beneficiary.amount;
-            tableBody.push(['', 'Abono a Saldo a Favor', '', `Bs. ${formatToTwoDecimals(beneficiary.amount)}`]);
+        if (paidDebts.length === 0 && beneficiary.amount > 0) {
+             totalPaidInConcepts = beneficiary.amount;
+             tableBody.push(['', 'Abono a Saldo a Favor', '', `Bs. ${formatCurrency(beneficiary.amount)}`]);
         }
 
         autoTable(doc, { 
@@ -390,64 +384,66 @@ const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptD
             head: [['Período', 'Concepto (Propiedad)', 'Monto ($)', 'Monto Pagado (Bs)']], 
             body: tableBody, 
             theme: 'striped', 
-            headStyles: { fillColor: [30, 80, 180], textColor: 255 }, 
+            headStyles: { fillColor: headerColor, textColor: 255 }, 
             styles: { fontSize: 9, cellPadding: 2.5 },
             columnStyles: {
                 2: { halign: 'right' },
                 3: { halign: 'right' },
             }
         });
-        startY = (doc as any).lastAutoTable.finalY + 10;
         
-        // 5. Summary and Total
+        let finalY = (doc as any).lastAutoTable.finalY + 10;
+        
+        // --- SUMMARY BLOCK ---
         const rightColX = pageWidth - margin;
+        const labelX = rightColX - 50;
         doc.setFontSize(9);
         
-        doc.text('Saldo a Favor Anterior:', rightColX - 50, startY, { align: 'right' });
-        doc.text(`Bs. ${formatToTwoDecimals(previousBalance)}`, rightColX, startY, { align: 'right' });
-        startY += 5;
+        doc.text('Saldo a Favor Anterior:', labelX, finalY, { align: 'right' });
+        doc.text(`Bs. ${formatCurrency(previousBalance)}`, rightColX, finalY, { align: 'right' });
+        finalY += 5;
         
-        doc.text('Monto del Pago Recibido:', rightColX - 50, startY, { align: 'right' });
-        doc.text(`Bs. ${formatToTwoDecimals(beneficiary.amount)}`, rightColX, startY, { align: 'right' });
-        startY += 5;
+        doc.text('Monto del Pago Recibido:', labelX, finalY, { align: 'right' });
+        doc.text(`Bs. ${formatCurrency(beneficiary.amount)}`, rightColX, finalY, { align: 'right' });
+        finalY += 5;
 
-        doc.text('Total Abonado en Deudas:', rightColX - 50, startY, { align: 'right' });
-        doc.text(`Bs. ${formatToTwoDecimals(totalPaidInConcepts)}`, rightColX, startY, { align: 'right' });
-        startY += 5;
+        doc.text('Total Abonado en Deudas:', labelX, finalY, { align: 'right' });
+        doc.text(`Bs. ${formatCurrency(totalPaidInConcepts)}`, rightColX, finalY, { align: 'right' });
+        finalY += 5;
 
-        doc.text('Saldo a Favor Actual:', rightColX - 50, startY, { align: 'right' });
-        doc.text(`Bs. ${formatToTwoDecimals(currentBalance)}`, rightColX, startY, { align: 'right' });
-        startY += 8;
+        doc.text('Saldo a Favor Actual:', labelX, finalY, { align: 'right' });
+        doc.text(`Bs. ${formatCurrency(currentBalance)}`, rightColX, finalY, { align: 'right' });
+        finalY += 8;
     
         doc.setFont('helvetica', 'bold');
-        doc.text('TOTAL PAGADO:', rightColX - 50, startY, { align: 'right' });
-        doc.text(`Bs. ${formatToTwoDecimals(beneficiary.amount)}`, rightColX, startY, { align: 'right' });
-        startY += 10;
-
-        // 6. Footer Notes
-        startY = Math.max(startY, 220); 
+        doc.text('TOTAL PAGADO:', labelX, finalY, { align: 'right' });
+        doc.text(`Bs. ${formatCurrency(beneficiary.amount)}`, rightColX, finalY, { align: 'right' });
+        
+        // --- FOOTER NOTES ---
+        let footerY = Math.max(finalY, 220); 
         doc.setFontSize(8).setFont('helvetica', 'normal');
+        doc.setTextColor(100);
 
         if (payment.observations) {
             const obsText = `Observaciones: ${payment.observations}`;
-            doc.text(obsText, margin, startY);
-            startY += 5;
+            doc.text(obsText, margin, footerY, {maxWidth: pageWidth - margin * 2});
+            footerY += 5;
         }
 
         const note1 = 'Todo propietario que requiera de firma y sello húmedo deberá imprimir éste recibo y hacerlo llegar al condominio para su respectiva estampa.';
-        const note2 = "Este recibo confirma que el pago ha sido validado para la(s) cuota(s) y propiedad(es) aquí detalladas.";
+        const note2 = `Este recibo confirma que el pago ha sido validado para la(s) cuota(s) y propiedad(es) aquí detalladas.`;
         const note3 = `Firma electrónica: '${companyInfo.name} - Condominio'`;
 
-        doc.text(note1, margin, startY);
-        startY += 4;
-        doc.text(note2, margin, startY);
-        startY += 4;
-        doc.text(note3, margin, startY);
-        startY += 8;
-
-        doc.setLineWidth(0.2).line(margin, startY, pageWidth - margin, startY);
-        startY += 4;
-        doc.setFont('helvetica', 'italic').text('Este recibo se generó de manera automatica y es válido sin firma manuscrita.', pageWidth / 2, startY, { align: 'center'});
+        doc.text(note1, margin, footerY, {maxWidth: pageWidth - margin * 2});
+        footerY += 8;
+        doc.text(note2, margin, footerY, {maxWidth: pageWidth - margin * 2});
+        footerY += 4;
+        doc.text(note3, margin, footerY, {maxWidth: pageWidth - margin * 2});
+        
+        footerY = 280; // Position it at the bottom
+        doc.setLineWidth(0.2).line(margin, footerY, pageWidth - margin, footerY);
+        footerY += 4;
+        doc.setFont('helvetica', 'italic').text('Este recibo se generó de manera automatica y es válido sin firma manuscrita.', pageWidth / 2, footerY, { align: 'center'});
         
         const pdfOutput = doc.output('blob');
         const pdfFile = new File([pdfOutput], `recibo_${receiptNumber}.pdf`, { type: 'application/pdf' });
@@ -663,7 +659,7 @@ const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptD
                                 return (
                                 <TableRow key={p.id}>
                                     <TableCell>{format(p.paymentDate.toDate(), 'dd MMM yy', {locale: es})}</TableCell>
-                                    <TableCell className="text-right font-medium">{formatToTwoDecimals(beneficiary.amount)}</TableCell>
+                                    <TableCell className="text-right font-medium">{formatCurrency(beneficiary.amount)}</TableCell>
                                     <TableCell className="text-center"><Badge variant={p.status === 'aprobado' ? 'success' : p.status === 'rechazado' ? 'destructive' : 'warning'} className="flex items-center justify-center">{statusIcon}{statusText}</Badge></TableCell>
                                     <TableCell className="text-right">
                                         {p.status === 'aprobado' && (
@@ -754,7 +750,7 @@ const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptD
                                     </div>
                                 </div>
                                 <div className="text-sm bg-muted/50 p-3 rounded-md">
-                                    <p><strong>Monto Pagado:</strong> Bs. {formatToTwoDecimals(receiptData.beneficiary.amount)}</p>
+                                    <p><strong>Monto Pagado:</strong> Bs. {formatCurrency(receiptData.beneficiary.amount)}</p>
                                 </div>
                                 <div>
                                     <h4 className="font-semibold mb-2">Conceptos Pagados</h4>
@@ -766,7 +762,7 @@ const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptD
                                                     <TableRow key={debt.id}>
                                                         <TableCell>{monthsLocale[debt.month]} {debt.year}</TableCell>
                                                         <TableCell>{debt.description}</TableCell>
-                                                        <TableCell className="text-right">{formatToTwoDecimals((debt.paidAmountUSD || debt.amountUSD) * receiptData.payment.exchangeRate)}</TableCell>
+                                                        <TableCell className="text-right">{formatCurrency((debt.paidAmountUSD || debt.amountUSD) * receiptData.payment.exchangeRate)}</TableCell>
                                                     </TableRow>
                                                 ))}
                                             </TableBody>
@@ -774,8 +770,8 @@ const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptD
                                     ) : (<p className="text-xs italic text-muted-foreground">El pago fue abonado al saldo a favor.</p>)}
                                 </div>
                                 <div className="text-right text-sm space-y-1 p-3 bg-muted/50 rounded-md">
-                                    <p>Saldo Anterior: Bs. {formatToTwoDecimals(receiptData.previousBalance)}</p>
-                                    <p className="font-bold">Saldo a Favor Actual: Bs. {formatToTwoDecimals(receiptData.currentBalance)}</p>
+                                    <p>Saldo Anterior: Bs. {formatCurrency(receiptData.previousBalance)}</p>
+                                    <p className="font-bold">Saldo a Favor Actual: Bs. {formatCurrency(receiptData.currentBalance)}</p>
                                 </div>
                             </div>
                              <DialogFooter className="flex-col sm:flex-row gap-2 pt-4">

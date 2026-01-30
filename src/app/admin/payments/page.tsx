@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
@@ -64,7 +65,7 @@ const MONTHS_LOCALE: { [key: number]: string } = {
     1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril', 5: 'Mayo', 6: 'Junio',
     7: 'Julio', 8: 'Agosto', 9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre'
 };
-const formatCurrency = (num: number) => `Bs. ${num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const formatCurrency = (num: number) => num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 
 // --- VERIFICATION COMPONENT ---
@@ -234,67 +235,63 @@ function VerificationComponent() {
         try {
             const doc = new jsPDF();
             const pageWidth = doc.internal.pageSize.getWidth();
-            const headerHeight = 35;
+            const headerHeight = 25;
             const margin = 14;
+            const headerColor = [28, 43, 58]; // #1C2B3A
             
             // --- HEADER ---
-            doc.setFillColor(28, 43, 58); // #1C2B3A
+            doc.setFillColor(headerColor[0], headerColor[1], headerColor[2]);
             doc.rect(0, 0, pageWidth, headerHeight, 'F');
             doc.setTextColor(255, 255, 255);
             
             let textX = margin;
             if (companyInfo.logo) {
                 try {
-                    const logoSize = 20;
-                    doc.saveGraphicsState();
-                    doc.circle(margin + logoSize / 2, 7 + logoSize / 2, logoSize / 2);
-                    doc.clip();
-                    doc.addImage(companyInfo.logo, 'PNG', margin, 7, logoSize, logoSize);
-                    doc.restoreGraphicsState();
+                    const logoSize = 18;
+                    doc.addImage(companyInfo.logo, 'PNG', margin, (headerHeight - logoSize) / 2, logoSize, logoSize);
                     textX += logoSize + 5;
                 } catch (e) {
                     console.error("Error adding logo to PDF:", e);
                 }
             }
     
-            doc.setFontSize(14).setFont('helvetica', 'bold');
-            doc.text(companyInfo.name, textX, 15);
-            doc.setFontSize(9).setFont('helvetica', 'normal');
-            doc.text(`RIF: ${companyInfo.rif}`, textX, 22);
-    
-            doc.setFontSize(12).setFont('helvetica', 'bold');
-            doc.text('EFAS CondoSys', pageWidth - margin, 15, { align: 'right' });
+            doc.setFontSize(11).setFont('helvetica', 'bold');
+            doc.text(companyInfo.name, textX, 13);
             doc.setFontSize(8).setFont('helvetica', 'normal');
-            doc.text('RECIBO DE PAGO', pageWidth - margin, 20, { align: 'right' });
+            doc.text(`RIF: ${companyInfo.rif}`, textX, 18);
     
-            doc.setTextColor(0, 0, 0);
+            doc.setFontSize(8).setFont('helvetica', 'normal');
+            doc.text('RECIBO DE PAGO', pageWidth - margin, headerHeight / 2 + 3, { align: 'right' });
     
-            // --- BARCODE ---
-            let startY = headerHeight + 30;
-            const canvas = document.createElement('canvas');
+            doc.setTextColor(0, 0, 0); // Reset text color
+    
+            let startY = headerHeight + 15;
+    
+            // --- BARCODE AND RECEIPT NUMBER ---
             const barcodeValue = `REC-${receiptNumber}`;
             try {
+                const canvas = document.createElement('canvas');
                 JsBarcode(canvas, barcodeValue, {
-                    format: "CODE128", height: 30, width: 1.5, displayValue: false, margin: 0,
+                    format: "CODE128", height: 40, width: 1.5, displayValue: false, margin: 0,
                 });
                 const barcodeDataUrl = canvas.toDataURL("image/png");
-                doc.addImage(barcodeDataUrl, 'PNG', pageWidth - margin - 55, headerHeight + 5, 50, 15);
-                doc.setFontSize(8).text(barcodeValue, pageWidth - margin - 55, headerHeight + 23);
+                doc.addImage(barcodeDataUrl, 'PNG', pageWidth - margin - 60, startY - 5, 60, 20);
+                doc.setFontSize(8).text(barcodeValue, pageWidth - margin, startY + 18, { align: 'right' });
+                doc.setFontSize(10).setFont('helvetica', 'bold').text(`N° de recibo: ${receiptNumber}`, pageWidth - margin, startY + 23, { align: 'right' });
             } catch (e) {
                 console.error("Barcode generation failed", e);
             }
     
-            // 2. Title Section
-            doc.setFontSize(16).setFont('helvetica', 'bold').text("RECIBO DE PAGO", pageWidth / 2, startY, { align: 'center' });
-            doc.setFontSize(9).setFont('helvetica', 'normal').text(`N° de recibo: ${receiptNumber}`, pageWidth - margin, startY, { align: 'right' });
-            startY += 8;
+            // --- MAIN TITLE ---
+            doc.setFontSize(16).setFont('helvetica', 'bold').text("RECIBO DE PAGO", margin, startY + 5);
+            startY += 20;
     
-            // 3. Details Section
+            // --- BENEFICIARY DETAILS ---
             doc.setFontSize(9);
             const detailsX = margin;
             doc.text(`Beneficiario: ${beneficiary.ownerName} (${data.ownerUnit})`, detailsX, startY);
             startY += 5;
-            doc.text(`Método de pago: ${payment.type}`, detailsX, startY);
+            doc.text(`Método de pago: ${payment.paymentMethod}`, detailsX, startY);
             startY += 5;
             doc.text(`Banco Emisor: ${payment.bank}`, detailsX, startY);
             startY += 5;
@@ -306,7 +303,7 @@ function VerificationComponent() {
             
             startY += 15;
     
-            // 4. Main Table
+            // --- CONCEPTS TABLE ---
             let totalPaidInConcepts = 0;
             const tableBody = paidDebts.map(debt => {
                 const debtAmountBs = (debt.paidAmountUSD || debt.amountUSD) * payment.exchangeRate;
@@ -321,9 +318,9 @@ function VerificationComponent() {
                 ];
             });
     
-            if (paidDebts.length === 0) {
-                totalPaidInConcepts = beneficiary.amount;
-                tableBody.push(['', 'Abono a Saldo a Favor', '', `Bs. ${formatCurrency(beneficiary.amount)}`]);
+            if (paidDebts.length === 0 && beneficiary.amount > 0) {
+                 totalPaidInConcepts = beneficiary.amount;
+                 tableBody.push(['', 'Abono a Saldo a Favor', '', `Bs. ${formatCurrency(beneficiary.amount)}`]);
             }
     
             autoTable(doc, { 
@@ -331,64 +328,66 @@ function VerificationComponent() {
                 head: [['Período', 'Concepto (Propiedad)', 'Monto ($)', 'Monto Pagado (Bs)']], 
                 body: tableBody, 
                 theme: 'striped', 
-                headStyles: { fillColor: [30, 80, 180], textColor: 255 }, 
+                headStyles: { fillColor: headerColor, textColor: 255 }, 
                 styles: { fontSize: 9, cellPadding: 2.5 },
                 columnStyles: {
                     2: { halign: 'right' },
                     3: { halign: 'right' },
                 }
             });
-            startY = (doc as any).lastAutoTable.finalY + 10;
             
-            // 5. Summary and Total
+            let finalY = (doc as any).lastAutoTable.finalY + 10;
+            
+            // --- SUMMARY BLOCK ---
             const rightColX = pageWidth - margin;
+            const labelX = rightColX - 50;
             doc.setFontSize(9);
             
-            doc.text('Saldo a Favor Anterior:', rightColX - 50, startY, { align: 'right' });
-            doc.text(`Bs. ${formatCurrency(previousBalance)}`, rightColX, startY, { align: 'right' });
-            startY += 5;
+            doc.text('Saldo a Favor Anterior:', labelX, finalY, { align: 'right' });
+            doc.text(`Bs. ${formatCurrency(previousBalance)}`, rightColX, finalY, { align: 'right' });
+            finalY += 5;
             
-            doc.text('Monto del Pago Recibido:', rightColX - 50, startY, { align: 'right' });
-            doc.text(`Bs. ${formatCurrency(beneficiary.amount)}`, rightColX, startY, { align: 'right' });
-            startY += 5;
+            doc.text('Monto del Pago Recibido:', labelX, finalY, { align: 'right' });
+            doc.text(`Bs. ${formatCurrency(beneficiary.amount)}`, rightColX, finalY, { align: 'right' });
+            finalY += 5;
     
-            doc.text('Total Abonado en Deudas:', rightColX - 50, startY, { align: 'right' });
-            doc.text(`Bs. ${formatCurrency(totalPaidInConcepts)}`, rightColX, startY, { align: 'right' });
-            startY += 5;
+            doc.text('Total Abonado en Deudas:', labelX, finalY, { align: 'right' });
+            doc.text(`Bs. ${formatCurrency(totalPaidInConcepts)}`, rightColX, finalY, { align: 'right' });
+            finalY += 5;
     
-            doc.text('Saldo a Favor Actual:', rightColX - 50, startY, { align: 'right' });
-            doc.text(`Bs. ${formatCurrency(currentBalance)}`, rightColX, startY, { align: 'right' });
-            startY += 8;
+            doc.text('Saldo a Favor Actual:', labelX, finalY, { align: 'right' });
+            doc.text(`Bs. ${formatCurrency(currentBalance)}`, rightColX, finalY, { align: 'right' });
+            finalY += 8;
         
             doc.setFont('helvetica', 'bold');
-            doc.text('TOTAL PAGADO:', rightColX - 50, startY, { align: 'right' });
-            doc.text(`Bs. ${formatCurrency(beneficiary.amount)}`, rightColX, startY, { align: 'right' });
-            startY += 10;
-    
-            // 6. Footer Notes
-            startY = Math.max(startY, 220); 
+            doc.text('TOTAL PAGADO:', labelX, finalY, { align: 'right' });
+            doc.text(`Bs. ${formatCurrency(beneficiary.amount)}`, rightColX, finalY, { align: 'right' });
+            
+            // --- FOOTER NOTES ---
+            let footerY = Math.max(finalY, 220); 
             doc.setFontSize(8).setFont('helvetica', 'normal');
+            doc.setTextColor(100);
     
             if (payment.observations) {
                 const obsText = `Observaciones: ${payment.observations}`;
-                doc.text(obsText, margin, startY);
-                startY += 5;
+                doc.text(obsText, margin, footerY, {maxWidth: pageWidth - margin * 2});
+                footerY += 5;
             }
     
             const note1 = 'Todo propietario que requiera de firma y sello húmedo deberá imprimir éste recibo y hacerlo llegar al condominio para su respectiva estampa.';
-            const note2 = "Este recibo confirma que el pago ha sido validado para la(s) cuota(s) y propiedad(es) aquí detalladas.";
+            const note2 = `Este recibo confirma que el pago ha sido validado para la(s) cuota(s) y propiedad(es) aquí detalladas.`;
             const note3 = `Firma electrónica: '${companyInfo.name} - Condominio'`;
     
-            doc.text(note1, margin, startY);
-            startY += 4;
-            doc.text(note2, margin, startY);
-            startY += 4;
-            doc.text(note3, margin, startY);
-            startY += 8;
-    
-            doc.setLineWidth(0.2).line(margin, startY, pageWidth - margin, startY);
-            startY += 4;
-            doc.setFont('helvetica', 'italic').text('Este recibo se generó de manera automatica y es válido sin firma manuscrita.', pageWidth / 2, startY, { align: 'center'});
+            doc.text(note1, margin, footerY, {maxWidth: pageWidth - margin * 2});
+            footerY += 8;
+            doc.text(note2, margin, footerY, {maxWidth: pageWidth - margin * 2});
+            footerY += 4;
+            doc.text(note3, margin, footerY, {maxWidth: pageWidth - margin * 2});
+            
+            footerY = 280; // Position it at the bottom
+            doc.setLineWidth(0.2).line(margin, footerY, pageWidth - margin, footerY);
+            footerY += 4;
+            doc.setFont('helvetica', 'italic').text('Este recibo se generó de manera automatica y es válido sin firma manuscrita.', pageWidth / 2, footerY, { align: 'center'});
             
             const pdfOutput = doc.output('blob');
             const pdfFile = new File([pdfOutput], `recibo_${receiptNumber}.pdf`, { type: 'application/pdf' });
@@ -500,7 +499,6 @@ function VerificationComponent() {
                                             <TableCell>{formatCurrency(p.totalAmount)}</TableCell>
                                             <TableCell className="font-mono">{p.reference}</TableCell>
                                             <TableCell className="text-right">
-                                                {p.status === 'pendiente' ? (
                                                     <DropdownMenu>
                                                         <DropdownMenuTrigger asChild>
                                                             <Button variant="ghost" className="h-8 w-8 p-0">
@@ -512,40 +510,51 @@ function VerificationComponent() {
                                                             <DropdownMenuItem onClick={() => setSelectedPayment(p)}>
                                                                 <Eye className="mr-2 h-4 w-4" /> Ver detalles
                                                             </DropdownMenuItem>
-                                                            <DropdownMenuItem onClick={() => handleApprove(p)} className="text-emerald-600 focus:text-emerald-600">
-                                                                <CheckCircle className="mr-2 h-4 w-4" /> Aprobar
-                                                            </DropdownMenuItem>
-                                                            <DropdownMenuItem onClick={() => setSelectedPayment(p)} className="text-destructive focus:text-destructive">
-                                                               <XCircle className="mr-2 h-4 w-4" /> Rechazar
-                                                            </DropdownMenuItem>
+                                                            
+                                                            {p.status === 'pendiente' && (
+                                                                <>
+                                                                    <DropdownMenuSeparator />
+                                                                    <DropdownMenuItem onClick={() => handleApprove(p)} className="text-emerald-600 focus:text-emerald-600">
+                                                                        <CheckCircle className="mr-2 h-4 w-4" /> Aprobar
+                                                                    </DropdownMenuItem>
+                                                                    <DropdownMenuItem onClick={() => { setSelectedPayment(p); setRejectionReason(''); }} className="text-destructive focus:text-destructive">
+                                                                        <XCircle className="mr-2 h-4 w-4" /> Rechazar
+                                                                    </DropdownMenuItem>
+                                                                </>
+                                                            )}
+                                                            
+                                                            {p.status === 'aprobado' && (
+                                                                <>
+                                                                    <DropdownMenuSeparator />
+                                                                    <DropdownMenuItem 
+                                                                        onClick={() => prepareAndGenerateReceipt('download', p, p.beneficiaries[0])} 
+                                                                        disabled={isGenerating || !p.beneficiaries || p.beneficiaries.length === 0}
+                                                                    >
+                                                                        {isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Download className="mr-2 h-4 w-4" />} 
+                                                                        Exportar PDF
+                                                                    </DropdownMenuItem>
+                                                                    <DropdownMenuItem 
+                                                                        onClick={() => prepareAndGenerateReceipt('share', p, p.beneficiaries[0])} 
+                                                                        disabled={isGenerating || !p.beneficiaries || p.beneficiaries.length === 0}
+                                                                    >
+                                                                        <Share2 className="mr-2 h-4 w-4" /> Compartir
+                                                                    </DropdownMenuItem>
+                                                                    <DropdownMenuSeparator />
+                                                                    <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => setPaymentToDelete(p)}>
+                                                                        <Trash2 className="mr-2 h-4 w-4"/>Eliminar
+                                                                    </DropdownMenuItem>
+                                                                </>
+                                                            )}
+                                                             {p.status === 'rechazado' && (
+                                                                 <>
+                                                                    <DropdownMenuSeparator />
+                                                                    <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => setPaymentToDelete(p)}>
+                                                                        <Trash2 className="mr-2 h-4 w-4"/>Eliminar
+                                                                    </DropdownMenuItem>
+                                                                 </>
+                                                             )}
                                                         </DropdownMenuContent>
                                                     </DropdownMenu>
-                                                ) : p.status === 'aprobado' ? (
-                                                    <DropdownMenu>
-                                                        <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4"/></Button></DropdownMenuTrigger>
-                                                        <DropdownMenuContent>
-                                                            <DropdownMenuItem onClick={() => setSelectedPayment(p)}><Eye className="mr-2 h-4 w-4"/>Ver Detalles</DropdownMenuItem>
-                                                            <DropdownMenuSeparator />
-                                                            <DropdownMenuItem 
-                                                                onClick={() => prepareAndGenerateReceipt('download', p, p.beneficiaries[0])} 
-                                                                disabled={isGenerating || !p.beneficiaries || p.beneficiaries.length === 0}
-                                                            >
-                                                                {isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Download className="mr-2 h-4 w-4" />} 
-                                                                Exportar PDF
-                                                            </DropdownMenuItem>
-                                                            <DropdownMenuItem 
-                                                                onClick={() => prepareAndGenerateReceipt('share', p, p.beneficiaries[0])} 
-                                                                disabled={isGenerating || !p.beneficiaries || p.beneficiaries.length === 0}
-                                                            >
-                                                                <Share2 className="mr-2 h-4 w-4" /> Compartir
-                                                            </DropdownMenuItem>
-                                                            <DropdownMenuSeparator />
-                                                            <DropdownMenuItem className="text-destructive" onClick={() => setPaymentToDelete(p)}><Trash2 className="mr-2 h-4 w-4"/>Eliminar</DropdownMenuItem>
-                                                        </DropdownMenuContent>
-                                                    </DropdownMenu>
-                                                ) : ( // Rechazado
-                                                    <Button variant="outline" size="sm" onClick={() => setSelectedPayment(p)}><Eye className="mr-2 h-4 w-4" /> Ver Detalles</Button>
-                                                )}
                                             </TableCell>
                                         </TableRow>
                                     ))}
@@ -562,10 +571,16 @@ function VerificationComponent() {
                                 <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Beneficiarios</CardTitle></CardHeader><CardContent>{selectedPayment?.beneficiaries.map((b, i) => (<div key={i} className="text-sm flex justify-between items-center"><span><User className="inline h-4 w-4 mr-1"/>{b.ownerName}</span><span className="font-bold">{formatCurrency(b.amount)}</span></div>))}</CardContent></Card>
                                 <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Detalles de la Transacción</CardTitle></CardHeader><CardContent className="text-sm space-y-1"><p><strong>Monto Total:</strong> {formatCurrency(selectedPayment?.totalAmount || 0)}</p><p><strong>Fecha:</strong> {selectedPayment ? format(selectedPayment.paymentDate.toDate(), 'dd/MM/yyyy') : ''}</p><p><strong>Método:</strong> {selectedPayment?.paymentMethod}</p><p><strong>Banco:</strong> {selectedPayment?.bank}</p></CardContent></Card>
                                 {selectedPayment?.status === 'rechazado' && (<Alert variant="destructive"><AlertTriangle className="h-4 w-4" /><AlertDescription><strong>Motivo del Rechazo:</strong> {selectedPayment.observations}</AlertDescription></Alert>)}
+                                {selectedPayment?.status === 'pendiente' && (
+                                    <div className="w-full space-y-2">
+                                        <Label htmlFor="rejectionReason">Motivo del rechazo (si aplica)</Label>
+                                        <Textarea id="rejectionReason" value={rejectionReason} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setRejectionReason(e.target.value)} placeholder="Ej: Referencia no coincide, monto incorrecto..." />
+                                    </div>
+                                )}
                             </div>
                             <div><Label>Comprobante de Pago</Label>{selectedPayment?.receiptUrl ? (<div className="mt-2 border rounded-lg overflow-hidden"><Image src={selectedPayment.receiptUrl} alt="Comprobante" width={400} height={600} className="w-full h-auto" /></div>) : <p className="text-sm text-muted-foreground">No se adjuntó comprobante.</p>}</div>
                         </div>
-                        {selectedPayment?.status === 'pendiente' && (<DialogFooter className="border-t pt-4 gap-4"><div className="w-full"><Label htmlFor="rejectionReason">Motivo del rechazo (opcional)</Label><Textarea id="rejectionReason" value={rejectionReason} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setRejectionReason(e.target.value)} placeholder="Ej: Referencia no coincide, monto incorrecto..." /></div><div className="w-full flex flex-col sm:flex-row gap-2 justify-end"><Button variant="destructive" onClick={() => handleReject(selectedPayment!)} disabled={isVerifying || !rejectionReason}>{isVerifying ? <Loader2 className="animate-spin" /> : <XCircle className="mr-2"/>} Rechazar</Button><Button onClick={() => handleApprove(selectedPayment!)} disabled={isVerifying} className="bg-green-500 hover:bg-green-600">{isVerifying ? <Loader2 className="animate-spin" /> : <CheckCircle className="mr-2"/>} Aprobar</Button></div></DialogFooter>)}
+                        {selectedPayment?.status === 'pendiente' && (<DialogFooter className="border-t pt-4 gap-2 flex-col sm:flex-row"><Button variant="destructive" onClick={() => handleReject(selectedPayment!)} disabled={isVerifying || !rejectionReason}>{isVerifying ? <Loader2 className="animate-spin" /> : <XCircle className="mr-2"/>} Rechazar</Button><Button onClick={() => handleApprove(selectedPayment!)} disabled={isVerifying} className="bg-green-500 hover:bg-green-600">{isVerifying ? <Loader2 className="animate-spin" /> : <CheckCircle className="mr-2"/>} Aprobar</Button></DialogFooter>)}
                     </DialogContent>
                 </Dialog>
                 <Dialog open={!!paymentToDelete} onOpenChange={() => setPaymentToDelete(null)}>
@@ -990,7 +1005,7 @@ function PaymentCalculatorUI({ owner, debts, activeRate, condoFee }: { owner: an
                                         const status = debt.status === 'vencida' || (debt.status === 'pending' && isOverdue) ? 'Vencida' : 'Pendiente';
                                         return <TableRow key={debt.id} data-state={selectedPendingDebts.includes(debt.id) ? 'selected' : ''}>
                                                 <TableCell className="text-center"><Checkbox onCheckedChange={() => setSelectedPendingDebts(p => p.includes(debt.id) ? p.filter(id=>id!==debt.id) : [...p, debt.id])} checked={selectedPendingDebts.includes(debt.id)} /></TableCell>
-                                                <TableCell className="font-medium">{monthsLocale[debt.month]} {debt.year}</TableCell>
+                                                <TableCell className="font-medium">{MONTHS_LOCALE[debt.month]} {debt.year}</TableCell>
                                                 <TableCell>{debt.description}</TableCell>
                                                 <TableCell><Badge variant={status === 'Vencida' ? 'destructive' : 'warning'}>{status}</Badge></TableCell>
                                                 <TableCell className="text-right">Bs. {formatCurrency(debt.amountUSD * activeRate)}</TableCell>
