@@ -34,6 +34,7 @@ import autoTable from 'jspdf-autotable';
 import JsBarcode from 'jsbarcode';
 import QRCode from 'qrcode';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Textarea } from '@/components/ui/textarea';
 
 
 // --- TYPES ---
@@ -49,6 +50,7 @@ type PaymentMethod = 'movil' | 'transferencia' | '';
 type Debt = { id: string; ownerId: string; year: number; month: number; amountUSD: number; description: string; status: 'pending' | 'paid' | 'vencida'; property: { street: string; house: string }; paidAmountUSD?: number;};
 type Payment = { id: string; beneficiaries: { ownerId: string; ownerName: string; amount: number; street?: string; house?: string; }[]; beneficiaryIds: string[]; totalAmount: number; exchangeRate: number; paymentDate: Timestamp; reportedAt: Timestamp; paymentMethod: 'transferencia' | 'movil' | 'efectivo' | 'zelle'; bank: string; reference: string; status: 'pendiente' | 'aprobado' | 'rechazado'; receiptUrl?: string; observations?: string; receiptNumbers?: { [ownerId: string]: string }; };
 type ReceiptData = { payment: Payment; beneficiary: any; ownerName: string; ownerUnit: string; paidDebts: Debt[]; previousBalance: number; currentBalance: number; qrCodeUrl?: string; receiptNumber: string; } | null;
+type PaymentDetails = { paymentMethod: 'movil' | 'transferencia' | ''; bank: string; otherBank: string; reference: string; };
 
 
 // --- CONSTANTS & HELPERS ---
@@ -255,15 +257,35 @@ function VerificationComponent() {
                                             <TableCell>{formatCurrency(p.totalAmount)}</TableCell>
                                             <TableCell className="font-mono">{p.reference}</TableCell>
                                             <TableCell className="text-right">
-                                                {p.status === 'aprobado' ? (
-                                                     <DropdownMenu>
+                                                {p.status === 'pendiente' ? (
+                                                    <DropdownMenu>
+                                                        <DropdownMenuTrigger asChild>
+                                                            <Button variant="ghost" className="h-8 w-8 p-0">
+                                                                <span className="sr-only">Abrir menú</span>
+                                                                <MoreHorizontal className="h-4 w-4" />
+                                                            </Button>
+                                                        </DropdownMenuTrigger>
+                                                        <DropdownMenuContent align="end">
+                                                            <DropdownMenuItem onClick={() => setSelectedPayment(p)}>
+                                                                <Eye className="mr-2 h-4 w-4" /> Ver detalles
+                                                            </DropdownMenuItem>
+                                                            <DropdownMenuItem onClick={() => handleApprove(p)} className="text-emerald-600 focus:text-emerald-600">
+                                                                <CheckCircle className="mr-2 h-4 w-4" /> Aprobar
+                                                            </DropdownMenuItem>
+                                                            <DropdownMenuItem onClick={() => setSelectedPayment(p)} className="text-destructive focus:text-destructive">
+                                                               <XCircle className="mr-2 h-4 w-4" /> Rechazar
+                                                            </DropdownMenuItem>
+                                                        </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                                ) : p.status === 'aprobado' ? (
+                                                    <DropdownMenu>
                                                         <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4"/></Button></DropdownMenuTrigger>
                                                         <DropdownMenuContent>
                                                             <DropdownMenuItem onClick={() => setSelectedPayment(p)}><Eye className="mr-2 h-4 w-4"/>Ver Recibo</DropdownMenuItem>
-                                                            <DropdownMenuItem className="text-destructive" onClick={() => setPaymentToDelete(p)}><Trash2 className="mr-2 h-4 w-4"/>Eliminar</Button></DropdownMenuItem>
+                                                            <DropdownMenuItem className="text-destructive" onClick={() => setPaymentToDelete(p)}><Trash2 className="mr-2 h-4 w-4"/>Eliminar</DropdownMenuItem>
                                                         </DropdownMenuContent>
-                                                     </DropdownMenu>
-                                                ) : (
+                                                    </DropdownMenu>
+                                                ) : ( // Rechazado
                                                     <Button variant="outline" size="sm" onClick={() => setSelectedPayment(p)}><Eye className="mr-2 h-4 w-4" /> Ver Detalles</Button>
                                                 )}
                                             </TableCell>
@@ -285,7 +307,7 @@ function VerificationComponent() {
                             </div>
                             <div><Label>Comprobante de Pago</Label>{selectedPayment?.receiptUrl ? (<div className="mt-2 border rounded-lg overflow-hidden"><Image src={selectedPayment.receiptUrl} alt="Comprobante" width={400} height={600} className="w-full h-auto" /></div>) : <p className="text-sm text-muted-foreground">No se adjuntó comprobante.</p>}</div>
                         </div>
-                        {selectedPayment?.status === 'pendiente' && (<DialogFooter className="border-t pt-4 gap-4"><div className="w-full"><Label htmlFor="rejectionReason">Motivo del rechazo (opcional)</Label><Textarea id="rejectionReason" value={rejectionReason} onChange={(e) => setRejectionReason(e.target.value)} placeholder="Ej: Referencia no coincide, monto incorrecto..." /></div><div className="w-full flex flex-col sm:flex-row gap-2 justify-end"><Button variant="destructive" onClick={() => handleReject(selectedPayment!)} disabled={isVerifying || !rejectionReason}>{isVerifying ? <Loader2 className="animate-spin" /> : <XCircle className="mr-2"/>} Rechazar</Button><Button onClick={() => handleApprove(selectedPayment!)} disabled={isVerifying} className="bg-green-500 hover:bg-green-600">{isVerifying ? <Loader2 className="animate-spin" /> : <CheckCircle className="mr-2"/>} Aprobar</Button></div></DialogFooter>)}
+                        {selectedPayment?.status === 'pendiente' && (<DialogFooter className="border-t pt-4 gap-4"><div className="w-full"><Label htmlFor="rejectionReason">Motivo del rechazo (opcional)</Label><Textarea id="rejectionReason" value={rejectionReason} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setRejectionReason(e.target.value)} placeholder="Ej: Referencia no coincide, monto incorrecto..." /></div><div className="w-full flex flex-col sm:flex-row gap-2 justify-end"><Button variant="destructive" onClick={() => handleReject(selectedPayment!)} disabled={isVerifying || !rejectionReason}>{isVerifying ? <Loader2 className="animate-spin" /> : <XCircle className="mr-2"/>} Rechazar</Button><Button onClick={() => handleApprove(selectedPayment!)} disabled={isVerifying} className="bg-green-500 hover:bg-green-600">{isVerifying ? <Loader2 className="animate-spin" /> : <CheckCircle className="mr-2"/>} Aprobar</Button></div></DialogFooter>)}
                     </DialogContent>
                 </Dialog>
                 <Dialog open={!!paymentToDelete} onOpenChange={() => setPaymentToDelete(null)}>
@@ -627,7 +649,7 @@ function AdminPaymentCalculatorComponent() {
 // --- MAIN PAGE COMPONENT ---
 function PaymentsPage() {
     const searchParams = useSearchParams();
-    const defaultTab = searchParams.get('tab') || 'verify';
+    const defaultTab = searchParams?.get('tab') || 'verify';
 
     return (
         <div className="space-y-8">
