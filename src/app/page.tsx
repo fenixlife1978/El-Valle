@@ -5,7 +5,7 @@ import React from 'react';
 import Link from 'next/link';
 import { Button } from "@/components/ui/button";
 import { Wallet, LayoutDashboard, ShieldCheck, ArrowRight } from 'lucide-react';
-import { SYSTEM_LOGO, COMPANY_NAME } from '@/lib/constants';
+import { SYSTEM_LOGO, COMPANY_NAME, SYSTEM_WORDMARK } from '@/lib/constants';
 
 export default function LandingPage() {
   return (
@@ -13,11 +13,16 @@ export default function LandingPage() {
       
       {/* HEADER - ESTRUCTURA EXACTA IMAGEN 1 */}
       <header className="flex items-center justify-between px-8 py-5 border-b border-white/5 sticky top-0 bg-[#1A1D23]/95 backdrop-blur-md z-50">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <img 
             src={SYSTEM_LOGO} 
             alt={COMPANY_NAME} 
-            className="h-10 w-auto object-contain"
+            className="h-9 w-9 object-contain"
+          />
+          <img 
+            src={SYSTEM_WORDMARK}
+            alt={COMPANY_NAME}
+            className="h-5 object-contain"
           />
         </div>
 
@@ -41,7 +46,7 @@ export default function LandingPage() {
         
         <div className="relative mb-14">
           <img 
-            src={SYSTEM_LOGO} 
+            src={SYSTEM_WORDMARK} 
             alt="Logo Central" 
             className="relative h-auto w-72 md:w-96 object-contain"
           />
@@ -128,7 +133,7 @@ export default function LandingPage() {
       <footer className="py-20 text-center border-t border-white/5 bg-[#1A1D23]">
         <div className="flex flex-col items-center gap-6">
           <div className="flex items-center gap-3 opacity-50">
-            <img src={SYSTEM_LOGO} alt="EFAS" className="h-8 w-auto grayscale object-contain" />
+            <img src={SYSTEM_WORDMARK} alt="EFAS" className="h-8 w-auto grayscale object-contain" />
           </div>
           <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.5em]">
             © 2026 {COMPANY_NAME} - Elevando el estándar de gestión
