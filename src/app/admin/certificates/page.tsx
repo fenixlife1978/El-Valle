@@ -382,37 +382,37 @@ export default function CertificatesPage() {
       const margin = 14;
 
       // --- HEADER ---
-        const headerColor = [28, 43, 58];
-        docPDF.setFillColor(headerColor[0], headerColor[1], headerColor[2]);
-        docPDF.rect(0, 0, pageWidth, headerHeight, 'F');
-        docPDF.setTextColor(255, 255, 255);
+      docPDF.setFillColor(30, 41, 59); // Slate-800
+      docPDF.rect(0, 0, pageWidth, headerHeight, 'F');
+      docPDF.setTextColor(255, 255, 255);
 
-        let textX = margin;
-        if (companyInfo?.logo) {
-            try {
-                const logoSize = 18;
-                docPDF.addImage(companyInfo.logo, 'PNG', margin, (headerHeight - logoSize) / 2, logoSize, logoSize);
-                textX += logoSize + 5;
-            }
-            catch(e) { console.error("Error adding logo:", e); }
-        }
-
-        docPDF.setFontSize(11).setFont('helvetica', 'bold');
-        docPDF.text(companyInfo?.name || 'CONDOMINIO', textX, 13);
-        docPDF.setFontSize(8).setFont('helvetica', 'normal');
-        docPDF.text(`RIF: ${companyInfo?.rif || 'N/A'}`, textX, 18);
+      if (companyInfo?.logo) {
+          try {
+              docPDF.addImage(companyInfo.logo, 'JPEG', margin, 6.5, 12, 12);
+              docPDF.setFontSize(12).setFont('helvetica', 'bold');
+              docPDF.text(companyInfo.name, margin + 17, 12);
+              docPDF.setFontSize(8).setFont('helvetica', 'normal');
+              docPDF.text(`RIF: ${companyInfo.rif || 'N/A'}`, margin + 17, 17);
+          }
+          catch(e) { console.error("Error adding logo:", e); }
+      } else {
+          docPDF.setFontSize(12).setFont('helvetica', 'bold');
+          docPDF.text(companyInfo.name, margin, 12);
+          docPDF.setFontSize(8).setFont('helvetica', 'normal');
+          docPDF.text(`RIF: ${companyInfo.rif || 'N/A'}`, margin, 17);
+      }
         
-        docPDF.setFontSize(8).setFont('helvetica', 'normal');
-        docPDF.text('DOCUMENTO OFICIAL', pageWidth - margin, headerHeight / 2 + 3, { align: 'right' });
-        
-        docPDF.setTextColor(0, 0, 0); // Reset text color
+      docPDF.setFontSize(8).setFont('helvetica', 'normal');
+      docPDF.text('DOCUMENTO OFICIAL', pageWidth - margin, headerHeight / 2 + 3, { align: 'right' });
       
-        let startY = headerHeight + 15;
+      docPDF.setTextColor(0, 0, 0); // Reset text color
+      
+      let startY = headerHeight + 15;
 
       // --- BARCODE ---
-      const canvas = document.createElement('canvas');
       const barcodeValue = `CERT-${certificate.id.slice(0, 4)}-${certificate.ownerId?.slice(0, 4)}`;
       try {
+          const canvas = document.createElement('canvas');
           JsBarcode(canvas, barcodeValue, {
               format: "CODE128", height: 40, width: 1.5, displayValue: true, margin: 0, fontSize: 10
           });
@@ -571,3 +571,4 @@ export default function CertificatesPage() {
     </div>
   );
 }
+

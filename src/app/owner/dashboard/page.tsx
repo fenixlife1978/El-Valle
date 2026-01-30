@@ -32,10 +32,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import Marquee from "@/components/ui/marquee";
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import JsBarcode from 'jsbarcode';
-import QRCode from 'qrcode';
+import { generatePaymentReceipt } from '@/lib/pdf-generator';
 
 
 // -------------------------------------------------------------------------
@@ -286,189 +283,69 @@ const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptD
     if (!data || !companyInfo) return;
     setIsGenerating(true);
 
-    const { payment, beneficiary, paidDebts, previousBalance, currentBalance, qrCodeUrl, receiptNumber } = data;
+    const { payment, beneficiary, paidDebts, previousBalance, currentBalance, receiptNumber } = data;
+
+    const conceptsForPdf = paidDebts.map(debt => {
+        const debtAmountBs = (debt.paidAmountUSD || debt.amountUSD) * payment.exchangeRate;
+        const propertyLabel = debt.property ? `${debt.property.street} - ${debt.property.house}` : 'N/A';
+        const concept = `${debt.description} (${propertyLabel})`;
+        return [
+            `${monthsLocale[debt.month]} ${debt.year}`,
+            concept,
+            `$${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}`,
+            formatCurrency(debtAmountBs)
+        ];
+    });
+
+    if (paidDebts.length === 0 && beneficiary.amount > 0) {
+        conceptsForPdf.push(['', 'Abono a Saldo a Favor', '', formatCurrency(beneficiary.amount)]);
+    }
+
+    const totalDebtPaidInBs = paidDebts.reduce((sum, debt) => sum + ((debt.paidAmountUSD || debt.amountUSD) * payment.exchangeRate), 0);
+
+    const dataForPdf = {
+        condoName: companyInfo.name,
+        rif: companyInfo.rif,
+        receiptNumber: receiptNumber,
+        ownerName: data.ownerName,
+        method: payment.paymentMethod,
+        bank: payment.bank,
+        reference: payment.reference,
+        date: format(payment.paymentDate.toDate(), 'dd/MM/yyyy'),
+        rate: formatCurrency(payment.exchangeRate),
+        concepts: conceptsForPdf,
+        prevBalance: formatCurrency(previousBalance),
+        receivedAmount: formatCurrency(beneficiary.amount),
+        totalDebtPaid: formatCurrency(totalDebtPaidInBs),
+        currentBalance: formatCurrency(currentBalance),
+        observations: payment.observations || 'Sin observaciones.'
+    };
     
     try {
-        const doc = new jsPDF();
-        const pageWidth = doc.internal.pageSize.getWidth();
-        const headerHeight = 25;
-        const margin = 14;
-        const headerColor = [28, 43, 58]; // #1C2B3A
-        
-        // --- HEADER ---
-        doc.setFillColor(headerColor[0], headerColor[1], headerColor[2]);
-        doc.rect(0, 0, pageWidth, headerHeight, 'F');
-        doc.setTextColor(255, 255, 255);
-        
-        let textX = margin;
-        if (companyInfo.logo) {
-            try {
-                const logoSize = 18;
-                doc.addImage(companyInfo.logo, 'PNG', margin, (headerHeight - logoSize) / 2, logoSize, logoSize);
-                textX += logoSize + 5;
-            } catch (e) {
-                console.error("Error adding logo to PDF:", e);
-            }
-        }
-
-        doc.setFontSize(11).setFont('helvetica', 'bold');
-        doc.text(companyInfo.name, textX, 13);
-        doc.setFontSize(8).setFont('helvetica', 'normal');
-        doc.text(`RIF: ${companyInfo.rif}`, textX, 18);
-
-        doc.setFontSize(8).setFont('helvetica', 'normal');
-        doc.text('RECIBO DE PAGO', pageWidth - margin, headerHeight / 2 + 3, { align: 'right' });
-
-        doc.setTextColor(0, 0, 0); // Reset text color
-
-        let startY = headerHeight + 15;
-
-        // --- BARCODE AND RECEIPT NUMBER ---
-        const barcodeValue = `REC-${receiptNumber}`;
-        try {
-            const canvas = document.createElement('canvas');
-            JsBarcode(canvas, barcodeValue, {
-                format: "CODE128", height: 40, width: 1.5, displayValue: false, margin: 0,
-            });
-            const barcodeDataUrl = canvas.toDataURL("image/png");
-            doc.addImage(barcodeDataUrl, 'PNG', pageWidth - margin - 60, startY - 5, 60, 20);
-            doc.setFontSize(8).text(barcodeValue, pageWidth - margin, startY + 18, { align: 'right' });
-            doc.setFontSize(10).setFont('helvetica', 'bold').text(`N° de recibo: ${receiptNumber}`, pageWidth - margin, startY + 23, { align: 'right' });
-        } catch (e) {
-            console.error("Barcode generation failed", e);
-        }
-
-        // --- MAIN TITLE ---
-        doc.setFontSize(16).setFont('helvetica', 'bold').text("RECIBO DE PAGO", margin, startY + 5);
-        startY += 20;
-
-        // --- BENEFICIARY DETAILS ---
-        doc.setFontSize(9);
-        const detailsX = margin;
-        doc.text(`Beneficiario: ${beneficiary.ownerName} (${data.ownerUnit})`, detailsX, startY);
-        startY += 5;
-        doc.text(`Método de pago: ${payment.paymentMethod}`, detailsX, startY);
-        startY += 5;
-        doc.text(`Banco Emisor: ${payment.bank}`, detailsX, startY);
-        startY += 5;
-        doc.text(`N° de Referencia Bancaria: ${payment.reference}`, detailsX, startY);
-        startY += 5;
-        doc.text(`Fecha del pago: ${format(payment.paymentDate.toDate(), 'dd/MM/yyyy')}`, detailsX, startY);
-        startY += 5;
-        doc.text(`Tasa de Cambio Aplicada: Bs. ${formatCurrency(payment.exchangeRate)} por USD`, detailsX, startY);
-        
-        startY += 15;
-
-        // --- CONCEPTS TABLE ---
-        let totalPaidInConcepts = 0;
-        const tableBody = paidDebts.map(debt => {
-            const debtAmountBs = (debt.paidAmountUSD || debt.amountUSD) * payment.exchangeRate;
-            totalPaidInConcepts += debtAmountBs;
-            const propertyLabel = debt.property ? `${debt.property.street} - ${debt.property.house}` : 'N/A';
-            const concept = `${debt.description} (${propertyLabel})`;
-            return [ 
-                `${monthsLocale[debt.month]} ${debt.year}`,
-                concept, 
-                `$${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}`, 
-                `Bs. ${formatCurrency(debtAmountBs)}` 
-            ];
-        });
-
-        if (paidDebts.length === 0 && beneficiary.amount > 0) {
-             totalPaidInConcepts = beneficiary.amount;
-             tableBody.push(['', 'Abono a Saldo a Favor', '', `Bs. ${formatCurrency(beneficiary.amount)}`]);
-        }
-
-        autoTable(doc, { 
-            startY: startY, 
-            head: [['Período', 'Concepto (Propiedad)', 'Monto ($)', 'Monto Pagado (Bs)']], 
-            body: tableBody, 
-            theme: 'striped', 
-            headStyles: { fillColor: headerColor, textColor: 255 }, 
-            styles: { fontSize: 9, cellPadding: 2.5 },
-            columnStyles: {
-                2: { halign: 'right' },
-                3: { halign: 'right' },
-            }
-        });
-        
-        let finalY = (doc as any).lastAutoTable.finalY + 10;
-        
-        // --- SUMMARY BLOCK ---
-        const rightColX = pageWidth - margin;
-        const labelX = rightColX - 50;
-        doc.setFontSize(9);
-        
-        doc.text('Saldo a Favor Anterior:', labelX, finalY, { align: 'right' });
-        doc.text(`Bs. ${formatCurrency(previousBalance)}`, rightColX, finalY, { align: 'right' });
-        finalY += 5;
-        
-        doc.text('Monto del Pago Recibido:', labelX, finalY, { align: 'right' });
-        doc.text(`Bs. ${formatCurrency(beneficiary.amount)}`, rightColX, finalY, { align: 'right' });
-        finalY += 5;
-
-        doc.text('Total Abonado en Deudas:', labelX, finalY, { align: 'right' });
-        doc.text(`Bs. ${formatCurrency(totalPaidInConcepts)}`, rightColX, finalY, { align: 'right' });
-        finalY += 5;
-
-        doc.text('Saldo a Favor Actual:', labelX, finalY, { align: 'right' });
-        doc.text(`Bs. ${formatCurrency(currentBalance)}`, rightColX, finalY, { align: 'right' });
-        finalY += 8;
-    
-        doc.setFont('helvetica', 'bold');
-        doc.text('TOTAL PAGADO:', labelX, finalY, { align: 'right' });
-        doc.text(`Bs. ${formatCurrency(beneficiary.amount)}`, rightColX, finalY, { align: 'right' });
-        
-        // --- FOOTER NOTES ---
-        let footerY = Math.max(finalY, 220); 
-        doc.setFontSize(8).setFont('helvetica', 'normal');
-        doc.setTextColor(100);
-
-        if (payment.observations) {
-            const obsText = `Observaciones: ${payment.observations}`;
-            doc.text(obsText, margin, footerY, {maxWidth: pageWidth - margin * 2});
-            footerY += 5;
-        }
-
-        const note1 = 'Todo propietario que requiera de firma y sello húmedo deberá imprimir éste recibo y hacerlo llegar al condominio para su respectiva estampa.';
-        const note2 = `Este recibo confirma que el pago ha sido validado para la(s) cuota(s) y propiedad(es) aquí detalladas.`;
-        const note3 = `Firma electrónica: '${companyInfo.name} - Condominio'`;
-
-        doc.text(note1, margin, footerY, {maxWidth: pageWidth - margin * 2});
-        footerY += 8;
-        doc.text(note2, margin, footerY, {maxWidth: pageWidth - margin * 2});
-        footerY += 4;
-        doc.text(note3, margin, footerY, {maxWidth: pageWidth - margin * 2});
-        
-        footerY = 280; // Position it at the bottom
-        doc.setLineWidth(0.2).line(margin, footerY, pageWidth - margin, footerY);
-        footerY += 4;
-        doc.setFont('helvetica', 'italic').text('Este recibo se generó de manera automatica y es válido sin firma manuscrita.', pageWidth / 2, footerY, { align: 'center'});
-        
-        const pdfOutput = doc.output('blob');
-        const pdfFile = new File([pdfOutput], `recibo_${receiptNumber}.pdf`, { type: 'application/pdf' });
-
         if (action === 'download') {
-            doc.save(`recibo_${receiptNumber}.pdf`);
-        } else if (navigator.share && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
-          try {
-              await navigator.share({
-                  title: `Recibo de Pago ${data.receiptNumber}`, 
-                  text: `Recibo de pago para ${data.ownerName}.`,
-                  files: [pdfFile],
-              });
-          } catch (error) {
-            console.error('Error al compartir:', error);
-            const url = URL.createObjectURL(pdfFile);
-            window.open(url, '_blank');
-          }
+            generatePaymentReceipt(dataForPdf, companyInfo.logo, 'download');
+        } else if (navigator.share) {
+            const pdfBlob = generatePaymentReceipt(dataForPdf, companyInfo.logo, 'blob');
+            if (pdfBlob) {
+                const pdfFile = new File([pdfBlob], `Recibo_${receiptNumber}.pdf`, { type: 'application/pdf' });
+                if (navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+                    await navigator.share({
+                        title: `Recibo de Pago ${receiptNumber}`,
+                        text: `Recibo de pago para ${data.ownerName}.`,
+                        files: [pdfFile],
+                    });
+                } else {
+                     throw new Error('No se puede compartir el PDF en este navegador.');
+                }
+            }
         } else {
-          const url = URL.createObjectURL(pdfFile);
-          window.open(url, '_blank');
+          throw new Error('La API de compartir no está soportada en este navegador.');
         }
-    } catch(error) {
-        console.error("Error generating PDF:", error);
-        toast({ variant: "destructive", title: "Error", description: "No se pudo generar el documento PDF." });
+    } catch (error: any) {
+        console.error('Error en Share/Download:', error);
+        // Fallback to download if sharing fails
+        generatePaymentReceipt(dataForPdf, companyInfo.logo, 'download');
+        toast({ title: 'Compartir no disponible', description: 'Se ha iniciado la descarga del PDF.'});
     } finally {
         setIsGenerating(false);
     }
@@ -501,10 +378,6 @@ const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptD
             const previousBalance = (ownerData.balance || 0) - (beneficiary.amount - totalDebtPaidWithPayment);
 
             const receiptNumber = payment.receiptNumbers?.[ownerId] || `N/A-${payment.id.slice(-5)}`;
-            const receiptUrl = `${window.location.origin}/receipt/${payment.id}/${beneficiary.ownerId}`;
-            const qrDataContent = JSON.stringify({ receiptNumber, date: format(new Date(), 'yyyy-MM-dd'), amount: beneficiary.amount, ownerId: beneficiary.ownerId, url: receiptUrl });
-            const qrCodeUrl = await QRCode.toDataURL(qrDataContent, { errorCorrectionLevel: 'M', margin: 2, scale: 4, color: { dark: '#000000', light: '#FFFFFF' } });
-
 
             setReceiptData({
                 payment,
@@ -514,8 +387,7 @@ const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptD
                 paidDebts: paidDebts.sort((a,b) => a.year - b.year || a.month - b.month),
                 previousBalance: previousBalance,
                 currentBalance: ownerData.balance || 0,
-                receiptNumber: receiptNumber,
-                qrCodeUrl: qrCodeUrl
+                receiptNumber: receiptNumber
             });
             setIsDialogOpen(true);
 
@@ -795,3 +667,4 @@ const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptD
         </div>
     );
 }
+

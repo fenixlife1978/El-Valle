@@ -30,10 +30,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import Image from 'next/image';
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuthorization } from '@/hooks/use-authorization';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import JsBarcode from 'jsbarcode';
-import QRCode from 'qrcode';
+import { generatePaymentReceipt } from '@/lib/pdf-generator';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { Textarea } from '@/components/ui/textarea';
 
@@ -230,189 +227,69 @@ function VerificationComponent() {
         if (!data || !companyInfo) return;
         setIsGenerating(true);
     
-        const { payment, beneficiary, paidDebts, previousBalance, currentBalance, qrCodeUrl, receiptNumber } = data;
+        const { payment, beneficiary, paidDebts, previousBalance, currentBalance, receiptNumber } = data;
+
+        const conceptsForPdf = paidDebts.map(debt => {
+            const debtAmountBs = (debt.paidAmountUSD || debt.amountUSD) * payment.exchangeRate;
+            const propertyLabel = debt.property ? `${debt.property.street} - ${debt.property.house}` : 'N/A';
+            const concept = `${debt.description} (${propertyLabel})`;
+            return [ 
+                `${MONTHS_LOCALE[debt.month]} ${debt.year}`,
+                concept, 
+                `$${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}`, 
+                formatCurrency(debtAmountBs) 
+            ];
+        });
+    
+        if (paidDebts.length === 0 && beneficiary.amount > 0) {
+             conceptsForPdf.push(['', 'Abono a Saldo a Favor', '', formatCurrency(beneficiary.amount)]);
+        }
+        
+        const totalDebtPaidInBs = paidDebts.reduce((sum, debt) => sum + ((debt.paidAmountUSD || debt.amountUSD) * payment.exchangeRate), 0);
+    
+        const dataForPdf = {
+            condoName: companyInfo.name,
+            rif: companyInfo.rif,
+            receiptNumber: receiptNumber,
+            ownerName: data.ownerName,
+            method: payment.paymentMethod,
+            bank: payment.bank,
+            reference: payment.reference,
+            date: format(payment.paymentDate.toDate(), 'dd/MM/yyyy'),
+            rate: formatCurrency(payment.exchangeRate),
+            concepts: conceptsForPdf,
+            prevBalance: formatCurrency(previousBalance),
+            receivedAmount: formatCurrency(beneficiary.amount),
+            totalDebtPaid: formatCurrency(totalDebtPaidInBs),
+            currentBalance: formatCurrency(currentBalance),
+            observations: payment.observations || 'Sin observaciones.'
+        };
         
         try {
-            const doc = new jsPDF();
-            const pageWidth = doc.internal.pageSize.getWidth();
-            const headerHeight = 25;
-            const margin = 14;
-            const headerColor = [28, 43, 58]; // #1C2B3A
-            
-            // --- HEADER ---
-            doc.setFillColor(headerColor[0], headerColor[1], headerColor[2]);
-            doc.rect(0, 0, pageWidth, headerHeight, 'F');
-            doc.setTextColor(255, 255, 255);
-            
-            let textX = margin;
-            if (companyInfo.logo) {
-                try {
-                    const logoSize = 18;
-                    doc.addImage(companyInfo.logo, 'PNG', margin, (headerHeight - logoSize) / 2, logoSize, logoSize);
-                    textX += logoSize + 5;
-                } catch (e) {
-                    console.error("Error adding logo to PDF:", e);
-                }
-            }
-    
-            doc.setFontSize(11).setFont('helvetica', 'bold');
-            doc.text(companyInfo.name, textX, 13);
-            doc.setFontSize(8).setFont('helvetica', 'normal');
-            doc.text(`RIF: ${companyInfo.rif}`, textX, 18);
-    
-            doc.setFontSize(8).setFont('helvetica', 'normal');
-            doc.text('RECIBO DE PAGO', pageWidth - margin, headerHeight / 2 + 3, { align: 'right' });
-    
-            doc.setTextColor(0, 0, 0); // Reset text color
-    
-            let startY = headerHeight + 15;
-    
-            // --- BARCODE AND RECEIPT NUMBER ---
-            const barcodeValue = `REC-${receiptNumber}`;
-            try {
-                const canvas = document.createElement('canvas');
-                JsBarcode(canvas, barcodeValue, {
-                    format: "CODE128", height: 40, width: 1.5, displayValue: false, margin: 0,
-                });
-                const barcodeDataUrl = canvas.toDataURL("image/png");
-                doc.addImage(barcodeDataUrl, 'PNG', pageWidth - margin - 60, startY - 5, 60, 20);
-                doc.setFontSize(8).text(barcodeValue, pageWidth - margin, startY + 18, { align: 'right' });
-                doc.setFontSize(10).setFont('helvetica', 'bold').text(`N° de recibo: ${receiptNumber}`, pageWidth - margin, startY + 23, { align: 'right' });
-            } catch (e) {
-                console.error("Barcode generation failed", e);
-            }
-    
-            // --- MAIN TITLE ---
-            doc.setFontSize(16).setFont('helvetica', 'bold').text("RECIBO DE PAGO", margin, startY + 5);
-            startY += 20;
-    
-            // --- BENEFICIARY DETAILS ---
-            doc.setFontSize(9);
-            const detailsX = margin;
-            doc.text(`Beneficiario: ${beneficiary.ownerName} (${data.ownerUnit})`, detailsX, startY);
-            startY += 5;
-            doc.text(`Método de pago: ${payment.paymentMethod}`, detailsX, startY);
-            startY += 5;
-            doc.text(`Banco Emisor: ${payment.bank}`, detailsX, startY);
-            startY += 5;
-            doc.text(`N° de Referencia Bancaria: ${payment.reference}`, detailsX, startY);
-            startY += 5;
-            doc.text(`Fecha del pago: ${format(payment.paymentDate.toDate(), 'dd/MM/yyyy')}`, detailsX, startY);
-            startY += 5;
-            doc.text(`Tasa de Cambio Aplicada: Bs. ${formatCurrency(payment.exchangeRate)} por USD`, detailsX, startY);
-            
-            startY += 15;
-    
-            // --- CONCEPTS TABLE ---
-            let totalPaidInConcepts = 0;
-            const tableBody = paidDebts.map(debt => {
-                const debtAmountBs = (debt.paidAmountUSD || debt.amountUSD) * payment.exchangeRate;
-                totalPaidInConcepts += debtAmountBs;
-                const propertyLabel = debt.property ? `${debt.property.street} - ${debt.property.house}` : 'N/A';
-                const concept = `${debt.description} (${propertyLabel})`;
-                return [ 
-                    `${MONTHS_LOCALE[debt.month]} ${debt.year}`,
-                    concept, 
-                    `$${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}`, 
-                    `Bs. ${formatCurrency(debtAmountBs)}` 
-                ];
-            });
-    
-            if (paidDebts.length === 0 && beneficiary.amount > 0) {
-                 totalPaidInConcepts = beneficiary.amount;
-                 tableBody.push(['', 'Abono a Saldo a Favor', '', `Bs. ${formatCurrency(beneficiary.amount)}`]);
-            }
-    
-            autoTable(doc, { 
-                startY: startY, 
-                head: [['Período', 'Concepto (Propiedad)', 'Monto ($)', 'Monto Pagado (Bs)']], 
-                body: tableBody, 
-                theme: 'striped', 
-                headStyles: { fillColor: headerColor, textColor: 255 }, 
-                styles: { fontSize: 9, cellPadding: 2.5 },
-                columnStyles: {
-                    2: { halign: 'right' },
-                    3: { halign: 'right' },
-                }
-            });
-            
-            let finalY = (doc as any).lastAutoTable.finalY + 10;
-            
-            // --- SUMMARY BLOCK ---
-            const rightColX = pageWidth - margin;
-            const labelX = rightColX - 50;
-            doc.setFontSize(9);
-            
-            doc.text('Saldo a Favor Anterior:', labelX, finalY, { align: 'right' });
-            doc.text(`Bs. ${formatCurrency(previousBalance)}`, rightColX, finalY, { align: 'right' });
-            finalY += 5;
-            
-            doc.text('Monto del Pago Recibido:', labelX, finalY, { align: 'right' });
-            doc.text(`Bs. ${formatCurrency(beneficiary.amount)}`, rightColX, finalY, { align: 'right' });
-            finalY += 5;
-    
-            doc.text('Total Abonado en Deudas:', labelX, finalY, { align: 'right' });
-            doc.text(`Bs. ${formatCurrency(totalPaidInConcepts)}`, rightColX, finalY, { align: 'right' });
-            finalY += 5;
-    
-            doc.text('Saldo a Favor Actual:', labelX, finalY, { align: 'right' });
-            doc.text(`Bs. ${formatCurrency(currentBalance)}`, rightColX, finalY, { align: 'right' });
-            finalY += 8;
-        
-            doc.setFont('helvetica', 'bold');
-            doc.text('TOTAL PAGADO:', labelX, finalY, { align: 'right' });
-            doc.text(`Bs. ${formatCurrency(beneficiary.amount)}`, rightColX, finalY, { align: 'right' });
-            
-            // --- FOOTER NOTES ---
-            let footerY = Math.max(finalY, 220); 
-            doc.setFontSize(8).setFont('helvetica', 'normal');
-            doc.setTextColor(100);
-    
-            if (payment.observations) {
-                const obsText = `Observaciones: ${payment.observations}`;
-                doc.text(obsText, margin, footerY, {maxWidth: pageWidth - margin * 2});
-                footerY += 5;
-            }
-    
-            const note1 = 'Todo propietario que requiera de firma y sello húmedo deberá imprimir éste recibo y hacerlo llegar al condominio para su respectiva estampa.';
-            const note2 = `Este recibo confirma que el pago ha sido validado para la(s) cuota(s) y propiedad(es) aquí detalladas.`;
-            const note3 = `Firma electrónica: '${companyInfo.name} - Condominio'`;
-    
-            doc.text(note1, margin, footerY, {maxWidth: pageWidth - margin * 2});
-            footerY += 8;
-            doc.text(note2, margin, footerY, {maxWidth: pageWidth - margin * 2});
-            footerY += 4;
-            doc.text(note3, margin, footerY, {maxWidth: pageWidth - margin * 2});
-            
-            footerY = 280; // Position it at the bottom
-            doc.setLineWidth(0.2).line(margin, footerY, pageWidth - margin, footerY);
-            footerY += 4;
-            doc.setFont('helvetica', 'italic').text('Este recibo se generó de manera automatica y es válido sin firma manuscrita.', pageWidth / 2, footerY, { align: 'center'});
-            
-            const pdfOutput = doc.output('blob');
-            const pdfFile = new File([pdfOutput], `recibo_${receiptNumber}.pdf`, { type: 'application/pdf' });
-    
             if (action === 'download') {
-                doc.save(`recibo_${receiptNumber}.pdf`);
-            } else if (navigator.share && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
-              try {
-                  await navigator.share({
-                      title: `Recibo de Pago ${data.receiptNumber}`, 
-                      text: `Recibo de pago para ${data.ownerName}.`,
-                      files: [pdfFile],
-                  });
-              } catch (error) {
-                console.error('Error al compartir:', error);
-                const url = URL.createObjectURL(pdfFile);
-                window.open(url, '_blank');
-              }
+                generatePaymentReceipt(dataForPdf, companyInfo.logo, 'download');
+            } else if (navigator.share) {
+                const pdfBlob = generatePaymentReceipt(dataForPdf, companyInfo.logo, 'blob');
+                if (pdfBlob) {
+                    const pdfFile = new File([pdfBlob], `Recibo_${receiptNumber}.pdf`, { type: 'application/pdf' });
+                    if (navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+                        await navigator.share({
+                            title: `Recibo de Pago ${receiptNumber}`,
+                            text: `Recibo de pago para ${data.ownerName}.`,
+                            files: [pdfFile],
+                        });
+                    } else {
+                         throw new Error('No se puede compartir el PDF en este navegador.');
+                    }
+                }
             } else {
-              const url = URL.createObjectURL(pdfFile);
-              window.open(url, '_blank');
+              throw new Error('La API de compartir no está soportada en este navegador.');
             }
-        } catch(error) {
-            console.error("Error generating PDF:", error);
-            toast({ variant: "destructive", title: "Error", description: "No se pudo generar el documento PDF." });
+        } catch (error: any) {
+            console.error('Error en Share/Download:', error);
+            // Fallback to download if sharing fails
+            generatePaymentReceipt(dataForPdf, companyInfo.logo, 'download');
+            toast({ title: 'Compartir no disponible', description: 'Se ha iniciado la descarga del PDF.'});
         } finally {
             setIsGenerating(false);
         }
@@ -441,9 +318,6 @@ function VerificationComponent() {
             const totalDebtPaidWithPayment = paidDebts.reduce((sum, debt) => sum + ((debt.paidAmountUSD || debt.amountUSD) * payment.exchangeRate), 0);
             const previousBalance = (ownerData.balance || 0) - (beneficiary.amount - totalDebtPaidWithPayment);
             const receiptNumber = payment.receiptNumbers?.[beneficiary.ownerId] || `N/A-${payment.id.slice(-5)}`;
-            const receiptUrl = `${window.location.origin}/receipt/${payment.id}/${beneficiary.ownerId}`;
-            const qrDataContent = JSON.stringify({ receiptNumber, date: format(new Date(), 'yyyy-MM-dd'), amount: beneficiary.amount, ownerId: beneficiary.ownerId, url: receiptUrl });
-            const qrCodeUrl = await QRCode.toDataURL(qrDataContent, { errorCorrectionLevel: 'M', margin: 2, scale: 4, color: { dark: '#000000', light: '#FFFFFF' } });
     
             const dataForPdf: ReceiptData = {
                 payment,
@@ -453,8 +327,7 @@ function VerificationComponent() {
                 paidDebts: paidDebts.sort((a,b) => a.year - b.year || a.month - b.month),
                 previousBalance: previousBalance,
                 currentBalance: ownerData.balance || 0,
-                receiptNumber: receiptNumber,
-                qrCodeUrl: qrCodeUrl
+                receiptNumber: receiptNumber
             };
             
             await handleGenerateAndAct(action, dataForPdf);
@@ -817,154 +690,90 @@ function ReportPaymentComponent() {
 }
 
 
-// --- CALCULATOR COMPONENT (for Admin) ---
-function AdminPaymentCalculatorComponent() {
-    const { activeCondoId, user } = useAuth();
-    const { toast } = useToast();
-    const [allOwners, setAllOwners] = useState<Owner[]>([]);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [selectedOwner, setSelectedOwner] = useState<(Owner & { balance: number }) | null>(null);
+// --- COMPONENT: PAYMENT CALCULATOR ---
+
+function PaymentCalculatorComponent() {
+    const { user, ownerData, loading: authLoading, activeCondoId } = useAuth();
+    const router = useRouter();
     const [ownerDebts, setOwnerDebts] = useState<Debt[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [loadingDebts, setLoadingDebts] = useState(true);
     const [activeRate, setActiveRate] = useState(0);
     const [condoFee, setCondoFee] = useState(0);
     const [selectedPendingDebts, setSelectedPendingDebts] = useState<string[]>([]);
     const [selectedAdvanceMonths, setSelectedAdvanceMonths] = useState<string[]>([]);
+    
     const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
     const [processingPayment, setProcessingPayment] = useState(false);
     const [paymentDetails, setPaymentDetails] = useState<PaymentDetails>({ paymentMethod: '', bank: '', otherBank: '', reference: '' });
 
+    const [now, setNow] = useState<Date | null>(null);
+    const { toast } = useToast();
+    
     useEffect(() => {
-        if (!activeCondoId) return;
-        setLoading(true);
-        const q = query(collection(db, "condominios", activeCondoId, "owners"), where("role", "==", "propietario"));
-        const unsubOwners = onSnapshot(q, (snapshot) => {
-            setAllOwners(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner)));
-            setLoading(false);
-        });
+        setNow(new Date());
+    }, []);
+
+    useEffect(() => {
+        if (authLoading || !user || !ownerData || !activeCondoId) {
+            if(!authLoading) setLoadingDebts(false);
+            return;
+        };
 
         const settingsRef = doc(db, 'condominios', activeCondoId, 'config', 'mainSettings');
-        const unsubSettings = onSnapshot(settingsRef, (snap) => {
-             if (snap.exists()) {
-                const settings = snap.data();
+        const settingsUnsubscribe = onSnapshot(settingsRef, (settingsSnap) => {
+            if (settingsSnap.exists()) {
+                const settings = settingsSnap.data();
                 setCondoFee(settings.condoFee || 0);
                 const rates = settings.exchangeRates || [];
                 const activeRateObj = rates.find((r: any) => r.active);
                 if (activeRateObj) setActiveRate(activeRateObj.rate);
+                else if (rates.length > 0) {
+                    const sortedRates = [...rates].sort((a:any, b:any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                    setActiveRate(sortedRates[0].rate);
+                }
             }
         });
-        return () => { unsubOwners(); unsubSettings(); };
-    }, [activeCondoId]);
-    
-    useEffect(() => {
-        if (!selectedOwner || !activeCondoId) { setOwnerDebts([]); return; }
-        const debtsQuery = query(collection(db, "condominios", activeCondoId, "debts"), where("ownerId", "==", selectedOwner.id));
-        const unsubDebts = onSnapshot(debtsQuery, (snapshot) => {
-            setOwnerDebts(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Debt)).sort((a, b) => a.year - b.year || a.month - b.month));
+        
+        const debtsQuery = query(collection(db, "condominios", activeCondoId, "debts"), where("ownerId", "==", user.uid));
+        const debtsUnsubscribe = onSnapshot(debtsQuery, (snapshot) => {
+            const debtsData: Debt[] = [];
+            snapshot.forEach(d => debtsData.push({ id: d.id, ...d.data() } as Debt));
+            setOwnerDebts(debtsData.sort((a, b) => a.year - b.year || a.month - b.month));
+            setLoadingDebts(false);
         });
-        return () => unsubDebts();
-    }, [selectedOwner, activeCondoId]);
 
-    const filteredOwners = useMemo(() => {
-        if (!searchTerm) return [];
-        return allOwners.filter(o => o.name && o.name.toLowerCase().includes(searchTerm.toLowerCase()));
-    }, [searchTerm, allOwners]);
+        return () => {
+            settingsUnsubscribe();
+            debtsUnsubscribe();
+        };
+
+    }, [user, ownerData, authLoading, activeCondoId]);
     
     const paymentCalculator = useMemo(() => {
-        if (!selectedOwner) return { totalToPay: 0, hasSelection: false, dueMonthsCount: 0, advanceMonthsCount: 0, totalDebtBs: 0, balanceInFavor: 0 };
-        const dueMonthsTotalUSD = ownerDebts.filter(d => selectedPendingDebts.includes(d.id)).reduce((sum, debt) => sum + debt.amountUSD, 0);
+        if (!ownerData) return { totalToPay: 0, hasSelection: false, dueMonthsCount: 0, advanceMonthsCount: 0, totalDebtBs: 0, balanceInFavor: 0 };
+        const pendingDebts = ownerDebts.filter(d => d.status === 'pending' || d.status === 'vencida');
+        const dueMonthsTotalUSD = pendingDebts.filter(debt => selectedPendingDebts.includes(debt.id)).reduce((sum, debt) => sum + debt.amountUSD, 0);
         const advanceMonthsTotalUSD = selectedAdvanceMonths.length * condoFee;
         const totalDebtUSD = dueMonthsTotalUSD + advanceMonthsTotalUSD;
         const totalDebtBs = totalDebtUSD * activeRate;
-        const totalToPay = Math.max(0, totalDebtBs - (selectedOwner.balance || 0));
-        return { totalToPay, hasSelection: selectedPendingDebts.length > 0 || selectedAdvanceMonths.length > 0, dueMonthsCount: selectedPendingDebts.length, advanceMonthsCount: selectedAdvanceMonths.length, totalDebtBs, balanceInFavor: selectedOwner.balance || 0, condoFee };
-    }, [selectedPendingDebts, selectedAdvanceMonths, ownerDebts, activeRate, condoFee, selectedOwner]);
+        const totalToPay = Math.max(0, totalDebtBs - (ownerData.balance || 0));
+        return { totalToPay, hasSelection: selectedPendingDebts.length > 0 || selectedAdvanceMonths.length > 0, dueMonthsCount: selectedPendingDebts.length, advanceMonthsCount: selectedAdvanceMonths.length, totalDebtBs, balanceInFavor: ownerData.balance || 0, condoFee };
+    }, [selectedPendingDebts, selectedAdvanceMonths, ownerDebts, activeRate, condoFee, ownerData]);
 
-
-    if (!selectedOwner) {
-        return (
-            <Card>
-                <CardHeader>
-                    <CardTitle>Calculadora de Pagos</CardTitle>
-                    <CardDescription>Busque un propietario para calcular y registrar un pago en su nombre.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div className="relative max-w-sm">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input placeholder="Buscar por nombre..." className="pl-9" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-                    </div>
-                    {searchTerm && filteredOwners.length > 0 && (
-                        <Card className="mt-2 border rounded-lg"><ScrollArea className="h-48">{filteredOwners.map(owner => (
-                            <div key={owner.id} onClick={() => setSelectedOwner(owner as any)} className="p-3 hover:bg-muted cursor-pointer border-b last:border-b-0">
-                                <p className="font-medium">{owner.name}</p>
-                            </div>))}
-                        </ScrollArea></Card>
-                    )}
-                </CardContent>
-            </Card>
-        );
+    if (authLoading || loadingDebts) {
+        return <div className="flex justify-center items-center h-64"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>;
     }
     
-    return (
-        <div className="space-y-6">
-            <Button variant="outline" onClick={() => setSelectedOwner(null)}><ArrowLeft className="mr-2 h-4 w-4"/>Cambiar Propietario</Button>
-            <PaymentCalculatorUI 
-                owner={selectedOwner}
-                debts={ownerDebts}
-                activeRate={activeRate}
-                condoFee={condoFee}
-            />
-        </div>
-    );
+    return <PaymentCalculatorUI owner={ownerData} debts={ownerDebts} activeRate={activeRate} condoFee={condoFee} />;
 }
 
-// --- MAIN PAGE COMPONENT ---
-function PaymentsPage() {
-    const searchParams = useSearchParams();
-    const defaultTab = searchParams?.get('tab') || 'verify';
 
-    return (
-        <div className="space-y-8">
-            <div className="mb-10">
-                <h2 className="text-4xl font-black text-foreground uppercase tracking-tighter italic drop-shadow-sm">
-                    Gestión de <span className="text-primary">Pagos</span>
-                </h2>
-                <div className="h-1.5 w-20 bg-primary mt-2 rounded-full"></div>
-                <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">
-                    Verificación, registro manual y cálculo de pagos.
-                </p>
-            </div>
-            <Tabs defaultValue={defaultTab} className="w-full">
-                <TabsList className="grid w-full grid-cols-3">
-                    <TabsTrigger value="verify">Verificación de Pagos</TabsTrigger>
-                    <TabsTrigger value="report">Reportar Pago Manual</TabsTrigger>
-                    <TabsTrigger value="calculator">Calculadora</TabsTrigger>
-                </TabsList>
-                <TabsContent value="verify" className="mt-6">
-                    <VerificationComponent />
-                </TabsContent>
-                <TabsContent value="report" className="mt-6">
-                    <ReportPaymentComponent />
-                </TabsContent>
-                <TabsContent value="calculator" className="mt-6">
-                    <AdminPaymentCalculatorComponent />
-                </TabsContent>
-            </Tabs>
-        </div>
-    );
-}
-
-// --- UI for Calculator (reused by Admin and Owner) ---
+// --- UI for Calculator (reused) ---
 function PaymentCalculatorUI({ owner, debts, activeRate, condoFee }: { owner: any; debts: Debt[]; activeRate: number; condoFee: number }) {
     const [selectedPendingDebts, setSelectedPendingDebts] = useState<string[]>([]);
     const [selectedAdvanceMonths, setSelectedAdvanceMonths] = useState<string[]>([]);
-    const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
-    const [processingPayment, setProcessingPayment] = useState(false);
-    const [paymentDetails, setPaymentDetails] = useState<PaymentDetails>({ paymentMethod: '', bank: '', otherBank: '', reference: '' });
-    const { toast } = useToast();
-    const { user, activeCondoId } = useAuth();
     const now = new Date();
-
+    
     const pendingDebts = useMemo(() => debts.filter(d => d.status === 'pending' || d.status === 'vencida').sort((a,b) => a.year - b.year || a.month - b.month), [debts]);
     const futureMonths = useMemo(() => {
         const paidAdvanceMonths = debts.filter(d => d.status === 'paid' && d.description.includes('Adelantado')).map(d => `${d.year}-${String(d.month).padStart(2, '0')}`);
@@ -974,7 +783,7 @@ function PaymentCalculatorUI({ owner, debts, activeRate, condoFee }: { owner: an
             return { value, label: format(date, 'MMMM yyyy', { locale: es }), disabled: paidAdvanceMonths.includes(value) };
         });
     }, [debts, now]);
-    
+
     const paymentCalculator = useMemo(() => {
         const dueMonthsTotalUSD = pendingDebts.filter(d => selectedPendingDebts.includes(d.id)).reduce((sum, debt) => sum + debt.amountUSD, 0);
         const advanceMonthsTotalUSD = selectedAdvanceMonths.length * condoFee;
@@ -984,55 +793,86 @@ function PaymentCalculatorUI({ owner, debts, activeRate, condoFee }: { owner: an
         return { totalToPay, hasSelection: selectedPendingDebts.length > 0 || selectedAdvanceMonths.length > 0, dueMonthsCount: selectedPendingDebts.length, advanceMonthsCount: selectedAdvanceMonths.length, totalDebtBs, balanceInFavor: owner.balance || 0, condoFee };
     }, [selectedPendingDebts, selectedAdvanceMonths, pendingDebts, activeRate, condoFee, owner]);
     
-    if (!owner) return null;
+    const formatCurrency = (num: number) => {
+        if (typeof num !== 'number' || isNaN(num)) return '0,00';
+        return num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    };
 
     return (
-        <div className="space-y-6">
-            <h3 className="text-xl font-bold">Calculadora para: <span className="text-primary">{owner.name}</span></h3>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-                <div className="lg:col-span-2 space-y-4">
-                    <Card>
-                        <CardHeader><CardTitle>1. Deudas Pendientes</CardTitle></CardHeader>
-                        <CardContent className="p-0">
-                           <Table>
-                                <TableHeader><TableRow><TableHead className="w-[50px] text-center">Pagar</TableHead><TableHead>Período</TableHead><TableHead>Concepto</TableHead><TableHead>Estado</TableHead><TableHead className="text-right">Monto (Bs.)</TableHead></TableRow></TableHeader>
-                                <TableBody>
-                                    {pendingDebts.length === 0 ? <TableRow><TableCell colSpan={5} className="h-24 text-center"><Info className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />No tiene deudas pendientes.</TableCell></TableRow> : 
-                                     pendingDebts.map((debt) => {
-                                        const debtMonthDate = startOfMonth(new Date(debt.year, debt.month - 1));
-                                        const isOverdue = isBefore(debtMonthDate, startOfMonth(now));
-                                        const status = debt.status === 'vencida' || (debt.status === 'pending' && isOverdue) ? 'Vencida' : 'Pendiente';
-                                        return <TableRow key={debt.id} data-state={selectedPendingDebts.includes(debt.id) ? 'selected' : ''}>
-                                                <TableCell className="text-center"><Checkbox onCheckedChange={() => setSelectedPendingDebts(p => p.includes(debt.id) ? p.filter(id=>id!==debt.id) : [...p, debt.id])} checked={selectedPendingDebts.includes(debt.id)} /></TableCell>
-                                                <TableCell className="font-medium">{MONTHS_LOCALE[debt.month]} {debt.year}</TableCell>
-                                                <TableCell>{debt.description}</TableCell>
-                                                <TableCell><Badge variant={status === 'Vencida' ? 'destructive' : 'warning'}>{status}</Badge></TableCell>
-                                                <TableCell className="text-right">Bs. {formatCurrency(debt.amountUSD * activeRate)}</TableCell>
-                                            </TableRow>
-                                    })}
-                                </TableBody>
-                            </Table>
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardHeader><CardTitle>2. Pagar Meses por Adelantado</CardTitle><CardDescription>Cuota mensual actual: ${condoFee.toFixed(2)}</CardDescription></CardHeader>
-                        <CardContent><div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">{futureMonths.map(month => <Button key={month.value} type="button" variant={selectedAdvanceMonths.includes(month.value) ? 'default' : 'outline'} className="flex items-center justify-center gap-2 capitalize" onClick={() => setSelectedAdvanceMonths(p => p.includes(month.value) ? p.filter(m=>m!==month.value) : [...p, month.value])} disabled={month.disabled}>{selectedAdvanceMonths.includes(month.value) && <Check className="h-4 w-4" />} {month.label}</Button>)}</div></CardContent>
-                    </Card>
-                </div>
-                <div className="lg:sticky lg:top-20">
-                     {paymentCalculator.hasSelection && <Card>
-                         <CardHeader><CardTitle className="flex items-center"><Calculator className="mr-2 h-5 w-5"/> 3. Resumen de Pago</CardTitle><CardDescription>Cálculo basado en su selección.</CardDescription></CardHeader>
-                        <CardContent className="space-y-3">
-                            {paymentCalculator.dueMonthsCount > 0 && <p className="text-sm text-muted-foreground">{paymentCalculator.dueMonthsCount} mes(es) adeudado(s) seleccionado(s).</p>}
-                            {paymentCalculator.advanceMonthsCount > 0 && <p className="text-sm text-muted-foreground">{paymentCalculator.advanceMonthsCount} mes(es) por adelanto seleccionado(s) x ${(paymentCalculator.condoFee ?? 0).toFixed(2)} c/u.</p>}
-                            <hr className="my-2"/><div className="flex justify-between items-center text-lg"><span className="text-muted-foreground">Sub-Total Deuda:</span><span className="font-medium">Bs. {formatCurrency(paymentCalculator.totalDebtBs)}</span></div>
-                            <div className="flex justify-between items-center text-md"><span className="text-muted-foreground flex items-center"><Minus className="mr-2 h-4 w-4"/> Saldo a Favor:</span><span className="font-medium text-green-500">Bs. {formatCurrency(paymentCalculator.balanceInFavor)}</span></div>
-                            <hr className="my-2"/><div className="flex justify-between items-center text-2xl font-bold"><span className="flex items-center"><Equal className="mr-2 h-5 w-5"/> TOTAL A PAGAR:</span><span className="text-primary">Bs. {formatCurrency(paymentCalculator.totalToPay)}</span></div>
-                        </CardContent>
-                        <CardFooter><Button className="w-full" onClick={() => setIsPaymentDialogOpen(true)} disabled={!paymentCalculator.hasSelection || paymentCalculator.totalToPay <= 0}><Receipt className="mr-2 h-4 w-4" />Reportar Pago</Button></CardFooter>
-                    </Card>}
-                </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+            <div className="lg:col-span-2 space-y-4">
+                <Card>
+                    <CardHeader><CardTitle>1. Deudas Pendientes</CardTitle></CardHeader>
+                    <CardContent className="p-0">
+                       <Table>
+                            <TableHeader><TableRow><TableHead className="w-[50px] text-center">Pagar</TableHead><TableHead>Período</TableHead><TableHead>Concepto</TableHead><TableHead>Estado</TableHead><TableHead className="text-right">Monto (Bs.)</TableHead></TableRow></TableHeader>
+                            <TableBody>
+                                {pendingDebts.length === 0 ? <TableRow><TableCell colSpan={5} className="h-24 text-center"><Info className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />No tiene deudas pendientes.</TableCell></TableRow> : 
+                                 pendingDebts.map((debt) => {
+                                    const debtMonthDate = startOfMonth(new Date(debt.year, debt.month - 1));
+                                    const isOverdue = isBefore(debtMonthDate, startOfMonth(now));
+                                    const status = debt.status === 'vencida' || (debt.status === 'pending' && isOverdue) ? 'Vencida' : 'Pendiente';
+                                    return <TableRow key={debt.id} data-state={selectedPendingDebts.includes(debt.id) ? 'selected' : ''}>
+                                            <TableCell className="text-center"><Checkbox onCheckedChange={() => setSelectedPendingDebts(p => p.includes(debt.id) ? p.filter(id=>id!==debt.id) : [...p, debt.id])} checked={selectedPendingDebts.includes(debt.id)} /></TableCell>
+                                            <TableCell className="font-medium">{monthsLocale[debt.month]} {debt.year}</TableCell>
+                                            <TableCell>{debt.description}</TableCell>
+                                            <TableCell><Badge variant={status === 'Vencida' ? 'destructive' : 'warning'}>{status}</Badge></TableCell>
+                                            <TableCell className="text-right">Bs. {formatCurrency(debt.amountUSD * activeRate)}</TableCell>
+                                        </TableRow>
+                                })}
+                            </TableBody>
+                        </Table>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader><CardTitle>2. Pagar Meses por Adelantado</CardTitle><CardDescription>Cuota mensual actual: ${condoFee.toFixed(2)}</CardDescription></CardHeader>
+                    <CardContent><div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">{futureMonths.map(month => <Button key={month.value} type="button" variant={selectedAdvanceMonths.includes(month.value) ? 'default' : 'outline'} className="flex items-center justify-center gap-2 capitalize" onClick={() => setSelectedAdvanceMonths(p => p.includes(month.value) ? p.filter(m=>m!==month.value) : [...p, month.value])} disabled={month.disabled}>{selectedAdvanceMonths.includes(month.value) && <Check className="h-4 w-4" />} {month.label}</Button>)}</div></CardContent>
+                </Card>
             </div>
+            <div className="lg:sticky lg:top-20">
+                 {paymentCalculator.hasSelection && <Card>
+                     <CardHeader><CardTitle className="flex items-center"><Calculator className="mr-2 h-5 w-5"/> 3. Resumen de Pago</CardTitle><CardDescription>Cálculo basado en su selección.</CardDescription></CardHeader>
+                    <CardContent className="space-y-3">
+                        {paymentCalculator.dueMonthsCount > 0 && <p className="text-sm text-muted-foreground">{paymentCalculator.dueMonthsCount} mes(es) adeudado(s) seleccionado(s).</p>}
+                        {paymentCalculator.advanceMonthsCount > 0 && <p className="text-sm text-muted-foreground">{paymentCalculator.advanceMonthsCount} mes(es) por adelanto seleccionado(s) x ${(paymentCalculator.condoFee ?? 0).toFixed(2)} c/u.</p>}
+                        <hr className="my-2"/><div className="flex justify-between items-center text-lg"><span className="text-muted-foreground">Sub-Total Deuda:</span><span className="font-medium">Bs. {formatCurrency(paymentCalculator.totalDebtBs)}</span></div>
+                        <div className="flex justify-between items-center text-md"><span className="text-muted-foreground flex items-center"><Minus className="mr-2 h-4 w-4"/> Saldo a Favor:</span><span className="font-medium text-green-500">Bs. {formatCurrency(paymentCalculator.balanceInFavor)}</span></div>
+                        <hr className="my-2"/><div className="flex justify-between items-center text-2xl font-bold"><span className="flex items-center"><Equal className="mr-2 h-5 w-5"/> TOTAL A PAGAR:</span><span className="text-primary">Bs. {formatCurrency(paymentCalculator.totalToPay)}</span></div>
+                    </CardContent>
+                    <CardFooter><Button className="w-full" asChild disabled={!paymentCalculator.hasSelection || paymentCalculator.totalToPay <= 0}><Link href="/owner/payments?tab=report"><Receipt className="mr-2 h-4 w-4"/>Proceder al Reporte de Pago</Link></Button></CardFooter>
+                </Card>}
+            </div>
+        </div>
+    );
+}
+
+function PaymentsPage() {
+    const searchParams = useSearchParams();
+    const defaultTab = searchParams?.get('tab') || 'report';
+    
+    return (
+        <div className="space-y-6">
+            <div className="mb-10">
+                <h2 className="text-4xl font-black text-foreground uppercase tracking-tighter italic drop-shadow-sm">
+                    Gestión de <span className="text-primary">Pagos</span>
+                </h2>
+                <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
+                <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">
+                    Reporta tus pagos y calcula tus deudas pendientes.
+                </p>
+            </div>
+            <Tabs defaultValue={defaultTab} className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="report">Reportar Pago</TabsTrigger>
+                    <TabsTrigger value="calculator">Calculadora de Pagos</TabsTrigger>
+                </TabsList>
+                <TabsContent value="report" className="mt-6">
+                    <ReportPaymentComponent />
+                </TabsContent>
+                <TabsContent value="calculator" className="mt-6">
+                    <PaymentCalculatorComponent />
+                </TabsContent>
+            </Tabs>
         </div>
     );
 }
@@ -1044,3 +884,4 @@ export default function PaymentsPageWrapper() {
         </Suspense>
     );
 }
+
