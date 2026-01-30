@@ -12,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
-import { CalendarIcon, Check, CheckCircle, Clock, DollarSign, Eye, FileText, Hash, Loader2, Upload, Banknote, Info, X, Save, FileUp, UserPlus, Trash2, XCircle, Search, ChevronDown, Minus, Equal, Receipt, AlertTriangle, User, MoreHorizontal, Download, Share2, Calculator } from 'lucide-react';
+import { CalendarIcon, Check, CheckCircle, Clock, DollarSign, Eye, FileText, Hash, Loader2, Upload, Banknote, Info, X, Save, FileUp, UserPlus, Trash2, XCircle, Search, ChevronDown, Minus, Equal, Receipt, AlertTriangle, User, MoreHorizontal, Download, Share2, Calculator, ArrowLeft } from 'lucide-react';
 import { format, isBefore, startOfMonth, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn, compressImage } from '@/lib/utils';
@@ -692,83 +692,6 @@ function ReportPaymentComponent() {
 
 // --- COMPONENT: PAYMENT CALCULATOR ---
 
-function PaymentCalculatorComponent() {
-    const { user, ownerData, loading: authLoading, activeCondoId } = useAuth();
-    const router = useRouter();
-    const [ownerDebts, setOwnerDebts] = useState<Debt[]>([]);
-    const [loadingDebts, setLoadingDebts] = useState(true);
-    const [activeRate, setActiveRate] = useState(0);
-    const [condoFee, setCondoFee] = useState(0);
-    const [selectedPendingDebts, setSelectedPendingDebts] = useState<string[]>([]);
-    const [selectedAdvanceMonths, setSelectedAdvanceMonths] = useState<string[]>([]);
-    
-    const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
-    const [processingPayment, setProcessingPayment] = useState(false);
-    const [paymentDetails, setPaymentDetails] = useState<PaymentDetails>({ paymentMethod: '', bank: '', otherBank: '', reference: '' });
-
-    const [now, setNow] = useState<Date | null>(null);
-    const { toast } = useToast();
-    
-    useEffect(() => {
-        setNow(new Date());
-    }, []);
-
-    useEffect(() => {
-        if (authLoading || !user || !ownerData || !activeCondoId) {
-            if(!authLoading) setLoadingDebts(false);
-            return;
-        };
-
-        const settingsRef = doc(db, 'condominios', activeCondoId, 'config', 'mainSettings');
-        const settingsUnsubscribe = onSnapshot(settingsRef, (settingsSnap) => {
-            if (settingsSnap.exists()) {
-                const settings = settingsSnap.data();
-                setCondoFee(settings.condoFee || 0);
-                const rates = settings.exchangeRates || [];
-                const activeRateObj = rates.find((r: any) => r.active);
-                if (activeRateObj) setActiveRate(activeRateObj.rate);
-                else if (rates.length > 0) {
-                    const sortedRates = [...rates].sort((a:any, b:any) => new Date(b.date).getTime() - new Date(a.date).getTime());
-                    setActiveRate(sortedRates[0].rate);
-                }
-            }
-        });
-        
-        const debtsQuery = query(collection(db, "condominios", activeCondoId, "debts"), where("ownerId", "==", user.uid));
-        const debtsUnsubscribe = onSnapshot(debtsQuery, (snapshot) => {
-            const debtsData: Debt[] = [];
-            snapshot.forEach(d => debtsData.push({ id: d.id, ...d.data() } as Debt));
-            setOwnerDebts(debtsData.sort((a, b) => a.year - b.year || a.month - b.month));
-            setLoadingDebts(false);
-        });
-
-        return () => {
-            settingsUnsubscribe();
-            debtsUnsubscribe();
-        };
-
-    }, [user, ownerData, authLoading, activeCondoId]);
-    
-    const paymentCalculator = useMemo(() => {
-        if (!ownerData) return { totalToPay: 0, hasSelection: false, dueMonthsCount: 0, advanceMonthsCount: 0, totalDebtBs: 0, balanceInFavor: 0 };
-        const pendingDebts = ownerDebts.filter(d => d.status === 'pending' || d.status === 'vencida');
-        const dueMonthsTotalUSD = pendingDebts.filter(debt => selectedPendingDebts.includes(debt.id)).reduce((sum, debt) => sum + debt.amountUSD, 0);
-        const advanceMonthsTotalUSD = selectedAdvanceMonths.length * condoFee;
-        const totalDebtUSD = dueMonthsTotalUSD + advanceMonthsTotalUSD;
-        const totalDebtBs = totalDebtUSD * activeRate;
-        const totalToPay = Math.max(0, totalDebtBs - (ownerData.balance || 0));
-        return { totalToPay, hasSelection: selectedPendingDebts.length > 0 || selectedAdvanceMonths.length > 0, dueMonthsCount: selectedPendingDebts.length, advanceMonthsCount: selectedAdvanceMonths.length, totalDebtBs, balanceInFavor: ownerData.balance || 0, condoFee };
-    }, [selectedPendingDebts, selectedAdvanceMonths, ownerDebts, activeRate, condoFee, ownerData]);
-
-    if (authLoading || loadingDebts) {
-        return <div className="flex justify-center items-center h-64"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>;
-    }
-    
-    return <PaymentCalculatorUI owner={ownerData} debts={ownerDebts} activeRate={activeRate} condoFee={condoFee} />;
-}
-
-
-// --- UI for Calculator (reused) ---
 function PaymentCalculatorUI({ owner, debts, activeRate, condoFee }: { owner: any; debts: Debt[]; activeRate: number; condoFee: number }) {
     const [selectedPendingDebts, setSelectedPendingDebts] = useState<string[]>([]);
     const [selectedAdvanceMonths, setSelectedAdvanceMonths] = useState<string[]>([]);
@@ -846,6 +769,119 @@ function PaymentCalculatorUI({ owner, debts, activeRate, condoFee }: { owner: an
     );
 }
 
+function PaymentCalculatorComponent() {
+    const { toast } = useToast();
+    const router = useRouter();
+    const { activeCondoId } = useAuth();
+    const [allOwners, setAllOwners] = useState<Owner[]>([]);
+    const [loadingOwners, setLoadingOwners] = useState(true);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [selectedOwner, setSelectedOwner] = useState<Owner | null>(null);
+    const [ownerDebts, setOwnerDebts] = useState<Debt[]>([]);
+    const [loadingDebts, setLoadingDebts] = useState(false);
+    const [activeRate, setActiveRate] = useState(0);
+    const [condoFee, setCondoFee] = useState(0);
+
+    useEffect(() => {
+        if (!activeCondoId) {
+            setLoadingOwners(false);
+            return;
+        }
+        const q = query(collection(db, "condominios", activeCondoId, "owners"), where("role", "==", "propietario"));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const ownersData: Owner[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner));
+            setAllOwners(ownersData.sort((a, b) => (a.name || '').localeCompare(b.name || '')));
+            setLoadingOwners(false);
+        });
+        return () => unsubscribe();
+    }, [activeCondoId]);
+
+    useEffect(() => {
+        if (!selectedOwner || !activeCondoId) {
+            setOwnerDebts([]);
+            return;
+        }
+        setLoadingDebts(true);
+        const settingsRef = doc(db, 'condominios', activeCondoId, 'config', 'mainSettings');
+        const settingsUnsubscribe = onSnapshot(settingsRef, (settingsSnap) => {
+            if (settingsSnap.exists()) {
+                const settings = settingsSnap.data();
+                setCondoFee(settings.condoFee || 0);
+                const rates = settings.exchangeRates || [];
+                const activeRateObj = rates.find((r: any) => r.active);
+                if (activeRateObj) setActiveRate(activeRateObj.rate);
+                else if (rates.length > 0) {
+                    const sortedRates = [...rates].sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                    setActiveRate(sortedRates[0].rate);
+                }
+            }
+        });
+
+        const debtsQuery = query(collection(db, "condominios", activeCondoId, "debts"), where("ownerId", "==", selectedOwner.id));
+        const debtsUnsubscribe = onSnapshot(debtsQuery, (snapshot) => {
+            const debtsData: Debt[] = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Debt));
+            setOwnerDebts(debtsData.sort((a, b) => a.year - b.year || a.month - b.month));
+            setLoadingDebts(false);
+        });
+        return () => {
+            settingsUnsubscribe();
+            debtsUnsubscribe();
+        };
+    }, [selectedOwner, activeCondoId]);
+
+    const filteredOwners = useMemo(() => {
+        if (!searchTerm) return [];
+        return allOwners.filter(owner => owner.name?.toLowerCase().includes(searchTerm.toLowerCase()));
+    }, [searchTerm, allOwners]);
+
+    if (loadingOwners) {
+        return <div className="flex justify-center items-center h-64"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>;
+    }
+
+    if (!selectedOwner) {
+        return (
+            <Card>
+                <CardHeader>
+                    <CardTitle>Seleccionar Propietario</CardTitle>
+                    <CardDescription>Busque y seleccione un propietario para calcular su deuda.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                     <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input placeholder="Buscar por nombre..." className="pl-9" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                    </div>
+                    {searchTerm && (
+                        <Card className="border rounded-lg">
+                            <ScrollArea className="h-60">
+                                {filteredOwners.length > 0 ? filteredOwners.map(owner => (
+                                    <div key={owner.id} onClick={() => { setSearchTerm(''); setSelectedOwner(owner); }} className="p-3 hover:bg-muted cursor-pointer border-b last:border-b-0">
+                                        <p className="font-medium text-sm">{owner.name}</p>
+                                        <p className="text-xs text-muted-foreground">{(owner.properties || []).map(p => `${p.street} - ${p.house}`).join(', ')}</p>
+                                    </div>
+                                )) : <p className="p-4 text-sm text-center text-muted-foreground">No se encontraron propietarios.</p>}
+                            </ScrollArea>
+                        </Card>
+                    )}
+                </CardContent>
+            </Card>
+        )
+    }
+
+    return (
+        <div>
+            <Button variant="outline" onClick={() => setSelectedOwner(null)} className="mb-4">
+                <ArrowLeft className="mr-2 h-4 w-4"/>
+                Cambiar de Propietario
+            </Button>
+            {loadingDebts ? (
+                <div className="flex justify-center items-center h-64"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>
+            ) : (
+                <PaymentCalculatorUI owner={selectedOwner} debts={ownerDebts} activeRate={activeRate} condoFee={condoFee} />
+            )}
+        </div>
+    );
+}
+
 function PaymentsPage() {
     const searchParams = useSearchParams();
     const defaultTab = searchParams?.get('tab') || 'verify';
@@ -888,3 +924,5 @@ export default function PaymentsPageWrapper() {
         </Suspense>
     );
 }
+
+    
