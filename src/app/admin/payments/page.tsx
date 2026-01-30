@@ -13,7 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
-import { CalendarIcon, Check, CheckCircle, Clock, DollarSign, Eye, FileText, Hash, Loader2, Upload, Banknote, Info, X, Save, FileUp, UserPlus, Trash2, XCircle, Search, ChevronDown, Minus, Equal, Receipt, AlertTriangle, User, Calculator, ArrowLeft, MoreHorizontal, Download, Share2 } from 'lucide-react';
+import { CalendarIcon, Check, CheckCircle, Clock, DollarSign, Eye, FileText, Hash, Loader2, Upload, Banknote, Info, X, Save, FileUp, UserPlus, Trash2, XCircle, Search, ChevronDown, Minus, Equal, Receipt, AlertTriangle, User, MoreHorizontal, Download, Share2 } from 'lucide-react';
 import { format, isBefore, startOfMonth, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn, compressImage } from '@/lib/utils';
@@ -703,7 +703,6 @@ function ReportPaymentComponent() {
     
     const validateForm = async (): Promise<{ isValid: boolean, error?: string }> => {
         if (!paymentDate || !exchangeRate || !paymentMethod || !bank || !totalAmount || Number(totalAmount) <= 0 || reference.length < 4) return { isValid: false, error: 'Complete todos los campos de la transacción (referencia min. 4 dígitos).' };
-        if (!receiptImage) return { isValid: false, error: 'Debe adjuntar una imagen del comprobante.' };
         if (beneficiaryRows.some(row => !row.owner || !row.amount || Number(row.amount) <= 0 || !row.selectedProperty)) return { isValid: false, error: 'Complete la información para cada beneficiario.' };
         if (Math.abs(balance) > 0.01) return { isValid: false, error: 'El monto total no coincide con la suma de los montos asignados.' };
         if (!activeCondoId) return { isValid: false, error: "No se encontró un condominio activo." };
@@ -774,7 +773,7 @@ function ReportPaymentComponent() {
                         {bank === 'Otro' && <div className="space-y-2"><Label>Nombre del Otro Banco</Label><Input value={otherBank} onChange={(e) => setOtherBank(e.target.value)} /></div>}
                         <div className="space-y-2"><Label>Referencia</Label><Input value={reference} onChange={(e) => setReference(e.target.value.replace(/\D/g, ''))}/></div>
                     </div>
-                    <div className="space-y-2"><Label>Comprobante</Label><Input type="file" onChange={handleImageUpload} />{receiptImage && <p className="text-xs text-green-600">Comprobante cargado.</p>}</div>
+                    <div className="space-y-2"><Label>Comprobante (Opcional)</Label><Input type="file" onChange={handleImageUpload} />{receiptImage && <p className="text-xs text-green-600">Comprobante cargado.</p>}</div>
                     <div className="grid md:grid-cols-2 gap-6">
                         <div className="space-y-2"><Label>Monto Total (Bs.)</Label><Input type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} placeholder="0.00" /></div>
                         <div className="space-y-2"><Label>Monto Equivalente (USD)</Label><div className="relative"><DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input type="text" value={amountUSD} readOnly className="pl-9 bg-muted"/></div></div>
