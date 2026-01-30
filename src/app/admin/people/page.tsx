@@ -309,6 +309,16 @@ export default function OwnersManagement() {
                                 </SelectContent>
                             </Select>
                         </div>
+                        {currentOwner.id && currentOwner.role === 'propietario' && (
+                            <div className="space-y-2">
+                                <Label>Saldo a Favor (Bs.)</Label>
+                                <Input 
+                                    type="number"
+                                    value={currentOwner.balance}
+                                    onChange={(e) => setCurrentOwner({...currentOwner, balance: Number(e.target.value)})}
+                                />
+                            </div>
+                        )}
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
