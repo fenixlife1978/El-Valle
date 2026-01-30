@@ -13,7 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
-import { CalendarIcon, Check, CheckCircle, Clock, DollarSign, Eye, FileText, Hash, Loader2, Upload, Banknote, Info, X, Save, FileUp, UserPlus, Trash2, XCircle, Search, ChevronDown, Minus, Equal, Receipt, AlertTriangle, User, MoreHorizontal, Download, Share2 } from 'lucide-react';
+import { CalendarIcon, Check, CheckCircle, Clock, DollarSign, Eye, FileText, Hash, Loader2, Upload, Banknote, Info, X, Save, FileUp, UserPlus, Trash2, XCircle, Search, ChevronDown, Minus, Equal, Receipt, AlertTriangle, User, MoreHorizontal, Download, Share2, Calculator } from 'lucide-react';
 import { format, isBefore, startOfMonth, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn, compressImage } from '@/lib/utils';
@@ -752,7 +752,7 @@ function PaymentCalculatorComponent() {
     const paymentCalculator = useMemo(() => {
         if (!ownerData) return { totalToPay: 0, hasSelection: false, dueMonthsCount: 0, advanceMonthsCount: 0, totalDebtBs: 0, balanceInFavor: 0 };
         const pendingDebts = ownerDebts.filter(d => d.status === 'pending' || d.status === 'vencida');
-        const dueMonthsTotalUSD = pendingDebts.filter(debt => selectedPendingDebts.includes(debt.id)).reduce((sum, debt) => sum + debt.amountUSD, 0);
+        const dueMonthsTotalUSD = pendingDebts.filter(d => selectedPendingDebts.includes(d.id)).reduce((sum, debt) => sum + debt.amountUSD, 0);
         const advanceMonthsTotalUSD = selectedAdvanceMonths.length * condoFee;
         const totalDebtUSD = dueMonthsTotalUSD + advanceMonthsTotalUSD;
         const totalDebtBs = totalDebtUSD * activeRate;
