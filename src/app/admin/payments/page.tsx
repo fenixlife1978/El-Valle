@@ -12,11 +12,11 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
-import { CalendarIcon, Check, CheckCircle2, DollarSign, FileText, Hash, Loader2, Upload, Banknote, Info, X, Save, FileUp, UserPlus, Trash2, XCircle, Search, ChevronDown, Minus, Equal, Receipt, CheckCircle, Clock, Eye, AlertTriangle, User, Calculator, ArrowLeft } from 'lucide-react';
+import { CalendarIcon, Check, CheckCircle, Clock, DollarSign, Eye, FileText, Hash, Loader2, Upload, Banknote, Info, X, Save, FileUp, UserPlus, Trash2, XCircle, Search, ChevronDown, Minus, Equal, Receipt, AlertTriangle, User, Calculator, ArrowLeft, MoreHorizontal, Download, Share2 } from 'lucide-react';
 import { format, isBefore, startOfMonth, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn, compressImage } from '@/lib/utils';
-import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc, where, getDocs, Timestamp, writeBatch, orderBy, runTransaction, updateDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc, where, getDocs, Timestamp, writeBatch, orderBy, runTransaction, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { BankSelectionModal } from '@/components/bank-selection-modal';
@@ -29,6 +29,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import Image from 'next/image';
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuthorization } from '@/hooks/use-authorization';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import JsBarcode from 'jsbarcode';
+import QRCode from 'qrcode';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+
 
 // --- TYPES ---
 type Owner = {
@@ -40,9 +46,10 @@ type Owner = {
 };
 type BeneficiaryRow = { id: string; owner: Owner | null; searchTerm: string; amount: string; selectedProperty: { street: string, house: string } | null; };
 type PaymentMethod = 'movil' | 'transferencia' | '';
-type Debt = { id: string; ownerId: string; year: number; month: number; amountUSD: number; description: string; status: 'pending' | 'paid' | 'vencida'; };
-type PaymentDetails = { paymentMethod: 'movil' | 'transferencia' | ''; bank: string; otherBank: string; reference: string; };
+type Debt = { id: string; ownerId: string; year: number; month: number; amountUSD: number; description: string; status: 'pending' | 'paid' | 'vencida'; property: { street: string; house: string }; paidAmountUSD?: number;};
 type Payment = { id: string; beneficiaries: { ownerId: string; ownerName: string; amount: number; street?: string; house?: string; }[]; beneficiaryIds: string[]; totalAmount: number; exchangeRate: number; paymentDate: Timestamp; reportedAt: Timestamp; paymentMethod: 'transferencia' | 'movil' | 'efectivo' | 'zelle'; bank: string; reference: string; status: 'pendiente' | 'aprobado' | 'rechazado'; receiptUrl?: string; observations?: string; receiptNumbers?: { [ownerId: string]: string }; };
+type ReceiptData = { payment: Payment; beneficiary: any; ownerName: string; ownerUnit: string; paidDebts: Debt[]; previousBalance: number; currentBalance: number; qrCodeUrl?: string; receiptNumber: string; } | null;
+
 
 // --- CONSTANTS & HELPERS ---
 const VENEZUELAN_BANKS = [
@@ -60,7 +67,7 @@ const formatCurrency = (num: number) => `Bs. ${num.toLocaleString('es-VE', { min
 
 // --- VERIFICATION COMPONENT ---
 function VerificationComponent() {
-    const { user } = useAuth();
+    const { user, companyInfo } = useAuth();
     const { requestAuthorization } = useAuthorization();
     const { toast } = useToast();
     const sId = typeof window !== 'undefined' ? localStorage.getItem('support_mode_id') : null;
@@ -72,8 +79,11 @@ function VerificationComponent() {
     const [searchTerm, setSearchTerm] = useState('');
     const [activeTab, setActiveTab] = useState('pendiente');
     const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
+    const [receiptData, setReceiptData] = useState<ReceiptData>(null);
     const [isVerifying, setIsVerifying] = useState(false);
+    const [isGenerating, setIsGenerating] = useState(false);
     const [rejectionReason, setRejectionReason] = useState('');
+    const [paymentToDelete, setPaymentToDelete] = useState<Payment | null>(null);
 
     useEffect(() => {
         if (!workingCondoId) { setLoading(false); return; }
@@ -89,17 +99,17 @@ function VerificationComponent() {
     }, [workingCondoId, toast]);
 
     const filteredPayments = useMemo(() => {
-        const lowerCaseSearchTerm = searchTerm.toLowerCase();
         return payments.filter(p => {
             if (!p) return false;
             const statusMatch = p.status === activeTab;
-            const searchMatch = searchTerm === '' ||
-                (p.reference && p.reference.toLowerCase().includes(lowerCaseSearchTerm)) ||
-                (p.beneficiaries && p.beneficiaries.some(b => 
-                    b && b.ownerName && b.ownerName.toLowerCase().includes(lowerCaseSearchTerm)
-                ));
+            if (!statusMatch) return false;
+            if (searchTerm === '') return true;
+
+            const lowerCaseSearchTerm = searchTerm.toLowerCase();
+            const referenceMatch = p.reference && p.reference.toLowerCase().includes(lowerCaseSearchTerm);
+            const ownerMatch = p.beneficiaries?.some(b => b.ownerName && b.ownerName.toLowerCase().includes(lowerCaseSearchTerm));
             
-            return statusMatch && searchMatch;
+            return referenceMatch || ownerMatch;
         });
     }, [payments, activeTab, searchTerm]);
 
@@ -173,6 +183,45 @@ function VerificationComponent() {
             }
         });
     };
+
+    const handleDeletePayment = async () => {
+        if (!paymentToDelete || !workingCondoId) return;
+        requestAuthorization(async () => {
+            setIsVerifying(true);
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const paymentRef = doc(db, 'condominios', workingCondoId, 'payments', paymentToDelete.id);
+                    const paidDebtsSnapshot = await getDocs(query(collection(db, 'condominios', workingCondoId, 'debts'), where('paymentId', '==', paymentToDelete.id)));
+                    let totalRefundToBalance = paymentToDelete.totalAmount;
+
+                    for (const debtDoc of paidDebtsSnapshot.docs) {
+                        transaction.update(debtDoc.ref, { status: 'pending', paymentId: deleteField(), paymentDate: deleteField(), paidAmountUSD: deleteField() });
+                        const debtData = debtDoc.data() as Debt;
+                        totalRefundToBalance -= (debtData.paidAmountUSD || debtData.amountUSD) * paymentToDelete.exchangeRate;
+                    }
+
+                    if (totalRefundToBalance > 0.01) {
+                         for (const beneficiary of paymentToDelete.beneficiaries) {
+                            const ownerRef = doc(db, 'condominios', workingCondoId, 'owners', beneficiary.ownerId);
+                            const ownerDoc = await transaction.get(ownerRef);
+                            if (ownerDoc.exists()) {
+                                const currentBalance = ownerDoc.data().balance || 0;
+                                transaction.update(ownerRef, { balance: Math.max(0, currentBalance - totalRefundToBalance) });
+                            }
+                        }
+                    }
+
+                    transaction.delete(paymentRef);
+                });
+                toast({ title: 'Pago Eliminado', description: 'El pago y sus efectos han sido revertidos.' });
+                setPaymentToDelete(null);
+            } catch (error: any) {
+                toast({ variant: 'destructive', title: 'Error al eliminar', description: error.message });
+            } finally {
+                setIsVerifying(false);
+            }
+        });
+    };
     
     return (
         <Card>
@@ -202,10 +251,22 @@ function VerificationComponent() {
                                     ) : filteredPayments.map(p => (
                                         <TableRow key={p.id}>
                                             <TableCell className="font-medium">{p.beneficiaries.map(b => b.ownerName).join(', ')}</TableCell>
-                                            <TableCell>{format(p.paymentDate.toDate(), 'dd/MM/yyyy')}</TableCell>
+                                            <TableCell>{p.paymentDate ? format(p.paymentDate.toDate(), 'dd/MM/yyyy') : 'N/A'}</TableCell>
                                             <TableCell>{formatCurrency(p.totalAmount)}</TableCell>
                                             <TableCell className="font-mono">{p.reference}</TableCell>
-                                            <TableCell className="text-right"><Button variant="outline" size="sm" onClick={() => setSelectedPayment(p)}><Eye className="mr-2 h-4 w-4" /> Ver Detalles</Button></TableCell>
+                                            <TableCell className="text-right">
+                                                {p.status === 'aprobado' ? (
+                                                     <DropdownMenu>
+                                                        <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4"/></Button></DropdownMenuTrigger>
+                                                        <DropdownMenuContent>
+                                                            <DropdownMenuItem onClick={() => setSelectedPayment(p)}><Eye className="mr-2 h-4 w-4"/>Ver Recibo</DropdownMenuItem>
+                                                            <DropdownMenuItem className="text-destructive" onClick={() => setPaymentToDelete(p)}><Trash2 className="mr-2 h-4 w-4"/>Eliminar</Button></DropdownMenuItem>
+                                                        </DropdownMenuContent>
+                                                     </DropdownMenu>
+                                                ) : (
+                                                    <Button variant="outline" size="sm" onClick={() => setSelectedPayment(p)}><Eye className="mr-2 h-4 w-4" /> Ver Detalles</Button>
+                                                )}
+                                            </TableCell>
                                         </TableRow>
                                     ))}
                                 </TableBody>
@@ -213,22 +274,26 @@ function VerificationComponent() {
                         )}
                     </div>
                 </Tabs>
-                {selectedPayment && (
-                    <Dialog open={!!selectedPayment} onOpenChange={() => setSelectedPayment(null)}>
-                        <DialogContent className="max-w-2xl">
-                            <DialogHeader><DialogTitle>Detalles del Pago - {selectedPayment.reference}</DialogTitle><DialogDescription>Reportado el {format(selectedPayment.reportedAt.toDate(), 'dd/MM/yyyy HH:mm')}</DialogDescription></DialogHeader>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4 max-h-[70vh] overflow-y-auto">
-                                <div className="space-y-4">
-                                    <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Beneficiarios</CardTitle></CardHeader><CardContent>{selectedPayment.beneficiaries.map((b, i) => (<div key={i} className="text-sm flex justify-between items-center"><span><User className="inline h-4 w-4 mr-1"/>{b.ownerName}</span><span className="font-bold">{formatCurrency(b.amount)}</span></div>))}</CardContent></Card>
-                                    <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Detalles de la Transacción</CardTitle></CardHeader><CardContent className="text-sm space-y-1"><p><strong>Monto Total:</strong> {formatCurrency(selectedPayment.totalAmount)}</p><p><strong>Fecha:</strong> {format(selectedPayment.paymentDate.toDate(), 'dd/MM/yyyy')}</p><p><strong>Método:</strong> {selectedPayment.paymentMethod}</p><p><strong>Banco:</strong> {selectedPayment.bank}</p></CardContent></Card>
-                                    {selectedPayment.status === 'rechazado' && (<Alert variant="destructive"><AlertTriangle className="h-4 w-4" /><AlertDescription><strong>Motivo del Rechazo:</strong> {selectedPayment.observations}</AlertDescription></Alert>)}
-                                </div>
-                                <div><Label>Comprobante de Pago</Label>{selectedPayment.receiptUrl ? (<div className="mt-2 border rounded-lg overflow-hidden"><Image src={selectedPayment.receiptUrl} alt="Comprobante" width={400} height={600} className="w-full h-auto" /></div>) : <p className="text-sm text-muted-foreground">No se adjuntó comprobante.</p>}</div>
+                <Dialog open={!!selectedPayment} onOpenChange={() => setSelectedPayment(null)}>
+                    <DialogContent className="max-w-2xl">
+                        <DialogHeader><DialogTitle>Detalles del Pago - {selectedPayment?.reference}</DialogTitle>{selectedPayment && <DialogDescription>Reportado el {format(selectedPayment.reportedAt.toDate(), 'dd/MM/yyyy HH:mm')}</DialogDescription>}</DialogHeader>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4 max-h-[70vh] overflow-y-auto">
+                            <div className="space-y-4">
+                                <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Beneficiarios</CardTitle></CardHeader><CardContent>{selectedPayment?.beneficiaries.map((b, i) => (<div key={i} className="text-sm flex justify-between items-center"><span><User className="inline h-4 w-4 mr-1"/>{b.ownerName}</span><span className="font-bold">{formatCurrency(b.amount)}</span></div>))}</CardContent></Card>
+                                <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Detalles de la Transacción</CardTitle></CardHeader><CardContent className="text-sm space-y-1"><p><strong>Monto Total:</strong> {formatCurrency(selectedPayment?.totalAmount || 0)}</p><p><strong>Fecha:</strong> {selectedPayment ? format(selectedPayment.paymentDate.toDate(), 'dd/MM/yyyy') : ''}</p><p><strong>Método:</strong> {selectedPayment?.paymentMethod}</p><p><strong>Banco:</strong> {selectedPayment?.bank}</p></CardContent></Card>
+                                {selectedPayment?.status === 'rechazado' && (<Alert variant="destructive"><AlertTriangle className="h-4 w-4" /><AlertDescription><strong>Motivo del Rechazo:</strong> {selectedPayment.observations}</AlertDescription></Alert>)}
                             </div>
-                            {selectedPayment.status === 'pendiente' && (<DialogFooter className="border-t pt-4 gap-4"><div className="w-full"><Label htmlFor="rejectionReason">Motivo del rechazo (opcional)</Label><Textarea id="rejectionReason" value={rejectionReason} onChange={(e) => setRejectionReason(e.target.value)} placeholder="Ej: Referencia no coincide, monto incorrecto..." /></div><div className="w-full flex flex-col sm:flex-row gap-2 justify-end"><Button variant="destructive" onClick={() => handleReject(selectedPayment)} disabled={isVerifying || !rejectionReason}>{isVerifying ? <Loader2 className="animate-spin" /> : <XCircle className="mr-2"/>} Rechazar</Button><Button onClick={() => handleApprove(selectedPayment)} disabled={isVerifying} className="bg-green-500 hover:bg-green-600">{isVerifying ? <Loader2 className="animate-spin" /> : <CheckCircle className="mr-2"/>} Aprobar</Button></div></DialogFooter>)}
-                        </DialogContent>
-                    </Dialog>
-                )}
+                            <div><Label>Comprobante de Pago</Label>{selectedPayment?.receiptUrl ? (<div className="mt-2 border rounded-lg overflow-hidden"><Image src={selectedPayment.receiptUrl} alt="Comprobante" width={400} height={600} className="w-full h-auto" /></div>) : <p className="text-sm text-muted-foreground">No se adjuntó comprobante.</p>}</div>
+                        </div>
+                        {selectedPayment?.status === 'pendiente' && (<DialogFooter className="border-t pt-4 gap-4"><div className="w-full"><Label htmlFor="rejectionReason">Motivo del rechazo (opcional)</Label><Textarea id="rejectionReason" value={rejectionReason} onChange={(e) => setRejectionReason(e.target.value)} placeholder="Ej: Referencia no coincide, monto incorrecto..." /></div><div className="w-full flex flex-col sm:flex-row gap-2 justify-end"><Button variant="destructive" onClick={() => handleReject(selectedPayment!)} disabled={isVerifying || !rejectionReason}>{isVerifying ? <Loader2 className="animate-spin" /> : <XCircle className="mr-2"/>} Rechazar</Button><Button onClick={() => handleApprove(selectedPayment!)} disabled={isVerifying} className="bg-green-500 hover:bg-green-600">{isVerifying ? <Loader2 className="animate-spin" /> : <CheckCircle className="mr-2"/>} Aprobar</Button></div></DialogFooter>)}
+                    </DialogContent>
+                </Dialog>
+                <Dialog open={!!paymentToDelete} onOpenChange={() => setPaymentToDelete(null)}>
+                     <DialogContent>
+                        <DialogHeader><DialogTitle className="text-destructive">Confirmar Eliminación</DialogTitle><DialogDescription>Esta acción revertirá el pago, las deudas liquidadas volverán a estar pendientes y se ajustará el saldo a favor. ¿Está seguro?</DialogDescription></DialogHeader>
+                        <DialogFooter><Button variant="outline" onClick={() => setPaymentToDelete(null)}>Cancelar</Button><Button variant="destructive" onClick={handleDeletePayment}>Sí, Eliminar Pago</Button></DialogFooter>
+                     </DialogContent>
+                </Dialog>
             </CardContent>
         </Card>
     );
@@ -276,9 +341,9 @@ function ReportPaymentComponent() {
                     if (paymentDate) {
                         setExchangeRate(null);
                         setExchangeRateMessage('Buscando tasa...');
-                        const allRates = (settings.exchangeRates || []) as ExchangeRate[];
+                        const allRates = (settings.exchangeRates || []);
                         const paymentDateString = format(paymentDate, 'yyyy-MM-dd');
-                        const applicableRates = allRates.filter(r => r.date <= paymentDateString).sort((a, b) => b.date.localeCompare(a.date));
+                        const applicableRates = allRates.filter((r:any) => r.date <= paymentDateString).sort((a:any, b:any) => b.date.localeCompare(a.date));
                         if (applicableRates.length > 0) {
                              setExchangeRate(applicableRates[0].rate);
                              setExchangeRateMessage('');
@@ -510,6 +575,17 @@ function AdminPaymentCalculatorComponent() {
         if (!searchTerm) return [];
         return allOwners.filter(o => o.name && o.name.toLowerCase().includes(searchTerm.toLowerCase()));
     }, [searchTerm, allOwners]);
+    
+    const paymentCalculator = useMemo(() => {
+        if (!selectedOwner) return { totalToPay: 0, hasSelection: false, dueMonthsCount: 0, advanceMonthsCount: 0, totalDebtBs: 0, balanceInFavor: 0 };
+        const dueMonthsTotalUSD = ownerDebts.filter(d => selectedPendingDebts.includes(d.id)).reduce((sum, debt) => sum + debt.amountUSD, 0);
+        const advanceMonthsTotalUSD = selectedAdvanceMonths.length * condoFee;
+        const totalDebtUSD = dueMonthsTotalUSD + advanceMonthsTotalUSD;
+        const totalDebtBs = totalDebtUSD * activeRate;
+        const totalToPay = Math.max(0, totalDebtBs - (selectedOwner.balance || 0));
+        return { totalToPay, hasSelection: selectedPendingDebts.length > 0 || selectedAdvanceMonths.length > 0, dueMonthsCount: selectedPendingDebts.length, advanceMonthsCount: selectedAdvanceMonths.length, totalDebtBs, balanceInFavor: selectedOwner.balance || 0, condoFee };
+    }, [selectedPendingDebts, selectedAdvanceMonths, ownerDebts, activeRate, condoFee, selectedOwner]);
+
 
     if (!selectedOwner) {
         return (
@@ -538,7 +614,12 @@ function AdminPaymentCalculatorComponent() {
     return (
         <div className="space-y-6">
             <Button variant="outline" onClick={() => setSelectedOwner(null)}><ArrowLeft className="mr-2 h-4 w-4"/>Cambiar Propietario</Button>
-            <p>Calculadora UI para {selectedOwner.name}</p>
+            <PaymentCalculatorUI 
+                owner={selectedOwner}
+                debts={ownerDebts}
+                activeRate={activeRate}
+                condoFee={condoFee}
+            />
         </div>
     );
 }
@@ -575,6 +656,89 @@ function PaymentsPage() {
                     <AdminPaymentCalculatorComponent />
                 </TabsContent>
             </Tabs>
+        </div>
+    );
+}
+
+// --- UI for Calculator (reused by Admin and Owner) ---
+function PaymentCalculatorUI({ owner, debts, activeRate, condoFee }: { owner: any; debts: Debt[]; activeRate: number; condoFee: number }) {
+    const [selectedPendingDebts, setSelectedPendingDebts] = useState<string[]>([]);
+    const [selectedAdvanceMonths, setSelectedAdvanceMonths] = useState<string[]>([]);
+    const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
+    const [processingPayment, setProcessingPayment] = useState(false);
+    const [paymentDetails, setPaymentDetails] = useState<PaymentDetails>({ paymentMethod: '', bank: '', otherBank: '', reference: '' });
+    const { toast } = useToast();
+    const { user, activeCondoId } = useAuth();
+    const now = new Date();
+
+    const pendingDebts = useMemo(() => debts.filter(d => d.status === 'pending' || d.status === 'vencida').sort((a,b) => a.year - b.year || a.month - b.month), [debts]);
+    const futureMonths = useMemo(() => {
+        const paidAdvanceMonths = debts.filter(d => d.status === 'paid' && d.description.includes('Adelantado')).map(d => `${d.year}-${String(d.month).padStart(2, '0')}`);
+        return Array.from({ length: 12 }, (_, i) => {
+            const date = addMonths(now, i);
+            const value = format(date, 'yyyy-MM');
+            return { value, label: format(date, 'MMMM yyyy', { locale: es }), disabled: paidAdvanceMonths.includes(value) };
+        });
+    }, [debts, now]);
+    
+    const paymentCalculator = useMemo(() => {
+        const dueMonthsTotalUSD = pendingDebts.filter(d => selectedPendingDebts.includes(d.id)).reduce((sum, debt) => sum + debt.amountUSD, 0);
+        const advanceMonthsTotalUSD = selectedAdvanceMonths.length * condoFee;
+        const totalDebtUSD = dueMonthsTotalUSD + advanceMonthsTotalUSD;
+        const totalDebtBs = totalDebtUSD * activeRate;
+        const totalToPay = Math.max(0, totalDebtBs - (owner.balance || 0));
+        return { totalToPay, hasSelection: selectedPendingDebts.length > 0 || selectedAdvanceMonths.length > 0, dueMonthsCount: selectedPendingDebts.length, advanceMonthsCount: selectedAdvanceMonths.length, totalDebtBs, balanceInFavor: owner.balance || 0, condoFee };
+    }, [selectedPendingDebts, selectedAdvanceMonths, pendingDebts, activeRate, condoFee, owner]);
+    
+    if (!owner) return null;
+
+    return (
+        <div className="space-y-6">
+            <h3 className="text-xl font-bold">Calculadora para: <span className="text-primary">{owner.name}</span></h3>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+                <div className="lg:col-span-2 space-y-4">
+                    <Card>
+                        <CardHeader><CardTitle>1. Deudas Pendientes</CardTitle></CardHeader>
+                        <CardContent className="p-0">
+                           <Table>
+                                <TableHeader><TableRow><TableHead className="w-[50px] text-center">Pagar</TableHead><TableHead>Período</TableHead><TableHead>Concepto</TableHead><TableHead>Estado</TableHead><TableHead className="text-right">Monto (Bs.)</TableHead></TableRow></TableHeader>
+                                <TableBody>
+                                    {pendingDebts.length === 0 ? <TableRow><TableCell colSpan={5} className="h-24 text-center"><Info className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />No tiene deudas pendientes.</TableCell></TableRow> : 
+                                     pendingDebts.map((debt) => {
+                                        const debtMonthDate = startOfMonth(new Date(debt.year, debt.month - 1));
+                                        const isOverdue = isBefore(debtMonthDate, startOfMonth(now));
+                                        const status = debt.status === 'vencida' || (debt.status === 'pending' && isOverdue) ? 'Vencida' : 'Pendiente';
+                                        return <TableRow key={debt.id} data-state={selectedPendingDebts.includes(debt.id) ? 'selected' : ''}>
+                                                <TableCell className="text-center"><Checkbox onCheckedChange={() => setSelectedPendingDebts(p => p.includes(debt.id) ? p.filter(id=>id!==debt.id) : [...p, debt.id])} checked={selectedPendingDebts.includes(debt.id)} /></TableCell>
+                                                <TableCell className="font-medium">{MONTHS_LOCALE[debt.month]} {debt.year}</TableCell>
+                                                <TableCell>{debt.description}</TableCell>
+                                                <TableCell><Badge variant={status === 'Vencida' ? 'destructive' : 'warning'}>{status}</Badge></TableCell>
+                                                <TableCell className="text-right">Bs. {formatCurrency(debt.amountUSD * activeRate)}</TableCell>
+                                            </TableRow>
+                                    })}
+                                </TableBody>
+                            </Table>
+                        </CardContent>
+                    </Card>
+                    <Card>
+                        <CardHeader><CardTitle>2. Pagar Meses por Adelantado</CardTitle><CardDescription>Cuota mensual actual: ${condoFee.toFixed(2)}</CardDescription></CardHeader>
+                        <CardContent><div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">{futureMonths.map(month => <Button key={month.value} type="button" variant={selectedAdvanceMonths.includes(month.value) ? 'default' : 'outline'} className="flex items-center justify-center gap-2 capitalize" onClick={() => setSelectedAdvanceMonths(p => p.includes(month.value) ? p.filter(m=>m!==month.value) : [...p, month.value])} disabled={month.disabled}>{selectedAdvanceMonths.includes(month.value) && <Check className="h-4 w-4" />} {month.label}</Button>)}</div></CardContent>
+                    </Card>
+                </div>
+                <div className="lg:sticky lg:top-20">
+                     {paymentCalculator.hasSelection && <Card>
+                         <CardHeader><CardTitle className="flex items-center"><Calculator className="mr-2 h-5 w-5"/> 3. Resumen de Pago</CardTitle><CardDescription>Cálculo basado en su selección.</CardDescription></CardHeader>
+                        <CardContent className="space-y-3">
+                            {paymentCalculator.dueMonthsCount > 0 && <p className="text-sm text-muted-foreground">{paymentCalculator.dueMonthsCount} mes(es) adeudado(s) seleccionado(s).</p>}
+                            {paymentCalculator.advanceMonthsCount > 0 && <p className="text-sm text-muted-foreground">{paymentCalculator.advanceMonthsCount} mes(es) por adelanto x ${paymentCalculator.condoFee.toFixed(2)} c/u.</p>}
+                            <hr className="my-2"/><div className="flex justify-between items-center text-lg"><span className="text-muted-foreground">Sub-Total Deuda:</span><span className="font-medium">Bs. {formatCurrency(paymentCalculator.totalDebtBs)}</span></div>
+                            <div className="flex justify-between items-center text-md"><span className="text-muted-foreground flex items-center"><Minus className="mr-2 h-4 w-4"/> Saldo a Favor:</span><span className="font-medium text-green-500">Bs. {formatCurrency(paymentCalculator.balanceInFavor)}</span></div>
+                            <hr className="my-2"/><div className="flex justify-between items-center text-2xl font-bold"><span className="flex items-center"><Equal className="mr-2 h-5 w-5"/> TOTAL A PAGAR:</span><span className="text-primary">Bs. {formatCurrency(paymentCalculator.totalToPay)}</span></div>
+                        </CardContent>
+                        <CardFooter><Button className="w-full" onClick={() => setIsPaymentDialogOpen(true)} disabled={!paymentCalculator.hasSelection || paymentCalculator.totalToPay <= 0}><Receipt className="mr-2 h-4 w-4" />Reportar Pago</Button></CardFooter>
+                    </Card>}
+                </div>
+            </div>
         </div>
     );
 }

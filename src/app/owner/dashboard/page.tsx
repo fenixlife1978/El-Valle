@@ -23,7 +23,7 @@ import CarteleraDigital from "@/components/CarteleraDigital";
 // Imports de Lógica y Librerías de Next/React
 import { useAuth } from "@/hooks/use-auth";
 import { useState, useEffect, useMemo } from 'react';
-import { collection, query, where, onSnapshot, getDocs, doc, Timestamp, orderBy, addDoc, serverTimestamp, limit, getDoc, runTransaction } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, getDocs, doc, Timestamp, orderBy, addDoc, serverTimestamp, limit, getDoc, runTransaction, deleteField } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { format, isBefore, startOfMonth } from "date-fns";
 import { es } from "date-fns/locale";
@@ -35,6 +35,7 @@ import Marquee from "@/components/ui/marquee";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import JsBarcode from 'jsbarcode';
+import QRCode from 'qrcode';
 
 
 // -------------------------------------------------------------------------
@@ -102,8 +103,7 @@ const monthsLocale: { [key: number]: string } = {
 
 const formatToTwoDecimals = (num: number) => {
     if (typeof num !== 'number' || isNaN(num)) return '0,00';
-    const truncated = Math.trunc(num * 100) / 100;
-    return truncated.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
 
@@ -478,7 +478,7 @@ const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptD
 
         setIsGenerating(true);
         try {
-            const QRCode = await import('qrcode');
+            
             const paidDebtsSnapshot = await getDocs(
                 query(collection(db, 'condominios', activeCondoId, 'debts'), where('paymentId', '==', payment.id), where('ownerId', '==', ownerId))
             );
@@ -500,7 +500,7 @@ const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptD
                 beneficiary,
                 ownerName: ownerData.name,
                 ownerUnit: `${ownerData.properties?.[0]?.street} - ${ownerData.properties?.[0]?.house}`,
-                paidDebts: paidDebts.sort((a,b) => a.year - b.year || a.month - a.month),
+                paidDebts: paidDebts.sort((a,b) => a.year - b.year || a.month - b.month),
                 previousBalance: previousBalance,
                 currentBalance: ownerData.balance || 0,
                 receiptNumber: receiptNumber,
@@ -592,7 +592,7 @@ const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptD
                         </div>
                         
                         <Button asChild className="w-full" disabled={stats.isSolvente}>
-                            <Link href="/owner/payments/calculator">
+                            <Link href="/owner/payments?tab=calculator">
                                 <CalendarCheck2 className="mr-2 h-4 w-4" />
                                 Calcular y Pagar Deuda
                             </Link>
@@ -667,7 +667,7 @@ const handleGenerateAndAct = async (action: 'download' | 'share', data: ReceiptD
                     </Table>
                 </CardContent>
                    <CardFooter>
-                    <Link href="/owner/payments/report" passHref>
+                    <Link href="/owner/payments?tab=report" passHref>
                         <Button variant="link" className="px-0">Ver historial completo y reportar pago →</Button>
                     </Link>
                 </CardFooter>
