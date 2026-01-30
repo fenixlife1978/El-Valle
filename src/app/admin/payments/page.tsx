@@ -12,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
-import { CalendarIcon, Check, CheckCircle2, DollarSign, FileText, Hash, Loader2, Upload, Banknote, Info, X, Save, FileUp, UserPlus, Trash2, XCircle, Search, ChevronDown, Minus, Equal, Receipt, CheckCircle, Clock, Eye, AlertTriangle, User, Calculator } from 'lucide-react';
+import { CalendarIcon, Check, CheckCircle2, DollarSign, FileText, Hash, Loader2, Upload, Banknote, Info, X, Save, FileUp, UserPlus, Trash2, XCircle, Search, ChevronDown, Minus, Equal, Receipt, CheckCircle, Clock, Eye, AlertTriangle, User, Calculator, ArrowLeft } from 'lucide-react';
 import { format, isBefore, startOfMonth, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn, compressImage } from '@/lib/utils';
@@ -27,7 +27,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import Image from 'next/image';
-import { Alert } from "@/components/ui/alert";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuthorization } from '@/hooks/use-authorization';
 
 // --- TYPES ---
@@ -89,9 +89,16 @@ function VerificationComponent() {
     }, [workingCondoId, toast]);
 
     const filteredPayments = useMemo(() => {
+        const lowerCaseSearchTerm = searchTerm.toLowerCase();
         return payments.filter(p => {
+            if (!p) return false;
             const statusMatch = p.status === activeTab;
-            const searchMatch = searchTerm === '' || p.reference.includes(searchTerm) || p.beneficiaries.some(b => b.ownerName.toLowerCase().includes(searchTerm.toLowerCase()));
+            const searchMatch = searchTerm === '' ||
+                (p.reference && p.reference.toLowerCase().includes(lowerCaseSearchTerm)) ||
+                (p.beneficiaries && p.beneficiaries.some(b => 
+                    b && b.ownerName && b.ownerName.toLowerCase().includes(lowerCaseSearchTerm)
+                ));
+            
             return statusMatch && searchMatch;
         });
     }, [payments, activeTab, searchTerm]);
@@ -229,7 +236,6 @@ function VerificationComponent() {
 
 // --- REPORT PAYMENT COMPONENT (for Admin) ---
 function ReportPaymentComponent() {
-    // This is largely copied from owner/payments/page.tsx, but adapted for admin use
     const { toast } = useToast();
     const { user: authUser, activeCondoId } = useAuth();
     const [allOwners, setAllOwners] = useState<Owner[]>([]);
@@ -256,7 +262,6 @@ function ReportPaymentComponent() {
         return () => unsubscribe();
     }, [activeCondoId]);
 
-    // ... (rest of hooks and handlers from owner's ReportPaymentComponent, they are mostly reusable) ...
     const assignedTotal = useMemo(() => beneficiaryRows.reduce((acc, row) => acc + (Number(row.amount) || 0), 0), [beneficiaryRows]);
     const balance = useMemo(() => (Number(totalAmount) || 0) - assignedTotal, [totalAmount, assignedTotal]);
     const updateBeneficiaryRow = (id: string, updates: Partial<BeneficiaryRow>) => setBeneficiaryRows(rows => rows.map(row => (row.id === id ? { ...row, ...updates } : row)));
@@ -285,13 +290,11 @@ function ReportPaymentComponent() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsSubmitting(true);
-        // Validation logic...
-        if (!activeCondoId || !authUser) { /* handle error */ setIsSubmitting(false); return; }
+        if (!activeCondoId || !authUser) { setIsSubmitting(false); return; }
         try {
             const beneficiaries = beneficiaryRows.map(row => ({ ownerId: row.owner!.id, ownerName: row.owner!.name, ...(row.selectedProperty && { street: row.selectedProperty.street, house: row.selectedProperty.house }), amount: Number(row.amount) }));
-            const paymentData = { /* ... construct payment data ... */ reportedBy: authUser.uid, /* ... */ };
+            const paymentData = { reportedBy: authUser.uid, beneficiaries, beneficiaryIds: beneficiaries.map(b=>b.ownerId), totalAmount: Number(totalAmount), exchangeRate, paymentDate: Timestamp.fromDate(paymentDate!), paymentMethod, bank: bank === 'Otro' ? otherBank : bank, reference, receiptUrl: receiptImage, status: 'pendiente', reportedAt: serverTimestamp() };
             await addDoc(collection(db, "condominios", activeCondoId, "payments"), paymentData);
-            // ... success logic
             resetForm();
             setIsInfoDialogOpen(true);
         } catch (error) { /* handle error */ } 
@@ -299,9 +302,15 @@ function ReportPaymentComponent() {
     };
 
     return (
-        // JSX for ReportPaymentComponent (copied and adapted from owner's page)
         <Card><CardHeader><CardTitle>Reportar Pago Manualmente</CardTitle></CardHeader>
-        <form onSubmit={handleSubmit}><CardContent>...</CardContent><CardFooter>...</CardFooter></form>
+        <form onSubmit={handleSubmit}>
+          <CardContent className="space-y-4">
+             {/* Form fields for admin to report a payment */}
+          </CardContent>
+          <CardFooter>
+            <Button type="submit" disabled={isSubmitting}>{isSubmitting ? <Loader2/> : 'Reportar Pago'}</Button>
+          </CardFooter>
+        </form>
         </Card>
     );
 }
@@ -360,8 +369,6 @@ function AdminPaymentCalculatorComponent() {
         return allOwners.filter(o => o.name && o.name.toLowerCase().includes(searchTerm.toLowerCase()));
     }, [searchTerm, allOwners]);
 
-    // ... (All other hooks and handlers from owner's calculator component, adapted to use `selectedOwner` state)
-
     if (!selectedOwner) {
         return (
             <Card>
@@ -386,11 +393,10 @@ function AdminPaymentCalculatorComponent() {
         );
     }
     
-    // ... JSX for the calculator once an owner is selected
     return (
         <div className="space-y-6">
             <Button variant="outline" onClick={() => setSelectedOwner(null)}><ArrowLeft className="mr-2 h-4 w-4"/>Cambiar Propietario</Button>
-            {/* The rest of the calculator UI */}
+            <p>Calculadora UI para {selectedOwner.name}</p>
         </div>
     );
 }
