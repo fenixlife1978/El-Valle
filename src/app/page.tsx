@@ -4,9 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { Button } from "@/components/ui/button";
 import { Wallet, LayoutDashboard, ShieldCheck, ArrowRight } from 'lucide-react';
-
-const BRAND_LOGO_URL = "https://i.supaimg.com/d4bb1b73-97ce-4af0-9116-e797c018629b.jpg";
-const COMPANY_NAME = "EFAS CondoSys";
+import { SYSTEM_LOGO, COMPANY_NAME, SYSTEM_WORDMARK } from '@/lib/constants';
 
 export default function LandingPage() {
   return (
@@ -17,16 +15,13 @@ export default function LandingPage() {
         <div className="flex items-center gap-4">
           <div className="border border-white/10 rounded-xl p-1 bg-white/5 shadow-inner overflow-hidden">
             <img 
-              src={BRAND_LOGO_URL} 
+              src={SYSTEM_LOGO} 
               alt="Logo" 
               className="h-10 w-10 object-cover rounded-lg"
             />
           </div>
           <div className="flex flex-col">
-            <h1 className="text-2xl font-[900] italic tracking-tighter leading-none uppercase">
-              <span className="text-[#F28705]">EFAS</span>
-              <span className="text-white">CONDOSYS</span>
-            </h1>
+            <img src={SYSTEM_WORDMARK} alt={COMPANY_NAME} className="w-48" />
             <p className="text-[9px] uppercase tracking-[0.3em] text-slate-400 font-bold">
               Sistema de Autogestión de Condominios
             </p>
@@ -35,12 +30,12 @@ export default function LandingPage() {
 
         <div className="flex items-center gap-8">
           <nav className="hidden md:flex items-center gap-6">
-            <Link href="/login" className="text-xs font-black text-slate-400 hover:text-[#F28705] transition-colors uppercase tracking-widest">
+            <Link href="/login?role=owner" className="text-xs font-black text-slate-400 hover:text-primary transition-colors uppercase tracking-widest">
               Propietarios
             </Link>
           </nav>
-          <Link href="/login">
-            <Button className="bg-[#0070f3] hover:bg-[#005bb5] text-white rounded-full px-8 h-10 font-bold text-xs uppercase tracking-widest shadow-lg shadow-blue-600/20">
+          <Link href="/login?role=admin">
+            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-full px-8 h-10 font-bold text-xs uppercase tracking-widest shadow-lg shadow-orange-600/20">
               Acceso Admin
             </Button>
           </Link>
@@ -49,12 +44,12 @@ export default function LandingPage() {
 
       {/* HERO SECTION */}
       <main className="flex flex-col items-center justify-center text-center px-6 pt-24 pb-32 relative">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[500px] bg-blue-600/5 blur-[120px] rounded-full -z-10" />
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[500px] bg-primary/5 blur-[120px] rounded-full -z-10" />
         
         <div className="relative mb-14">
           <div className="absolute inset-0 bg-[#F28705]/15 blur-[80px] rounded-full" />
           <img 
-            src={BRAND_LOGO_URL} 
+            src={SYSTEM_LOGO} 
             alt="EFAS Logo Central" 
             className="relative h-64 w-64 md:h-80 md:w-80 rounded-[3rem] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.7)] border border-white/10 object-cover"
           />
@@ -77,12 +72,12 @@ export default function LandingPage() {
         </p>
 
         <div className="flex flex-col sm:flex-row gap-4">
-          <Link href="/login">
+          <Link href="/welcome">
             <Button size="lg" className="h-14 px-10 rounded-2xl bg-white text-black hover:bg-slate-200 font-black uppercase italic tracking-tight">
               Comenzar Ahora
             </Button>
           </Link>
-          <Link href="/login">
+          <Link href="/welcome">
             <Button size="lg" variant="outline" className="h-14 px-10 rounded-2xl border-white/10 bg-white/5 hover:bg-white/10 font-black uppercase italic tracking-tight text-white">
               Saber más <ArrowRight className="ml-2 h-5 w-5" />
             </Button>
@@ -137,8 +132,8 @@ export default function LandingPage() {
       <footer className="py-20 text-center border-t border-white/5 bg-[#1A1D23]">
         <div className="flex flex-col items-center gap-6">
           <div className="flex items-center gap-3 opacity-50">
-            <img src={BRAND_LOGO_URL} alt="EFAS" className="h-6 w-6 grayscale" />
-            <span className="font-black italic tracking-tighter text-sm uppercase">EFAS CONDOSYS</span>
+            <img src={SYSTEM_LOGO} alt="EFAS" className="h-6 w-6 grayscale" />
+            <img src={SYSTEM_WORDMARK} alt={COMPANY_NAME} className="h-4 grayscale" />
           </div>
           <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.5em]">
             © 2026 {COMPANY_NAME} - Elevando el estándar de gestión

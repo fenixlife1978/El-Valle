@@ -136,6 +136,7 @@ function LoginPage() {
 
             <Card className="w-full max-w-sm border-border shadow-2xl rounded-[2.5rem] overflow-hidden bg-card/80 backdrop-blur-xl text-card-foreground relative z-10">
                 <CardHeader className="text-center pb-2 pt-8">
+                    <img src={SYSTEM_LOGO} alt="Logo" className="w-16 h-16 mx-auto mb-4 rounded-2xl border-2 border-primary/20 p-1" />
                     <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 text-primary text-[10px] font-black uppercase tracking-wider mb-2 mx-auto border border-primary/20">
                         <AlertCircle className="w-3.5 h-3.5" /> Acceso {role === 'admin' ? 'Administrativo' : 'Propietario'}
                     </div>
