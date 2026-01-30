@@ -1,17 +1,48 @@
-
 'use client';
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Mail, Lock, ArrowRight, Home, Loader2 } from 'lucide-react';
+import { Mail, Lock, ArrowRight, Home, Loader2, AlertCircle } from 'lucide-react';
 
 export default function OwnerLoginPage() {
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Estados para capturar los datos del formulario
+  const [condoKey, setCondoKey] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    setTimeout(() => setIsLoading(false), 2000);
+    setError(null);
+
+    try {
+      // Petición a la API de autenticación
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          condoKey: condoKey.trim().toUpperCase(), 
+          email: email.toLowerCase().trim(), 
+          password 
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "ERROR DE AUTENTICACION, VERIFIQUE SUS DATOS");
+      }
+
+      // Redirección al panel del propietario tras login exitoso
+      window.location.href = '/owner/dashboard';
+      
+    } catch (err: any) {
+      setError(err.message);
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -23,7 +54,7 @@ export default function OwnerLoginPage() {
       `}</style>
 
       <div className="w-full max-w-[450px]">
-        {/* LOGO Y TÍTULO DE PROPIETARIOS */}
+        {/* LOGO Y TÍTULO */}
         <div className="text-center mb-10">
           <Link href="/welcome" className="inline-block group transition-transform hover:scale-105 duration-300">
             <div className="bg-white p-4 rounded-[2rem] shadow-xl border border-slate-100 mb-6 inline-block">
@@ -41,7 +72,38 @@ export default function OwnerLoginPage() {
 
         {/* CARD DE LOGIN */}
         <div className="bg-white p-10 rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.04)] border border-white">
+          
+          {/* Alerta de Error */}
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center gap-3 text-red-600 text-sm font-inter font-bold animate-in fade-in slide-in-from-top-2">
+              <AlertCircle className="h-5 w-5 flex-shrink-0" />
+              {error}
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-6">
+            
+            {/* CAMPO: KEY DEL CONDOMINIO */}
+            <div>
+              <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-2">
+                Key del Condominio
+              </label>
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                  <Home className="h-5 w-5 text-slate-300 group-focus-within:text-[#0081c9] transition-colors" />
+                </div>
+                <input
+                  type="text"
+                  value={condoKey}
+                  onChange={(e) => setCondoKey(e.target.value.toUpperCase())}
+                  placeholder="EJ: VALLECONDO"
+                  className="block w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-slate-700 font-inter font-medium focus:outline-none focus:ring-2 focus:ring-[#0081c9]/10 focus:border-[#0081c9] transition-all"
+                  required
+                />
+              </div>
+            </div>
+
+            {/* CAMPO: CORREO ELECTRÓNICO */}
             <div>
               <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-2">
                 Correo Electrónico
@@ -52,6 +114,8 @@ export default function OwnerLoginPage() {
                 </div>
                 <input
                   type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   placeholder="ejemplo@propietario.com"
                   className="block w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-slate-700 font-inter font-medium focus:outline-none focus:ring-2 focus:ring-[#0081c9]/10 focus:border-[#0081c9] transition-all"
                   required
@@ -59,6 +123,7 @@ export default function OwnerLoginPage() {
               </div>
             </div>
 
+            {/* CAMPO: CONTRASEÑA */}
             <div>
               <div className="flex items-center justify-between mb-2 ml-1">
                 <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">
@@ -77,6 +142,8 @@ export default function OwnerLoginPage() {
                 </div>
                 <input
                   type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   className="block w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-slate-700 font-inter font-medium focus:outline-none focus:ring-2 focus:ring-[#0081c9]/10 focus:border-[#0081c9] transition-all"
                   required
