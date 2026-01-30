@@ -33,6 +33,7 @@ import { useAuthorization } from '@/hooks/use-authorization';
 import { generatePaymentReceipt } from '@/lib/pdf-generator';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { Textarea } from '@/components/ui/textarea';
+import Link from 'next/link';
 
 
 // --- TYPES ---
@@ -814,7 +815,7 @@ function PaymentCalculatorUI({ owner, debts, activeRate, condoFee }: { owner: an
                                     const status = debt.status === 'vencida' || (debt.status === 'pending' && isOverdue) ? 'Vencida' : 'Pendiente';
                                     return <TableRow key={debt.id} data-state={selectedPendingDebts.includes(debt.id) ? 'selected' : ''}>
                                             <TableCell className="text-center"><Checkbox onCheckedChange={() => setSelectedPendingDebts(p => p.includes(debt.id) ? p.filter(id=>id!==debt.id) : [...p, debt.id])} checked={selectedPendingDebts.includes(debt.id)} /></TableCell>
-                                            <TableCell className="font-medium">{monthsLocale[debt.month]} {debt.year}</TableCell>
+                                            <TableCell className="font-medium">{MONTHS_LOCALE[debt.month]} {debt.year}</TableCell>
                                             <TableCell>{debt.description}</TableCell>
                                             <TableCell><Badge variant={status === 'Vencida' ? 'destructive' : 'warning'}>{status}</Badge></TableCell>
                                             <TableCell className="text-right">Bs. {formatCurrency(debt.amountUSD * activeRate)}</TableCell>
