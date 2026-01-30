@@ -16,7 +16,7 @@ import { CalendarIcon, Check, CheckCircle, Clock, DollarSign, Eye, FileText, Has
 import { format, isBefore, startOfMonth, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn, compressImage } from '@/lib/utils';
-import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc, where, getDocs, Timestamp, writeBatch, orderBy, runTransaction, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc, where, getDocs, Timestamp, writeBatch, orderBy, runTransaction, updateDoc, deleteDoc, deleteField } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { BankSelectionModal } from '@/components/bank-selection-modal';
@@ -104,10 +104,10 @@ function VerificationComponent() {
             const statusMatch = p.status === activeTab;
             if (!statusMatch) return false;
             if (searchTerm === '') return true;
-
+    
             const lowerCaseSearchTerm = searchTerm.toLowerCase();
-            const referenceMatch = p.reference && p.reference.toLowerCase().includes(lowerCaseSearchTerm);
-            const ownerMatch = p.beneficiaries?.some(b => b.ownerName && b.ownerName.toLowerCase().includes(lowerCaseSearchTerm));
+            const referenceMatch = p.reference?.toLowerCase().includes(lowerCaseSearchTerm);
+            const ownerMatch = p.beneficiaries?.some(b => b && b.ownerName && b.ownerName.toLowerCase().includes(lowerCaseSearchTerm));
             
             return referenceMatch || ownerMatch;
         });

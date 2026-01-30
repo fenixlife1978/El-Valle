@@ -68,7 +68,7 @@ export default function LandingPage() {
         </div>
 
         <h2 className="text-7xl md:text-9xl font-[900] tracking-tighter text-white mb-8 max-w-5xl leading-[0.85] uppercase italic">
-          Potencia tu <br />comunidad
+          La Evolucion de Tu Condominio <br /> nunca antes fue tan sencillo
         </h2>
 
         <p className="max-w-2xl text-slate-400 text-lg md:text-xl font-medium mb-12 leading-relaxed">
