@@ -124,9 +124,12 @@ function VerificationComponent() {
                     const receiptNumbers: { [ownerId: string]: string } = {};
 
                     const settingsRef = doc(db, 'condominios', workingCondoId, 'config', 'mainSettings');
-                    const settingsDoc = await getDoc(settingsRef); // Non-transactional read
-                    if (!settingsDoc.exists()) throw new Error("No se encontró la configuración del condominio (condoFee).");
-                    const condoFeeUSD = settingsDoc.data().condoFee || 0;
+                    const settingsDoc = await getDoc(settingsRef);
+                    if (!settingsDoc.exists() || !settingsDoc.data().condoFee) {
+                        throw new Error("No se encontró la cuota de condominio (condoFee) en la configuración.");
+                    }
+                    const condoFeeUSD = settingsDoc.data().condoFee;
+                    const costoCuotaActualBs = condoFeeUSD * payment.exchangeRate;
 
                     for (const beneficiary of payment.beneficiaries) {
                         const ownerRef = doc(db, 'condominios', workingCondoId, 'owners', beneficiary.ownerId);
@@ -136,31 +139,25 @@ function VerificationComponent() {
                         const saldoAFavorPrevio = ownerDoc.data().balance || 0;
                         const montoRecibido = beneficiary.amount;
 
-                        const debtsQuery = query(collection(db, 'condominios', workingCondoId, 'debts'), where('ownerId', '==', beneficiary.ownerId), where('status', 'in', ['pending', 'vencida']), orderBy('year'), orderBy('month'));
-                        const debtsSnapshot = await getDocs(debtsQuery); // Non-transactional read, but required by Firebase transaction model
+                        const allOwnerDebtsQuery = query(collection(db, 'condominios', workingCondoId, 'debts'), where('ownerId', '==', beneficiary.ownerId));
+                        const allOwnerDebtsSnapshot = await getDocs(allOwnerDebtsQuery);
+                        const allOwnerDebts = allOwnerDebtsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Debt));
 
-                        const cuotasPendientes = debtsSnapshot.docs.map(doc => {
-                            const debt = doc.data() as Debt;
-                            return {
-                                id: doc.id,
+                        const cuotasPendientes = allOwnerDebts
+                            .filter(d => d.status === 'pending' || d.status === 'vencida')
+                            .sort((a, b) => a.year - b.year || a.month - b.month)
+                            .map(debt => ({
+                                id: debt.id,
                                 amountUSD: debt.amountUSD,
                                 monto: debt.amountUSD * payment.exchangeRate,
                                 year: debt.year,
                                 month: debt.month,
-                                description: debt.description
-                            };
-                        });
+                                description: debt.description,
+                            }));
+                        
+                        const liquidationResult = processPaymentLiquidation(montoRecibido, saldoAFavorPrevio, cuotasPendientes, costoCuotaActualBs);
 
-                        const costoCuotaActualBs = condoFeeUSD * payment.exchangeRate;
-
-                        const liquidationResult = processPaymentLiquidation(
-                            montoRecibido,
-                            saldoAFavorPrevio,
-                            cuotasPendientes,
-                            costoCuotaActualBs
-                        );
-
-                        // 1. Update liquidated debts
+                        // 1. Update liquidated pending debts
                         for (const liquidada of liquidationResult.cuotasLiquidadas) {
                             const debtRef = doc(db, 'condominios', workingCondoId, 'debts', liquidada.id);
                             transaction.update(debtRef, {
@@ -173,23 +170,22 @@ function VerificationComponent() {
 
                         // 2. Handle advance payments
                         if (liquidationResult.cuotasAdelantadas > 0 && condoFeeUSD > 0) {
-                            const allDebtsQuery = query(collection(db, 'condominios', workingCondoId, 'debts'), where('ownerId', '==', beneficiary.ownerId), orderBy('year', 'desc'), orderBy('month', 'desc'));
-                            const allDebtsSnapshot = await getDocs(allDebtsQuery); // Non-transactional read
-                            const allOwnerDebts = allDebtsSnapshot.docs.map(d => ({id: d.id, ...d.data()} as Debt));
-                            
                             let lastPaidPeriod = { year: 1970, month: 0 };
-                            allOwnerDebts.forEach(d => {
+                            
+                            const allPotentiallyPaidDebts = allOwnerDebts.map(d => {
                                 const isNewlyLiquidated = liquidationResult.cuotasLiquidadas.some(l => l.id === d.id);
-                                if (d.status === 'paid' || isNewlyLiquidated) {
+                                return { ...d, status: isNewlyLiquidated ? 'paid' : d.status };
+                            });
+
+                            allPotentiallyPaidDebts.forEach(d => {
+                                if (d.status === 'paid') {
                                     if (d.year > lastPaidPeriod.year || (d.year === lastPaidPeriod.year && d.month > lastPaidPeriod.month)) {
                                         lastPaidPeriod = { year: d.year, month: d.month };
                                     }
                                 }
                             });
-
-                            let nextPeriodDate = lastPaidPeriod.year === 1970 
-                                ? startOfMonth(new Date()) 
-                                : addMonths(new Date(lastPaidPeriod.year, lastPaidPeriod.month - 1), 1);
+                            
+                            let nextPeriodDate = addMonths(new Date(lastPaidPeriod.year, lastPaidPeriod.month, 0), 1);
 
                             for (let i = 0; i < liquidationResult.cuotasAdelantadas; i++) {
                                 const futureYear = nextPeriodDate.getFullYear();
@@ -198,7 +194,7 @@ function VerificationComponent() {
                                 const debtRef = doc(collection(db, "condominios", workingCondoId, "debts"));
                                 transaction.set(debtRef, {
                                     ownerId: beneficiary.ownerId,
-                                    property: ownerDoc.data().properties[0],
+                                    property: ownerDoc.data().properties?.[0] || {},
                                     year: futureYear,
                                     month: futureMonth,
                                     amountUSD: condoFeeUSD,
@@ -208,7 +204,6 @@ function VerificationComponent() {
                                     paymentDate: payment.paymentDate,
                                     paidAmountUSD: condoFeeUSD,
                                 });
-
                                 nextPeriodDate = addMonths(nextPeriodDate, 1);
                             }
                         }
@@ -535,7 +530,7 @@ function VerificationComponent() {
     );
 }
 
-// --- REPORT PAYMENT COMPONENT (for Admin) ---
+// --- COMPONENT: REPORT PAYMENT COMPONENT (for Admin) ---
 function ReportPaymentComponent() {
     const { toast } = useToast();
     const { user: authUser, activeCondoId } = useAuth();
@@ -758,7 +753,7 @@ function ReportPaymentComponent() {
 }
 
 
-// --- COMPONENT: PAYMENT CALCULATOR ---
+// --- COMPONENT: PAYMENT CALCULATOR (ADMIN) ---
 
 function PaymentCalculatorComponent() {
     const { toast } = useToast();
@@ -954,8 +949,15 @@ function PaymentCalculatorUI({ owner, debts, activeRate, condoFee }: { owner: an
 
 function PaymentsPage() {
     const searchParams = useSearchParams();
-    const defaultTab = searchParams?.get('tab') || 'report';
-    
+    const router = useRouter();
+
+    const [activeTab, setActiveTab] = useState(searchParams?.get('tab') || 'report');
+
+    const handleTabChange = (value: string) => {
+        setActiveTab(value);
+        router.push(`/admin/payments?tab=${value}`, { scroll: false });
+    };
+
     return (
         <div className="space-y-6">
             <div className="mb-10">
@@ -964,14 +966,18 @@ function PaymentsPage() {
                 </h2>
                 <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
                 <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">
-                    Reporta tus pagos y calcula tus deudas pendientes.
+                    Verificación de pagos, registro manual y calculadora de deudas.
                 </p>
             </div>
-            <Tabs defaultValue={defaultTab} className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
+            <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+                <TabsList className="grid w-full grid-cols-3">
+                    <TabsTrigger value="verify">Verificación de Pagos</TabsTrigger>
                     <TabsTrigger value="report">Reportar Pago</TabsTrigger>
                     <TabsTrigger value="calculator">Calculadora de Pagos</TabsTrigger>
                 </TabsList>
+                <TabsContent value="verify" className="mt-6">
+                    <VerificationComponent />
+                </TabsContent>
                 <TabsContent value="report" className="mt-6">
                     <ReportPaymentComponent />
                 </TabsContent>

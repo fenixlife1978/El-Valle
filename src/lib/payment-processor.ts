@@ -1,3 +1,4 @@
+
 /**
  * Lógica de Liquidación Cronológica EFAS CondoSys
  * Regla de Oro: Precisión de 2 decimales exactos
@@ -64,7 +65,6 @@ export const processPaymentLiquidation = (
     totalAplicadoADeudas: totalAbonadoDeudas / 100,
     cuotasLiquidadas,
     cuotasAdelantadas,
-    // El remanente exacto que no alcanzó para otra cuota
     nuevoSaldoAFavor: saldoDisponible / 100
   };
 };
