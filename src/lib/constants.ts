@@ -1,2 +1,2 @@
-export const SYSTEM_LOGO = "https://firebasestorage.googleapis.com/v0/b/valles-del-condo.appspot.com/o/assets%2Fefas-condosys-logo.png?alt=media";
+export const SYSTEM_LOGO = "https://i.supaimg.com/afd3a5b0-7942-4e45-b2b0-cf892310e6ea.png";
 export const COMPANY_NAME = "EFAS CondoSys";
