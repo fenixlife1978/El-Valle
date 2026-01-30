@@ -1,8 +1,9 @@
 
 /**
  * Lógica de Liquidación Cronológica EFAS CondoSys
- * Regla de Oro: Precisión de 2 decimales exactos
+ * Regla de Oro: Precisión de 2 decimales exactos utilizando Decimal.js
  */
+import { Decimal } from 'decimal.js';
 
 interface PendingDebt {
     id: string;
@@ -24,21 +25,21 @@ export const processPaymentLiquidation = (
   cuotasPendientes: PendingDebt[],
   costoCuotaActualBs: number
 ) => {
-  // 1. Convertir todo a CÉNTIMOS (Enteros) para evitar errores de coma flotante
-  let saldoDisponible = Math.round((montoRecibido + saldoAFavorPrevio) * 100);
-  const valorCuotaCents = Math.round(costoCuotaActualBs * 100);
+  // 1. Convertir todo a objetos Decimal para evitar errores de coma flotante
+  let saldoDisponible = new Decimal(montoRecibido).plus(new Decimal(saldoAFavorPrevio));
+  const valorCuotaBs = new Decimal(costoCuotaActualBs);
   
   const cuotasLiquidadas: PendingDebt[] = [];
-  let totalAbonadoDeudas = 0; // En céntimos
+  let totalAbonadoDeudas = new Decimal(0);
   let cuotasAdelantadas = 0;
 
   // 2. LIQUIDAR DEUDAS PENDIENTES/VENCIDAS (Orden Cronológico)
   for (const cuota of cuotasPendientes) {
-    const deudaCents = Math.round(cuota.monto * 100);
+    const deudaBs = new Decimal(cuota.monto);
     
-    if (saldoDisponible >= deudaCents) {
-      saldoDisponible -= deudaCents;
-      totalAbonadoDeudas += deudaCents;
+    if (saldoDisponible.gte(deudaBs)) {
+      saldoDisponible = saldoDisponible.minus(deudaBs);
+      totalAbonadoDeudas = totalAbonadoDeudas.plus(deudaBs);
       cuotasLiquidadas.push({
         ...cuota,
         status: 'LIQUIDADA',
@@ -51,20 +52,20 @@ export const processPaymentLiquidation = (
   }
 
   // 3. CALCULAR MESES POR ADELANTADO (Si aún hay saldo suficiente)
-  if (valorCuotaCents > 0) {
-      while (saldoDisponible >= valorCuotaCents) {
-        saldoDisponible -= valorCuotaCents;
-        totalAbonadoDeudas += valorCuotaCents;
+  if (valorCuotaBs.greaterThan(0)) {
+      while (saldoDisponible.gte(valorCuotaBs)) {
+        saldoDisponible = saldoDisponible.minus(valorCuotaBs);
+        totalAbonadoDeudas = totalAbonadoDeudas.plus(valorCuotaBs);
         cuotasAdelantadas++;
       }
   }
 
-  // 4. RESULTADO FINAL (Convertir de nuevo a decimales con 2 dígitos)
+  // 4. RESULTADO FINAL (Convertir de nuevo a números estándar)
   return {
     montoTotalProcesado: montoRecibido,
-    totalAplicadoADeudas: totalAbonadoDeudas / 100,
+    totalAplicadoADeudas: totalAbonadoDeudas.toDecimalPlaces(2).toNumber(),
     cuotasLiquidadas,
     cuotasAdelantadas,
-    nuevoSaldoAFavor: saldoDisponible / 100
+    nuevoSaldoAFavor: saldoDisponible.toDecimalPlaces(2).toNumber()
   };
 };
