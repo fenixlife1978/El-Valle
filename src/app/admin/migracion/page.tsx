@@ -12,7 +12,7 @@ import { useRouter } from 'next/navigation';
 
 export default function MigrationPage() {
   const { toast } = useToast();
-  const { ownerData, loading: authLoading } = useAuth() as any;
+  const { ownerData, loading: authLoading, activeCondoId } = useAuth();
   const [loading, setLoading] = useState<string | null>(null);
   const router = useRouter();
 
@@ -24,7 +24,7 @@ export default function MigrationPage() {
   }, [ownerData, authLoading, router]);
 
   const migrateCollection = async (collectionName: string, targetPath: string) => {
-    if (!ownerData?.condominioId) {
+    if (!activeCondoId) {
         toast({ variant: "destructive", title: "Error", description: "No se detectó ID de condominio." });
         return;
     }
@@ -36,16 +36,12 @@ export default function MigrationPage() {
 
       for (const document of querySnapshot.docs) {
         const data = document.data();
-        // Filtramos para que solo migre lo que pertenece a este condominio
-        // o documentos que no tengan condominioId (como configuraciones viejas)
-        if (!data.condominioId || data.condominioId === ownerData.condominioId) {
-          const newDocRef = doc(db, "condominios", ownerData.condominioId, targetPath, document.id);
-          await setDoc(newDocRef, data);
-          count++;
-        }
+        const newDocRef = doc(db, "condominios", activeCondoId, targetPath, document.id);
+        await setDoc(newDocRef, data);
+        count++;
       }
 
-      toast({ title: "Migración Exitosa", description: `Se movieron ${count} documentos a la subcolección ${targetPath}.` });
+      toast({ title: "Migración Exitosa", description: `Se movieron ${count} documentos a la subcolección ${targetPath} de ${activeCondoId}.` });
     } catch (error) {
       console.error(error);
       toast({ variant: "destructive", title: "Error de Permisos", description: "Revisa las reglas de Firebase." });
@@ -72,7 +68,7 @@ export default function MigrationPage() {
         <div className="flex items-center">
           <AlertTriangle className="text-amber-400 mr-3" />
           <p className="text-sm">
-            <strong>Atención:</strong> Esta herramienta mueve datos de la raíz a la estructura interna de <strong>{ownerData?.condominioId}</strong>.
+            <strong>Atención:</strong> Esta herramienta mueve datos de la raíz a la estructura interna de <strong>{activeCondoId || '...'}</strong>.
           </p>
         </div>
       </div>
