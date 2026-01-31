@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -102,6 +101,12 @@ export default function MigrationPage() {
           icon="config" 
           loading={loading} 
           onClick={() => migrateCollection('config', 'config')} 
+        />
+        <MigrationCard 
+          title="Estados Financieros" 
+          icon="financial_statements" 
+          loading={loading} 
+          onClick={() => migrateCollection('financial_statements', 'financial_statements')} 
         />
       </div>
     </div>
