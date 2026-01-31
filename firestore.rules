@@ -21,7 +21,41 @@ service cloud.firestore {
         return isSignedIn() && request.auth.uid == userId;
     }
 
-    // --- Root Collections ---
+    // --- Root Collections (For Migration by Super Admin) ---
+    match /owners/{userId} {
+        allow read, write: if isSuperAdmin();
+    }
+    match /billboard_announcements/{docId} {
+        allow read, write: if isSuperAdmin();
+    }
+    match /payments/{paymentId} {
+        allow read, write: if isSuperAdmin();
+    }
+    match /config/{docId} {
+        allow read: if isSignedIn(); 
+        allow write: if isSuperAdmin();
+    }
+    match /financial_statements/{statementId} {
+        allow read, write: if isSuperAdmin();
+    }
+     match /unidades/{docId} {
+      allow read, write: if isSuperAdmin();
+    }
+    match /debts/{docId} {
+      allow read, write: if isSuperAdmin();
+    }
+    match /published_reports/{docId} {
+      allow read, write: if isSuperAdmin();
+    }
+    match /app_feedback/{docId} {
+      allow read, write: if isSuperAdmin();
+    }
+    match /integral_reports/{docId} {
+      allow read, write: if isSuperAdmin();
+    }
+
+
+    // --- New Multi-Condo Structure ---
 
     // The /condominios collection itself
     match /condominios/{condoId} {
