@@ -14,7 +14,8 @@ import {
     ArrowLeftCircle,
     AlertTriangle,
     FileSearch,
-    Receipt
+    Receipt,
+    DatabaseZap // Importado para el nuevo ítem
 } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
@@ -53,6 +54,7 @@ const adminNavItems: NavItem[] = [
             { href: "/admin/settings", label: "Config. General" },
             { href: "/admin/settings/sync", label: "Sincronización" },
             { href: "/admin/validation", label: "Validación de Datos" },
+            { href: "/admin/migracion", label: "Migración de Datos" },
         ]
     },
 ];
