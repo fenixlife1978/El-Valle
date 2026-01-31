@@ -7,7 +7,7 @@ import {
     onSnapshot, 
     collection, 
     getDocs, 
-    getDoc // Se agregó esta importación faltante
+    getDoc
 } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
 
@@ -67,39 +67,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     setLoading(false);
                     return;
                 }
+                
+                const storedCondoId = typeof window !== 'undefined' ? localStorage.getItem('activeCondoId') : null;
 
-                const condominiosSnapshot = await getDocs(collection(db, "condominios"));
-                let userFound = false;
-
-                for (const condoDoc of condominiosSnapshot.docs) {
-                    const condoId = condoDoc.id;
-                    const ownerRef = doc(db, 'condominios', condoId, 'owners', user.uid);
-                    const ownerSnap = await getDoc(ownerRef);
-
-                    if (ownerSnap.exists()) {
-                        unsubscribeSnap = onSnapshot(ownerRef, (docSnap) => {
-                            if (docSnap.exists()) {
-                                const data = docSnap.data();
-                                setOwnerData(data);
-                                setActiveCondoId(data.condominioId || condoId);
-                            } else {
-                                setOwnerData(null);
-                                setActiveCondoId(null);
+                if (storedCondoId) {
+                    const ownerRef = doc(db, 'condominios', storedCondoId, 'owners', user.uid);
+                    unsubscribeSnap = onSnapshot(ownerRef, (docSnap) => {
+                        if (docSnap.exists()) {
+                            const data = docSnap.data();
+                            setOwnerData(data);
+                            setActiveCondoId(storedCondoId);
+                        } else {
+                            setOwnerData(null);
+                            setActiveCondoId(null);
+                            if (typeof window !== 'undefined') {
+                                localStorage.removeItem('activeCondoId');
+                                localStorage.removeItem('workingCondoId');
                             }
-                        });
-                        userFound = true;
-                        break;
-                    }
-                }
-
-                if (!userFound) {
-                    console.warn(`Auth-Hook: No profile found for user ${user.uid}`);
+                        }
+                        setLoading(false);
+                    }, (error) => {
+                        console.error("Error subscribing to owner profile:", error);
+                        setLoading(false);
+                    });
+                } else {
+                    // No condo ID stored, user can't be fully authenticated.
                     setOwnerData(null);
                     setActiveCondoId(null);
+                    setLoading(false);
                 }
+
             } catch (error) {
                 console.error("Error en findAndSubscribe:", error);
-            } finally {
                 setLoading(false);
             }
         };

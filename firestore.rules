@@ -1,151 +1,129 @@
-
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
     // --- Helper Functions ---
-    // Is the user authenticated?
     function isSignedIn() {
       return request.auth != null;
     }
+    
+    function isSuperAdmin() {
+        return isSignedIn() && request.auth.token.email == 'vallecondo@gmail.com';
+    }
 
-    // Does the requesting user's UID match the document ID?
+    function isAdmin(condoId) {
+      // Checks if the requesting user is an admin of the specified condo
+      return isSignedIn() && get(/databases/$(database)/documents/condominios/$(condoId)/owners/$(request.auth.uid)).data.role == 'administrador';
+    }
+
     function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+        return isSignedIn() && request.auth.uid == userId;
     }
 
-    // Is the user an administrator? Reads the user's role from their profile.
-    function isAdmin() {
-      return isSignedIn() && get(/databases/$(database)/documents/owners/$(request.auth.uid)).data.role == 'administrador';
-    }
-    
-    // --- Collection Rules ---
+    // --- Root Collections ---
 
-    // Owners collection: Contains user profiles and roles.
-    match /owners/{userId} {
-      // Admins can read/write any profile.
-      // Owners can read and update their own profile.
-      allow read, update: if isAdmin() || isOwner(userId);
-      // Only admins can create or delete profiles.
-      allow create, delete: if isAdmin();
-    }
-    
-    // Config collection: General app settings like company info and rates.
-    match /config/{docId} {
-      // Everyone can read it (needed for company logo, etc.).
+    // The /condominios collection itself
+    match /condominios/{condoId} {
+      // Allows reading the condo's main document if signed in. This is needed for login and gatekeeper.
       allow read: if true;
-      // Only admins can change settings.
-      allow write: if isAdmin();
-    }
-    
-    // Logs collection: Audit trail for admin actions.
-    match /logs/{logId} {
-        // Only admins can read logs.
-        allow read: if isAdmin();
-        // Logs are created by the system on behalf of the user, so creation must be allowed for any signed-in user.
-        allow create: if isSignedIn();
-        // Nobody can update or delete logs.
-        allow update, delete: if false;
-    }
+      allow list: if false; // Deny listing all condos.
+      allow write: if isSuperAdmin(); // Only super admin can create/update condo documents.
 
-    // Billboard announcements collection.
-    match /billboard_announcements/{announcementId} {
-        // All authenticated users can read announcements.
+      // --- Subcollections within a condo ---
+      
+      // OWNERS subcollection
+      match /owners/{userId} {
+        // Admins can read any profile in their condo. Owners can read their own.
+        allow read: if isSuperAdmin() || isAdmin(condoId) || isOwner(userId);
+        
+        // Admins can write to any profile. Owners can update their own (for avatar, etc).
+        allow write: if isSuperAdmin() || isAdmin(condoId);
+        allow update: if isOwner(userId);
+      }
+      
+      // CONFIG subcollection
+      match /config/{docId} {
         allow read: if isSignedIn();
-        // Only admins can create, update, or delete them.
-        allow write: if isAdmin();
-    }
-
-    // Payments collection: Where users report their payments.
-    match /payments/{paymentId} {
-        // Admins can manage all payments.
-        allow read, write: if isAdmin();
-        // Any signed-in user can create a payment report.
+        allow write: if isSuperAdmin() || isAdmin(condoId);
+      }
+      
+      // DEBTS subcollection
+      match /debts/{debtId} {
+        // Admins can manage all debts. Owners can only read their own.
+        allow write: if isSuperAdmin() || isAdmin(condoId);
+        allow read: if isSuperAdmin() || isAdmin(condoId) || (isSignedIn() && resource.data.ownerId == request.auth.uid);
+      }
+      
+      // PAYMENTS subcollection
+      match /payments/{paymentId} {
+        allow read, write: if isSuperAdmin() || isAdmin(condoId);
         allow create: if isSignedIn();
         // Owners can read payments where they are a beneficiary.
         allow read: if isSignedIn() && request.auth.uid in resource.data.beneficiaryIds;
-    }
-    
-    // Debts collection: Tracks what each owner owes.
-    match /debts/{debtId} {
-        // Admins can manage all debts.
-        allow write: isAdmin();
-        // Owners can only read their own debts.
-        allow read: isSignedIn() && resource.data.ownerId == request.auth.uid;
-    }
-
-    // Certificates collection: Residence/solvency certificates.
-    match /certificates/{certId} {
-        // Only admins can manage certificates.
-        allow read, write: if isAdmin();
-        // Owners can create their own certificate requests.
+      }
+      
+      // Other generic subcollections
+      match /billboard_announcements/{docId} {
+          allow read: if isSignedIn();
+          allow write: if isSuperAdmin() || isAdmin(condoId);
+      }
+      match /logs/{docId} {
+        allow read: if isSuperAdmin() || isAdmin(condoId);
+        allow create: if isSignedIn();
+        allow update, delete: if false;
+      }
+      match /certificates/{docId} {
+        allow read, write: if isSuperAdmin() || isAdmin(condoId);
         allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
-    }
-    
-    // Financial Statements collection: Monthly financial reports.
-    match /financial_statements/{statementId} {
-        // Only admins can create/edit financial statements.
-        allow write: if isAdmin();
-        // All authenticated users can read them (e.g., in published reports).
-        allow read: isSignedIn();
-    }
-    
-    // Published reports collection: Controls what reports are visible to owners.
-    match /published_reports/{reportId} {
-      // All authenticated users can see the list of published reports.
-      allow read: isSignedIn();
-      // Only admins can publish or unpublish reports.
-      allow write: if isAdmin();
-    }
-
-    // Petty cash collection.
-    match /petty_cash_replenishments/{repId} {
-        // Only admins can manage petty cash.
-        allow read, write: if isAdmin();
-    }
-
-    // Surveys collection.
-    match /surveys/{surveyId} {
-        // All signed-in users can read surveys to vote.
+      }
+      match /financial_statements/{docId} {
         allow read: if isSignedIn();
-        // Admins can create/delete surveys. They can update results/totalVotes via transaction.
-        // The results and totalVotes fields are updated when a user votes.
-        allow update: isSignedIn();
-        allow create, delete: isAdmin();
+        allow write: if isSuperAdmin() || isAdmin(condoId);
+      }
+       match /expenses/{docId} {
+        allow read: if isSignedIn();
+        allow write: if isSuperAdmin() || isAdmin(condoId);
+      }
+      match /published_reports/{docId} {
+        allow read: if isSignedIn();
+        allow write: if isSuperAdmin() || isAdmin(condoId);
+      }
+      match /petty_cash_replenishments/{docId} {
+          allow read, write: if isSuperAdmin() || isAdmin(condoId);
+      }
+       match /cajaChica_movimientos/{docId} {
+        allow read, write: if isSuperAdmin() || isAdmin(condoId);
+      }
+      match /cajaChica_reposiciones/{docId} {
+        allow read, write: if isSuperAdmin() || isAdmin(condoId);
+      }
+      match /surveys/{docId} {
+        allow read: if isSignedIn();
+        allow create, delete: if isSuperAdmin() || isAdmin(condoId);
+        allow update: if isSignedIn(); // Allows owners to update results when voting
+      }
+      match /survey_responses/{docId} {
+        allow read: if isSuperAdmin() || isAdmin(condoId) || (isSignedIn() && resource.data.userId == request.auth.uid);
+        allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+        allow update: if false;
+        allow delete: if isSuperAdmin() || isAdmin(condoId);
+      }
+      match /app_feedback/{docId} {
+        allow create: if isSignedIn();
+        allow read, delete: if isSuperAdmin() || isAdmin(condoId);
+        allow update: if false;
+      }
+      match /admin_tasks/{docId} {
+        allow read, write: if isSuperAdmin() || isAdmin(condoId);
+      }
+
     }
 
-    // Survey responses: Tracks who has voted on what.
-    match /survey_responses/{responseId} {
-      // Admins can read all responses for auditing.
-      // Owners can read their own response to see what they voted.
-      allow read: isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
-      // An owner can only create a response for themselves. They cannot update it.
-      allow create: isSignedIn() && request.resource.data.userId == request.auth.uid;
-      // Nobody can update a response once created. Only admins can delete.
-      allow update: if false;
-      allow delete: isAdmin();
-    }
-    
-    // App feedback collection
-    match /app_feedback/{feedbackId} {
-      // Any signed-in user can submit feedback.
-      allow create: if isSignedIn();
-      // Only admins can read the feedback.
-      allow read, delete: isAdmin();
-      allow update: if false;
-    }
-    
-    // Historical payments collection.
-    match /historical_payments/{histId} {
-      // Only admins can manage historical payment records.
-      allow read, write: if isAdmin();
-    }
-
-    // Admin tasks collection.
-    match /admin_tasks/{taskId} {
-      // Only admins can create, read, and update tasks.
-      allow read, write: if isAdmin();
+    // Collection for super admin management
+    match /system_management/{docId} {
+        allow read: if isSignedIn();
+        allow write: if isSuperAdmin();
     }
   }
 }
