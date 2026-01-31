@@ -54,7 +54,6 @@ const adminNavItems: NavItem[] = [
             { href: "/admin/settings", label: "Config. General" },
             { href: "/admin/settings/sync", label: "Sincronización" },
             { href: "/admin/validation", label: "Validación de Datos" },
-            { href: "/admin/migracion", label: "Migración de Datos" },
         ]
     },
 ];
