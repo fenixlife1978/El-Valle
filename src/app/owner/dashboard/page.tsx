@@ -63,19 +63,20 @@ export default function OwnerDashboardPage() {
         setLoading(true);
 
         const unsubAnuncios = onSnapshot(
-            query(
-                collection(db, "condominios", currentCondoId, "billboard_announcements"), 
-                where("published", "==", true),
-                orderBy("createdAt", "desc")
-            ),
+            collection(db, "condominios", currentCondoId, "billboard_announcements"), 
             (snapshot) => {
+                if (snapshot.empty) {
+                    console.warn("⚠️ LA COLECCIÓN ESTÁ TOTALMENTE VACÍA EN FIREBASE.");
+                } else {
+                    console.log("✅ Documentos crudos encontrados:", snapshot.docs.length);
+                    snapshot.docs.forEach(doc => {
+                        console.log(`ID: ${doc.id} | Datos:`, doc.data());
+                    });
+                }
                 const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Anuncio));
-                console.log("Anuncios cargados con éxito:", data.length); 
                 setAnuncios(data);
             },
-            (err) => {
-                console.error("Error en Cartelera:", err);
-            }
+            (err) => console.error("Error en Cartelera:", err)
         );
 
         const unsubDebts = onSnapshot(
