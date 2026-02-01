@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
 import { useAuth } from '@/hooks/use-auth';
 import { BottomNavBar, type BottomNavItem } from '@/components/bottom-nav-bar';
-import { Loader2, Home, Plus, FileSearch, Settings, Banknote, Landmark, ClipboardList, Calculator, Award, Grid3X3 } from 'lucide-react';
+import { Loader2, Home, Plus, FileSearch, Banknote, Landmark, ClipboardList, Calculator, Award, Grid3X3 } from 'lucide-react';
 
 const ownerNavItems: NavItem[] = [
   { href: "/owner/dashboard", icon: Home, label: "Inicio" },
@@ -28,7 +28,6 @@ const ownerNavItems: NavItem[] = [
         { href: "/owner/reports", label: "Publicaciones" },
         { href: "/owner/certificates", label: "Constancias" },
         { href: "/owner/surveys", label: "Encuestas" },
-        { href: "/owner/settings", label: "Configuración" },
     ]
   },
 ];
@@ -49,7 +48,6 @@ const ownerBottomNavItems: BottomNavItem[] = [
     ]
   },
   { href: '/owner/reports', icon: FileSearch, label: 'Publicaciones' },
-  { href: '/owner/settings', icon: Settings, label: 'Ajustes' },
 ];
 
 export default function OwnerLayout({ children }: { children: ReactNode }) {

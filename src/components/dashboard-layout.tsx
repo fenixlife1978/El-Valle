@@ -1,3 +1,4 @@
+
 'use client';
 
 import Link from 'next/link';
@@ -71,7 +72,7 @@ const CustomHeader = ({
   };
   
   const userName = ownerData?.name || 'Usuario';
-  const avatarSrc = userRole === 'administrador' ? companyInfo?.logo : ownerData?.avatar;
+  const avatarSrc = userRole === 'administrador' ? companyInfo?.logo : SYSTEM_LOGO;
 
   return (
     <header className="sticky top-4 z-10 mx-4 flex h-20 items-center justify-between gap-2 rounded-xl border bg-card/80 px-4 shadow-lg backdrop-blur-sm sm:px-6 text-card-foreground">
