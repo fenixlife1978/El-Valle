@@ -67,27 +67,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // All user profiles (admin, owner) are stored in the 'owners' collection per condo.
         const docRef = doc(db, 'condominios', storedCondoId, 'owners', user.uid);
     
-        const unsubSnap = onSnapshot(docRef, 
-            (snap) => {
-                if (snap.exists() && snap.data().published !== false) {
-                    setOwnerData(snap.data());
-                    setActiveCondoId(storedCondoId);
-                    setUserRole(snap.data().role || storedRole);
-                } else {
-                    console.warn("Usuario no encontrado o no publicado en este condominio.");
-                    setOwnerData(null);
+        const unsubSnap = onSnapshot(docRef, async (snap) => {
+            if (snap.exists() && snap.data().published !== false) {
+                const userData = snap.data();
+                
+                // --- LÓGICA DINÁMICA DE LOGO ---
+                let finalPhoto = userData.photoURL;
+        
+                if (!finalPhoto) {
+                    // Si el propietario no tiene foto, buscamos el logo del condominio
+                    const condoDoc = await getDoc(doc(db, 'condominios', storedCondoId));
+                    if (condoDoc.exists()) {
+                        finalPhoto = condoDoc.data().logoUrl; // Usamos el logo del edificio
+                    }
                 }
-                setLoading(false);
-            }, 
-            (error) => {
-                console.error("Error de permisos en Firestore al buscar perfil:", error);
-                setOwnerData(null); 
-                setLoading(false); 
+        
+                setOwnerData({
+                    ...userData,
+                    photoURL: finalPhoto || '/default-avatar.png' // Fallback final
+                });
+                
+                setActiveCondoId(storedCondoId);
+                setUserRole(storedRole);
+            } else {
+                auth.signOut();
+                window.location.href = '/welcome';
             }
-        );
+            setLoading(false);
+        },
+        (error) => {
+            // AQUÍ ES DONDE DABA EL "PERMISSION DENIED"
+            console.error("Error de permisos en Firestore:", error);
+            setLoading(false); // IMPORTANTE: dejar de cargar aunque falle
+            setOwnerData(null); 
+        });
     
         return () => unsubSnap();
-    }, [user]);
+    }, [user, loading]);
 
     // Cargar información de la empresa (EFAS CondoSys) y el Condominio
     useEffect(() => {
