@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, createContext, useContext, ReactNode } from 'react';
@@ -64,42 +65,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             return;
         }
     
-        // All user profiles (admin, owner) are stored in the 'owners' collection per condo.
+        // CLAVE: Como me confirmas que los admins también están en 'owners', 
+        // siempre buscamos el perfil en la subcolección 'owners'
         const docRef = doc(db, 'condominios', storedCondoId, 'owners', user.uid);
     
         const unsubSnap = onSnapshot(docRef, async (snap) => {
-            if (snap.exists() && snap.data().published !== false) {
+            if (snap.exists()) {
                 const userData = snap.data();
                 
-                // --- LÓGICA DINÁMICA DE LOGO ---
+                // Verificación de publicación (Solo para evitar accesos no autorizados)
+                if (userData.published === false) {
+                    auth.signOut();
+                    window.location.href = '/welcome';
+                    return;
+                }
+    
+                // Lógica de foto: Prioridad 1: Foto perfil, Prioridad 2: Logo Condo
                 let finalPhoto = userData.photoURL;
-        
                 if (!finalPhoto) {
-                    // Si el propietario no tiene foto, buscamos el logo del condominio
-                    const condoDoc = await getDoc(doc(db, 'condominios', storedCondoId));
-                    if (condoDoc.exists()) {
-                        finalPhoto = condoDoc.data().logoUrl; // Usamos el logo del edificio
+                    try {
+                        const condoDoc = await getDoc(doc(db, 'condominios', storedCondoId));
+                        if (condoDoc.exists()) {
+                            finalPhoto = condoDoc.data()?.logoUrl;
+                        }
+                    } catch (e) {
+                        console.error("Error obteniendo logo del condominio:", e);
                     }
                 }
-        
+    
+                // Guardamos todo en el estado. 
+                // setOwnerData contendrá el perfil independientemente de si es admin u owner.
                 setOwnerData({
                     ...userData,
-                    photoURL: finalPhoto || '/default-avatar.png' // Fallback final
+                    photoURL: finalPhoto || '/default-avatar.png'
                 });
                 
                 setActiveCondoId(storedCondoId);
-                setUserRole(storedRole);
+                setUserRole(storedRole); // Aquí mantenemos 'admin' si así vino del login
+                setLoading(false); 
             } else {
+                // Si el admin no está en la colección owners, lo rebota
+                console.error("Perfil no encontrado en /owners/ para el ID:", user.uid);
                 auth.signOut();
                 window.location.href = '/welcome';
             }
+        }, (error) => {
+            console.error("Error de permisos en AuthProvider:", error);
             setLoading(false);
-        },
-        (error) => {
-            // AQUÍ ES DONDE DABA EL "PERMISSION DENIED"
-            console.error("Error de permisos en Firestore:", error);
-            setLoading(false); // IMPORTANTE: dejar de cargar aunque falle
-            setOwnerData(null); 
         });
     
         return () => unsubSnap();
