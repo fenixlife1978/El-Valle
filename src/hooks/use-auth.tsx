@@ -1,8 +1,7 @@
-
 'use client';
 
 import React, { useState, useEffect, createContext, useContext, ReactNode } from 'react';
-import { onAuthStateChanged, User } from 'firebase/auth';
+import { onAuthStateChanged, User, signOut } from 'firebase/auth';
 import { doc, onSnapshot, getDoc } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
 
@@ -28,11 +27,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [activeCondoId, setActiveCondoId] = useState<string | null>(null);
     const [userRole, setUserRole] = useState<string | null>(null);
 
+    // 1. Escuchar cambios en el estado de autenticación de Firebase
     useEffect(() => {
         const unsub = onAuthStateChanged(auth, (firebaseUser) => {
             setUser(firebaseUser);
             if (!firebaseUser) {
-                setLoading(false); // Si no hay usuario, deja de cargar para mostrar el login
+                setLoading(false);
                 setOwnerData(null);
                 setActiveCondoId(null);
                 setUserRole(null);
@@ -41,15 +41,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return () => unsub();
     }, []);
 
+    // 2. Cargar Perfil, Rol y Logo del Condominio
     useEffect(() => {
-        if (!user) {
-            // User is not logged in, AuthGuard will handle it.
-            return;
-        };
+        if (!user) return;
 
-        if (user.email === ADMIN_EMAIL) {
+        // --- Lógica para Super Admin ---
+        if (user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
             const supportId = typeof window !== 'undefined' ? localStorage.getItem('support_mode_id') : null;
             const storedCondoId = typeof window !== 'undefined' ? localStorage.getItem('activeCondoId') : null;
+            
             setActiveCondoId(supportId || storedCondoId);
             setUserRole('super-admin');
             setOwnerData({ name: 'Super Admin', role: 'super-admin' });
@@ -57,30 +57,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             return;
         }
         
+        // --- Lógica para Admins y Owners ---
         const storedCondoId = localStorage.getItem('activeCondoId');
         const storedRole = localStorage.getItem('userRole');
     
         if (!storedCondoId || !storedRole) {
-            if (!loading) window.location.href = '/welcome';
+            // Si no hay datos en localStorage, esperamos a que el Login los ponga
+            // No redirigimos aquí para evitar el "rebote" durante el proceso de login
             return;
         }
     
-        // CLAVE: Como me confirmas que los admins también están en 'owners', 
-        // siempre buscamos el perfil en la subcolección 'owners'
+        // Buscamos siempre en 'owners' ya que los admins también residen ahí
         const docRef = doc(db, 'condominios', storedCondoId, 'owners', user.uid);
     
         const unsubSnap = onSnapshot(docRef, async (snap) => {
             if (snap.exists()) {
                 const userData = snap.data();
                 
-                // Verificación de publicación (Solo para evitar accesos no autorizados)
+                // Bloqueo si no está publicado
                 if (userData.published === false) {
-                    auth.signOut();
+                    await signOut(auth);
                     window.location.href = '/welcome';
                     return;
                 }
     
-                // Lógica de foto: Prioridad 1: Foto perfil, Prioridad 2: Logo Condo
+                // Lógica de Foto de Perfil / Logo de EFAS CondoSys
                 let finalPhoto = userData.photoURL;
                 if (!finalPhoto) {
                     try {
@@ -89,42 +90,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                             finalPhoto = condoDoc.data()?.logoUrl;
                         }
                     } catch (e) {
-                        console.error("Error obteniendo logo del condominio:", e);
+                        console.error("Error obteniendo logo de condominio:", e);
                     }
                 }
     
-                // Guardamos todo en el estado. 
-                // setOwnerData contendrá el perfil independientemente de si es admin u owner.
                 setOwnerData({
                     ...userData,
                     photoURL: finalPhoto || '/default-avatar.png'
                 });
                 
                 setActiveCondoId(storedCondoId);
-                setUserRole(storedRole); // Aquí mantenemos 'admin' si así vino del login
+                setUserRole(storedRole);
                 setLoading(false); 
             } else {
-                // Si el admin no está en la colección owners, lo rebota
-                console.error("Perfil no encontrado en /owners/ para el ID:", user.uid);
-                auth.signOut();
-                window.location.href = '/welcome';
+                console.error("Perfil no encontrado en subcolección owners");
+                // Solo echamos al usuario si la carga de Firebase Auth ya terminó
+                if (window.location.pathname !== '/welcome') {
+                    await signOut(auth);
+                    window.location.href = '/welcome';
+                }
             }
         }, (error) => {
-            console.error("Error de permisos en AuthProvider:", error);
+            console.error("Error de permisos en Firestore:", error);
             setLoading(false);
         });
     
         return () => unsubSnap();
-    }, [user, loading]);
+    }, [user]); // Nota: Solo dependemos de 'user' para evitar bucles de carga
 
-    // Cargar información de la empresa (EFAS CondoSys) y el Condominio
+    // 3. Cargar información de la empresa (EFAS CondoSys)
     useEffect(() => {
         if (!activeCondoId) {
             setCompanyInfo(null);
             return;
         }
         
-        // Buscamos en la ruta de configuración que definimos para cada condominio
         const configRef = doc(db, 'condominios', activeCondoId, 'config', 'mainSettings');
         const unsubscribeConfig = onSnapshot(configRef, (docSnap) => {
             if (docSnap.exists()) {
