@@ -1,163 +1,65 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // --- Helper Functions ---
-    function isSignedIn() {
-      return request.auth != null;
-    }
-    
+    // --- FUNCIONES DE SEGURIDAD CORREGIDAS ---
     function isSuperAdmin() {
-        return isSignedIn() && request.auth.token.email == 'vallecondo@gmail.com';
+      return request.auth != null && request.auth.token.email == 'vallecondo@gmail.com';
     }
 
-    function isAdmin(condoId) {
-      // Checks if the requesting user is an admin of the specified condo
-      return isSignedIn() && get(/databases/$(database)/documents/condominios/$(condoId)/owners/$(request.auth.uid)).data.role == 'administrador';
+    // AHORA BUSCA EN OWNERS: Verifica si el usuario está en owners y su campo 'role' es 'admin'
+    function isCondoAdmin(condoId) {
+      let userDoc = get(/databases/$(database)/documents/condominios/$(condoId)/owners/$(request.auth.uid));
+      return request.auth != null && userDoc.data.role == 'admin';
     }
 
-    function isOwner(userId) {
-        return isSignedIn() && request.auth.uid == userId;
+    function isCondoOwner(condoId) {
+      return request.auth != null && 
+        exists(/databases/$(database)/documents/condominios/$(condoId)/owners/$(request.auth.uid));
     }
 
-    // --- Root Collections (For Migration by Super Admin) ---
-    match /owners/{userId} {
-        allow read, write: if isSuperAdmin();
-    }
-    match /billboard_announcements/{docId} {
-        allow read, write: if isSuperAdmin();
-    }
-    match /payments/{paymentId} {
-        allow read, write: if isSuperAdmin();
-    }
-    match /config/{docId} {
-        allow read: if isSignedIn(); 
-        allow write: if isSuperAdmin();
-    }
-    match /financial_statements/{statementId} {
-        allow read, write: if isSuperAdmin();
-    }
-     match /unidades/{docId} {
-      allow read, write: if isSuperAdmin();
-    }
-    match /debts/{docId} {
-      allow read, write: if isSuperAdmin();
-    }
-    match /published_reports/{docId} {
-      allow read, write: if isSuperAdmin();
-    }
-    match /app_feedback/{docId} {
-      allow read, write: if isSuperAdmin();
-    }
-    match /integral_reports/{docId} {
+    // --- REGLA MAESTRA SUPER ADMIN ---
+    match /{allPaths=**} {
       allow read, write: if isSuperAdmin();
     }
 
-
-    // --- New Multi-Condo Structure ---
-
-    // The /condominios collection itself
+    // --- COLECCIÓN DE CONDOMINIOS ---
     match /condominios/{condoId} {
-      // Allows reading the condo's main document if signed in. This is needed for login and gatekeeper.
-      allow read: if true;
-      allow list: if false; // Deny listing all condos.
-      allow write: if isSuperAdmin(); // Only super admin can create/update condo documents.
+      
+      allow read: if request.auth != null;
 
-      // --- Subcollections within a condo ---
-      
-      // OWNERS subcollection
-      match /owners/{userId} {
-        // Admins can read any profile in their condo. Owners can read their own.
-        allow read: if isSuperAdmin() || isAdmin(condoId) || isOwner(userId);
-        
-        // Admins can write to any profile. Owners can update their own (for avatar, etc).
-        allow write: if isSuperAdmin() || isAdmin(condoId);
-        allow update: if isOwner(userId);
+      // Simplificamos la lectura de perfiles
+      match /owners/{ownerId} {
+        // Un usuario puede leer su propio perfil si está en owners (sea admin u owner)
+        allow read: if request.auth != null && (request.auth.uid == ownerId || isCondoAdmin(condoId));
+        // Solo admins pueden crear/editar perfiles
+        allow write: if isCondoAdmin(condoId);
       }
-      
-      // CONFIG subcollection
-      match /config/{docId} {
-        allow read: if isSignedIn();
-        allow write: if isSuperAdmin() || isAdmin(condoId);
-      }
-      
-      // DEBTS subcollection
+
+      // DEUDAS (Debts)
       match /debts/{debtId} {
-        // Admins can manage all debts. Owners can only read their own.
-        allow write: if isSuperAdmin() || isAdmin(condoId);
-        allow read: if isSuperAdmin() || isAdmin(condoId) || (isSignedIn() && resource.data.ownerId == request.auth.uid);
+        allow read: if isCondoAdmin(condoId) || (request.auth != null && resource.data.ownerId == request.auth.uid);
+        allow write: if isCondoAdmin(condoId);
       }
-      
-      // PAYMENTS subcollection
+
+      // PAGOS (Payments)
       match /payments/{paymentId} {
-        allow read, write: if isSuperAdmin() || isAdmin(condoId);
-        allow create: if isSignedIn();
-        // Owners can read payments where they are a beneficiary.
-        allow read: if isSignedIn() && request.auth.uid in resource.data.beneficiaryIds;
-      }
-      
-      // Other generic subcollections
-      match /billboard_announcements/{docId} {
-          allow read: if isSignedIn();
-          allow write: if isSuperAdmin() || isAdmin(condoId);
-      }
-      match /logs/{docId} {
-        allow read: if isSuperAdmin() || isAdmin(condoId);
-        allow create: if isSignedIn();
-        allow update, delete: if false;
-      }
-      match /certificates/{docId} {
-        allow read, write: if isSuperAdmin() || isAdmin(condoId);
-        allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
-      }
-      match /financial_statements/{docId} {
-        allow read: if isSignedIn();
-        allow write: if isSuperAdmin() || isAdmin(condoId);
-      }
-       match /expenses/{docId} {
-        allow read: if isSignedIn();
-        allow write: if isSuperAdmin() || isAdmin(condoId);
-      }
-      match /published_reports/{docId} {
-        allow read: if isSignedIn();
-        allow write: if isSuperAdmin() || isAdmin(condoId);
-      }
-      match /petty_cash_replenishments/{docId} {
-          allow read, write: if isSuperAdmin() || isAdmin(condoId);
-      }
-       match /cajaChica_movimientos/{docId} {
-        allow read, write: if isSuperAdmin() || isAdmin(condoId);
-      }
-      match /cajaChica_reposiciones/{docId} {
-        allow read, write: if isSuperAdmin() || isAdmin(condoId);
-      }
-      match /surveys/{docId} {
-        allow read: if isSignedIn();
-        allow create, delete: if isSuperAdmin() || isAdmin(condoId);
-        allow update: if isSignedIn(); // Allows owners to update results when voting
-      }
-      match /survey_responses/{docId} {
-        allow read: if isSuperAdmin() || isAdmin(condoId) || (isSignedIn() && resource.data.userId == request.auth.uid);
-        allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-        allow update: if false;
-        allow delete: if isSuperAdmin() || isAdmin(condoId);
-      }
-      match /app_feedback/{docId} {
-        allow create: if isSignedIn();
-        allow read, delete: if isSuperAdmin() || isAdmin(condoId);
-        allow update: if false;
-      }
-      match /admin_tasks/{docId} {
-        allow read, write: if isSuperAdmin() || isAdmin(condoId);
+        allow read: if isCondoAdmin(condoId) || (request.auth != null && request.auth.uid in resource.data.beneficiaryIds);
+        allow create: if request.auth != null; 
+        allow update, delete: if isCondoAdmin(condoId);
       }
 
-    }
+      // CARTELERA (Billboard)
+      match /billboard_announcements/{annId} {
+        allow read: if request.auth != null; 
+        allow write: if isCondoAdmin(condoId);
+      }
 
-    // Collection for super admin management
-    match /system_management/{docId} {
-        allow read: if isSignedIn();
-        allow write: if isSuperAdmin();
+      // CONFIGURACIÓN (Rooted en workingCondoId/activeCondoId)
+      match /{allChildren=**} {
+        allow read: if isCondoAdmin(condoId) || isCondoOwner(condoId);
+        allow write: if isCondoAdmin(condoId);
+      }
     }
   }
 }
