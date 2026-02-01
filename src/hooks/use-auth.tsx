@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, createContext, useContext, ReactNode } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot, getDoc } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
 
 export interface AuthContextType {
@@ -32,13 +32,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setUser(firebaseUser);
             if (!firebaseUser) {
                 setLoading(false); // Si no hay usuario, deja de cargar para mostrar el login
+                setOwnerData(null);
+                setActiveCondoId(null);
+                setUserRole(null);
             }
         });
         return () => unsub();
     }, []);
 
     useEffect(() => {
-        if (!user) return;
+        if (!user) {
+            // User is not logged in, AuthGuard will handle it.
+            return;
+        };
 
         if (user.email === ADMIN_EMAIL) {
             const supportId = typeof window !== 'undefined' ? localStorage.getItem('support_mode_id') : null;
@@ -54,38 +60,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const storedRole = localStorage.getItem('userRole');
     
         if (!storedCondoId || !storedRole) {
-            // Solo si no hay NADA en storage después de logueado, lo mandamos fuera
             if (!loading) window.location.href = '/welcome';
             return;
         }
     
-        const collectionName = storedRole === 'admin' ? 'admins' : 'owners';
-        const docRef = doc(db, 'condominios', storedCondoId, collectionName, user.uid);
+        // All user profiles (admin, owner) are stored in the 'owners' collection per condo.
+        const docRef = doc(db, 'condominios', storedCondoId, 'owners', user.uid);
     
-        const unsubSnap = onSnapshot(docRef, (snap) => {
-            if (snap.exists() && snap.data().published !== false) {
-                setOwnerData(snap.data());
-                setActiveCondoId(storedCondoId);
-                setUserRole(storedRole);
-            } else {
-                // Si el documento no existe o no está publicado
-                auth.signOut();
-                window.location.href = '/welcome';
+        const unsubSnap = onSnapshot(docRef, 
+            (snap) => {
+                if (snap.exists() && snap.data().published !== false) {
+                    setOwnerData(snap.data());
+                    setActiveCondoId(storedCondoId);
+                    setUserRole(snap.data().role || storedRole);
+                } else {
+                    console.warn("Usuario no encontrado o no publicado en este condominio.");
+                    setOwnerData(null);
+                }
+                setLoading(false);
+            }, 
+            (error) => {
+                console.error("Error de permisos en Firestore al buscar perfil:", error);
+                setOwnerData(null); 
+                setLoading(false); 
             }
-            setLoading(false); // SOLO QUITAMOS EL LOADING AQUÍ
-        }, (error) => {
-            console.error("Auth Snapshot Error:", error);
-            auth.signOut();
-            window.location.href = '/welcome';
-        });
+        );
     
         return () => unsubSnap();
-    }, [user, loading]);
-
+    }, [user]);
 
     // Cargar información de la empresa (EFAS CondoSys) y el Condominio
     useEffect(() => {
-        if (!activeCondoId) return;
+        if (!activeCondoId) {
+            setCompanyInfo(null);
+            return;
+        }
         
         // Buscamos en la ruta de configuración que definimos para cada condominio
         const configRef = doc(db, 'condominios', activeCondoId, 'config', 'mainSettings');
