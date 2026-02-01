@@ -1,3 +1,4 @@
+
 'use client';
 
 // ... (Tus mismos imports de UI y Lucide)
@@ -62,8 +63,19 @@ export default function OwnerDashboardPage() {
         setLoading(true);
 
         const unsubAnuncios = onSnapshot(
-            query(collection(db, "condominios", currentCondoId, "billboard_announcements"), where("published", "==", true), orderBy("createdAt", "desc")),
-            (snap) => setAnuncios(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Anuncio)))
+            query(
+                collection(db, "condominios", currentCondoId, "billboard_announcements"), 
+                where("published", "==", true),
+                orderBy("createdAt", "desc")
+            ),
+            (snapshot) => {
+                const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Anuncio));
+                console.log("Anuncios cargados con éxito:", data.length); 
+                setAnuncios(data);
+            },
+            (err) => {
+                console.error("Error en Cartelera:", err);
+            }
         );
 
         const unsubDebts = onSnapshot(
