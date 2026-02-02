@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/use-auth';
-import { db, auth } from '@/lib/firebase';
+import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs, doc, updateDoc, deleteDoc, Timestamp, addDoc } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
@@ -21,7 +21,8 @@ type MissingProfileResult = {
     missingEmails: string[];
 };
 
-export default function SyncProfilesPage() {
+export default function SyncProfilesPage({ params }: { params: { condoId: string } }) {
+    const workingCondoId = params.condoId;
     const { toast } = useToast();
     const { user: adminUser } = useAuth();
     
@@ -59,11 +60,11 @@ export default function SyncProfilesPage() {
     }, [adminUser, toast]);
 
     const searchOwner = async () => {
-        if (!ownerSearchTerm) return;
+        if (!ownerSearchTerm || !workingCondoId) return;
         setLoadingAction(prev => ({ ...prev, changeEmail: true }));
         try {
             const q = query(
-                collection(db, "owners"), 
+                collection(db, "condominios", workingCondoId, "owners"), 
                 where("name", ">=", ownerSearchTerm),
                 where("name", "<=", ownerSearchTerm + '\uf8ff')
             );
@@ -84,7 +85,7 @@ export default function SyncProfilesPage() {
     };
 
     const changeEmail = async () => {
-        if (!foundOwner || !newEmail) {
+        if (!foundOwner || !newEmail || !workingCondoId) {
             toast({ variant: 'destructive', title: 'Datos incompletos', description: 'Debe buscar un propietario y proporcionar un nuevo correo.' });
             return;
         }
@@ -95,11 +96,13 @@ export default function SyncProfilesPage() {
 
         setLoadingAction(prev => ({ ...prev, changeEmail: true }));
         try {
-            await addDoc(collection(db, "admin_tasks"), {
+            await addDoc(collection(db, "condominios", workingCondoId, "admin_tasks"), {
                 targetUID: foundOwner.id,
                 newEmail: newEmail,
                 status: "pending",
-                adminUID: adminUser.uid,
+                requestedBy: adminUser.uid,
+                createdAt: serverTimestamp(),
+                condoId: workingCondoId
             });
 
             toast({
@@ -121,35 +124,20 @@ export default function SyncProfilesPage() {
     };
 
     const checkMissingProfiles = async () => {
+        if (!workingCondoId) return;
         setLoadingAction(prev => ({ ...prev, checkMissing: true }));
         setMissingProfileResult(null);
         try {
             // NOTA: Esta es una simulación. El SDK de cliente no puede listar usuarios.
             // Una Cloud Function sería necesaria para obtener `allAuthUsers`.
             // Por ahora, simularemos un resultado.
-            const allAuthUsers = [
-                // { uid: 'user1', email: 'user1@example.com' },
-                // { uid: 'user2', email: 'user2@example.com' },
-                // { uid: 'user-sin-perfil@example.com', email: 'user-sin-perfil@example.com' }
-            ];
-
-            const ownersSnapshot = await getDocs(collection(db, "owners"));
+            
+            const ownersSnapshot = await getDocs(collection(db, "condominios", workingCondoId, "owners"));
             const ownerUIDs = new Set(ownersSnapshot.docs.map(doc => doc.id));
 
-            let missingCount = 0;
-            let missingEmails: string[] = [];
-
-            // Esta es la lógica que se ejecutaría en el backend
-            // for (const authUser of allAuthUsers) {
-            //     if (!ownerUIDs.has(authUser.uid)) {
-            //         missingCount++;
-            //         if (authUser.email) missingEmails.push(authUser.email);
-            //     }
-            // }
-            
             // Simulación del resultado
-            missingCount = 0; // Cambiar este valor para simular perfiles faltantes
-            missingEmails = []; // Añadir emails para simular
+            const missingCount = 0; // Cambiar este valor para simular perfiles faltantes
+            const missingEmails: string[] = []; // Añadir emails para simular
 
             setMissingProfileResult({
                 checked: ownerUIDs.size + missingCount,
@@ -278,22 +266,6 @@ export default function SyncProfilesPage() {
                         <AlertTriangle className="h-4 w-4 mt-0.5 text-orange-500 shrink-0"/>
                         <p><strong>Importante:</strong> Al hacer clic, se creará una tarea para que el sistema procese el cambio. Una vez completado, el propietario deberá usar la opción "¿Olvidaste tu contraseña?" en la pantalla de inicio de sesión con su nuevo correo para restablecer su acceso.</p>
                     </div>
-                </CardFooter>
-            </Card>
-
-             <Card>
-                <CardHeader>
-                    <CardTitle>Sincronizar Perfiles de Usuario (Deshabilitado)</CardTitle>
-                    <CardDescription>Verifica que todos los propietarios tengan una cuenta de autenticación. Crea las que falten.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <p className="text-sm text-muted-foreground">Esta herramienta es útil si algunos usuarios no pueden iniciar sesión, pero requiere permisos de administrador en el backend para funcionar.</p>
-                </CardContent>
-                <CardFooter>
-                     <Button disabled>
-                        <ShieldCheck className="mr-2 h-4 w-4" />
-                        Sincronizar Perfiles
-                    </Button>
                 </CardFooter>
             </Card>
         </div>

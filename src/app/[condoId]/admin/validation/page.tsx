@@ -12,8 +12,9 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, UserCheck, Building, ShieldCheck } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
-export default function ValidationPage() {
-    const { user, activeCondoId } = useAuth();
+export default function ValidationPage({ params }: { params: { condoId: string } }) {
+    const workingCondoId = params.condoId;
+    const { user } = useAuth();
     const [pendingUsers, setPendingUsers] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const { toast } = useToast();
@@ -21,21 +22,15 @@ export default function ValidationPage() {
     const isSuperAdmin = user?.email === 'vallecondo@gmail.com';
 
     useEffect(() => {
-        let q;
-        // Cambiado a la colección "owners" según tu estructura
-        if (isSuperAdmin) {
-            q = query(collection(db, "owners"), where("role", "==", "admin"), where("status", "==", "pending"));
-        } else if (activeCondoId) {
-            q = query(
-                collection(db, "owners"), 
-                where("condoId", "==", activeCondoId), 
-                where("role", "==", "owner"), 
-                where("status", "==", "pending")
-            );
-        } else {
+        if (!workingCondoId) {
             setLoading(false);
             return;
         }
+
+        const q = query(
+            collection(db, "condominios", workingCondoId, "owners"), 
+            where("status", "==", "pending")
+        );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -47,11 +42,12 @@ export default function ValidationPage() {
         });
 
         return () => unsubscribe();
-    }, [isSuperAdmin, activeCondoId]);
+    }, [workingCondoId]);
 
     const handleAction = async (ownerId: string, newStatus: 'active' | 'rejected') => {
+        if (!workingCondoId) return;
         try {
-            await updateDoc(doc(db, "owners", ownerId), { 
+            await updateDoc(doc(db, "condominios", workingCondoId, "owners", ownerId), { 
                 status: newStatus,
                 validatedBy: user?.email,
                 validatedAt: new Date().toISOString()
@@ -93,14 +89,14 @@ export default function ValidationPage() {
                                 <TableRow className="border-border">
                                     <TableHead className="text-muted-foreground">Nombre / Propietario</TableHead>
                                     <TableHead className="text-muted-foreground">Email</TableHead>
-                                    {isSuperAdmin && <TableHead className="text-muted-foreground">ID Condominio</TableHead>}
+                                    <TableHead className="text-muted-foreground">Rol</TableHead>
                                     <TableHead className="text-right text-muted-foreground">Acción</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {pendingUsers.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={isSuperAdmin ? 4 : 3} className="text-center py-12 text-muted-foreground font-bold italic">
+                                        <TableCell colSpan={4} className="text-center py-12 text-muted-foreground font-bold italic">
                                             No hay registros esperando aprobación en este momento.
                                         </TableCell>
                                     </TableRow>
@@ -109,13 +105,9 @@ export default function ValidationPage() {
                                         <TableRow key={u.id} className="border-border hover:bg-secondary/20 transition-colors">
                                             <TableCell className="text-foreground font-bold uppercase text-sm tracking-tight">{u.name || '---'}</TableCell>
                                             <TableCell className="text-muted-foreground font-mono text-xs">{u.email}</TableCell>
-                                            {isSuperAdmin && (
-                                                <TableCell>
-                                                    <Badge variant="outline" className="text-amber-400 border-amber-500/30 bg-amber-900/20">
-                                                        <Building className="h-3 w-3 mr-1" /> {u.condoId || 'Sin ID'}
-                                                    </Badge>
-                                                </TableCell>
-                                            )}
+                                            <TableCell>
+                                                <Badge variant={u.role === 'admin' ? 'destructive' : 'outline'}>{u.role}</Badge>
+                                            </TableCell>
                                             <TableCell className="text-right space-x-2">
                                                 <Button 
                                                     size="sm" 

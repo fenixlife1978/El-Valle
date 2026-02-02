@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -9,21 +10,17 @@ import { db } from '@/lib/firebase';
 import { format } from "date-fns";
 import CarteleraDigital from "@/components/CarteleraDigital";
 import { useAuth } from "@/hooks/use-auth";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 const formatToTwoDecimals = (num: number) => {
     if (typeof num !== 'number' || isNaN(num)) return '0,00';
     return num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-export default function AdminDashboardPage() {
+export default function AdminDashboardPage({ params }: { params: { condoId: string } }) {
     const { user, role, loading: authLoading } = useAuth();
     const router = useRouter();
-    const params = useParams();
-    
-    // SOLUCIÓN AL ERROR DE TYPESCRIPT: Casting seguro de params para evitar 'possibly null'
-    const castParams = params as { condoId?: string } | null;
-    const targetCondoId = castParams?.condoId || "";
+    const workingCondoId = params.condoId;
 
     const [loading, setLoading] = useState(true);
     const [stats, setStats] = useState({
@@ -36,7 +33,7 @@ export default function AdminDashboardPage() {
     const [anuncios, setAnuncios] = useState<any[]>([]);
     const [condoName, setCondoName] = useState("");
 
-    // 1. Verificación de Seguridad y Roles (Rooted in Super Admin email)
+    // 1. Verificación de Seguridad y Roles
     useEffect(() => {
         if (!authLoading) {
             if (!user) {
@@ -51,20 +48,20 @@ export default function AdminDashboardPage() {
         }
     }, [user, role, authLoading, router]);
 
-    // 2. Carga de Datos Consolidada usando targetCondoId de la URL
+    // 2. Carga de Datos Consolidada usando workingCondoId de la URL
     useEffect(() => {
-        if (!targetCondoId) return;
+        if (!workingCondoId) return;
 
         setLoading(true);
 
         // --- INFO DEL CONDOMINIO ---
-        getDoc(doc(db, 'condominios', targetCondoId)).then(snap => {
+        getDoc(doc(db, 'condominios', workingCondoId)).then(snap => {
             if (snap.exists()) setCondoName(snap.data().nombre);
         });
 
-        // --- CARGA DE ANUNCIOS (Switch de publicado implícito) ---
+        // --- CARGA DE ANUNCIOS ---
         const qAnuncios = query(
-            collection(db, "condominios", targetCondoId, "billboard_announcements"),
+            collection(db, "condominios", workingCondoId, "billboard_announcements"),
             orderBy("createdAt", "desc"),
             limit(5)
         );
@@ -78,7 +75,7 @@ export default function AdminDashboardPage() {
 
         // --- CARGA DE PROPIETARIOS ---
         const unsubOwners = onSnapshot(
-            collection(db, 'condominios', targetCondoId, 'owners'),
+            collection(db, 'condominios', workingCondoId, 'owners'),
             (snap) => {
                 setStats(prev => ({ ...prev, totalOwners: snap.size }));
             }
@@ -89,7 +86,7 @@ export default function AdminDashboardPage() {
         const fetchAndSubscribe = async () => {
             let currentRate = 1;
             try {
-                const snap = await getDoc(doc(db, 'condominios', targetCondoId, 'config', 'mainSettings'));
+                const snap = await getDoc(doc(db, 'condominios', workingCondoId, 'config', 'mainSettings'));
                 if (snap.exists()) {
                     const rates = snap.data().exchangeRates || [];
                     const active = rates.find((r: any) => r.active === true || r.status === 'active');
@@ -102,7 +99,7 @@ export default function AdminDashboardPage() {
             startOfMonth.setHours(0, 0, 0, 0);
 
             unsubPayments = onSnapshot(
-                collection(db, 'condominios', targetCondoId, 'payments'),
+                collection(db, 'condominios', workingCondoId, 'payments'),
                 (snap) => {
                     let bs = 0; let usd = 0; let pending = 0;
                     const paymentsList: any[] = [];
@@ -140,7 +137,7 @@ export default function AdminDashboardPage() {
             unsubOwners();
             if (unsubPayments) unsubPayments();
         };
-    }, [targetCondoId]);
+    }, [workingCondoId]);
 
     if (authLoading || loading) {
         return (
@@ -162,7 +159,7 @@ export default function AdminDashboardPage() {
                 <div className="flex items-center gap-2 mt-3">
                     <Building2 className="h-4 w-4 text-amber-500" />
                     <p className="text-muted-foreground font-bold text-sm uppercase tracking-wide">
-                        Gestionando: <span className="text-foreground">{condoName || targetCondoId}</span>
+                        Gestionando: <span className="text-foreground">{condoName || workingCondoId}</span>
                     </p>
                 </div>
             </div>

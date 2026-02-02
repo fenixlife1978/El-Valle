@@ -8,19 +8,12 @@ import { Loader2, Copy, Banknote, Smartphone, University } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/hooks/use-auth';
 
-type CompanyInfo = {
-    name: string;
-    rif: string;
-    phone: string;
-    bankName: string;
-    accountNumber: string;
-};
-
 export default function PaymentMethodsPage() {
     const { toast } = useToast();
     const { companyInfo, loading } = useAuth();
 
     const handleCopy = (textToCopy: string, fieldName: string) => {
+        if (!textToCopy) return;
         navigator.clipboard.writeText(textToCopy).then(() => {
             toast({
                 title: `${fieldName} copiado`,

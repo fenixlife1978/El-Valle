@@ -11,29 +11,19 @@ import { collection, onSnapshot, addDoc, deleteDoc, doc, serverTimestamp, orderB
 import { db } from '@/lib/firebase';
 import { PlusCircle, Loader2, Trash2, XCircle, Edit } from 'lucide-react';
 import { useAuthorization } from '@/hooks/use-authorization';
-import { useAuth } from '@/hooks/use-auth';
 import { compressImage } from '@/lib/utils';
 import Image from 'next/image';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 
-export default function BillboardPage() {
+export default function BillboardPage({ params }: { params: { condoId: string } }) {
+  const workingCondoId = params.condoId;
   const { toast } = useToast();
   const { requestAuthorization } = useAuthorization();
-  const { user, activeCondoId } = useAuth(); // Usamos activeCondoId del hook
   
   const [anuncios, setAnuncios] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
-  // Determinamos el ID del condominio (Soporte o Real)
-  const [currentCondoId, setCurrentCondoId] = useState<string | null>(null);
-
-  useEffect(() => {
-    const sId = localStorage.getItem('support_mode_id');
-    const id = (sId && user?.email === 'vallecondo@gmail.com') ? sId : activeCondoId;
-    setCurrentCondoId(id);
-  }, [user, activeCondoId]);
 
   // Estados para nuevo anuncio
   const [titulo, setTitulo] = useState('');
@@ -48,11 +38,10 @@ export default function BillboardPage() {
 
   // ESCUCHA DE ANUNCIOS
   useEffect(() => {
-    if (!currentCondoId) return;
+    if (!workingCondoId) return;
 
-    // RUTA CORREGIDA: condominios > {id} > billboard_announcements
     const q = query(
-      collection(db, "condominios", currentCondoId, "billboard_announcements"), 
+      collection(db, "condominios", workingCondoId, "billboard_announcements"), 
       orderBy("createdAt", "desc")
     );
 
@@ -66,7 +55,7 @@ export default function BillboardPage() {
     });
 
     return () => unsubscribe();
-  }, [currentCondoId]);
+  }, [workingCondoId]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -83,16 +72,16 @@ export default function BillboardPage() {
   };
 
   const handleSaveAnuncio = () => {
-    if (!titulo || !imagen || !currentCondoId) return;
+    if (!titulo || !imagen || !workingCondoId) return;
     requestAuthorization(async () => {
         setIsSubmitting(true);
         try {
-            // GUARDAR EN LA RUTA CORRECTA
-            await addDoc(collection(db, 'condominios', currentCondoId, 'billboard_announcements'), {
+            await addDoc(collection(db, 'condominios', workingCondoId, 'billboard_announcements'), {
                 titulo,
                 descripcion,
                 urlImagen: imagen,
                 createdAt: serverTimestamp(),
+                condoId: workingCondoId,
             });
             toast({ title: 'Anuncio publicado' });
             setTitulo(''); setDescripcion(''); setImagen(null);
@@ -112,10 +101,10 @@ export default function BillboardPage() {
   };
 
   const handleUpdateAnuncio = () => {
-    if (!editingAnuncio || !currentCondoId) return;
+    if (!editingAnuncio || !workingCondoId) return;
     requestAuthorization(async () => {
         try {
-            await updateDoc(doc(db, 'condominios', currentCondoId, 'billboard_announcements', editingAnuncio.id), {
+            await updateDoc(doc(db, 'condominios', workingCondoId, 'billboard_announcements', editingAnuncio.id), {
                 titulo: editTitulo,
                 descripcion: editDescripcion,
                 updatedAt: serverTimestamp(),
@@ -129,10 +118,10 @@ export default function BillboardPage() {
   };
 
   const handleDelete = (id: string) => {
-      if(!currentCondoId) return;
+      if(!workingCondoId) return;
       requestAuthorization(async () => {
           try {
-              await deleteDoc(doc(db, 'condominios', currentCondoId, 'billboard_announcements', id));
+              await deleteDoc(doc(db, 'condominios', workingCondoId, 'billboard_announcements', id));
               toast({ title: 'Anuncio eliminado' });
           } catch (e) {
               toast({ variant: 'destructive', title: 'No se pudo eliminar' });

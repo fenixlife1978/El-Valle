@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
@@ -28,6 +29,9 @@ export function AuthorizationProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
   
   const { user, activeCondoId } = useAuth();
+  
+  // La fuente de verdad para el ID del condominio activo.
+  const workingCondoId = activeCondoId;
 
   const requestAuthorization = useCallback((actionToExecute: () => Promise<void>) => {
     setAction(() => actionToExecute);
@@ -40,17 +44,17 @@ export function AuthorizationProvider({ children }: { children: ReactNode }) {
   };
 
   const createLog = async (result: 'success' | 'failure', detail: string) => {
-    if (!user || !activeCondoId) return;
+    if (!user || !workingCondoId) return;
     
     try {
-      // Los logs se guardan por condominio para evitar mezcla de datos
-      await addDoc(collection(db, 'condominios', activeCondoId, 'logs'), {
+      await addDoc(collection(db, 'condominios', workingCondoId, 'logs'), {
         userId: user.uid,
         userName: user.displayName || user.email,
         action: 'authorization_attempt',
         detail: detail,
         result,
         timestamp: serverTimestamp(),
+        condoId: workingCondoId
       });
     } catch (error) {
       console.error("Error creando log en EFAS CondoSys:", error);
@@ -58,25 +62,24 @@ export function AuthorizationProvider({ children }: { children: ReactNode }) {
   };
 
   const handleVerify = async (enteredKey: string) => {
-    if (!activeCondoId) {
+    if (!workingCondoId) {
         toast({ variant: 'destructive', title: 'Error', description: 'No hay un condominio activo seleccionado.' });
         return;
     }
 
     setIsVerifying(true);
     try {
-      const keyDocRef = doc(db, 'condominios', activeCondoId, 'config', 'authorization');
+      const keyDocRef = doc(db, 'condominios', workingCondoId, 'config', 'authorization');
       const keyDoc = await getDoc(keyDocRef);
 
       if (!keyDoc.exists()) {
-        // En lugar de intentar setDoc (que daría error de permiso a un owner), 
-        // informamos que no está configurada.
         toast({
           variant: 'destructive',
           title: 'Configuración pendiente',
           description: 'La clave de autorización no ha sido configurada por el administrador.',
         });
         await createLog('failure', 'Intento de autorización en condominio sin clave configurada');
+        setIsVerifying(false);
         return;
       }
 
