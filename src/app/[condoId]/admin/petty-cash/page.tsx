@@ -209,12 +209,13 @@ export default function PettyCashManager() {
             const dateTimestamp = Timestamp.fromDate(dialogDate);
 
             if (type === 'ingreso') {
-                // Es una nueva reposición de fondo (Ingreso al Libro)
                 const repRef = await addDoc(collection(db, 'condominios', workingCondoId, 'cajaChica_reposiciones'), {
                     date: dateTimestamp,
                     description: dialogDescription,
                     amount: amount,
-                    expenses: []
+                    expenses: [],
+                    condoId: workingCondoId,
+                    activeCondoId: activeCondoId,
                 });
 
                 await addDoc(collection(db, 'condominios', workingCondoId, 'cajaChica_movimientos'), {
@@ -222,10 +223,11 @@ export default function PettyCashManager() {
                     description: `FONDO INICIAL: ${dialogDescription}`,
                     amount: amount,
                     type: 'ingreso',
-                    replenishmentId: repRef.id
+                    replenishmentId: repRef.id,
+                    condoId: workingCondoId,
+                    activeCondoId: activeCondoId,
                 });
             } else {
-                // Es un gasto contra un fondo existente
                 if (amount > totals.saldo) {
                     throw new Error(`Saldo insuficiente en Caja Chica. Disponible: Bs. ${formatToTwoDecimals(totals.saldo)}`);
                 }
@@ -238,7 +240,7 @@ export default function PettyCashManager() {
                 
                 let receiptUrl = "";
                 if (dialogReceiptFile) {
-                    const storageRef = ref(storage, `condominios/${workingCondoId}/cajaChica/${Date.now()}_${dialogReceiptFile.name}`);
+                    const storageRef = ref(storage, `condos/${workingCondoId}/caja_chica/${Date.now()}_${dialogReceiptFile.name}`);
                     const uploadTask = await uploadBytes(storageRef, dialogReceiptFile);
                     receiptUrl = await getDownloadURL(uploadTask.ref);
                 }
@@ -264,7 +266,9 @@ export default function PettyCashManager() {
                     description: dialogDescription,
                     amount: amount,
                     type: 'egreso',
-                    replenishmentId: replenishmentToUseId
+                    replenishmentId: replenishmentToUseId,
+                    condoId: workingCondoId,
+                    activeCondoId: activeCondoId,
                 });
                 await batch.commit();
             }
@@ -292,7 +296,9 @@ export default function PettyCashManager() {
                 date: dateTimestamp,
                 description: `REPOSICIÓN DE: ${rep.description}`,
                 amount: amountToReplenish,
-                expenses: []
+                expenses: [],
+                condoId: workingCondoId,
+                activeCondoId: activeCondoId,
             });
 
             await addDoc(collection(db, 'condominios', workingCondoId, 'cajaChica_movimientos'), {
@@ -300,10 +306,11 @@ export default function PettyCashManager() {
                 description: `INGRESO POR REPOSICIÓN: ${rep.description}`,
                 amount: amountToReplenish,
                 type: 'ingreso',
-                replenishmentId: repRef.id
+                replenishmentId: repRef.id,
+                condoId: workingCondoId,
+                activeCondoId: activeCondoId,
             });
             
-            // Opcional: Registrar el egreso en la contabilidad principal aquí si se desea
         } catch (error) {
             console.error(error);
         } finally {
@@ -370,7 +377,7 @@ export default function PettyCashManager() {
             columnStyles: { 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' } }
         });
 
-        doc.save(`CajaChica_Libro_${filterDateRange.fromMonth}_${filterDateRange.fromYear}.pdf`);
+        doc.save(`CajaChica_Libro_${workingCondoId}_${filterDateRange.fromMonth}_${filterDateRange.fromYear}.pdf`);
     };
 
     const handleGenerateReplenishmentPdf = (rep: any) => {
@@ -399,7 +406,7 @@ export default function PettyCashManager() {
         doc.text(`Subtotal Gastado: Bs. ${formatToTwoDecimals(rep.totalRepExpenses)}`, 140, finalY);
         doc.text(`Saldo Remanente: Bs. ${formatToTwoDecimals(rep.currentCycleEndBalance)}`, 140, finalY + 7);
 
-        doc.save(`Relacion_Gastos_${rep.id.substring(0,5)}.pdf`);
+        doc.save(`Relacion_Gastos_${workingCondoId}_${rep.id.substring(0,5)}.pdf`);
     };
 
     // --- Options ---
@@ -422,7 +429,7 @@ export default function PettyCashManager() {
                     </h2>
                     <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
                     <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide flex items-center gap-2">
-                        <Building2 className="h-4 w-4" /> Gestión de Fondos y Gastos Menores
+                        <Building2 className="h-4 w-4" /> Gestión de Fondos y Gastos Menores ({workingCondoId})
                     </p>
                 </div>
                 <Button 
@@ -750,5 +757,3 @@ export default function PettyCashManager() {
         </div>
     );
 }
-
-    

@@ -2,14 +2,14 @@
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Receipt } from "lucide-react";
+import { Loader2, Receipt, Building2 } from "lucide-react"; 
 import { useEffect, useState } from "react";
 import { collection, query, onSnapshot, doc, getDoc, orderBy, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { format } from "date-fns";
 import CarteleraDigital from "@/components/CarteleraDigital";
 import { useAuth } from "@/hooks/use-auth";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 
 const formatToTwoDecimals = (num: number) => {
     if (typeof num !== 'number' || isNaN(num)) return '0,00';
@@ -17,8 +17,14 @@ const formatToTwoDecimals = (num: number) => {
 };
 
 export default function AdminDashboardPage() {
-    const { user, role, activeCondoId, workingCondoId, loading: authLoading } = useAuth();
+    const { user, role, loading: authLoading } = useAuth();
     const router = useRouter();
+    const params = useParams();
+    
+    // SOLUCIÓN AL ERROR DE TYPESCRIPT: Casting seguro de params para evitar 'possibly null'
+    const castParams = params as { condoId?: string } | null;
+    const targetCondoId = castParams?.condoId || "";
+
     const [loading, setLoading] = useState(true);
     const [stats, setStats] = useState({
         monthlyIncome: 0,
@@ -28,11 +34,9 @@ export default function AdminDashboardPage() {
     });
     const [recentPayments, setRecentPayments] = useState<any[]>([]);
     const [anuncios, setAnuncios] = useState<any[]>([]);
+    const [condoName, setCondoName] = useState("");
 
-    // LÓGICA DE DETECCIÓN DE CONDOMINIO (PRIORIDAD AL WORKING ID)
-    const targetCondoId = workingCondoId || activeCondoId;
-
-    // 1. Verificación de Seguridad y Roles
+    // 1. Verificación de Seguridad y Roles (Rooted in Super Admin email)
     useEffect(() => {
         if (!authLoading) {
             if (!user) {
@@ -47,18 +51,18 @@ export default function AdminDashboardPage() {
         }
     }, [user, role, authLoading, router]);
 
-    // 2. Carga de Datos Consolidada
+    // 2. Carga de Datos Consolidada usando targetCondoId de la URL
     useEffect(() => {
-        // Si no hay ningún ID disponible, no intentamos cargar nada aún
-        if (!targetCondoId) {
-            if (!authLoading) setLoading(false);
-            return;
-        }
+        if (!targetCondoId) return;
 
         setLoading(true);
 
-        // --- CARGA DE ANUNCIOS (billboard_announcements) ---
-        // Aplicamos el switch de publicado para mayor control
+        // --- INFO DEL CONDOMINIO ---
+        getDoc(doc(db, 'condominios', targetCondoId)).then(snap => {
+            if (snap.exists()) setCondoName(snap.data().nombre);
+        });
+
+        // --- CARGA DE ANUNCIOS (Switch de publicado implícito) ---
         const qAnuncios = query(
             collection(db, "condominios", targetCondoId, "billboard_announcements"),
             orderBy("createdAt", "desc"),
@@ -68,11 +72,9 @@ export default function AdminDashboardPage() {
         const unsubAnuncios = onSnapshot(qAnuncios, (snap) => {
             const dataAnuncios = snap.docs
                 .map(d => ({ id: d.id, ...d.data() }))
-                // Filtramos por si acaso el switch de publicado está en la data
                 .filter((a: any) => a.published !== false); 
-            
             setAnuncios(dataAnuncios);
-        }, (err) => console.error("Error anuncios:", err));
+        });
 
         // --- CARGA DE PROPIETARIOS ---
         const unsubOwners = onSnapshot(
@@ -138,7 +140,7 @@ export default function AdminDashboardPage() {
             unsubOwners();
             if (unsubPayments) unsubPayments();
         };
-    }, [targetCondoId, authLoading]);
+    }, [targetCondoId]);
 
     if (authLoading || loading) {
         return (
@@ -150,23 +152,29 @@ export default function AdminDashboardPage() {
     }
 
     return (
-        <div className="space-y-6">
+        <div className="p-6 space-y-6 max-w-7xl mx-auto font-montserrat">
+            {/* Encabezado Dinámico */}
             <div className="mb-10">
                 <h2 className="text-4xl font-black uppercase tracking-tighter italic drop-shadow-sm text-foreground">
                     Panel de <span className="text-amber-500">Control</span>
                 </h2>
-                <div className="h-1.5 w-20 bg-amber-500 mt-2 rounded-full"></div>
-                <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">
-                    Sincronizado con: <span className="text-foreground">{targetCondoId}</span>
-                </p>
+                <div className="h-1.5 w-20 bg-amber-500 mt-2 rounded-full shadow-[0_0_10px_rgba(245,158,11,0.3)]"></div>
+                <div className="flex items-center gap-2 mt-3">
+                    <Building2 className="h-4 w-4 text-amber-500" />
+                    <p className="text-muted-foreground font-bold text-sm uppercase tracking-wide">
+                        Gestionando: <span className="text-foreground">{condoName || targetCondoId}</span>
+                    </p>
+                </div>
             </div>
             
-            <div className="bg-card border-border rounded-[2rem] p-4 shadow-sm overflow-hidden">
+            {/* Cartelera */}
+            <div className="bg-card border-border rounded-[2rem] p-4 shadow-sm overflow-hidden border border-white/5">
                 <CarteleraDigital anuncios={anuncios} />
             </div>
 
+            {/* Tarjetas de Estadísticas */}
             <div className="grid gap-6 md:grid-cols-3">
-                <Card className="bg-blue-50 border-blue-200 text-slate-900 shadow-sm rounded-[1.5rem]">
+                <Card className="bg-blue-50/40 border-blue-200/50 text-slate-900 shadow-sm rounded-[1.5rem] backdrop-blur-sm border">
                     <CardHeader className="pb-2"><CardTitle className="text-[10px] font-black uppercase tracking-widest text-blue-600">Ingresos (Mes)</CardTitle></CardHeader>
                     <CardContent>
                         <div className="text-3xl font-black">Bs. {formatToTwoDecimals(stats.monthlyIncome)}</div>
@@ -174,7 +182,7 @@ export default function AdminDashboardPage() {
                     </CardContent>
                 </Card>
 
-                <Card className="bg-amber-50 border-amber-200 text-slate-900 shadow-sm rounded-[1.5rem]">
+                <Card className="bg-amber-50/40 border-amber-200/50 text-slate-900 shadow-sm rounded-[1.5rem] backdrop-blur-sm border">
                     <CardHeader className="pb-2"><CardTitle className="text-[10px] font-black uppercase tracking-widest text-amber-600">Validaciones Pendientes</CardTitle></CardHeader>
                     <CardContent>
                         <div className="text-3xl font-black">{stats.pendingPayments}</div>
@@ -182,7 +190,7 @@ export default function AdminDashboardPage() {
                     </CardContent>
                 </Card>
 
-                <Card className="bg-slate-50 border-slate-200 text-slate-900 shadow-sm rounded-[1.5rem]">
+                <Card className="bg-slate-50/40 border-slate-200/50 text-slate-900 shadow-sm rounded-[1.5rem] backdrop-blur-sm border">
                     <CardHeader className="pb-2"><CardTitle className="text-[10px] font-black uppercase tracking-widest text-slate-500">Comunidad</CardTitle></CardHeader>
                     <CardContent>
                         <div className="text-3xl font-black">{stats.totalOwners}</div>
@@ -191,16 +199,17 @@ export default function AdminDashboardPage() {
                 </Card>
             </div>
 
-            <Card className="bg-card border-border text-foreground rounded-[2rem] overflow-hidden shadow-sm">
-                <CardHeader className="border-b border-border/50 flex flex-row items-center justify-between bg-slate-50/30">
+            {/* Tabla de Movimientos */}
+            <Card className="bg-card border-border text-foreground rounded-[2rem] overflow-hidden shadow-sm border border-white/5">
+                <CardHeader className="border-b border-border/50 flex flex-row items-center justify-between bg-muted/30">
                     <CardTitle className="text-xs font-black uppercase tracking-widest text-amber-600">Últimos Movimientos Verificados</CardTitle>
                     <Receipt className="w-4 h-4 text-slate-400" />
                 </CardHeader>
                 <CardContent className="p-0">
                     <Table>
-                        <TableHeader className="bg-slate-50/50">
-                            <TableRow>
-                                <TableHead className="text-[10px] uppercase font-black text-slate-500">Propietario</TableHead>
+                        <TableHeader className="bg-muted/20">
+                            <TableRow className="hover:bg-transparent border-b border-white/5">
+                                <TableHead className="text-[10px] uppercase font-black text-slate-500 py-4">Propietario</TableHead>
                                 <TableHead className="text-[10px] uppercase font-black text-slate-500">Monto</TableHead>
                                 <TableHead className="text-[10px] uppercase font-black text-slate-500">Fecha</TableHead>
                             </TableRow>
@@ -214,14 +223,14 @@ export default function AdminDashboardPage() {
                                 </TableRow>
                             ) : (
                                 recentPayments.map(p => (
-                                    <TableRow key={p.id} className="hover:bg-slate-50/50 transition-colors">
-                                        <TableCell className="font-bold text-xs uppercase text-slate-700">
+                                    <TableRow key={p.id} className="hover:bg-muted/50 transition-colors border-b border-white/5">
+                                        <TableCell className="font-bold text-xs uppercase text-foreground py-4">
                                             {p.ownerName || 'Residente'}
                                         </TableCell>
-                                        <TableCell className="text-emerald-600 font-black italic">
+                                        <TableCell className="text-emerald-500 font-black italic">
                                             Bs. {formatToTwoDecimals(p.totalAmount)}
                                         </TableCell>
-                                        <TableCell className="text-[10px] font-bold text-slate-400 uppercase">
+                                        <TableCell className="text-[10px] font-bold text-muted-foreground uppercase">
                                             {p.paymentDate ? format(p.paymentDate.toDate(), 'dd/MM/yy') : '---'}
                                         </TableCell>
                                     </TableRow>

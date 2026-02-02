@@ -1,9 +1,7 @@
-
-
 'use client';
 
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
@@ -14,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
-import { CalendarIcon, Check, CheckCircle2, DollarSign, FileText, Hash, Loader2, Upload, Banknote, Info, X, Save, FileUp, UserPlus, Trash2, XCircle, Search, ChevronDown, Minus, Equal, Receipt, Calculator } from 'lucide-react';
+import { CalendarIcon, Check, CheckCircle2, DollarSign, FileText, Hash, Loader2, Banknote, Info, Save, FileUp, UserPlus, Trash2, Search, ChevronDown, Minus, Equal, Receipt, Calculator, XCircle } from 'lucide-react';
 import { format, isBefore, startOfMonth, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn, compressImage } from '@/lib/utils';
@@ -27,9 +25,7 @@ import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/component
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { useRouter } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-
 
 // --- TYPES AND CONSTANTS ---
 
@@ -41,7 +37,7 @@ type Owner = {
 
 type ExchangeRate = {
     id: string;
-    date: string; // Stored as 'yyyy-MM-dd'
+    date: string;
     rate: number;
     active: boolean;
 };
@@ -55,8 +51,6 @@ type BeneficiaryRow = {
 };
 
 type PaymentMethod = 'movil' | 'transferencia' | '';
-
-const ADMIN_USER_ID = 'valle-admin-main-account';
 
 type Debt = {
     id: string;
@@ -75,24 +69,19 @@ type PaymentDetails = {
     reference: string;
 };
 
-const venezuelanBanks = [
-    { value: 'banesco', label: 'Banesco' }, { value: 'mercantil', label: 'Mercantil' },
-    { value: 'provincial', label: 'Provincial' }, { value: 'bdv', label: 'Banco de Venezuela' },
-    { value: 'bnc', label: 'Banco Nacional de Crédito (BNC)' }, { value: 'tesoro', label: 'Banco del Tesoro' },
-    { value: 'otro', label: 'Otro' },
-];
-
 const monthsLocale: { [key: number]: string } = {
     1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril', 5: 'Mayo', 6: 'Junio',
     7: 'Julio', 8: 'Agosto', 9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre'
 };
 
-
 // --- COMPONENT: REPORT PAYMENT FORM ---
 
 function ReportPaymentComponent() {
     const { toast } = useToast();
-    const { user: authUser, ownerData: authOwnerData, activeCondoId } = useAuth();
+    const params = useParams();
+    const condoId = (params?.condoId as string) || "";
+    const { user: authUser, ownerData: authOwnerData } = useAuth();
+    
     const [allOwners, setAllOwners] = useState<Owner[]>([]);
     const [loading, setLoading] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -113,14 +102,14 @@ function ReportPaymentComponent() {
     const [openSections, setOpenSections] = useState({ details: true, beneficiaries: true });
 
     useEffect(() => {
-        if (!activeCondoId) return;
-        const q = query(collection(db, "condominios", activeCondoId, "owners"), where("role", "==", "propietario"));
+        if (!condoId) return;
+        const q = query(collection(db, "condominios", condoId, "owners"), where("role", "==", "propietario"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const ownersData: Owner[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner));
             setAllOwners(ownersData.sort((a, b) => (a.name || '').localeCompare(b.name || '')));
         });
         return () => unsubscribe();
-    }, [activeCondoId]);
+    }, [condoId]);
     
     useEffect(() => {
          if (authOwnerData && authUser) {
@@ -135,10 +124,10 @@ function ReportPaymentComponent() {
     }, [authOwnerData, authUser]);
 
     useEffect(() => {
-        if (!activeCondoId) return;
+        if (!condoId) return;
         const fetchRate = async () => {
              try {
-                const settingsRef = doc(db, 'condominios', activeCondoId, 'config', 'mainSettings');
+                const settingsRef = doc(db, 'condominios', condoId, 'config', 'mainSettings');
                 const docSnap = await getDoc(settingsRef);
                 if (docSnap.exists()) {
                     const settings = docSnap.data();
@@ -152,7 +141,7 @@ function ReportPaymentComponent() {
                              setExchangeRate(applicableRates[0].rate);
                              setExchangeRateMessage('');
                         } else {
-                           setExchangeRateMessage('No hay tasa para esta fecha.');
+                            setExchangeRateMessage('No hay tasa para esta fecha.');
                         }
                     } else {
                         setExchangeRate(null);
@@ -167,7 +156,7 @@ function ReportPaymentComponent() {
             }
         }
         fetchRate();
-    }, [paymentDate, activeCondoId]);
+    }, [paymentDate, condoId]);
 
     useEffect(() => {
         const bs = parseFloat(totalAmount);
@@ -231,7 +220,6 @@ function ReportPaymentComponent() {
         return allOwners.filter(owner => owner.name?.toLowerCase().includes(searchTerm.toLowerCase()));
     };
 
-
     const validateForm = async (): Promise<{ isValid: boolean, error?: string }> => {
         if (!paymentDate || !exchangeRate || !paymentMethod || !bank || !totalAmount || Number(totalAmount) <= 0 || reference.length < 4) {
              return { isValid: false, error: 'Por favor, complete todos los campos de la transacción (referencia min. 4 dígitos).' };
@@ -245,9 +233,9 @@ function ReportPaymentComponent() {
         if (Math.abs(balance) > 0.01) {
             return { isValid: false, error: 'El monto total no coincide con la suma de los montos asignados a los beneficiarios.' };
         }
-        if (!activeCondoId) return { isValid: false, error: "No se encontró un condominio activo." };
+        if (!condoId) return { isValid: false, error: "No se encontró un condominio activo." };
         try {
-            const q = query(collection(db, "condominios", activeCondoId, "payments"), where("reference", "==", reference), where("totalAmount", "==", Number(totalAmount)), where("paymentDate", "==", Timestamp.fromDate(paymentDate)));
+            const q = query(collection(db, "condominios", condoId, "payments"), where("reference", "==", reference), where("totalAmount", "==", Number(totalAmount)), where("paymentDate", "==", Timestamp.fromDate(paymentDate)));
             if (!(await getDocs(q)).empty) {
                 return { isValid: false, error: 'Ya existe un reporte de pago con esta misma referencia, monto y fecha.' };
             }
@@ -268,7 +256,7 @@ function ReportPaymentComponent() {
             return;
         }
 
-        if (!authUser || !authOwnerData || !activeCondoId) {
+        if (!authUser || !authOwnerData || !condoId) {
             toast({ variant: 'destructive', title: 'Error de Autenticación'});
             setIsSubmitting(false);
             return;
@@ -291,26 +279,26 @@ function ReportPaymentComponent() {
                 totalAmount: Number(totalAmount),
                 beneficiaries: beneficiaries,
                 beneficiaryIds: Array.from(new Set(beneficiaries.map(b => b.ownerId))),
-                status: 'pendiente' as 'pendiente',
+                status: 'pendiente',
                 reportedAt: serverTimestamp(),
                 reportedBy: authUser.uid,
                 receiptUrl: receiptImage,
             };
             
-            const paymentRef = await addDoc(collection(db, "condominios", activeCondoId, "payments"), paymentData);
+            const paymentRef = await addDoc(collection(db, "condominios", condoId, "payments"), paymentData);
             
-            const q = query(collection(db, 'condominios', activeCondoId, 'owners'), where('role', '==', 'administrador'));
+            const q = query(collection(db, 'condominios', condoId, 'owners'), where('role', '==', 'administrador'));
             const adminSnapshot = await getDocs(q);
 
             const batch = writeBatch(db);
             adminSnapshot.forEach(adminDoc => {
-                const notificationsRef = doc(collection(db, `condominios/${activeCondoId}/owners/${adminDoc.id}/notifications`));
+                const notificationsRef = doc(collection(db, `condominios/${condoId}/owners/${adminDoc.id}/notifications`));
                 batch.set(notificationsRef, {
                     title: "Nuevo Pago Reportado",
                     body: `${authOwnerData?.name || 'Un propietario'} ha reportado un nuevo pago por Bs. ${totalAmount}.`,
                     createdAt: serverTimestamp(),
                     read: false,
-                    href: `/admin/payments?tab=verify`,
+                    href: `/${condoId}/admin/payments?tab=verify`,
                     paymentId: paymentRef.id
                 });
             });
@@ -321,8 +309,7 @@ function ReportPaymentComponent() {
 
         } catch (error) {
             console.error("Error submitting payment: ", error);
-            const errorMessage = "No se pudo enviar el reporte. Por favor, intente de nuevo.";
-            toast({ variant: "destructive", title: "Error Inesperado", description: errorMessage });
+            toast({ variant: "destructive", title: "Error Inesperado", description: "No se pudo enviar el reporte. Por favor, intente de nuevo." });
         } finally {
             setIsSubmitting(false);
         }
@@ -408,7 +395,7 @@ function ReportPaymentComponent() {
                             </CollapsibleContent>
                         </Card>
                     </Collapsible>
-                    
+
                     <Collapsible open={openSections.beneficiaries} onOpenChange={(isOpen) => setOpenSections(prev => ({...prev, beneficiaries: isOpen}))}>
                          <Card className="border-none bg-background/5">
                             <CollapsibleTrigger className="w-full">
@@ -466,17 +453,12 @@ function ReportPaymentComponent() {
                                                       <SelectContent>
                                                         {Array.isArray(row.owner?.properties) && row.owner.properties.length > 0 ? (
                                                           row.owner.properties.map((p, pIdx) => (
-                                                            <SelectItem 
-                                                              key={`${p.street}-${p.house}-${pIdx}`} 
-                                                              value={`${p.street}-${p.house}`}
-                                                            >
+                                                            <SelectItem key={`${p.street}-${p.house}-${pIdx}`} value={`${p.street}-${p.house}`}>
                                                               {`${p.street} - ${p.house}`}
                                                             </SelectItem>
                                                           ))
                                                         ) : (
-                                                          <SelectItem value="none" disabled>
-                                                            No hay propiedades disponibles
-                                                          </SelectItem>
+                                                          <SelectItem value="none" disabled>No hay propiedades disponibles</SelectItem>
                                                         )}
                                                       </SelectContent>
                                                     </Select>
@@ -516,12 +498,12 @@ function ReportPaymentComponent() {
                             Reporte Enviado para Revisión
                         </DialogTitle>
                          <div className="pt-4 text-sm text-muted-foreground space-y-4">
-                           <p>¡Gracias! Hemos recibido tu reporte de pago. El tiempo máximo para la aprobación es de <strong>24 horas</strong>.</p>
-                           <p>Te invitamos a ingresar nuevamente después de este lapso para:</p>
-                           <ul className="list-disc list-inside space-y-1">
+                            <p>¡Gracias! Hemos recibido tu reporte de pago. El tiempo máximo para la aprobación es de <strong>24 horas</strong>.</p>
+                            <p>Te invitamos a ingresar nuevamente después de este lapso para:</p>
+                            <ul className="list-disc list-inside space-y-1">
                                <li>Verificar si el monto enviado cubrió completamente tu deuda.</li>
                                <li>Descargar tu recibo de pago una vez que sea aprobado.</li>
-                           </ul>
+                            </ul>
                         </div>
                     </DialogHeader>
                     <DialogFooter>
@@ -536,33 +518,21 @@ function ReportPaymentComponent() {
 // --- COMPONENT: PAYMENT CALCULATOR ---
 
 function PaymentCalculatorComponent() {
-    const { user, ownerData, loading: authLoading, activeCondoId } = useAuth();
-    const router = useRouter();
+    const { user, ownerData, loading: authLoading } = useAuth();
+    const params = useParams();
+    const condoId = (params?.condoId as string) || "";
     const [ownerDebts, setOwnerDebts] = useState<Debt[]>([]);
     const [loadingDebts, setLoadingDebts] = useState(true);
     const [activeRate, setActiveRate] = useState(0);
     const [condoFee, setCondoFee] = useState(0);
-    const [selectedPendingDebts, setSelectedPendingDebts] = useState<string[]>([]);
-    const [selectedAdvanceMonths, setSelectedAdvanceMonths] = useState<string[]>([]);
-    
-    const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
-    const [processingPayment, setProcessingPayment] = useState(false);
-    const [paymentDetails, setPaymentDetails] = useState<PaymentDetails>({ paymentMethod: '', bank: '', otherBank: '', reference: '' });
-
-    const [now, setNow] = useState<Date | null>(null);
-    const { toast } = useToast();
-    
-    useEffect(() => {
-        setNow(new Date());
-    }, []);
 
     useEffect(() => {
-        if (authLoading || !user || !ownerData || !activeCondoId) {
+        if (authLoading || !user || !ownerData || !condoId) {
             if(!authLoading) setLoadingDebts(false);
             return;
         };
 
-        const settingsRef = doc(db, 'condominios', activeCondoId, 'config', 'mainSettings');
+        const settingsRef = doc(db, 'condominios', condoId, 'config', 'mainSettings');
         const settingsUnsubscribe = onSnapshot(settingsRef, (settingsSnap) => {
             if (settingsSnap.exists()) {
                 const settings = settingsSnap.data();
@@ -577,7 +547,7 @@ function PaymentCalculatorComponent() {
             }
         });
         
-        const debtsQuery = query(collection(db, "condominios", activeCondoId, "debts"), where("ownerId", "==", user.uid));
+        const debtsQuery = query(collection(db, "condominios", condoId, "debts"), where("ownerId", "==", user.uid));
         const debtsUnsubscribe = onSnapshot(debtsQuery, (snapshot) => {
             const debtsData: Debt[] = [];
             snapshot.forEach(d => debtsData.push({ id: d.id, ...d.data() } as Debt));
@@ -590,18 +560,7 @@ function PaymentCalculatorComponent() {
             debtsUnsubscribe();
         };
 
-    }, [user, ownerData, authLoading, activeCondoId]);
-    
-    const paymentCalculator = useMemo(() => {
-        if (!ownerData) return { totalToPay: 0, hasSelection: false, dueMonthsCount: 0, advanceMonthsCount: 0, totalDebtBs: 0, balanceInFavor: 0 };
-        const pendingDebts = ownerDebts.filter(d => d.status === 'pending' || d.status === 'vencida');
-        const dueMonthsTotalUSD = pendingDebts.filter(debt => selectedPendingDebts.includes(debt.id)).reduce((sum, debt) => sum + debt.amountUSD, 0);
-        const advanceMonthsTotalUSD = selectedAdvanceMonths.length * condoFee;
-        const totalDebtUSD = dueMonthsTotalUSD + advanceMonthsTotalUSD;
-        const totalDebtBs = totalDebtUSD * activeRate;
-        const totalToPay = Math.max(0, totalDebtBs - (ownerData.balance || 0));
-        return { totalToPay, hasSelection: selectedPendingDebts.length > 0 || selectedAdvanceMonths.length > 0, dueMonthsCount: selectedPendingDebts.length, advanceMonthsCount: selectedAdvanceMonths.length, totalDebtBs, balanceInFavor: ownerData.balance || 0, condoFee };
-    }, [selectedPendingDebts, selectedAdvanceMonths, ownerDebts, activeRate, condoFee, ownerData]);
+    }, [user, ownerData, authLoading, condoId]);
 
     if (authLoading || loadingDebts) {
         return <div className="flex justify-center items-center h-64"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>;
@@ -611,10 +570,11 @@ function PaymentCalculatorComponent() {
 }
 
 
-// --- UI for Calculator (reused) ---
 function PaymentCalculatorUI({ owner, debts, activeRate, condoFee }: { owner: any; debts: Debt[]; activeRate: number; condoFee: number }) {
     const [selectedPendingDebts, setSelectedPendingDebts] = useState<string[]>([]);
     const [selectedAdvanceMonths, setSelectedAdvanceMonths] = useState<string[]>([]);
+    const params = useParams();
+    const condoId = (params?.condoId as string) || "";
     const now = new Date();
     
     const pendingDebts = useMemo(() => debts.filter(d => d.status === 'pending' || d.status === 'vencida').sort((a,b) => a.year - b.year || a.month - b.month), [debts]);
@@ -662,7 +622,7 @@ function PaymentCalculatorUI({ owner, debts, activeRate, condoFee }: { owner: an
                                             <TableCell><Badge variant={status === 'Vencida' ? 'destructive' : 'warning'}>{status}</Badge></TableCell>
                                             <TableCell className="text-right">Bs. {formatCurrency(debt.amountUSD * activeRate)}</TableCell>
                                         </TableRow>
-                                })}
+                                 })}
                             </TableBody>
                         </Table>
                     </CardContent>
@@ -682,7 +642,7 @@ function PaymentCalculatorUI({ owner, debts, activeRate, condoFee }: { owner: an
                         <div className="flex justify-between items-center text-md"><span className="text-muted-foreground flex items-center"><Minus className="mr-2 h-4 w-4"/> Saldo a Favor:</span><span className="font-medium text-green-500">Bs. {formatCurrency(paymentCalculator.balanceInFavor)}</span></div>
                         <hr className="my-2"/><div className="flex justify-between items-center text-2xl font-bold"><span className="flex items-center"><Equal className="mr-2 h-5 w-5"/> TOTAL A PAGAR:</span><span className="text-primary">Bs. {formatCurrency(paymentCalculator.totalToPay)}</span></div>
                     </CardContent>
-                    <CardFooter><Button className="w-full" asChild disabled={!paymentCalculator.hasSelection || paymentCalculator.totalToPay <= 0}><Link href="/owner/payments?tab=report"><Receipt className="mr-2 h-4 w-4"/>Proceder al Reporte de Pago</Link></Button></CardFooter>
+                    <CardFooter><Button className="w-full" asChild disabled={!paymentCalculator.hasSelection || paymentCalculator.totalToPay <= 0}><Link href={`/${condoId}/owner/payments?tab=report`}><Receipt className="mr-2 h-4 w-4"/>Proceder al Reporte de Pago</Link></Button></CardFooter>
                 </Card>}
             </div>
         </div>

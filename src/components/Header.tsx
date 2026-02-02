@@ -1,131 +1,118 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
-import { db } from '@/lib/firebase';
-import { doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { db, auth } from '@/lib/firebase';
+import { doc, onSnapshot, getDoc } from 'firebase/firestore';
+import { signOut } from 'firebase/auth';
+import { Building2, Loader2, Power } from 'lucide-react';
 
 export default function Header() {
-    const { companyInfo: authCompanyInfo, loading: authLoading, activeCondoId: authCondoId, user } = useAuth();
+    const params = useParams();
+    const router = useRouter();
+    const { user, activeCondoId, companyInfo: authCompanyInfo, loading: authLoading } = useAuth();
     
-    const [supportInfo, setSupportInfo] = useState<any>(null);
-    const [isSupport, setIsSupport] = useState(false);
-    const [loadingSupport, setLoadingSupport] = useState(false);
     const [tasaBCV, setTasaBCV] = useState<number | string>("---");
+    const [supportInfo, setSupportInfo] = useState<any>(null);
+
+    const urlCondoId = params?.condoId as string;
+    const sId = typeof window !== 'undefined' ? localStorage.getItem('support_mode_id') : null;
+    const isSuperAdmin = user?.email === 'vallecondo@gmail.com';
+    
+    const workingCondoId = urlCondoId || (isSuperAdmin ? sId : activeCondoId);
+    const isSupportMode = !!(isSuperAdmin && (sId || urlCondoId));
 
     useEffect(() => {
-        const sId = localStorage.getItem('support_mode_id');
-        const isSuperAdmin = user?.email === 'vallecondo@gmail.com';
-        const currentId = (sId && isSuperAdmin) ? sId : authCondoId;
+        if (!workingCondoId) return;
 
-        if (sId && isSuperAdmin) {
-            setIsSupport(true);
-            setLoadingSupport(true);
-            getDoc(doc(db, 'condominios', sId)).then(docSnap => {
-                if (docSnap.exists()) {
-                    const d = docSnap.data();
-                    setSupportInfo({
-                        name: d.name || d.nombre,
-                        rif: d.rif,
-                        logo: d.logo
-                    });
-                }
-                setLoadingSupport(false);
+        if (isSupportMode || urlCondoId) {
+            getDoc(doc(db, 'condominios', workingCondoId)).then(docSnap => {
+                if (docSnap.exists()) setSupportInfo(docSnap.data());
             });
-        } else {
-            setIsSupport(false);
-            setSupportInfo(null);
         }
 
-        if (currentId) {
-            const settingsRef = doc(db, 'condominios', currentId, 'config', 'mainSettings');
-            
-            const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
-                if (docSnap.exists()) {
-                    const data = docSnap.data();
-                    if (Array.isArray(data.exchangeRates)) {
-                        const rateActive = data.exchangeRates.find((r: any) => r.active === true);
-                        
-                        if (rateActive) {
-                            const valor = rateActive.rate || rateActive.value || rateActive.monto;
-                            const formatted = typeof valor === 'number' 
-                                ? valor.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 4 })
-                                : valor;
-                            setTasaBCV(formatted);
-                        } else {
-                            setTasaBCV("---");
-                        }
+        const settingsRef = doc(db, 'condominios', workingCondoId, 'config', 'mainSettings');
+        const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                if (Array.isArray(data.exchangeRates)) {
+                    const rateActive = data.exchangeRates.find((r: any) => r.active === true);
+                    if (rateActive) {
+                        const valor = rateActive.rate || rateActive.value || rateActive.monto;
+                        setTasaBCV(typeof valor === 'number' 
+                            ? valor.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                            : valor
+                        );
                     }
                 }
-            }, (error) => {
-                console.error("Error en tiempo real (Tasa):", error);
-                setTasaBCV("Error");
-            });
+            }
+        });
+        return () => unsubscribe();
+    }, [workingCondoId, isSupportMode, urlCondoId]);
 
-            return () => unsubscribe();
+    const info = isSupportMode ? (supportInfo || authCompanyInfo) : authCompanyInfo;
+
+    // LÓGICA DE SALIDA DIFERENCIADA
+    const handleExit = async () => {
+        if (isSupportMode && isSuperAdmin) {
+            // Caso Super Admin: Solo limpia el rastro de soporte y vuelve a su panel
+            localStorage.removeItem('support_mode_id');
+            router.push('/super-admin');
+        } else {
+            // Caso Admin / Owner: Cierra la sesión de Firebase por completo
+            try {
+                await signOut(auth);
+                router.push('/login');
+            } catch (error) {
+                console.error("Error al cerrar sesión:", error);
+            }
         }
-    }, [user, authCondoId]);
-
-    const info = isSupport ? supportInfo : authCompanyInfo;
-    const isLoading = isSupport ? loadingSupport : authLoading;
-    const cId = isSupport ? localStorage.getItem('support_mode_id') : authCondoId;
+    };
 
     return (
-        <header className="bg-card text-card-foreground p-4 shadow-sm border-b border-border sticky top-[6px] z-50 mx-4 mt-2 rounded-2xl">
-            <div className="container mx-auto flex items-center justify-between">
-                
-                <div className="flex items-center gap-4">
-                    <div className="relative w-12 h-12 rounded-full overflow-hidden bg-background border border-border flex items-center justify-center shadow-inner">
-                        {info?.logo ? (
-                            <img src={info.logo} alt="Logo" className="object-cover w-full h-full" />
-                        ) : (
-                            <span className="text-[8px] font-black text-muted-foreground uppercase text-center leading-tight">Sin<br/>Logo</span>
-                        )}
-                    </div>
-
-                    <div className="flex flex-col">
-                        <div className="flex items-center gap-2">
-                            <h1 className="text-lg font-black uppercase tracking-tight leading-tight text-primary">
-                                {isLoading ? "Cargando..." : (info?.name || info?.nombre || "No identificado")}
-                            </h1>
-                        </div>
-                        <p className="text-[10px] font-bold text-muted-foreground tracking-[0.2em] uppercase">
-                            {info?.rif ? `RIF: ${info.rif}` : (cId ? `ID: ${cId}` : "Sin Identificación")}
-                        </p>
-                    </div>
-                </div>
-
-                <div className="flex items-center gap-6">
-                    <div className="flex items-center gap-3 border-r border-border pr-6">
-                        <div className="w-10 h-10 rounded-full overflow-hidden border border-border bg-background flex-shrink-0 shadow-lg">
-                            <img 
-                                src="/logo-bcv.png" 
-                                alt="BCV" 
-                                className="w-full h-full object-contain"
-                            />
-                        </div>
-                        
-                        <div className="flex flex-col items-end">
-                            <span className="text-[9px] font-black uppercase tracking-widest text-green-500">Tasa Oficial BCV</span>
-                            <div className="text-xl font-black italic text-foreground tracking-tighter leading-none flex items-baseline gap-1">
-                                {tasaBCV} <span className="text-[10px] text-muted-foreground not-italic font-bold">VES</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    {isSupport && (
-                        <button 
-                            onClick={() => {
-                                localStorage.removeItem('support_mode_id');
-                                window.location.href = '/super-admin';
-                            }} 
-                            className="text-[9px] bg-red-100 hover:bg-red-200 px-4 py-2 rounded-lg font-black border border-red-200 transition-all uppercase italic tracking-tighter text-red-700"
-                        >
-                            Finalizar Soporte
-                        </button>
+        <header className="sticky top-4 z-40 mx-4 flex h-20 items-center justify-between gap-4 rounded-2xl border bg-[#1A1D23]/90 px-6 shadow-xl backdrop-blur-md text-white">
+            <div className="flex items-center gap-4">
+                <div className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-white/20 bg-white shadow-lg">
+                    {info?.logo ? (
+                        <img src={info.logo} alt="Logo" className="h-full w-full object-cover" />
+                    ) : (
+                        <Building2 className="h-7 w-7 text-slate-400" />
                     )}
                 </div>
+                
+                <div className="flex flex-col">
+                    <h1 className="text-xl font-black uppercase tracking-tighter text-[#4A90E2] leading-tight">
+                        {authLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : (info?.name || info?.nombre || "Cargando...")}
+                    </h1>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400 opacity-80">
+                        {info?.rif ? `RIF: ${info.rif}` : `ID: ${workingCondoId}`}
+                    </p>
+                </div>
+            </div>
+
+            <div className="flex items-center gap-8">
+                <div className="flex items-center gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white overflow-hidden shadow-md border border-white/10">
+                        <img src="/logo-bcv.png" alt="BCV" className="h-full w-full object-cover" />
+                    </div>
+                    <div className="flex flex-col leading-none">
+                        <span className="text-[10px] font-black uppercase text-[#4CAF50] tracking-widest mb-0.5">Tasa Oficial BCV</span>
+                        <div className="flex items-baseline gap-1">
+                            <span className="text-3xl font-black tabular-nums tracking-tighter">{tasaBCV}</span>
+                            <span className="text-xs font-bold text-slate-400 uppercase">VES</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Botón Circular Rojo - Acción según rol */}
+                <button 
+                    onClick={handleExit}
+                    title={isSupportMode ? "Finalizar Soporte" : "Cerrar Sesión"}
+                    className="flex h-12 w-12 items-center justify-center rounded-full border-2 border-red-500 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all duration-300 shadow-lg shadow-red-500/20 active:scale-90"
+                >
+                    <Power className="h-6 w-6 stroke-[3px]" />
+                </button>
             </div>
         </header>
     );

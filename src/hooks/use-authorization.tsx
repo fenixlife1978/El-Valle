@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
-import { doc, getDoc, addDoc, collection, serverTimestamp, setDoc } from 'firebase/firestore';
+import { doc, getDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { AuthorizationModal } from '@/components/authorization-modal';
 import { useToast } from './use-toast';
@@ -16,7 +16,7 @@ const AuthorizationContext = createContext<AuthorizationContextType | undefined>
 export function useAuthorization() {
   const context = useContext(AuthorizationContext);
   if (!context) {
-    throw new Error('useAuthorization must be used within an AuthorizationProvider');
+    throw new Error('useAuthorization debe usarse dentro de AuthorizationProvider');
   }
   return context;
 }
@@ -43,6 +43,7 @@ export function AuthorizationProvider({ children }: { children: ReactNode }) {
     if (!user || !activeCondoId) return;
     
     try {
+      // Los logs se guardan por condominio para evitar mezcla de datos
       await addDoc(collection(db, 'condominios', activeCondoId, 'logs'), {
         userId: user.uid,
         userName: user.displayName || user.email,
@@ -52,13 +53,13 @@ export function AuthorizationProvider({ children }: { children: ReactNode }) {
         timestamp: serverTimestamp(),
       });
     } catch (error) {
-      console.error("Error creating EFAS log:", error);
+      console.error("Error creando log en EFAS CondoSys:", error);
     }
   };
 
   const handleVerify = async (enteredKey: string) => {
     if (!activeCondoId) {
-        toast({ variant: 'destructive', title: 'Error', description: 'No hay un condominio seleccionado.' });
+        toast({ variant: 'destructive', title: 'Error', description: 'No hay un condominio activo seleccionado.' });
         return;
     }
 
@@ -68,21 +69,22 @@ export function AuthorizationProvider({ children }: { children: ReactNode }) {
       const keyDoc = await getDoc(keyDocRef);
 
       if (!keyDoc.exists()) {
-        await setDoc(keyDocRef, { key: '180578' });
+        // En lugar de intentar setDoc (que daría error de permiso a un owner), 
+        // informamos que no está configurada.
         toast({
           variant: 'destructive',
-          title: 'Clave inicial establecida',
-          description: 'Se ha configurado la clave por defecto para este condominio. Intente de nuevo.',
+          title: 'Configuración pendiente',
+          description: 'La clave de autorización no ha sido configurada por el administrador.',
         });
-        await createLog('failure', 'Se generó clave por defecto para el condominio');
+        await createLog('failure', 'Intento de autorización en condominio sin clave configurada');
         return;
       }
 
       const correctKey = keyDoc.data().key;
 
       if (enteredKey === correctKey) {
-        toast({ title: 'Autorización concedida', className: 'bg-green-100' });
-        await createLog('success', 'Autorización aprobada con clave del condominio');
+        toast({ title: 'Autorización concedida', variant: 'default' });
+        await createLog('success', 'Clave verificada correctamente');
         
         if (action) {
           await action();
@@ -92,13 +94,19 @@ export function AuthorizationProvider({ children }: { children: ReactNode }) {
         toast({ 
           variant: 'destructive', 
           title: 'Clave incorrecta', 
-          description: 'La clave ingresada no coincide con los registros del condominio.' 
+          description: 'La clave ingresada no es válida para este condominio.' 
         });
         await createLog('failure', 'Clave de condominio incorrecta');
       }
-    } catch (error) {
-      console.error('Error verifying key:', error);
-      toast({ variant: 'destructive', title: 'Error de Verificación' });
+    } catch (error: any) {
+      console.error('Error de autorización:', error);
+      toast({ 
+        variant: 'destructive', 
+        title: 'Error de Seguridad', 
+        description: error.message?.includes('permissions') 
+          ? 'No tienes permisos para verificar esta clave.' 
+          : 'Hubo un problema al conectar con el servidor.' 
+      });
     } finally {
       setIsVerifying(false);
     }
