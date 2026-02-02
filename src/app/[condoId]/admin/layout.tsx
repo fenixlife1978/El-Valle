@@ -18,70 +18,73 @@ import {
     DatabaseZap // Importado para el nuevo ítem
 } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useParams } from 'next/navigation';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
 import { useAuth } from '@/hooks/use-auth';
 import { BottomNavBar, type BottomNavItem } from '@/components/bottom-nav-bar';
 import Header from '@/components/Header';
 import { Button } from '@/components/ui/button';
 
-const adminNavItems: NavItem[] = [
-    { href: "/admin/dashboard", icon: Home, label: "Dashboard" },
-    { 
-        href: "#", 
-        icon: Landmark, 
-        label: "Gestión de Pagos",
-        items: [
-            { href: "/admin/payments?tab=verify", label: "Verificación de Pagos" },
-            { href: "/admin/payments?tab=report", label: "Reportar Pago Manual" },
-            { href: "/admin/payments?tab=calculator", label: "Calculadora" },
-        ]
-    },
-    { 
-        href: "#", 
-        icon: Grid3X3, 
-        label: "Utilidades",
-        items: [
-            { href: "/admin/debts", label: "Gestión de Deudas" },
-            { href: "/admin/financial-balance", label: "Balance Financiero" },
-            { href: "/admin/expenses", label: "Gestión de Egresos" },
-            { href: "/admin/petty-cash", label: "Caja Chica" },
-            { href: "/admin/reports", label: "Informes" },
-            { href: "/admin/billboard", label: "Cartelera" },
-            { href: "/admin/surveys", label: "Encuestas" },
-            { href: "/admin/certificates", label: "Constancias" },
-            { href: "/admin/people", label: "Personas" },
-            { href: "/admin/settings", label: "Config. General" },
-            { href: "/admin/settings/sync", label: "Sincronización" },
-            { href: "/admin/validation", label: "Validación de Datos" },
-        ]
-    },
-];
-
-const adminBottomNavItems: BottomNavItem[] = [
-  { href: '/admin/dashboard', icon: Home, label: 'Inicio' },
-  { href: '/admin/payments', icon: Receipt, label: 'Pagos' },
-  { 
-    href: '#', 
-    icon: Plus, 
-    label: 'Más', 
-    isCentral: true,
-    subMenu: [
-        { href: "/admin/debts", icon: WalletCards, label: "Deudas" },
-        { href: "/admin/surveys", icon: ClipboardList, label: "Encuestas" },
-        { href: "/admin/people", icon: Users, label: "Personas" },
-        { href: "/admin/settings", icon: Settings, label: "Ajustes" },
-    ]
-  },
-  { href: '/admin/reports', icon: FileSearch, label: 'Informes' },
-  { href: '/admin/people', icon: Users, label: 'Personas' },
-];
-
 export default function AdminLayout({ children }: { children: ReactNode }) {
     const { ownerData, role, loading, user } = useAuth();
     const pathname = usePathname() ?? '';
     const router = useRouter();
+    const params = useParams();
+    const condoId = params?.condoId as string;
     const [supportCondoId, setSupportCondoId] = useState<string | null>(null);
+
+    const adminNavItems: NavItem[] = [
+        { href: `/${condoId}/admin/dashboard`, icon: Home, label: "Dashboard" },
+        { 
+            href: "#", 
+            icon: Landmark, 
+            label: "Gestión de Pagos",
+            items: [
+                { href: `/${condoId}/admin/payments?tab=verify`, label: "Verificación de Pagos" },
+                { href: `/${condoId}/admin/payments?tab=report`, label: "Reportar Pago Manual" },
+                { href: `/${condoId}/admin/payments?tab=calculator`, label: "Calculadora" },
+            ]
+        },
+        { 
+            href: "#", 
+            icon: Grid3X3, 
+            label: "Utilidades",
+            items: [
+                { href: `/${condoId}/admin/debts`, label: "Gestión de Deudas" },
+                { href: `/${condoId}/admin/financial-balance`, label: "Balance Financiero" },
+                { href: `/${condoId}/admin/expenses`, label: "Gestión de Egresos" },
+                { href: `/${condoId}/admin/petty-cash`, label: "Caja Chica" },
+                { href: `/${condoId}/admin/reports`, label: "Informes" },
+                { href: `/${condoId}/admin/billboard`, label: "Cartelera" },
+                { href: `/${condoId}/admin/surveys`, label: "Encuestas" },
+                { href: `/${condoId}/admin/certificates`, label: "Constancias" },
+                { href: `/${condoId}/admin/people`, label: "Personas" },
+                { href: `/${condoId}/admin/settings`, label: "Config. General" },
+                { href: `/${condoId}/admin/settings/sync`, label: "Sincronización" },
+                { href: `/${condoId}/admin/validation`, label: "Validación de Datos" },
+            ]
+        },
+    ];
+
+    const adminBottomNavItems: BottomNavItem[] = [
+      { href: `/${condoId}/admin/dashboard`, icon: Home, label: 'Inicio' },
+      { href: `/${condoId}/admin/payments`, icon: Receipt, label: 'Pagos' },
+      { 
+        href: '#', 
+        icon: Plus, 
+        label: 'Más', 
+        isCentral: true,
+        subMenu: [
+            { href: `/${condoId}/admin/debts`, icon: WalletCards, label: "Deudas" },
+            { href: `/${condoId}/admin/surveys`, icon: ClipboardList, label: "Encuestas" },
+            { href: `/${condoId}/admin/people`, icon: Users, label: "Personas" },
+            { href: `/${condoId}/admin/settings`, icon: Settings, label: "Ajustes" },
+        ]
+      },
+      { href: `/${condoId}/admin/reports`, icon: FileSearch, label: 'Informes' },
+      { href: `/${condoId}/admin/people`, icon: Users, label: 'Personas' },
+    ];
+
 
     useEffect(() => {
         const mode = localStorage.getItem('support_condo_id');

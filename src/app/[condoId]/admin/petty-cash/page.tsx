@@ -64,9 +64,11 @@ const formatToTwoDecimals = (num: number) => {
     return (Math.round(num * 100) / 100).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-export default function PettyCashManager() {
-    const { user, activeCondoId } = useAuth();
+export default function PettyCashManager({ params }: { params: { condoId: string } }) {
+    const { user } = useAuth();
     const { toast } = useToast();
+    const workingCondoId = params.condoId;
+    const activeCondoId = params.condoId;
     
     // States
     const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -96,9 +98,6 @@ export default function PettyCashManager() {
         toMonth: (new Date().getMonth() + 1).toString().padStart(2, '0'),
         toYear: currentYear.toString()
     });
-    
-    const sId = typeof window !== 'undefined' ? localStorage.getItem('support_mode_id') : null;
-    const workingCondoId = (sId && user?.email === 'vallecondo@gmail.com') ? sId : activeCondoId;
 
     // --- Load Data (Segmented by workingCondoId) ---
     useEffect(() => {
