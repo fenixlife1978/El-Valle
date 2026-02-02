@@ -63,7 +63,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarGroupContent>
             <SidebarMenu>
               {navItems.map((item) => {
-                const dynamicUrl = `/${condoId}\${item.url}`
+                const dynamicUrl = `/${condoId}${item.url}`
                 const isActive = pathname === dynamicUrl
                 return (
                   <SidebarMenuItem key={item.title}>

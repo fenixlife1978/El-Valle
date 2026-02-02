@@ -22,13 +22,6 @@ import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { BankSelectionModal } from '@/components/bank-selection-modal';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-
-// --- TYPES AND CONSTANTS ---
 
 type Owner = {
     id: string;
@@ -53,29 +46,6 @@ type BeneficiaryRow = {
 
 type PaymentMethod = 'movil' | 'transferencia' | '';
 
-type Debt = {
-    id: string;
-    ownerId: string;
-    year: number;
-    month: number;
-    amountUSD: number;
-    description: string;
-    status: 'pending' | 'paid' | 'vencida';
-};
-
-type PaymentDetails = {
-    paymentMethod: 'movil' | 'transferencia' | '';
-    bank: string;
-    otherBank: string;
-    reference: string;
-};
-
-const monthsLocale: { [key: number]: string } = {
-    1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril', 5: 'Mayo', 6: 'Junio',
-    7: 'Julio', 8: 'Agosto', 9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre'
-};
-
-// --- COMPONENT: REPORT PAYMENT FORM ---
 
 function ReportPaymentComponent() {
     const { toast } = useToast();
@@ -100,7 +70,6 @@ function ReportPaymentComponent() {
     const [beneficiaryRows, setBeneficiaryRows] = useState<BeneficiaryRow[]>([]);
     const [isBankModalOpen, setIsBankModalOpen] = useState(false);
     const [isInfoDialogOpen, setIsInfoDialogOpen] = useState(false);
-    const [openSections, setOpenSections] = useState({ details: true, beneficiaries: true });
 
     useEffect(() => {
         if (!condoId) return;
@@ -325,160 +294,143 @@ function ReportPaymentComponent() {
                 </div>
             </CardHeader>
             <form onSubmit={handleSubmit}>
-                <CardContent className="p-8 grid grid-cols-1 gap-y-6">
-                    <Collapsible open={openSections.details} onOpenChange={(isOpen) => setOpenSections(prev => ({...prev, details: isOpen}))}>
-                        <Card className="border-none bg-background/5">
-                            <CollapsibleTrigger className="w-full">
-                                <CardHeader className="flex flex-row items-center justify-between cursor-pointer">
-                                    <CardTitle>1. Detalles de la Transacción</CardTitle>
-                                    <ChevronDown className={`h-5 w-5 transition-transform ${openSections.details ? 'rotate-180' : ''}`} />
-                                </CardHeader>
-                            </CollapsibleTrigger>
-                            <CollapsibleContent>
-                                <CardContent className="grid md:grid-cols-2 gap-x-8 gap-y-6 pt-4">
-                                    <div className="space-y-2">
-                                        <Label className="text-primary uppercase text-xs font-bold tracking-wider">Método de Pago</Label>
-                                        <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as PaymentMethod)} disabled={isSubmitting}>
-                                            <SelectTrigger className="pl-12 pr-4 py-6 bg-input border-border rounded-2xl text-base focus:ring-primary">
-                                                <FileText className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                                                <SelectValue placeholder="Seleccione un método..." />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="transferencia">Transferencia</SelectItem>
-                                                <SelectItem value="movil">Pago Móvil</SelectItem>
-                                            </SelectContent>
-                                        </Select>
+                <CardContent className="p-8 grid grid-cols-1 gap-y-10">
+                    
+                    <div className="space-y-6">
+                        <CardTitle className="text-xl">1. Detalles de la Transacción</CardTitle>
+                        <div className="grid md:grid-cols-2 gap-x-8 gap-y-6 pt-4">
+                            <div className="space-y-2">
+                                <Label className="text-primary uppercase text-xs font-bold tracking-wider">Método de Pago</Label>
+                                <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as PaymentMethod)} disabled={isSubmitting}>
+                                    <SelectTrigger className="pl-12 pr-4 py-6 bg-input border-border rounded-2xl text-base focus:ring-primary">
+                                        <FileText className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                                        <SelectValue placeholder="Seleccione un método..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="transferencia">Transferencia</SelectItem>
+                                        <SelectItem value="movil">Pago Móvil</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="space-y-2">
+                                <Label className="text-primary uppercase text-xs font-bold tracking-wider">Banco Emisor</Label>
+                                <Button type="button" variant="outline" className="w-full justify-start text-left font-normal pl-12 pr-4 py-6 bg-input border-border rounded-2xl text-base hover:bg-input" onClick={() => setIsBankModalOpen(true)} disabled={isSubmitting}>
+                                    <Banknote className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                                    {bank || "Seleccione un banco..."}
+                                </Button>
+                            </div>
+                            {bank === 'Otro' && (
+                                <div className="space-y-2">
+                                    <Label className="text-primary uppercase text-xs font-bold tracking-wider">Nombre del Otro Banco</Label>
+                                    <div className="relative flex items-center">
+                                    <Banknote className="absolute left-4 h-5 w-5 text-muted-foreground" />
+                                    <Input value={otherBank} onChange={(e) => setOtherBank(e.target.value)} className="pl-12 pr-4 py-6 bg-input border-border rounded-2xl text-base" placeholder="Especifique el banco" disabled={isSubmitting}/>
                                     </div>
-                                    <div className="space-y-2">
-                                        <Label className="text-primary uppercase text-xs font-bold tracking-wider">Banco Emisor</Label>
-                                        <Button type="button" variant="outline" className="w-full justify-start text-left font-normal pl-12 pr-4 py-6 bg-input border-border rounded-2xl text-base hover:bg-input" onClick={() => setIsBankModalOpen(true)} disabled={isSubmitting}>
-                                            <Banknote className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                                            {bank || "Seleccione un banco..."}
+                                </div>
+                            )}
+                            <div className="space-y-2">
+                                <Label className="text-primary uppercase text-xs font-bold tracking-wider">Referencia</Label>
+                                <div className="relative flex items-center">
+                                    <Hash className="absolute left-4 h-5 w-5 text-muted-foreground" />
+                                    <Input value={reference} onChange={(e) => setReference(e.target.value.replace(/\D/g, '').slice(0, 6))} maxLength={6} className="pl-12 pr-4 py-6 bg-input border-border rounded-2xl text-base" placeholder="Últimos 6 dígitos" disabled={isSubmitting}/>
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <Label className="text-primary uppercase text-xs font-bold tracking-wider">Fecha del Pago</Label>
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal pl-12 pr-4 py-6 bg-input border-border rounded-2xl text-base hover:bg-input", !paymentDate && "text-muted-foreground")} disabled={isSubmitting}>
+                                            <CalendarIcon className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                                            {paymentDate ? format(paymentDate, "PPP", { locale: es }) : <span>Seleccione una fecha</span>}
                                         </Button>
-                                    </div>
-                                    {bank === 'Otro' && (
-                                        <div className="space-y-2">
-                                            <Label className="text-primary uppercase text-xs font-bold tracking-wider">Nombre del Otro Banco</Label>
-                                            <div className="relative flex items-center">
-                                            <Banknote className="absolute left-4 h-5 w-5 text-muted-foreground" />
-                                            <Input value={otherBank} onChange={(e) => setOtherBank(e.target.value)} className="pl-12 pr-4 py-6 bg-input border-border rounded-2xl text-base" placeholder="Especifique el banco" disabled={isSubmitting}/>
-                                            </div>
-                                        </div>
-                                    )}
-                                    <div className="space-y-2">
-                                        <Label className="text-primary uppercase text-xs font-bold tracking-wider">Referencia</Label>
-                                        <div className="relative flex items-center">
-                                            <Hash className="absolute left-4 h-5 w-5 text-muted-foreground" />
-                                            <Input value={reference} onChange={(e) => setReference(e.target.value.replace(/\D/g, '').slice(0, 6))} maxLength={6} className="pl-12 pr-4 py-6 bg-input border-border rounded-2xl text-base" placeholder="Últimos 6 dígitos" disabled={isSubmitting}/>
-                                        </div>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label className="text-primary uppercase text-xs font-bold tracking-wider">Fecha del Pago</Label>
-                                        <Popover>
-                                            <PopoverTrigger asChild>
-                                                <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal pl-12 pr-4 py-6 bg-input border-border rounded-2xl text-base hover:bg-input", !paymentDate && "text-muted-foreground")} disabled={isSubmitting}>
-                                                    <CalendarIcon className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                                                    {paymentDate ? format(paymentDate, "PPP", { locale: es }) : <span>Seleccione una fecha</span>}
-                                                </Button>
-                                            </PopoverTrigger>
-                                            <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={paymentDate} onSelect={setPaymentDate} initialFocus locale={es} disabled={(date) => date > new Date()} /></PopoverContent>
-                                        </Popover>
-                                    </div>
-                                    <div className="space-y-2 md:col-span-2">
-                                        <Label className="text-primary uppercase text-xs font-bold tracking-wider">Adjuntar Comprobante</Label>
-                                        <div className="relative flex items-center">
-                                            <FileUp className="absolute left-4 h-5 w-5 text-muted-foreground" />
-                                            <Input id="receipt" type="file" onChange={handleImageUpload} className="pl-12 pr-4 py-4 bg-input border-border rounded-2xl text-base file:text-muted-foreground file:text-sm" disabled={isSubmitting} />
-                                        </div>
-                                        {receiptImage && <p className="text-xs text-primary flex items-center gap-1"><CheckCircle2 className="h-3 w-3"/>Comprobante cargado.</p>}
-                                    </div>
-                                </CardContent>
-                            </CollapsibleContent>
-                        </Card>
-                    </Collapsible>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={paymentDate} onSelect={setPaymentDate} initialFocus locale={es} disabled={(date) => date > new Date()} /></PopoverContent>
+                                </Popover>
+                            </div>
+                            <div className="space-y-2 md:col-span-2">
+                                <Label className="text-primary uppercase text-xs font-bold tracking-wider">Adjuntar Comprobante</Label>
+                                <div className="relative flex items-center">
+                                    <FileUp className="absolute left-4 h-5 w-5 text-muted-foreground" />
+                                    <Input id="receipt" type="file" onChange={handleImageUpload} className="pl-12 pr-4 py-4 bg-input border-border rounded-2xl text-base file:text-muted-foreground file:text-sm" disabled={isSubmitting} />
+                                </div>
+                                {receiptImage && <p className="text-xs text-primary flex items-center gap-1"><CheckCircle2 className="h-3 w-3"/>Comprobante cargado.</p>}
+                            </div>
+                        </div>
+                    </div>
 
-                    <Collapsible open={openSections.beneficiaries} onOpenChange={(isOpen) => setOpenSections(prev => ({...prev, beneficiaries: isOpen}))}>
-                         <Card className="border-none bg-background/5">
-                            <CollapsibleTrigger className="w-full">
-                                <CardHeader className="flex flex-row items-center justify-between cursor-pointer">
-                                    <CardTitle>2. Monto y Beneficiarios</CardTitle>
-                                    <ChevronDown className={`h-5 w-5 transition-transform ${openSections.beneficiaries ? 'rotate-180' : ''}`} />
-                                </CardHeader>
-                            </CollapsibleTrigger>
-                           <CollapsibleContent>
-                                <CardContent className="space-y-6 pt-4">
-                                    <div className="grid md:grid-cols-2 gap-6">
-                                        <div className="space-y-2">
-                                            <Label className="text-primary uppercase text-xs font-bold tracking-wider">Monto Total del Pago (Bs.)</Label>
-                                            <Input id="totalAmount" type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} placeholder="0.00" disabled={loading} className="py-6 bg-input/80 rounded-2xl"/>
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label className="text-primary uppercase text-xs font-bold tracking-wider">Monto Equivalente (USD)</Label>
-                                            <div className="relative">
-                                                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                                <Input type="text" value={amountUSD} readOnly className="pl-9 bg-muted/50 py-6 rounded-2xl" placeholder="0.00" />
+                    <div className="space-y-6">
+                         <CardTitle className="text-xl">2. Monto y Beneficiarios</CardTitle>
+                        <div className="space-y-6 pt-4">
+                            <div className="grid md:grid-cols-2 gap-6">
+                                <div className="space-y-2">
+                                    <Label className="text-primary uppercase text-xs font-bold tracking-wider">Monto Total del Pago (Bs.)</Label>
+                                    <Input id="totalAmount" type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} placeholder="0.00" disabled={loading} className="py-6 bg-input/80 rounded-2xl"/>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label className="text-primary uppercase text-xs font-bold tracking-wider">Monto Equivalente (USD)</Label>
+                                    <div className="relative">
+                                        <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                        <Input type="text" value={amountUSD} readOnly className="pl-9 bg-muted/50 py-6 rounded-2xl" placeholder="0.00" />
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="space-y-4"><Label className="font-semibold">Asignación de Montos</Label>
+                                {beneficiaryRows.map((row, index) => (
+                                    <Card key={row.id} className="p-4 bg-muted/50 relative">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="space-y-2"><Label htmlFor={`search-${row.id}`}>Beneficiario {index + 1}</Label>
+                                                {!row.owner ? (<><div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input id={`search-${row.id}`} placeholder="Buscar por nombre..." className="pl-9" value={row.searchTerm} onChange={(e) => updateBeneficiaryRow(row.id, { searchTerm: e.target.value })} disabled={loading} /></div>{row.searchTerm.length >= 2 && getFilteredOwners(row.searchTerm).length > 0 && <Card className="border rounded-md"><ScrollArea className="h-32">{getFilteredOwners(row.searchTerm).map(owner => (<div key={owner.id} onClick={() => handleOwnerSelect(row.id, owner)} className="p-2 hover:bg-muted cursor-pointer border-b last:border-b-0"><p className="font-medium text-sm">{owner.name}</p></div>))}</ScrollArea></Card>}</>)
+                                                : (<div className="p-3 bg-background rounded-md flex items-center justify-between"><div><p className="font-semibold text-primary">{row.owner.name}</p></div><Button variant="ghost" size="icon" onClick={() => removeBeneficiaryRow(row.id)} disabled={loading || beneficiaryRows.length === 1}><XCircle className="h-5 w-5 text-destructive" /></Button></div>)}
                                             </div>
+                                            <div className="space-y-2"><Label htmlFor={`amount-${row.id}`}>Monto Asignado (Bs.)</Label><Input id={`amount-${row.id}`} type="number" placeholder="0.00" value={row.amount} onChange={(e) => updateBeneficiaryRow(row.id, { amount: e.target.value })} disabled={loading || !row.owner} /></div>
                                         </div>
-                                    </div>
-                                    <div className="space-y-4"><Label className="font-semibold">Asignación de Montos</Label>
-                                        {beneficiaryRows.map((row, index) => (
-                                            <Card key={row.id} className="p-4 bg-muted/50 relative">
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                    <div className="space-y-2"><Label htmlFor={`search-${row.id}`}>Beneficiario {index + 1}</Label>
-                                                        {!row.owner ? (<><div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input id={`search-${row.id}`} placeholder="Buscar por nombre..." className="pl-9" value={row.searchTerm} onChange={(e) => updateBeneficiaryRow(row.id, { searchTerm: e.target.value })} disabled={loading} /></div>{row.searchTerm.length >= 2 && getFilteredOwners(row.searchTerm).length > 0 && <Card className="border rounded-md"><ScrollArea className="h-32">{getFilteredOwners(row.searchTerm).map(owner => (<div key={owner.id} onClick={() => handleOwnerSelect(row.id, owner)} className="p-2 hover:bg-muted cursor-pointer border-b last:border-b-0"><p className="font-medium text-sm">{owner.name}</p></div>))}</ScrollArea></Card>}</>)
-                                                        : (<div className="p-3 bg-background rounded-md flex items-center justify-between"><div><p className="font-semibold text-primary">{row.owner.name}</p></div><Button variant="ghost" size="icon" onClick={() => removeBeneficiaryRow(row.id)} disabled={loading || beneficiaryRows.length === 1}><XCircle className="h-5 w-5 text-destructive" /></Button></div>)}
-                                                    </div>
-                                                    <div className="space-y-2"><Label htmlFor={`amount-${row.id}`}>Monto Asignado (Bs.)</Label><Input id={`amount-${row.id}`} type="number" placeholder="0.00" value={row.amount} onChange={(e) => updateBeneficiaryRow(row.id, { amount: e.target.value })} disabled={loading || !row.owner} /></div>
-                                                </div>
-                                                {row.owner && (
-                                                  <div className="mt-4 space-y-2">
-                                                    <Label>Asignar a Propiedad</Label>
-                                                    <Select 
-                                                      onValueChange={(v) => {
-                                                        const props = Array.isArray(row.owner?.properties) ? row.owner.properties : [];
-                                                        const found = props.find(p => `${p.street}-${p.house}` === v);
-                                                        updateBeneficiaryRow(row.id, { selectedProperty: found || null });
-                                                      }} 
-                                                      value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''} 
-                                                      disabled={loading || !row.owner || !Array.isArray(row.owner.properties)}
-                                                    >
-                                                      <SelectTrigger className="rounded-xl">
-                                                        <SelectValue 
-                                                          placeholder={
-                                                            Array.isArray(row.owner.properties) && row.owner.properties.length > 0
-                                                              ? "Seleccione una propiedad..." 
-                                                              : "Usuario sin propiedades"
-                                                          } 
-                                                        />
-                                                      </SelectTrigger>
-                                                      <SelectContent>
-                                                        {Array.isArray(row.owner?.properties) && row.owner.properties.length > 0 ? (
-                                                          row.owner.properties.map((p, pIdx) => (
-                                                            <SelectItem key={`${p.street}-${p.house}-${pIdx}`} value={`${p.street}-${p.house}`}>
-                                                              {`${p.street} - ${p.house}`}
-                                                            </SelectItem>
-                                                          ))
-                                                        ) : (
-                                                          <SelectItem value="none" disabled>No hay propiedades disponibles</SelectItem>
-                                                        )}
-                                                      </SelectContent>
-                                                    </Select>
-                                                  </div>
+                                        {row.owner && (
+                                          <div className="mt-4 space-y-2">
+                                            <Label>Asignar a Propiedad</Label>
+                                            <Select 
+                                              onValueChange={(v) => {
+                                                const props = Array.isArray(row.owner?.properties) ? row.owner.properties : [];
+                                                const found = props.find(p => `${p.street}-${p.house}` === v);
+                                                updateBeneficiaryRow(row.id, { selectedProperty: found || null });
+                                              }} 
+                                              value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''} 
+                                              disabled={loading || !row.owner || !Array.isArray(row.owner.properties)}
+                                            >
+                                              <SelectTrigger className="rounded-xl">
+                                                <SelectValue 
+                                                  placeholder={
+                                                    Array.isArray(row.owner.properties) && row.owner.properties.length > 0
+                                                      ? "Seleccione una propiedad..." 
+                                                      : "Usuario sin propiedades"
+                                                  } 
+                                                />
+                                              </SelectTrigger>
+                                              <SelectContent>
+                                                {Array.isArray(row.owner?.properties) && row.owner.properties.length > 0 ? (
+                                                  row.owner.properties.map((p, pIdx) => (
+                                                    <SelectItem key={`${p.street}-${p.house}-${pIdx}`} value={`${p.street}-${p.house}`}>
+                                                      {`${p.street} - ${p.house}`}
+                                                    </SelectItem>
+                                                  ))
+                                                ) : (
+                                                  <SelectItem value="none" disabled>No hay propiedades disponibles</SelectItem>
                                                 )}
-                                                {beneficiaryRows.length > 1 && <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive" onClick={() => removeBeneficiaryRow(row.id)} disabled={loading}><Trash2 className="h-4 w-4"/></Button>}
-                                            </Card>
-                                        ))}
-                                        <Button type="button" variant="outline" size="sm" onClick={addBeneficiaryRow} disabled={loading}><UserPlus className="mr-2 h-4 w-4"/>Añadir Otro Beneficiario</Button>
-                                        <CardFooter className="p-4 bg-background/50 rounded-lg space-y-2 mt-4 flex-col items-stretch">
-                                            <div className="flex justify-between text-sm font-medium"><span>Monto Total del Pago:</span><span>Bs. {Number(totalAmount || 0).toFixed(2)}</span></div>
-                                            <div className="flex justify-between text-sm"><span>Total Asignado:</span><span>Bs. {assignedTotal.toFixed(2)}</span></div><hr className="my-1 border-border"/><div className={cn("flex justify-between text-base font-bold", balance !== 0 ? 'text-destructive' : 'text-green-600')}><span>Balance:</span><span>Bs. {balance.toFixed(2)}</span></div>
-                                        </CardFooter>
-                                    </div>
-                                </CardContent>
-                               </CollapsibleContent>
-                            </Card>
-                        </Collapsible>
-                    </CardContent>
+                                              </SelectContent>
+                                            </Select>
+                                          </div>
+                                        )}
+                                        {beneficiaryRows.length > 1 && <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive" onClick={() => removeBeneficiaryRow(row.id)} disabled={loading}><Trash2 className="h-4 w-4"/></Button>}
+                                    </Card>
+                                ))}
+                                <Button type="button" variant="outline" size="sm" onClick={addBeneficiaryRow} disabled={loading}><UserPlus className="mr-2 h-4 w-4"/>Añadir Otro Beneficiario</Button>
+                                <CardFooter className="p-4 bg-background/50 rounded-lg space-y-2 mt-4 flex-col items-stretch">
+                                    <div className="flex justify-between text-sm font-medium"><span>Monto Total del Pago:</span><span>Bs. {Number(totalAmount || 0).toFixed(2)}</span></div>
+                                    <div className="flex justify-between text-sm"><span>Total Asignado:</span><span>Bs. {assignedTotal.toFixed(2)}</span></div><hr className="my-1 border-border"/><div className={cn("flex justify-between text-base font-bold", balance !== 0 ? 'text-destructive' : 'text-green-600')}><span>Balance:</span><span>Bs. {balance.toFixed(2)}</span></div>
+                                </CardFooter>
+                            </div>
+                        </div>
+                    </div>
+                </CardContent>
 
                 <CardFooter className="bg-background/10 p-6 flex justify-end gap-4">
                     <Button type="button" variant="ghost" className="text-muted-foreground hover:text-white" onClick={resetForm} disabled={isSubmitting}>
@@ -516,176 +468,20 @@ function ReportPaymentComponent() {
     );
 }
 
-// --- COMPONENT: PAYMENT CALCULATOR ---
-
-function PaymentCalculatorComponent() {
-    const { user, ownerData, loading: authLoading } = useAuth();
-    const params = useParams();
-    const condoId = (params?.condoId as string) || "";
-    const [ownerDebts, setOwnerDebts] = useState<Debt[]>([]);
-    const [loadingDebts, setLoadingDebts] = useState(true);
-    const [activeRate, setActiveRate] = useState(0);
-    const [condoFee, setCondoFee] = useState(0);
-
-    useEffect(() => {
-        if (authLoading || !user || !ownerData || !condoId) {
-            if(!authLoading) setLoadingDebts(false);
-            return;
-        };
-
-        const settingsRef = doc(db, 'condominios', condoId, 'config', 'mainSettings');
-        const settingsUnsubscribe = onSnapshot(settingsRef, (settingsSnap) => {
-            if (settingsSnap.exists()) {
-                const settings = settingsSnap.data();
-                setCondoFee(settings.condoFee || 0);
-                const rates = settings.exchangeRates || [];
-                const activeRateObj = rates.find((r: any) => r.active);
-                if (activeRateObj) setActiveRate(activeRateObj.rate);
-                else if (rates.length > 0) {
-                    const sortedRates = [...rates].sort((a:any, b:any) => new Date(b.date).getTime() - new Date(a.date).getTime());
-                    setActiveRate(sortedRates[0].rate);
-                }
-            }
-        });
-        
-        const debtsQuery = query(collection(db, "condominios", condoId, "debts"), where("ownerId", "==", user.uid));
-        const debtsUnsubscribe = onSnapshot(debtsQuery, (snapshot) => {
-            const debtsData: Debt[] = [];
-            snapshot.forEach(d => debtsData.push({ id: d.id, ...d.data() } as Debt));
-            setOwnerDebts(debtsData.sort((a, b) => a.year - b.year || a.month - b.month));
-            setLoadingDebts(false);
-        });
-
-        return () => {
-            settingsUnsubscribe();
-            debtsUnsubscribe();
-        };
-
-    }, [user, ownerData, authLoading, condoId]);
-
-    if (authLoading || loadingDebts) {
-        return <div className="flex justify-center items-center h-64"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>;
-    }
-    
-    return <PaymentCalculatorUI owner={ownerData} debts={ownerDebts} activeRate={activeRate} condoFee={condoFee} />;
-}
-
-
-function PaymentCalculatorUI({ owner, debts, activeRate, condoFee }: { owner: any; debts: Debt[]; activeRate: number; condoFee: number }) {
-    const [selectedPendingDebts, setSelectedPendingDebts] = useState<string[]>([]);
-    const [selectedAdvanceMonths, setSelectedAdvanceMonths] = useState<string[]>([]);
-    const params = useParams();
-    const condoId = (params?.condoId as string) || "";
-    const now = new Date();
-    
-    const pendingDebts = useMemo(() => debts.filter(d => d.status === 'pending' || d.status === 'vencida').sort((a,b) => a.year - b.year || a.month - b.month), [debts]);
-    const futureMonths = useMemo(() => {
-        const paidAdvanceMonths = debts.filter(d => d.status === 'paid' && d.description.includes('Adelantado')).map(d => `${d.year}-${String(d.month).padStart(2, '0')}`);
-        return Array.from({ length: 12 }, (_, i) => {
-            const date = addMonths(now, i);
-            const value = format(date, 'yyyy-MM');
-            return { value, label: format(date, 'MMMM yyyy', { locale: es }), disabled: paidAdvanceMonths.includes(value) };
-        });
-    }, [debts, now]);
-
-    const paymentCalculator = useMemo(() => {
-        const dueMonthsTotalUSD = pendingDebts.filter(d => selectedPendingDebts.includes(d.id)).reduce((sum, debt) => sum + debt.amountUSD, 0);
-        const advanceMonthsTotalUSD = selectedAdvanceMonths.length * condoFee;
-        const totalDebtUSD = dueMonthsTotalUSD + advanceMonthsTotalUSD;
-        const totalDebtBs = totalDebtUSD * activeRate;
-        const totalToPay = Math.max(0, totalDebtBs - (owner.balance || 0));
-        return { totalToPay, hasSelection: selectedPendingDebts.length > 0 || selectedAdvanceMonths.length > 0, dueMonthsCount: selectedPendingDebts.length, advanceMonthsCount: selectedAdvanceMonths.length, totalDebtBs, balanceInFavor: owner.balance || 0, condoFee };
-    }, [selectedPendingDebts, selectedAdvanceMonths, pendingDebts, activeRate, condoFee, owner]);
-    
-    const formatCurrency = (num: number) => {
-        if (typeof num !== 'number' || isNaN(num)) return '0,00';
-        return num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    };
-
-    return (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-            <div className="lg:col-span-2 space-y-4">
-                <Card>
-                    <CardHeader><CardTitle>1. Deudas Pendientes</CardTitle></CardHeader>
-                    <CardContent className="p-0">
-                       <Table>
-                            <TableHeader><TableRow><TableHead className="w-[50px] text-center">Pagar</TableHead><TableHead>Período</TableHead><TableHead>Concepto</TableHead><TableHead>Estado</TableHead><TableHead className="text-right">Monto (Bs.)</TableHead></TableRow></TableHeader>
-                            <TableBody>
-                                {pendingDebts.length === 0 ? <TableRow><TableCell colSpan={5} className="h-24 text-center"><Info className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />No tiene deudas pendientes.</TableCell></TableRow> : 
-                                 pendingDebts.map((debt) => {
-                                    const debtMonthDate = startOfMonth(new Date(debt.year, debt.month - 1));
-                                    const isOverdue = isBefore(debtMonthDate, startOfMonth(now));
-                                    const status = debt.status === 'vencida' || (debt.status === 'pending' && isOverdue) ? 'Vencida' : 'Pendiente';
-                                    return <TableRow key={debt.id} data-state={selectedPendingDebts.includes(debt.id) ? 'selected' : ''}>
-                                            <TableCell className="text-center"><Checkbox onCheckedChange={() => setSelectedPendingDebts(p => p.includes(debt.id) ? p.filter(id=>id!==debt.id) : [...p, debt.id])} checked={selectedPendingDebts.includes(debt.id)} /></TableCell>
-                                            <TableCell className="font-medium">{monthsLocale[debt.month]} {debt.year}</TableCell>
-                                            <TableCell>{debt.description}</TableCell>
-                                            <TableCell><Badge variant={status === 'Vencida' ? 'destructive' : 'warning'}>{status}</Badge></TableCell>
-                                            <TableCell className="text-right">Bs. {formatCurrency(debt.amountUSD * activeRate)}</TableCell>
-                                        </TableRow>
-                                 })}
-                            </TableBody>
-                        </Table>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader><CardTitle>2. Pagar Meses por Adelantado</CardTitle><CardDescription>Cuota mensual actual: ${condoFee.toFixed(2)}</CardDescription></CardHeader>
-                    <CardContent><div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">{futureMonths.map(month => <Button key={month.value} type="button" variant={selectedAdvanceMonths.includes(month.value) ? 'default' : 'outline'} className="flex items-center justify-center gap-2 capitalize" onClick={() => setSelectedAdvanceMonths(p => p.includes(month.value) ? p.filter(m=>m!==month.value) : [...p, month.value])} disabled={month.disabled}>{selectedAdvanceMonths.includes(month.value) && <Check className="h-4 w-4" />} {month.label}</Button>)}</div></CardContent>
-                </Card>
-            </div>
-            <div className="lg:sticky lg:top-20">
-                 {paymentCalculator.hasSelection && <Card>
-                     <CardHeader><CardTitle className="flex items-center"><Calculator className="mr-2 h-5 w-5"/> 3. Resumen de Pago</CardTitle><CardDescription>Cálculo basado en su selección.</CardDescription></CardHeader>
-                    <CardContent className="space-y-3">
-                        {paymentCalculator.dueMonthsCount > 0 && <p className="text-sm text-muted-foreground">{paymentCalculator.dueMonthsCount} mes(es) adeudado(s) seleccionado(s).</p>}
-                        {paymentCalculator.advanceMonthsCount > 0 && <p className="text-sm text-muted-foreground">{paymentCalculator.advanceMonthsCount} mes(es) por adelanto seleccionado(s) x ${(paymentCalculator.condoFee ?? 0).toFixed(2)} c/u.</p>}
-                        <hr className="my-2"/><div className="flex justify-between items-center text-lg"><span className="text-muted-foreground">Sub-Total Deuda:</span><span className="font-medium">Bs. {formatCurrency(paymentCalculator.totalDebtBs)}</span></div>
-                        <div className="flex justify-between items-center text-md"><span className="text-muted-foreground flex items-center"><Minus className="mr-2 h-4 w-4"/> Saldo a Favor:</span><span className="font-medium text-green-500">Bs. {formatCurrency(paymentCalculator.balanceInFavor)}</span></div>
-                        <hr className="my-2"/><div className="flex justify-between items-center text-2xl font-bold"><span className="flex items-center"><Equal className="mr-2 h-5 w-5"/> TOTAL A PAGAR:</span><span className="text-primary">Bs. {formatCurrency(paymentCalculator.totalToPay)}</span></div>
-                    </CardContent>
-                    <CardFooter><Button className="w-full" asChild disabled={!paymentCalculator.hasSelection || paymentCalculator.totalToPay <= 0}><Link href={`/${condoId}/owner/payments?tab=report`}><Receipt className="mr-2 h-4 w-4"/>Proceder al Reporte de Pago</Link></Button></CardFooter>
-                </Card>}
-            </div>
-        </div>
-    );
-}
 
 function PaymentsPage() {
-    const searchParams = useSearchParams();
-    const router = useRouter();
-    const params = useParams();
-    const condoId = params?.condoId as string;
-    
-    const [activeTab, setActiveTab] = useState(searchParams?.get('tab') || 'report');
-    
-    const handleTabChange = (value: string) => {
-        setActiveTab(value);
-        router.push(`/${condoId}/owner/payments?tab=${value}`, { scroll: false });
-    };
-    
     return (
         <div className="space-y-6">
             <div className="mb-10">
                 <h2 className="text-4xl font-black text-foreground uppercase tracking-tighter italic drop-shadow-sm">
-                    Gestión de <span className="text-primary">Pagos</span>
+                    Reportar <span className="text-primary">Pago</span>
                 </h2>
                 <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
                 <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">
-                    Reporta tus pagos y calcula tus deudas pendientes.
+                    Completa el formulario para notificar tu pago a la administración.
                 </p>
             </div>
-            <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="report">Reportar Pago</TabsTrigger>
-                    <TabsTrigger value="calculator">Calculadora de Pagos</TabsTrigger>
-                </TabsList>
-                <TabsContent value="report" className="mt-6">
-                    <ReportPaymentComponent />
-                </TabsContent>
-                <TabsContent value="calculator" className="mt-6">
-                    <PaymentCalculatorComponent />
-                </TabsContent>
-            </Tabs>
+            <ReportPaymentComponent />
         </div>
     );
 }

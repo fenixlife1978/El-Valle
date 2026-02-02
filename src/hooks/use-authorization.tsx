@@ -1,5 +1,4 @@
-
-'use client';
+"use client";
 
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { doc, getDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
@@ -28,10 +27,7 @@ export function AuthorizationProvider({ children }: { children: ReactNode }) {
   const [isVerifying, setIsVerifying] = useState(false);
   const { toast } = useToast();
   
-  const { user, activeCondoId } = useAuth();
-  
-  // La fuente de verdad para el ID del condominio activo.
-  const workingCondoId = activeCondoId;
+  const { user, activeCondoId, workingCondoId } = useAuth();
 
   const requestAuthorization = useCallback((actionToExecute: () => Promise<void>) => {
     setAction(() => actionToExecute);
