@@ -29,7 +29,7 @@ export default function SyncPage() {
                 <p className="text-muted-foreground max-w-md font-bold">
                     Esta área contiene herramientas de sincronización global. Solo el Super Administrador tiene privilegios de ejecución aquí.
                 </p>
-                <Button variant="outline" className="border-border text-foreground" onClick={() => router.push('/admin/dashboard')}>
+                <Button variant="outline" className="border-border text-foreground" onClick={() => router.push('/welcome')}>
                     Volver al Panel Seguro
                 </Button>
             </div>
@@ -117,3 +117,4 @@ export default function SyncPage() {
         </div>
     );
 }
+

@@ -23,7 +23,7 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
       icon: Landmark, 
       label: "Pagos",
       items: [
-        { href: `/${condoId}/owner/payments?tab=report`, label: "Reportar Pago" },
+        { href: `/${condoId}/owner/payments`, label: "Reportar Pago" },
         { href: `/${condoId}/owner/payment-methods`, label: "Métodos de Pago" },
         { href: `/${condoId}/owner/payments/calculator`, label: "Calculadora de Pagos" },
       ]
@@ -49,7 +49,7 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
       label: 'Reportar', 
       isCentral: true,
       subMenu: [
-          { href: `/${condoId}/owner/payments?tab=report`, icon: Plus, label: "Reportar Pago" },
+          { href: `/${condoId}/owner/payments`, icon: Plus, label: "Reportar Pago" },
           { href: `/${condoId}/owner/payments/calculator`, icon: Calculator, label: "Calculadora" },
           { href: `/${condoId}/owner/certificates`, icon: Award, label: "Constancias" },
           { href: `/${condoId}/owner/surveys`, icon: ClipboardList, label: "Encuestas" },

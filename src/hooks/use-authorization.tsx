@@ -29,10 +29,26 @@ export function AuthorizationProvider({ children }: { children: ReactNode }) {
   
   const { user, activeCondoId, workingCondoId } = useAuth();
 
-  const requestAuthorization = useCallback((actionToExecute: () => Promise<void>) => {
+  const requestAuthorization = useCallback(async (actionToExecute: () => Promise<void>) => {
+    // SUPER ADMIN BYPASS: Si el email es el del super admin, ejecutar directamente.
+    if (user?.email === 'vallecondo@gmail.com') {
+      try {
+        await actionToExecute();
+      } catch (error: any) {
+        console.error("Error en acción de Super Admin:", error);
+        toast({
+          variant: "destructive",
+          title: "Error de Super Admin",
+          description: error.message || 'La operación protegida falló.'
+        });
+      }
+      return; // No solicitar PIN para super admin
+    }
+    
+    // Flujo normal para otros administradores
     setAction(() => actionToExecute);
     setIsModalOpen(true);
-  }, []);
+  }, [user, toast]);
 
   const handleClose = () => {
     setIsModalOpen(false);
