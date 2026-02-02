@@ -80,7 +80,7 @@ function LoginPage() {
 
             // 5. Redirección Total
             // Usamos window.location.href para forzar una recarga limpia y evitar estados de caché
-            const dest = role === 'admin' ? '/admin/dashboard' : '/owner/dashboard';
+            const dest = role === 'admin' ? `/${condoId}/admin/dashboard` : `/${condoId}/owner/dashboard`;
             window.location.href = dest;
 
         } catch (err: any) {

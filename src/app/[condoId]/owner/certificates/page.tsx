@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -132,7 +131,7 @@ export default function OwnerCertificatesPage() {
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>
-                        <Button onClick={() => router.push('/owner/dashboard')}>
+                        <Button onClick={() => router.push(`/${activeCondoId}/owner/dashboard`)}>
                             Volver al Inicio
                         </Button>
                     </DialogFooter>

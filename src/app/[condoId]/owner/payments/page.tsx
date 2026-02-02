@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
@@ -651,7 +652,16 @@ function PaymentCalculatorUI({ owner, debts, activeRate, condoFee }: { owner: an
 
 function PaymentsPage() {
     const searchParams = useSearchParams();
-    const defaultTab = searchParams?.get('tab') || 'report';
+    const router = useRouter();
+    const params = useParams();
+    const condoId = params?.condoId as string;
+    
+    const [activeTab, setActiveTab] = useState(searchParams?.get('tab') || 'report');
+    
+    const handleTabChange = (value: string) => {
+        setActiveTab(value);
+        router.push(`/${condoId}/owner/payments?tab=${value}`, { scroll: false });
+    };
     
     return (
         <div className="space-y-6">
@@ -664,7 +674,7 @@ function PaymentsPage() {
                     Reporta tus pagos y calcula tus deudas pendientes.
                 </p>
             </div>
-            <Tabs defaultValue={defaultTab} className="w-full">
+            <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
                 <TabsList className="grid w-full grid-cols-2">
                     <TabsTrigger value="report">Reportar Pago</TabsTrigger>
                     <TabsTrigger value="calculator">Calculadora de Pagos</TabsTrigger>

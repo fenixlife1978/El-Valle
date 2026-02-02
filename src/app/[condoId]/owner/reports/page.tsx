@@ -133,7 +133,7 @@ export default function OwnerHistoryPage() {
                                         </TableCell>
                                         <TableCell className="text-right">
                                             <Button variant="outline" size="sm" asChild>
-                                                <Link href={`/owner/report/${report.id}`}>Ver Reporte</Link>
+                                                <Link href={`/${activeCondoId}/owner/report/${report.id}`}>Ver Reporte</Link>
                                             </Button>
                                         </TableCell>
                                     </TableRow>

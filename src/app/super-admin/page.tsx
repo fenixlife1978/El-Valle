@@ -75,7 +75,7 @@ export default function SuperAdminPage() {
 
   const handleSupport = (id: string) => {
     localStorage.setItem('support_mode_id', id);
-    router.push('/admin/dashboard');
+    router.push(`/${id}/admin/dashboard`);
   };
   
   const handleLogout = async () => {

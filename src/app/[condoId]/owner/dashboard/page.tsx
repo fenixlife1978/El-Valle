@@ -1,4 +1,3 @@
-
 'use client';
 
 // ... (Tus mismos imports de UI y Lucide)
@@ -178,7 +177,7 @@ export default function OwnerDashboardPage() {
                     </CardContent>
                     <CardFooter className="pt-4 px-8 pb-8">
                         <Button asChild className="w-full h-14 rounded-2xl font-black uppercase tracking-widest shadow-lg transition-transform active:scale-95" disabled={stats.isSolvente}>
-                            <Link href="/owner/payments?tab=calculator">
+                            <Link href={`/${currentCondoId}/owner/payments?tab=calculator`}>
                                 Calcular y Reportar Pago
                             </Link>
                         </Button>
@@ -205,7 +204,7 @@ export default function OwnerDashboardPage() {
                         <CardTitle className="text-xl font-bold flex items-center gap-2">
                             <Receipt className="h-5 w-5 text-primary"/> Pagos Recientes
                         </CardTitle>
-                        <Link href="/owner/payments?tab=report">
+                        <Link href={`/${currentCondoId}/owner/payments?tab=report`}>
                             <Button variant="outline" className="font-black text-[10px] uppercase tracking-widest rounded-xl">Reportar Nuevo</Button>
                         </Link>
                     </div>

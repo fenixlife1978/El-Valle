@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -8,6 +9,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Building2, ArrowRight, Loader2, ShieldCheck, Plus } from 'lucide-react';
+import Link from 'next/link';
 
 export default function SuperAdminCondosPage() {
   const [condominios, setCondominios] = useState<any[]>([]);
@@ -29,17 +31,6 @@ export default function SuperAdminCondosPage() {
     });
     return () => unsub();
   }, []);
-
-  // FUNCIÓN FORZADA PARA EVITAR EL 404
-  const handleManage = (condoId: string) => {
-    if (!condoId) return;
-    const targetPath = `/${condoId}/admin/dashboard`;
-    
-    // Usamos window.location para forzar una carga limpia en el navegador
-    // Esto asegura que Next.js registre la ruta dinámica [condoId] correctamente
-    console.log("Navegando a ruta maestra:", targetPath);
-    window.location.href = targetPath;
-  };
 
   if (loading) {
     return (
@@ -63,9 +54,11 @@ export default function SuperAdminCondosPage() {
           </h1>
           <p className="text-muted-foreground font-bold uppercase text-xs tracking-widest mt-4">Gestión de Propiedades EFAS</p>
         </div>
-        <Button className="rounded-2xl font-black uppercase text-[10px] py-6 px-8 bg-amber-500 hover:bg-amber-600 text-white gap-2 shadow-lg shadow-amber-500/20">
-          <Plus className="h-4 w-4" /> Registrar Nuevo
-        </Button>
+        <Link href="/super-admin/condominios/nuevo">
+          <Button className="rounded-2xl font-black uppercase text-[10px] py-6 px-8 bg-amber-500 hover:bg-amber-600 text-white gap-2 shadow-lg shadow-amber-500/20">
+            <Plus className="h-4 w-4" /> Registrar Nuevo
+          </Button>
+        </Link>
       </div>
 
       <Card className="border-none shadow-2xl rounded-[2.5rem] overflow-hidden bg-card/40 backdrop-blur-xl border border-white/10">
@@ -102,7 +95,7 @@ export default function SuperAdminCondosPage() {
                   </TableCell>
                   <TableCell className="text-right pr-10">
                     <Button 
-                      onClick={() => handleManage(condo.id)}
+                      onClick={() => router.push(`/${condo.id}/admin/dashboard`)}
                       className="rounded-xl font-black uppercase text-[10px] py-6 px-6 gap-3 bg-foreground hover:bg-amber-500 text-background transition-all hover:scale-105"
                     >
                       Gestionar <ArrowRight className="h-4 w-4" />

@@ -34,11 +34,11 @@ export default function LandingPage() {
 
         <div className="flex items-center gap-8">
           <nav className="hidden md:flex items-center gap-6">
-            <Link href="/login" className="text-xs font-black text-slate-400 hover:text-[#F28705] transition-colors uppercase tracking-widest">
+            <Link href="/login?role=owner" className="text-xs font-black text-slate-400 hover:text-[#F28705] transition-colors uppercase tracking-widest">
               Propietarios
             </Link>
           </nav>
-          <Link href="/login">
+          <Link href="/login?role=admin">
             <Button className="bg-[#0070f3] hover:bg-[#005bb5] text-white rounded-full px-8 h-10 font-bold text-xs uppercase tracking-widest shadow-lg shadow-blue-600/20">
               Acceso Admin
             </Button>
@@ -77,12 +77,12 @@ export default function LandingPage() {
         </p>
 
         <div className="flex flex-col sm:flex-row gap-4">
-          <Link href="/login">
+          <Link href="/welcome">
             <Button size="lg" className="h-14 px-10 rounded-2xl bg-white text-black hover:bg-slate-200 font-black uppercase italic">
               Comenzar Ahora
             </Button>
           </Link>
-          <Link href="/login">
+          <Link href="/welcome">
             <Button size="lg" variant="outline" className="h-14 px-10 rounded-2xl border-white/10 bg-white/5 hover:bg-white/10 font-black uppercase italic text-white">
               Saber más <ArrowRight className="ml-2 h-5 w-5" />
             </Button>

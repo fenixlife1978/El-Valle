@@ -63,7 +63,7 @@ export default function Header() {
             // Caso Admin / Owner: Cierra la sesión de Firebase por completo
             try {
                 await signOut(auth);
-                router.push('/login');
+                router.push('/welcome');
             } catch (error) {
                 console.error("Error al cerrar sesión:", error);
             }

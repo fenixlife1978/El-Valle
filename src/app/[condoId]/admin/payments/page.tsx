@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useSearchParams, useRouter, useParams } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
 import { Input } from '@/components/ui/input';
@@ -892,7 +892,8 @@ function PaymentCalculatorComponent() {
 
         const debtsQuery = query(collection(db, "condominios", activeCondoId, "debts"), where("ownerId", "==", selectedOwner.id));
         const debtsUnsubscribe = onSnapshot(debtsQuery, (snapshot) => {
-            const debtsData: Debt[] = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Debt));
+            const debtsData: Debt[] = [];
+            snapshot.forEach(d => debtsData.push({ id: d.id, ...d.data() } as Debt));
             setOwnerDebts(debtsData.sort((a, b) => a.year - b.year || a.month - b.month));
             setLoadingDebts(false);
         });
@@ -1002,7 +1003,7 @@ function PaymentCalculatorUI({ owner, debts, activeRate, condoFee }: { owner: an
                                     const status = debt.status === 'vencida' || (debt.status === 'pending' && isOverdue) ? 'Vencida' : 'Pendiente';
                                     return <TableRow key={debt.id} data-state={selectedPendingDebts.includes(debt.id) ? 'selected' : ''}>
                                             <TableCell className="text-center"><Checkbox onCheckedChange={() => setSelectedPendingDebts(p => p.includes(debt.id) ? p.filter(id=>id!==debt.id) : [...p, debt.id])} checked={selectedPendingDebts.includes(debt.id)} /></TableCell>
-                                            <TableCell className="font-medium">{MONTHS_LOCALE[debt.month]} {debt.year}</TableCell>
+                                            <TableCell className="font-medium">{monthsLocale[debt.month]} {debt.year}</TableCell>
                                             <TableCell>{debt.description}</TableCell>
                                             <TableCell><Badge variant={status === 'Vencida' ? 'destructive' : 'warning'}>{status}</Badge></TableCell>
                                             <TableCell className="text-right">Bs. {formatCurrency(debt.amountUSD * activeRate)}</TableCell>
@@ -1044,12 +1045,14 @@ function PaymentCalculatorUI({ owner, debts, activeRate, condoFee }: { owner: an
 function PaymentsPage() {
     const searchParams = useSearchParams();
     const router = useRouter();
+    const params = useParams();
+    const condoId = params?.condoId;
 
-    const [activeTab, setActiveTab] = useState(searchParams?.get('tab') || 'report');
+    const [activeTab, setActiveTab] = useState(searchParams?.get('tab') || 'verify');
 
     const handleTabChange = (value: string) => {
         setActiveTab(value);
-        router.push(`/admin/payments?tab=${value}`, { scroll: false });
+        router.push(`/${condoId}/admin/payments?tab=${value}`, { scroll: false });
     };
 
     return (
