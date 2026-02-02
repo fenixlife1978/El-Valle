@@ -82,7 +82,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         ]
       },
       { href: `/${condoId}/admin/reports`, icon: FileSearch, label: 'Informes' },
-      { href: `/${condoId}/admin/people`, icon: Users, label: 'Personas' },
     ];
 
 

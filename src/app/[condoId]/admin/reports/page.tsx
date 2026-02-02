@@ -26,7 +26,7 @@ import { format, addMonths, startOfMonth, parse, getYear, getMonth, isBefore, is
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useAuth } from '@/hooks/use-auth';
@@ -342,7 +342,9 @@ export default function ReportsPage() {
     const { toast } = useToast();
     const { requestAuthorization } = useAuthorization();
     const router = useRouter();
-    const { activeCondoId, companyInfo: authCompanyInfo } = useAuth();
+    const params = useParams();
+    const activeCondoId = params?.condoId as string;
+    const { companyInfo: authCompanyInfo } = useAuth();
 
     const [loading, setLoading] = useState(true);
     const [generatingReport, setGeneratingReport] = useState(false);
@@ -735,6 +737,7 @@ export default function ReportsPage() {
 
             const reportRef = doc(collection(db, 'condominios', activeCondoId, 'integral_reports'));
             await setDoc(reportRef, {
+                condoId: activeCondoId,
                 createdAt: Timestamp.now(),
                 data: dataToSave,
                 filters: {
@@ -765,6 +768,7 @@ export default function ReportsPage() {
                     type: 'integral',
                     sourceId: report.id,
                     createdAt: Timestamp.now(),
+                    condoId: activeCondoId,
                 });
 
                 const ownersSnapshot = await getDocs(query(collection(db, 'condominios', activeCondoId, 'owners'), where('role', '==', 'propietario')));
@@ -776,7 +780,8 @@ export default function ReportsPage() {
                         body: 'El reporte integral de propietarios ya está disponible para su consulta.',
                         createdAt: Timestamp.now(),
                         read: false,
-                        href: `/${activeCondoId}/owner/reports`
+                        href: `/${activeCondoId}/owner/reports`,
+                        condoId: activeCondoId,
                     });
                 });
                 await batch.commit();
