@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -278,7 +279,7 @@ export default function SurveysPage() {
                             body: `Participa en la encuesta: "${title}"`,
                             createdAt: Timestamp.now(),
                             read: false,
-                            href: `/owner/surveys`
+                            href: `/${activeCondoId}/owner/surveys`
                         });
                     });
                     await batch.commit();

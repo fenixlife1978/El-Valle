@@ -14,8 +14,7 @@ import {
     serverTimestamp, 
     onSnapshot, 
     orderBy, 
-    deleteDoc, 
-    writeBatch 
+    deleteDoc
 } from 'firebase/firestore';
 import { 
     Download, 
@@ -23,16 +22,12 @@ import {
     RefreshCw, 
     Box, 
     Save, 
-    Eye, 
     MoreHorizontal, 
-    Trash2,
     Barcode as BarcodeIcon,
     ShieldCheck
 } from 'lucide-react';
-import { useAuth } from '@/hooks/use-auth';
 import { format, startOfMonth, endOfMonth, parse } from 'date-fns';
 import { es } from 'date-fns/locale';
-import Link from 'next/link';
 
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -58,12 +53,10 @@ import {
     DropdownMenu, 
     DropdownMenuContent, 
     DropdownMenuItem, 
-    DropdownMenuSeparator, 
     DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 
 // --- TIPOS ---
 interface PettyCashMovement {
@@ -90,11 +83,13 @@ const months = [
 
 const years = Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear() - i));
 
-export default function FinancialBalancePage() {
+export default function FinancialBalancePage({ params }: { params: { condoId: string } }) {
     const { toast } = useToast();
-    const { activeCondoId, loading: authLoading } = useAuth();
     const { requestAuthorization } = useAuthorization();
-    const currentCondoId = activeCondoId;
+    
+    // Nueva estructura: obtenemos el ID de los params
+    const workingCondoId = params.condoId;
+    const activeCondoId = params.condoId; // Para consistencia con tus reglas de búsqueda
 
     const [dataLoading, setDataLoading] = useState(true);
     const [syncing, setSyncing] = useState(false);
@@ -117,10 +112,11 @@ export default function FinancialBalancePage() {
     const [publishedReports, setPublishedReports] = useState<any[]>([]);
 
     const loadData = useCallback(async () => {
-        if (!currentCondoId) return;
+        if (!workingCondoId) return;
         setSyncing(true);
         try {
-            const configRef = doc(db, 'condominios', currentCondoId, 'config', 'mainSettings');
+            // Cargar configuración del condominio
+            const configRef = doc(db, 'condominios', workingCondoId, 'config', 'mainSettings');
             const configSnap = await getDoc(configRef);
             if (configSnap.exists()) {
                 const d = configSnap.data();
@@ -134,20 +130,48 @@ export default function FinancialBalancePage() {
             const fromDate = startOfMonth(new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1));
             const toDate = endOfMonth(fromDate);
             
-            const paymentsSnap = await getDocs(query(collection(db, 'condominios', currentCondoId, 'payments'), where('paymentDate', '>=', fromDate), where('paymentDate', '<=', toDate), where('status', '==', 'aprobado')));
+            // 1. Ingresos (Pagos aprobados)
+            const paymentsSnap = await getDocs(query(
+                collection(db, 'condominios', workingCondoId, 'payments'), 
+                where('paymentDate', '>=', fromDate), 
+                where('paymentDate', '<=', toDate), 
+                where('status', '==', 'aprobado')
+            ));
             const totalIngresos = paymentsSnap.docs.reduce((sum, doc) => sum + (doc.data().totalAmount || 0), 0);
             
-            const expensesSnap = await getDocs(query(collection(db, 'condominios', currentCondoId, 'gastos'), where('date', '>=', fromDate), where('date', '<=', toDate)));
-            const listaEgresos = expensesSnap.docs.map(d => ({ id: d.id, fecha: format(d.data().date.toDate(), 'dd/MM/yyyy'), descripcion: d.data().description, monto: d.data().amount, category: d.data().category || 'General' }));
+            // 2. Egresos (Gastos registrados)
+            const expensesSnap = await getDocs(query(
+                collection(db, 'condominios', workingCondoId, 'gastos'), 
+                where('date', '>=', fromDate), 
+                where('date', '<=', toDate)
+            ));
+            const listaEgresos = expensesSnap.docs.map(d => ({ 
+                id: d.id, 
+                fecha: format(d.data().date.toDate(), 'dd/MM/yyyy'), 
+                descripcion: d.data().description, 
+                monto: d.data().amount, 
+                category: d.data().category || 'General' 
+            }));
             const totalEgresos = listaEgresos.reduce((sum, item) => sum + item.monto, 0);
 
-            const prevPettySnap = await getDocs(query(collection(db, 'condominios', currentCondoId, 'cajaChica_movimientos'), where('date', '<', fromDate)));
+            // 3. Caja Chica (Usando las nuevas colecciones transactions_caja)
+            const prevPettySnap = await getDocs(query(
+                collection(db, 'transactions_caja'), 
+                where('condoId', '==', workingCondoId),
+                where('date', '<', fromDate)
+            ));
             const sInicialCC = prevPettySnap.docs.reduce((sum, doc) => {
                 const data = doc.data();
                 return sum + (data.type === 'ingreso' ? data.amount : -data.amount);
             }, 0);
 
-            const currentPettySnap = await getDocs(query(collection(db, 'condominios', currentCondoId, 'cajaChica_movimientos'), where('date', '>=', fromDate), where('date', '<=', toDate), orderBy('date', 'asc')));
+            const currentPettySnap = await getDocs(query(
+                collection(db, 'transactions_caja'), 
+                where('condoId', '==', workingCondoId),
+                where('date', '>=', fromDate), 
+                where('date', '<=', toDate), 
+                orderBy('date', 'asc')
+            ));
             const movsCC = currentPettySnap.docs.map(d => ({ id: d.id, ...d.data() })) as PettyCashMovement[];
             const reposCC = movsCC.filter(m => m.type === 'ingreso').reduce((sum, m) => sum + m.amount, 0);
             const gastosCC = movsCC.filter(m => m.type === 'egreso').reduce((sum, m) => sum + m.amount, 0);
@@ -160,35 +184,51 @@ export default function FinancialBalancePage() {
             
             const sBancos = estadoFinal.saldoAnterior + totalIngresos - totalEgresos;
             setEstadoFinal(prev => ({ ...prev, totalIngresos, totalEgresos, saldoBancos: sBancos, disponibilidadTotal: sBancos + sFinalCC }));
+            
         } catch (error) { 
-            toast({ variant: "destructive", title: "Error de sincronización" }); 
+            console.error("Error loadData:", error);
+            toast({ variant: "destructive", title: "Error al cargar datos" }); 
         } finally { 
             setSyncing(false); 
             setDataLoading(false); 
         }
-    }, [currentCondoId, selectedMonth, selectedYear, estadoFinal.saldoAnterior, toast]);
+    }, [workingCondoId, selectedMonth, selectedYear, estadoFinal.saldoAnterior, toast]);
 
     useEffect(() => {
-        if (!authLoading && currentCondoId) {
+        if (workingCondoId) {
             loadData();
-            const unsubHistorial = onSnapshot(query(collection(db, 'condominios', currentCondoId, 'financial_statements'), orderBy('createdAt', 'desc')), (snap) => setSavedStatements(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-            const unsubPublicados = onSnapshot(query(collection(db, 'condominios', currentCondoId, 'published_reports')), (snap) => setPublishedReports(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+            
+            // Suscripción a Balances Guardados
+            const unsubHistorial = onSnapshot(query(
+                collection(db, 'financial_statements'), 
+                where('condoId', '==', workingCondoId),
+                orderBy('createdAt', 'desc')
+            ), (snap) => {
+                setSavedStatements(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+            });
+
+            // Suscripción a Reportes Publicados
+            const unsubPublicados = onSnapshot(query(
+                collection(db, 'published_reports'),
+                where('condoId', '==', workingCondoId)
+            ), (snap) => {
+                setPublishedReports(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+            });
+
             return () => { unsubHistorial(); unsubPublicados(); };
         }
-    }, [authLoading, currentCondoId, loadData]);
+    }, [workingCondoId, loadData]);
 
     const generatePDF = (data: any) => {
         const docPDF = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
         const pageWidth = docPDF.internal.pageSize.getWidth();
         const margin = 15;
-        const primaryColor = [15, 23, 42]; // Slate 900
-        const accentColor = [245, 158, 11]; // Amber 500
+        const primaryColor = [15, 23, 42]; 
+        const accentColor = [245, 158, 11];
 
-        // Header Background
         docPDF.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
         docPDF.rect(0, 0, pageWidth, 40, 'F');
 
-        // Información del Condominio (Marca EFAS removida del header)
         docPDF.setTextColor(255, 255, 255);
         docPDF.setFontSize(14);
         docPDF.setFont('helvetica', 'bold');
@@ -198,7 +238,6 @@ export default function FinancialBalancePage() {
         docPDF.text(`RIF: ${companyInfo.rif}`, margin, 26);
         docPDF.text(companyInfo.address.substring(0, 80) || "Administración General", margin, 31);
 
-        // Rectángulo Naranja (Período)
         const periodLabel = `${months.find(m => m.value === (data.month || selectedMonth))?.label.toUpperCase()} ${data.year || selectedYear}`;
         docPDF.setFillColor(accentColor[0], accentColor[1], accentColor[2]);
         docPDF.roundedRect(pageWidth - 65, 12, 50, 10, 1, 1, 'F');
@@ -206,7 +245,6 @@ export default function FinancialBalancePage() {
         docPDF.setFont('helvetica', 'bold');
         docPDF.text(periodLabel, pageWidth - 40, 18.5, { align: 'center' });
 
-        // Título Principal + Código de Barras
         docPDF.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
         docPDF.setFontSize(16);
         docPDF.text("ESTADO DE RESULTADOS MENSUAL", margin, 55);
@@ -221,7 +259,6 @@ export default function FinancialBalancePage() {
         docPDF.setLineWidth(1);
         docPDF.line(margin, 58, 30, 58);
 
-        // Tabla Ingresos
         autoTable(docPDF, {
             startY: 65,
             head: [['CONCEPTOS DE INGRESOS', 'CATEGORÍA', 'MONTO Bs.']],
@@ -231,7 +268,6 @@ export default function FinancialBalancePage() {
             columnStyles: { 2: { halign: 'right', fontStyle: 'bold' } }
         });
 
-        // Tabla Egresos
         autoTable(docPDF, {
             startY: (docPDF as any).lastAutoTable.finalY + 8,
             head: [['DETALLES DE GASTOS Y EGRESOS', 'FECHA', 'MONTO Bs.']],
@@ -241,11 +277,9 @@ export default function FinancialBalancePage() {
             columnStyles: { 2: { halign: 'right', fontStyle: 'bold' } }
         });
 
-        // --- SECCIÓN RESUMEN FINAL EN DOS COLUMNAS ---
         const fY = (docPDF as any).lastAutoTable.finalY + 10;
         const colWidth = (pageWidth - (margin * 2) - 5) / 2;
 
-        // Columna Izquierda: Caja Chica
         docPDF.setDrawColor(220, 220, 220);
         docPDF.setLineWidth(0.2);
         docPDF.roundedRect(margin, fY, colWidth, 22, 1, 1, 'S');
@@ -263,7 +297,6 @@ export default function FinancialBalancePage() {
         docPDF.setFont('helvetica', 'bold');
         docPDF.text(`DISPONIBILIDAD CAJA: Bs. ${formatCurrency(data.cajaChica?.saldoFinal || 0)}`, margin + 4, fY + 19);
 
-        // Columna Derecha: Disponibilidad Total
         docPDF.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
         docPDF.roundedRect(margin + colWidth + 5, fY, colWidth, 22, 1, 1, 'F');
         docPDF.setTextColor(255, 255, 255);
@@ -272,7 +305,6 @@ export default function FinancialBalancePage() {
         docPDF.setFontSize(13);
         docPDF.text(`Bs. ${formatCurrency(data.disponibilidad)}`, margin + colWidth + 9, fY + 17);
 
-        // Footer (EFAS se mantiene solo aquí)
         docPDF.setFontSize(7);
         docPDF.setTextColor(150);
         docPDF.text(`Documento contable generado por sistema EFAS CondoSys - ${new Date().toLocaleString()}`, margin, 285);
@@ -280,7 +312,7 @@ export default function FinancialBalancePage() {
         docPDF.save(`Balance_${periodLabel.replace(' ', '_')}.pdf`);
     };
 
-    if (authLoading || dataLoading) return <div className="h-screen flex flex-col items-center justify-center space-y-4"><Loader2 className="h-12 w-12 animate-spin text-primary" /><p className="font-black uppercase text-xs">Cargando EFAS...</p></div>;
+    if (dataLoading) return <div className="h-screen flex flex-col items-center justify-center space-y-4"><Loader2 className="h-12 w-12 animate-spin text-primary" /><p className="font-black uppercase text-xs">Cargando EFAS...</p></div>;
 
     return (
         <div className="max-w-7xl mx-auto space-y-8 pb-24 px-4">
@@ -288,7 +320,7 @@ export default function FinancialBalancePage() {
                 <div className="space-y-2">
                     <h2 className="text-4xl font-black text-foreground uppercase tracking-tighter italic">Balance <span className="text-primary">Financiero</span></h2>
                     <div className="h-1.5 w-32 bg-amber-500 rounded-full"></div>
-                    <p className="text-muted-foreground font-black uppercase text-[10px] flex items-center gap-1"><ShieldCheck className="h-3 w-3" /> EFAS CondoSys - Autenticado</p>
+                    <p className="text-muted-foreground font-black uppercase text-[10px] flex items-center gap-1"><ShieldCheck className="h-3 w-3" /> EFAS CondoSys - {workingCondoId}</p>
                 </div>
                 <div className="flex gap-3">
                     <Button variant="outline" onClick={loadData} className="rounded-2xl border-2 h-12 font-bold"><RefreshCw className={`mr-2 h-4 w-4 ${syncing && 'animate-spin'}`} /> Sincronizar</Button>
@@ -344,44 +376,55 @@ export default function FinancialBalancePage() {
                     <div className="p-5 text-center bg-slate-100/50"><p className="text-[10px] font-bold text-primary uppercase">Cierre</p><p className="font-black text-primary text-lg">{formatCurrency(cajaChica.saldoFinal)}</p></div>
                 </div>
                 <Table>
-                    <TableHeader className="bg-slate-50"><TableRow><TableHead className="text-[10px] uppercase font-black text-slate-800">Fecha</TableHead><TableHead className="text-[10px] uppercase font-black text-slate-800">Descripción del Movimiento</TableHead><TableHead className="text-right text-[10px] uppercase font-black text-slate-800">Monto</TableHead></TableRow></TableHeader>
+                    <TableHeader className="bg-slate-50"><TableRow><TableHead className="text-[10px] uppercase font-black text-slate-800">Fecha</TableHead><TableHead className="text-[10px] uppercase font-black text-slate-800">Descripción</TableHead><TableHead className="text-right text-[10px] uppercase font-black text-slate-800">Monto</TableHead></TableRow></TableHeader>
                     <TableBody>{cajaChicaMovs.map((m) => (<TableRow key={m.id} className="h-10 text-[11px] border-b hover:bg-slate-50 transition-colors"><TableCell className="font-bold text-slate-600 p-4">{format(m.date.toDate(), 'dd/MM')}</TableCell><TableCell className="uppercase text-slate-700 font-semibold p-4">{m.description}</TableCell><TableCell className={`text-right font-black p-4 ${m.type === 'ingreso' ? 'text-emerald-600' : 'text-rose-600'}`}>{m.type === 'ingreso' ? '+' : '-'}{formatCurrency(m.amount)}</TableCell></TableRow>))}</TableBody>
                 </Table>
             </Card>
 
             <Card className="rounded-[3rem] p-8 border-2 shadow-2xl bg-white">
                 <div className="space-y-4">
-                    <Label className="text-xs font-black uppercase text-slate-500 ml-1">Observaciones del Administrador</Label>
-                    <Textarea placeholder="Notas que se incluirán al final del reporte PDF..." className="rounded-2xl min-h-[100px] border-2 bg-slate-50/30" value={notas} onChange={e => setNotas(e.target.value)} />
+                    <Label className="text-xs font-black uppercase text-slate-500 ml-1">Observaciones</Label>
+                    <Textarea placeholder="Notas para el PDF..." className="rounded-2xl min-h-[100px] border-2 bg-slate-50/30" value={notas} onChange={e => setNotas(e.target.value)} />
                     <div className="flex justify-end"><Button className="rounded-full h-12 px-10 font-black uppercase italic shadow-xl bg-slate-900" onClick={async () => {
-                        if (!currentCondoId) return;
+                        if (!workingCondoId) return;
                         const pId = `${selectedYear}-${selectedMonth.padStart(2, '0')}`;
-                        await setDoc(doc(db, 'condominios', currentCondoId, 'financial_statements', pId), { id: pId, ingresos: ingresos.map(i => ({...i, monto: i.real})), egresos, cajaChica, estadoFinanciero: estadoFinal, notas, createdAt: serverTimestamp() });
+                        await setDoc(doc(db, 'financial_statements', pId), { 
+                            id: pId, 
+                            condoId: workingCondoId, 
+                            activeCondoId: activeCondoId,
+                            ingresos: ingresos.map(i => ({...i, monto: i.real})), 
+                            egresos, 
+                            cajaChica, 
+                            estadoFinanciero: estadoFinal, 
+                            notas, 
+                            createdAt: serverTimestamp() 
+                        });
                         toast({ title: "BALANCE GUARDADO" });
                     }}><Save className="mr-2 h-5 w-5" /> Guardar Período</Button></div>
                 </div>
             </Card>
 
             <Card className="rounded-[3rem] border-2 shadow-2xl overflow-hidden bg-white">
-                <div className="p-8 bg-slate-900 text-white flex justify-between items-center"><CardTitle className="text-xl font-black uppercase italic">Historial de Balances</CardTitle><Badge className="bg-amber-500 font-black text-slate-900">{savedStatements.length} REGISTROS</Badge></div>
-                <Table><TableHeader className="bg-slate-50 h-14"><TableRow><TableHead className="font-black text-[10px] pl-8 uppercase text-slate-700">Período</TableHead><TableHead className="font-black text-[10px] uppercase text-slate-700">Total Bancos</TableHead><TableHead className="font-black text-[10px] uppercase text-slate-700">Visibilidad</TableHead><TableHead className="text-right font-black text-[10px] pr-8 uppercase text-slate-700">Acciones</TableHead></TableRow></TableHeader>
+                <div className="p-8 bg-slate-900 text-white flex justify-between items-center"><CardTitle className="text-xl font-black uppercase italic">Historial</CardTitle><Badge className="bg-amber-500 font-black text-slate-900">{savedStatements.length} REGISTROS</Badge></div>
+                <Table><TableHeader className="bg-slate-50 h-14"><TableRow><TableHead className="font-black text-[10px] pl-8 uppercase text-slate-700">Período</TableHead><TableHead className="font-black text-[10px] uppercase text-slate-700">Total</TableHead><TableHead className="font-black text-[10px] uppercase text-slate-700">Visibilidad</TableHead><TableHead className="text-right font-black text-[10px] pr-8 uppercase text-slate-700">Acciones</TableHead></TableRow></TableHeader>
                     <TableBody>{savedStatements.map((s) => {
-                        const isPub = publishedReports.some(p => p.id === `balance-${s.id}`);
+                        const isPub = publishedReports.some(p => p.sourceId === s.id);
                         return (<TableRow key={s.id} className="h-20 hover:bg-slate-50"><TableCell className="pl-8 font-black uppercase text-sm italic text-primary">{format(parse(s.id, 'yyyy-MM', new Date()), 'MMMM yyyy', { locale: es })}</TableCell><TableCell className="font-black text-slate-700">{formatCurrency(s.estadoFinanciero?.disponibilidadTotal)} Bs.</TableCell>
                             <TableCell><div className="flex items-center gap-2"><Switch checked={isPub} onCheckedChange={() => {
                                 requestAuthorization(async () => {
-                                    const rRef = doc(db, 'condominios', currentCondoId!, 'published_reports', `balance-${s.id}`);
-                                    if(isPub) await deleteDoc(rRef); else await setDoc(rRef, { type: 'balance', sourceId: s.id, createdAt: serverTimestamp() });
+                                    const rRef = doc(db, 'published_reports', `balance-${s.id}-${workingCondoId}`);
+                                    if(isPub) await deleteDoc(rRef); 
+                                    else await setDoc(rRef, { type: 'balance', sourceId: s.id, condoId: workingCondoId, activeCondoId, createdAt: serverTimestamp() });
                                     toast({ title: isPub ? "DESPUBLICADO" : "PUBLICADO" });
                                 });
                             }} /><span className="text-[9px] font-black uppercase text-slate-500">{isPub ? 'Público' : 'Privado'}</span></div></TableCell>
                             <TableCell className="text-right pr-8"><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" className="rounded-full h-10 w-10 border-2 border-slate-200"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                                 <DropdownMenuContent align="end" className="rounded-xl border-2 w-52"><DropdownMenuItem className="font-bold text-xs" onClick={() => generatePDF({...s, disponibilidad: s.estadoFinanciero?.disponibilidadTotal, month: s.id.split('-')[1], year: s.id.split('-')[0]})}>DESCARGAR PDF</DropdownMenuItem><DropdownMenuItem className="text-rose-600 font-bold text-xs" onClick={async () => {
                                     requestAuthorization(async () => {
-                                        await deleteDoc(doc(db, 'condominios', currentCondoId!, 'financial_statements', s.id));
+                                        await deleteDoc(doc(db, 'financial_statements', s.id));
                                         toast({ title: "BALANCE ELIMINADO" });
                                     });
-                                }}>ELIMINAR DEFINITIVAMENTE</DropdownMenuItem></DropdownMenuContent></DropdownMenu></TableCell></TableRow>);
+                                }}>ELIMINAR</DropdownMenuItem></DropdownMenuContent></DropdownMenu></TableCell></TableRow>);
                     })}</TableBody>
                 </Table>
             </Card>

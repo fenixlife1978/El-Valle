@@ -67,13 +67,10 @@ const formatCurrency = (num: number) => num.toLocaleString('es-VE', { minimumFra
 
 
 // --- VERIFICATION COMPONENT ---
-function VerificationComponent() {
+function VerificationComponent({ condoId }: { condoId: string }) {
     const { user, companyInfo } = useAuth();
     const { requestAuthorization } = useAuthorization();
     const { toast } = useToast();
-    const sId = typeof window !== 'undefined' ? localStorage.getItem('support_mode_id') : null;
-    const { activeCondoId } = useAuth();
-    const workingCondoId = (sId && user?.email === 'vallecondo@gmail.com') ? sId : activeCondoId;
 
     const [payments, setPayments] = useState<Payment[]>([]);
     const [loading, setLoading] = useState(true);
@@ -89,8 +86,8 @@ function VerificationComponent() {
     const [liquidatedDetails, setLiquidatedDetails] = useState<{ debts: Debt[], balanceCredit: number } | null>(null);
 
     useEffect(() => {
-        if (!workingCondoId) { setLoading(false); return; }
-        const q = query(collection(db, 'condominios', workingCondoId, 'payments'), orderBy('reportedAt', 'desc'));
+        if (!condoId) { setLoading(false); return; }
+        const q = query(collection(db, 'condominios', condoId, 'payments'), orderBy('reportedAt', 'desc'));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             setPayments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Payment)));
             setLoading(false);
@@ -99,10 +96,10 @@ function VerificationComponent() {
             setLoading(false);
         });
         return () => unsubscribe();
-    }, [workingCondoId, toast]);
+    }, [condoId, toast]);
 
     useEffect(() => {
-        if (!selectedPayment || !workingCondoId || selectedPayment.status !== 'aprobado') {
+        if (!selectedPayment || !condoId || selectedPayment.status !== 'aprobado') {
             setLiquidatedDetails(null);
             return;
         }
@@ -111,7 +108,7 @@ function VerificationComponent() {
             setLoadingDetails(true);
             try {
                 const debtsQuery = query(
-                    collection(db, 'condominios', workingCondoId, 'debts'),
+                    collection(db, 'condominios', condoId, 'debts'),
                     where('paymentId', '==', selectedPayment.id)
                 );
                 const debtsSnapshot = await getDocs(debtsQuery);
@@ -139,7 +136,7 @@ function VerificationComponent() {
     
         fetchLiquidationDetails();
     
-    }, [selectedPayment, workingCondoId, toast]);
+    }, [selectedPayment, condoId, toast]);
 
     const filteredPayments = useMemo(() => {
         return payments.filter(p => {
@@ -158,14 +155,14 @@ function VerificationComponent() {
 
     const handleApprove = (payment: Payment) => {
         requestAuthorization(async () => {
-            if (!workingCondoId) return;
+            if (!condoId) return;
             setIsVerifying(true);
             try {
                 await runTransaction(db, async (transaction) => {
-                    const paymentRef = doc(db, 'condominios', workingCondoId, 'payments', payment.id);
+                    const paymentRef = doc(db, 'condominios', condoId, 'payments', payment.id);
                     const receiptNumbers: { [ownerId: string]: string } = {};
 
-                    const settingsRef = doc(db, 'condominios', workingCondoId, 'config', 'mainSettings');
+                    const settingsRef = doc(db, 'condominios', condoId, 'config', 'mainSettings');
                     const settingsDoc = await getDoc(settingsRef);
                     if (!settingsDoc.exists() || !settingsDoc.data().condoFee) {
                         throw new Error("No se encontró la cuota de condominio (condoFee) en la configuración.");
@@ -174,14 +171,14 @@ function VerificationComponent() {
                     const costoCuotaActualBs = condoFeeUSD * payment.exchangeRate;
 
                     for (const beneficiary of payment.beneficiaries) {
-                        const ownerRef = doc(db, 'condominios', workingCondoId, 'owners', beneficiary.ownerId);
+                        const ownerRef = doc(db, 'condominios', condoId, 'owners', beneficiary.ownerId);
                         const ownerDoc = await transaction.get(ownerRef);
                         if (!ownerDoc.exists()) throw new Error(`El propietario ${beneficiary.ownerName} no fue encontrado.`);
 
                         const saldoAFavorPrevio = ownerDoc.data().balance || 0;
                         const montoRecibido = beneficiary.amount;
 
-                        const allOwnerDebtsQuery = query(collection(db, 'condominios', workingCondoId, 'debts'), where('ownerId', '==', beneficiary.ownerId));
+                        const allOwnerDebtsQuery = query(collection(db, 'condominios', condoId, 'debts'), where('ownerId', '==', beneficiary.ownerId));
                         const allOwnerDebtsSnapshot = await getDocs(allOwnerDebtsQuery);
                         const allOwnerDebts = allOwnerDebtsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Debt));
 
@@ -201,7 +198,7 @@ function VerificationComponent() {
 
                         // 1. Update liquidated pending debts
                         for (const liquidada of liquidationResult.cuotasLiquidadas) {
-                            const debtRef = doc(db, 'condominios', workingCondoId, 'debts', liquidada.id);
+                            const debtRef = doc(db, 'condominios', condoId, 'debts', liquidada.id);
                             transaction.update(debtRef, {
                                 status: 'paid',
                                 paymentId: payment.id,
@@ -233,7 +230,7 @@ function VerificationComponent() {
                                 const futureYear = nextPeriodDate.getFullYear();
                                 const futureMonth = nextPeriodDate.getMonth() + 1;
                                 
-                                const debtRef = doc(collection(db, "condominios", workingCondoId, "debts"));
+                                const debtRef = doc(collection(db, "condominios", condoId, "debts"));
                                 transaction.set(debtRef, {
                                     ownerId: beneficiary.ownerId,
                                     property: ownerDoc.data().properties?.[0] || {},
@@ -274,10 +271,10 @@ function VerificationComponent() {
     const handleReject = (payment: Payment) => {
         if (!rejectionReason) { toast({ variant: 'destructive', title: 'Razón requerida' }); return; }
         requestAuthorization(async () => {
-            if (!workingCondoId) return;
+            if (!condoId) return;
             setIsVerifying(true);
             try {
-                await updateDoc(doc(db, 'condominios', workingCondoId, 'payments', payment.id), { status: 'rechazado', observations: rejectionReason });
+                await updateDoc(doc(db, 'condominios', condoId, 'payments', payment.id), { status: 'rechazado', observations: rejectionReason });
                 toast({ title: 'Pago Rechazado' });
                 setSelectedPayment(null);
                 setRejectionReason('');
@@ -290,13 +287,13 @@ function VerificationComponent() {
     };
 
     const handleDeletePayment = async () => {
-        if (!paymentToDelete || !workingCondoId) return;
+        if (!paymentToDelete || !condoId) return;
         requestAuthorization(async () => {
             setIsVerifying(true);
             try {
                 await runTransaction(db, async (transaction) => {
-                    const paymentRef = doc(db, 'condominios', workingCondoId, 'payments', paymentToDelete.id);
-                    const paidDebtsSnapshot = await getDocs(query(collection(db, 'condominios', workingCondoId, 'debts'), where('paymentId', '==', paymentToDelete.id)));
+                    const paymentRef = doc(db, 'condominios', condoId, 'payments', paymentToDelete.id);
+                    const paidDebtsSnapshot = await getDocs(query(collection(db, 'condominios', condoId, 'debts'), where('paymentId', '==', paymentToDelete.id)));
                     let totalRefundToBalance = paymentToDelete.totalAmount;
 
                     for (const debtDoc of paidDebtsSnapshot.docs) {
@@ -307,7 +304,7 @@ function VerificationComponent() {
 
                     if (totalRefundToBalance > 0.01) {
                          for (const beneficiary of paymentToDelete.beneficiaries) {
-                            const ownerRef = doc(db, 'condominios', workingCondoId, 'owners', beneficiary.ownerId);
+                            const ownerRef = doc(db, 'condominios', condoId, 'owners', beneficiary.ownerId);
                             const ownerDoc = await transaction.get(ownerRef);
                             if (ownerDoc.exists()) {
                                 const currentBalance = ownerDoc.data().balance || 0;
@@ -401,14 +398,14 @@ function VerificationComponent() {
     };
     
     const prepareAndGenerateReceipt = async (action: 'download' | 'share', payment: Payment, beneficiary: any) => {
-        if (!beneficiary || !beneficiary.ownerId || !companyInfo || !workingCondoId) {
+        if (!beneficiary || !beneficiary.ownerId || !companyInfo || !condoId) {
             toast({ variant: "destructive", title: "Error", description: "Datos insuficientes para generar el recibo." });
             return;
         }
         
         setIsGenerating(true);
         try {
-            const ownerRef = doc(db, 'condominios', workingCondoId, 'owners', beneficiary.ownerId);
+            const ownerRef = doc(db, 'condominios', condoId, 'owners', beneficiary.ownerId);
             const ownerSnap = await getDoc(ownerRef);
             if (!ownerSnap.exists()) {
                 throw new Error('Owner profile not found.');
@@ -416,7 +413,7 @@ function VerificationComponent() {
             const ownerData = ownerSnap.data();
     
             const paidDebtsSnapshot = await getDocs(
-                query(collection(db, 'condominios', workingCondoId, 'debts'), where('paymentId', '==', payment.id), where('ownerId', '==', beneficiary.ownerId))
+                query(collection(db, 'condominios', condoId, 'debts'), where('paymentId', '==', payment.id), where('ownerId', '==', beneficiary.ownerId))
             );
             const paidDebts = paidDebtsSnapshot.docs.map(d => d.data() as Debt);
             
@@ -618,9 +615,9 @@ function VerificationComponent() {
 }
 
 // --- COMPONENT: REPORT PAYMENT COMPONENT (for Admin) ---
-function ReportPaymentComponent() {
+function ReportPaymentComponent({ condoId }: { condoId: string }) {
     const { toast } = useToast();
-    const { user: authUser, activeCondoId } = useAuth();
+    const { user: authUser } = useAuth();
     const [allOwners, setAllOwners] = useState<Owner[]>([]);
     const [loading, setLoading] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -639,20 +636,20 @@ function ReportPaymentComponent() {
     const [isBankModalOpen, setIsBankModalOpen] = useState(false);
 
     useEffect(() => {
-        if (!activeCondoId) return;
-        const q = query(collection(db, "condominios", activeCondoId, "owners"), where("role", "==", "propietario"));
+        if (!condoId) return;
+        const q = query(collection(db, "condominios", condoId, "owners"), where("role", "==", "propietario"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const ownersData: Owner[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner));
             setAllOwners(ownersData.sort((a, b) => (a.name || '').localeCompare(b.name || '')));
         });
         return () => unsubscribe();
-    }, [activeCondoId]);
+    }, [condoId]);
     
     useEffect(() => {
-        if (!activeCondoId) return;
+        if (!condoId) return;
         const fetchRate = async () => {
              try {
-                const settingsRef = doc(db, 'condominios', activeCondoId, 'config', 'mainSettings');
+                const settingsRef = doc(db, 'condominios', condoId, 'config', 'mainSettings');
                 const docSnap = await getDoc(settingsRef);
                 if (docSnap.exists()) {
                     const settings = docSnap.data();
@@ -681,7 +678,7 @@ function ReportPaymentComponent() {
             }
         }
         fetchRate();
-    }, [paymentDate, activeCondoId]);
+    }, [paymentDate, condoId]);
 
     useEffect(() => {
         const bs = parseFloat(totalAmount);
@@ -728,9 +725,9 @@ function ReportPaymentComponent() {
         if (!paymentDate || !exchangeRate || !paymentMethod || !bank || !totalAmount || Number(totalAmount) <= 0 || reference.length < 4) return { isValid: false, error: 'Complete todos los campos de la transacción (referencia min. 4 dígitos).' };
         if (beneficiaryRows.some(row => !row.owner || !row.amount || Number(row.amount) <= 0 || !row.selectedProperty)) return { isValid: false, error: 'Complete la información para cada beneficiario.' };
         if (Math.abs(balance) > 0.01) return { isValid: false, error: 'El monto total no coincide con la suma de los montos asignados.' };
-        if (!activeCondoId) return { isValid: false, error: "No se encontró un condominio activo." };
+        if (!condoId) return { isValid: false, error: "No se encontró un condominio activo." };
         try {
-            const q = query(collection(db, "condominios", activeCondoId, "payments"), where("reference", "==", reference), where("totalAmount", "==", Number(totalAmount)), where("paymentDate", "==", Timestamp.fromDate(paymentDate)));
+            const q = query(collection(db, "condominios", condoId, "payments"), where("reference", "==", reference), where("totalAmount", "==", Number(totalAmount)), where("paymentDate", "==", Timestamp.fromDate(paymentDate)));
             if (!(await getDocs(q)).empty) return { isValid: false, error: 'Ya existe un reporte con esta misma referencia, monto y fecha.' };
         } catch (dbError) { return { isValid: false, error: "No se pudo verificar si el pago ya existe." }; }
         return { isValid: true };
@@ -747,7 +744,7 @@ function ReportPaymentComponent() {
             return;
         }
 
-        if (!authUser || !activeCondoId) {
+        if (!authUser || !condoId) {
             toast({ variant: 'destructive', title: 'Error de Autenticación'});
             setIsSubmitting(false);
             return;
@@ -757,17 +754,17 @@ function ReportPaymentComponent() {
             const beneficiaries = beneficiaryRows.map(row => ({ ownerId: row.owner!.id, ownerName: row.owner!.name, ...(row.selectedProperty && { street: row.selectedProperty.street, house: row.selectedProperty.house }), amount: Number(row.amount) }));
             const paymentData = { reportedBy: authUser.uid, beneficiaries, beneficiaryIds: beneficiaries.map(b=>b.ownerId), totalAmount: Number(totalAmount), exchangeRate, paymentDate: Timestamp.fromDate(paymentDate!), paymentMethod, bank: bank === 'Otro' ? otherBank : bank, reference, receiptUrl: receiptImage, status: 'pendiente', reportedAt: serverTimestamp() };
             
-            await addDoc(collection(db, "condominios", activeCondoId, "payments"), paymentData);
+            await addDoc(collection(db, "condominios", condoId, "payments"), paymentData);
 
             const batch = writeBatch(db);
             beneficiaries.forEach(beneficiary => {
-                const notificationsRef = doc(collection(db, `condominios/${activeCondoId}/owners/${beneficiary.ownerId}/notifications`));
+                const notificationsRef = doc(collection(db, `condominios/${condoId}/owners/${beneficiary.ownerId}/notifications`));
                 batch.set(notificationsRef, {
                     title: "Pago Registrado por Administración",
                     body: `La administración ha registrado un pago a su favor por Bs. ${beneficiary.amount.toFixed(2)}. Será verificado y aplicado pronto.`,
                     createdAt: serverTimestamp(),
                     read: false,
-                    href: `/owner/dashboard`
+                    href: `/${condoId}/owner/dashboard`
                 });
             });
             await batch.commit();
@@ -842,10 +839,10 @@ function ReportPaymentComponent() {
 
 // --- COMPONENT: PAYMENT CALCULATOR (ADMIN) ---
 
-function PaymentCalculatorComponent() {
+function PaymentCalculatorComponent({ condoId }: { condoId: string }) {
     const { toast } = useToast();
     const router = useRouter();
-    const { user: authUser, ownerData: authOwnerData, activeCondoId } = useAuth();
+    const { user: authUser, ownerData: authOwnerData } = useAuth();
     const [allOwners, setAllOwners] = useState<Owner[]>([]);
     const [loadingOwners, setLoadingOwners] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -856,26 +853,26 @@ function PaymentCalculatorComponent() {
     const [condoFee, setCondoFee] = useState(0);
 
     useEffect(() => {
-        if (!activeCondoId) {
+        if (!condoId) {
             setLoadingOwners(false);
             return;
         }
-        const q = query(collection(db, "condominios", activeCondoId, "owners"), where("role", "==", "propietario"));
+        const q = query(collection(db, "condominios", condoId, "owners"), where("role", "==", "propietario"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const ownersData: Owner[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner));
             setAllOwners(ownersData.sort((a, b) => (a.name || '').localeCompare(b.name || '')));
             setLoadingOwners(false);
         });
         return () => unsubscribe();
-    }, [activeCondoId]);
+    }, [condoId]);
 
     useEffect(() => {
-        if (!selectedOwner || !activeCondoId) {
+        if (!selectedOwner || !condoId) {
             setOwnerDebts([]);
             return;
         }
         setLoadingDebts(true);
-        const settingsRef = doc(db, 'condominios', activeCondoId, 'config', 'mainSettings');
+        const settingsRef = doc(db, 'condominios', condoId, 'config', 'mainSettings');
         const settingsUnsubscribe = onSnapshot(settingsRef, (settingsSnap) => {
             if (settingsSnap.exists()) {
                 const settings = settingsSnap.data();
@@ -890,7 +887,7 @@ function PaymentCalculatorComponent() {
             }
         });
 
-        const debtsQuery = query(collection(db, "condominios", activeCondoId, "debts"), where("ownerId", "==", selectedOwner.id));
+        const debtsQuery = query(collection(db, "condominios", condoId, "debts"), where("ownerId", "==", selectedOwner.id));
         const debtsUnsubscribe = onSnapshot(debtsQuery, (snapshot) => {
             const debtsData: Debt[] = [];
             snapshot.forEach(d => debtsData.push({ id: d.id, ...d.data() } as Debt));
@@ -901,7 +898,7 @@ function PaymentCalculatorComponent() {
             settingsUnsubscribe();
             debtsUnsubscribe();
         };
-    }, [selectedOwner, activeCondoId]);
+    }, [selectedOwner, condoId]);
 
     const filteredOwners = useMemo(() => {
         if (!searchTerm) return [];
@@ -950,7 +947,7 @@ function PaymentCalculatorComponent() {
             {loadingDebts ? (
                 <div className="flex justify-center items-center h-64"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>
             ) : (
-                <PaymentCalculatorUI owner={selectedOwner} debts={ownerDebts} activeRate={activeRate} condoFee={condoFee} />
+                <PaymentCalculatorUI owner={selectedOwner} debts={ownerDebts} activeRate={activeRate} condoFee={condoFee} condoId={condoId} />
             )}
         </div>
     );
@@ -958,7 +955,7 @@ function PaymentCalculatorComponent() {
 
 
 // --- UI for Calculator (reused) ---
-function PaymentCalculatorUI({ owner, debts, activeRate, condoFee }: { owner: any; debts: Debt[]; activeRate: number; condoFee: number }) {
+function PaymentCalculatorUI({ owner, debts, activeRate, condoFee, condoId }: { owner: any; debts: Debt[]; activeRate: number; condoFee: number, condoId: string | null }) {
     const [selectedPendingDebts, setSelectedPendingDebts] = useState<string[]>([]);
     const [selectedAdvanceMonths, setSelectedAdvanceMonths] = useState<string[]>([]);
     const now = new Date();
@@ -1030,7 +1027,7 @@ function PaymentCalculatorUI({ owner, debts, activeRate, condoFee }: { owner: an
                     </CardContent>
                     <CardFooter>
                         <Button className="w-full" asChild disabled={!paymentCalculator.hasSelection || paymentCalculator.totalToPay <= 0}>
-                            <Link href="/owner/payments?tab=report">
+                            <Link href={`/${condoId}/admin/payments?tab=report`}>
                                 <Receipt className="mr-2 h-4 w-4"/>
                                 Proceder al Reporte de Pago
                             </Link>
@@ -1042,11 +1039,9 @@ function PaymentCalculatorUI({ owner, debts, activeRate, condoFee }: { owner: an
     );
 }
 
-function PaymentsPage() {
+function PaymentsPage({ condoId }: { condoId: string }) {
     const searchParams = useSearchParams();
     const router = useRouter();
-    const params = useParams();
-    const condoId = params?.condoId;
 
     const [activeTab, setActiveTab] = useState(searchParams?.get('tab') || 'verify');
 
@@ -1073,13 +1068,13 @@ function PaymentsPage() {
                     <TabsTrigger value="calculator">Calculadora de Pagos</TabsTrigger>
                 </TabsList>
                 <TabsContent value="verify" className="mt-6">
-                    <VerificationComponent />
+                    <VerificationComponent condoId={condoId} />
                 </TabsContent>
                 <TabsContent value="report" className="mt-6">
-                    <ReportPaymentComponent />
+                    <ReportPaymentComponent condoId={condoId} />
                 </TabsContent>
                 <TabsContent value="calculator" className="mt-6">
-                    <PaymentCalculatorComponent />
+                    <PaymentCalculatorComponent condoId={condoId} />
                 </TabsContent>
             </Tabs>
         </div>
@@ -1087,9 +1082,12 @@ function PaymentsPage() {
 }
 
 export default function PaymentsPageWrapper() {
+    const params = useParams();
+    const condoId = params?.condoId as string;
+    
     return (
         <Suspense fallback={<div className="flex h-64 items-center justify-center"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>}>
-            <PaymentsPage />
+            <PaymentsPage condoId={condoId} />
         </Suspense>
     );
 }

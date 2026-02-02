@@ -681,7 +681,7 @@ export default function ReportsPage() {
         const paymentsWithDebts: PaymentWithDebts[] = [];
         for (const payment of allApprovedPayments) {
             const liquidatedDebts = allDebts.filter(d => d.paymentId === payment.id)
-                .sort((a,b) => a.year - a.year || a.month - b.month);
+                .sort((a,b) => a.year - b.year || a.month - b.month);
             
             paymentsWithDebts.push({
                 ...payment,
@@ -776,7 +776,7 @@ export default function ReportsPage() {
                         body: 'El reporte integral de propietarios ya está disponible para su consulta.',
                         createdAt: Timestamp.now(),
                         read: false,
-                        href: `/owner/reports`
+                        href: `/${activeCondoId}/owner/reports`
                     });
                 });
                 await batch.commit();

@@ -1,6 +1,6 @@
 
 import { redirect } from 'next/navigation';
 
-export default function OwnerPaymentsReportRedirectPage() {
-  redirect('/owner/payments?tab=report');
+export default function OwnerPaymentsReportRedirectPage({ params }: { params: { condoId: string } }) {
+  redirect(`/${params.condoId}/owner/payments?tab=report`);
 }
