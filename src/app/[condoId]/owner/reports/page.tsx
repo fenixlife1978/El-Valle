@@ -11,8 +11,8 @@ import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import Link from 'next/link';
 import { useAuth } from '@/hooks/use-auth';
+import { useRouter } from 'next/navigation';
 
 type PublishedReport = {
     id: string; // e.g., 'balance-2025-10' or 'integral-...'
@@ -28,6 +28,7 @@ const monthsLocale: { [key: number]: string } = {
 export default function OwnerHistoryPage() {
     const { toast } = useToast();
     const { activeCondoId } = useAuth();
+    const router = useRouter();
     const [loading, setLoading] = useState(true);
     const [reports, setReports] = useState<PublishedReport[]>([]);
     
@@ -132,8 +133,8 @@ export default function OwnerHistoryPage() {
                                             {format(report.createdAt, 'dd MMMM, yyyy - hh:mm a', {locale: es})}
                                         </TableCell>
                                         <TableCell className="text-right">
-                                            <Button variant="outline" size="sm" asChild>
-                                                <Link href={`/${activeCondoId}/owner/report/${report.id}`}>Ver Reporte</Link>
+                                            <Button variant="outline" size="sm" onClick={() => router.push(`/${activeCondoId}/owner/report/${report.id}`)}>
+                                                Ver Reporte
                                             </Button>
                                         </TableCell>
                                     </TableRow>

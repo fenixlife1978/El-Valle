@@ -67,7 +67,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (!storedCondoId || !storedRole) {
             if (!loading) {
-                // signOut(auth); // Evita bucle si hay error de storage
+                 console.warn("No condoId or role found in storage.");
             }
             return;
         }
@@ -78,25 +78,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const unsubSnap = onSnapshot(docRef, async (snap) => {
             if (snap.exists()) {
                 const userData = snap.data();
-                let finalPhoto = userData.photoURL;
-
-                if (!finalPhoto) {
-                    try {
-                        const condoDoc = await getDoc(doc(db, 'condominios', storedCondoId));
-                        if (condoDoc.exists()) {
-                            finalPhoto = condoDoc.data()?.logoUrl;
-                        }
-                    } catch (e) {
-                        console.error("Error obteniendo logo del condominio:", e);
-                    }
-                }
-                
-                setOwnerData({ ...userData, photoURL: finalPhoto || '/default-avatar.png' });
+                setOwnerData({ ...userData });
                 setActiveCondoId(storedCondoId);
                 setUserRole(storedRole);
             } else {
                 console.warn("Authenticated user profile not found in DB, preventing sign-out loop:", user.uid);
-                setOwnerData(null);
+                setOwnerData(null); // Keep user authenticated but without a profile
                 setActiveCondoId(storedCondoId);
                 setUserRole(null);
             }
@@ -107,11 +94,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setOwnerData(null);
         });
 
-        // Cargar companyInfo
+        // Cargar companyInfo desde la ruta correcta
         const settingsRef = doc(db, 'condominios', storedCondoId, 'config', 'mainSettings');
         const unsubSettings = onSnapshot(settingsRef, (settingsSnap) => {
             if (settingsSnap.exists()) {
                 setCompanyInfo(settingsSnap.data().companyInfo);
+            } else {
+                setCompanyInfo(null); // No hay info si no existe el doc
             }
         });
 

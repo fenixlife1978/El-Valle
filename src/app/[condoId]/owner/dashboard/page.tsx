@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
@@ -27,7 +28,7 @@ const formatCurrency = (num: number) => num.toLocaleString('es-VE', { minimumFra
 
 export default function OwnerDashboardPage() {
     // 1. Extraemos todo del useAuth
-    const { user, ownerData, activeCondoId, workingCondoId, companyInfo, loading: authLoading } = useAuth();
+    const { user, ownerData, activeCondoId, companyInfo, loading: authLoading } = useAuth();
     const router = useRouter();
     
     const [loadingData, setLoadingData] = useState(true);
@@ -36,18 +37,16 @@ export default function OwnerDashboardPage() {
     const [anuncios, setAnuncios] = useState<Anuncio[]>([]);
     const [now, setNow] = useState<Date | null>(null);
 
-    const currentCondoId = activeCondoId || workingCondoId;
+    const currentCondoId = activeCondoId;
 
     // --- EFECTO DE DATOS (Solo si hay usuario y condominio) ---
     useEffect(() => {
         setNow(new Date());
 
-        // Si authLoading es true, o no hay usuario, o no hay condominio todavía, no pedimos nada
         if (authLoading || !user || !currentCondoId) return;
 
         setLoadingData(true);
 
-        // A. Cartelera (Solo publicados)
         const unsubAnuncios = onSnapshot(
             query(collection(db, "condominios", currentCondoId, "billboard_announcements"), where("published", "==", true)), 
             (snapshot) => {
@@ -56,19 +55,20 @@ export default function OwnerDashboardPage() {
             }
         );
 
-        // B. Deudas (Solo las publicadas para el propietario)
         const unsubDebts = onSnapshot(
             query(
                 collection(db, 'condominios', currentCondoId, 'debts'), 
                 where('ownerId', '==', user.uid),
-                where('published', '==", true'), // Regla de switch
+                where('published', '==', true),
                 orderBy('year', 'desc'), 
                 orderBy('month', 'desc')
             ),
-            (snap) => setDebts(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Debt)))
+            (snap) => {
+                const debtsData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Debt));
+                 setDebts(debtsData);
+            }
         );
 
-        // C. Pagos
         const unsubPayments = onSnapshot(
             query(collection(db, 'condominios', currentCondoId, 'payments'), where('beneficiaryIds', 'array-contains', user.uid)),
             (snap) => {
@@ -100,11 +100,8 @@ export default function OwnerDashboardPage() {
         }
         return { totalPendingUSD, isSolvente, oldestDebtDate, isVencida };
     }, [debts, now]);
-
-    // --- MANEJO DE ESTADOS DE CARGA (Para evitar rebotes) ---
     
-    // 1. Mientras useAuth está verificando la sesión inicial
-    if (authLoading) {
+    if (authLoading || (!ownerData && loadingData)) {
         return (
             <div className="h-screen flex flex-col items-center justify-center bg-background">
                 <Loader2 className="animate-spin text-primary h-12 w-12" />
@@ -114,20 +111,11 @@ export default function OwnerDashboardPage() {
             </div>
         );
     }
-
-    // 2. Si ya terminó de cargar pero no hay datos de propietario (Espera activa)
-    if (user && !ownerData) {
-        return (
-            <div className="h-screen flex flex-col items-center justify-center bg-background">
-                <Loader2 className="animate-spin text-primary h-10 w-10 mb-4" />
-                <p className="font-bold text-sm uppercase">Sincronizando con {currentCondoId}...</p>
-                <p className="text-[10px] text-muted-foreground mt-2">Si el sistema no avanza, verifique su conexión.</p>
-            </div>
-        );
+    
+    if (!user || !ownerData) {
+         router.replace('/welcome');
+        return null;
     }
-
-    // 3. Si no hay usuario en absoluto (aquí el AuthProvider debería mandarte al welcome, pero retornamos null para no romper nada)
-    if (!user || !ownerData) return null;
 
     const statusVariant = stats.isSolvente ? 'success' : stats.isVencida ? 'destructive' : 'warning';
 

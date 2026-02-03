@@ -395,6 +395,7 @@ export default function DebtManagementPage() {
                                     ownerId: owner.id, property: property, year: futureYear, month: futureMonth, amountUSD: condoFee,
                                     description: "Cuota de Condominio (Pagada por adelantado)", status: 'paid', paidAmountUSD: condoFee,
                                     paymentDate: paymentDate, paymentId: paymentRef.id,
+                                    published: true, // Publicado por defecto
                                 });
                                 allPaidPeriods.add(periodKey);
                                 nextPeriodDate = addMonths(nextPeriodDate, 1);
@@ -478,7 +479,8 @@ export default function DebtManagementPage() {
                                     month: month,
                                     amountUSD: condoFee,
                                     description: 'Cuota de Condominio',
-                                    status: 'pending' // Always 'pending' on creation. UI will determine 'vencida'.
+                                    status: 'pending', // Always 'pending' on creation. UI will determine 'vencida'.
+                                    published: true, // Publicado por defecto
                                 });
                                 newDebtsCount++;
                             }
@@ -744,7 +746,7 @@ export default function DebtManagementPage() {
                     newDebtsCreated++;
                     const debtAmountBs = new Decimal(amountUSD).times(new Decimal(activeRate));
                     const debtRef = doc(collection(firestore, "condominios", workingCondoId, "debts"));
-                    let debtData: any = { ownerId: selectedOwner.id, property: propertyForMassDebt, year: debtYear, month: debtMonth, amountUSD: amountUSD, description: description, status: 'pending' };
+                    let debtData: any = { ownerId: selectedOwner.id, property: propertyForMassDebt, year: debtYear, month: debtMonth, amountUSD: amountUSD, description: description, status: 'pending', published: true };
                     
                     if (availableBalance.gte(debtAmountBs)) {
                         availableBalance = availableBalance.minus(debtAmountBs);

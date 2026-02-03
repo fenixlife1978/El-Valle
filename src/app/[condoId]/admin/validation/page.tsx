@@ -20,6 +20,7 @@ export default function ValidationPage({ params }: { params: { condoId: string }
     const { toast } = useToast();
 
     const isSuperAdmin = user?.email === 'vallecondo@gmail.com';
+    const ownersCollectionName = workingCondoId === 'condo_01' ? 'owners' : 'propietarios';
 
     useEffect(() => {
         if (!workingCondoId) {
@@ -28,7 +29,7 @@ export default function ValidationPage({ params }: { params: { condoId: string }
         }
 
         const q = query(
-            collection(db, "condominios", workingCondoId, "owners"), 
+            collection(db, "condominios", workingCondoId, ownersCollectionName), 
             where("status", "==", "pending")
         );
 
@@ -42,12 +43,12 @@ export default function ValidationPage({ params }: { params: { condoId: string }
         });
 
         return () => unsubscribe();
-    }, [workingCondoId]);
+    }, [workingCondoId, ownersCollectionName]);
 
     const handleAction = async (ownerId: string, newStatus: 'active' | 'rejected') => {
         if (!workingCondoId) return;
         try {
-            await updateDoc(doc(db, "condominios", workingCondoId, "owners", ownerId), { 
+            await updateDoc(doc(db, "condominios", workingCondoId, ownersCollectionName, ownerId), { 
                 status: newStatus,
                 validatedBy: user?.email,
                 validatedAt: new Date().toISOString()

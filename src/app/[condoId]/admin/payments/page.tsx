@@ -979,7 +979,7 @@ function PaymentCalculatorComponent({ condoId }: { condoId: string }) {
             {loadingDebts ? (
                 <div className="flex justify-center items-center h-64"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>
             ) : (
-                <PaymentCalculatorUI owner={selectedOwner} debts={ownerDebts} activeRate={activeRate} condoFee={condoFee} condoId={condoId} />
+                <PaymentCalculatorUI owner={selectedOwner} debts={ownerDebts} activeRate={activeRate} condoFee={condoFee} condoId={condoId} showReportButton={false} />
             )}
         </div>
     );
@@ -987,7 +987,7 @@ function PaymentCalculatorComponent({ condoId }: { condoId: string }) {
 
 
 // --- UI for Calculator (reused) ---
-function PaymentCalculatorUI({ owner, debts, activeRate, condoFee, condoId }: { owner: any; debts: Debt[]; activeRate: number; condoFee: number, condoId: string | null }) {
+function PaymentCalculatorUI({ owner, debts, activeRate, condoFee, condoId, showReportButton = true }: { owner: any; debts: Debt[]; activeRate: number; condoFee: number, condoId: string | null, showReportButton?: boolean }) {
     const [selectedPendingDebts, setSelectedPendingDebts] = useState<string[]>([]);
     const [selectedAdvanceMonths, setSelectedAdvanceMonths] = useState<string[]>([]);
     const router = useRouter();
@@ -1059,14 +1059,16 @@ function PaymentCalculatorUI({ owner, debts, activeRate, condoFee, condoId }: { 
                         <hr className="my-2"/><div className="flex justify-between items-center text-2xl font-bold"><span className="flex items-center"><Equal className="mr-2 h-5 w-5"/> TOTAL SUGERIDO A PAGAR:</span><span className="font-bold text-primary">Bs. {formatCurrency(paymentCalculator.totalToPay)}</span></div>
                     </CardContent>
                     <CardFooter>
-                        <Button 
-                            className="w-full" 
-                            disabled={!paymentCalculator.hasSelection || paymentCalculator.totalToPay <= 0}
-                            onClick={() => router.push(`/${condoId}/owner/payments?tab=report`)}
-                        >
-                            <Receipt className="mr-2 h-4 w-4"/>
-                            Proceder al Reporte de Pago
-                        </Button>
+                       {showReportButton && (
+                            <Button
+                                className="w-full"
+                                disabled={!paymentCalculator.hasSelection || paymentCalculator.totalToPay <= 0}
+                                onClick={() => router.push(`/${condoId}/owner/payments?tab=report`)}
+                            >
+                                <Receipt className="mr-2 h-4 w-4" />
+                                Proceder al Reporte de Pago
+                            </Button>
+                        )}
                     </CardFooter>
                 </Card>}
             </div>

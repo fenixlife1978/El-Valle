@@ -5,7 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Loader2, Receipt, Building2 } from "lucide-react"; 
 import { useEffect, useState } from "react";
-import { collection, query, onSnapshot, doc, getDoc, orderBy, limit } from 'firebase/firestore';
+import { collection, query, onSnapshot, doc, getDoc, orderBy, limit, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { format } from "date-fns";
 import CarteleraDigital from "@/components/CarteleraDigital";
@@ -53,90 +53,72 @@ export default function AdminDashboardPage({ params }: { params: { condoId: stri
         if (!workingCondoId) return;
 
         setLoading(true);
-
-        // --- INFO DEL CONDOMINIO ---
-        getDoc(doc(db, 'condominios', workingCondoId)).then(snap => {
-            if (snap.exists()) setCondoName(snap.data().nombre);
-        });
-
-        // --- CARGA DE ANUNCIOS ---
-        const qAnuncios = query(
-            collection(db, "condominios", workingCondoId, "billboard_announcements"),
-            orderBy("createdAt", "desc"),
-            limit(5)
-        );
-
-        const unsubAnuncios = onSnapshot(qAnuncios, (snap) => {
-            const dataAnuncios = snap.docs
-                .map(d => ({ id: d.id, ...d.data() }))
-                .filter((a: any) => a.published !== false); 
-            setAnuncios(dataAnuncios);
-        });
-
-        // --- CARGA DE PROPIETARIOS ---
-        const ownersCollectionName = workingCondoId === 'condo_01' ? 'owners' : 'propietarios';
-        const unsubOwners = onSnapshot(
-            collection(db, 'condominios', workingCondoId, ownersCollectionName),
-            (snap) => {
-                setStats(prev => ({ ...prev, totalOwners: snap.size }));
-            }
-        );
-
-        // --- CARGA DE TASA Y PAGOS ---
         let unsubPayments: () => void;
-        const fetchAndSubscribe = async () => {
-            let currentRate = 1;
-            try {
-                const snap = await getDoc(doc(db, 'condominios', workingCondoId, 'config', 'mainSettings'));
-                if (snap.exists()) {
-                    const rates = snap.data().exchangeRates || [];
-                    const active = rates.find((r: any) => r.active === true || r.status === 'active');
-                    currentRate = active?.rate || active?.value || 1;
-                }
-            } catch (e) { console.warn("Usando tasa por defecto (1)"); }
 
+        // Listener para la configuración (nombre del condo y tasa de cambio)
+        const unsubSettings = onSnapshot(doc(db, 'condominios', workingCondoId, 'config', 'mainSettings'), (settingsSnap) => {
+            let currentRate = 1;
+            if (settingsSnap.exists()) {
+                const settings = settingsSnap.data();
+                setCondoName(settings.companyInfo?.name || workingCondoId);
+                const rates = settings.exchangeRates || [];
+                const active = rates.find((r: any) => r.active === true || r.status === 'active');
+                currentRate = active?.rate || active?.value || 1;
+            }
+
+            // Listener para los pagos, que depende de la tasa de cambio
+            if (unsubPayments) unsubPayments(); // Limpiar listener anterior si la config cambia
+            
             const startOfMonth = new Date();
             startOfMonth.setDate(1);
             startOfMonth.setHours(0, 0, 0, 0);
 
-            unsubPayments = onSnapshot(
-                collection(db, 'condominios', workingCondoId, 'payments'),
-                (snap) => {
-                    let bs = 0; let usd = 0; let pending = 0;
-                    const paymentsList: any[] = [];
+            const paymentsQuery = query(collection(db, 'condominios', workingCondoId, 'payments'));
+            unsubPayments = onSnapshot(paymentsQuery, (paymentSnap) => {
+                let monthlyIncomeBs = 0;
+                let monthlyIncomeUsd = 0;
+                let pendingCount = 0;
+                const recentApproved: any[] = [];
 
-                    snap.docs.forEach(d => {
-                        const data = d.data();
-                        const status = data.status?.toLowerCase();
-                        const pDate = data.paymentDate?.toDate();
+                paymentSnap.forEach(doc => {
+                    const data = doc.data();
+                    if (data.status === 'pendiente') {
+                        pendingCount++;
+                    } else if (data.status === 'aprobado' && data.paymentDate?.toDate() >= startOfMonth) {
+                        const amount = data.totalAmount || 0;
+                        monthlyIncomeBs += amount;
+                        monthlyIncomeUsd += amount / (data.exchangeRate || currentRate);
+                        recentApproved.push({ id: doc.id, ...data });
+                    }
+                });
+                
+                setStats(prev => ({ ...prev, monthlyIncome: monthlyIncomeBs, monthlyIncomeUSD: monthlyIncomeUsd, pendingPayments: pendingCount }));
+                setRecentPayments(
+                    recentApproved
+                    .sort((a, b) => (b.paymentDate?.toMillis() || 0) - (a.paymentDate?.toMillis() || 0))
+                    .slice(0, 5)
+                );
+            });
+        });
 
-                        if (status === 'pendiente') pending++;
-                        if (status === 'aprobado' && pDate >= startOfMonth) {
-                            const amount = data.totalAmount || 0;
-                            bs += amount;
-                            const exchangeRate = data.exchangeRate || currentRate;
-                            usd += amount / exchangeRate;
-                            paymentsList.push({ id: d.id, ...data });
-                        }
-                    });
+        // Listeners independientes
+        const qAnuncios = query(collection(db, "condominios", workingCondoId, "billboard_announcements"), orderBy("createdAt", "desc"), limit(5));
+        const unsubAnuncios = onSnapshot(qAnuncios, (snap) => {
+            setAnuncios(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+            setLoading(false);
+        });
 
-                    setStats(prev => ({ ...prev, monthlyIncome: bs, monthlyIncomeUSD: usd, pendingPayments: pending }));
-                    setRecentPayments(
-                        paymentsList
-                        .sort((a, b) => (b.paymentDate?.toMillis() || 0) - (a.paymentDate?.toMillis() || 0))
-                        .slice(0, 5)
-                    );
-                    setLoading(false);
-                }
-            );
-        };
+        const ownersCollectionName = workingCondoId === 'condo_01' ? 'owners' : 'propietarios';
+        const unsubOwners = onSnapshot(collection(db, 'condominios', workingCondoId, ownersCollectionName), (snap) => {
+            setStats(prev => ({ ...prev, totalOwners: snap.size }));
+        });
 
-        fetchAndSubscribe();
-
+        // Cleanup
         return () => {
+            unsubSettings();
+            if (unsubPayments) unsubPayments();
             unsubAnuncios();
             unsubOwners();
-            if (unsubPayments) unsubPayments();
         };
     }, [workingCondoId]);
 

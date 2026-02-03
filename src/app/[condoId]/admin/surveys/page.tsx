@@ -234,6 +234,7 @@ export default function SurveysPage() {
             }
             
             setIsSubmitting(true);
+            const ownersCollectionName = activeCondoId === 'condo_01' ? 'owners' : 'propietarios';
             const surveysCollectionRef = collection(db, "condominios", activeCondoId, "surveys");
             try {
                 const finalQuestions = questions.map(q => ({
@@ -270,10 +271,10 @@ export default function SurveysPage() {
                         totalVotes: 0,
                     });
                     
-                    const ownersSnapshot = await getDocs(query(collection(db, 'condominios', activeCondoId, 'owners'), where('role', '==', 'propietario')));
+                    const ownersSnapshot = await getDocs(query(collection(db, 'condominios', activeCondoId, ownersCollectionName), where('role', '==', 'propietario')));
                     const batch = writeBatch(db);
                     ownersSnapshot.forEach(ownerDoc => {
-                        const notificationsRef = doc(collection(db, `condominios/${activeCondoId}/owners/${ownerDoc.id}/notifications`));
+                        const notificationsRef = doc(collection(db, `condominios/${activeCondoId}/${ownersCollectionName}/${ownerDoc.id}/notifications`));
                         batch.set(notificationsRef, {
                             title: 'Nueva Encuesta Disponible',
                             body: `Participa en la encuesta: "${title}"`,

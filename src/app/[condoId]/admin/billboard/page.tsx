@@ -15,6 +15,8 @@ import { compressImage } from '@/lib/utils';
 import Image from 'next/image';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 
 export default function BillboardPage({ params }: { params: { condoId: string } }) {
   const workingCondoId = params.condoId;
@@ -82,6 +84,7 @@ export default function BillboardPage({ params }: { params: { condoId: string } 
                 urlImagen: imagen,
                 createdAt: serverTimestamp(),
                 condoId: workingCondoId,
+                published: true, // Publicado por defecto
             });
             toast({ title: 'Anuncio publicado' });
             setTitulo(''); setDescripcion(''); setImagen(null);
@@ -89,6 +92,18 @@ export default function BillboardPage({ params }: { params: { condoId: string } 
             toast({ variant: 'destructive', title: 'Error al guardar' });
         } finally {
             setIsSubmitting(false);
+        }
+    });
+  };
+
+  const handleTogglePublished = (id: string, published: boolean) => {
+    if (!workingCondoId) return;
+    requestAuthorization(async () => {
+        try {
+            await updateDoc(doc(db, 'condominios', workingCondoId, 'billboard_announcements', id), { published });
+            toast({ title: `Anuncio ${published ? 'publicado' : 'ocultado'}` });
+        } catch (e) {
+            toast({ variant: 'destructive', title: 'Error al actualizar visibilidad' });
         }
     });
   };
@@ -176,6 +191,9 @@ export default function BillboardPage({ params }: { params: { condoId: string } 
         {anuncios.map((anuncio) => (
           <Card key={anuncio.id} className="rounded-[2rem] overflow-hidden border-none shadow-sm bg-card group hover:shadow-md transition-all">
             <div className="aspect-video relative overflow-hidden bg-secondary">
+              <Badge variant={anuncio.published === false ? 'secondary' : 'success'} className="absolute top-3 left-3 z-10 font-black text-xs uppercase">
+                {anuncio.published === false ? 'Borrador' : 'Publicado'}
+              </Badge>
               {anuncio.urlImagen && (
                 <Image src={anuncio.urlImagen} alt={anuncio.titulo} fill className="object-cover group-hover:scale-105 transition-transform" />
               )}
@@ -183,13 +201,23 @@ export default function BillboardPage({ params }: { params: { condoId: string } 
             <div className="p-6">
               <h3 className="font-black text-foreground leading-tight uppercase italic text-sm">{anuncio.titulo}</h3>
               <p className="text-xs font-bold text-muted-foreground mt-2 line-clamp-3 leading-relaxed">{anuncio.descripcion}</p>
-              <div className="flex gap-2 mt-6 pt-4 border-t border-border">
-                <Button variant="outline" size="sm" className="flex-1 rounded-full text-primary border-primary/20 font-bold text-[10px] uppercase" onClick={() => openEdit(anuncio)}>
-                  <Edit className="h-3 w-3 mr-2" /> Editar
-                </Button>
-                <Button variant="destructive" size="icon" className="rounded-full h-9 w-9 shadow-md shadow-red-500/10" onClick={() => handleDelete(anuncio.id)}>
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+              <div className="flex justify-between items-center gap-2 mt-6 pt-4 border-t border-border">
+                <div className="flex gap-2">
+                    <Button variant="outline" size="sm" className="rounded-full text-primary border-primary/20 font-bold text-[10px] uppercase" onClick={() => openEdit(anuncio)}>
+                        <Edit className="h-3 w-3 mr-2" /> Editar
+                    </Button>
+                    <Button variant="destructive" size="icon" className="rounded-full h-9 w-9 shadow-md shadow-red-500/10" onClick={() => handleDelete(anuncio.id)}>
+                        <Trash2 className="h-4 w-4" />
+                    </Button>
+                </div>
+                <div className="flex items-center gap-2">
+                    <Label htmlFor={`switch-${anuncio.id}`} className="text-xs font-bold text-muted-foreground">Publicar</Label>
+                    <Switch
+                        id={`switch-${anuncio.id}`}
+                        checked={anuncio.published}
+                        onCheckedChange={(checked) => handleTogglePublished(anuncio.id, checked)}
+                    />
+                </div>
               </div>
             </div>
           </Card>

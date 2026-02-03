@@ -70,7 +70,7 @@ const compressImage = (file: File, maxWidth: number, maxHeight: number): Promise
 
 export default function SettingsPage() {
   const { toast } = useToast();
-  const { activeCondoId, workingCondoId } = useAuth(); // Usando ambos IDs según instrucciones
+  const { activeCondoId } = useAuth();
   const { requestAuthorization } = useAuthorization();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<Record<string, boolean>>({});
@@ -81,7 +81,7 @@ export default function SettingsPage() {
   const inputStyle = "rounded-xl h-12 bg-input border-border font-bold text-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary";
 
   // Identificador prioritario para las consultas
-  const condoId = activeCondoId || workingCondoId;
+  const condoId = activeCondoId;
 
   useEffect(() => {
     async function fetchSettings() {
@@ -91,7 +91,6 @@ export default function SettingsPage() {
       }
 
       try {
-        // RUTA CORREGIDA: Apuntando a la ruta física real en Firestore
         const docRef = doc(db, 'condominios', condoId, 'config', 'mainSettings');
         const docSnap = await getDoc(docRef);
         
