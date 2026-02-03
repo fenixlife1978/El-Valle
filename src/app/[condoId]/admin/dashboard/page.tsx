@@ -74,8 +74,9 @@ export default function AdminDashboardPage({ params }: { params: { condoId: stri
         });
 
         // --- CARGA DE PROPIETARIOS ---
+        const ownersCollectionName = workingCondoId === 'condo_01' ? 'owners' : 'propietarios';
         const unsubOwners = onSnapshot(
-            collection(db, 'condominios', workingCondoId, 'owners'),
+            collection(db, 'condominios', workingCondoId, ownersCollectionName),
             (snap) => {
                 setStats(prev => ({ ...prev, totalOwners: snap.size }));
             }
@@ -222,7 +223,7 @@ export default function AdminDashboardPage({ params }: { params: { condoId: stri
                                 recentPayments.map(p => (
                                     <TableRow key={p.id} className="hover:bg-muted/50 transition-colors border-b border-white/5">
                                         <TableCell className="font-bold text-xs uppercase text-foreground py-4">
-                                            {p.beneficiaries?.map((b: any) => b.ownerName).join(', ') || 'Residente'}
+                                            {p.beneficiaries?.map((b: any) => b.ownerName).join(', ') || 'RESIDENTE'}
                                         </TableCell>
                                         <TableCell className="text-emerald-500 font-black italic">
                                             Bs. {formatToTwoDecimals(p.totalAmount)}

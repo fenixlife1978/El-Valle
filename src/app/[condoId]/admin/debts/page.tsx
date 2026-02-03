@@ -204,8 +204,8 @@ export default function DebtManagementPage() {
                 toast({ variant: 'destructive', title: 'Error de Carga', description: 'No se pudieron cargar datos críticos.' });
             }
         };
-
-        const ownersQuery = query(collection(db, "condominios", workingCondoId, "owners"));
+        const ownersCollectionName = workingCondoId === 'condo_01' ? 'owners' : 'propietarios';
+        const ownersQuery = query(collection(db, "condominios", workingCondoId, ownersCollectionName));
         const ownersUnsubscribe = onSnapshot(ownersQuery, async (snapshot) => {
             let ownersData: Owner[] = snapshot.docs.map(doc => {
                 const data = doc.data();
@@ -304,12 +304,13 @@ export default function DebtManagementPage() {
         let reconciledCount = 0;
         let processedOwners = 0;
         const firestore = db;
+        const ownersCollectionName = workingCondoId === 'condo_01' ? 'owners' : 'propietarios';
 
         for (const owner of ownersWithBalance) {
             processedOwners++;
             try {
                 await runTransaction(firestore, async (transaction) => {
-                    const ownerRef = doc(firestore, 'condominios', workingCondoId, 'owners', owner.id);
+                    const ownerRef = doc(firestore, 'condominios', workingCondoId, ownersCollectionName, owner.id);
                     const ownerDoc = await transaction.get(ownerRef);
                     if (!ownerDoc.exists()) throw new Error(`Propietario ${owner.id} no encontrado.`);
                     
@@ -640,11 +641,12 @@ export default function DebtManagementPage() {
     const confirmDelete = async () => {
         if (!debtToDelete || !selectedOwner || !workingCondoId) return;
         const firestore = db;
+        const ownersCollectionName = workingCondoId === 'condo_01' ? 'owners' : 'propietarios';
     
         try {
             await runTransaction(firestore, async (transaction) => {
                 // --- 1. All reads first ---
-                const ownerRef = doc(firestore, "condominios", workingCondoId, "owners", selectedOwner.id);
+                const ownerRef = doc(firestore, "condominios", workingCondoId, ownersCollectionName, selectedOwner.id);
                 const debtRef = doc(firestore, "condominios", workingCondoId, "debts", debtToDelete.id);
 
                 const ownerDoc = await transaction.get(ownerRef);
@@ -710,6 +712,7 @@ export default function DebtManagementPage() {
 
         const monthsToGenerate = differenceInCalendarMonths(endDate, startDate) + 1;
         const firestore = db;
+        const ownersCollectionName = workingCondoId === 'condo_01' ? 'owners' : 'propietarios';
 
         try {
             if (activeRate <= 0) throw "No hay una tasa de cambio activa o registrada configurada.";
@@ -724,7 +727,7 @@ export default function DebtManagementPage() {
             
             await runTransaction(firestore, async (transaction) => {
                 // --- 1. ALL READS FIRST ---
-                const ownerRef = doc(firestore, "condominios", workingCondoId, "owners", selectedOwner.id);
+                const ownerRef = doc(firestore, "condominios", workingCondoId, ownersCollectionName, selectedOwner.id);
                 const ownerDoc = await transaction.get(ownerRef);
                 if (!ownerDoc.exists()) throw "El documento del propietario no existe.";
                 

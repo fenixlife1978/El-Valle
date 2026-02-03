@@ -39,7 +39,7 @@ export default function ForgotPasswordPage() {
                 description: 'Se ha enviado un enlace para restablecer su contraseña a su correo electrónico.',
                 className: 'bg-blue-100 border-blue-400 text-blue-800'
             });
-            router.push('/login');
+            router.push('/welcome');
         } catch (error: any) {
             console.error("Password reset error:", error);
             let description = 'Ocurrió un error inesperado.';

@@ -7,15 +7,20 @@ service cloud.firestore {
       return request.auth != null && request.auth.token.email == 'vallecondo@gmail.com';
     }
 
-    // AHORA BUSCA EN OWNERS: Verifica si el usuario está en owners y su campo 'role' es 'admin'
+    // Verifica si el usuario es admin en CUALQUIERA de las dos colecciones posibles
     function isCondoAdmin(condoId) {
-      let userDoc = get(/databases/$(database)/documents/condominios/$(condoId)/owners/$(request.auth.uid));
-      return request.auth != null && userDoc.data.role == 'admin';
+      let isOwnersAdmin = exists(/databases/$(database)/documents/condominios/$(condoId)/owners/$(request.auth.uid)) &&
+                           get(/databases/$(database)/documents/condominios/$(condoId)/owners/$(request.auth.uid)).data.role == 'admin';
+      let isPropietariosAdmin = exists(/databases/$(database)/documents/condominios/$(condoId)/propietarios/$(request.auth.uid)) &&
+                               get(/databases/$(database)/documents/condominios/$(condoId)/propietarios/$(request.auth.uid)).data.role == 'admin';
+      return request.auth != null && (isOwnersAdmin || isPropietariosAdmin);
     }
 
+    // Verifica si el usuario existe en CUALQUIERA de las dos colecciones
     function isCondoOwner(condoId) {
       return request.auth != null && 
-        exists(/databases/$(database)/documents/condominios/$(condoId)/owners/$(request.auth.uid));
+        (exists(/databases/$(database)/documents/condominios/$(condoId)/owners/$(request.auth.uid)) ||
+         exists(/databases/$(database)/documents/condominios/$(condoId)/propietarios/$(request.auth.uid)));
     }
 
     // --- REGLA MAESTRA SUPER ADMIN ---
@@ -28,11 +33,15 @@ service cloud.firestore {
       
       allow read: if request.auth != null;
 
-      // Simplificamos la lectura de perfiles
+      // Perfiles de Propietarios (Estructura Antigua para condo_01)
       match /owners/{ownerId} {
-        // Un usuario puede leer su propio perfil si está en owners (sea admin u owner)
         allow read: if request.auth != null && (request.auth.uid == ownerId || isCondoAdmin(condoId));
-        // Solo admins pueden crear/editar perfiles
+        allow write: if isCondoAdmin(condoId);
+      }
+
+      // Perfiles de Propietarios (Estructura Nueva para los demás)
+      match /propietarios/{ownerId} {
+        allow read: if request.auth != null && (request.auth.uid == ownerId || isCondoAdmin(condoId));
         allow write: if isCondoAdmin(condoId);
       }
 

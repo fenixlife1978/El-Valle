@@ -1,7 +1,6 @@
 
 'use client';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -70,10 +69,10 @@ export function BottomNavBar({ items, pathname }: { items: BottomNavItem[], path
           );
         }
         return (
-          <Link
-            href={item.href}
+          <button
+            type="button"
             key={item.href}
-            prefetch={true}
+            onClick={() => router.push(item.href)}
             className={cn(
               'flex flex-col items-center justify-center gap-1 rounded-md p-2 text-sm font-medium',
               isActive ? 'text-primary' : 'text-muted-foreground'
@@ -81,7 +80,7 @@ export function BottomNavBar({ items, pathname }: { items: BottomNavItem[], path
           >
             <item.icon className="h-6 w-6" />
             <span>{item.label}</span>
-          </Link>
+          </button>
         );
       })}
     </nav>

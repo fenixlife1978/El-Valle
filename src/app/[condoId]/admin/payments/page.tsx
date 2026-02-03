@@ -171,7 +171,8 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                     const costoCuotaActualBs = condoFeeUSD * payment.exchangeRate;
 
                     for (const beneficiary of payment.beneficiaries) {
-                        const ownerRef = doc(db, 'condominios', condoId, 'owners', beneficiary.ownerId);
+                        const ownersCollectionName = condoId === 'condo_01' ? 'owners' : 'propietarios';
+                        const ownerRef = doc(db, 'condominios', condoId, ownersCollectionName, beneficiary.ownerId);
                         const ownerDoc = await transaction.get(ownerRef);
                         if (!ownerDoc.exists()) throw new Error(`El propietario ${beneficiary.ownerName} no fue encontrado.`);
 
@@ -304,7 +305,10 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                     const paymentData = paymentDoc.data() as Payment;
                     const paidDebtsSnapshot = await getDocs(paidDebtsQuery);
     
-                    const ownerRefs = paymentData.beneficiaries.map(b => doc(db, 'condominios', condoId, 'owners', b.ownerId));
+                    const ownerRefs = paymentData.beneficiaries.map(b => {
+                        const ownersCollectionName = condoId === 'condo_01' ? 'owners' : 'propietarios';
+                        return doc(db, 'condominios', condoId, ownersCollectionName, b.ownerId);
+                    });
                     const ownerDocs = await Promise.all(ownerRefs.map(ref => transaction.get(ref)));
     
                     // --- 2. FASE DE LÓGICA ---
@@ -429,7 +433,8 @@ function VerificationComponent({ condoId }: { condoId: string }) {
         
         setIsGenerating(true);
         try {
-            const ownerRef = doc(db, 'condominios', condoId, 'owners', beneficiary.ownerId);
+            const ownersCollectionName = condoId === 'condo_01' ? 'owners' : 'propietarios';
+            const ownerRef = doc(db, 'condominios', condoId, ownersCollectionName, beneficiary.ownerId);
             const ownerSnap = await getDoc(ownerRef);
             if (!ownerSnap.exists()) {
                 throw new Error('Owner profile not found.');
@@ -661,7 +666,8 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
 
     useEffect(() => {
         if (!condoId) return;
-        const q = query(collection(db, "condominios", condoId, "owners"), where("role", "==", "propietario"));
+        const ownersCollectionName = condoId === 'condo_01' ? 'owners' : 'propietarios';
+        const q = query(collection(db, "condominios", condoId, ownersCollectionName), where("role", "==", "propietario"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const ownersData: Owner[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner));
             setAllOwners(ownersData.sort((a, b) => (a.name || '').localeCompare(b.name || '')));
@@ -782,7 +788,8 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
 
             const batch = writeBatch(db);
             beneficiaries.forEach(beneficiary => {
-                const notificationsRef = doc(collection(db, `condominios/${condoId}/owners/${beneficiary.ownerId}/notifications`));
+                const ownersCollectionName = condoId === 'condo_01' ? 'owners' : 'propietarios';
+                const notificationsRef = doc(collection(db, `condominios/${condoId}/${ownersCollectionName}/${beneficiary.ownerId}/notifications`));
                 batch.set(notificationsRef, {
                     title: "Pago Registrado por Administración",
                     body: `La administración ha registrado un pago a su favor por Bs. ${beneficiary.amount.toFixed(2)}. Será verificado y aplicado pronto.`,
@@ -881,7 +888,8 @@ function PaymentCalculatorComponent({ condoId }: { condoId: string }) {
             setLoadingOwners(false);
             return;
         }
-        const q = query(collection(db, "condominios", condoId, "owners"), where("role", "==", "propietario"));
+        const ownersCollectionName = condoId === 'condo_01' ? 'owners' : 'propietarios';
+        const q = query(collection(db, "condominios", condoId, ownersCollectionName), where("role", "==", "propietario"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const ownersData: Owner[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner));
             setAllOwners(ownersData.sort((a, b) => (a.name || '').localeCompare(b.name || '')));
@@ -1047,7 +1055,7 @@ function PaymentCalculatorUI({ owner, debts, activeRate, condoFee, condoId }: { 
                         {paymentCalculator.advanceMonthsCount > 0 && <p className="text-sm text-muted-foreground">{paymentCalculator.advanceMonthsCount} mes(es) por adelanto seleccionado(s) x ${(paymentCalculator.condoFee ?? 0).toFixed(2)} c/u.</p>}
                         <hr className="my-2"/><div className="flex justify-between items-center text-lg"><span className="text-muted-foreground">Sub-Total Deuda:</span><span className="font-medium">Bs. {formatCurrency(paymentCalculator.totalDebtBs)}</span></div>
                         <div className="flex justify-between items-center text-md"><span className="text-muted-foreground flex items-center"><Minus className="mr-2 h-4 w-4"/> Saldo a Favor:</span><span className="font-medium text-green-500">Bs. {formatCurrency(paymentCalculator.balanceInFavor)}</span></div>
-                        <hr className="my-2"/><div className="flex justify-between items-center text-2xl font-bold"><span className="flex items-center"><Equal className="mr-2 h-5 w-5"/> TOTAL SUGERIDO A PAGAR:</span><span className="text-primary">Bs. {formatCurrency(paymentCalculator.totalToPay)}</span></div>
+                        <hr className="my-2"/><div className="flex justify-between items-center text-2xl font-bold"><span className="flex items-center"><Equal className="mr-2 h-5 w-5"/> TOTAL SUGERIDO A PAGAR:</span><span className="font-bold text-primary">Bs. {formatCurrency(paymentCalculator.totalToPay)}</span></div>
                     </CardContent>
                     <CardFooter>
                         <Button className="w-full" asChild disabled={!paymentCalculator.hasSelection || paymentCalculator.totalToPay <= 0}>
@@ -1119,4 +1127,3 @@ export default function PaymentsPageWrapper() {
         </Suspense>
     );
 }
-

@@ -72,7 +72,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             return;
         }
         
-        const docRef = doc(db, 'condominios', storedCondoId, 'owners', user.uid);
+        const ownersCollectionName = storedCondoId === 'condo_01' ? 'owners' : 'propietarios';
+        const docRef = doc(db, 'condominios', storedCondoId, ownersCollectionName, user.uid);
+
         const unsubSnap = onSnapshot(docRef, async (snap) => {
             if (snap.exists() && snap.data().published !== false) {
                 const userData = snap.data();

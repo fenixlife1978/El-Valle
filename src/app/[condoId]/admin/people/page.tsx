@@ -1,3 +1,4 @@
+
 "use client";
 
 import { 
@@ -65,6 +66,8 @@ export default function OwnersManagement() {
     const sId = typeof window !== 'undefined' ? localStorage.getItem('support_mode_id') : null;
     const isSuperAdmin = currentUser?.email === 'vallecondo@gmail.com';
     const workingCondoId = urlCondoId || (isSuperAdmin ? sId : activeCondoId);
+    
+    const ownersCollectionName = workingCondoId === 'condo_01' ? 'owners' : 'propietarios';
 
     const [owners, setOwners] = useState<Owner[]>([]);
     const [admins, setAdmins] = useState<Owner[]>([]);
@@ -79,7 +82,7 @@ export default function OwnersManagement() {
 
         setLoading(true);
         // Todas las queries apuntan estrictamente al condominio en uso
-        const ownersRef = collection(db, 'condominios', workingCondoId, 'owners');
+        const ownersRef = collection(db, 'condominios', workingCondoId, ownersCollectionName);
         
         const unsubscribe = onSnapshot(ownersRef, (snapshot) => {
             const allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner));
@@ -92,7 +95,7 @@ export default function OwnersManagement() {
         });
 
         return () => unsubscribe();
-    }, [workingCondoId]);
+    }, [workingCondoId, ownersCollectionName]);
 
     const filteredOwners = useMemo(() => owners.filter(o => {
         const search = searchTerm.toLowerCase();
@@ -128,7 +131,7 @@ export default function OwnersManagement() {
             try {
                 if (id) {
                     // Actualización
-                    const userRef = doc(db, "condominios", workingCondoId, "owners", id);
+                    const userRef = doc(db, "condominios", workingCondoId, ownersCollectionName, id);
                     await setDoc(userRef, {
                         name, role, balance: Number(balance), properties,
                         updatedAt: serverTimestamp()
@@ -148,7 +151,7 @@ export default function OwnersManagement() {
                     // Cerrar sesión del secundario inmediatamente
                     await signOut(secondaryAuth);
 
-                    const userRef = doc(db, "condominios", workingCondoId, "owners", newUser.uid);
+                    const userRef = doc(db, "condominios", workingCondoId, ownersCollectionName, newUser.uid);
                     await setDoc(userRef, {
                         uid: newUser.uid,
                         name, email, role, 
@@ -174,7 +177,7 @@ export default function OwnersManagement() {
     const handleConfirmDelete = async () => {
         if (!userToDelete || !workingCondoId) return;
         try {
-            await deleteDoc(doc(db, "condominios", workingCondoId, "owners", userToDelete.id));
+            await deleteDoc(doc(db, "condominios", workingCondoId, ownersCollectionName, userToDelete.id));
             toast({ title: 'Perfil eliminado del condominio' });
         } catch (error) {
             toast({ variant: 'destructive', title: 'Error al eliminar' });
