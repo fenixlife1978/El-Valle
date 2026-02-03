@@ -354,17 +354,19 @@ export default function PettyCashManager({ params }: { params: { condoId: string
         doc.setFontSize(10);
         doc.text(`Período: ${filterDateRange.fromMonth}/${filterDateRange.fromYear} a ${filterDateRange.toMonth}/${filterDateRange.toYear}`, 14, 28);
         
+        let runningBalance = periodTotals.saldoInicial;
         const tableData = [
             ["-", "SALDO INICIAL DEL PERÍODO", "", "", formatToTwoDecimals(periodTotals.saldoInicial)],
-            ...filteredTransactions.map(tx => [
-                format(tx.date.toDate(), 'dd/MM/yyyy'),
-                tx.description,
-                tx.type === 'ingreso' ? formatToTwoDecimals(tx.amount) : '',
-                tx.type === 'egreso' ? formatToTwoDecimals(tx.amount) : '',
-                ''
-            ]),
-            ["", "TOTALES", formatToTwoDecimals(periodTotals.totalIngresos), formatToTwoDecimals(periodTotals.totalEgresos), ""],
-            ["", "SALDO FINAL", "", "", formatToTwoDecimals(periodTotals.saldoFinal)]
+            ...filteredTransactions.map(tx => {
+                runningBalance += (tx.type === 'ingreso' ? tx.amount : -tx.amount);
+                return [
+                    format(tx.date.toDate(), 'dd/MM/yyyy'),
+                    tx.description,
+                    tx.type === 'ingreso' ? formatToTwoDecimals(tx.amount) : '',
+                    tx.type === 'egreso' ? formatToTwoDecimals(tx.amount) : '',
+                    formatToTwoDecimals(runningBalance)
+                ];
+            }),
         ];
 
         autoTable(doc, {
@@ -373,7 +375,17 @@ export default function PettyCashManager({ params }: { params: { condoId: string
             startY: 35,
             theme: 'grid',
             headStyles: { fillColor: [0, 129, 201] },
-            columnStyles: { 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' } }
+            footStyles: { fillColor: [23, 37, 84], textColor: 255, fontStyle: 'bold' },
+            foot: [
+                ['', 'TOTALES', formatToTwoDecimals(periodTotals.totalIngresos), formatToTwoDecimals(periodTotals.totalEgresos), ''],
+                ['', 'SALDO FINAL', '', '', formatToTwoDecimals(periodTotals.saldoFinal)]
+            ],
+            columnStyles: { 
+                0: { halign: 'center' },
+                2: { halign: 'right' }, 
+                3: { halign: 'right' }, 
+                4: { halign: 'right' } 
+            }
         });
 
         doc.save(`CajaChica_Libro_${workingCondoId}_${filterDateRange.fromMonth}_${filterDateRange.fromYear}.pdf`);
@@ -522,37 +534,46 @@ export default function PettyCashManager({ params }: { params: { condoId: string
                                             <TableHead className="font-bold">Concepto / Descripción</TableHead>
                                             <TableHead className="text-right font-bold text-green-700">Ingreso</TableHead>
                                             <TableHead className="text-right font-bold text-red-700">Egreso</TableHead>
+                                            <TableHead className="text-right font-bold">Saldo</TableHead>
                                             <TableHead className="text-right"></TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         <TableRow className="bg-blue-50/50 font-bold italic">
-                                            <TableCell colSpan={2}>Saldo Inicial Período</TableCell>
-                                            <TableCell colSpan={3} className="text-right text-[#0081c9]">Bs. {formatToTwoDecimals(periodTotals.saldoInicial)}</TableCell>
+                                            <TableCell colSpan={4}>Saldo Inicial Período</TableCell>
+                                            <TableCell className="text-right text-[#0081c9]">{formatToTwoDecimals(periodTotals.saldoInicial)}</TableCell>
+                                            <TableCell></TableCell>
                                         </TableRow>
                                         {loading ? (
-                                            <TableRow><TableCell colSpan={5} className="h-24 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-[#0081c9]"/></TableCell></TableRow>
+                                            <TableRow><TableCell colSpan={6} className="h-24 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-[#0081c9]"/></TableCell></TableRow>
                                         ) : filteredTransactions.length === 0 ? (
-                                            <TableRow><TableCell colSpan={5} className="h-24 text-center text-slate-400">No hay movimientos en este período</TableCell></TableRow>
+                                            <TableRow><TableCell colSpan={6} className="h-24 text-center text-slate-400">No hay movimientos en este período</TableCell></TableRow>
                                         ) : (
-                                            filteredTransactions.map(tx => (
-                                                <TableRow key={tx.id} className="hover:bg-slate-50 transition-colors">
-                                                    <TableCell className="font-medium text-slate-600">{format(tx.date.toDate(), 'dd/MM/yyyy')}</TableCell>
-                                                    <TableCell className="uppercase text-[11px] font-bold text-slate-700">{tx.description}</TableCell>
-                                                    <TableCell className="text-right text-green-600 font-black">{tx.type === 'ingreso' ? `Bs. ${formatToTwoDecimals(tx.amount)}` : ''}</TableCell>
-                                                    <TableCell className="text-right text-red-600 font-black">{tx.type === 'egreso' ? `Bs. ${formatToTwoDecimals(tx.amount)}` : ''}</TableCell>
-                                                    <TableCell className="text-right">
-                                                        <Button variant="ghost" size="icon" onClick={() => handleDeleteTransaction(tx)} className="hover:bg-red-50 text-slate-400 hover:text-red-600">
-                                                            <Trash2 className="h-4 w-4"/>
-                                                        </Button>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))
+                                            (() => {
+                                                let runningBalance = periodTotals.saldoInicial;
+                                                return filteredTransactions.map(tx => {
+                                                    runningBalance += (tx.type === 'ingreso' ? tx.amount : -tx.amount);
+                                                    return (
+                                                        <TableRow key={tx.id} className="hover:bg-slate-50 transition-colors">
+                                                            <TableCell className="font-medium text-slate-600">{format(tx.date.toDate(), 'dd/MM/yyyy')}</TableCell>
+                                                            <TableCell className="uppercase text-[11px] font-bold text-slate-700">{tx.description}</TableCell>
+                                                            <TableCell className="text-right text-green-600 font-black">{tx.type === 'ingreso' ? `Bs. ${formatToTwoDecimals(tx.amount)}` : ''}</TableCell>
+                                                            <TableCell className="text-right text-red-600 font-black">{tx.type === 'egreso' ? `Bs. ${formatToTwoDecimals(tx.amount)}` : ''}</TableCell>
+                                                            <TableCell className="text-right font-bold">{formatToTwoDecimals(runningBalance)}</TableCell>
+                                                            <TableCell className="text-right">
+                                                                <Button variant="ghost" size="icon" onClick={() => handleDeleteTransaction(tx)} className="hover:bg-red-50 text-slate-400 hover:text-red-600">
+                                                                    <Trash2 className="h-4 w-4"/>
+                                                                </Button>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    );
+                                                });
+                                            })()
                                         )}
                                     </TableBody>
                                     <TableFooter className="bg-slate-900 text-white">
                                         <TableRow className="font-black">
-                                            <TableCell colSpan={3} className="text-right uppercase tracking-widest text-[10px]">Saldo Final Estimado del Período</TableCell>
+                                            <TableCell colSpan={4} className="text-right uppercase tracking-widest text-[10px]">Saldo Final del Período</TableCell>
                                             <TableCell className="text-right text-[#f59e0b] text-lg" colSpan={2}>Bs. {formatToTwoDecimals(periodTotals.saldoFinal)}</TableCell>
                                         </TableRow>
                                     </TableFooter>

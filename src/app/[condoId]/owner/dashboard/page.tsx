@@ -205,7 +205,7 @@ export default function OwnerDashboardPage() {
                         <CardTitle className="text-xl font-bold flex items-center gap-2">
                             <Receipt className="h-5 w-5 text-primary"/> Pagos Recientes
                         </CardTitle>
-                        <Link href={`/${currentCondoId}/owner/payments?tab=report`}>
+                        <Link href={`/${currentCondoId}/owner/payments`}>
                             <Button variant="outline" className="font-black text-[10px] uppercase tracking-widest rounded-xl">Reportar Nuevo</Button>
                         </Link>
                     </div>
