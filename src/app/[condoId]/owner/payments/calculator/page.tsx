@@ -18,7 +18,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 const venezuelanBanks = [
     { value: 'banesco', label: 'Banesco' }, { value: 'mercantil', label: 'Mercantil' },
@@ -39,6 +39,7 @@ const formatToTwoDecimals = (num: number) => {
 export default function OwnerPaymentCalculatorPage({ params }: { params: { condoId: string } }) {
     const workingCondoId = params.condoId;
     const { user, ownerData, loading: authLoading } = useAuth();
+    const router = useRouter();
     
     const [ownerDebts, setOwnerDebts] = useState<any[]>([]);
     const [loadingDebts, setLoadingDebts] = useState(true);
@@ -273,15 +274,13 @@ export default function OwnerPaymentCalculatorPage({ params }: { params: { condo
                                 <hr className="my-2"/>
                                 <div className="flex justify-between items-center text-2xl font-bold">
                                     <span className="flex items-center"><Equal className="mr-2 h-5 w-5"/> TOTAL A PAGAR:</span>
-                                    <span className="text-primary">Bs. {formatToTwoDecimals(paymentCalculator.totalToPay)}</span>
+                                    <span className="font-bold text-primary">Bs. {formatToTwoDecimals(paymentCalculator.totalToPay)}</span>
                                 </div>
                             </CardContent>
                             <CardFooter>
-                                <Button className="w-full" asChild disabled={!paymentCalculator.hasSelection || paymentCalculator.totalToPay <= 0}>
-                                    <Link href={`/${workingCondoId}/owner/payments`}>
-                                        <Receipt className="mr-2 h-4 w-4"/>
-                                        Proceder al Reporte de Pago
-                                    </Link>
+                                <Button className="w-full" disabled={!paymentCalculator.hasSelection || paymentCalculator.totalToPay <= 0} onClick={() => router.push(`/${workingCondoId}/owner/payments`)}>
+                                    <Receipt className="mr-2 h-4 w-4"/>
+                                    Proceder al Reporte de Pago
                                 </Button>
                             </CardFooter>
                         </Card>

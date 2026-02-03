@@ -409,8 +409,10 @@ export default function ReportsPage() {
         }
         setLoading(true);
         try {
+            const ownersCollectionName = activeCondoId === 'condo_01' ? 'owners' : 'propietarios';
+
             const settingsRef = doc(db, 'condominios', activeCondoId, 'config', 'mainSettings');
-            const ownersQuery = query(collection(db, 'condominios', activeCondoId, 'owners'));
+            const ownersQuery = query(collection(db, 'condominios', activeCondoId, ownersCollectionName));
             const paymentsQuery = query(collection(db, 'condominios', activeCondoId, 'payments'));
             const debtsQuery = query(collection(db, 'condominios', activeCondoId, 'debts'));
             const historicalPaymentsQuery = query(collection(db, 'condominios', activeCondoId, 'historical_payments'));
@@ -727,8 +729,9 @@ export default function ReportsPage() {
         if (!activeCondoId) return;
         setGeneratingReport(true);
         try {
+            const ownersCollectionName = activeCondoId === 'condo_01' ? 'owners' : 'propietarios';
             // Refetch all data to ensure it's current
-            const ownersData = (await getDocs(collection(db, 'condominios', activeCondoId, 'owners'))).docs.map(d => ({ id: d.id, ...d.data() } as Owner));
+            const ownersData = (await getDocs(collection(db, 'condominios', activeCondoId, ownersCollectionName))).docs.map(d => ({ id: d.id, ...d.data() } as Owner));
             const debtsData = (await getDocs(collection(db, 'condominios', activeCondoId, 'debts'))).docs.map(d => ({ id: d.id, ...d.data() } as Debt));
             const paymentsData = (await getDocs(collection(db, 'condominios', activeCondoId, 'payments'))).docs.map(d => ({ id: d.id, ...d.data() } as Payment));
             const historicalData = (await getDocs(collection(db, 'condominios', activeCondoId, 'historical_payments'))).docs.map(d => d.data() as HistoricalPayment);
@@ -771,10 +774,11 @@ export default function ReportsPage() {
                     condoId: activeCondoId,
                 });
 
-                const ownersSnapshot = await getDocs(query(collection(db, 'condominios', activeCondoId, 'owners'), where('role', '==', 'propietario')));
+                const ownersCollectionName = activeCondoId === 'condo_01' ? 'owners' : 'propietarios';
+                const ownersSnapshot = await getDocs(query(collection(db, 'condominios', activeCondoId, ownersCollectionName), where('role', '==', 'propietario')));
                 const batch = writeBatch(db);
                 ownersSnapshot.forEach(ownerDoc => {
-                    const notificationsRef = doc(collection(db, `condominios/${activeCondoId}/owners/${ownerDoc.id}/notifications`));
+                    const notificationsRef = doc(collection(db, `condominios/${activeCondoId}/${ownersCollectionName}/${ownerDoc.id}/notifications`));
                     batch.set(notificationsRef, {
                         title: 'Nuevo Reporte Publicado',
                         body: 'El reporte integral de propietarios ya está disponible para su consulta.',

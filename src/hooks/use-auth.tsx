@@ -95,8 +95,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 setActiveCondoId(storedCondoId);
                 setUserRole(storedRole);
             } else {
-                console.warn("Usuario no encontrado en la base de datos o perfil no publicado:", user.uid);
-                signOut(auth);
+                console.warn("Authenticated user profile not found in DB, preventing sign-out loop:", user.uid);
+                setOwnerData(null);
+                setActiveCondoId(storedCondoId);
+                setUserRole(null);
             }
             setLoading(false);
         }, (error) => {

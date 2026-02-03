@@ -13,7 +13,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { collection, query, where, onSnapshot, orderBy, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { format, isBefore, startOfMonth } from "date-fns";
-import Link from "next/link";
+import { useRouter } from 'next/navigation';
 import { cn } from "@/lib/utils";
 import Marquee from "@/components/ui/marquee";
 
@@ -28,6 +28,7 @@ const formatCurrency = (num: number) => num.toLocaleString('es-VE', { minimumFra
 export default function OwnerDashboardPage() {
     // 1. Extraemos todo del useAuth
     const { user, ownerData, activeCondoId, workingCondoId, companyInfo, loading: authLoading } = useAuth();
+    const router = useRouter();
     
     const [loadingData, setLoadingData] = useState(true);
     const [debts, setDebts] = useState<Debt[]>([]);
@@ -173,10 +174,8 @@ export default function OwnerDashboardPage() {
                         )}
                     </CardContent>
                     <CardFooter className="pt-4 px-8 pb-8">
-                        <Button asChild className="w-full h-14 rounded-2xl font-black uppercase tracking-widest shadow-lg transition-transform active:scale-95" disabled={stats.isSolvente}>
-                            <Link href={`/${currentCondoId}/owner/payments/calculator`}>
-                                Calcular y Reportar Pago
-                            </Link>
+                        <Button onClick={() => router.push(`/${currentCondoId}/owner/payments/calculator`)} className="w-full h-14 rounded-2xl font-black uppercase tracking-widest shadow-lg transition-transform active:scale-95" disabled={stats.isSolvente}>
+                            Calcular y Reportar Pago
                         </Button>
                     </CardFooter>
                 </Card>
@@ -200,9 +199,7 @@ export default function OwnerDashboardPage() {
                         <CardTitle className="text-xl font-bold flex items-center gap-2">
                             <Receipt className="h-5 w-5 text-primary"/> Pagos Recientes
                         </CardTitle>
-                        <Link href={`/${currentCondoId}/owner/payments`}>
-                            <Button variant="outline" className="font-black text-[10px] uppercase tracking-widest rounded-xl">Ver Todos</Button>
-                        </Link>
+                        <Button onClick={() => router.push(`/${currentCondoId}/owner/payments`)} variant="outline" className="font-black text-[10px] uppercase tracking-widest rounded-xl">Ver Todos</Button>
                     </div>
                 </CardHeader>
                 <CardContent className="p-0">
