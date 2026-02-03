@@ -85,6 +85,8 @@ function VerificationComponent({ condoId }: { condoId: string }) {
     const [loadingDetails, setLoadingDetails] = useState(false);
     const [liquidatedDetails, setLiquidatedDetails] = useState<{ debts: Debt[], balanceCredit: number } | null>(null);
 
+    const ownersCollectionName = condoId === 'condo_01' ? 'owners' : 'propietarios';
+
     useEffect(() => {
         if (!condoId) { setLoading(false); return; }
         const q = query(collection(db, 'condominios', condoId, 'payments'), orderBy('reportedAt', 'desc'));
@@ -171,7 +173,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                     const costoCuotaActualBs = condoFeeUSD * payment.exchangeRate;
 
                     for (const beneficiary of payment.beneficiaries) {
-                        const ownersCollectionName = condoId === 'condo_01' ? 'owners' : 'propietarios';
                         const ownerRef = doc(db, 'condominios', condoId, ownersCollectionName, beneficiary.ownerId);
                         const ownerDoc = await transaction.get(ownerRef);
                         if (!ownerDoc.exists()) throw new Error(`El propietario ${beneficiary.ownerName} no fue encontrado.`);
@@ -306,7 +307,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                     const paidDebtsSnapshot = await getDocs(paidDebtsQuery);
     
                     const ownerRefs = paymentData.beneficiaries.map(b => {
-                        const ownersCollectionName = condoId === 'condo_01' ? 'owners' : 'propietarios';
                         return doc(db, 'condominios', condoId, ownersCollectionName, b.ownerId);
                     });
                     const ownerDocs = await Promise.all(ownerRefs.map(ref => transaction.get(ref)));
@@ -433,7 +433,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
         
         setIsGenerating(true);
         try {
-            const ownersCollectionName = condoId === 'condo_01' ? 'owners' : 'propietarios';
             const ownerRef = doc(db, 'condominios', condoId, ownersCollectionName, beneficiary.ownerId);
             const ownerSnap = await getDoc(ownerRef);
             if (!ownerSnap.exists()) {
@@ -664,16 +663,17 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
     const [beneficiaryRows, setBeneficiaryRows] = useState<BeneficiaryRow[]>([{ id: Date.now().toString(), owner: null, searchTerm: '', amount: '', selectedProperty: null }]);
     const [isBankModalOpen, setIsBankModalOpen] = useState(false);
 
+    const ownersCollectionName = condoId === 'condo_01' ? 'owners' : 'propietarios';
+
     useEffect(() => {
         if (!condoId) return;
-        const ownersCollectionName = condoId === 'condo_01' ? 'owners' : 'propietarios';
         const q = query(collection(db, "condominios", condoId, ownersCollectionName), where("role", "==", "propietario"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const ownersData: Owner[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner));
             setAllOwners(ownersData.sort((a, b) => (a.name || '').localeCompare(b.name || '')));
         });
         return () => unsubscribe();
-    }, [condoId]);
+    }, [condoId, ownersCollectionName]);
     
     useEffect(() => {
         if (!condoId) return;
@@ -788,7 +788,6 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
 
             const batch = writeBatch(db);
             beneficiaries.forEach(beneficiary => {
-                const ownersCollectionName = condoId === 'condo_01' ? 'owners' : 'propietarios';
                 const notificationsRef = doc(collection(db, `condominios/${condoId}/${ownersCollectionName}/${beneficiary.ownerId}/notifications`));
                 batch.set(notificationsRef, {
                     title: "Pago Registrado por Administración",
@@ -883,12 +882,13 @@ function PaymentCalculatorComponent({ condoId }: { condoId: string }) {
     const [activeRate, setActiveRate] = useState(0);
     const [condoFee, setCondoFee] = useState(0);
 
+    const ownersCollectionName = condoId === 'condo_01' ? 'owners' : 'propietarios';
+
     useEffect(() => {
         if (!condoId) {
             setLoadingOwners(false);
             return;
         }
-        const ownersCollectionName = condoId === 'condo_01' ? 'owners' : 'propietarios';
         const q = query(collection(db, "condominios", condoId, ownersCollectionName), where("role", "==", "propietario"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const ownersData: Owner[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner));
@@ -896,7 +896,7 @@ function PaymentCalculatorComponent({ condoId }: { condoId: string }) {
             setLoadingOwners(false);
         });
         return () => unsubscribe();
-    }, [condoId]);
+    }, [condoId, ownersCollectionName]);
 
     useEffect(() => {
         if (!selectedOwner || !condoId) {
@@ -1062,7 +1062,7 @@ function PaymentCalculatorUI({ owner, debts, activeRate, condoFee, condoId }: { 
                         <Button 
                             className="w-full" 
                             disabled={!paymentCalculator.hasSelection || paymentCalculator.totalToPay <= 0}
-                            onClick={() => router.push(`/${condoId}/admin/payments?tab=report`)}
+                            onClick={() => router.push(`/${condoId}/owner/payments?tab=report`)}
                         >
                             <Receipt className="mr-2 h-4 w-4"/>
                             Proceder al Reporte de Pago

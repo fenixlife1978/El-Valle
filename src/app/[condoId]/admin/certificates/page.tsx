@@ -219,8 +219,8 @@ export default function CertificatesPage() {
       setLoading(false);
       return;
     }
-
-    const ownersSub = onSnapshot(query(collection(db, 'condominios', activeCondoId, 'owners')), (snap) => {
+    const ownersCollectionName = activeCondoId === 'condo_01' ? 'owners' : 'propietarios';
+    const ownersSub = onSnapshot(query(collection(db, 'condominios', activeCondoId, ownersCollectionName)), (snap) => {
       setOwners(snap.docs.map(d => ({ id: d.id, ...d.data() } as Owner)));
     });
 
@@ -239,8 +239,9 @@ export default function CertificatesPage() {
   }, [activeCondoId]);
 
   const togglePublished = async (id: string, current: boolean) => {
+    if (!activeCondoId) return;
     try {
-      await updateDoc(doc(db, 'condominios', activeCondoId!, 'certificates', id), { published: !current });
+      await updateDoc(doc(db, 'condominios', activeCondoId, 'certificates', id), { published: !current });
       toast({ title: !current ? "Visible para el Propietario" : "Oculto del Historial" });
     } catch (e) {
       toast({ variant: "destructive", title: "Error" });
@@ -249,9 +250,10 @@ export default function CertificatesPage() {
 
   const handleGenerateAndSave = async (data: any, person: any) => {
     requestAuthorization(async () => {
+      if (!activeCondoId) return;
       setIsSubmitting(true);
       try {
-        const docRef = await addDoc(collection(db, 'condominios', activeCondoId!, 'certificates'), { ...data, createdAt: serverTimestamp() });
+        const docRef = await addDoc(collection(db, 'condominios', activeCondoId, 'certificates'), { ...data, createdAt: serverTimestamp() });
         await generatePDF({ ...data, id: docRef.id });
         toast({ title: "¡Éxito!", description: "Documento generado y guardado en el historial." });
       } catch (e) {

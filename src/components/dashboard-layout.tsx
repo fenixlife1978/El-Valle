@@ -118,11 +118,15 @@ const CustomHeader = ({
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <Link key={item.label} href={item.href}>
-              <Button variant={pathname === item.href ? "secondary" : "ghost"} size="sm" className="font-bold">
-                {item.label}
-              </Button>
-            </Link>
+            <Button 
+              key={item.label} 
+              variant={pathname === item.href ? "secondary" : "ghost"} 
+              size="sm" 
+              className="font-bold"
+              onClick={() => router.push(item.href)}
+            >
+              {item.label}
+            </Button>
           )
         ))}
       </nav>

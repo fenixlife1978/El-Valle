@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -9,7 +8,6 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Building2, ArrowRight, Loader2, ShieldCheck, Plus } from 'lucide-react';
-import Link from 'next/link';
 
 export default function SuperAdminCondosPage() {
   const [condominios, setCondominios] = useState<any[]>([]);
@@ -54,11 +52,11 @@ export default function SuperAdminCondosPage() {
           </h1>
           <p className="text-muted-foreground font-bold uppercase text-xs tracking-widest mt-4">Gestión de Propiedades EFAS</p>
         </div>
-        <Link href="/super-admin/condominios/nuevo">
-          <Button className="rounded-2xl font-black uppercase text-[10px] py-6 px-8 bg-amber-500 hover:bg-amber-600 text-white gap-2 shadow-lg shadow-amber-500/20">
+        <Button 
+            onClick={() => router.push('/super-admin/condominios/nuevo')}
+            className="rounded-2xl font-black uppercase text-[10px] py-6 px-8 bg-amber-500 hover:bg-amber-600 text-white gap-2 shadow-lg shadow-amber-500/20">
             <Plus className="h-4 w-4" /> Registrar Nuevo
-          </Button>
-        </Link>
+        </Button>
       </div>
 
       <Card className="border-none shadow-2xl rounded-[2.5rem] overflow-hidden bg-card/40 backdrop-blur-xl border border-white/10">

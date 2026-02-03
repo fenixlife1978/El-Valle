@@ -1,16 +1,18 @@
 'use client';
 
 import React from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import { Wallet, LayoutDashboard, ShieldCheck, ArrowRight } from 'lucide-react';
 import { SYSTEM_LOGO, COMPANY_NAME } from '@/lib/constants';
 
 export default function LandingPage() {
+  const router = useRouter();
+
   return (
     <div className="min-h-screen bg-[#1A1D23] text-white font-sans selection:bg-[#F28705] selection:text-white">
       
-      {/* HEADER - NOMBRE SEÑALADO CON FLECHA ROJA */}
+      {/* HEADER */}
       <header className="flex items-center justify-between px-8 py-5 border-b border-white/5 sticky top-0 bg-[#1A1D23]/95 backdrop-blur-md z-50">
         <div className="flex items-center gap-4">
           <div className="border border-white/10 rounded-xl p-1 bg-white/5 shadow-inner">
@@ -21,7 +23,6 @@ export default function LandingPage() {
             />
           </div>
           <div className="flex flex-col">
-            {/* NOMBRE DE MARCA EXACTO A LA IMAGEN */}
             <h1 className="text-2xl font-[900] italic tracking-tighter leading-none uppercase">
               <span className="text-[#F28705]">EFAS</span>
               <span className="text-white">CONDOSYS</span>
@@ -34,23 +35,20 @@ export default function LandingPage() {
 
         <div className="flex items-center gap-8">
           <nav className="hidden md:flex items-center gap-6">
-            <Link href="/login?role=owner" className="text-xs font-black text-slate-400 hover:text-[#F28705] transition-colors uppercase tracking-widest">
+            <button onClick={() => router.push('/login?role=owner')} className="text-xs font-black text-slate-400 hover:text-[#F28705] transition-colors uppercase tracking-widest">
               Propietarios
-            </Link>
+            </button>
           </nav>
-          <Link href="/login?role=admin">
-            <Button className="bg-[#0070f3] hover:bg-[#005bb5] text-white rounded-full px-8 h-10 font-bold text-xs uppercase tracking-widest shadow-lg shadow-blue-600/20">
-              Acceso Admin
-            </Button>
-          </Link>
+          <Button onClick={() => router.push('/login?role=admin')} className="bg-[#0070f3] hover:bg-[#005bb5] text-white rounded-full px-8 h-10 font-bold text-xs uppercase tracking-widest shadow-lg shadow-blue-600/20">
+            Acceso Admin
+          </Button>
         </div>
       </header>
 
-      {/* HERO SECTION - LOGO GRANDE EN RECTÁNGULO ROJO */}
+      {/* HERO SECTION */}
       <main className="flex flex-col items-center justify-center text-center px-6 pt-24 pb-32 relative">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[500px] bg-blue-600/5 blur-[120px] rounded-full -z-10" />
         
-        {/* RECTÁNGULO DEL LOGO CENTRAL */}
         <div className="relative mb-14">
           <div className="absolute inset-0 bg-[#F28705]/15 blur-[80px] rounded-full" />
           <img 
@@ -77,20 +75,16 @@ export default function LandingPage() {
         </p>
 
         <div className="flex flex-col sm:flex-row gap-4">
-          <Link href="/welcome">
-            <Button size="lg" className="h-14 px-10 rounded-2xl bg-white text-black hover:bg-slate-200 font-black uppercase italic">
+          <Button onClick={() => router.push('/welcome')} size="lg" className="h-14 px-10 rounded-2xl bg-white text-black hover:bg-slate-200 font-black uppercase italic">
               Comenzar Ahora
-            </Button>
-          </Link>
-          <Link href="/welcome">
-            <Button size="lg" variant="outline" className="h-14 px-10 rounded-2xl border-white/10 bg-white/5 hover:bg-white/10 font-black uppercase italic text-white">
+          </Button>
+          <Button onClick={() => router.push('/welcome')} size="lg" variant="outline" className="h-14 px-10 rounded-2xl border-white/10 bg-white/5 hover:bg-white/10 font-black uppercase italic text-white">
               Saber más <ArrowRight className="ml-2 h-5 w-5" />
-            </Button>
-          </Link>
+          </Button>
         </div>
       </main>
 
-      {/* MÓDULOS INTEGRADOS - MANTENIENDO TODO IGUAL */}
+      {/* MODULES */}
       <section className="bg-[#14161B] py-28 border-t border-white/5">
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex flex-col items-center text-center mb-20">
