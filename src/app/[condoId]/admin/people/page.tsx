@@ -256,7 +256,7 @@ export default function OwnersManagement() {
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                         <Input 
                             placeholder="Buscar por nombre, correo, calle o casa..." 
-                            className="pl-12 bg-slate-100 border-none h-12 rounded-xl focus-visible:ring-primary"
+                            className="pl-12 bg-slate-100 border-none h-12 rounded-xl focus-visible:ring-primary text-black"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />

@@ -36,8 +36,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     const adminNavItems: NavItem[] = [
         { href: `/${condoId}/admin/dashboard`, icon: Home, label: "Dashboard" },
         { 
-            href: "#", 
-            icon: Landmark, 
+            href: "#",
             label: "Gestión de Pagos",
             items: [
                 { href: `/${condoId}/admin/payments?tab=verify`, label: "Verificación de Pagos" },
@@ -46,8 +45,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             ]
         },
         { 
-            href: "#", 
-            icon: Grid3X3, 
+            href: "#",
             label: "Utilidades",
             items: [
                 { href: `/${condoId}/admin/debts`, label: "Gestión de Deudas" },

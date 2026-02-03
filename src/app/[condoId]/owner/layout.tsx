@@ -19,7 +19,7 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
   const ownerNavItems: NavItem[] = [
     { href: `/${condoId}/owner/dashboard`, icon: Home, label: "Inicio" },
     { 
-      href: `/${condoId}/owner/payments`, 
+      href: "#", 
       icon: Landmark, 
       label: "Pagos",
       items: [
