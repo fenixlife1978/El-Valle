@@ -86,7 +86,7 @@ export default function ForgotPasswordPage() {
                             {loading ? 'Enviando...' : 'Enviar Correo de Restablecimiento'}
                         </Button>
                          <Button variant="link" size="sm" asChild>
-                            <Link href="/login">Volver a Iniciar Sesión</Link>
+                            <Link href="/welcome">Volver al Inicio</Link>
                         </Button>
                     </CardFooter>
                 </form>

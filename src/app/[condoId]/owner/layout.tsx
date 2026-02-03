@@ -6,7 +6,7 @@ import { usePathname, useRouter, useParams } from 'next/navigation';
 import { DashboardLayout, type NavItem } from '@/components/dashboard-layout';
 import { useAuth } from '@/hooks/use-auth';
 import { BottomNavBar, type BottomNavItem } from '@/components/bottom-nav-bar';
-import { Loader2, Home, Plus, FileSearch, Banknote, Landmark, ClipboardList, Calculator, Award, Grid3X3 } from 'lucide-react';
+import { Loader2, Home, Plus, FileSearch, Banknote, ClipboardList, Calculator, Award } from 'lucide-react';
 
 export default function OwnerLayout({ children }: { children: ReactNode }) {
   const { user, ownerData, role, loading } = useAuth();
@@ -20,7 +20,6 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
     { href: `/${condoId}/owner/dashboard`, icon: Home, label: "Inicio" },
     { 
       href: "#", 
-      icon: Landmark, 
       label: "Pagos",
       items: [
         { href: `/${condoId}/owner/payments`, label: "Reportar Pago" },
@@ -30,7 +29,6 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
     },
     { 
       href: "#", 
-      icon: Grid3X3, 
       label: "Utilidades",
       items: [
           { href: `/${condoId}/owner/reports`, label: "Publicaciones" },

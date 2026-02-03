@@ -76,7 +76,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const docRef = doc(db, 'condominios', storedCondoId, ownersCollectionName, user.uid);
 
         const unsubSnap = onSnapshot(docRef, async (snap) => {
-            if (snap.exists() && snap.data().published !== false) {
+            if (snap.exists()) {
                 const userData = snap.data();
                 let finalPhoto = userData.photoURL;
 

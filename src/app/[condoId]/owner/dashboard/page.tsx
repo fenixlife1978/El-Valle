@@ -1,103 +1,87 @@
-
 'use client';
 
-// ... (Tus mismos imports de UI y Lucide)
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, AlertCircle, Receipt, CalendarCheck2, Download, Banknote, Share2 } from "lucide-react";
-import { Dialog, DialogContent, DialogFooter } from '@/components/ui/dialog';
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Loader2, AlertCircle, Receipt, CalendarCheck2, Download, Banknote } from "lucide-react";
 import CarteleraDigital from "@/components/CarteleraDigital";
 
 // Imports de Lógica y Librerías
 import { useAuth } from "@/hooks/use-auth";
 import { useState, useEffect, useMemo } from 'react';
-import { collection, query, where, onSnapshot, getDocs, Timestamp, orderBy, limit } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { format, isBefore, startOfMonth } from "date-fns";
-import { es } from "date-fns/locale";
 import Link from "next/link";
-import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import Marquee from "@/components/ui/marquee";
-import { generatePaymentReceipt } from '@/lib/pdf-generator';
 
-// ... (Tus tipos y constantes de meses)
+// --- TIPOS ---
 type Anuncio = { id: string; urlImagen: string; titulo: string; descripcion?: string; published?: boolean; };
 type Debt = { id: string; year: number; month: number; amountUSD: number; description: string; status: 'pending' | 'paid' | 'vencida'; paidAmountUSD?: number; property: { street: string, house: string }; published?: boolean; };
-type Payment = { id: string; status: 'pendiente' | 'aprobado' | 'rechazado'; totalAmount: number; paymentDate: Timestamp; reference: string; beneficiaryIds: string[]; beneficiaries: { ownerId: string; ownerName: string; amount: number; street?: string; house?: string; }[]; exchangeRate: number; receiptNumbers?: { [ownerId: string]: string }; observations?: string; paymentMethod: string; bank: string; };
-type ReceiptData = { payment: Payment; beneficiary: any; ownerName: string; ownerUnit: string; paidDebts: Debt[]; previousBalance: number; currentBalance: number; receiptNumber: string; } | null;
+type Payment = { id: string; status: 'pendiente' | 'aprobado' | 'rechazado'; totalAmount: number; paymentDate: any; reference: string; beneficiaryIds: string[]; beneficiaries: { ownerId: string; ownerName: string; amount: number; street?: string; house?: string; }[]; exchangeRate: number; };
 
 const monthsLocale: { [key: number]: string } = { 1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril', 5: 'Mayo', 6: 'Junio', 7: 'Julio', 8: 'Agosto', 9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre' };
 const formatCurrency = (num: number) => num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export default function OwnerDashboardPage() {
+    // 1. Extraemos todo del useAuth
     const { user, ownerData, activeCondoId, workingCondoId, companyInfo, loading: authLoading } = useAuth();
-    const { toast } = useToast();
     
-    const [loading, setLoading] = useState(true);
+    const [loadingData, setLoadingData] = useState(true);
     const [debts, setDebts] = useState<Debt[]>([]);
     const [payments, setPayments] = useState<Payment[]>([]);
-    const [isGenerating, setIsGenerating] = useState(false);
-    const [receiptData, setReceiptData] = useState<ReceiptData>(null);
-    const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [anuncios, setAnuncios] = useState<Anuncio[]>([]);
     const [now, setNow] = useState<Date | null>(null);
 
-    const ownerId = user?.uid;
     const currentCondoId = activeCondoId || workingCondoId;
 
-    // --- EFECTO DE DATOS ---
+    // --- EFECTO DE DATOS (Solo si hay usuario y condominio) ---
     useEffect(() => {
         setNow(new Date());
 
-        if (authLoading || !user) return;
+        // Si authLoading es true, o no hay usuario, o no hay condominio todavía, no pedimos nada
+        if (authLoading || !user || !currentCondoId) return;
 
-        if (!currentCondoId) {
-            setLoading(false);
-            return;
-        };
+        setLoadingData(true);
 
-        setLoading(true);
-
+        // A. Cartelera (Solo publicados)
         const unsubAnuncios = onSnapshot(
-            collection(db, "condominios", currentCondoId, "billboard_announcements"), 
+            query(collection(db, "condominios", currentCondoId, "billboard_announcements"), where("published", "==", true)), 
             (snapshot) => {
-                if (snapshot.empty) {
-                    console.warn("⚠️ LA COLECCIÓN ESTÁ TOTALMENTE VACÍA EN FIREBASE.");
-                } else {
-                    console.log("✅ Documentos crudos encontrados:", snapshot.docs.length);
-                    snapshot.docs.forEach(doc => {
-                        console.log(`ID: ${doc.id} | Datos:`, doc.data());
-                    });
-                }
                 const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Anuncio));
                 setAnuncios(data);
-            },
-            (err) => console.error("Error en Cartelera:", err)
+            }
         );
 
+        // B. Deudas (Solo las publicadas para el propietario)
         const unsubDebts = onSnapshot(
-            query(collection(db, 'condominios', currentCondoId, 'debts'), where('ownerId', '==', ownerId), orderBy('year', 'desc'), orderBy('month', 'desc')),
+            query(
+                collection(db, 'condominios', currentCondoId, 'debts'), 
+                where('ownerId', '==', user.uid),
+                where('published', '==", true'), // Regla de switch
+                orderBy('year', 'desc'), 
+                orderBy('month', 'desc')
+            ),
             (snap) => setDebts(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Debt)))
         );
 
+        // C. Pagos
         const unsubPayments = onSnapshot(
-            query(collection(db, 'condominios', currentCondoId, 'payments'), where('beneficiaryIds', 'array-contains', ownerId)),
+            query(collection(db, 'condominios', currentCondoId, 'payments'), where('beneficiaryIds', 'array-contains', user.uid)),
             (snap) => {
                 const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Payment));
-                setPayments(list.sort((a, b) => b.paymentDate.toMillis() - a.paymentDate.toMillis()));
-                setLoading(false);
+                setPayments(list.sort((a, b) => b.paymentDate?.toMillis() - a.paymentDate?.toMillis()));
+                setLoadingData(false);
             },
-            () => setLoading(false)
+            () => setLoadingData(false)
         );
 
         return () => { unsubAnuncios(); unsubDebts(); unsubPayments(); };
-    }, [user, currentCondoId, authLoading, ownerId]);
+    }, [user, currentCondoId, authLoading]);
 
-    // --- LÓGICA DE RECIBOS Y STATS ---
+    // --- LÓGICA DE STATS ---
     const stats = useMemo(() => {
         const pendingDebts = debts.filter(d => d.status === 'pending' || d.status === 'vencida');
         const totalPendingUSD = pendingDebts.reduce((sum, d) => sum + d.amountUSD - (d.paidAmountUSD || 0), 0);
@@ -116,26 +100,38 @@ export default function OwnerDashboardPage() {
         return { totalPendingUSD, isSolvente, oldestDebtDate, isVencida };
     }, [debts, now]);
 
-    // --- RENDERIZADO DE ESTADOS DE CARGA (Aquí está el truco) ---
-    if (authLoading || (user && !ownerData)) {
+    // --- MANEJO DE ESTADOS DE CARGA (Para evitar rebotes) ---
+    
+    // 1. Mientras useAuth está verificando la sesión inicial
+    if (authLoading) {
         return (
-            <div className="h-screen flex flex-col items-center justify-center">
+            <div className="h-screen flex flex-col items-center justify-center bg-background">
                 <Loader2 className="animate-spin text-primary h-12 w-12" />
                 <p className="mt-4 font-black uppercase text-[10px] tracking-widest animate-pulse">
-                    EFAS CondoSys • Sincronizando Perfil...
+                    EFAS CondoSys • Autenticando...
                 </p>
             </div>
         );
     }
-    
-    // Si llegamos aquí y no hay ownerData, es porque el AuthProvider nos va a echar en un segundo
-    if (!ownerData) return null; 
 
-    // 3. Render principal cuando TODO está listo
+    // 2. Si ya terminó de cargar pero no hay datos de propietario (Espera activa)
+    if (user && !ownerData) {
+        return (
+            <div className="h-screen flex flex-col items-center justify-center bg-background">
+                <Loader2 className="animate-spin text-primary h-10 w-10 mb-4" />
+                <p className="font-bold text-sm uppercase">Sincronizando con {currentCondoId}...</p>
+                <p className="text-[10px] text-muted-foreground mt-2">Si el sistema no avanza, verifique su conexión.</p>
+            </div>
+        );
+    }
+
+    // 3. Si no hay usuario en absoluto (aquí el AuthProvider debería mandarte al welcome, pero retornamos null para no romper nada)
+    if (!user || !ownerData) return null;
+
     const statusVariant = stats.isSolvente ? 'success' : stats.isVencida ? 'destructive' : 'warning';
 
     return (
-        <div className="space-y-6 md:space-y-8 p-4 md:p-8 max-w-7xl mx-auto animate-in fade-in duration-700">
+        <div className="space-y-6 md:space-y-8 p-4 md:p-8 max-w-7xl mx-auto animate-in fade-in duration-700 font-montserrat">
             <header className="flex flex-col gap-2">
                 <h1 className="text-3xl font-bold tracking-tight">👋 ¡Hola, {ownerData.name?.split(' ')[0]}!</h1>
                 <p className="text-muted-foreground font-medium">Panel de autogestión: <span className="text-foreground font-bold">{companyInfo?.name || 'EFAS CondoSys'}</span></p>
@@ -198,7 +194,6 @@ export default function OwnerDashboardPage() {
                 </Card>
             </div>
 
-            {/* TABLA DE PAGOS (Versión simplificada para el ejemplo) */}
             <Card className="border-none shadow-2xl overflow-hidden rounded-[2rem]">
                 <CardHeader className="bg-muted/30 border-b px-8 py-6">
                     <div className="flex justify-between items-center">
@@ -206,7 +201,7 @@ export default function OwnerDashboardPage() {
                             <Receipt className="h-5 w-5 text-primary"/> Pagos Recientes
                         </CardTitle>
                         <Link href={`/${currentCondoId}/owner/payments`}>
-                            <Button variant="outline" className="font-black text-[10px] uppercase tracking-widest rounded-xl">Reportar Nuevo</Button>
+                            <Button variant="outline" className="font-black text-[10px] uppercase tracking-widest rounded-xl">Ver Todos</Button>
                         </Link>
                     </div>
                 </CardHeader>
@@ -221,28 +216,36 @@ export default function OwnerDashboardPage() {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {payments.slice(0, 5).map(p => {
-                                const ben = p.beneficiaries.find(b => b.ownerId === ownerId);
-                                if(!ben) return null;
-                                return (
-                                    <TableRow key={p.id} className="hover:bg-muted/20 border-muted/20 transition-colors">
-                                        <TableCell className="px-8 font-bold text-sm">{format(p.paymentDate.toDate(), 'dd/MM/yyyy')}</TableCell>
-                                        <TableCell className="text-right font-black text-primary">{formatCurrency(ben.amount)}</TableCell>
-                                        <TableCell className="text-center">
-                                            <Badge variant={p.status === 'aprobado' ? 'success' : p.status === 'rechazado' ? 'destructive' : 'warning'} className="text-[9px] font-black uppercase px-2">
-                                                {p.status}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell className="text-right px-8">
-                                            {p.status === 'aprobado' && (
-                                                <Button variant="ghost" size="sm" className="rounded-full hover:bg-primary/10" onClick={() => {/* tu lógica de recibo */}}>
-                                                    <Download className="h-4 w-4 text-primary"/>
-                                                </Button>
-                                            )}
-                                        </TableCell>
-                                    </TableRow>
-                                );
-                            })}
+                            {loadingData ? (
+                                <TableRow><TableCell colSpan={4} className="text-center py-10"><Loader2 className="animate-spin mx-auto"/></TableCell></TableRow>
+                            ) : payments.length === 0 ? (
+                                <TableRow><TableCell colSpan={4} className="text-center py-10 text-muted-foreground font-bold">No hay pagos reportados.</TableCell></TableRow>
+                            ) : (
+                                payments.slice(0, 5).map(p => {
+                                    const ben = p.beneficiaries?.find(b => b.ownerId === user.uid);
+                                    if(!ben) return null;
+                                    return (
+                                        <TableRow key={p.id} className="hover:bg-muted/20 border-muted/20 transition-colors">
+                                            <TableCell className="px-8 font-bold text-sm">
+                                                {p.paymentDate ? format(p.paymentDate.toDate(), 'dd/MM/yyyy') : '---'}
+                                            </TableCell>
+                                            <TableCell className="text-right font-black text-primary">{formatCurrency(ben.amount)}</TableCell>
+                                            <TableCell className="text-center">
+                                                <Badge variant={p.status === 'aprobado' ? 'success' : p.status === 'rechazado' ? 'destructive' : 'warning'} className="text-[9px] font-black uppercase px-2">
+                                                    {p.status}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell className="text-right px-8">
+                                                {p.status === 'aprobado' && (
+                                                    <Button variant="ghost" size="sm" className="rounded-full hover:bg-primary/10">
+                                                        <Download className="h-4 w-4 text-primary"/>
+                                                    </Button>
+                                                )}
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                })
+                            )}
                         </TableBody>
                     </Table>
                 </CardContent>
