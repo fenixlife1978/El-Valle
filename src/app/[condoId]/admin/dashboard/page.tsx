@@ -222,7 +222,7 @@ export default function AdminDashboardPage({ params }: { params: { condoId: stri
                                 recentPayments.map(p => (
                                     <TableRow key={p.id} className="hover:bg-muted/50 transition-colors border-b border-white/5">
                                         <TableCell className="font-bold text-xs uppercase text-foreground py-4">
-                                            {p.ownerName || 'Residente'}
+                                            {p.beneficiaries?.map((b: any) => b.ownerName).join(', ') || 'Residente'}
                                         </TableCell>
                                         <TableCell className="text-emerald-500 font-black italic">
                                             Bs. {formatToTwoDecimals(p.totalAmount)}

@@ -111,11 +111,9 @@ const CustomHeader = ({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start">
                 {item.items.map(subItem => (
-                  <Link key={subItem.label} href={subItem.href} passHref>
-                    <DropdownMenuItem className="cursor-pointer font-bold">
-                      {subItem.label}
-                    </DropdownMenuItem>
-                  </Link>
+                  <DropdownMenuItem key={subItem.label} onClick={() => router.push(subItem.href)} className="cursor-pointer font-bold">
+                    {subItem.label}
+                  </DropdownMenuItem>
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
@@ -182,20 +180,26 @@ const CustomHeader = ({
                   <div key={item.label} className="py-2">
                     <h3 className="px-4 text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">{item.label}</h3>
                     {item.items.map(subItem => (
-                      <Link key={subItem.label} href={subItem.href}>
-                        <Button variant={pathname === subItem.href ? "secondary" : "ghost"} className="w-full justify-start py-6 text-base font-bold">
-                          {subItem.label}
-                        </Button>
-                      </Link>
+                      <Button 
+                        key={subItem.label} 
+                        variant={pathname === subItem.href ? "secondary" : "ghost"} 
+                        className="w-full justify-start py-6 text-base font-bold"
+                        onClick={() => router.push(subItem.href)}
+                      >
+                        {subItem.label}
+                      </Button>
                     ))}
                   </div>
                 ) : (
-                  <Link key={item.label} href={item.href}>
-                    <Button variant={pathname === item.href ? "secondary" : "ghost"} className="w-full justify-start py-6 text-base font-bold">
-                      <item.icon className="mr-3 h-5 w-5 text-primary"/>
-                      {item.label}
-                    </Button>
-                  </Link>
+                  <Button 
+                    key={item.label} 
+                    variant={pathname === item.href ? "secondary" : "ghost"} 
+                    className="w-full justify-start py-6 text-base font-bold"
+                    onClick={() => router.push(item.href)}
+                  >
+                    <item.icon className="mr-3 h-5 w-5 text-primary"/>
+                    {item.label}
+                  </Button>
                 )
               ))}
             </nav>

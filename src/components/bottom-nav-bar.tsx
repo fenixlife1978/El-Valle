@@ -2,6 +2,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Plus } from 'lucide-react';
@@ -28,6 +29,8 @@ export type BottomNavItem = {
 };
 
 export function BottomNavBar({ items, pathname }: { items: BottomNavItem[], pathname: string }) {
+  const router = useRouter();
+
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 flex h-16 items-center justify-around border-t bg-card p-2 sm:hidden">
       {items.map((item) => {
@@ -52,12 +55,14 @@ export function BottomNavBar({ items, pathname }: { items: BottomNavItem[], path
                   className="w-56 mb-2"
                 >
                   {item.subMenu?.map((subItem) => (
-                    <Link href={subItem.href} key={subItem.href} passHref>
-                       <DropdownMenuItem className="gap-2 cursor-pointer">
-                            <subItem.icon className="h-4 w-4" />
-                            <span>{subItem.label}</span>
-                        </DropdownMenuItem>
-                    </Link>
+                    <DropdownMenuItem 
+                      key={subItem.href} 
+                      onClick={() => router.push(subItem.href)}
+                      className="gap-2 cursor-pointer"
+                    >
+                      <subItem.icon className="h-4 w-4" />
+                      <span>{subItem.label}</span>
+                    </DropdownMenuItem>
                   ))}
                 </DropdownMenuContent>
               </DropdownMenu>
