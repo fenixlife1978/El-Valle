@@ -18,6 +18,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import Link from 'next/link';
 
 const venezuelanBanks = [
     { value: 'banesco', label: 'Banesco' }, { value: 'mercantil', label: 'Mercantil' },
@@ -28,6 +29,11 @@ const venezuelanBanks = [
 const monthsLocale: { [key: number]: string } = {
     1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril', 5: 'Mayo', 6: 'Junio',
     7: 'Julio', 8: 'Agosto', 9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre'
+};
+
+const formatToTwoDecimals = (num: number) => {
+    if (typeof num !== 'number' || isNaN(num)) return '0,00';
+    return num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
 export default function OwnerPaymentCalculatorPage({ params }: { params: { condoId: string } }) {
@@ -80,6 +86,23 @@ export default function OwnerPaymentCalculatorPage({ params }: { params: { condo
            .sort((a, b) => a.year - b.year || a.month - b.month);
     }, [ownerDebts]);
 
+    const futureMonths = useMemo(() => {
+        const now = new Date();
+        const paidAdvanceMonths = ownerDebts
+            .filter(d => d.status === 'paid' && d.description.includes('Adelantado'))
+            .map(d => `${d.year}-${String(d.month).padStart(2, '0')}`);
+        
+        return Array.from({ length: 12 }, (_, i) => {
+            const date = addMonths(now, i);
+            const value = format(date, 'yyyy-MM');
+            return { 
+                value, 
+                label: format(date, 'MMMM yyyy', { locale: es }), 
+                disabled: paidAdvanceMonths.includes(value) 
+            };
+        });
+    }, [ownerDebts]);
+
     const paymentCalculator = useMemo(() => {
         const dueMonthsTotalUSD = pendingDebts
             .filter(debt => selectedPendingDebts.includes(debt.id))
@@ -99,9 +122,6 @@ export default function OwnerPaymentCalculatorPage({ params }: { params: { condo
             condoFee
         };
     }, [selectedPendingDebts, selectedAdvanceMonths, pendingDebts, activeRate, condoFee, ownerData]);
-
-    const formatToTwoDecimals = (num: number) => 
-        num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
     const handleRegisterPayment = async () => {
         if (!workingCondoId || !user || !ownerData) return;
@@ -147,7 +167,7 @@ export default function OwnerPaymentCalculatorPage({ params }: { params: { condo
             </div>
         );
     }
-
+    
     return (
         <div className="p-6 space-y-6 font-montserrat max-w-7xl mx-auto">
             <div className="mb-10">
@@ -160,13 +180,160 @@ export default function OwnerPaymentCalculatorPage({ params }: { params: { condo
                 </p>
             </div>
 
-            <Card className="border-none shadow-xl rounded-[2rem] bg-card/50 backdrop-blur-md p-8 border border-white/5">
-                <div className="text-center py-10">
-                    <Calculator className="h-12 w-12 text-amber-500 mx-auto mb-4 opacity-50" />
-                    <h3 className="font-black uppercase italic tracking-tight text-xl">Interfaz de Calculadora Activa</h3>
-                    <p className="text-muted-foreground text-sm mt-2">Selecciona tus meses pendientes para generar el reporte de pago en Bolívares.</p>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+                <div className="lg:col-span-2 space-y-4">
+                    <Card>
+                        <CardHeader><CardTitle>1. Deudas Pendientes</CardTitle></CardHeader>
+                        <CardContent className="p-0">
+                           <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead className="w-[50px] text-center">Pagar</TableHead>
+                                        <TableHead>Período</TableHead>
+                                        <TableHead>Concepto</TableHead>
+                                        <TableHead>Estado</TableHead>
+                                        <TableHead className="text-right">Monto (Bs.)</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {pendingDebts.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell colSpan={5} className="h-24 text-center">
+                                                <Info className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                                                No tiene deudas pendientes.
+                                            </TableCell>
+                                        </TableRow>
+                                    ) : (
+                                     pendingDebts.map((debt) => {
+                                        const debtMonthDate = startOfMonth(new Date(debt.year, debt.month - 1));
+                                        const isOverdue = isBefore(debtMonthDate, startOfMonth(new Date()));
+                                        const status = debt.status === 'vencida' || (debt.status === 'pending' && isOverdue) ? 'Vencida' : 'Pendiente';
+                                        return (
+                                            <TableRow key={debt.id} data-state={selectedPendingDebts.includes(debt.id) ? 'selected' : ''}>
+                                                <TableCell className="text-center">
+                                                    <Checkbox 
+                                                        onCheckedChange={() => setSelectedPendingDebts(p => p.includes(debt.id) ? p.filter(id=>id!==debt.id) : [...p, debt.id])} 
+                                                        checked={selectedPendingDebts.includes(debt.id)} 
+                                                    />
+                                                </TableCell>
+                                                <TableCell className="font-medium">{monthsLocale[debt.month]} {debt.year}</TableCell>
+                                                <TableCell>{debt.description}</TableCell>
+                                                <TableCell><Badge variant={status === 'Vencida' ? 'destructive' : 'warning'}>{status}</Badge></TableCell>
+                                                <TableCell className="text-right">Bs. {formatToTwoDecimals(debt.amountUSD * activeRate)}</TableCell>
+                                            </TableRow>
+                                        );
+                                    }))}
+                                </TableBody>
+                            </Table>
+                        </CardContent>
+                    </Card>
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>2. Pagar Meses por Adelantado</CardTitle>
+                            <CardDescription>Cuota mensual actual: ${condoFee.toFixed(2)}</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                                {futureMonths.map(month => (
+                                    <Button 
+                                        key={month.value} 
+                                        type="button" 
+                                        variant={selectedAdvanceMonths.includes(month.value) ? 'default' : 'outline'} 
+                                        className="flex items-center justify-center gap-2 capitalize" 
+                                        onClick={() => setSelectedAdvanceMonths(p => p.includes(month.value) ? p.filter(m=>m!==month.value) : [...p, month.value])} 
+                                        disabled={month.disabled}
+                                    >
+                                        {selectedAdvanceMonths.includes(month.value) && <Check className="h-4 w-4" />} 
+                                        {month.label}
+                                    </Button>
+                                ))}
+                            </div>
+                        </CardContent>
+                    </Card>
                 </div>
-            </Card>
+                <div className="lg:sticky lg:top-20">
+                     {paymentCalculator.hasSelection && (
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center"><Calculator className="mr-2 h-5 w-5"/> 3. Resumen de Pago</CardTitle>
+                                <CardDescription>Cálculo basado en su selección.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                                {paymentCalculator.dueMonthsCount > 0 && <p className="text-sm text-muted-foreground">{paymentCalculator.dueMonthsCount} mes(es) adeudado(s) seleccionado(s).</p>}
+                                {paymentCalculator.advanceMonthsCount > 0 && <p className="text-sm text-muted-foreground">{paymentCalculator.advanceMonthsCount} mes(es) por adelanto seleccionado(s) x ${(paymentCalculator.condoFee ?? 0).toFixed(2)} c/u.</p>}
+                                <hr className="my-2"/>
+                                <div className="flex justify-between items-center text-lg">
+                                    <span className="text-muted-foreground">Sub-Total Deuda:</span>
+                                    <span className="font-medium">Bs. {formatToTwoDecimals(paymentCalculator.totalDebtBs)}</span>
+                                </div>
+                                <div className="flex justify-between items-center text-md">
+                                    <span className="text-muted-foreground flex items-center"><Minus className="mr-2 h-4 w-4"/> Saldo a Favor:</span>
+                                    <span className="font-medium text-green-500">Bs. {formatToTwoDecimals(paymentCalculator.balanceInFavor)}</span>
+                                </div>
+                                <hr className="my-2"/>
+                                <div className="flex justify-between items-center text-2xl font-bold">
+                                    <span className="flex items-center"><Equal className="mr-2 h-5 w-5"/> TOTAL A PAGAR:</span>
+                                    <span className="text-primary">Bs. {formatToTwoDecimals(paymentCalculator.totalToPay)}</span>
+                                </div>
+                            </CardContent>
+                            <CardFooter>
+                                <Button className="w-full" asChild disabled={!paymentCalculator.hasSelection || paymentCalculator.totalToPay <= 0}>
+                                    <Link href={`/${workingCondoId}/owner/payments`}>
+                                        <Receipt className="mr-2 h-4 w-4"/>
+                                        Proceder al Reporte de Pago
+                                    </Link>
+                                </Button>
+                            </CardFooter>
+                        </Card>
+                    )}
+                </div>
+            </div>
+
+            <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Reportar Pago por Bs. {formatToTwoDecimals(paymentCalculator.totalToPay)}</DialogTitle>
+                        <DialogDescription>Complete los detalles de su transacción.</DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="space-y-2">
+                            <Label>Método de Pago</Label>
+                            <Select value={paymentDetails.paymentMethod} onValueChange={v => setPaymentDetails(p => ({...p, paymentMethod: v}))}>
+                                <SelectTrigger><SelectValue placeholder="Seleccione..."/></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="transferencia">Transferencia</SelectItem>
+                                    <SelectItem value="movil">Pago Móvil</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                         <div className="space-y-2">
+                            <Label>Banco Emisor</Label>
+                            <Select value={paymentDetails.bank} onValueChange={v => setPaymentDetails(p => ({...p, bank: v}))}>
+                                <SelectTrigger><SelectValue placeholder="Seleccione..."/></SelectTrigger>
+                                <SelectContent>
+                                    {venezuelanBanks.map(b => <SelectItem key={b.value} value={b.value}>{b.label}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        {paymentDetails.bank === 'otro' && (
+                             <div className="space-y-2">
+                                <Label>Nombre del Otro Banco</Label>
+                                <Input value={paymentDetails.otherBank} onChange={e => setPaymentDetails(p => ({...p, otherBank: e.target.value}))}/>
+                            </div>
+                        )}
+                         <div className="space-y-2">
+                            <Label>Referencia</Label>
+                            <Input value={paymentDetails.reference} onChange={e => setPaymentDetails(p => ({...p, reference: e.target.value}))}/>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsPaymentDialogOpen(false)}>Cancelar</Button>
+                        <Button onClick={handleRegisterPayment} disabled={processingPayment}>
+                            {processingPayment ? <Loader2 className="animate-spin" /> : 'Confirmar y Reportar'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

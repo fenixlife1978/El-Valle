@@ -288,36 +288,60 @@ function VerificationComponent({ condoId }: { condoId: string }) {
 
     const handleDeletePayment = async () => {
         if (!paymentToDelete || !condoId) return;
+    
         requestAuthorization(async () => {
             setIsVerifying(true);
             try {
+                const paymentRef = doc(db, 'condominios', condoId, 'payments', paymentToDelete.id);
+    
+                const paidDebtsQuery = query(collection(db, 'condominios', condoId, 'debts'), where('paymentId', '==', paymentToDelete.id));
+                
                 await runTransaction(db, async (transaction) => {
-                    const paymentRef = doc(db, 'condominios', condoId, 'payments', paymentToDelete.id);
-                    const paidDebtsSnapshot = await getDocs(query(collection(db, 'condominios', condoId, 'debts'), where('paymentId', '==', paymentToDelete.id)));
-                    let totalRefundToBalance = paymentToDelete.totalAmount;
-
-                    for (const debtDoc of paidDebtsSnapshot.docs) {
-                        transaction.update(debtDoc.ref, { status: 'pending', paymentId: deleteField(), paymentDate: deleteField(), paidAmountUSD: deleteField() });
+                    // --- 1. FASE DE LECTURA ---
+                    const paymentDoc = await transaction.get(paymentRef);
+                    if (!paymentDoc.exists()) return;
+                    
+                    const paymentData = paymentDoc.data() as Payment;
+                    const paidDebtsSnapshot = await getDocs(paidDebtsQuery);
+    
+                    const ownerRefs = paymentData.beneficiaries.map(b => doc(db, 'condominios', condoId, 'owners', b.ownerId));
+                    const ownerDocs = await Promise.all(ownerRefs.map(ref => transaction.get(ref)));
+    
+                    // --- 2. FASE DE LÓGICA ---
+                    let totalAmountAppliedToDebts = 0;
+                    paidDebtsSnapshot.forEach(debtDoc => {
                         const debtData = debtDoc.data() as Debt;
-                        totalRefundToBalance -= (debtData.paidAmountUSD || debtData.amountUSD) * paymentToDelete.exchangeRate;
-                    }
-
-                    if (totalRefundToBalance > 0.01) {
-                         for (const beneficiary of paymentToDelete.beneficiaries) {
-                            const ownerRef = doc(db, 'condominios', condoId, 'owners', beneficiary.ownerId);
-                            const ownerDoc = await transaction.get(ownerRef);
+                        totalAmountAppliedToDebts += (debtData.paidAmountUSD || debtData.amountUSD) * paymentData.exchangeRate;
+                    });
+                    const totalSurplus = paymentData.totalAmount - totalAmountAppliedToDebts;
+    
+                    // --- 3. FASE DE ESCRITURA ---
+                    paidDebtsSnapshot.forEach(debtDoc => {
+                        transaction.update(debtDoc.ref, {
+                            status: 'pending',
+                            paymentId: deleteField(),
+                            paymentDate: deleteField(),
+                            paidAmountUSD: deleteField()
+                        });
+                    });
+    
+                    if (totalSurplus > 0.01) {
+                         ownerDocs.forEach(ownerDoc => {
                             if (ownerDoc.exists()) {
                                 const currentBalance = ownerDoc.data().balance || 0;
-                                transaction.update(ownerRef, { balance: Math.max(0, currentBalance - totalRefundToBalance) });
+                                transaction.update(ownerDoc.ref, { balance: Math.max(0, currentBalance - totalSurplus) });
                             }
-                        }
+                        });
                     }
-
+    
                     transaction.delete(paymentRef);
                 });
+    
                 toast({ title: 'Pago Eliminado', description: 'El pago y sus efectos han sido revertidos.' });
                 setPaymentToDelete(null);
+    
             } catch (error: any) {
+                console.error("Error deleting payment:", error);
                 toast({ variant: 'destructive', title: 'Error al eliminar', description: error.message });
             } finally {
                 setIsVerifying(false);
@@ -1000,7 +1024,7 @@ function PaymentCalculatorUI({ owner, debts, activeRate, condoFee, condoId }: { 
                                     const status = debt.status === 'vencida' || (debt.status === 'pending' && isOverdue) ? 'Vencida' : 'Pendiente';
                                     return <TableRow key={debt.id} data-state={selectedPendingDebts.includes(debt.id) ? 'selected' : ''}>
                                             <TableCell className="text-center"><Checkbox onCheckedChange={() => setSelectedPendingDebts(p => p.includes(debt.id) ? p.filter(id=>id!==debt.id) : [...p, debt.id])} checked={selectedPendingDebts.includes(debt.id)} /></TableCell>
-                                            <TableCell className="font-medium">{monthsLocale[debt.month]} {debt.year}</TableCell>
+                                            <TableCell className="font-medium">{MONTHS_LOCALE[debt.month]} {debt.year}</TableCell>
                                             <TableCell>{debt.description}</TableCell>
                                             <TableCell><Badge variant={status === 'Vencida' ? 'destructive' : 'warning'}>{status}</Badge></TableCell>
                                             <TableCell className="text-right">Bs. {formatCurrency(debt.amountUSD * activeRate)}</TableCell>
@@ -1027,7 +1051,7 @@ function PaymentCalculatorUI({ owner, debts, activeRate, condoFee, condoId }: { 
                     </CardContent>
                     <CardFooter>
                         <Button className="w-full" asChild disabled={!paymentCalculator.hasSelection || paymentCalculator.totalToPay <= 0}>
-                            <Link href={`/${condoId}/admin/payments?tab=report`}>
+                            <Link href={`/${condoId}/owner/payments?tab=report`}>
                                 <Receipt className="mr-2 h-4 w-4"/>
                                 Proceder al Reporte de Pago
                             </Link>
@@ -1039,14 +1063,14 @@ function PaymentCalculatorUI({ owner, debts, activeRate, condoFee, condoId }: { 
     );
 }
 
-function PaymentsPage({ condoId }: { condoId: string }) {
+function PaymentsPage() {
     const searchParams = useSearchParams();
+    const condoId = useParams()?.condoId as string;
     const router = useRouter();
 
-    const [activeTab, setActiveTab] = useState(searchParams?.get('tab') || 'verify');
+    const activeTab = searchParams?.get('tab') || 'verify';
 
     const handleTabChange = (value: string) => {
-        setActiveTab(value);
         router.push(`/${condoId}/admin/payments?tab=${value}`, { scroll: false });
     };
 
@@ -1058,14 +1082,14 @@ function PaymentsPage({ condoId }: { condoId: string }) {
                 </h2>
                 <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
                 <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">
-                    Verificación de pagos, registro manual y calculadora de deudas.
+                   Verificación de pagos, reportes manuales y calculadora de cuotas.
                 </p>
             </div>
             <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-                <TabsList className="grid w-full grid-cols-3">
-                    <TabsTrigger value="verify">Verificación de Pagos</TabsTrigger>
-                    <TabsTrigger value="report">Reportar Pago</TabsTrigger>
-                    <TabsTrigger value="calculator">Calculadora de Pagos</TabsTrigger>
+                 <TabsList className="grid w-full grid-cols-3">
+                    <TabsTrigger value="verify">Verificación</TabsTrigger>
+                    <TabsTrigger value="report">Reporte Manual</TabsTrigger>
+                    <TabsTrigger value="calculator">Calculadora</TabsTrigger>
                 </TabsList>
                 <TabsContent value="verify" className="mt-6">
                     <VerificationComponent condoId={condoId} />
@@ -1087,7 +1111,7 @@ export default function PaymentsPageWrapper() {
     
     return (
         <Suspense fallback={<div className="flex h-64 items-center justify-center"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>}>
-            <PaymentsPage condoId={condoId} />
+            <PaymentsPage />
         </Suspense>
     );
 }
