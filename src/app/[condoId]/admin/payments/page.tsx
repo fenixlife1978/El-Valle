@@ -1047,11 +1047,11 @@ function PaymentCalculatorUI({ owner, debts, activeRate, condoFee, condoId }: { 
                         {paymentCalculator.advanceMonthsCount > 0 && <p className="text-sm text-muted-foreground">{paymentCalculator.advanceMonthsCount} mes(es) por adelanto seleccionado(s) x ${(paymentCalculator.condoFee ?? 0).toFixed(2)} c/u.</p>}
                         <hr className="my-2"/><div className="flex justify-between items-center text-lg"><span className="text-muted-foreground">Sub-Total Deuda:</span><span className="font-medium">Bs. {formatCurrency(paymentCalculator.totalDebtBs)}</span></div>
                         <div className="flex justify-between items-center text-md"><span className="text-muted-foreground flex items-center"><Minus className="mr-2 h-4 w-4"/> Saldo a Favor:</span><span className="font-medium text-green-500">Bs. {formatCurrency(paymentCalculator.balanceInFavor)}</span></div>
-                        <hr className="my-2"/><div className="flex justify-between items-center text-2xl font-bold"><span className="flex items-center"><Equal className="mr-2 h-5 w-5"/> TOTAL A PAGAR:</span><span className="text-primary">Bs. {formatCurrency(paymentCalculator.totalToPay)}</span></div>
+                        <hr className="my-2"/><div className="flex justify-between items-center text-2xl font-bold"><span className="flex items-center"><Equal className="mr-2 h-5 w-5"/> TOTAL SUGERIDO A PAGAR:</span><span className="text-primary">Bs. {formatCurrency(paymentCalculator.totalToPay)}</span></div>
                     </CardContent>
                     <CardFooter>
                         <Button className="w-full" asChild disabled={!paymentCalculator.hasSelection || paymentCalculator.totalToPay <= 0}>
-                            <Link href={`/${condoId}/owner/payments?tab=report`}>
+                            <Link href={`/${condoId}/admin/payments?tab=report`}>
                                 <Receipt className="mr-2 h-4 w-4"/>
                                 Proceder al Reporte de Pago
                             </Link>
@@ -1068,7 +1068,11 @@ function PaymentsPage() {
     const condoId = useParams()?.condoId as string;
     const router = useRouter();
 
-    const activeTab = searchParams?.get('tab') || 'verify';
+    const activeTabFromUrl = searchParams?.get('tab');
+    // Ensure activeTab is one of the valid values, otherwise default to 'verify'
+    const validTabs = ['verify', 'report', 'calculator'];
+    const activeTab = validTabs.includes(activeTabFromUrl || '') ? activeTabFromUrl : 'verify';
+
 
     const handleTabChange = (value: string) => {
         router.push(`/${condoId}/admin/payments?tab=${value}`, { scroll: false });
@@ -1115,3 +1119,4 @@ export default function PaymentsPageWrapper() {
         </Suspense>
     );
 }
+

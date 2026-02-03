@@ -57,6 +57,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Badge } from '@/components/ui/badge';
+import { useAuth } from '@/hooks/use-auth';
 
 // --- TIPOS ---
 interface PettyCashMovement {
@@ -86,10 +87,12 @@ const years = Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear(
 export default function FinancialBalancePage({ params }: { params: { condoId: string } }) {
     const { toast } = useToast();
     const { requestAuthorization } = useAuthorization();
+    const { user: currentUser, activeCondoId: authActiveCondoId } = useAuth();
     
     // Nueva estructura: obtenemos el ID de los params
-    const workingCondoId = params.condoId;
-    const activeCondoId = params.condoId; // Para consistencia con tus reglas de búsqueda
+    const sId = typeof window !== 'undefined' ? localStorage.getItem('support_mode_id') : null;
+    const isSuperAdmin = currentUser?.email === 'vallecondo@gmail.com';
+    const workingCondoId = params.condoId || (isSuperAdmin ? sId : authActiveCondoId);
 
     const [dataLoading, setDataLoading] = useState(true);
     const [syncing, setSyncing] = useState(false);
@@ -115,9 +118,42 @@ export default function FinancialBalancePage({ params }: { params: { condoId: st
         if (!workingCondoId) return;
         setSyncing(true);
         try {
-            // Cargar configuración del condominio
-            const configRef = doc(db, 'condominios', workingCondoId, 'config', 'mainSettings');
-            const configSnap = await getDoc(configRef);
+            const fromDate = startOfMonth(new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1));
+            const toDate = endOfMonth(fromDate);
+    
+            // Run all queries in parallel
+            const [
+                configSnap,
+                paymentsSnap,
+                expensesSnap,
+                prevPettySnap,
+                currentPettySnap
+            ] = await Promise.all([
+                getDoc(doc(db, 'condominios', workingCondoId, 'config', 'mainSettings')),
+                getDocs(query(
+                    collection(db, 'condominios', workingCondoId, 'payments'),
+                    where('paymentDate', '>=', fromDate),
+                    where('paymentDate', '<=', toDate),
+                    where('status', '==', 'aprobado')
+                )),
+                getDocs(query(
+                    collection(db, 'condominios', workingCondoId, 'gastos'),
+                    where('date', '>=', fromDate),
+                    where('date', '<=', toDate)
+                )),
+                getDocs(query(
+                    collection(db, 'condominios', workingCondoId, 'cajaChica_movimientos'),
+                    where('date', '<', fromDate)
+                )),
+                getDocs(query(
+                    collection(db, 'condominios', workingCondoId, 'cajaChica_movimientos'),
+                    where('date', '>=', fromDate),
+                    where('date', '<=', toDate),
+                    orderBy('date', 'asc')
+                ))
+            ]);
+    
+            // Process config
             if (configSnap.exists()) {
                 const d = configSnap.data();
                 setCompanyInfo({
@@ -126,91 +162,71 @@ export default function FinancialBalancePage({ params }: { params: { condoId: st
                     address: d.companyInfo?.address || ""
                 });
             }
-
-            const fromDate = startOfMonth(new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1));
-            const toDate = endOfMonth(fromDate);
-            
-            // 1. Ingresos (Pagos aprobados)
-            const paymentsSnap = await getDocs(query(
-                collection(db, 'condominios', workingCondoId, 'payments'), 
-                where('paymentDate', '>=', fromDate), 
-                where('paymentDate', '<=', toDate), 
-                where('status', '==', 'aprobado')
-            ));
+    
+            // Process payments (Ingresos)
             const totalIngresos = paymentsSnap.docs.reduce((sum, doc) => sum + (doc.data().totalAmount || 0), 0);
             
-            // 2. Egresos (Gastos registrados)
-            const expensesSnap = await getDocs(query(
-                collection(db, 'condominios', workingCondoId, 'gastos'), 
-                where('date', '>=', fromDate), 
-                where('date', '<=', toDate)
-            ));
-            const listaEgresos = expensesSnap.docs.map(d => ({ 
-                id: d.id, 
-                fecha: format(d.data().date.toDate(), 'dd/MM/yyyy'), 
-                descripcion: d.data().description, 
-                monto: d.data().amount, 
-                category: d.data().category || 'General' 
+            // Process general expenses (Egresos)
+            const listaEgresos = expensesSnap.docs.map(d => ({
+                id: d.id,
+                fecha: format(d.data().date.toDate(), 'dd/MM/yyyy'),
+                descripcion: d.data().description,
+                monto: d.data().amount,
+                category: d.data().category || 'General'
             }));
             const totalEgresos = listaEgresos.reduce((sum, item) => sum + item.monto, 0);
-
-            // 3. Caja Chica (Usando las nuevas colecciones transactions_caja)
-            const prevPettySnap = await getDocs(query(
-                collection(db, 'transactions_caja'), 
-                where('condoId', '==', workingCondoId),
-                where('date', '<', fromDate)
-            ));
+    
+            // Process Petty Cash (Caja Chica)
             const sInicialCC = prevPettySnap.docs.reduce((sum, doc) => {
                 const data = doc.data();
                 return sum + (data.type === 'ingreso' ? data.amount : -data.amount);
             }, 0);
-
-            const currentPettySnap = await getDocs(query(
-                collection(db, 'transactions_caja'), 
-                where('condoId', '==', workingCondoId),
-                where('date', '>=', fromDate), 
-                where('date', '<=', toDate), 
-                orderBy('date', 'asc')
-            ));
+    
             const movsCC = currentPettySnap.docs.map(d => ({ id: d.id, ...d.data() })) as PettyCashMovement[];
             const reposCC = movsCC.filter(m => m.type === 'ingreso').reduce((sum, m) => sum + m.amount, 0);
             const gastosCC = movsCC.filter(m => m.type === 'egreso').reduce((sum, m) => sum + m.amount, 0);
             const sFinalCC = sInicialCC + reposCC - gastosCC;
-
+    
+            // Set state
             setIngresos([{ concepto: 'Recaudación por Cobranza', real: totalIngresos, category: 'Ingresos Ordinarios' }]);
             setEgresos(listaEgresos);
             setCajaChicaMovs(movsCC);
             setCajaChica({ saldoInicial: sInicialCC, reposiciones: reposCC, gastos: gastosCC, saldoFinal: sFinalCC });
             
-            const sBancos = estadoFinal.saldoAnterior + totalIngresos - totalEgresos;
-            setEstadoFinal(prev => ({ ...prev, totalIngresos, totalEgresos, saldoBancos: sBancos, disponibilidadTotal: sBancos + sFinalCC }));
+            // Final calculations
+            setEstadoFinal(prev => {
+                const saldoBancos = prev.saldoAnterior + totalIngresos - totalEgresos;
+                return {
+                    ...prev,
+                    totalIngresos,
+                    totalEgresos,
+                    saldoBancos,
+                    disponibilidadTotal: saldoBancos + sFinalCC
+                };
+            });
             
         } catch (error) { 
             console.error("Error loadData:", error);
-            toast({ variant: "destructive", title: "Error al cargar datos" }); 
+            toast({ variant: "destructive", title: "Error al cargar datos", description: "No se pudieron obtener los datos financieros." }); 
         } finally { 
             setSyncing(false); 
             setDataLoading(false); 
         }
-    }, [workingCondoId, selectedMonth, selectedYear, estadoFinal.saldoAnterior, toast]);
+    }, [workingCondoId, selectedMonth, selectedYear, toast]);
 
     useEffect(() => {
         if (workingCondoId) {
             loadData();
             
-            // Suscripción a Balances Guardados
             const unsubHistorial = onSnapshot(query(
-                collection(db, 'financial_statements'), 
-                where('condoId', '==', workingCondoId),
+                collection(db, 'condominios', workingCondoId, 'financial_statements'),
                 orderBy('createdAt', 'desc')
             ), (snap) => {
                 setSavedStatements(snap.docs.map(d => ({ id: d.id, ...d.data() })));
             });
 
-            // Suscripción a Reportes Publicados
             const unsubPublicados = onSnapshot(query(
-                collection(db, 'published_reports'),
-                where('condoId', '==', workingCondoId)
+                collection(db, 'condominios', workingCondoId, 'published_reports')
             ), (snap) => {
                 setPublishedReports(snap.docs.map(d => ({ id: d.id, ...d.data() })));
             });
@@ -388,10 +404,8 @@ export default function FinancialBalancePage({ params }: { params: { condoId: st
                     <div className="flex justify-end"><Button className="rounded-full h-12 px-10 font-black uppercase italic shadow-xl bg-slate-900" onClick={async () => {
                         if (!workingCondoId) return;
                         const pId = `${selectedYear}-${selectedMonth.padStart(2, '0')}`;
-                        await setDoc(doc(db, 'financial_statements', pId), { 
+                        await setDoc(doc(db, 'condominios', workingCondoId, 'financial_statements', pId), { 
                             id: pId, 
-                            condoId: workingCondoId, 
-                            activeCondoId: activeCondoId,
                             ingresos: ingresos.map(i => ({...i, monto: i.real})), 
                             egresos, 
                             cajaChica, 
@@ -412,16 +426,18 @@ export default function FinancialBalancePage({ params }: { params: { condoId: st
                         return (<TableRow key={s.id} className="h-20 hover:bg-slate-50"><TableCell className="pl-8 font-black uppercase text-sm italic text-primary">{format(parse(s.id, 'yyyy-MM', new Date()), 'MMMM yyyy', { locale: es })}</TableCell><TableCell className="font-black text-slate-700">{formatCurrency(s.estadoFinanciero?.disponibilidadTotal)} Bs.</TableCell>
                             <TableCell><div className="flex items-center gap-2"><Switch checked={isPub} onCheckedChange={() => {
                                 requestAuthorization(async () => {
-                                    const rRef = doc(db, 'published_reports', `balance-${s.id}-${workingCondoId}`);
+                                    if (!workingCondoId) return;
+                                    const rRef = doc(db, 'condominios', workingCondoId, 'published_reports', `balance-${s.id}`);
                                     if(isPub) await deleteDoc(rRef); 
-                                    else await setDoc(rRef, { type: 'balance', sourceId: s.id, condoId: workingCondoId, activeCondoId, createdAt: serverTimestamp() });
+                                    else await setDoc(rRef, { type: 'balance', sourceId: s.id, createdAt: serverTimestamp() });
                                     toast({ title: isPub ? "DESPUBLICADO" : "PUBLICADO" });
                                 });
                             }} /><span className="text-[9px] font-black uppercase text-slate-500">{isPub ? 'Público' : 'Privado'}</span></div></TableCell>
                             <TableCell className="text-right pr-8"><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" className="rounded-full h-10 w-10 border-2 border-slate-200"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                                 <DropdownMenuContent align="end" className="rounded-xl border-2 w-52"><DropdownMenuItem className="font-bold text-xs" onClick={() => generatePDF({...s, disponibilidad: s.estadoFinanciero?.disponibilidadTotal, month: s.id.split('-')[1], year: s.id.split('-')[0]})}>DESCARGAR PDF</DropdownMenuItem><DropdownMenuItem className="text-rose-600 font-bold text-xs" onClick={async () => {
                                     requestAuthorization(async () => {
-                                        await deleteDoc(doc(db, 'financial_statements', s.id));
+                                        if (!workingCondoId) return;
+                                        await deleteDoc(doc(db, 'condominios', workingCondoId, 'financial_statements', s.id));
                                         toast({ title: "BALANCE ELIMINADO" });
                                     });
                                 }}>ELIMINAR</DropdownMenuItem></DropdownMenuContent></DropdownMenu></TableCell></TableRow>);

@@ -14,8 +14,7 @@ import {
     ArrowLeftCircle,
     AlertTriangle,
     FileSearch,
-    Receipt,
-    DatabaseZap // Importado para el nuevo ítem
+    Receipt
 } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { usePathname, useRouter, useParams } from 'next/navigation';
@@ -66,7 +65,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
     const adminBottomNavItems: BottomNavItem[] = [
       { href: `/${condoId}/admin/dashboard`, icon: Home, label: 'Inicio' },
-      { href: `/${condoId}/admin/payments`, icon: Receipt, label: 'Pagos' },
+      { href: `/${condoId}/admin/payments?tab=verify`, icon: Receipt, label: 'Pagos' },
       { 
         href: '#', 
         icon: Plus, 
