@@ -1,3 +1,4 @@
+
 'use client';
 
 import React from 'react';
@@ -34,14 +35,9 @@ export default function LandingPage() {
         </div>
 
         <div className="flex items-center gap-8">
-          <nav className="hidden md:flex items-center gap-6">
-            <button onClick={() => router.push('/login?role=owner')} className="text-xs font-black text-slate-400 hover:text-[#F28705] transition-colors uppercase tracking-widest">
-              Propietarios
-            </button>
-          </nav>
-          <Button onClick={() => router.push('/login?role=admin')} className="bg-[#0070f3] hover:bg-[#005bb5] text-white rounded-full px-8 h-10 font-bold text-xs uppercase tracking-widest shadow-lg shadow-blue-600/20">
-            Acceso Admin
-          </Button>
+            <Button onClick={() => router.push('/welcome')} className="bg-[#F28705] hover:bg-[#F28705]/90 text-white rounded-full px-8 h-10 font-bold text-xs uppercase tracking-widest shadow-lg shadow-orange-500/20">
+                Ingresa Ahora
+            </Button>
         </div>
       </header>
 
