@@ -1111,9 +1111,8 @@ function PaymentsPage() {
     const router = useRouter();
 
     const activeTabFromUrl = searchParams?.get('tab');
-    // Ensure activeTab is one of the valid values, otherwise default to 'verify'
     const validTabs = ['verify', 'report', 'calculator'];
-    const activeTab = validTabs.includes(activeTabFromUrl || '') ? activeTabFromUrl : 'verify';
+    const activeTab = (activeTabFromUrl && validTabs.includes(activeTabFromUrl)) ? activeTabFromUrl : 'verify';
 
 
     const handleTabChange = (value: string) => {
