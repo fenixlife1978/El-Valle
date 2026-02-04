@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState, useEffect, createContext, useContext, useCallback } from 'react';
-import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
+import React, { useState, useEffect, createContext, useContext } from 'react';
+import { onAuthStateChanged, type User } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
-import { doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 
 interface AuthContextType {
     user: User | null;
@@ -29,94 +29,76 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     const isSuperAdmin = user?.email === 'vallecondo@gmail.com';
 
+    // 1. Escuchar cambios de autenticación
     useEffect(() => {
-        const securityTimeout = setTimeout(() => setLoading(false), 8000);
-
         const unsubAuth = onAuthStateChanged(auth, (firebaseUser) => {
             setUser(firebaseUser);
             if (!firebaseUser) {
                 setLoading(false);
-                clearTimeout(securityTimeout);
+                setUserRole(null);
+                setOwnerData(null);
             }
         });
-
-        return () => {
-            unsubAuth();
-            clearTimeout(securityTimeout);
-        };
+        return () => unsubAuth();
     }, []);
 
+    // 2. Cargar datos de Firestore y NORMALIZAR ROLES
     useEffect(() => {
-        if (typeof window === 'undefined') {
-            return;
-        }
-        
-        if (!user) {
-            setOwnerData(null);
-            setCompanyInfo(null);
-            setActiveCondoId(null);
-            setUserRole(null);
-            setWorkingCondoId(null);
-            return;
-        }
+        if (typeof window === 'undefined' || !user) return;
 
         const storedCondoId = localStorage.getItem('activeCondoId');
-        const storedRole = localStorage.getItem('userRole');
-        const storedWorkingCondoId = localStorage.getItem('workingCondoId');
-
+        const storedWorkingId = localStorage.getItem('workingCondoId');
+        
         setActiveCondoId(storedCondoId);
-        setUserRole(storedRole);
-        setWorkingCondoId(storedWorkingCondoId || storedCondoId);
+        setWorkingCondoId(storedWorkingId || storedCondoId);
 
         if (isSuperAdmin) {
-            setOwnerData({ name: 'Super Admin', email: user.email });
             setUserRole('super-admin');
             setLoading(false);
             return;
         }
 
-        if (!storedCondoId || !storedRole) {
-            if (!loading) {
-                 console.warn("No condoId or role found in storage.");
-            }
+        if (!storedCondoId) {
             setLoading(false);
             return;
         }
-        
-        const ownersCollectionName = storedCondoId === 'condo_01' ? 'owners' : 'propietarios';
-        const docRef = doc(db, 'condominios', storedCondoId, ownersCollectionName, user.uid);
 
-        const unsubSnap = onSnapshot(docRef, async (snap) => {
+        // Regla EFAS: condo_01 usa 'owners', los demás 'propietarios'
+        const collectionName = storedCondoId === 'condo_01' ? 'owners' : 'propietarios';
+        const docRef = doc(db, 'condominios', storedCondoId, collectionName, user.uid);
+
+        const unsubSnap = onSnapshot(docRef, (snap) => {
             if (snap.exists()) {
                 const userData = snap.data();
-                setOwnerData({ ...userData });
-            } else {
-                console.warn("Authenticated user profile not found in DB, preventing sign-out loop:", user.uid);
-                setOwnerData(null);
-                setUserRole(null);
+                setOwnerData(userData);
+                
+                // --- TRADUCCIÓN DE ROLES PARA EVITAR REBOTE ---
+                const dbRole = userData.role?.toLowerCase() || '';
+                if (dbRole === 'propietario') {
+                    setUserRole('owner'); // Next.js busca la carpeta /owner/
+                } else if (dbRole === 'administrador' || dbRole === 'admin') {
+                    setUserRole('admin'); // Next.js busca la carpeta /admin/
+                } else {
+                    setUserRole(dbRole);
+                }
             }
-            setLoading(false);
+            setLoading(false); // Terminamos la carga aquí
         }, (error) => {
-            console.error("Error de permisos en AuthProvider:", error);
-            setLoading(false); 
-            setOwnerData(null);
+            console.error("Error en Auth Snap:", error);
+            setLoading(false);
         });
 
         const settingsRef = doc(db, 'condominios', storedCondoId, 'config', 'mainSettings');
-        const unsubSettings = onSnapshot(settingsRef, (settingsSnap) => {
-            if (settingsSnap.exists()) {
-                setCompanyInfo(settingsSnap.data().companyInfo);
-            } else {
-                setCompanyInfo(null);
-            }
+        const unsubSettings = onSnapshot(settingsRef, (s) => {
+            if (s.exists()) setCompanyInfo(s.data().companyInfo);
         });
 
         return () => {
             unsubSnap();
             unsubSettings();
         };
-    }, [user, isSuperAdmin, loading]);
-
+        // ELIMINAMOS 'loading' de las dependencias para romper el bucle infinito
+    }, [user, isSuperAdmin]); 
 
     const value = {
         user,

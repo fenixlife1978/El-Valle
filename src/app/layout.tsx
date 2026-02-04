@@ -27,11 +27,12 @@ function AuthGuard({ children }: { children: ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
+    // Si todavía está cargando la sesión de Firebase, no hacemos nada
     if (loading) return;
 
     const isPublic = publicPaths.includes(pathname);
     
-    // REGLA EFAS CondoSys: Obtener el workingCondoId para la ruta dinámica
+    // REGLA EFAS CondoSys: Determinar el ID de trabajo
     const sId = typeof window !== 'undefined' ? localStorage.getItem('support_mode_id') : null;
     const workingCondoId = (isSuperAdmin && sId) ? sId : activeCondoId;
 
@@ -47,20 +48,23 @@ function AuthGuard({ children }: { children: ReactNode }) {
     if (user) {
       if (isPublic) {
         if (!workingCondoId) {
-          // Si no hay ID de condominio, no podemos ir al dashboard dinámico
-          console.warn("Usuario sin condoId activo.");
+          console.warn("EFAS: Usuario autenticado pero sin activeCondoId.");
           return;
         }
 
-        // Corregimos la ruta inyectando el [condoId] para evitar 404
-        if (role === 'admin') {
+        // NORMALIZACIÓN DE ROL: Traducimos lo que venga de DB a las rutas de Next.js
+        const currentRole = role?.toLowerCase();
+        
+        if (currentRole === 'admin' || currentRole === 'administrador') {
+          // Si el rol es admin (en inglés o español), va a la carpeta /admin/
           router.replace(`/${workingCondoId}/admin/dashboard`);
-        } else if (role === 'owner') {
+        } else if (currentRole === 'owner' || currentRole === 'propietario') {
+          // Si el rol es propietario (en inglés o español), va a la carpeta /owner/
           router.replace(`/${workingCondoId}/owner/dashboard`);
         }
       }
     } 
-    // 3. SIN SESIÓN
+    // 3. SIN SESIÓN ACTIVA
     else {
       if (!isPublic) {
         router.replace('/welcome');
@@ -68,7 +72,7 @@ function AuthGuard({ children }: { children: ReactNode }) {
     }
   }, [user, role, loading, pathname, router, isSuperAdmin, activeCondoId]);
 
-  // Pantalla de carga profesional
+  // Pantalla de carga profesional de EFAS CondoSys
   if (loading) {
     return (
       <div className="flex h-screen w-full flex-col items-center justify-center bg-background fixed inset-0 z-[500]">
@@ -90,7 +94,7 @@ function AuthGuard({ children }: { children: ReactNode }) {
             </p>
           </div>
           <p className="text-[10px] text-muted-foreground font-bold tracking-[0.6em] uppercase opacity-60">
-            Iniciando Ecosistema
+            Sincronizando Ecosistema
           </p>
         </div>
       </div>
@@ -129,6 +133,7 @@ export default function RootLayout({
             <AuthorizationProvider>
               <AuthGuard>
                 <div className="relative flex min-h-screen w-full flex-col">
+                  <SupportBanner /> {/* Banner para modo soporte super-admin */}
                   {children}
                 </div>
               </AuthGuard>
