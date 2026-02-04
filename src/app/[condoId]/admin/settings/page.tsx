@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -84,16 +85,30 @@ export default function SettingsPage() {
   const condoId = activeCondoId;
 
   useEffect(() => {
-    async function fetchSettings() {
+    async function fetchAndSyncSettings() {
       if (!condoId) {
         setLoading(false);
         return;
       }
-
+  
+      setLoading(true);
       try {
-        const docRef = doc(db, 'condominios', condoId, 'config', 'mainSettings');
-        const docSnap = await getDoc(docRef);
-        
+        const newConfigRef = doc(db, 'condominios', condoId, 'config', 'mainSettings');
+        let docSnap = await getDoc(newConfigRef);
+  
+        // If config doesn't exist in the new path, check the legacy path for condo_01
+        if (!docSnap.exists() && condoId === 'condo_01') {
+          const legacyConfigRef = doc(db, 'config', 'mainSettings');
+          const legacySnap = await getDoc(legacyConfigRef);
+  
+          if (legacySnap.exists()) {
+            // Found legacy config, migrate it to the new path
+            await setDoc(newConfigRef, legacySnap.data(), { merge: true });
+            docSnap = await getDoc(newConfigRef); // Re-fetch the newly created doc
+            toast({ title: 'Configuración Migrada', description: 'Se ha movido la configuración de condo_01 a la nueva estructura.' });
+          }
+        }
+  
         if (docSnap.exists()) {
           const data = docSnap.data();
           setSettings({
@@ -103,8 +118,8 @@ export default function SettingsPage() {
             loginSettings: { ...defaultSettings.loginSettings, ...data.loginSettings }
           });
         } else {
-          // Si no existe, lo creamos para evitar errores de visualización
-          await setDoc(docRef, defaultSettings);
+          // If still no doc exists (even after potential migration), create a default one
+          await setDoc(newConfigRef, defaultSettings);
           setSettings(defaultSettings);
         }
       } catch (error) {
@@ -114,7 +129,7 @@ export default function SettingsPage() {
         setLoading(false);
       }
     }
-    fetchSettings();
+    fetchAndSyncSettings();
   }, [condoId, toast]);
 
   const handleSave = async (section: string, dataToUpdate: Partial<Settings>) => {
