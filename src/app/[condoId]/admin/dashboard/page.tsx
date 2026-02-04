@@ -1,31 +1,30 @@
-
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Receipt, Building2, Users, AlertCircle, FileText, BarChart2 } from "lucide-react";
-import { collection, query, onSnapshot, doc, orderBy, limit, where } from 'firebase/firestore';
+import { Loader2, Receipt, Building2, Users } from "lucide-react"; 
+import { useEffect, useState } from "react";
+import { collection, query, onSnapshot, doc, orderBy, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { format, startOfMonth, isAfter } from "date-fns";
-import { es } from 'date-fns/locale';
+import { es } from "date-fns/locale";
 import CarteleraDigital from "@/components/CarteleraDigital";
 import { useAuth } from "@/hooks/use-auth";
-import { useRouter, useParams } from "next/navigation";
-import AdminCharts from "../../../../components/AdminCharts";
-
+import { useRouter } from "next/navigation";
 
 const formatToTwoDecimals = (num: number) => {
     if (typeof num !== 'number' || isNaN(num)) return '0,00';
     return num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-export default function AdminDashboardPage() {
+export default function AdminDashboardPage({ params }: { params: Promise<{ condoId: string }> }) {
     const { user, role, loading: authLoading } = useAuth();
     const router = useRouter();
-    const params = useParams();
-    const workingCondoId = params?.condoId as string;
     
+    const resolvedParams = React.use(params);
+    const workingCondoId = resolvedParams.condoId;
+
     const [loading, setLoading] = useState(true);
     const [stats, setStats] = useState({
         monthlyIncome: 0,
@@ -34,10 +33,8 @@ export default function AdminDashboardPage() {
         totalOwners: 0
     });
     const [recentPayments, setRecentPayments] = useState<any[]>([]);
-    const [allPayments, setAllPayments] = useState<any[]>([]);
     const [anuncios, setAnuncios] = useState<any[]>([]);
     const [condoName, setCondoName] = useState("");
-    const [currentRate, setCurrentRate] = useState(1);
 
     useEffect(() => {
         if (!authLoading) {
@@ -46,7 +43,7 @@ export default function AdminDashboardPage() {
                 return;
             }
             const isSuperAdmin = user.email === 'vallecondo@gmail.com';
-            const isAdmin = role === 'administrador' || role === 'admin';
+            const isAdmin = role?.toLowerCase() === 'administrador' || role?.toLowerCase() === 'admin';
             if (!isSuperAdmin && !isAdmin) {
                 router.replace('/welcome');
             }
@@ -59,14 +56,13 @@ export default function AdminDashboardPage() {
         setLoading(true);
 
         const unsubSettings = onSnapshot(doc(db, 'condominios', workingCondoId, 'config', 'mainSettings'), (settingsSnap) => {
-            let activeRate = 1;
+            let currentRate = 1;
             if (settingsSnap.exists()) {
                 const settings = settingsSnap.data();
                 setCondoName(settings.companyInfo?.name || settings.name || workingCondoId);
                 const rates = settings.exchangeRates || [];
                 const active = rates.find((r: any) => r.active === true || r.status === 'active');
-                activeRate = active?.rate || active?.value || 1;
-                setCurrentRate(activeRate);
+                currentRate = active?.rate || active?.value || 1;
             }
 
             const inicioDeMes = startOfMonth(new Date());
@@ -77,11 +73,9 @@ export default function AdminDashboardPage() {
                 let incomeUsd = 0;
                 let pendingCount = 0;
                 const recentApproved: any[] = [];
-                const allFetchedPayments: any[] = [];
 
                 paymentSnap.forEach(docSnap => {
                     const data = docSnap.data();
-                    allFetchedPayments.push({ id: docSnap.id, ...data });
                     const fechaPago = data.paymentDate?.toDate?.() || (data.paymentDate ? new Date(data.paymentDate) : null);
 
                     if (data.status === 'pendiente') {
@@ -90,7 +84,7 @@ export default function AdminDashboardPage() {
                         if (fechaPago && isAfter(fechaPago, inicioDeMes)) {
                             const amount = data.totalAmount || 0;
                             incomeBs += amount;
-                            incomeUsd += amount / (data.exchangeRate || activeRate);
+                            incomeUsd += amount / (data.exchangeRate || currentRate);
                         }
                         recentApproved.push({ id: docSnap.id, ...data });
                     }
@@ -108,24 +102,15 @@ export default function AdminDashboardPage() {
                     .sort((a, b) => (b.paymentDate?.toMillis?.() || 0) - (a.paymentDate?.toMillis?.() || 0))
                     .slice(0, 5)
                 );
-                setAllPayments(allFetchedPayments);
             });
 
             return () => unsubPayments();
         });
-        
-        const qAnuncios = query(
-            collection(db, "condominios", workingCondoId, "billboard_announcements"), 
-            where("published", "==", true),
-            orderBy("createdAt", "desc"), 
-            limit(5)
-        );
+
+        const qAnuncios = query(collection(db, "condominios", workingCondoId, "billboard_announcements"), orderBy("createdAt", "desc"), limit(5));
         const unsubAnuncios = onSnapshot(qAnuncios, (snap) => {
             setAnuncios(snap.docs.map(d => ({ id: d.id, ...d.data() })));
             setLoading(false);
-        }, (error) => {
-             console.error("Error fetching announcements:", error);
-             setLoading(false);
         });
 
         const ownersCol = workingCondoId === 'condo_01' ? 'owners' : 'propietarios';
@@ -140,7 +125,7 @@ export default function AdminDashboardPage() {
         return (
             <div className="min-h-screen bg-background flex flex-col items-center justify-center">
                 <Loader2 className="h-10 w-10 animate-spin text-amber-500 mb-4" />
-                <p className="text-muted-foreground font-black uppercase tracking-[0.3em] text-[10px]">EFAS CondoSys Sync...</p>
+                <p className="text-muted-foreground font-black uppercase tracking-widest text-[10px]">EFAS CondoSys: Cargando...</p>
             </div>
         );
     }
@@ -159,59 +144,55 @@ export default function AdminDashboardPage() {
                 </div>
             </div>
             
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+            <div className="bg-card border rounded-[2rem] p-4 shadow-sm">
                 <CarteleraDigital anuncios={anuncios} />
-                
-                <div className="grid gap-6">
-                    <Card className="bg-slate-900 border-none rounded-[2rem] shadow-lg">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-[10px] font-black uppercase tracking-[0.2em] text-sky-400 flex items-center gap-2">
-                                <Receipt className="h-3 w-3" /> Ingresos (Mes)
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-3xl font-black text-white">Bs. {formatToTwoDecimals(stats.monthlyIncome)}</div>
-                            <p className="text-xs font-bold text-sky-200/70 mt-1 italic">${formatToTwoDecimals(stats.monthlyIncomeUSD)} USD</p>
-                        </CardContent>
-                    </Card>
-
-                    <div className="grid grid-cols-2 gap-6">
-                        <Card className="bg-amber-500 border-none rounded-[2rem] shadow-lg">
-                            <CardHeader className="pb-2">
-                                <CardTitle className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-900">Por Validar</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-3xl font-black text-slate-900">{stats.pendingPayments}</div>
-                                <p className="text-xs font-bold text-amber-900/70 mt-1 uppercase italic">Pagos en espera</p>
-                            </CardContent>
-                        </Card>
-
-                        <Card className="bg-white border border-slate-100 rounded-[2rem] shadow-lg">
-                            <CardHeader className="pb-2">
-                                <CardTitle className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 flex items-center gap-2">
-                                    <Users className="h-3 w-3" /> Comunidad
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-3xl font-black text-slate-900">{stats.totalOwners}</div>
-                                <p className="text-xs font-bold text-slate-400 mt-1 uppercase italic">Propietarios</p>
-                            </CardContent>
-                        </Card>
-                    </div>
-                </div>
             </div>
-            
-            <AdminCharts payments={allPayments} currentRate={currentRate}/>
-            
+
+            <div className="grid gap-6 md:grid-cols-3">
+                <Card className="bg-slate-900 border-none rounded-[2rem] shadow-lg">
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-[10px] font-black uppercase tracking-[0.2em] text-sky-400 flex items-center gap-2">
+                            <Receipt className="h-3 w-3" /> Ingresos (Mes)
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-3xl font-black text-white">Bs. {formatToTwoDecimals(stats.monthlyIncome)}</div>
+                        <p className="text-xs font-bold text-sky-200/70 mt-1 italic">${formatToTwoDecimals(stats.monthlyIncomeUSD)} USD</p>
+                    </CardContent>
+                </Card>
+
+                <Card className="bg-amber-500 border-none rounded-[2rem] shadow-lg">
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-900">Por Validar</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-3xl font-black text-slate-900">{stats.pendingPayments}</div>
+                        <p className="text-xs font-bold text-amber-900/70 mt-1 uppercase">Pendientes</p>
+                    </CardContent>
+                </Card>
+
+                <Card className="bg-white border border-slate-100 rounded-[2rem] shadow-lg">
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 flex items-center gap-2">
+                            <Users className="h-3 w-3" /> Comunidad
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-3xl font-black text-slate-900">{stats.totalOwners}</div>
+                        <p className="text-xs font-bold text-slate-400 mt-1 uppercase">Propietarios</p>
+                    </CardContent>
+                </Card>
+            </div>
+
             <Card className="rounded-2xl shadow-sm border overflow-hidden bg-white">
                 <CardHeader className="bg-slate-50 border-b">
-                    <CardTitle className="text-xs font-black uppercase tracking-widest text-slate-700">Últimos Pagos Aprobados</CardTitle>
+                    <CardTitle className="text-xs font-black uppercase tracking-widest text-slate-700">Pagos Aprobados Recientemente</CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
                     <Table>
                         <TableHeader>
                             <TableRow className="bg-slate-50/50">
-                                <TableHead className="text-[10px] uppercase font-black text-slate-500 py-4 px-6">Propietario / Residente</TableHead>
+                                <TableHead className="text-[10px] uppercase font-black text-slate-500 py-4 px-6">Residente</TableHead>
                                 <TableHead className="text-[10px] uppercase font-black text-slate-500">Monto</TableHead>
                                 <TableHead className="text-[10px] uppercase font-black text-slate-500">Fecha</TableHead>
                             </TableRow>
@@ -220,7 +201,7 @@ export default function AdminDashboardPage() {
                             {recentPayments.length === 0 ? (
                                 <TableRow>
                                     <TableCell colSpan={3} className="text-center py-10 text-slate-400 font-bold uppercase text-[10px]">
-                                        Sin movimientos recientes
+                                        Sin movimientos registrados
                                     </TableCell>
                                 </TableRow>
                             ) : (

@@ -1,4 +1,3 @@
-
 'use client';
 
 import {
@@ -36,6 +35,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         { href: `/${condoId}/admin/dashboard`, icon: Home, label: "Dashboard" },
         { 
             href: "#",
+            icon: Receipt, // Se añadió el ícono obligatorio
             label: "Gestión de Pagos",
             items: [
                 { href: `/${condoId}/admin/payments?tab=verify`, label: "Verificación de Pagos" },
@@ -45,6 +45,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         },
         { 
             href: "#",
+            icon: Grid3X3, // Se añadió el ícono obligatorio
             label: "Utilidades",
             items: [
                 { href: `/${condoId}/admin/debts`, label: "Gestión de Deudas" },
@@ -109,7 +110,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     };
 
     const isSuperAdmin = user?.email === 'vallecondo@gmail.com';
-    const isAdmin = role?.toLowerCase() === 'administrador' || role?.toLowerCase() === 'super-admin';
+    const userRoleLower = role?.toLowerCase();
+    const isAdmin = userRoleLower === 'administrador' || userRoleLower === 'super-admin';
     const authorized = isSuperAdmin || isAdmin;
 
     if (loading || !user || !authorized) {

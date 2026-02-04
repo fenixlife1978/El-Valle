@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -9,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { Loader2, Save, Upload, DollarSign, KeyRound, PlusCircle, Building2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -19,6 +18,7 @@ import { es } from 'date-fns/locale';
 import { Switch } from '@/components/ui/switch';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useAuth } from '@/hooks/use-auth';
+import { compressImage } from '@/lib/utils';
 
 // --- DEFINICIONES DE TIPOS ---
 type CompanyInfo = {
@@ -47,28 +47,6 @@ const defaultSettings: Settings = {
   loginSettings: { ownerLoginEnabled: true, disabledMessage: 'Mantenimiento.' }
 };
 
-const compressImage = (file: File, maxWidth: number, maxHeight: number): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = (event) => {
-      const img = new Image();
-      img.src = event.target?.result as string;
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        let width = img.width; let height = img.height;
-        if (width > height) { if (width > maxWidth) { height *= maxWidth / width; width = maxWidth; } }
-        else { if (height > maxHeight) { width *= maxHeight / height; height = maxHeight; } }
-        canvas.width = width; canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx?.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', 0.7));
-      };
-    };
-    reader.onerror = (error) => reject(error);
-  });
-};
-
 export default function SettingsPage() {
   const { toast } = useToast();
   const { activeCondoId } = useAuth();
@@ -85,51 +63,61 @@ export default function SettingsPage() {
   const condoId = activeCondoId;
 
   useEffect(() => {
-    async function fetchAndSyncSettings() {
-      if (!condoId) {
+    if (!condoId) {
+      setLoading(false);
+      return;
+    }
+  
+    setLoading(true);
+    const docRef = doc(db, 'condominios', condoId, 'config', 'mainSettings');
+  
+    const unsubscribe = onSnapshot(docRef, async (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        setSettings({
+          companyInfo: { ...defaultSettings.companyInfo, ...data.companyInfo },
+          exchangeRates: data.exchangeRates || [],
+          condoFee: data.condoFee || 0,
+          loginSettings: { ...defaultSettings.loginSettings, ...data.loginSettings }
+        });
         setLoading(false);
-        return;
-      }
-  
-      setLoading(true);
-      try {
-        const newConfigRef = doc(db, 'condominios', condoId, 'config', 'mainSettings');
-        let docSnap = await getDoc(newConfigRef);
-  
-        // If config doesn't exist in the new path, check the legacy path for condo_01
-        if (!docSnap.exists() && condoId === 'condo_01') {
-          const legacyConfigRef = doc(db, 'config', 'mainSettings');
-          const legacySnap = await getDoc(legacyConfigRef);
-  
-          if (legacySnap.exists()) {
-            // Found legacy config, migrate it to the new path
-            await setDoc(newConfigRef, legacySnap.data(), { merge: true });
-            docSnap = await getDoc(newConfigRef); // Re-fetch the newly created doc
-            toast({ title: 'Configuración Migrada', description: 'Se ha movido la configuración de condo_01 a la nueva estructura.' });
+      } else {
+        // Document doesn't exist, let's try to migrate or create it.
+        let migrated = false;
+        if (condoId === 'condo_01') {
+          try {
+            const legacyConfigRef = doc(db, 'config', 'mainSettings');
+            const legacySnap = await getDoc(legacyConfigRef);
+            if (legacySnap.exists()) {
+              await setDoc(docRef, legacySnap.data(), { merge: true });
+              migrated = true;
+              toast({ title: 'Configuración Migrada', description: 'Se ha movido la configuración a la nueva estructura.' });
+              // The snapshot listener will re-fire with the new data.
+            }
+          } catch (e) {
+            console.error("Failed to migrate legacy config", e);
           }
         }
   
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          setSettings({
-            companyInfo: { ...defaultSettings.companyInfo, ...data.companyInfo },
-            exchangeRates: data.exchangeRates || [],
-            condoFee: data.condoFee || 0,
-            loginSettings: { ...defaultSettings.loginSettings, ...data.loginSettings }
-          });
-        } else {
-          // If still no doc exists (even after potential migration), create a default one
-          await setDoc(newConfigRef, defaultSettings);
-          setSettings(defaultSettings);
+        if (!migrated) {
+          // If not migrated (or not condo_01), create a default doc.
+          try {
+            await setDoc(docRef, defaultSettings);
+            // The snapshot listener will re-fire, no need to set state here.
+          } catch (e) {
+            console.error("Failed to create default settings", e);
+            toast({ variant: "destructive", title: "Error de configuración", description: "No se pudo inicializar la configuración." });
+            setLoading(false); // Stop loading on error
+          }
         }
-      } catch (error) {
-        console.error("Error fetching settings:", error);
-        toast({ variant: "destructive", title: "Error de carga", description: "No se pudo conectar con la ruta de configuración." });
-      } finally {
-        setLoading(false);
       }
-    }
-    fetchAndSyncSettings();
+    }, (error) => {
+      console.error("Error fetching settings:", error);
+      toast({ variant: "destructive", title: "Error de carga", description: "No se pudo conectar con la ruta de configuración." });
+      setLoading(false);
+    });
+  
+    return () => unsubscribe();
   }, [condoId, toast]);
 
   const handleSave = async (section: string, dataToUpdate: Partial<Settings>) => {
@@ -176,7 +164,7 @@ export default function SettingsPage() {
 
   const handleAddRate = () => {
     const val = parseFloat(newRate.rate);
-    if (isNaN(val)) return;
+    if (isNaN(val) || !newRate.date) return;
     const newEntry = { id: Date.now().toString(), date: newRate.date, rate: val, active: true };
     const updatedRates = [newEntry, ...(settings.exchangeRates || []).map(r => ({ ...r, active: false }))];
     setSettings(prev => ({ ...prev, exchangeRates: updatedRates }));
