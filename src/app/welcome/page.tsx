@@ -1,11 +1,10 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Shield, User, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useEffect } from 'react';
+import { SYSTEM_LOGO, COMPANY_NAME } from '@/lib/constants';
 
 export default function WelcomePage() {
     const router = useRouter();
@@ -52,7 +51,7 @@ export default function WelcomePage() {
     if (loading) {
         return (
             <div className="min-h-screen flex flex-col items-center justify-center bg-background">
-                <Loader2 className="h-10 w-10 animate-spin text-amber-500 mb-4" />
+                <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
                 <p className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground animate-pulse">
                     Validando acceso EFAS...
                 </p>
@@ -61,61 +60,43 @@ export default function WelcomePage() {
     }
 
     return (
-        <main className="min-h-screen flex flex-col items-center justify-center bg-background p-4 font-montserrat">
-            <div className="text-center mb-10">
-                <div className="mb-6">
-                    <h1 className="text-5xl font-black italic tracking-tighter uppercase">
-                        <span className="text-amber-500">EFAS</span><span className="text-foreground">CONDOSYS</span>
-                    </h1>
-                    <div className="h-1.5 w-24 bg-amber-500 mx-auto mt-1 rounded-full"></div>
-                </div>
-                <h2 className="text-2xl font-bold text-foreground uppercase tracking-tight">Bienvenido</h2>
-                <p className="text-muted-foreground mt-2 font-medium">Seleccione su portal de acceso</p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-2xl">
-                {/* CARD ADMINISTRADOR */}
-                <Card className="hover:border-amber-500 transition-all border-2 border-transparent bg-card shadow-xl rounded-[2.5rem] overflow-hidden group">
-                    <CardHeader className="items-center text-center pt-8">
-                        <div className="p-4 bg-amber-500/10 rounded-2xl mb-2 group-hover:scale-110 transition-transform duration-300">
-                            <Shield className="h-10 w-10 text-amber-600" />
-                        </div>
-                        <CardTitle className="font-black uppercase tracking-tighter">Administración</CardTitle>
-                        <CardDescription className="font-bold text-[10px] uppercase tracking-widest">Gestión de Condominios</CardDescription>
-                    </CardHeader>
-                    <CardContent className="p-8">
-                        <Button 
-                            className="w-full h-12 rounded-xl font-black uppercase tracking-widest bg-slate-900 hover:bg-slate-800 shadow-lg" 
-                            onClick={() => router.push('/login?role=admin')}
-                        >
-                            ENTRAR
-                        </Button>
-                    </CardContent>
-                </Card>
-
-                {/* CARD PROPIETARIO */}
-                <Card className="hover:border-amber-500 transition-all border-2 border-transparent bg-card shadow-xl rounded-[2.5rem] overflow-hidden group">
-                    <CardHeader className="items-center text-center pt-8">
-                        <div className="p-4 bg-amber-500/10 rounded-2xl mb-2 group-hover:scale-110 transition-transform duration-300">
-                            <User className="h-10 w-10 text-amber-600" />
-                        </div>
-                        <CardTitle className="font-black uppercase tracking-tighter">Propietario</CardTitle>
-                        <CardDescription className="font-bold text-[10px] uppercase tracking-widest">Portal de Residentes</CardDescription>
-                    </CardHeader>
-                    <CardContent className="p-8">
-                        <Button 
-                            className="w-full h-12 rounded-xl font-black uppercase tracking-widest bg-amber-500 hover:bg-amber-600 text-white shadow-lg" 
-                            onClick={() => router.push('/login?role=owner')}
-                        >
-                            ENTRAR
-                        </Button>
-                    </CardContent>
-                </Card>
+        <div className="min-h-screen w-full font-montserrat">
+            <div className="absolute top-8 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center text-center">
+                 <img src={SYSTEM_LOGO} alt={COMPANY_NAME} className="h-20 w-20 rounded-3xl object-cover border-4 border-background shadow-2xl mb-2" />
+                 <h1 className="text-3xl font-black italic tracking-tighter uppercase">
+                    <span className="text-primary">EFAS</span><span className="text-foreground">CONDOSYS</span>
+                </h1>
+                <p className="text-xs text-muted-foreground font-bold tracking-widest">Seleccione su portal</p>
             </div>
             
-            <footer className="mt-16 text-[9px] font-black uppercase text-muted-foreground/40 tracking-[0.4em]">
-                EFAS CondoSys • San Felipe • Yaracuy
-            </footer>
-        </main>
+            <div className="grid grid-cols-1 md:grid-cols-2 h-screen">
+                <div 
+                    onClick={() => router.push('/login?role=admin')}
+                    className="relative bg-card text-foreground flex flex-col items-center justify-center p-12 text-center group cursor-pointer transition-all duration-300 hover:bg-slate-900"
+                >
+                    <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/gplay.png')] opacity-[0.02] group-hover:opacity-[0.03]"></div>
+                    <div className="z-10 flex flex-col items-center">
+                        <div className="p-6 rounded-3xl border-2 border-border bg-background/30 group-hover:scale-110 group-hover:border-primary/50 transition-transform mb-8">
+                            <Shield className="h-16 w-16 text-primary" />
+                        </div>
+                        <h2 className="text-4xl font-black uppercase tracking-tighter">Administrador</h2>
+                        <p className="text-sm font-bold text-muted-foreground mt-2 uppercase tracking-widest">Gestión de Condominios</p>
+                    </div>
+                </div>
+                 <div 
+                    onClick={() => router.push('/login?role=owner')}
+                    className="relative bg-secondary text-foreground flex flex-col items-center justify-center p-12 text-center group cursor-pointer transition-all duration-300 hover:bg-primary"
+                >
+                    <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/gplay.png')] opacity-[0.03] group-hover:opacity-[0.05]"></div>
+                     <div className="z-10 flex flex-col items-center">
+                        <div className="p-6 rounded-3xl border-2 border-primary/50 bg-primary/20 group-hover:scale-110 group-hover:bg-white/10 group-hover:border-white transition-transform mb-8">
+                            <User className="h-16 w-16 text-white" />
+                        </div>
+                        <h2 className="text-4xl font-black uppercase tracking-tighter text-white">Propietario</h2>
+                        <p className="text-sm font-bold text-primary-foreground/70 mt-2 uppercase tracking-widest">Portal de Residentes</p>
+                    </div>
+                </div>
+            </div>
+        </div>
     );
 }
