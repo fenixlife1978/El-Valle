@@ -134,7 +134,7 @@ export const generatePaymentReceipt = (paymentData: any, condoLogoUrl: string | 
   if (outputType === 'blob') {
     return doc.output('blob');
   } else {
-    doc.save(`Recibo_${paymentData.receiptNumber}.pdf`);
+    doc.save(`Recibo_${paymentData.ownerName.replace(/ /g, '_')}.pdf`);
     return null;
   }
 };

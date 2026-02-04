@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
@@ -420,10 +421,10 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             } else if (navigator.share) {
                 const pdfBlob = generatePaymentReceipt(dataForPdf, companyInfo.logo, 'blob');
                 if (pdfBlob) {
-                    const pdfFile = new File([pdfBlob], `Recibo_${receiptNumber}.pdf`, { type: 'application/pdf' });
+                    const pdfFile = new File([pdfBlob], `Recibo_${data.ownerName.replace(/ /g, '_')}.pdf`, { type: 'application/pdf' });
                     if (navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
                         await navigator.share({
-                            title: `Recibo de Pago ${receiptNumber}`,
+                            title: `Recibo de Pago para ${data.ownerName}`,
                             text: `Recibo de pago para ${data.ownerName}.`,
                             files: [pdfFile],
                         });
@@ -1110,10 +1111,7 @@ function PaymentsPage() {
     const condoId = useParams()?.condoId as string;
     const router = useRouter();
 
-    const activeTabFromUrl = searchParams?.get('tab');
-    const validTabs = ['verify', 'report', 'calculator'];
-    const activeTab = (activeTabFromUrl && validTabs.includes(activeTabFromUrl)) ? activeTabFromUrl : 'verify';
-
+    const activeTab = searchParams?.get('tab') ?? 'verify';
 
     const handleTabChange = (value: string) => {
         router.push(`/${condoId}/admin/payments?tab=${value}`, { scroll: false });
@@ -1160,3 +1158,4 @@ export default function PaymentsPageWrapper() {
         </Suspense>
     );
 }
+
