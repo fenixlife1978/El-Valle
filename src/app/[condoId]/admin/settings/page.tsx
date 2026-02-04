@@ -17,7 +17,7 @@ import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Switch } from '@/components/ui/switch';
 import { useAuthorization } from '@/hooks/use-authorization';
-import { useAuth } from '@/hooks/use-auth';
+import { useParams } from 'next/navigation'; // Cambiado para obtener ID de la URL
 import { compressImage } from '@/lib/utils';
 
 // --- DEFINICIONES DE TIPOS ---
@@ -49,8 +49,12 @@ const defaultSettings: Settings = {
 
 export default function SettingsPage() {
   const { toast } = useToast();
-  const { activeCondoId } = useAuth();
+  const params = useParams(); // Obtenemos el condoId de la ruta dinámica
   const { requestAuthorization } = useAuthorization();
+  
+  // Definimos workingCondoId basándonos en la URL
+  const workingCondoId = params?.condoId as string;
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [settings, setSettings] = useState<Settings>(defaultSettings);
@@ -59,17 +63,16 @@ export default function SettingsPage() {
 
   const inputStyle = "rounded-xl h-12 bg-input border-border font-bold text-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary";
 
-  // Identificador prioritario para las consultas
-  const condoId = activeCondoId;
-
   useEffect(() => {
-    if (!condoId) {
+    // Si no hay ID en la URL, no podemos cargar nada
+    if (!workingCondoId) {
       setLoading(false);
       return;
     }
   
     setLoading(true);
-    const docRef = doc(db, 'condominios', condoId, 'config', 'mainSettings');
+    // Ruta corregida para cumplir con la jerarquía de EFAS CondoSys
+    const docRef = doc(db, 'condominios', workingCondoId, 'config', 'mainSettings');
   
     const unsubscribe = onSnapshot(docRef, async (snapshot) => {
       if (snapshot.exists()) {
@@ -82,49 +85,46 @@ export default function SettingsPage() {
         });
         setLoading(false);
       } else {
-        // Document doesn't exist, let's try to migrate or create it.
+        // Lógica de migración para condo_01 pre-multiempresa
         let migrated = false;
-        if (condoId === 'condo_01') {
+        if (workingCondoId === 'condo_01') {
           try {
             const legacyConfigRef = doc(db, 'config', 'mainSettings');
             const legacySnap = await getDoc(legacyConfigRef);
             if (legacySnap.exists()) {
               await setDoc(docRef, legacySnap.data(), { merge: true });
               migrated = true;
-              toast({ title: 'Configuración Migrada', description: 'Se ha movido la configuración a la nueva estructura.' });
-              // The snapshot listener will re-fire with the new data.
+              toast({ title: 'EFAS: Migración Exitosa', description: 'Datos de condo_01 sincronizados en la nueva ruta.' });
             }
           } catch (e) {
-            console.error("Failed to migrate legacy config", e);
+            console.error("Error migrando configuración antigua", e);
           }
         }
   
         if (!migrated) {
-          // If not migrated (or not condo_01), create a default doc.
           try {
             await setDoc(docRef, defaultSettings);
-            // The snapshot listener will re-fire, no need to set state here.
           } catch (e) {
-            console.error("Failed to create default settings", e);
-            toast({ variant: "destructive", title: "Error de configuración", description: "No se pudo inicializar la configuración." });
-            setLoading(false); // Stop loading on error
+            console.error("Error creando configuración inicial", e);
+            toast({ variant: "destructive", title: "Error", description: "No se pudo inicializar la configuración." });
+            setLoading(false);
           }
         }
       }
     }, (error) => {
-      console.error("Error fetching settings:", error);
-      toast({ variant: "destructive", title: "Error de carga", description: "No se pudo conectar con la ruta de configuración." });
+      console.error("Error de conexión con Firestore:", error);
+      toast({ variant: "destructive", title: "Error de carga", description: "Verifique permisos en la ruta de este condominio." });
       setLoading(false);
     });
   
     return () => unsubscribe();
-  }, [condoId, toast]);
+  }, [workingCondoId, toast]);
 
   const handleSave = async (section: string, dataToUpdate: Partial<Settings>) => {
-    if (!condoId) return;
+    if (!workingCondoId) return;
     setSaving(prev => ({ ...prev, [section]: true }));
     try {
-      const docRef = doc(db, 'condominios', condoId, 'config', 'mainSettings');
+      const docRef = doc(db, 'condominios', workingCondoId, 'config', 'mainSettings');
       await setDoc(docRef, dataToUpdate, { merge: true });
       toast({ title: "Guardado", description: "Configuración actualizada en EFAS CondoSys." });
     } catch (e) {
@@ -135,11 +135,11 @@ export default function SettingsPage() {
   };
 
   const handleSaveSecurity = async (key: string) => {
-    if (!condoId) return;
+    if (!workingCondoId) return;
     requestAuthorization(async () => {
       setSaving(prev => ({ ...prev, security: true }));
       try {
-        const authRef = doc(db, 'condominios', condoId, 'config', 'authorization');
+        const authRef = doc(db, 'condominios', workingCondoId, 'config', 'authorization');
         await setDoc(authRef, { key, updatedAt: new Date().toISOString() }, { merge: true });
         toast({ title: "PIN Seguro actualizado" });
         setNewAuthKey('');
@@ -150,7 +150,7 @@ export default function SettingsPage() {
 
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file && condoId) {
+    if (file && workingCondoId) {
       try {
         setSaving(prev => ({...prev, company: true }));
         const base64 = await compressImage(file, 200, 200);
@@ -175,7 +175,7 @@ export default function SettingsPage() {
   if (loading) return (
     <div className="flex h-[80vh] flex-col items-center justify-center gap-4">
       <Loader2 className="animate-spin text-primary h-12 w-12" />
-      <p className="text-xs font-bold text-muted-foreground uppercase">Sincronizando con {condoId}...</p>
+      <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest italic">Sincronizando EFAS con {workingCondoId}...</p>
     </div>
   );
 
@@ -183,11 +183,11 @@ export default function SettingsPage() {
     <div className="max-w-6xl mx-auto space-y-8 p-4 md:p-6 pb-24">
       <div className="mb-10">
         <h2 className="text-4xl font-black text-foreground uppercase tracking-tighter italic drop-shadow-sm">
-          Configuración <span className="text-primary">General</span>
+          Ajustes <span className="text-primary">Globales</span>
         </h2>
         <div className="h-1.5 w-20 bg-primary mt-2 rounded-full"></div>
-        <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">
-          ID: {condoId} — Gestiona los parámetros de EFAS CondoSys.
+        <p className="text-muted-foreground font-bold mt-3 text-[10px] uppercase tracking-widest italic">
+          Gestión: {settings.companyInfo?.name || workingCondoId}
         </p>
       </div>
       
@@ -266,13 +266,17 @@ export default function SettingsPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {settings.exchangeRates?.map((r) => (
-                      <TableRow key={r.id} className="hover:bg-secondary/20 transition-colors border-border">
-                        <TableCell className="font-bold text-foreground">{format(parseISO(r.date), 'PPP', { locale: es })}</TableCell>
-                        <TableCell className="font-black text-foreground text-lg">Bs. {r.rate}</TableCell>
-                        <TableCell className="text-right">{r.active ? <Badge className="bg-green-500">ACTIVA</Badge> : <Badge variant="outline">HISTORIAL</Badge>}</TableCell>
-                      </TableRow>
-                    ))}
+                    {settings.exchangeRates?.length === 0 ? (
+                      <TableRow><TableCell colSpan={3} className="text-center py-6 text-[10px] font-black uppercase text-muted-foreground italic">No hay registros</TableCell></TableRow>
+                    ) : (
+                      settings.exchangeRates?.map((r) => (
+                        <TableRow key={r.id} className="hover:bg-secondary/20 transition-colors border-border">
+                          <TableCell className="font-bold text-foreground">{format(parseISO(r.date), 'PPP', { locale: es })}</TableCell>
+                          <TableCell className="font-black text-foreground text-lg">Bs. {r.rate}</TableCell>
+                          <TableCell className="text-right">{r.active ? <Badge className="bg-green-500">ACTIVA</Badge> : <Badge variant="outline">HISTORIAL</Badge>}</TableCell>
+                        </TableRow>
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               </div>

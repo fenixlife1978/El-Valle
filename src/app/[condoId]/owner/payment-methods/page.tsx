@@ -7,10 +7,34 @@ import { Button } from "@/components/ui/button";
 import { Loader2, Copy, Banknote, Smartphone, University } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/hooks/use-auth';
+import { onSnapshot, doc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 export default function PaymentMethodsPage() {
     const { toast } = useToast();
-    const { companyInfo, loading } = useAuth();
+    const { activeCondoId, loading: authLoading } = useAuth();
+    
+    const [companyInfo, setCompanyInfo] = useState<any | null>(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        if (!activeCondoId) {
+            setLoading(false);
+            return;
+        }
+        setLoading(true);
+        const settingsRef = doc(db, 'condominios', activeCondoId, 'config', 'mainSettings');
+        const unsub = onSnapshot(settingsRef, (snap) => {
+            if (snap.exists() && snap.data().companyInfo) {
+                setCompanyInfo(snap.data().companyInfo);
+            } else {
+                setCompanyInfo(null);
+            }
+            setLoading(false);
+        });
+        return () => unsub();
+    }, [activeCondoId]);
+
 
     const handleCopy = (textToCopy: string, fieldName: string) => {
         if (!textToCopy) return;
@@ -30,7 +54,7 @@ export default function PaymentMethodsPage() {
         });
     };
 
-    if (loading) {
+    if (authLoading || loading) {
         return (
             <div className="flex items-center justify-center h-64">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />

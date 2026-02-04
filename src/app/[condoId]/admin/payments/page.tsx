@@ -68,16 +68,17 @@ const formatCurrency = (num: number) => num.toLocaleString('es-VE', { minimumFra
 
 // --- VERIFICATION COMPONENT ---
 function VerificationComponent({ condoId }: { condoId: string }) {
-    const { user, companyInfo } = useAuth();
+    const { user } = useAuth();
     const { requestAuthorization } = useAuthorization();
     const { toast } = useToast();
 
+    const [companyInfo, setCompanyInfo] = useState<any | null>(null);
+    const [companyInfoLoading, setCompanyInfoLoading] = useState(true);
     const [payments, setPayments] = useState<Payment[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [activeTab, setActiveTab] = useState('pendiente');
     const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
-    const [receiptData, setReceiptData] = useState<ReceiptData>(null);
     const [isVerifying, setIsVerifying] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
     const [rejectionReason, setRejectionReason] = useState('');
@@ -86,6 +87,24 @@ function VerificationComponent({ condoId }: { condoId: string }) {
     const [liquidatedDetails, setLiquidatedDetails] = useState<{ debts: Debt[], balanceCredit: number } | null>(null);
 
     const ownersCollectionName = condoId === 'condo_01' ? 'owners' : 'propietarios';
+
+    useEffect(() => {
+        if (!condoId) {
+            setCompanyInfoLoading(false);
+            return;
+        }
+        const settingsRef = doc(db, 'condominios', condoId, 'config', 'mainSettings');
+        const unsub = onSnapshot(settingsRef, (snap) => {
+            if (snap.exists() && snap.data().companyInfo) {
+                setCompanyInfo(snap.data().companyInfo);
+            } else {
+                setCompanyInfo(null);
+            }
+            setCompanyInfoLoading(false);
+        });
+        return () => unsub();
+    }, [condoId]);
+
 
     useEffect(() => {
         if (!condoId) { setLoading(false); return; }
@@ -426,8 +445,18 @@ function VerificationComponent({ condoId }: { condoId: string }) {
     };
     
     const prepareAndGenerateReceipt = async (action: 'download' | 'share', payment: Payment, beneficiary: any) => {
-        if (!beneficiary || !beneficiary.ownerId || !companyInfo || !condoId) {
-            toast({ variant: "destructive", title: "Error", description: "Datos insuficientes para generar el recibo." });
+        if (!beneficiary || !beneficiary.ownerId || !condoId) {
+            toast({ variant: "destructive", title: "Error", description: "Datos del beneficiario son inválidos." });
+            return;
+        }
+
+        if (companyInfoLoading) {
+            toast({ title: 'Cargando...', description: 'Información del condominio está cargando, por favor intente de nuevo en un momento.' });
+            return;
+        }
+
+        if (!companyInfo) {
+            toast({ variant: 'destructive', title: 'Error de Configuración', description: 'No se encontró la información del condominio. Por favor, complete la sección "Identidad" en Ajustes.' });
             return;
         }
         
