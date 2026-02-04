@@ -67,7 +67,8 @@ function AuthGuard({ children }: { children: ReactNode }) {
     // 3. SIN SESIÓN ACTIVA
     else {
       if (!isPublic) {
-        router.replace('/welcome');
+        console.log("Acceso no autorizado: Redirigiendo a Landing Page");
+        router.replace('/'); 
       }
     }
   }, [user, role, loading, pathname, router, isSuperAdmin, activeCondoId]);

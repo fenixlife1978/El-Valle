@@ -56,14 +56,15 @@ export default function Header() {
     // LÓGICA DE SALIDA DIFERENCIADA
     const handleExit = async () => {
         if (isSupportMode && isSuperAdmin) {
-            // Caso Super Admin: Solo limpia el rastro de soporte y vuelve a su panel
             localStorage.removeItem('support_mode_id');
             router.push('/super-admin');
         } else {
-            // Caso Admin / Owner: Cierra la sesión de Firebase por completo
             try {
                 await signOut(auth);
-                router.push('/welcome');
+                localStorage.removeItem('activeCondoId');
+                localStorage.removeItem('workingCondoId');
+                localStorage.removeItem('userRole');
+                router.push('/');
             } catch (error) {
                 console.error("Error al cerrar sesión:", error);
             }
