@@ -9,19 +9,21 @@ import { db } from '@/lib/firebase';
 import { format, startOfMonth, isAfter } from "date-fns";
 import { es } from "date-fns/locale"; 
 import CarteleraDigital from "@/components/CarteleraDigital";
-import AdminCharts from "@/components/AdminCharts";
 import { useAuth } from "@/hooks/use-auth";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
+import AdminCharts from '@/components/AdminCharts';
+
 
 const formatToTwoDecimals = (num: number) => {
     if (typeof num !== 'number' || isNaN(num)) return '0,00';
     return num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-export default function AdminDashboardPage({ params }: { params: { condoId: string } }) {
+export default function AdminDashboardPage() {
     const { user, role, loading: authLoading } = useAuth();
     const router = useRouter();
-    const workingCondoId = params.condoId;
+    const params = useParams();
+    const workingCondoId = params.condoId as string;
 
     const [loading, setLoading] = useState(true);
     const [stats, setStats] = useState({
@@ -210,7 +212,7 @@ export default function AdminDashboardPage({ params }: { params: { condoId: stri
 
             {/* MÓDULO DE GRÁFICOS ANALÍTICOS */}
             <AdminCharts payments={allPayments} currentRate={currentRate} />
-
+            
             {/* Tabla de Movimientos Recientes */}
             <Card className="rounded-[2.5rem] border-none shadow-2xl overflow-hidden bg-white">
                 <CardHeader className="bg-slate-900 px-8 py-6">
