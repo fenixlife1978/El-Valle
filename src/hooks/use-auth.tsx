@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, createContext, useContext, useCallback } from 'react';
@@ -26,6 +25,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [loading, setLoading] = useState(true);
     const [role, setUserRole] = useState<string | null>(null);
     const [activeCondoId, setActiveCondoId] = useState<string | null>(null);
+    const [workingCondoId, setWorkingCondoId] = useState<string | null>(null);
     
     const isSuperAdmin = user?.email === 'vallecondo@gmail.com';
 
@@ -47,16 +47,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
     useEffect(() => {
+        if (typeof window === 'undefined') {
+            return;
+        }
+        
         if (!user) {
             setOwnerData(null);
             setCompanyInfo(null);
             setActiveCondoId(null);
             setUserRole(null);
+            setWorkingCondoId(null);
             return;
         }
 
         const storedCondoId = localStorage.getItem('activeCondoId');
         const storedRole = localStorage.getItem('userRole');
+        const storedWorkingCondoId = localStorage.getItem('workingCondoId');
+
+        setActiveCondoId(storedCondoId);
+        setUserRole(storedRole);
+        setWorkingCondoId(storedWorkingCondoId || storedCondoId);
 
         if (isSuperAdmin) {
             setOwnerData({ name: 'Super Admin', email: user.email });
@@ -69,6 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (!loading) {
                  console.warn("No condoId or role found in storage.");
             }
+            setLoading(false);
             return;
         }
         
@@ -79,12 +90,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (snap.exists()) {
                 const userData = snap.data();
                 setOwnerData({ ...userData });
-                setActiveCondoId(storedCondoId);
-                setUserRole(storedRole);
             } else {
                 console.warn("Authenticated user profile not found in DB, preventing sign-out loop:", user.uid);
-                setOwnerData(null); // Keep user authenticated but without a profile
-                setActiveCondoId(storedCondoId);
+                setOwnerData(null);
                 setUserRole(null);
             }
             setLoading(false);
@@ -94,13 +102,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setOwnerData(null);
         });
 
-        // Cargar companyInfo desde la ruta correcta
         const settingsRef = doc(db, 'condominios', storedCondoId, 'config', 'mainSettings');
         const unsubSettings = onSnapshot(settingsRef, (settingsSnap) => {
             if (settingsSnap.exists()) {
                 setCompanyInfo(settingsSnap.data().companyInfo);
             } else {
-                setCompanyInfo(null); // No hay info si no existe el doc
+                setCompanyInfo(null);
             }
         });
 
@@ -119,7 +126,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         role,
         isSuperAdmin,
         activeCondoId,
-        workingCondoId: localStorage.getItem('workingCondoId') || activeCondoId,
+        workingCondoId,
     };
 
     return (

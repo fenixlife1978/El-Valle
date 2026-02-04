@@ -9,7 +9,7 @@ import { db } from '@/lib/firebase';
 import { format, startOfMonth, isAfter } from "date-fns";
 import { es } from "date-fns/locale"; 
 import CarteleraDigital from "@/components/CarteleraDigital";
-import AdminCharts from "@/components/AdminCharts"; // Importamos el nuevo módulo
+import AdminCharts from "@/components/AdminCharts";
 import { useAuth } from "@/hooks/use-auth";
 import { useRouter } from "next/navigation";
 
