@@ -31,7 +31,7 @@ import Image from 'next/image';
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuthorization } from '@/hooks/use-authorization';
 import { generatePaymentReceipt } from '@/lib/pdf-generator';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuPortal } from '@/components/ui/dropdown-menu';
 import { Textarea } from '@/components/ui/textarea';
 import Link from 'next/link';
 import { processPaymentLiquidation } from '@/lib/payment-processor';
@@ -570,19 +570,43 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                                                             {p.status === 'aprobado' && p.beneficiaries?.length > 0 && (
                                                                 <>
                                                                     <DropdownMenuSeparator />
-                                                                    <DropdownMenuItem 
-                                                                        onClick={() => prepareAndGenerateReceipt('download', p, p.beneficiaries[0])} 
-                                                                        disabled={isGenerating}
-                                                                    >
-                                                                        {isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Download className="mr-2 h-4 w-4" />} 
-                                                                        Exportar PDF
-                                                                    </DropdownMenuItem>
-                                                                    <DropdownMenuItem 
-                                                                        onClick={() => prepareAndGenerateReceipt('share', p, p.beneficiaries[0])} 
-                                                                        disabled={isGenerating}
-                                                                    >
-                                                                        <Share2 className="mr-2 h-4 w-4" /> Compartir
-                                                                    </DropdownMenuItem>
+                                                                    {p.beneficiaries.length === 1 ? (
+                                                                        <>
+                                                                            <DropdownMenuItem onClick={() => prepareAndGenerateReceipt('download', p, p.beneficiaries[0])} disabled={isGenerating}>
+                                                                                {isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Download className="mr-2 h-4 w-4" />} Exportar PDF
+                                                                            </DropdownMenuItem>
+                                                                            <DropdownMenuItem onClick={() => prepareAndGenerateReceipt('share', p, p.beneficiaries[0])} disabled={isGenerating}>
+                                                                                <Share2 className="mr-2 h-4 w-4" /> Compartir Recibo
+                                                                            </DropdownMenuItem>
+                                                                        </>
+                                                                    ) : (
+                                                                        <>
+                                                                            <DropdownMenuSub>
+                                                                                <DropdownMenuSubTrigger><Download className="mr-2 h-4 w-4"/>Exportar Recibo</DropdownMenuSubTrigger>
+                                                                                <DropdownMenuPortal>
+                                                                                    <DropdownMenuSubContent>
+                                                                                        {p.beneficiaries.map(ben => (
+                                                                                            <DropdownMenuItem key={ben.ownerId} onClick={() => prepareAndGenerateReceipt('download', p, ben)}>
+                                                                                                {ben.ownerName}
+                                                                                            </DropdownMenuItem>
+                                                                                        ))}
+                                                                                    </DropdownMenuSubContent>
+                                                                                </DropdownMenuPortal>
+                                                                            </DropdownMenuSub>
+                                                                            <DropdownMenuSub>
+                                                                                <DropdownMenuSubTrigger><Share2 className="mr-2 h-4 w-4"/>Compartir Recibo</DropdownMenuSubTrigger>
+                                                                                 <DropdownMenuPortal>
+                                                                                    <DropdownMenuSubContent>
+                                                                                        {p.beneficiaries.map(ben => (
+                                                                                            <DropdownMenuItem key={ben.ownerId} onClick={() => prepareAndGenerateReceipt('share', p, ben)}>
+                                                                                                {ben.ownerName}
+                                                                                            </DropdownMenuItem>
+                                                                                        ))}
+                                                                                    </DropdownMenuSubContent>
+                                                                                </DropdownMenuPortal>
+                                                                            </DropdownMenuSub>
+                                                                        </>
+                                                                    )}
                                                                     <DropdownMenuSeparator />
                                                                     <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => setPaymentToDelete(p)}>
                                                                         <Trash2 className="mr-2 h-4 w-4"/>Eliminar
@@ -1139,7 +1163,7 @@ function PaymentsPage() {
                    Verificación de pagos, reportes manuales y calculadora de cuotas.
                 </p>
             </div>
-            <Tabs value={activeTab ?? 'verify'} onValueChange={handleTabChange} className="w-full">
+            <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
                  <TabsList className="grid w-full grid-cols-3">
                     <TabsTrigger value="verify">Verificación</TabsTrigger>
                     <TabsTrigger value="report">Reporte Manual</TabsTrigger>

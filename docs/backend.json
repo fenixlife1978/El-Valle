@@ -165,7 +165,7 @@
         "properties": {
             "description": { "type": "string" },
             "amount": { "type": "number" },
-            "category": { "type": "string", "enum": ["Servicios", "Mantenimientos y Servicios", "Nomina", "Administracion", "Telefonia e Internet", "Gastos ExtraOrdinarios", "Reparaciones Generales", "Otros Gastos"] },
+            "category": { "type": "string", "enum": ["Servicios", "Mantenimientos y Servicios", "Nomina", "Administracion", "Telefonia e Internet", "Gastos ExtraOrdinarios", "Reparaciones Generales", "Caja Chica", "Otros Gastos"] },
             "date": { "type": "string", "format": "date-time" },
             "createdAt": { "type": "string", "format": "date-time" },
             "reference": { "type": "string" }
@@ -282,6 +282,7 @@
             "date": {"type": "string", "format": "date-time"},
             "amount": {"type": "number"},
             "description": {"type": "string"},
+            "sourceExpenseId": { "type": "string"},
             "expenses": {
                 "type": "array",
                 "items": {
@@ -292,7 +293,8 @@
                         "description": {"type": "string"},
                         "amount": {"type": "number"},
                         "receiptUrl": {"type": "string", "format": "uri"}
-                    }
+                    },
+                    "required": ["id", "date", "description", "amount"]
                 }
             }
         }
@@ -482,3 +484,4 @@
     "providers": ["password", "google.com"]
   }
 }
+
