@@ -180,30 +180,41 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             if (!condoId) return;
             setIsVerifying(true);
             try {
+                // --- PRE-TRANSACTION READS ---
+                const settingsRef = doc(db, 'condominios', condoId, 'config', 'mainSettings');
+                const settingsDoc = await getDoc(settingsRef);
+                if (!settingsDoc.exists() || !settingsDoc.data().condoFee) {
+                    throw new Error("No se encontró la cuota de condominio (condoFee) en la configuración.");
+                }
+                const condoFeeUSD = settingsDoc.data().condoFee;
+                const costoCuotaActualBs = condoFeeUSD * payment.exchangeRate;
+    
+                const beneficiaryIds = payment.beneficiaries.map(b => b.ownerId);
+                if (beneficiaryIds.length === 0) throw new Error("El pago no tiene beneficiarios.");
+                
+                const allDebtsQuery = query(collection(db, 'condominios', condoId, 'debts'), where('ownerId', 'in', beneficiaryIds));
+                const allDebtsSnapshot = await getDocs(allDebtsQuery);
+                const allDebtsForTx = allDebtsSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Debt));
+    
+                // --- START TRANSACTION ---
                 await runTransaction(db, async (transaction) => {
                     const paymentRef = doc(db, 'condominios', condoId, 'payments', payment.id);
                     const receiptNumbers: { [ownerId: string]: string } = {};
-
-                    const settingsRef = doc(db, 'condominios', condoId, 'config', 'mainSettings');
-                    const settingsDoc = await getDoc(settingsRef);
-                    if (!settingsDoc.exists() || !settingsDoc.data().condoFee) {
-                        throw new Error("No se encontró la cuota de condominio (condoFee) en la configuración.");
-                    }
-                    const condoFeeUSD = settingsDoc.data().condoFee;
-                    const costoCuotaActualBs = condoFeeUSD * payment.exchangeRate;
-
+    
+                    // --- TRANSACTION READ PHASE ---
+                    const ownerRefs = beneficiaryIds.map(id => doc(db, 'condominios', condoId, ownersCollectionName, id));
+                    const ownerDocs = await Promise.all(ownerRefs.map(ref => transaction.get(ref)));
+    
+                    // --- LOGIC & WRITE PHASE ---
                     for (const beneficiary of payment.beneficiaries) {
-                        const ownerRef = doc(db, 'condominios', condoId, ownersCollectionName, beneficiary.ownerId);
-                        const ownerDoc = await transaction.get(ownerRef);
-                        if (!ownerDoc.exists()) throw new Error(`El propietario ${beneficiary.ownerName} no fue encontrado.`);
-
+                        const ownerDoc = ownerDocs.find(d => d.id === beneficiary.ownerId);
+                        if (!ownerDoc || !ownerDoc.exists()) throw new Error(`El propietario ${beneficiary.ownerName} no fue encontrado.`);
+                        
                         const saldoAFavorPrevio = ownerDoc.data().balance || 0;
                         const montoRecibido = beneficiary.amount;
-
-                        const allOwnerDebtsQuery = query(collection(db, 'condominios', condoId, 'debts'), where('ownerId', '==', beneficiary.ownerId));
-                        const allOwnerDebtsSnapshot = await getDocs(allOwnerDebtsQuery);
-                        const allOwnerDebts = allOwnerDebtsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Debt));
-
+    
+                        const allOwnerDebts = allDebtsForTx.filter(d => d.ownerId === beneficiary.ownerId);
+                        
                         const cuotasPendientes = allOwnerDebts
                             .filter(d => d.status === 'pending' || d.status === 'vencida')
                             .sort((a, b) => a.year - b.year || a.month - b.month)
@@ -217,7 +228,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                             }));
                         
                         const liquidationResult = processPaymentLiquidation(montoRecibido, saldoAFavorPrevio, cuotasPendientes, costoCuotaActualBs);
-
+    
                         // 1. Update liquidated pending debts
                         for (const liquidada of liquidationResult.cuotasLiquidadas) {
                             const debtRef = doc(db, 'condominios', condoId, 'debts', liquidada.id);
@@ -228,7 +239,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                                 paidAmountUSD: liquidada.amountUSD
                             });
                         }
-
+    
                         // 2. Handle advance payments
                         if (liquidationResult.cuotasAdelantadas > 0 && condoFeeUSD > 0) {
                             let lastPaidPeriod = { year: 1970, month: 0 };
@@ -268,20 +279,20 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                                 nextPeriodDate = addMonths(nextPeriodDate, 1);
                             }
                         }
-
+    
                         // 3. Update owner's balance
-                        transaction.update(ownerRef, { balance: liquidationResult.nuevoSaldoAFavor });
+                        transaction.update(ownerDoc.ref, { balance: liquidationResult.nuevoSaldoAFavor });
                         
                         // 4. Generate receipt number
                         receiptNumbers[beneficiary.ownerId] = `REC-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 90000) + 10000)}`;
                     }
-
+    
                     transaction.update(paymentRef, { status: 'aprobado', observations: 'Pago verificado y aplicado por la administración.', receiptNumbers });
                 });
                 
                 toast({ title: 'Pago Aprobado', description: 'El pago ha sido procesado con la nueva lógica de liquidación.', className: 'bg-green-100 border-green-400 text-green-800' });
                 setSelectedPayment(null);
-
+    
             } catch (error: any) {
                 toast({ variant: 'destructive', title: 'Error al Aprobar', description: error.message || 'No se pudo completar la transacción.' });
             } finally {
@@ -421,7 +432,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             } else if (navigator.share) {
                 const pdfBlob = generatePaymentReceipt(dataForPdf, companyInfo.logo, 'blob');
                 if (pdfBlob) {
-                    const pdfFile = new File([pdfBlob], `Recibo_${data.ownerName.replace(/ /g, '_')}.pdf`, { type: 'application/pdf' });
+                    const pdfFile = new File([pdfBlob], `Recibo_${data.ownerName.replace(/\s/g, '_')}.pdf`, { type: 'application/pdf' });
                     if (navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
                         await navigator.share({
                             title: `Recibo de Pago para ${data.ownerName}`,
@@ -1158,4 +1169,3 @@ export default function PaymentsPageWrapper() {
         </Suspense>
     );
 }
-
