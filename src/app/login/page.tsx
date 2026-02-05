@@ -43,57 +43,57 @@ export default function LoginPage() {
     
         try {
             await setPersistence(auth, browserLocalPersistence);
-    
-            // 1. AUTENTICAR PRIMERO (Para tener permisos de lectura)
             const userCredential = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
-            const userId = userCredential.user.uid;
+            const user = userCredential.user;
     
-            // 2. CASO SUPER ADMIN
-            if (email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+            // Super Admin check
+            if (user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
                 localStorage.setItem('userRole', 'super-admin');
                 window.location.href = '/super-admin';
                 return;
             }
+            
+            // Admin Login Flow
+            if (role === 'admin') {
+                if (!condoKey) {
+                    throw new Error("Debes ingresar la Key de tu condominio");
+                }
+                const condoQuery = query(
+                    collection(db, "condominios"),
+                    where("registrationKey", "==", condoKey.trim().toUpperCase()),
+                    limit(1)
+                );
+                const condoSnap = await getDocs(condoQuery);
+                if (condoSnap.empty) {
+                    throw new Error("La Key del condominio no es válida.");
+                }
+                const activeCondoId = condoSnap.docs[0].id;
+                
+                // Validate admin belongs to this condo
+                const collectionName = activeCondoId === 'condo_01' ? 'owners' : 'propietarios';
+                const userDocRef = doc(db, 'condominios', activeCondoId, collectionName, user.uid);
+                const userDocSnap = await getDoc(userDocRef);
     
-            if (!condoKey) throw new Error("Debes ingresar la Key de tu condominio");
+                if (!userDocSnap.exists() || !['admin', 'administrador'].includes(userDocSnap.data()?.role)) {
+                     await auth.signOut();
+                     throw new Error(`No tienes permisos de administrador para este condominio.`);
+                }
     
-            // 3. OBTENER CONDO ID
-            const condoQuery = query(
-                collection(db, "condominios"), 
-                where("registrationKey", "==", condoKey.trim().toUpperCase()), 
-                limit(1)
-            );
-            const condoSnap = await getDocs(condoQuery);
-            if (condoSnap.empty) throw new Error("La Key ingresada no es válida.");
-            const activeCondoId = condoSnap.docs[0].id;
-    
-            // 4. GUARDAR ESTADO
-            localStorage.setItem('activeCondoId', activeCondoId);
-            localStorage.setItem('workingCondoId', activeCondoId);
-            localStorage.setItem('userRole', role!);
-    
-            // 5. VALIDAR PERTENENCIA
-            const collectionName = activeCondoId === 'condo_01' ? 'owners' : 'propietarios';
-            const userDocRef = doc(db, 'condominios', activeCondoId, collectionName, userId);
-            const userDocSnap = await getDoc(userDocRef);
-    
-            if (!userDocSnap.exists()) {
-                await auth.signOut();
-                localStorage.clear();
-                throw new Error(`No tienes acceso a este condominio.`);
+                localStorage.setItem('activeCondoId', activeCondoId);
+                localStorage.setItem('userRole', 'admin');
+                toast({ title: "Acceso de Administrador Exitoso" });
+                window.location.href = `/${activeCondoId}/admin/dashboard`;
+                
+            } else if (role === 'owner') {
+                // Owner Login Flow
+                // The AuthGuard will handle redirection after useAuth loads the user's data
+                toast({ title: "Acceso Exitoso", description: "Cargando tu portal..." });
+                router.push('/welcome'); // Let the AuthGuard do its job
             }
-    
-            // 6. REDIRIGIR
-            const targetPath = role === 'admin' 
-                ? `/${activeCondoId}/admin/dashboard` 
-                : `/${activeCondoId}/owner/dashboard`;
-    
-            toast({ title: "Acceso Exitoso", description: "Cargando tu portal..." });
-            window.location.href = targetPath;
     
         } catch (err: any) {
             console.error("Login Error:", err);
-            setLoading(false);
+            setLoading(false); // Make sure loading is set to false on error
             let errorMessage = "Credenciales incorrectas o error de conexión.";
             if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
                 errorMessage = "Correo electrónico o contraseña incorrectos.";
