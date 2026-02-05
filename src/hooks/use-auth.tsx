@@ -72,17 +72,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 const userData = snap.data();
                 setOwnerData(userData);
                 
-                // --- TRADUCCIÓN DE ROLES PARA EVITAR REBOTE ---
-                const dbRole = userData.role?.toLowerCase() || '';
-                if (dbRole === 'propietario') {
-                    setUserRole('owner'); // Next.js busca la carpeta /owner/
-                } else if (dbRole === 'administrador' || dbRole === 'admin') {
-                    setUserRole('admin'); // Next.js busca la carpeta /admin/
+                // --- NORMALIZACIÓN RADICAL ---
+                const rawRole = (userData.role || '').toLowerCase();
+                if (rawRole === 'propietario' || rawRole === 'owner') {
+                    setUserRole('owner');
+                } else if (rawRole === 'administrador' || rawRole === 'admin') {
+                    setUserRole('admin');
                 } else {
-                    setUserRole(dbRole);
+                    setUserRole(rawRole);
                 }
             }
-            setLoading(false); // Terminamos la carga aquí
+            // IMPORTANTE: Solo ponemos loading en false después de asignar el rol
+            setLoading(false); 
         }, (error) => {
             console.error("Error en Auth Snap:", error);
             setLoading(false);
@@ -97,7 +98,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             unsubSnap();
             unsubSettings();
         };
-        // ELIMINAMOS 'loading' de las dependencias para romper el bucle infinito
     }, [user, isSuperAdmin]); 
 
     const value = {

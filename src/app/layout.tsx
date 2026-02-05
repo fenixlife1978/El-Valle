@@ -27,51 +27,35 @@ function AuthGuard({ children }: { children: ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    // Si todavía está cargando la sesión de Firebase, no hacemos nada
     if (loading) return;
 
     const isPublic = publicPaths.includes(pathname);
-    
-    // REGLA EFAS CondoSys: Determinar el ID de trabajo
     const sId = typeof window !== 'undefined' ? localStorage.getItem('support_mode_id') : null;
     const workingCondoId = (isSuperAdmin && sId) ? sId : activeCondoId;
 
-    // 1. CASO SUPER ADMIN
     if (isSuperAdmin) {
-      if (isPublic) {
-        router.replace('/super-admin');
-      }
-      return;
+        if (isPublic) router.replace('/super-admin');
+        return;
     }
 
-    // 2. CASO USUARIOS REGULARES (Admin/Owner)
     if (user) {
-      if (isPublic) {
-        if (!workingCondoId) {
-          console.warn("EFAS: Usuario autenticado pero sin activeCondoId.");
-          return;
-        }
+        // Si ya tenemos usuario y rol, pero estamos en una página pública (como /welcome)
+        if (isPublic && role) {
+            if (!workingCondoId) return;
 
-        // NORMALIZACIÓN DE ROL: Traducimos lo que venga de DB a las rutas de Next.js
-        const currentRole = role?.toLowerCase();
-        
-        if (currentRole === 'admin' || currentRole === 'administrador') {
-          // Si el rol es admin (en inglés o español), va a la carpeta /admin/
-          router.replace(`/${workingCondoId}/admin/dashboard`);
-        } else if (currentRole === 'owner' || currentRole === 'propietario') {
-          // Si el rol es propietario (en inglés o español), va a la carpeta /owner/
-          router.replace(`/${workingCondoId}/owner/dashboard`);
+            // Redirección basada en el rol normalizado
+            if (role === 'admin') {
+                router.replace(`/${workingCondoId}/admin/dashboard`);
+            } else if (role === 'owner') {
+                router.replace(`/${workingCondoId}/owner/dashboard`);
+            }
         }
-      }
-    } 
-    // 3. SIN SESIÓN ACTIVA
-    else {
-      if (!isPublic) {
-        console.log("Acceso no autorizado: Redirigiendo a Landing Page");
-        router.replace('/'); 
-      }
+    } else if (!isPublic) {
+        // Si no hay usuario y la ruta es privada, a la Landing
+        router.replace('/');
     }
-  }, [user, role, loading, pathname, router, isSuperAdmin, activeCondoId]);
+}, [user, role, loading, pathname, isSuperAdmin, activeCondoId, router]);
+
 
   // Pantalla de carga profesional de EFAS CondoSys
   if (loading) {
