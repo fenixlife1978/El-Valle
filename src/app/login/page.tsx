@@ -27,7 +27,7 @@ export default function LoginPage() {
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
-        const roleFromQuery = searchParams.get('role');
+        const roleFromQuery = searchParams?.get('role');
         if (roleFromQuery === 'admin' || roleFromQuery === 'owner') {
             setRole(roleFromQuery);
         } else {
