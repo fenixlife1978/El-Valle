@@ -1,184 +1,205 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
+import { Card, CardHeader, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Shield, User } from 'lucide-react';
-import Link from 'next/link';
-
-// Firebase imports
-import { signInWithEmailAndPassword, setPersistence, browserLocalPersistence } from 'firebase/auth';
-import { collection, query, where, getDocs, doc, getDoc, limit } from 'firebase/firestore';
+import { Loader2, Eye, EyeOff, Home } from 'lucide-react';
+import { signInWithEmailAndPassword, setPersistence, browserLocalPersistence, signOut } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
+import Link from 'next/link';
+import { collection, query, where, getDocs, limit, doc, getDoc } from 'firebase/firestore';
+import { SYSTEM_LOGO } from '@/lib/constants';
 
-const ADMIN_EMAIL = 'vallecondo@gmail.com';
+const SUPER_ADMIN_EMAIL = 'vallecondo@gmail.com';
 
-export default function LoginPage() {
+function LoginPage() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { toast } = useToast();
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [condoKey, setCondoKey] = useState('');
-    const [role, setRole] = useState<'owner' | 'admin' | null>(null);
+    const [condoKey, setCondoKey] = useState(''); 
     const [loading, setLoading] = useState(false);
+    const [portalType, setPortalType] = useState<'owner' | 'admin' | null>(null);
+    const [showPassword, setShowPassword] = useState(false);
 
     useEffect(() => {
-        const roleFromQuery = searchParams?.get('role');
-        if (roleFromQuery === 'admin' || roleFromQuery === 'owner') {
-            setRole(roleFromQuery);
+        const roleParam = searchParams?.get('role');
+        if (roleParam === 'admin' || roleParam === 'owner') {
+            setPortalType(roleParam as 'owner' | 'admin');
         } else {
-            router.replace('/welcome'); // Redirect if role is invalid
+            router.replace('/welcome');
         }
     }, [searchParams, router]);
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
-    
+
         try {
             await setPersistence(auth, browserLocalPersistence);
-            const userCredential = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
-            const user = userCredential.user;
-    
-            // Super Admin check
-            if (user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+            
+            // 1. Auth inicial en Firebase
+            const credentials = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
+            const userId = credentials.user.uid;
+
+            // 2. Bypass para Super Admin (EFAS CondoSys)
+            if (email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()) {
                 localStorage.setItem('userRole', 'super-admin');
+                toast({ title: "Modo Super Admin", description: "Acceso total concedido." });
                 window.location.href = '/super-admin';
                 return;
             }
+
+            // 3. Buscar Condominio por registrationKey
+            if (!condoKey) throw new Error("Se requiere la Key del condominio");
+            const condoQuery = query(
+                collection(db, "condominios"), 
+                where("registrationKey", "==", condoKey.trim().toUpperCase()), 
+                limit(1)
+            );
+            const condoSnap = await getDocs(condoQuery);
             
-            // Admin Login Flow
-            if (role === 'admin') {
-                if (!condoKey) {
-                    throw new Error("Debes ingresar la Key de tu condominio");
-                }
-                const condoQuery = query(
-                    collection(db, "condominios"),
-                    where("registrationKey", "==", condoKey.trim().toUpperCase()),
-                    limit(1)
-                );
-                const condoSnap = await getDocs(condoQuery);
-                if (condoSnap.empty) {
-                    throw new Error("La Key del condominio no es válida.");
-                }
-                const activeCondoId = condoSnap.docs[0].id;
-                
-                // Validate admin belongs to this condo
-                const collectionName = activeCondoId === 'condo_01' ? 'owners' : 'propietarios';
-                const userDocRef = doc(db, 'condominios', activeCondoId, collectionName, user.uid);
-                const userDocSnap = await getDoc(userDocRef);
-    
-                if (!userDocSnap.exists() || !['admin', 'administrador'].includes(userDocSnap.data()?.role)) {
-                     await auth.signOut();
-                     throw new Error(`No tienes permisos de administrador para este condominio.`);
-                }
-    
-                localStorage.setItem('activeCondoId', activeCondoId);
-                localStorage.setItem('userRole', 'admin');
-                toast({ title: "Acceso de Administrador Exitoso" });
-                window.location.href = `/${activeCondoId}/admin/dashboard`;
-                
-            } else if (role === 'owner') {
-                // Owner Login Flow
-                // The AuthGuard will handle redirection after useAuth loads the user's data
-                toast({ title: "Acceso Exitoso", description: "Cargando tu portal..." });
-                router.push('/welcome'); // Let the AuthGuard do its job
+            if (condoSnap.empty) {
+                await signOut(auth);
+                throw new Error("Key de condominio no válida.");
             }
-    
+
+            const activeCondoId = condoSnap.docs[0].id;
+            let userData = null;
+
+            // 4. ESTRATEGIA DE BÚSQUEDA JERÁRQUICA
+            // INTENTO 1: Estructura Vieja (subcolección 'owners')
+            const oldRef = doc(db, 'condominios', activeCondoId, 'owners', userId);
+            const oldSnap = await getDoc(oldRef);
+
+            if (oldSnap.exists()) {
+                userData = oldSnap.data();
+            } else {
+                // INTENTO 2: Estructura Nueva (subcolección 'propietarios')
+                const newRef = doc(db, 'condominios', activeCondoId, 'propietarios', userId);
+                const newSnap = await getDoc(newRef);
+                if (newSnap.exists()) {
+                    userData = newSnap.data();
+                }
+            }
+
+            if (!userData) {
+                await signOut(auth);
+                throw new Error("No estás registrado como propietario o administrador en este condominio.");
+            }
+
+            // 5. NORMALIZACIÓN Y VALIDACIÓN DE ROL
+            const dbRole = (userData.role || '').toLowerCase();
+            
+            // Definimos compatibilidad de términos (Vieja vs Nueva estructura)
+            const esAdministrador = dbRole === 'administrador' || dbRole === 'admin';
+            const esPropietario = dbRole === 'propietario' || dbRole === 'owner';
+
+            const isAuthorized = portalType === 'admin' ? esAdministrador : esPropietario;
+
+            if (!isAuthorized) {
+                await signOut(auth);
+                throw new Error(`Tu rol registrado (${dbRole}) no tiene acceso al portal de ${portalType === 'admin' ? 'Administradores' : 'Propietarios'}.`);
+            }
+
+            // 6. PERSISTENCIA DE DATOS (REGLA: activeId y workingCondoId)
+            localStorage.setItem('activeCondoId', activeCondoId);
+            localStorage.setItem('workingCondoId', activeCondoId);
+            localStorage.setItem('userRole', portalType!); // 'admin' o 'owner'
+
+            toast({ title: "¡Éxito!", description: "Sincronizando con la base de datos..." });
+
+            // 7. REDIRECCIÓN CON DELAY (Evita rebotes de carga en useAuth)
+            setTimeout(() => {
+                window.location.href = `/${activeCondoId}/${portalType}/dashboard`;
+            }, 800);
+
         } catch (err: any) {
-            console.error("Login Error:", err);
-            setLoading(false); // Make sure loading is set to false on error
-            let errorMessage = "Credenciales incorrectas o error de conexión.";
-            if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
-                errorMessage = "Correo electrónico o contraseña incorrectos.";
-            } else if (err.message) {
-                errorMessage = err.message;
-            }
+            setLoading(false);
+            let msg = err.message || "Error desconocido";
+            if (err.code === 'auth/invalid-credential') msg = "Correo o contraseña incorrectos.";
+            
             toast({ 
                 variant: 'destructive', 
-                title: 'Error de Inicio de Sesión', 
-                description: errorMessage
+                title: 'Error de Acceso', 
+                description: msg 
             });
         }
     };
-    
-    if (!role) {
-        return (
-            <div className="flex h-screen w-full items-center justify-center bg-background">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-        );
-    }
 
     return (
-        <main className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
-            <Card className="w-full max-w-sm">
-                <CardHeader className="text-center">
-                    <div className="flex justify-center mb-4">
-                        {role === 'admin' ? <Shield className="h-10 w-10 text-primary"/> : <User className="h-10 w-10 text-primary"/>}
+        <main className="min-h-screen flex flex-col items-center justify-center bg-background p-4 font-montserrat">
+            <Card className="w-full max-w-sm border-border shadow-2xl rounded-[2.5rem] bg-card/80 backdrop-blur-xl overflow-hidden">
+                <CardHeader className="text-center pb-2 pt-8">
+                    <img src={SYSTEM_LOGO} alt="EFAS" className="w-16 h-16 mx-auto mb-4 rounded-2xl object-cover border-2 border-primary/20 p-1" />
+                    <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 text-primary text-[10px] font-black uppercase mx-auto border border-primary/20">
+                        Portal {portalType === 'admin' ? 'Administrativo' : 'Propietario'}
                     </div>
-                    <CardTitle>Portal de {role === 'admin' ? 'Administrador' : 'Propietario'}</CardTitle>
-                    <CardDescription>Inicia sesión para acceder a tu panel.</CardDescription>
                 </CardHeader>
                 <form onSubmit={handleLogin}>
-                    <CardContent className="space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="email">Correo Electrónico</Label>
-                            <Input
-                                id="email"
-                                type="email"
-                                placeholder="su.correo@ejemplo.com"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                required
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="password">Contraseña</Label>
-                            <Input
-                                id="password"
-                                type="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                required
-                            />
-                        </div>
-                        {role === 'admin' && (
-                            <div className="space-y-2">
-                                <Label htmlFor="condoKey">Condo Key</Label>
-                                <Input
-                                    id="condoKey"
-                                    type="text"
-                                    placeholder="Clave de tu condominio"
+                    <CardContent className="space-y-4 px-8 pt-4">
+                        <div className="space-y-1.5">
+                            <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Key del Condominio</Label>
+                            <div className="relative">
+                                <Input 
+                                    type="text" 
+                                    className="h-12 rounded-2xl pl-10 uppercase font-bold"
                                     value={condoKey}
                                     onChange={(e) => setCondoKey(e.target.value)}
-                                    required
+                                    placeholder="EJ: VALLE01"
+                                    required={email.toLowerCase() !== SUPER_ADMIN_EMAIL}
                                 />
+                                <Home className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
                             </div>
-                        )}
-                    </CardContent>
-                    <CardFooter className="flex flex-col gap-4">
-                        <Button type="submit" className="w-full" disabled={loading}>
-                            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            {loading ? 'Ingresando...' : 'Iniciar Sesión'}
-                        </Button>
-                        <div className="flex justify-between w-full text-sm">
-                            <Button variant="link" size="sm" asChild className="p-0">
-                                <Link href="/forgot-password">¿Olvidaste tu contraseña?</Link>
-                            </Button>
-                            <Button variant="link" size="sm" asChild className="p-0">
-                                <Link href="/welcome">Cambiar de portal</Link>
-                            </Button>
                         </div>
+                        <div className="space-y-1.5">
+                            <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">E-mail</Label>
+                            <Input 
+                                type="email" 
+                                className="h-12 rounded-2xl font-bold" 
+                                value={email} 
+                                onChange={(e) => setEmail(e.target.value)} 
+                                required 
+                            />
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Contraseña</Label>
+                            <div className="relative">
+                                <Input 
+                                    type={showPassword ? "text" : "password"} 
+                                    className="h-12 rounded-2xl font-bold pr-12" 
+                                    value={password} 
+                                    onChange={(e) => setPassword(e.target.value)} 
+                                    required 
+                                />
+                                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground">
+                                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                </button>
+                            </div>
+                        </div>
+                    </CardContent>
+                    <CardFooter className="flex flex-col gap-4 pb-10 pt-6 px-8">
+                        <Button type="submit" disabled={loading} className="w-full h-14 rounded-2xl font-black uppercase tracking-widest">
+                            {loading ? <Loader2 className="animate-spin w-5 h-5" /> : 'Entrar'}
+                        </Button>
+                        <Link href="/welcome" className="text-[10px] font-black uppercase text-muted-foreground hover:text-primary transition-colors text-center">← Volver</Link>
                     </CardFooter>
                 </form>
             </Card>
         </main>
+    );
+}
+
+export default function LoginPageWithSuspense() {
+    return (
+        <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>}>
+            <LoginPage />
+        </Suspense>
     );
 }

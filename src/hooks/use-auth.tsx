@@ -3,7 +3,7 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
-import { doc, onSnapshot, collectionGroup, query, where, getDocs, limit, getDoc } from 'firebase/firestore';
+import { doc, onSnapshot, getDoc } from 'firebase/firestore';
 
 interface AuthContextType {
   user: User | null;
@@ -37,71 +37,77 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setLoading(false);
         setUserRole(null);
         setActiveCondoId(null);
+        setWorkingCondoId(null);
         return;
       }
 
-      
+      // Recuperar datos validados en el Login para evitar rebotes
+      const savedCondoId = localStorage.getItem('activeCondoId');
+      const savedRole = localStorage.getItem('userRole');
+
       if (firebaseUser.email === 'vallecondo@gmail.com') {
         setUserRole('super-admin');
+        setActiveCondoId(savedCondoId);
+        setWorkingCondoId(savedCondoId || 'condo_01');
         setLoading(false);
         return;
       }
 
       try {
-        // --- MÉTODO 1: Intento Directo (Evita errores de índice/permisos si es condo_01) ---
-        // Muchos de tus propietarios están en condo_01/owners. Intentamos ruta directa primero.
-        const directRef = doc(db, 'condominios', 'condo_01', 'owners', firebaseUser.uid);
-        const directSnap = await getDoc(directRef);
+        const condoIdToUse = savedCondoId;
+        
+        if (condoIdToUse) {
+          setActiveCondoId(condoIdToUse);
+          setWorkingCondoId(condoIdToUse);
 
-        let finalData = null;
-        let finalCondoId = null;
+          let userDataFound = null;
 
-        if (directSnap.exists()) {
-          finalData = directSnap.data();
-          finalCondoId = 'condo_01';
-        } else {
-          // --- MÉTODO 2: Collection Group (Para otros condominios) ---
-          // IMPORTANTE: Añadimos limit(1) para que la regla de seguridad no sospeche
-          const q = query(
-            collectionGroup(db, 'owners'), 
-            where('uid', '==', firebaseUser.uid),
-            limit(1) 
-          );
-          let qSnap = await getDocs(q);
+          // --- ESTRATEGIA DE BÚSQUEDA JERÁRQUICA EFAS ---
+          
+          // 1. Intentar Estructura Vieja (owners) - Ej: condo_01
+          const ownerRef = doc(db, 'condominios', condoIdToUse, 'owners', firebaseUser.uid);
+          const ownerSnap = await getDoc(ownerRef);
 
-          if (qSnap.empty) {
-            const q2 = query(
-              collectionGroup(db, 'propietarios'), 
-              where('uid', '==', firebaseUser.uid),
-              limit(1)
+          if (ownerSnap.exists()) {
+            userDataFound = ownerSnap.data();
+          } else {
+            // 2. Intentar Estructura Nueva (propietarios) - Ej: condo_02
+            const propRef = doc(db, 'condominios', condoIdToUse, 'propietarios', firebaseUser.uid);
+            const propSnap = await getDoc(propRef);
+            if (propSnap.exists()) {
+              userDataFound = propSnap.data();
+            }
+          }
+
+          if (userDataFound) {
+            setOwnerData(userDataFound);
+            
+            // Mapeo de roles unificado (Español/Inglés)
+            const rawRole = (userDataFound.role || savedRole || '').toLowerCase();
+            if (rawRole === 'propietario' || rawRole === 'owner') {
+              setUserRole('owner');
+            } else if (rawRole === 'administrador' || rawRole === 'admin') {
+              setUserRole('admin');
+            } else {
+              setUserRole(rawRole);
+            }
+
+            // 3. Suscripción a Configuración del Condominio
+            const settingsRef = doc(db, 'condominios', condoIdToUse, 'config', 'mainSettings');
+            
+            onSnapshot(settingsRef, 
+              (s) => {
+                if (s.exists()) setCompanyInfo(s.data().companyInfo);
+              },
+              (error) => {
+                console.warn("Permisos: No se pudo leer companyInfo, usando genérico.");
+                setCompanyInfo({ name: "EFAS CondoSys" });
+              }
             );
-            qSnap = await getDocs(q2);
           }
-
-          if (!qSnap.empty) {
-            finalData = qSnap.docs[0].data();
-            finalCondoId = finalData.condominioId;
-          }
-        }
-
-        if (finalData && finalCondoId) {
-          setActiveCondoId(finalCondoId);
-          setWorkingCondoId(finalCondoId);
-          setOwnerData(finalData);
-
-          const rawRole = (finalData.role || '').toLowerCase();
-          if (rawRole === 'propietario' || rawRole === 'owner') setUserRole('owner');
-          else if (rawRole === 'administrador' || rawRole === 'admin') setUserRole('admin');
-          else setUserRole(rawRole);
-
-          // Suscripción a settings
-          const settingsRef = doc(db, 'condominios', finalCondoId, 'config', 'mainSettings');
-          onSnapshot(settingsRef, (s) => {
-            if (s.exists()) setCompanyInfo(s.data().companyInfo);
-          });
         }
       } catch (error) {
-        console.error("Error en EFAS Auth:", error);
+        console.error("Error crítico en EFAS Auth:", error);
       } finally {
         setLoading(false);
       }
@@ -112,7 +118,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider value={{ user, ownerData, companyInfo, loading, role, isSuperAdmin, activeCondoId, workingCondoId }}>
-      {children}
+      {!loading ? children : (
+        <div className="h-screen flex items-center justify-center bg-background">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground italic">
+              EFAS CondoSys Sincronizando...
+            </p>
+          </div>
+        </div>
+      )}
     </AuthContext.Provider>
   );
 }
