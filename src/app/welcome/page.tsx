@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useRouter } from 'next/navigation';
@@ -11,39 +12,31 @@ export default function WelcomePage() {
     const { user, role, loading } = useAuth();
 
     useEffect(() => {
-        if (!loading && user) {
-            // 1. Prioridad Super Admin
-            if (user.email === 'vallecondo@gmail.com') {
-                router.replace('/super-admin');
-                return;
+        if (loading || !user) return; // Wait for auth state to be resolved
+
+        // 1. Super Admin has highest priority
+        if (user.email === 'vallecondo@gmail.com') {
+            router.replace('/super-admin');
+            return;
+        }
+
+        // 2. For regular users, check for role and condoId
+        const activeCondoId = localStorage.getItem('activeCondoId') || localStorage.getItem('workingCondoId');
+        
+        if (activeCondoId && role) {
+            let pathSegment = '';
+
+            // Use the already-normalized role from useAuth
+            if (role === 'admin') {
+                pathSegment = 'admin';
+            } else if (role === 'owner') {
+                pathSegment = 'owner';
             }
 
-            // 2. Obtener datos de sesión
-            const activeCondoId = localStorage.getItem('activeCondoId') || localStorage.getItem('workingCondoId');
-            // Usamos el rol que viene del hook de auth (prioritario) o del storage
-            const rawRole = role || localStorage.getItem('userRole');
-
-            if (activeCondoId && rawRole) {
-                const roleLower = rawRole.toLowerCase();
-                let normalizedPath = '';
-
-                // MAPEADO PARA VIEJA ESTRUCTURA (condo_01)
-                // DB: "propietario" -> Carpeta: "/owner/"
-                if (roleLower === 'propietario') {
-                    normalizedPath = 'owner';
-                } 
-                // DB: "admin" -> Carpeta: "/admin/"
-                else if (roleLower === 'admin' || roleLower === 'administrador') {
-                    normalizedPath = 'admin';
-                }
-
-                if (normalizedPath) {
-                    const targetPath = `/${activeCondoId}/${normalizedPath}/dashboard`;
-                    console.log(`EFAS CondoSys: Redirigiendo ${rawRole} a ${targetPath}`);
-                    router.replace(targetPath);
-                } else {
-                    console.warn("Rol no reconocido para redirección:", rawRole);
-                }
+            if (pathSegment) {
+                const targetPath = `/${activeCondoId}/${pathSegment}/dashboard`;
+                console.log(`EFAS CondoSys: Redirigiendo ${role} a ${targetPath}`);
+                router.replace(targetPath);
             }
         }
     }, [user, role, loading, router]);
