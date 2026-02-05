@@ -11,7 +11,6 @@ import { format, startOfMonth, isAfter } from "date-fns";
 import { es } from "date-fns/locale";
 import CarteleraDigital from "@/components/CarteleraDigital";
 import { useAuth } from "@/hooks/use-auth";
-import { useRouter } from "next/navigation";
 
 const formatToTwoDecimals = (num: number) => {
     if (typeof num !== 'number' || isNaN(num)) return '0,00';
@@ -19,8 +18,8 @@ const formatToTwoDecimals = (num: number) => {
 };
 
 export default function AdminDashboardPage({ params }: { params: Promise<{ condoId: string }> }) {
-    const { user, role, loading: authLoading } = useAuth();
-    const router = useRouter();
+    // Corregido: Se extrae 'loading' y se renombra a 'authLoading' para evitar conflicto con el loading local
+    const { loading: authLoading } = useAuth();
     
     const resolvedParams = React.use(params);
     const workingCondoId = resolvedParams.condoId;
@@ -37,24 +36,11 @@ export default function AdminDashboardPage({ params }: { params: Promise<{ condo
     const [condoName, setCondoName] = useState("");
 
     useEffect(() => {
-        if (!authLoading) {
-            if (!user) {
-                router.replace('/login?role=admin');
-                return;
-            }
-            const isSuperAdmin = user.email === 'vallecondo@gmail.com';
-            const isAdmin = role?.toLowerCase() === 'administrador' || role?.toLowerCase() === 'admin';
-            if (!isSuperAdmin && !isAdmin) {
-                router.replace('/welcome');
-            }
-        }
-    }, [user, role, authLoading, router]);
-
-    useEffect(() => {
         if (!workingCondoId || authLoading) return;
 
         setLoading(true);
 
+        // 1. Cargar Configuración y Tasa
         const unsubSettings = onSnapshot(doc(db, 'condominios', workingCondoId, 'config', 'mainSettings'), (settingsSnap) => {
             let currentRate = 1;
             if (settingsSnap.exists()) {
@@ -67,6 +53,7 @@ export default function AdminDashboardPage({ params }: { params: Promise<{ condo
 
             const inicioDeMes = startOfMonth(new Date());
 
+            // 2. Cargar Pagos
             const paymentsQuery = query(collection(db, 'condominios', workingCondoId, 'payments'));
             const unsubPayments = onSnapshot(paymentsQuery, (paymentSnap) => {
                 let incomeBs = 0;
@@ -107,49 +94,59 @@ export default function AdminDashboardPage({ params }: { params: Promise<{ condo
             return () => unsubPayments();
         });
 
+        // 3. Cargar Anuncios (Billboard)
         const qAnuncios = query(collection(db, "condominios", workingCondoId, "billboard_announcements"), orderBy("createdAt", "desc"), limit(5));
         const unsubAnuncios = onSnapshot(qAnuncios, (snap) => {
             setAnuncios(snap.docs.map(d => ({ id: d.id, ...d.data() })));
             setLoading(false);
         });
 
+        // 4. Cargar Propietarios (Rooted en el condominio específico)
         const ownersCol = workingCondoId === 'condo_01' ? 'owners' : 'propietarios';
         const unsubOwners = onSnapshot(collection(db, 'condominios', workingCondoId, ownersCol), (snap) => {
             setStats(prev => ({ ...prev, totalOwners: snap.size }));
         });
 
-        return () => { unsubSettings(); unsubAnuncios(); unsubOwners(); };
+        return () => { 
+            unsubSettings(); 
+            unsubAnuncios(); 
+            unsubOwners(); 
+        };
     }, [workingCondoId, authLoading]);
 
+    // Pantalla de carga integrada con el estilo EFAS
     if (authLoading || loading) {
         return (
-            <div className="min-h-screen bg-background flex flex-col items-center justify-center">
-                <Loader2 className="h-10 w-10 animate-spin text-amber-500 mb-4" />
-                <p className="text-muted-foreground font-black uppercase tracking-widest text-[10px]">EFAS CondoSys: Cargando...</p>
+            <div className="min-h-[70vh] flex flex-col items-center justify-center bg-transparent">
+                <Loader2 className="h-10 w-10 animate-spin text-[#F28705] mb-4" />
+                <p className="text-slate-500 font-black uppercase tracking-[0.3em] text-[10px] animate-pulse">
+                    EFAS CONDOSYS: Actualizando Datos
+                </p>
             </div>
         );
     }
 
     return (
-        <div className="p-6 space-y-6 max-w-7xl mx-auto">
+        <div className="p-6 space-y-6 max-w-7xl mx-auto animate-in fade-in zoom-in-95 duration-500">
             <div className="mb-8">
                 <h2 className="text-4xl font-black uppercase tracking-tighter italic text-slate-900">
-                    Panel de <span className="text-amber-500">Control</span>
+                    Panel de <span className="text-[#F28705]">Control</span>
                 </h2>
                 <div className="flex items-center gap-2 mt-2">
-                    <Building2 className="h-4 w-4 text-amber-500" />
+                    <Building2 className="h-4 w-4 text-[#F28705]" />
                     <p className="text-slate-500 font-bold text-xs uppercase tracking-widest">
                         {condoName || workingCondoId}
                     </p>
                 </div>
             </div>
             
-            <div className="bg-card border rounded-[2rem] p-4 shadow-sm">
+            <div className="bg-card border rounded-[2rem] p-4 shadow-sm overflow-hidden">
                 <CarteleraDigital anuncios={anuncios} />
             </div>
 
             <div className="grid gap-6 md:grid-cols-3">
-                <Card className="bg-slate-900 border-none rounded-[2rem] shadow-lg">
+                {/* Card Ingresos */}
+                <Card className="bg-slate-900 border-none rounded-[2rem] shadow-lg transition-transform hover:scale-[1.02]">
                     <CardHeader className="pb-2">
                         <CardTitle className="text-[10px] font-black uppercase tracking-[0.2em] text-sky-400 flex items-center gap-2">
                             <Receipt className="h-3 w-3" /> Ingresos (Mes)
@@ -161,17 +158,19 @@ export default function AdminDashboardPage({ params }: { params: Promise<{ condo
                     </CardContent>
                 </Card>
 
-                <Card className="bg-amber-500 border-none rounded-[2rem] shadow-lg">
+                {/* Card Pendientes */}
+                <Card className="bg-[#F28705] border-none rounded-[2rem] shadow-lg transition-transform hover:scale-[1.02]">
                     <CardHeader className="pb-2">
-                        <CardTitle className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-900">Por Validar</CardTitle>
+                        <CardTitle className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-950/80">Por Validar</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="text-3xl font-black text-slate-900">{stats.pendingPayments}</div>
-                        <p className="text-xs font-bold text-amber-900/70 mt-1 uppercase">Pendientes</p>
+                        <div className="text-3xl font-black text-white">{stats.pendingPayments}</div>
+                        <p className="text-xs font-bold text-orange-900/70 mt-1 uppercase">Pendientes</p>
                     </CardContent>
                 </Card>
 
-                <Card className="bg-white border border-slate-100 rounded-[2rem] shadow-lg">
+                {/* Card Comunidad */}
+                <Card className="bg-white border border-slate-100 rounded-[2rem] shadow-lg transition-transform hover:scale-[1.02]">
                     <CardHeader className="pb-2">
                         <CardTitle className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 flex items-center gap-2">
                             <Users className="h-3 w-3" /> Comunidad
@@ -184,8 +183,8 @@ export default function AdminDashboardPage({ params }: { params: Promise<{ condo
                 </Card>
             </div>
 
-            <Card className="rounded-2xl shadow-sm border overflow-hidden bg-white">
-                <CardHeader className="bg-slate-50 border-b">
+            <Card className="rounded-[2rem] shadow-sm border overflow-hidden bg-white">
+                <CardHeader className="bg-slate-50 border-b p-6">
                     <CardTitle className="text-xs font-black uppercase tracking-widest text-slate-700">Pagos Aprobados Recientemente</CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -206,8 +205,8 @@ export default function AdminDashboardPage({ params }: { params: Promise<{ condo
                                 </TableRow>
                             ) : (
                                 recentPayments.map(p => (
-                                    <TableRow key={p.id} className="hover:bg-slate-50 transition-colors">
-                                        <TableCell className="font-bold text-xs uppercase text-slate-900 py-4 px-6">
+                                    <TableRow key={p.id} className="hover:bg-slate-50 transition-colors border-b last:border-0">
+                                        <TableCell className="font-bold text-xs uppercase text-slate-900 py-5 px-6">
                                             {p.beneficiaries?.[0]?.ownerName || p.ownerName || 'Residente'}
                                         </TableCell>
                                         <TableCell className="text-emerald-700 font-black">
