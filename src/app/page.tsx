@@ -1,3 +1,4 @@
+
 'use client';
 
 import React from 'react';
@@ -31,7 +32,7 @@ export default function LandingPage() {
             />
           </div>
           <div className="flex flex-col">
-            <h1 className="text-2xl font-[900] italic tracking-tighter leading-none uppercase">
+            <h1 className="text-xl md:text-2xl font-[900] italic tracking-tighter leading-none uppercase">
               <span className="text-[#F28705]">EFAS</span>
               <span className="text-white">CONDOSYS</span>
             </h1>
@@ -61,7 +62,7 @@ export default function LandingPage() {
           <img 
             src={SYSTEM_LOGO} 
             alt="EFAS Central" 
-            className="relative h-56 w-56 md:h-72 md:w-72 rounded-[3rem] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.8)] border border-white/10 object-cover transition-transform duration-700 hover:rotate-2"
+            className="relative h-48 w-48 md:h-72 md:w-72 rounded-[3rem] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.8)] border border-white/10 object-cover transition-transform duration-700 hover:rotate-2"
           />
         </div>
 
@@ -72,11 +73,11 @@ export default function LandingPage() {
           </span>
         </div>
 
-        <h2 className="text-6xl md:text-9xl font-[900] tracking-tighter text-white mb-8 max-w-6xl leading-[0.85] uppercase italic">
+        <h2 className="text-5xl md:text-9xl font-[900] tracking-tighter text-white mb-8 max-w-6xl leading-[0.85] uppercase italic">
           Potencia tu <span className="text-[#F28705]">comunidad</span>
         </h2>
 
-        <p className="max-w-2xl text-slate-400 text-lg md:text-xl font-medium mb-12 leading-relaxed">
+        <p className="max-w-2xl text-slate-400 text-base md:text-xl font-medium mb-12 leading-relaxed">
           La solución definitiva de {COMPANY_NAME} para la administración moderna. 
           Transparencia absoluta, eficiencia operativa y comunicación en tiempo real.
         </p>
@@ -85,7 +86,7 @@ export default function LandingPage() {
           <Button 
             onClick={handleStart} 
             size="lg" 
-            className="h-16 px-12 rounded-2xl bg-white text-black hover:bg-slate-200 font-black uppercase italic text-lg transition-transform hover:-translate-y-1"
+            className="h-14 md:h-16 px-10 md:px-12 rounded-2xl bg-white text-black hover:bg-slate-200 font-black uppercase italic text-base md:text-lg transition-transform hover:-translate-y-1"
           >
             Comenzar Ahora
           </Button>
@@ -93,7 +94,7 @@ export default function LandingPage() {
             onClick={handleStart} 
             size="lg" 
             variant="outline" 
-            className="h-16 px-12 rounded-2xl border-white/10 bg-white/5 hover:bg-white/10 font-black uppercase italic text-white text-lg transition-transform hover:-translate-y-1"
+            className="h-14 md:h-16 px-10 md:px-12 rounded-2xl border-white/10 bg-white/5 hover:bg-white/10 font-black uppercase italic text-white text-base md:text-lg transition-transform hover:-translate-y-1"
           >
             Saber más <ArrowRight className="ml-2 h-5 w-5 text-[#F28705]" />
           </Button>
@@ -101,7 +102,7 @@ export default function LandingPage() {
       </main>
 
       {/* MODULES SECTION */}
-      <section className="bg-[#14161B] py-32 border-t border-white/5 relative overflow-hidden">
+      <section className="bg-[#14161B] py-24 md:py-32 border-t border-white/5 relative overflow-hidden">
         <div className="max-w-7xl mx-auto px-6 relative z-10">
           <div className="flex flex-col items-center text-center mb-24">
             <h2 className="text-4xl md:text-6xl font-black tracking-tighter text-white uppercase italic">
@@ -112,7 +113,7 @@ export default function LandingPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12">
             {/* Cobranza */}
-            <div className="bg-[#1E2128]/50 p-12 rounded-[3.5rem] border border-white/5 flex flex-col items-center text-center group transition-all duration-500 hover:border-[#F28705]/40 hover:bg-[#1E2128] hover:shadow-2xl">
+            <div className="bg-[#1E2128]/50 p-8 md:p-12 rounded-[3.5rem] border border-white/5 flex flex-col items-center text-center group transition-all duration-500 hover:border-[#F28705]/40 hover:bg-[#1E2128] hover:shadow-2xl">
               <div className="w-20 h-20 bg-blue-500/10 rounded-3xl flex items-center justify-center mb-8 text-[#0070f3] group-hover:scale-110 transition-transform">
                 <Wallet size={42} />
               </div>
@@ -123,7 +124,7 @@ export default function LandingPage() {
             </div>
 
             {/* Panel */}
-            <div className="bg-[#1E2128]/50 p-12 rounded-[3.5rem] border border-white/5 flex flex-col items-center text-center group transition-all duration-500 hover:border-[#F28705]/40 hover:bg-[#1E2128] hover:shadow-2xl">
+            <div className="bg-[#1E2128]/50 p-8 md:p-12 rounded-[3.5rem] border border-white/5 flex flex-col items-center text-center group transition-all duration-500 hover:border-[#F28705]/40 hover:bg-[#1E2128] hover:shadow-2xl">
               <div className="w-20 h-20 bg-[#F28705]/10 rounded-3xl flex items-center justify-center mb-8 text-[#F28705] group-hover:scale-110 transition-transform">
                 <LayoutDashboard size={42} />
               </div>
@@ -134,7 +135,7 @@ export default function LandingPage() {
             </div>
 
             {/* Seguridad */}
-            <div className="bg-[#1E2128]/50 p-12 rounded-[3.5rem] border border-white/5 flex flex-col items-center text-center group transition-all duration-500 hover:border-[#F28705]/40 hover:bg-[#1E2128] hover:shadow-2xl">
+            <div className="bg-[#1E2128]/50 p-8 md:p-12 rounded-[3.5rem] border border-white/5 flex flex-col items-center text-center group transition-all duration-500 hover:border-[#F28705]/40 hover:bg-[#1E2128] hover:shadow-2xl">
               <div className="w-20 h-20 bg-emerald-500/10 rounded-3xl flex items-center justify-center mb-8 text-emerald-500 group-hover:scale-110 transition-transform">
                 <ShieldCheck size={42} />
               </div>
@@ -156,7 +157,7 @@ export default function LandingPage() {
           </div>
           <div className="flex flex-col gap-2">
             <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.5em]">
-              © 2026 {COMPANY_NAME}
+              © {new Date().getFullYear()} {COMPANY_NAME}
             </p>
             <p className="text-slate-600 text-[9px] font-bold uppercase tracking-[0.2em]">
               San Felipe, Yaracuy • Innovación en Gestión Residencial

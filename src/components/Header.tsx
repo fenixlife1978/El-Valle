@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -53,7 +54,6 @@ export default function Header() {
 
     const info = isSupportMode ? (supportInfo || authCompanyInfo) : authCompanyInfo;
 
-    // LÓGICA DE SALIDA DIFERENCIADA
     const handleExit = async () => {
         if (isSupportMode && isSuperAdmin) {
             localStorage.removeItem('support_mode_id');
@@ -73,27 +73,27 @@ export default function Header() {
 
     return (
         <header className="sticky top-4 z-40 mx-4 flex h-16 md:h-20 items-center justify-between gap-4 rounded-2xl border bg-[#1A1D23]/90 px-4 md:px-6 shadow-xl backdrop-blur-md text-white">
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 overflow-hidden">
                 <div className="relative flex h-10 w-10 md:h-14 md:w-14 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-white/20 bg-white shadow-lg">
                     {info?.logo ? (
                         <img src={info.logo} alt="Logo" className="h-full w-full object-cover" />
                     ) : (
-                        <Building2 className="h-7 w-7 text-slate-400" />
+                        <Building2 className="h-6 w-6 md:h-7 md:w-7 text-slate-400" />
                     )}
                 </div>
                 
-                <div className="flex flex-col">
-                    <h1 className="text-lg md:text-xl font-black uppercase tracking-tighter text-[#4A90E2] leading-tight">
+                <div className="flex flex-col min-w-0">
+                    <h1 className="text-base md:text-xl font-black uppercase tracking-tighter text-[#4A90E2] leading-tight truncate">
                         {authLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : (info?.name || info?.nombre || "Cargando...")}
                     </h1>
-                    <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400 opacity-80">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 opacity-80 truncate">
                         {info?.rif ? `RIF: ${info.rif}` : `ID: ${workingCondoId}`}
                     </p>
                 </div>
             </div>
 
             <div className="flex items-center gap-2 md:gap-8">
-                <div className="hidden lg:flex items-center gap-3">
+                <div className="hidden md:flex items-center gap-3">
                     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white overflow-hidden shadow-md border border-white/10">
                         <img src="/logo-bcv.png" alt="BCV" className="h-full w-full object-cover" />
                     </div>
@@ -106,7 +106,6 @@ export default function Header() {
                     </div>
                 </div>
 
-                {/* Botón Circular Rojo - Acción según rol */}
                 <button 
                     onClick={handleExit}
                     title={isSupportMode ? "Finalizar Soporte" : "Cerrar Sesión"}

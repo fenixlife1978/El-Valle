@@ -1,3 +1,4 @@
+
 'use client';
 
 import React from 'react';
@@ -18,7 +19,6 @@ const formatToTwoDecimals = (num: number) => {
 };
 
 export default function AdminDashboardPage({ params }: { params: Promise<{ condoId: string }> }) {
-    // Corregido: Se extrae 'loading' y se renombra a 'authLoading' para evitar conflicto con el loading local
     const { loading: authLoading } = useAuth();
     
     const resolvedParams = React.use(params);
@@ -40,7 +40,6 @@ export default function AdminDashboardPage({ params }: { params: Promise<{ condo
 
         setLoading(true);
 
-        // 1. Cargar Configuración y Tasa
         const unsubSettings = onSnapshot(doc(db, 'condominios', workingCondoId, 'config', 'mainSettings'), (settingsSnap) => {
             let currentRate = 1;
             if (settingsSnap.exists()) {
@@ -53,7 +52,6 @@ export default function AdminDashboardPage({ params }: { params: Promise<{ condo
 
             const inicioDeMes = startOfMonth(new Date());
 
-            // 2. Cargar Pagos
             const paymentsQuery = query(collection(db, 'condominios', workingCondoId, 'payments'));
             const unsubPayments = onSnapshot(paymentsQuery, (paymentSnap) => {
                 let incomeBs = 0;
@@ -94,14 +92,12 @@ export default function AdminDashboardPage({ params }: { params: Promise<{ condo
             return () => unsubPayments();
         });
 
-        // 3. Cargar Anuncios (Billboard)
         const qAnuncios = query(collection(db, "condominios", workingCondoId, "billboard_announcements"), orderBy("createdAt", "desc"), limit(5));
         const unsubAnuncios = onSnapshot(qAnuncios, (snap) => {
             setAnuncios(snap.docs.map(d => ({ id: d.id, ...d.data() })));
             setLoading(false);
         });
 
-        // 4. Cargar Propietarios (Rooted en el condominio específico)
         const ownersCol = workingCondoId === 'condo_01' ? 'owners' : 'propietarios';
         const unsubOwners = onSnapshot(collection(db, 'condominios', workingCondoId, ownersCol), (snap) => {
             setStats(prev => ({ ...prev, totalOwners: snap.size }));
@@ -114,7 +110,6 @@ export default function AdminDashboardPage({ params }: { params: Promise<{ condo
         };
     }, [workingCondoId, authLoading]);
 
-    // Pantalla de carga integrada con el estilo EFAS
     if (authLoading || loading) {
         return (
             <div className="min-h-[70vh] flex flex-col items-center justify-center bg-transparent">
@@ -127,9 +122,9 @@ export default function AdminDashboardPage({ params }: { params: Promise<{ condo
     }
 
     return (
-        <div className="p-6 space-y-6 max-w-7xl mx-auto animate-in fade-in zoom-in-95 duration-500">
+        <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto animate-in fade-in zoom-in-95 duration-500">
             <div className="mb-8">
-                <h2 className="text-4xl font-black uppercase tracking-tighter italic text-slate-900">
+                <h2 className="text-3xl md:text-4xl font-black uppercase tracking-tighter italic text-slate-900">
                     Panel de <span className="text-[#F28705]">Control</span>
                 </h2>
                 <div className="flex items-center gap-2 mt-2">
@@ -140,12 +135,11 @@ export default function AdminDashboardPage({ params }: { params: Promise<{ condo
                 </div>
             </div>
             
-            <div className="bg-card border rounded-[2rem] p-4 shadow-sm overflow-hidden">
+            <div className="bg-card border rounded-[2rem] p-4 shadow-sm overflow-hidden w-full max-w-lg mx-auto">
                 <CarteleraDigital anuncios={anuncios} />
             </div>
 
             <div className="grid gap-6 md:grid-cols-3">
-                {/* Card Ingresos */}
                 <Card className="bg-slate-900 border-none rounded-[2rem] shadow-lg transition-transform hover:scale-[1.02]">
                     <CardHeader className="pb-2">
                         <CardTitle className="text-[10px] font-black uppercase tracking-[0.2em] text-sky-400 flex items-center gap-2">
@@ -158,7 +152,6 @@ export default function AdminDashboardPage({ params }: { params: Promise<{ condo
                     </CardContent>
                 </Card>
 
-                {/* Card Pendientes */}
                 <Card className="bg-[#F28705] border-none rounded-[2rem] shadow-lg transition-transform hover:scale-[1.02]">
                     <CardHeader className="pb-2">
                         <CardTitle className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-950/80">Por Validar</CardTitle>
@@ -169,7 +162,6 @@ export default function AdminDashboardPage({ params }: { params: Promise<{ condo
                     </CardContent>
                 </Card>
 
-                {/* Card Comunidad */}
                 <Card className="bg-white border border-slate-100 rounded-[2rem] shadow-lg transition-transform hover:scale-[1.02]">
                     <CardHeader className="pb-2">
                         <CardTitle className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 flex items-center gap-2">
@@ -188,38 +180,40 @@ export default function AdminDashboardPage({ params }: { params: Promise<{ condo
                     <CardTitle className="text-xs font-black uppercase tracking-widest text-slate-700">Pagos Aprobados Recientemente</CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
-                    <Table>
-                        <TableHeader>
-                            <TableRow className="bg-slate-50/50">
-                                <TableHead className="text-[10px] uppercase font-black text-slate-500 py-4 px-6">Residente</TableHead>
-                                <TableHead className="text-[10px] uppercase font-black text-slate-500">Monto</TableHead>
-                                <TableHead className="text-[10px] uppercase font-black text-slate-500">Fecha</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {recentPayments.length === 0 ? (
-                                <TableRow>
-                                    <TableCell colSpan={3} className="text-center py-10 text-slate-400 font-bold uppercase text-[10px]">
-                                        Sin movimientos registrados
-                                    </TableCell>
+                    <div className="overflow-x-auto">
+                        <Table>
+                            <TableHeader>
+                                <TableRow className="bg-slate-50/50">
+                                    <TableHead className="text-[10px] uppercase font-black text-slate-500 py-4 px-6">Residente</TableHead>
+                                    <TableHead className="text-[10px] uppercase font-black text-slate-500">Monto</TableHead>
+                                    <TableHead className="text-[10px] uppercase font-black text-slate-500">Fecha</TableHead>
                                 </TableRow>
-                            ) : (
-                                recentPayments.map(p => (
-                                    <TableRow key={p.id} className="hover:bg-slate-50 transition-colors border-b last:border-0">
-                                        <TableCell className="font-bold text-xs uppercase text-slate-900 py-5 px-6">
-                                            {p.beneficiaries?.[0]?.ownerName || p.ownerName || 'Residente'}
-                                        </TableCell>
-                                        <TableCell className="text-emerald-700 font-black">
-                                            Bs. {formatToTwoDecimals(p.totalAmount)}
-                                        </TableCell>
-                                        <TableCell className="text-[10px] font-bold text-slate-500 uppercase">
-                                            {p.paymentDate ? format(p.paymentDate.toDate(), 'dd/MM/yy', { locale: es }) : '---'}
+                            </TableHeader>
+                            <TableBody>
+                                {recentPayments.length === 0 ? (
+                                    <TableRow>
+                                        <TableCell colSpan={3} className="text-center py-10 text-slate-400 font-bold uppercase text-[10px]">
+                                            Sin movimientos registrados
                                         </TableCell>
                                     </TableRow>
-                                ))
-                            )}
-                        </TableBody>
-                    </Table>
+                                ) : (
+                                    recentPayments.map(p => (
+                                        <TableRow key={p.id} className="hover:bg-slate-50 transition-colors border-b last:border-0">
+                                            <TableCell className="font-bold text-xs uppercase text-slate-900 py-5 px-6">
+                                                {p.beneficiaries?.[0]?.ownerName || p.ownerName || 'Residente'}
+                                            </TableCell>
+                                            <TableCell className="text-emerald-700 font-black">
+                                                Bs. {formatToTwoDecimals(p.totalAmount)}
+                                            </TableCell>
+                                            <TableCell className="text-[10px] font-bold text-slate-500 uppercase">
+                                                {p.paymentDate ? format(p.paymentDate.toDate(), 'dd/MM/yy', { locale: es }) : '---'}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
                 </CardContent>
             </Card>
         </div>

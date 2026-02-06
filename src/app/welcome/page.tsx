@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useRouter } from 'next/navigation';
@@ -11,21 +12,18 @@ export default function WelcomePage() {
     const { user, role, loading } = useAuth();
 
     useEffect(() => {
-        if (loading || !user) return; // Wait for auth state to be resolved
+        if (loading || !user) return; 
 
-        // 1. Super Admin has highest priority
         if (user.email === 'vallecondo@gmail.com') {
             router.replace('/super-admin');
             return;
         }
 
-        // 2. For regular users, check for role and condoId
         const activeCondoId = localStorage.getItem('activeCondoId') || localStorage.getItem('workingCondoId');
         
         if (activeCondoId && role) {
             let pathSegment = '';
 
-            // Use the already-normalized role from useAuth
             if (role === 'admin') {
                 pathSegment = 'admin';
             } else if (role === 'owner') {
@@ -34,7 +32,6 @@ export default function WelcomePage() {
 
             if (pathSegment) {
                 const targetPath = `/${activeCondoId}/${pathSegment}/dashboard`;
-                console.log(`EFAS CondoSys: Redirigiendo ${role} a ${targetPath}`);
                 router.replace(targetPath);
             }
         }
@@ -55,7 +52,7 @@ export default function WelcomePage() {
         <div className="min-h-screen w-full font-montserrat">
             <div className="absolute top-8 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center text-center">
                  <img src={SYSTEM_LOGO} alt={COMPANY_NAME} className="h-20 w-20 rounded-3xl object-cover border-4 border-background shadow-2xl mb-2" />
-                 <h1 className="text-3xl font-black italic tracking-tighter uppercase">
+                 <h1 className="text-2xl md:text-3xl font-black italic tracking-tighter uppercase">
                     <span className="text-primary">EFAS</span><span className="text-foreground">CONDOSYS</span>
                 </h1>
                 <p className="text-xs text-muted-foreground font-bold tracking-widest">Seleccione su portal</p>
@@ -69,7 +66,7 @@ export default function WelcomePage() {
                     <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/gplay.png')] opacity-[0.02] group-hover:opacity-[0.03]"></div>
                     <div className="z-10 flex flex-col items-center">
                         <div className="p-4 md:p-6 rounded-3xl border-2 border-border bg-background/30 group-hover:scale-110 group-hover:border-primary/50 transition-transform mb-8">
-                            <Shield className="h-12 w-12 md:h-16 md:w-16 text-primary" />
+                            <Shield className="h-10 w-10 md:h-16 md:w-16 text-primary" />
                         </div>
                         <h2 className="text-3xl md:text-4xl font-black uppercase tracking-tighter">Administrador</h2>
                         <p className="text-sm font-bold text-muted-foreground mt-2 uppercase tracking-widest">Gestión de Condominios</p>
@@ -82,7 +79,7 @@ export default function WelcomePage() {
                     <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/gplay.png')] opacity-[0.03] group-hover:opacity-[0.05]"></div>
                      <div className="z-10 flex flex-col items-center">
                         <div className="p-4 md:p-6 rounded-3xl border-2 border-primary/50 bg-primary/20 group-hover:scale-110 group-hover:bg-white/10 group-hover:border-white transition-transform mb-8">
-                            <User className="h-12 w-12 md:h-16 md:w-16 text-white" />
+                            <User className="h-10 w-10 md:h-16 md:w-16 text-white" />
                         </div>
                         <h2 className="text-3xl md:text-4xl font-black uppercase tracking-tighter text-white">Propietario</h2>
                         <p className="text-sm font-bold text-primary-foreground/70 mt-2 uppercase tracking-widest">Portal de Residentes</p>

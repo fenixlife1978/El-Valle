@@ -28,9 +28,8 @@ export default function CarteleraDigital({ anuncios }: { anuncios: Anuncio[] }) 
   }
 
   return (
-    <div className="max-w-md mx-auto relative group">
-      {/* Marco decorativo del "Televisor" con tamaño ajustado */}
-      <div className="relative rounded-xl overflow-hidden shadow-lg border-2 md:border-4 border-card bg-card aspect-square">
+    <div className="w-full relative group">
+      <div className="relative rounded-2xl overflow-hidden shadow-lg border-2 md:border-4 border-card bg-card aspect-video">
         <Swiper
           modules={[Autoplay, EffectFade, Pagination, Navigation]}
           effect="fade"
@@ -54,22 +53,20 @@ export default function CarteleraDigital({ anuncios }: { anuncios: Anuncio[] }) 
                   className="opacity-90"
                 />
                 
-                {/* Banner de información inferior */}
-                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent p-3 md:p-4 pt-10">
-                  <div className="border-l-4 border-primary pl-3">
-                    <h3 className="text-md md:text-xl font-black text-white uppercase tracking-tight">
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent p-4 md:p-6 pt-12">
+                  <div className="border-l-4 border-primary pl-4">
+                    <h3 className="text-lg md:text-xl font-black text-white uppercase tracking-tight">
                       {anuncio.titulo}
                     </h3>
                     {anuncio.descripcion && (
-                      <p className="text-gray-200 text-xs mt-1 font-light max-w-2xl line-clamp-2">
+                      <p className="text-gray-200 text-xs md:text-sm mt-1 font-light max-w-2xl line-clamp-2">
                         {anuncio.descripcion}
                       </p>
                     )}
                   </div>
                 </div>
 
-                {/* Badge de "EN VIVO / ACTUALIDAD" */}
-                <div className="absolute top-4 right-4 bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded flex items-center gap-1.5 animate-pulse">
+                <div className="absolute top-4 right-4 bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded-md flex items-center gap-1.5 animate-pulse">
                   <span className="w-2 h-2 bg-white rounded-full"></span>
                   CARTELERA VIRTUAL
                 </div>

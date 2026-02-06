@@ -1,10 +1,11 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Building2, ArrowRight, Loader2, ShieldCheck, Plus } from 'lucide-react';
@@ -40,7 +41,7 @@ export default function SuperAdminCondosPage() {
   }
 
   return (
-    <div className="p-8 max-w-7xl mx-auto font-montserrat min-h-screen">
+    <div className="p-4 md:p-8 max-w-7xl mx-auto font-montserrat min-h-screen">
       <div className="mb-12 flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
           <div className="flex items-center gap-2 text-amber-500 mb-2">
@@ -59,52 +60,71 @@ export default function SuperAdminCondosPage() {
         </Button>
       </div>
 
-      <Card className="border-none shadow-2xl rounded-[2.5rem] overflow-hidden bg-card/40 backdrop-blur-xl border border-white/10">
-        <CardHeader className="bg-muted/30 border-b border-white/5 p-8">
-          <div className="flex items-center gap-3">
-            <Building2 className="text-amber-500 h-6 w-6" />
-            <CardTitle className="text-xl font-black uppercase tracking-tight italic text-foreground">Portafolio Activo</CardTitle>
-          </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader className="bg-muted/10">
-              <TableRow className="hover:bg-transparent border-b border-white/5">
-                <TableHead className="py-6 pl-10 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre del Condominio</TableHead>
-                <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">ID del Sistema</TableHead>
-                <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground text-right pr-10">Acción</TableHead>
+      {/* Vista de Tabla para Desktops */}
+      <Card className="hidden md:block border-none shadow-2xl rounded-[2.5rem] overflow-hidden bg-card/40 backdrop-blur-xl border border-white/10">
+        <Table>
+          <TableHeader className="bg-muted/10">
+            <TableRow className="hover:bg-transparent border-b border-white/5">
+              <TableHead className="py-6 pl-10 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre del Condominio</TableHead>
+              <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">ID del Sistema</TableHead>
+              <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground text-right pr-10">Acción</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {condominios.map((condo) => (
+              <TableRow key={condo.id} className="border-b border-white/5 group hover:bg-amber-500/5 transition-all duration-300">
+                <TableCell className="py-8 pl-10">
+                  <div className="flex flex-col">
+                    <span className="font-black text-xl uppercase tracking-tighter group-hover:text-amber-500 transition-colors text-foreground">
+                      {condo.nombre}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground font-bold uppercase">Ref: {condo.id}</span>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <code className="text-[10px] font-mono bg-muted/50 px-3 py-1.5 rounded-lg text-amber-500/80 border border-amber-500/10 uppercase">
+                    {condo.id}
+                  </code>
+                </TableCell>
+                <TableCell className="text-right pr-10">
+                  <Button 
+                    onClick={() => router.push(`/${condo.id}/admin/dashboard`)}
+                    className="rounded-xl font-black uppercase text-[10px] py-6 px-6 gap-3 bg-foreground hover:bg-amber-500 text-background transition-all hover:scale-105"
+                  >
+                    Gestionar <ArrowRight className="h-4 w-4" />
+                  </Button>
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {condominios.map((condo) => (
-                <TableRow key={condo.id} className="border-b border-white/5 group hover:bg-amber-500/5 transition-all duration-300">
-                  <TableCell className="py-8 pl-10">
-                    <div className="flex flex-col">
-                      <span className="font-black text-xl uppercase tracking-tighter group-hover:text-amber-500 transition-colors text-foreground">
-                        {condo.nombre}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground font-bold uppercase">Ref: {condo.id}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <code className="text-[10px] font-mono bg-muted/50 px-3 py-1.5 rounded-lg text-amber-500/80 border border-amber-500/10 uppercase">
-                      {condo.id}
-                    </code>
-                  </TableCell>
-                  <TableCell className="text-right pr-10">
-                    <Button 
-                      onClick={() => router.push(`/${condo.id}/admin/dashboard`)}
-                      className="rounded-xl font-black uppercase text-[10px] py-6 px-6 gap-3 bg-foreground hover:bg-amber-500 text-background transition-all hover:scale-105"
-                    >
-                      Gestionar <ArrowRight className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
+            ))}
+          </TableBody>
+        </Table>
       </Card>
+      
+      {/* Vista de Tarjetas para Móviles */}
+      <div className="md:hidden space-y-4">
+        {condominios.map((condo) => (
+          <Card key={condo.id} className="bg-card/40 border-white/10 rounded-2xl">
+            <CardContent className="p-4 flex flex-col gap-4">
+              <div className="flex items-center gap-3">
+                  <div className="p-3 bg-muted rounded-xl">
+                      <Building2 className="h-6 w-6 text-amber-500"/>
+                  </div>
+                  <div>
+                      <h3 className="font-black text-lg text-foreground uppercase leading-tight">{condo.nombre}</h3>
+                      <p className="text-[10px] text-muted-foreground font-bold uppercase">ID: {condo.id}</p>
+                  </div>
+              </div>
+              <Button
+                  onClick={() => router.push(`/${condo.id}/admin/dashboard`)}
+                  className="w-full rounded-xl font-black uppercase text-xs py-5 gap-2 bg-foreground hover:bg-amber-500 text-background transition-all"
+              >
+                  Gestionar <ArrowRight className="h-4 w-4" />
+              </Button>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
     </div>
   );
 }
