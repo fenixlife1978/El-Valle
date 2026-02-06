@@ -47,7 +47,7 @@ export default function SuperAdminCondosPage() {
             <ShieldCheck className="h-5 w-5" />
             <span className="text-xs font-black uppercase tracking-[0.4em]">Directorio Global</span>
           </div>
-          <h1 className="text-6xl font-black uppercase italic tracking-tighter text-foreground leading-none">
+          <h1 className="text-4xl sm:text-5xl md:text-6xl font-black uppercase italic tracking-tighter text-foreground leading-none">
             Condo<span className="text-amber-500">minios</span>
           </h1>
           <p className="text-muted-foreground font-bold uppercase text-xs tracking-widest mt-4">Gestión de Propiedades EFAS</p>

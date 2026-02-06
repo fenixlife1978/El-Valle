@@ -72,9 +72,9 @@ export default function Header() {
     };
 
     return (
-        <header className="sticky top-4 z-40 mx-4 flex h-20 items-center justify-between gap-4 rounded-2xl border bg-[#1A1D23]/90 px-6 shadow-xl backdrop-blur-md text-white">
+        <header className="sticky top-4 z-40 mx-4 flex h-16 md:h-20 items-center justify-between gap-4 rounded-2xl border bg-[#1A1D23]/90 px-4 md:px-6 shadow-xl backdrop-blur-md text-white">
             <div className="flex items-center gap-4">
-                <div className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-white/20 bg-white shadow-lg">
+                <div className="relative flex h-10 w-10 md:h-14 md:w-14 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-white/20 bg-white shadow-lg">
                     {info?.logo ? (
                         <img src={info.logo} alt="Logo" className="h-full w-full object-cover" />
                     ) : (
@@ -83,7 +83,7 @@ export default function Header() {
                 </div>
                 
                 <div className="flex flex-col">
-                    <h1 className="text-xl font-black uppercase tracking-tighter text-[#4A90E2] leading-tight">
+                    <h1 className="text-lg md:text-xl font-black uppercase tracking-tighter text-[#4A90E2] leading-tight">
                         {authLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : (info?.name || info?.nombre || "Cargando...")}
                     </h1>
                     <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400 opacity-80">
@@ -92,8 +92,8 @@ export default function Header() {
                 </div>
             </div>
 
-            <div className="flex items-center gap-8">
-                <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 md:gap-8">
+                <div className="hidden lg:flex items-center gap-3">
                     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white overflow-hidden shadow-md border border-white/10">
                         <img src="/logo-bcv.png" alt="BCV" className="h-full w-full object-cover" />
                     </div>
@@ -110,9 +110,9 @@ export default function Header() {
                 <button 
                     onClick={handleExit}
                     title={isSupportMode ? "Finalizar Soporte" : "Cerrar Sesión"}
-                    className="flex h-12 w-12 items-center justify-center rounded-full border-2 border-red-500 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all duration-300 shadow-lg shadow-red-500/20 active:scale-90"
+                    className="flex h-10 w-10 md:h-12 md:w-12 items-center justify-center rounded-full border-2 border-red-500 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all duration-300 shadow-lg shadow-red-500/20 active:scale-90"
                 >
-                    <Power className="h-6 w-6 stroke-[3px]" />
+                    <Power className="h-5 w-5 md:h-6 md:w-6 stroke-[3px]" />
                 </button>
             </div>
         </header>

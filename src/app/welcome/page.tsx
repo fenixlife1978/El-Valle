@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useRouter } from 'next/navigation';
@@ -69,10 +68,10 @@ export default function WelcomePage() {
                 >
                     <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/gplay.png')] opacity-[0.02] group-hover:opacity-[0.03]"></div>
                     <div className="z-10 flex flex-col items-center">
-                        <div className="p-6 rounded-3xl border-2 border-border bg-background/30 group-hover:scale-110 group-hover:border-primary/50 transition-transform mb-8">
-                            <Shield className="h-16 w-16 text-primary" />
+                        <div className="p-4 md:p-6 rounded-3xl border-2 border-border bg-background/30 group-hover:scale-110 group-hover:border-primary/50 transition-transform mb-8">
+                            <Shield className="h-12 w-12 md:h-16 md:w-16 text-primary" />
                         </div>
-                        <h2 className="text-4xl font-black uppercase tracking-tighter">Administrador</h2>
+                        <h2 className="text-3xl md:text-4xl font-black uppercase tracking-tighter">Administrador</h2>
                         <p className="text-sm font-bold text-muted-foreground mt-2 uppercase tracking-widest">Gestión de Condominios</p>
                     </div>
                 </div>
@@ -82,10 +81,10 @@ export default function WelcomePage() {
                 >
                     <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/gplay.png')] opacity-[0.03] group-hover:opacity-[0.05]"></div>
                      <div className="z-10 flex flex-col items-center">
-                        <div className="p-6 rounded-3xl border-2 border-primary/50 bg-primary/20 group-hover:scale-110 group-hover:bg-white/10 group-hover:border-white transition-transform mb-8">
-                            <User className="h-16 w-16 text-white" />
+                        <div className="p-4 md:p-6 rounded-3xl border-2 border-primary/50 bg-primary/20 group-hover:scale-110 group-hover:bg-white/10 group-hover:border-white transition-transform mb-8">
+                            <User className="h-12 w-12 md:h-16 md:w-16 text-white" />
                         </div>
-                        <h2 className="text-4xl font-black uppercase tracking-tighter text-white">Propietario</h2>
+                        <h2 className="text-3xl md:text-4xl font-black uppercase tracking-tighter text-white">Propietario</h2>
                         <p className="text-sm font-bold text-primary-foreground/70 mt-2 uppercase tracking-widest">Portal de Residentes</p>
                     </div>
                 </div>
