@@ -1,25 +1,23 @@
-// public/sw.js
-
-const CACHE_NAME = 'efas-condosys-v1'; // Nombre actualizado al sistema
+const CACHE_NAME = 'efas-condosys-v1';
 const ASSETS_TO_CACHE = [
   '/',
   '/manifest.json',
-  '/og-banner.png',
-  '/icon-192x192.png', // Añadido: vital para el modo offline
+  '/icon-192x192.png',
   '/icon-512x512.png'
 ];
 
-// 1. INSTALACIÓN: Cachear archivos y forzar activación
+// 1. INSTALACIÓN: Cachear archivos base
 self.addEventListener('install', (event) => {
-  self.skipWaiting(); // Obliga al SW nuevo a tomar el control de inmediato
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
+      // Usamos cache.addAll pero capturamos errores por si falta algún archivo
+      return cache.addAll(ASSETS_TO_CACHE).catch(err => console.warn("Error precacheando:", err));
     })
   );
 });
 
-// 2. ACTIVACIÓN: Limpiar cachés viejas (EVITA QUE EL USUARIO VEA DATA ANTIGUA)
+// 2. ACTIVACIÓN: Limpiar versiones antiguas
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
@@ -33,50 +31,60 @@ self.addEventListener('activate', (event) => {
       );
     })
   );
-  return self.clients.claim(); // Toma el control de las pestañas abiertas inmediatamente
+  return self.clients.claim();
 });
 
-// 3. FETCH: Estrategia "Stale-While-Revalidate" (Rápido pero actualizado)
+// 3. FETCH: Estrategia Stale-While-Revalidate con filtros
 self.addEventListener('fetch', (event) => {
-  // Solo cacheamos peticiones GET (evita errores con llamadas a Firebase/API)
-  if (event.request.method !== 'GET') return;
+  const { request } = event;
+  const url = new URL(request.url);
+
+  // NO CACHEAR: Peticiones que no sean GET, extensiones, o APIs de Firebase/Google
+  if (
+    request.method !== 'GET' || 
+    !url.protocol.startsWith('http') ||
+    url.hostname.includes('googleapis.com') ||
+    url.hostname.includes('firebase')
+  ) {
+    return;
+  }
 
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      const fetchPromise = fetch(event.request).then((networkResponse) => {
-        // Actualizamos la caché con la respuesta fresca de la red
-        if (networkResponse && networkResponse.status === 200) {
+    caches.match(request).then((cachedResponse) => {
+      const fetchPromise = fetch(request).then((networkResponse) => {
+        // Solo cachear respuestas válidas
+        if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
           const responseToCache = networkResponse.clone();
           caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache);
+            cache.put(request, responseToCache);
           });
         }
         return networkResponse;
       }).catch(() => {
-        // Si no hay red y no hay caché (ej. una página nueva offline), podrías devolver un offline.html
+        // Retorno silencioso si falla la red y no hay caché
+        return cachedResponse; 
       });
 
-      // Devolvemos la caché si existe, si no, esperamos a la red
       return cachedResponse || fetchPromise;
     })
   );
 });
 
 // 4. PUSH: Notificaciones
-self.addEventListener('push', function (event) {
+self.addEventListener('push', (event) => {
   let data = {};
   try {
     data = event.data ? event.data.json() : {};
   } catch (e) {
-    data = { title: 'EFAS CondoSys', body: event.data.text() };
+    data = { title: 'EFAS CondoSys', body: event.data ? event.data.text() : 'Nueva actualización' };
   }
 
-  const title = data.title || 'Notificación de Condominio';
+  const title = data.title || 'Notificación EFAS';
   const options = {
-    body: data.body || 'Tienes una nueva actualización.',
-    icon: data.icon || '/icon-192x192.png',
-    badge: data.badge || '/badge-72x72.png',
-    vibrate: [100, 50, 100], // Vibración para mayor impacto
+    body: data.body || 'Tienes una nueva actualización en tu condominio.',
+    icon: '/icon-192x192.png',
+    badge: '/icon-192x192.png',
+    vibrate: [100, 50, 100],
     data: {
       url: data.url || '/'
     }
@@ -86,19 +94,17 @@ self.addEventListener('push', function (event) {
 });
 
 // 5. CLICK EN NOTIFICACIÓN
-self.addEventListener('notificationclick', function (event) {
+self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const urlToOpen = new URL(event.notification.data.url, self.location.origin).href;
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // Si ya hay una pestaña abierta con esa URL, le damos foco
       for (const client of clientList) {
         if (client.url === urlToOpen && 'focus' in client) {
           return client.focus();
         }
       }
-      // Si no, abrimos una nueva
       if (clients.openWindow) {
         return clients.openWindow(urlToOpen);
       }

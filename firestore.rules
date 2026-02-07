@@ -2,12 +2,10 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // --- FUNCIONES DE SEGURIDAD CORREGIDAS ---
     function isSuperAdmin() {
       return request.auth != null && request.auth.token.email == 'vallecondo@gmail.com';
     }
 
-    // Verifica si el usuario es admin en CUALQUIERA de las dos colecciones posibles
     function isCondoAdmin(condoId) {
       let isOwnersAdmin = exists(/databases/$(database)/documents/condominios/$(condoId)/owners/$(request.auth.uid)) &&
                            get(/databases/$(database)/documents/condominios/$(condoId)/owners/$(request.auth.uid)).data.role == 'admin';
@@ -16,59 +14,80 @@ service cloud.firestore {
       return request.auth != null && (isOwnersAdmin || isPropietariosAdmin);
     }
 
-    // Verifica si el usuario existe en CUALQUIERA de las dos colecciones
     function isCondoOwner(condoId) {
       return request.auth != null && 
         (exists(/databases/$(database)/documents/condominios/$(condoId)/owners/$(request.auth.uid)) ||
          exists(/databases/$(database)/documents/condominios/$(condoId)/propietarios/$(request.auth.uid)));
     }
 
-    // --- REGLA MAESTRA SUPER ADMIN ---
     match /{allPaths=**} {
       allow read, write: if isSuperAdmin();
     }
 
-    // --- COLECCIÓN DE CONDOMINIOS ---
     match /condominios/{condoId} {
       
       allow read: if request.auth != null;
 
-      // Perfiles de Propietarios (Estructura Antigua para condo_01)
       match /owners/{ownerId} {
         allow read: if request.auth != null && (request.auth.uid == ownerId || isCondoAdmin(condoId));
         allow write: if isCondoAdmin(condoId);
+        allow list: if isCondoAdmin(condoId);
       }
 
-      // Perfiles de Propietarios (Estructura Nueva para los demás)
       match /propietarios/{ownerId} {
         allow read: if request.auth != null && (request.auth.uid == ownerId || isCondoAdmin(condoId));
         allow write: if isCondoAdmin(condoId);
+        allow list: if isCondoAdmin(condoId);
       }
 
-      // DEUDAS (Debts)
       match /debts/{debtId} {
-        allow read: if isCondoAdmin(condoId) || (request.auth != null && resource.data.ownerId == request.auth.uid);
+        allow read: if isCondoAdmin(condoId) || (resource.data.ownerId == request.auth.uid);
         allow write: if isCondoAdmin(condoId);
       }
 
-      // PAGOS (Payments)
       match /payments/{paymentId} {
-        allow read: if isCondoAdmin(condoId) || (request.auth != null && request.auth.uid in resource.data.beneficiaryIds);
-        allow create: if request.auth != null; 
+        allow read: if isCondoAdmin(condoId) || (request.auth.uid in resource.data.beneficiaryIds);
+        allow create: if isCondoOwner(condoId); 
         allow update, delete: if isCondoAdmin(condoId);
       }
 
-      // CARTELERA (Billboard)
       match /billboard_announcements/{annId} {
-        allow read: if request.auth != null; 
+        allow read: if isCondoOwner(condoId) || isCondoAdmin(condoId);
+        allow write: if isCondoAdmin(condoId);
+      }
+      
+      match /config/{docId} {
+        allow read: if isCondoOwner(condoId) || isCondoAdmin(condoId);
         allow write: if isCondoAdmin(condoId);
       }
 
-      // CONFIGURACIÓN (Rooted en workingCondoId/activeCondoId)
-      match /{allChildren=**} {
-        allow read: if isCondoAdmin(condoId) || isCondoOwner(condoId);
+      match /surveys/{surveyId} {
+        allow read: if isCondoOwner(condoId) || isCondoAdmin(condoId);
         allow write: if isCondoAdmin(condoId);
       }
+
+      match /survey_responses/{responseId} {
+        allow read, write: if resource.data.userId == request.auth.uid;
+        allow create: if isCondoOwner(condoId);
+      }
+      
+      match /published_reports/{reportId} {
+         allow read: if isCondoOwner(condoId) || isCondoAdmin(condoId);
+         allow write: if isCondoAdmin(condoId);
+      }
+
+      // Admin-only collections
+      match /admin_tasks/{taskId} { allow read, write: if isCondoAdmin(condoId); }
+      match /app_feedback/{feedbackId} { allow read, write: if isCondoAdmin(condoId); }
+      match /certificates/{certId} { allow read, write: if isCondoAdmin(condoId); }
+      match /expenses/{expenseId} { allow read, write: if isCondoAdmin(condoId); }
+      match /financial_statements/{statementId} { allow read, write: if isCondoAdmin(condoId); }
+      match /historical_payments/{histId} { allow read, write: if isCondoAdmin(condoId); }
+      match /integral_reports/{reportId} { allow read, write: if isCondoAdmin(condoId); }
+      match /logs/{logId} { allow read, write: if isCondoAdmin(condoId); }
+      match /petty_cash_replenishments/{repId} { allow read, write: if isCondoAdmin(condoId); }
+      match /cajaChica_movimientos/{movId} { allow read, write: if isCondoAdmin(condoId); }
+      match /cajaChica_reposiciones/{repoId} { allow read, write: if isCondoAdmin(condoId); }
     }
   }
 }
