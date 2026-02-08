@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
@@ -59,58 +60,38 @@ function LoginPage() {
             let activeCondoId: string;
             let userData: any = null;
 
-            // 3. Differentiated logic based on Portal Type
+            // 3. Check for condoKey for both portals
+            if (!condoKey) throw new Error("Debes ingresar la Key de tu condominio");
+
+            const condoQuery = query(collection(db, "condominios"), where("registrationKey", "==", condoKey.trim().toUpperCase()), limit(1));
+            const condoSnap = await getDocs(condoQuery);
+            
+            if (condoSnap.empty) {
+                await signOut(auth);
+                throw new Error("Key de condominio no válida.");
+            }
+            
+            activeCondoId = condoSnap.docs[0].id;
+            const ownersCollectionName = activeCondoId === 'condo_01' ? 'owners' : 'propietarios';
+            const userDocRef = doc(db, 'condominios', activeCondoId, ownersCollectionName, user.uid);
+            const userDocSnap = await getDoc(userDocRef);
+
+            if (!userDocSnap.exists()) {
+                await signOut(auth);
+                throw new Error("Tus credenciales no coinciden con un usuario registrado en este condominio.");
+            }
+
+            userData = userDocSnap.data();
+            const dbRole = (userData.role || '').toLowerCase();
+
+            // 4. Role-specific validation
             if (portalType === 'admin') {
-                // --- ADMIN LOGIN FLOW ---
-                if (!condoKey) throw new Error("Debes ingresar la Key de tu condominio");
-
-                const condoQuery = query(collection(db, "condominios"), where("registrationKey", "==", condoKey.trim().toUpperCase()), limit(1));
-                const condoSnap = await getDocs(condoQuery);
-                
-                if (condoSnap.empty) {
-                    await signOut(auth);
-                    throw new Error("Key de condominio no válida.");
-                }
-                
-                activeCondoId = condoSnap.docs[0].id;
-                const ownersCollectionName = activeCondoId === 'condo_01' ? 'owners' : 'propietarios';
-                const userDocRef = doc(db, 'condominios', activeCondoId, ownersCollectionName, user.uid);
-                const userDocSnap = await getDoc(userDocRef);
-
-                if (!userDocSnap.exists()) {
-                    await signOut(auth);
-                    throw new Error("No estás registrado como administrador en este condominio.");
-                }
-                
-                userData = userDocSnap.data();
-                const dbRole = (userData.role || '').toLowerCase();
                 if (dbRole !== 'admin' && dbRole !== 'administrador') {
                      await signOut(auth);
                     throw new Error(`Tu rol (${dbRole}) no tiene acceso al portal de Administradores.`);
                 }
             } else if (portalType === 'owner') {
-                // --- OWNER LOGIN FLOW ---
-                // Find owner's condo from the root 'users' collection (created during onboarding)
-                const userProfileRef = doc(db, "users", user.uid);
-                const userProfileSnap = await getDoc(userProfileRef);
-
-                if (!userProfileSnap.exists() || !userProfileSnap.data()?.condominioId) {
-                    await signOut(auth);
-                    throw new Error("No se encontró el perfil de tu condominio. Contacta a la administración.");
-                }
-                
-                activeCondoId = userProfileSnap.data().condominioId;
-                const ownersCollectionName = activeCondoId === 'condo_01' ? 'owners' : 'propietarios';
-                const userDocRef = doc(db, 'condominios', activeCondoId, ownersCollectionName, user.uid);
-                const userDocSnap = await getDoc(userDocRef);
-                
-                if (!userDocSnap.exists()) {
-                    await signOut(auth);
-                    throw new Error("Se encontró tu condominio, pero tu perfil de propietario no existe allí.");
-                }
-                userData = userDocSnap.data();
-                const dbRole = (userData.role || '').toLowerCase();
-                if (dbRole !== 'propietario' && dbRole !== 'owner') {
+                 if (dbRole !== 'propietario' && dbRole !== 'owner') {
                      await signOut(auth);
                     throw new Error(`Tu rol (${dbRole}) no tiene acceso al portal de Propietarios.`);
                 }
@@ -118,7 +99,7 @@ function LoginPage() {
                 throw new Error("Tipo de portal no válido. Seleccione uno.");
             }
 
-            // 4. Set session and redirect
+            // 5. Set session and redirect
             localStorage.setItem('activeCondoId', activeCondoId);
             localStorage.setItem('workingCondoId', activeCondoId);
             localStorage.setItem('userRole', portalType);
@@ -153,22 +134,20 @@ function LoginPage() {
                 </CardHeader>
                 <form onSubmit={handleLogin}>
                     <CardContent className="space-y-4 px-8 pt-4">
-                        {portalType === 'admin' && (
-                             <div className="space-y-1.5">
-                                <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Key del Condominio</Label>
-                                <div className="relative">
-                                    <Input 
-                                        type="text" 
-                                        className="h-12 rounded-2xl pl-10 uppercase font-bold"
-                                        value={condoKey}
-                                        onChange={(e) => setCondoKey(e.target.value)}
-                                        placeholder="EJ: VALLE01"
-                                        required
-                                    />
-                                    <Home className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
-                                </div>
+                         <div className="space-y-1.5">
+                            <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Key del Condominio</Label>
+                            <div className="relative">
+                                <Input 
+                                    type="text" 
+                                    className="h-12 rounded-2xl pl-10 uppercase font-bold"
+                                    value={condoKey}
+                                    onChange={(e) => setCondoKey(e.target.value)}
+                                    placeholder="EJ: VALLE01"
+                                    required
+                                />
+                                <Home className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
                             </div>
-                        )}
+                        </div>
                         <div className="space-y-1.5">
                             <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">E-mail</Label>
                             <Input 
