@@ -34,14 +34,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(firebaseUser);
       
       if (!firebaseUser) {
-        setLoading(false);
+        setOwnerData(null);
         setUserRole(null);
         setActiveCondoId(null);
         setWorkingCondoId(null);
+        setLoading(false);
         return;
       }
 
-      // Recuperar datos validados en el Login para evitar rebotes
+      // Recuperar IDs guardados en el Login
       const savedCondoId = localStorage.getItem('activeCondoId');
       const savedRole = localStorage.getItem('userRole');
 
@@ -60,30 +61,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setActiveCondoId(condoIdToUse);
           setWorkingCondoId(condoIdToUse);
 
-          let userDataFound = null;
+          let userData = null;
 
-          // --- ESTRATEGIA DE BÚSQUEDA JERÁRQUICA EFAS ---
+          // 1. BÚSQUEDA SECUENCIAL (VIEJA -> NUEVA ESTRUCTURA)
           
-          // 1. Intentar Estructura Vieja (owners) - Ej: condo_01
-          const ownerRef = doc(db, 'condominios', condoIdToUse, 'owners', firebaseUser.uid);
-          const ownerSnap = await getDoc(ownerRef);
+          // Intento A: Vieja estructura (owners)
+          const oldOwnerRef = doc(db, 'condominios', condoIdToUse, 'owners', firebaseUser.uid);
+          const oldSnap = await getDoc(oldOwnerRef);
 
-          if (ownerSnap.exists()) {
-            userDataFound = ownerSnap.data();
+          if (oldSnap.exists()) {
+            userData = oldSnap.data();
           } else {
-            // 2. Intentar Estructura Nueva (propietarios) - Ej: condo_02
-            const propRef = doc(db, 'condominios', condoIdToUse, 'propietarios', firebaseUser.uid);
-            const propSnap = await getDoc(propRef);
-            if (propSnap.exists()) {
-              userDataFound = propSnap.data();
+            // Intento B: Nueva estructura (propietarios)
+            const newOwnerRef = doc(db, 'condominios', condoIdToUse, 'propietarios', firebaseUser.uid);
+            const newSnap = await getDoc(newOwnerRef);
+            if (newSnap.exists()) {
+              userData = newSnap.data();
             }
           }
 
-          if (userDataFound) {
-            setOwnerData(userDataFound);
+          if (userData) {
+            setOwnerData(userData);
             
-            // Mapeo de roles unificado (Español/Inglés)
-            const rawRole = (userDataFound.role || savedRole || '').toLowerCase();
+            // Mapeo y Normalización de Roles EFAS
+            const rawRole = (userData.role || savedRole || '').toLowerCase();
             if (rawRole === 'propietario' || rawRole === 'owner') {
               setUserRole('owner');
             } else if (rawRole === 'administrador' || rawRole === 'admin') {
@@ -92,22 +93,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               setUserRole(rawRole);
             }
 
-            // 3. Suscripción a Configuración del Condominio
+            // 2. Suscripción a Configuración (Logo, Nombre, etc.)
             const settingsRef = doc(db, 'condominios', condoIdToUse, 'config', 'mainSettings');
-            
             onSnapshot(settingsRef, 
               (s) => {
                 if (s.exists()) setCompanyInfo(s.data().companyInfo);
               },
-              (error) => {
-                console.warn("Permisos: No se pudo leer companyInfo, usando genérico.");
+              () => {
+                // Fallback si no hay permisos o no existe
                 setCompanyInfo({ name: "EFAS CondoSys" });
               }
             );
           }
         }
       } catch (error) {
-        console.error("Error crítico en EFAS Auth:", error);
+        console.error("Error en Sincronización EFAS:", error);
       } finally {
         setLoading(false);
       }
@@ -119,12 +119,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider value={{ user, ownerData, companyInfo, loading, role, isSuperAdmin, activeCondoId, workingCondoId }}>
       {!loading ? children : (
-        <div className="h-screen flex items-center justify-center bg-background">
+        <div className="h-screen flex items-center justify-center bg-[#1A1D23]">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mx-auto mb-4"></div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground italic">
-              EFAS CondoSys Sincronizando...
-            </p>
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#F28705] mx-auto mb-4"></div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Sincronizando EFAS...</p>
           </div>
         </div>
       )}

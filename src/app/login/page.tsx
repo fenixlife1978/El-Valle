@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
@@ -45,81 +44,89 @@ function LoginPage() {
         try {
             await setPersistence(auth, browserLocalPersistence);
             
-            // 1. Authenticate with Firebase Auth
+            // 1. Auth inicial
             const credentials = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
-            const user = credentials.user;
+            const userId = credentials.user.uid;
 
-            // 2. Handle Super Admin Bypass
-            if (user.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()) {
+            // 2. Bypass Super Admin (EFAS CondoSys Master)
+            if (email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()) {
                 localStorage.setItem('userRole', 'super-admin');
                 toast({ title: "Modo Super Admin", description: "Acceso total concedido." });
                 window.location.href = '/super-admin';
                 return;
             }
-            
-            let activeCondoId: string;
-            let userData: any = null;
 
-            // 3. Check for condoKey for both portals
-            if (!condoKey) throw new Error("Debes ingresar la Key de tu condominio");
-
-            const condoQuery = query(collection(db, "condominios"), where("registrationKey", "==", condoKey.trim().toUpperCase()), limit(1));
+            // 3. Buscar Condominio por registrationKey
+            if (!condoKey) throw new Error("Se requiere la Key del condominio");
+            const condoQuery = query(
+                collection(db, "condominios"), 
+                where("registrationKey", "==", condoKey.trim().toUpperCase()), 
+                limit(1)
+            );
             const condoSnap = await getDocs(condoQuery);
             
             if (condoSnap.empty) {
                 await signOut(auth);
                 throw new Error("Key de condominio no válida.");
             }
+
+            const activeCondoId = condoSnap.docs[0].id;
+            let userData = null;
+            let finalRole = '';
+
+            // 4. BÚSQUEDA SECUENCIAL (VIEJA -> NUEVA ESTRUCTURA)
             
-            activeCondoId = condoSnap.docs[0].id;
-            const ownersCollectionName = activeCondoId === 'condo_01' ? 'owners' : 'propietarios';
-            const userDocRef = doc(db, 'condominios', activeCondoId, ownersCollectionName, user.uid);
-            const userDocSnap = await getDoc(userDocRef);
+            // Intento A: Vieja estructura (Subcolección 'owners')
+            const oldRef = doc(db, 'condominios', activeCondoId, 'owners', userId);
+            const oldSnap = await getDoc(oldRef);
 
-            if (!userDocSnap.exists()) {
-                await signOut(auth);
-                throw new Error("Tus credenciales no coinciden con un usuario registrado en este condominio.");
-            }
-
-            userData = userDocSnap.data();
-            const dbRole = (userData.role || '').toLowerCase();
-
-            // 4. Role-specific validation
-            if (portalType === 'admin') {
-                if (dbRole !== 'admin' && dbRole !== 'administrador') {
-                     await signOut(auth);
-                    throw new Error(`Tu rol (${dbRole}) no tiene acceso al portal de Administradores.`);
-                }
-            } else if (portalType === 'owner') {
-                 if (dbRole !== 'propietario' && dbRole !== 'owner') {
-                     await signOut(auth);
-                    throw new Error(`Tu rol (${dbRole}) no tiene acceso al portal de Propietarios.`);
-                }
+            if (oldSnap.exists()) {
+                userData = oldSnap.data();
+                console.log("[EFAS] Usuario encontrado en estructura antigua (owners)");
             } else {
-                throw new Error("Tipo de portal no válido. Seleccione uno.");
+                // Intento B: Nueva estructura (Subcolección 'propietarios')
+                const newRef = doc(db, 'condominios', activeCondoId, 'propietarios', userId);
+                const newSnap = await getDoc(newRef);
+                
+                if (newSnap.exists()) {
+                    userData = newSnap.data();
+                    console.log("[EFAS] Usuario encontrado en nueva estructura (propietarios)");
+                }
             }
 
-            // 5. Set session and redirect
+            if (!userData) {
+                await signOut(auth);
+                throw new Error("No estás registrado en este condominio.");
+            }
+
+            // 5. Normalización de Roles
+            const dbRole = (userData.role || '').toLowerCase(); // "propietario" o "administrador"
+
+            const isAuthorized = portalType === 'admin' 
+                ? (dbRole === 'administrador' || dbRole === 'admin')
+                : (dbRole === 'propietario' || dbRole === 'owner');
+
+            if (!isAuthorized) {
+                await signOut(auth);
+                throw new Error(`Acceso denegado: Tu rol es ${dbRole}.`);
+            }
+
+            // 6. Guardar estado y redirigir
             localStorage.setItem('activeCondoId', activeCondoId);
             localStorage.setItem('workingCondoId', activeCondoId);
-            localStorage.setItem('userRole', portalType);
+            localStorage.setItem('userRole', portalType!);
 
-            toast({ title: "¡Bienvenido!", description: "Sincronizando con tu condominio..." });
+            toast({ title: "¡Éxito!", description: "Sincronizando comunidad..." });
 
             setTimeout(() => {
                 window.location.href = `/${activeCondoId}/${portalType}/dashboard`;
-            }, 800);
+            }, 500);
 
         } catch (err: any) {
             setLoading(false);
             let msg = err.message || "Error desconocido";
             if (err.code === 'auth/invalid-credential') msg = "Correo o contraseña incorrectos.";
-            
-            toast({ 
-                variant: 'destructive', 
-                title: 'Error de Acceso', 
-                description: msg 
-            });
+            toast({ variant: 'destructive', title: 'Error de Acceso', description: msg });
         }
     };
 
@@ -134,7 +141,7 @@ function LoginPage() {
                 </CardHeader>
                 <form onSubmit={handleLogin}>
                     <CardContent className="space-y-4 px-8 pt-4">
-                         <div className="space-y-1.5">
+                        <div className="space-y-1.5">
                             <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Key del Condominio</Label>
                             <div className="relative">
                                 <Input 
@@ -142,32 +149,20 @@ function LoginPage() {
                                     className="h-12 rounded-2xl pl-10 uppercase font-bold"
                                     value={condoKey}
                                     onChange={(e) => setCondoKey(e.target.value)}
-                                    placeholder="EJ: VALLE01"
-                                    required
+                                    placeholder="VALLE01"
+                                    required={email.toLowerCase() !== SUPER_ADMIN_EMAIL}
                                 />
                                 <Home className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
                             </div>
                         </div>
                         <div className="space-y-1.5">
                             <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">E-mail</Label>
-                            <Input 
-                                type="email" 
-                                className="h-12 rounded-2xl font-bold" 
-                                value={email} 
-                                onChange={(e) => setEmail(e.target.value)} 
-                                required 
-                            />
+                            <Input type="email" className="h-12 rounded-2xl font-bold" value={email} onChange={(e) => setEmail(e.target.value)} required />
                         </div>
                         <div className="space-y-1.5">
                             <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Contraseña</Label>
                             <div className="relative">
-                                <Input 
-                                    type={showPassword ? "text" : "password"} 
-                                    className="h-12 rounded-2xl font-bold pr-12" 
-                                    value={password} 
-                                    onChange={(e) => setPassword(e.target.value)} 
-                                    required 
-                                />
+                                <Input type={showPassword ? "text" : "password"} className="h-12 rounded-2xl font-bold pr-12" value={password} onChange={(e) => setPassword(e.target.value)} required />
                                 <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground">
                                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                                 </button>
@@ -188,7 +183,7 @@ function LoginPage() {
 
 export default function LoginPageWithSuspense() {
     return (
-        <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>}>
+        <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><Loader2 className="animate-spin text-primary" /></div>}>
             <LoginPage />
         </Suspense>
     );

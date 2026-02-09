@@ -1,11 +1,9 @@
-
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Loader2, Receipt, Building2, Users } from "lucide-react"; 
-import { useEffect, useState } from "react";
 import { collection, query, onSnapshot, doc, orderBy, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { format, startOfMonth, isAfter } from "date-fns";
@@ -20,7 +18,6 @@ const formatToTwoDecimals = (num: number) => {
 
 export default function AdminDashboardPage({ params }: { params: Promise<{ condoId: string }> }) {
     const { loading: authLoading } = useAuth();
-    
     const resolvedParams = React.use(params);
     const workingCondoId = resolvedParams.condoId;
 
@@ -40,6 +37,7 @@ export default function AdminDashboardPage({ params }: { params: Promise<{ condo
 
         setLoading(true);
 
+        // 1. Configuración y Tasa de Cambio
         const unsubSettings = onSnapshot(doc(db, 'condominios', workingCondoId, 'config', 'mainSettings'), (settingsSnap) => {
             let currentRate = 1;
             if (settingsSnap.exists()) {
@@ -52,6 +50,7 @@ export default function AdminDashboardPage({ params }: { params: Promise<{ condo
 
             const inicioDeMes = startOfMonth(new Date());
 
+            // 2. Escucha de Pagos (Ingresos y Pendientes)
             const paymentsQuery = query(collection(db, 'condominios', workingCondoId, 'payments'));
             const unsubPayments = onSnapshot(paymentsQuery, (paymentSnap) => {
                 let incomeBs = 0;
@@ -89,24 +88,38 @@ export default function AdminDashboardPage({ params }: { params: Promise<{ condo
                 );
             });
 
-            return () => unsubPayments();
+            return unsubPayments;
         });
 
-        const qAnuncios = query(collection(db, "condominios", workingCondoId, "billboard_announcements"), orderBy("createdAt", "desc"), limit(5));
+        // 3. Cartelera Digital
+        const qAnuncios = query(
+            collection(db, "condominios", workingCondoId, "billboard_announcements"), 
+            orderBy("createdAt", "desc"), 
+            limit(5)
+        );
         const unsubAnuncios = onSnapshot(qAnuncios, (snap) => {
             setAnuncios(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-            setLoading(false);
         });
 
-        const ownersCol = workingCondoId === 'condo_01' ? 'owners' : 'propietarios';
-        const unsubOwners = onSnapshot(collection(db, 'condominios', workingCondoId, ownersCol), (snap) => {
-            setStats(prev => ({ ...prev, totalOwners: snap.size }));
+        // 4. Conteo de Comunidad (Dual: Owners + Propietarios)
+        // Escuchamos ambas colecciones para no perder datos en la transición
+        const unsubOldOwners = onSnapshot(collection(db, 'condominios', workingCondoId, 'owners'), (oldSnap) => {
+            const unsubNewPropietarios = onSnapshot(collection(db, 'condominios', workingCondoId, 'propietarios'), (newSnap) => {
+                // Usamos un Set de IDs para evitar duplicados si un usuario existe en ambas
+                const uniqueIds = new Set([
+                    ...oldSnap.docs.map(d => d.id),
+                    ...newSnap.docs.map(d => d.id)
+                ]);
+                setStats(prev => ({ ...prev, totalOwners: uniqueIds.size }));
+                setLoading(false);
+            });
+            return () => unsubNewPropietarios();
         });
 
         return () => { 
             unsubSettings(); 
             unsubAnuncios(); 
-            unsubOwners(); 
+            unsubOldOwners(); 
         };
     }, [workingCondoId, authLoading]);
 
@@ -123,6 +136,7 @@ export default function AdminDashboardPage({ params }: { params: Promise<{ condo
 
     return (
         <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto animate-in fade-in zoom-in-95 duration-500">
+            {/* Header */}
             <div className="mb-8">
                 <h2 className="text-3xl md:text-4xl font-black uppercase tracking-tighter italic text-slate-900">
                     Panel de <span className="text-[#F28705]">Control</span>
@@ -130,15 +144,17 @@ export default function AdminDashboardPage({ params }: { params: Promise<{ condo
                 <div className="flex items-center gap-2 mt-2">
                     <Building2 className="h-4 w-4 text-[#F28705]" />
                     <p className="text-slate-500 font-bold text-xs uppercase tracking-widest">
-                        {condoName || workingCondoId}
+                        {condoName || "Cargando condominio..."}
                     </p>
                 </div>
             </div>
             
+            {/* Cartelera */}
             <div className="bg-card border rounded-[2rem] p-4 shadow-sm overflow-hidden w-full max-w-lg mx-auto">
                 <CarteleraDigital anuncios={anuncios} />
             </div>
 
+            {/* Stats Grid */}
             <div className="grid gap-6 md:grid-cols-3">
                 <Card className="bg-slate-900 border-none rounded-[2rem] shadow-lg transition-transform hover:scale-[1.02]">
                     <CardHeader className="pb-2">
@@ -158,7 +174,7 @@ export default function AdminDashboardPage({ params }: { params: Promise<{ condo
                     </CardHeader>
                     <CardContent>
                         <div className="text-3xl font-black text-white">{stats.pendingPayments}</div>
-                        <p className="text-xs font-bold text-orange-900/70 mt-1 uppercase">Pendientes</p>
+                        <p className="text-xs font-bold text-orange-900/70 mt-1 uppercase">Pagos Pendientes</p>
                     </CardContent>
                 </Card>
 
@@ -170,14 +186,15 @@ export default function AdminDashboardPage({ params }: { params: Promise<{ condo
                     </CardHeader>
                     <CardContent>
                         <div className="text-3xl font-black text-slate-900">{stats.totalOwners}</div>
-                        <p className="text-xs font-bold text-slate-400 mt-1 uppercase">Propietarios</p>
+                        <p className="text-xs font-bold text-slate-400 mt-1 uppercase">Residentes Activos</p>
                     </CardContent>
                 </Card>
             </div>
 
+            {/* Tabla de Pagos */}
             <Card className="rounded-[2rem] shadow-sm border overflow-hidden bg-white">
                 <CardHeader className="bg-slate-50 border-b p-6">
-                    <CardTitle className="text-xs font-black uppercase tracking-widest text-slate-700">Pagos Aprobados Recientemente</CardTitle>
+                    <CardTitle className="text-xs font-black uppercase tracking-widest text-slate-700">Últimos Pagos Aprobados</CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
                     <div className="overflow-x-auto">
@@ -186,21 +203,21 @@ export default function AdminDashboardPage({ params }: { params: Promise<{ condo
                                 <TableRow className="bg-slate-50/50">
                                     <TableHead className="text-[10px] uppercase font-black text-slate-500 py-4 px-6">Residente</TableHead>
                                     <TableHead className="text-[10px] uppercase font-black text-slate-500">Monto</TableHead>
-                                    <TableHead className="text-[10px] uppercase font-black text-slate-500">Fecha</TableHead>
+                                    <TableHead className="text-[10px] uppercase font-black text-slate-500">Fecha Pago</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {recentPayments.length === 0 ? (
                                     <TableRow>
                                         <TableCell colSpan={3} className="text-center py-10 text-slate-400 font-bold uppercase text-[10px]">
-                                            Sin movimientos registrados
+                                            Sin movimientos este mes
                                         </TableCell>
                                     </TableRow>
                                 ) : (
                                     recentPayments.map(p => (
                                         <TableRow key={p.id} className="hover:bg-slate-50 transition-colors border-b last:border-0">
                                             <TableCell className="font-bold text-xs uppercase text-slate-900 py-5 px-6">
-                                                {p.beneficiaries?.[0]?.ownerName || p.ownerName || 'Residente'}
+                                                {p.beneficiaries?.[0]?.ownerName || p.ownerName || 'Usuario EFAS'}
                                             </TableCell>
                                             <TableCell className="text-emerald-700 font-black">
                                                 Bs. {formatToTwoDecimals(p.totalAmount)}
