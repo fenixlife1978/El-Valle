@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -9,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
-import { Loader2, Save, Upload, DollarSign, KeyRound, PlusCircle, Building2 } from "lucide-react";
+import { Loader2, Save, Upload, DollarSign, KeyRound, PlusCircle, Building2, MoreHorizontal, Edit, Trash2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from "@/components/ui/badge";
@@ -17,8 +18,11 @@ import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Switch } from '@/components/ui/switch';
 import { useAuthorization } from '@/hooks/use-authorization';
-import { useParams } from 'next/navigation'; // Cambiado para obtener ID de la URL
+import { useParams } from 'next/navigation';
 import { compressImage } from '@/lib/utils';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+
 
 // --- DEFINICIONES DE TIPOS ---
 type CompanyInfo = {
@@ -60,6 +64,12 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings>(defaultSettings);
   const [newRate, setNewRate] = useState({ date: format(new Date(), 'yyyy-MM-dd'), rate: '' });
   const [newAuthKey, setNewAuthKey] = useState('');
+
+  const [isEditRateDialogOpen, setIsEditRateDialogOpen] = useState(false);
+  const [editingRate, setEditingRate] = useState<ExchangeRate | null>(null);
+  const [editRateData, setEditRateData] = useState({ date: '', rate: '' });
+  const [isDeleteRateDialogOpen, setIsDeleteRateDialogOpen] = useState(false);
+  const [rateToDelete, setRateToDelete] = useState<ExchangeRate | null>(null);
 
   const inputStyle = "rounded-xl h-12 bg-input border-border font-bold text-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary";
 
@@ -167,10 +177,57 @@ export default function SettingsPage() {
     if (isNaN(val) || !newRate.date) return;
     const newEntry = { id: Date.now().toString(), date: newRate.date, rate: val, active: true };
     const updatedRates = [newEntry, ...(settings.exchangeRates || []).map(r => ({ ...r, active: false }))];
-    setSettings(prev => ({ ...prev, exchangeRates: updatedRates }));
     handleSave('rates', { exchangeRates: updatedRates });
     setNewRate({ date: format(new Date(), 'yyyy-MM-dd'), rate: '' });
   };
+  
+  const handleOpenEditDialog = (rate: ExchangeRate) => {
+    setEditingRate(rate);
+    setEditRateData({ date: rate.date, rate: String(rate.rate) });
+    setIsEditRateDialogOpen(true);
+  };
+
+  const handleUpdateRate = () => {
+      if (!editingRate) return;
+      const val = parseFloat(editRateData.rate);
+      if (isNaN(val) || !editRateData.date) {
+          toast({ variant: 'destructive', title: 'Datos inválidos' });
+          return;
+      }
+      
+      let updatedRates = settings.exchangeRates.map(r => 
+          r.id === editingRate.id ? { ...r, date: editRateData.date, rate: val } : r
+      );
+
+      // Re-sort by date to determine the new active rate
+      updatedRates.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      updatedRates = updatedRates.map((r, index) => ({ ...r, active: index === 0 }));
+
+      handleSave('rates', { exchangeRates: updatedRates });
+      setIsEditRateDialogOpen(false);
+      setEditingRate(null);
+  };
+
+  const handleOpenDeleteDialog = (rate: ExchangeRate) => {
+      setRateToDelete(rate);
+      setIsDeleteRateDialogOpen(true);
+  };
+
+  const confirmDeleteRate = () => {
+      if (!rateToDelete) return;
+      let updatedRates = settings.exchangeRates.filter(r => r.id !== rateToDelete.id);
+
+      if (rateToDelete.active && updatedRates.length > 0) {
+          updatedRates.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+          updatedRates = updatedRates.map((r, index) => ({ ...r, active: index === 0 }));
+      }
+      
+      handleSave('rates', { exchangeRates: updatedRates });
+      setIsDeleteRateDialogOpen(false);
+      setRateToDelete(null);
+      toast({ title: 'Tasa eliminada' });
+  };
+
 
   if (loading) return (
     <div className="flex h-[80vh] flex-col items-center justify-center gap-4">
@@ -262,18 +319,39 @@ export default function SettingsPage() {
                     <TableRow>
                       <TableHead className="font-black text-muted-foreground">FECHA</TableHead>
                       <TableHead className="font-black text-muted-foreground">TASA</TableHead>
-                      <TableHead className="font-black text-muted-foreground text-right">ESTADO</TableHead>
+                      <TableHead className="font-black text-muted-foreground">ESTADO</TableHead>
+                      <TableHead className="text-right font-black text-muted-foreground">ACCIONES</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {settings.exchangeRates?.length === 0 ? (
-                      <TableRow><TableCell colSpan={3} className="text-center py-6 text-[10px] font-black uppercase text-muted-foreground italic">No hay registros</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={4} className="text-center py-6 text-[10px] font-black uppercase text-muted-foreground italic">No hay registros</TableCell></TableRow>
                     ) : (
                       settings.exchangeRates?.map((r) => (
                         <TableRow key={r.id} className="hover:bg-secondary/20 transition-colors border-border">
                           <TableCell className="font-bold text-foreground">{format(parseISO(r.date), 'PPP', { locale: es })}</TableCell>
                           <TableCell className="font-black text-foreground text-lg">Bs. {r.rate}</TableCell>
-                          <TableCell className="text-right">{r.active ? <Badge className="bg-green-500">ACTIVA</Badge> : <Badge variant="outline">HISTORIAL</Badge>}</TableCell>
+                          <TableCell>{r.active ? <Badge className="bg-green-500">ACTIVA</Badge> : <Badge variant="outline">HISTORIAL</Badge>}</TableCell>
+                          <TableCell className="text-right">
+                              <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                      <Button variant="ghost" className="h-8 w-8 p-0">
+                                          <span className="sr-only">Abrir menú</span>
+                                          <MoreHorizontal className="h-4 w-4" />
+                                      </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                      <DropdownMenuItem onClick={() => handleOpenEditDialog(r)}>
+                                          <Edit className="mr-2 h-4 w-4" />
+                                          <span>Editar</span>
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem onClick={() => handleOpenDeleteDialog(r)} className="text-destructive">
+                                          <Trash2 className="mr-2 h-4 w-4" />
+                                          <span>Eliminar</span>
+                                      </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                              </DropdownMenu>
+                          </TableCell>
                         </TableRow>
                       ))
                     )}
@@ -329,6 +407,46 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
       </Tabs>
+      
+      <Dialog open={isEditRateDialogOpen} onOpenChange={setIsEditRateDialogOpen}>
+          <DialogContent>
+              <DialogHeader>
+                  <DialogTitle>Editar Tasa de Cambio</DialogTitle>
+                  <DialogDescription>
+                      Ajuste la fecha o el monto de la tasa registrada.
+                  </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                  <div className="space-y-2">
+                      <Label htmlFor="edit-date">Fecha</Label>
+                      <Input id="edit-date" type="date" value={editRateData.date} onChange={(e) => setEditRateData({...editRateData, date: e.target.value})} />
+                  </div>
+                  <div className="space-y-2">
+                      <Label htmlFor="edit-rate">Monto (Bs.)</Label>
+                      <Input id="edit-rate" type="number" value={editRateData.rate} onChange={(e) => setEditRateData({...editRateData, rate: e.target.value})} />
+                  </div>
+              </div>
+              <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsEditRateDialogOpen(false)}>Cancelar</Button>
+                  <Button onClick={handleUpdateRate}>Guardar Cambios</Button>
+              </DialogFooter>
+          </DialogContent>
+      </Dialog>
+
+      <Dialog open={isDeleteRateDialogOpen} onOpenChange={setIsDeleteRateDialogOpen}>
+          <DialogContent>
+              <DialogHeader>
+                  <DialogTitle>¿Confirmar Eliminación?</DialogTitle>
+                  <DialogDescription>
+                      Esta acción no se puede deshacer. La tasa para la fecha {rateToDelete ? format(parseISO(rateToDelete.date), 'dd/MM/yyyy', { locale: es }) : ''} será eliminada permanentemente.
+                  </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsDeleteRateDialogOpen(false)}>Cancelar</Button>
+                  <Button variant="destructive" onClick={confirmDeleteRate}>Eliminar Tasa</Button>
+              </DialogFooter>
+          </DialogContent>
+      </Dialog>
     </div>
   );
 }
