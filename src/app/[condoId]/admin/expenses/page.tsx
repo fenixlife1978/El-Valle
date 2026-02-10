@@ -14,13 +14,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, PlusCircle, Trash2, Building2, CreditCard, Save, FileDown } from 'lucide-react';
+import { Loader2, PlusCircle, Trash2, Building2, CreditCard, Save, FileDown, Banknote, Landmark, DollarSign } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Badge } from '@/components/ui/badge';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import JsBarcode from 'jsbarcode';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+
 
 type Expense = {
     id: string;
@@ -180,6 +182,64 @@ function RegisterExpenseForm({ workingCondoId, onSave }: { workingCondoId: strin
   );
 }
 
+const ExpensesTable = ({ expenses, handleDelete }: { expenses: Expense[], handleDelete: (id: string) => void }) => {
+    const totalAmount = useMemo(() => expenses.reduce((sum, exp) => sum + exp.amount, 0), [expenses]);
+
+    return (
+        <Table>
+            <TableHeader className="bg-secondary/30">
+                <TableRow className="h-16 hover:bg-transparent border-border/50">
+                    <TableHead className="text-muted-foreground px-8 font-bold text-xs uppercase">Fecha</TableHead>
+                    <TableHead className="text-muted-foreground font-bold text-xs uppercase">Descripción</TableHead>
+                    <TableHead className="text-muted-foreground font-bold text-xs uppercase">Categoría</TableHead>
+                    <TableHead className="text-right text-muted-foreground font-bold text-xs uppercase">Monto (Bs.)</TableHead>
+                    <TableHead className="text-right text-muted-foreground px-8 font-bold text-xs uppercase">Acción</TableHead>
+                </TableRow>
+            </TableHeader>
+            <TableBody>
+                {expenses.length === 0 ? (
+                    <TableRow>
+                        <TableCell colSpan={5} className="text-center py-20 text-muted-foreground/50 font-black uppercase italic tracking-widest">No hay egresos registrados para este período y fuente.</TableCell>
+                    </TableRow>
+                ) : (
+                    expenses.map(expense => (
+                        <TableRow key={expense.id} className="h-20 hover:bg-secondary/20 transition-colors border-b border-border/50">
+                            <TableCell className="px-8 font-bold text-muted-foreground">
+                                {expense.date ? format(expense.date.toDate(), 'dd/MM/yyyy') : '---'}
+                            </TableCell>
+                            <TableCell>
+                                <p className="font-black text-foreground uppercase italic">{expense.description}</p>
+                                <p className="text-[9px] text-muted-foreground font-bold">REF: {expense.reference}</p>
+                            </TableCell>
+                            <TableCell>
+                                <Badge className="bg-primary/10 text-primary border-none shadow-none font-black text-[9px] uppercase px-3">
+                                    {expense.category}
+                                </Badge>
+                            </TableCell>
+                            <TableCell className="text-right font-black text-destructive text-xl italic tracking-tighter">
+                                - Bs. {formatToTwoDecimals(expense.amount)}
+                            </TableCell>
+                            <TableCell className="text-right px-8">
+                                <Button variant="ghost" size="icon" onClick={() => handleDelete(expense.id)} className="text-red-300/50 hover:text-red-500 hover:bg-destructive/10 rounded-full">
+                                    <Trash2 className="h-5 w-5"/>
+                                </Button>
+                            </TableCell>
+                        </TableRow>
+                    ))
+                )}
+            </TableBody>
+            <CardFooter className="bg-secondary/10">
+                <div className="flex justify-end items-center w-full p-4">
+                    <span className="text-muted-foreground font-bold text-xs uppercase mr-4">Total del Período:</span>
+                    <span className="font-black text-destructive text-2xl italic tracking-tighter">
+                        - Bs. {formatToTwoDecimals(totalAmount)}
+                    </span>
+                </div>
+            </CardFooter>
+        </Table>
+    );
+}
+
 export default function ExpensesPage() {
     const { user: currentUser, activeCondoId, companyInfo } = useAuth();
     const { toast } = useToast();
@@ -215,10 +275,9 @@ export default function ExpensesPage() {
         });
     }, [expenses, filterYear, filterMonth]);
     
-    const totalFilteredAmount = useMemo(() => {
-        return filteredExpenses.reduce((total, expense) => total + expense.amount, 0);
-    }, [filteredExpenses]);
-
+    const bankExpenses = useMemo(() => filteredExpenses.filter(e => e.paymentSource === 'banco'), [filteredExpenses]);
+    const cashBsExpenses = useMemo(() => filteredExpenses.filter(e => e.paymentSource === 'efectivo_bs'), [filteredExpenses]);
+    const cashUsdExpenses = useMemo(() => filteredExpenses.filter(e => e.paymentSource === 'efectivo_usd'), [filteredExpenses]);
 
     const handleDelete = async (id: string) => {
         if (!workingCondoId) return;
@@ -243,86 +302,52 @@ export default function ExpensesPage() {
         const headerHeight = 35;
         const margin = 14;
 
-        // --- HEADER ---
-        doc.setFillColor(28, 43, 58); // #1C2B3A
+        doc.setFillColor(28, 43, 58);
         doc.rect(0, 0, pageWidth, headerHeight, 'F');
         doc.setTextColor(255, 255, 255);
 
-        // --- LOGO (LEFT) ---
-        let textX = margin;
         if (companyInfo?.logo) {
             try {
-                const logoSize = 20;
                 doc.saveGraphicsState();
-                doc.circle(margin + logoSize / 2, 7 + logoSize / 2, logoSize / 2);
+                doc.circle(margin + 10, 7 + 10, 10);
                 doc.clip();
-                doc.addImage(companyInfo.logo, 'PNG', margin, 7, logoSize, logoSize);
+                doc.addImage(companyInfo.logo, 'PNG', margin, 7, 20, 20);
                 doc.restoreGraphicsState();
-                textX += logoSize + 5;
             }
             catch(e) { console.error("Error adding logo:", e); }
         }
 
         doc.setFontSize(14).setFont('helvetica', 'bold');
-        doc.text(companyInfo?.name || 'CONDOMINIO', textX, 15);
+        doc.text(companyInfo?.name || 'CONDOMINIO', margin + 25, 15);
         doc.setFontSize(9).setFont('helvetica', 'normal');
-        doc.text(`RIF: ${companyInfo?.rif || 'N/A'}`, textX, 22);
+        doc.text(`RIF: ${companyInfo?.rif || 'N/A'}`, margin + 25, 22);
 
-        // --- BRAND & BARCODE (RIGHT) ---
-        const endX = pageWidth - margin;
         const efasColor = '#F97316';
         const condoSysColor = '#FFFFFF';
-        
         doc.setFont('helvetica', 'bolditalic');
         doc.setFontSize(10);
-        
-        const efasText = "EFAS";
-        const condoSysText = "CONDOSYS";
+        const efasText = "EFAS", condoSysText = "CONDOSYS";
         const condoSysWidth = doc.getStringUnitWidth(condoSysText) * 10 / doc.internal.scaleFactor;
-        
-        const brandY = 12;
-        doc.setTextColor(efasColor);
-        doc.text(efasText, endX - condoSysWidth - 1, brandY, { align: 'right' });
-        doc.setTextColor(condoSysColor);
-        doc.text(condoSysText, endX, brandY, { align: 'right' });
-        
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(7);
-        doc.setTextColor(200, 200, 200);
-        doc.text('REPORTE DE EGRESOS', endX, brandY + 5, { align: 'right' });
+        doc.setTextColor(efasColor).text(efasText, pageWidth - margin - condoSysWidth - 1, 12, { align: 'right' });
+        doc.setTextColor(condoSysColor).text(condoSysText, pageWidth - margin, 12, { align: 'right' });
+        doc.setFont('helvetica', 'normal').setFontSize(7).setTextColor(200, 200, 200);
+        doc.text('REPORTE DE EGRESOS', pageWidth - margin, 17, { align: 'right' });
 
-        // --- BARCODE (Inside Header) ---
         const canvas = document.createElement('canvas');
         const barcodeValue = `EGR-${filterYear}-${filterMonth}`;
         try {
-            JsBarcode(canvas, barcodeValue, {
-                format: "CODE128", 
-                height: 25,
-                width: 1,
-                displayValue: false, 
-                margin: 0,
-                background: "#1c2b3a",
-                lineColor: "#ffffff"
-            });
-            const barcodeDataUrl = canvas.toDataURL("image/png");
-            const barcodeWidth = 40;
-            const barcodeHeight = 10;
-            doc.addImage(barcodeDataUrl, 'PNG', endX - barcodeWidth, brandY + 8, barcodeWidth, barcodeHeight);
-        } catch (e) {
-            console.error("Barcode generation failed", e);
-        }
+            JsBarcode(canvas, barcodeValue, { format: "CODE128", height: 25, width: 1, displayValue: false, margin: 0, background: "#1c2b3a", lineColor: "#ffffff" });
+            doc.addImage(canvas.toDataURL("image/png"), 'PNG', pageWidth - margin - 40, 20, 40, 10);
+        } catch (e) { console.error("Barcode generation failed", e); }
         
-        // --- MAIN CONTENT ---
-        doc.setTextColor(0, 0, 0); // Reset text color to black for the rest of the document
+        doc.setTextColor(0, 0, 0);
         let startY = headerHeight + 15;
         
         const selectedMonthLabel = monthOptions.find(m => m.value === filterMonth)?.label;
         const title = `Reporte de Egresos - ${selectedMonthLabel} ${filterYear}`;
         
         doc.setFontSize(18).text(title, 14, startY);
-        doc.setFontSize(11);
-        doc.setTextColor(0, 0, 0);
-        doc.text(`Fecha: ${format(new Date(), 'dd/MM/yyyy')}`, 190, startY, { align: 'right' });
+        doc.setFontSize(11).text(`Fecha: ${format(new Date(), 'dd/MM/yyyy')}`, 190, startY, { align: 'right' });
 
         autoTable(doc, {
             startY: startY + 10,
@@ -335,10 +360,10 @@ export default function ExpensesPage() {
                 exp.paymentSource?.replace('_', ' ') || 'Banco',
                 formatToTwoDecimals(exp.amount)
             ]),
-            foot: [['', '', '', '', 'Total Egresos', formatToTwoDecimals(totalFilteredAmount)]],
+            foot: [['', '', '', '', 'Total Egresos', formatToTwoDecimals(filteredExpenses.reduce((sum, exp) => sum + exp.amount, 0))]],
             headStyles: { fillColor: [239, 68, 68] },
             footStyles: { fillColor: [185, 28, 28], textColor: 255, fontStyle: 'bold' },
-            bodyStyles: { textColor: [0, 0, 0] }, // Explicitly set body text to black
+            bodyStyles: { textColor: [0, 0, 0] },
             columnStyles: { 5: { halign: 'right' } }
         });
 
@@ -381,54 +406,22 @@ export default function ExpensesPage() {
                         </div>
                     </div>
                 </CardHeader>
-                <CardContent className="p-0">
+                <CardContent className="p-4 md:p-6">
                      {loading ? (
                         <div className="flex justify-center items-center h-40"><Loader2 className="h-10 w-10 animate-spin text-primary"/></div>
                     ) : (
-                        <Table>
-                            <TableHeader className="bg-secondary/30">
-                                <TableRow className="h-16 hover:bg-transparent border-border/50">
-                                    <TableHead className="text-muted-foreground px-8 font-bold text-xs uppercase">Fecha</TableHead>
-                                    <TableHead className="text-muted-foreground font-bold text-xs uppercase">Descripción</TableHead>
-                                    <TableHead className="text-muted-foreground font-bold text-xs uppercase">Categoría</TableHead>
-                                    <TableHead className="text-right text-muted-foreground font-bold text-xs uppercase">Monto (Bs.)</TableHead>
-                                    <TableHead className="text-right text-muted-foreground px-8 font-bold text-xs uppercase">Acción</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {filteredExpenses.length === 0 ? (
-                                    <TableRow>
-                                        <TableCell colSpan={5} className="text-center py-20 text-muted-foreground/50 font-black uppercase italic tracking-widest">No hay egresos registrados para este período</TableCell>
-                                    </TableRow>
-                                ) : (
-                                    filteredExpenses.map(expense => (
-                                        <TableRow key={expense.id} className="h-20 hover:bg-secondary/20 transition-colors border-b border-border/50">
-                                            <TableCell className="px-8 font-bold text-muted-foreground">
-                                                {expense.date ? format(expense.date.toDate(), 'dd/MM/yyyy') : '---'}
-                                            </TableCell>
-                                            <TableCell>
-                                                <p className="font-black text-foreground uppercase italic">{expense.description}</p>
-                                                <p className="text-[9px] text-muted-foreground font-bold">REF: {expense.reference}</p>
-                                                {expense.paymentSource && <Badge variant={expense.paymentSource === 'banco' ? 'secondary' : 'default'} className="mt-1 text-[9px] font-black uppercase">{expense.paymentSource.replace('_', ' ')}</Badge>}
-                                            </TableCell>
-                                            <TableCell>
-                                                <Badge className="bg-primary/10 text-primary border-none shadow-none font-black text-[9px] uppercase px-3">
-                                                    {expense.category}
-                                                </Badge>
-                                            </TableCell>
-                                            <TableCell className="text-right font-black text-destructive text-xl italic tracking-tighter">
-                                                - Bs. {formatToTwoDecimals(expense.amount)}
-                                            </TableCell>
-                                            <TableCell className="text-right px-8">
-                                                <Button variant="ghost" size="icon" onClick={() => handleDelete(expense.id)} className="text-red-300/50 hover:text-red-500 hover:bg-destructive/10 rounded-full">
-                                                    <Trash2 className="h-5 w-5"/>
-                                                </Button>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))
-                                )}
-                            </TableBody>
-                        </Table>
+                        <Tabs defaultValue="banco">
+                            <TabsList className="grid w-full grid-cols-3 bg-secondary/20 rounded-2xl h-auto p-1.5">
+                                <TabsTrigger value="banco" className="rounded-xl h-12 text-xs md:text-sm font-black gap-2"><Landmark className="h-4 w-4"/> Banco</TabsTrigger>
+                                <TabsTrigger value="efectivo_bs" className="rounded-xl h-12 text-xs md:text-sm font-black gap-2"><Banknote className="h-4 w-4"/> Efectivo Bs.</TabsTrigger>
+                                <TabsTrigger value="efectivo_usd" className="rounded-xl h-12 text-xs md:text-sm font-black gap-2"><DollarSign className="h-4 w-4"/> Efectivo USD</TabsTrigger>
+                            </TabsList>
+                            <div className="mt-4">
+                                <TabsContent value="banco"><ExpensesTable expenses={bankExpenses} handleDelete={handleDelete} /></TabsContent>
+                                <TabsContent value="efectivo_bs"><ExpensesTable expenses={cashBsExpenses} handleDelete={handleDelete} /></TabsContent>
+                                <TabsContent value="efectivo_usd"><ExpensesTable expenses={cashUsdExpenses} handleDelete={handleDelete} /></TabsContent>
+                            </div>
+                        </Tabs>
                     )}
                 </CardContent>
             </Card>
