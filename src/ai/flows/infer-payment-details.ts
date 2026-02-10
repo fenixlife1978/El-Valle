@@ -14,7 +14,7 @@ import { format } from 'date-fns';
 const venezuelanBanks = [
     'banesco', 'mercantil', 'provincial', 'bdv', 'bnc', 'tesoro', 'otro'
 ] as const;
-const paymentMethods = ['movil', 'transferencia', 'efectivo_bs', 'efectivo_usd', 'zelle'] as const;
+const paymentMethods = ['movil', 'transferencia', 'efectivo_bs', 'efectivo_usd'] as const;
 
 // We define a strict output schema. The AI will do its best to conform to this.
 const InferPaymentDetailsOutputSchema = z.object({
@@ -48,7 +48,7 @@ The user will provide text that might be informal or contain abbreviations. You 
 Key Information to Extract:
 - Amount: The total amount paid in Bolivars (Bs.). Extract only the number.
 - Date: The date the payment was made. If the user says "hoy" (today), "ayer" (yesterday), or provides a date, convert it to 'yyyy-MM-dd' format. Today is ${format(new Date(), 'yyyy-MM-dd')}.
-- Method: Determine if it was a 'movil' (Pago Móvil), 'transferencia' (Transferencia), 'efectivo_bs' (Efectivo Bs.), 'efectivo_usd' (Efectivo USD), or 'zelle'.
+- Method: Determine if it was a 'movil' (Pago Móvil), 'transferencia' (Transferencia), 'efectivo_bs' (Efectivo Bs.), or 'efectivo_usd' (Efectivo USD).
 - Bank: Identify the bank. Common banks are Banesco, Mercantil, Provincial, Banco de Venezuela (BDV), BNC, Tesoro. If you cannot identify a specific bank, use 'otro'.
 - Reference: Extract the reference number. It should be a string of digits.
 

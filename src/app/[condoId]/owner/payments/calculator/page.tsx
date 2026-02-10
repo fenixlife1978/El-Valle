@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -271,11 +272,7 @@ export default function OwnerPaymentCalculatorPage({ params }: { params: { condo
                                     <span className="text-muted-foreground flex items-center"><Minus className="mr-2 h-4 w-4"/> Saldo a Favor:</span>
                                     <span className="font-medium text-green-500">Bs. {formatToTwoDecimals(paymentCalculator.balanceInFavor)}</span>
                                 </div>
-                                <hr className="my-2"/>
-                                <div className="flex justify-between items-center text-2xl font-bold">
-                                    <span className="flex items-center"><Equal className="mr-2 h-5 w-5"/> TOTAL A PAGAR:</span>
-                                    <span className="font-bold text-primary">Bs. {formatToTwoDecimals(paymentCalculator.totalToPay)}</span>
-                                </div>
+                                <hr className="my-2"/><div className="flex justify-between items-center text-2xl font-bold"><span className="flex items-center"><Equal className="mr-2 h-5 w-5"/> TOTAL A PAGAR:</span><span className="font-bold text-primary">Bs. {formatToTwoDecimals(paymentCalculator.totalToPay)}</span></div>
                             </CardContent>
                             <CardFooter>
                                 <Button className="w-full" disabled={!paymentCalculator.hasSelection || paymentCalculator.totalToPay <= 0} onClick={() => router.push(`/${workingCondoId}/owner/payments`)}>
@@ -304,7 +301,6 @@ export default function OwnerPaymentCalculatorPage({ params }: { params: { condo
                                     <SelectItem value="movil">Pago Móvil</SelectItem>
                                     <SelectItem value="efectivo_bs">Efectivo Bs.</SelectItem>
                                     <SelectItem value="efectivo_usd">Efectivo USD</SelectItem>
-                                    <SelectItem value="zelle">Zelle</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>

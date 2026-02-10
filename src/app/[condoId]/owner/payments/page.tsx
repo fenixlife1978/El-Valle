@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
@@ -44,7 +45,7 @@ type BeneficiaryRow = {
     selectedProperty: { street: string, house: string } | null;
 };
 
-type PaymentMethod = 'movil' | 'transferencia' | 'efectivo_bs' | 'efectivo_usd' | 'zelle' | '';
+type PaymentMethod = 'movil' | 'transferencia' | 'efectivo_bs' | 'efectivo_usd' | '';
 
 
 function ReportPaymentComponent() {
@@ -311,7 +312,6 @@ function ReportPaymentComponent() {
                                         <SelectItem value="movil">Pago Móvil</SelectItem>
                                         <SelectItem value="efectivo_bs">Efectivo Bs.</SelectItem>
                                         <SelectItem value="efectivo_usd">Efectivo USD</SelectItem>
-                                        <SelectItem value="zelle">Zelle</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
