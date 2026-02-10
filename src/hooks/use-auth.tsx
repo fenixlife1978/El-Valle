@@ -23,17 +23,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [ownerData, setOwnerData] = useState<any | null>(null);
   const [companyInfo, setCompanyInfo] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
-  const [role, setUserRole] = useState<string | null>(null);
-  const [activeCondoId, setActiveCondoId] = useState<string | null>(null);
-  const [workingCondoId, setWorkingCondoId] = useState<string | null>(null);
+  
+  // Inicializamos desde localStorage para evitar el "hueco" de tiempo que causa el rebote
+  const [role, setUserRole] = useState<string | null>(
+    typeof window !== 'undefined' ? localStorage.getItem('userRole') : null
+  );
+  const [activeCondoId, setActiveCondoId] = useState<string | null>(
+    typeof window !== 'undefined' ? localStorage.getItem('activeCondoId') : null
+  );
+  const [workingCondoId, setWorkingCondoId] = useState<string | null>(
+    typeof window !== 'undefined' ? localStorage.getItem('workingCondoId') : null
+  );
 
   const isSuperAdmin = user?.email === 'vallecondo@gmail.com';
 
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, async (firebaseUser) => {
-      setUser(firebaseUser);
-      
       if (!firebaseUser) {
+        setUser(null);
         setOwnerData(null);
         setUserRole(null);
         setActiveCondoId(null);
@@ -42,10 +49,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // Recuperar IDs guardados en el Login
+      setUser(firebaseUser);
+
+      // Recuperar IDs del login
       const savedCondoId = localStorage.getItem('activeCondoId');
       const savedRole = localStorage.getItem('userRole');
 
+      // Caso Super Admin
       if (firebaseUser.email === 'vallecondo@gmail.com') {
         setUserRole('super-admin');
         setActiveCondoId(savedCondoId);
@@ -55,7 +65,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        const condoIdToUse = savedCondoId;
+        const condoIdToUse = savedCondoId || activeCondoId;
         
         if (condoIdToUse) {
           setActiveCondoId(condoIdToUse);
@@ -63,47 +73,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
           let userData = null;
 
-          // 1. BÚSQUEDA SECUENCIAL (VIEJA -> NUEVA ESTRUCTURA)
-          
-          // Intento A: Vieja estructura (owners)
+          // Búsqueda en Doble Estructura (Detección de Propietario/Admin)
           const oldOwnerRef = doc(db, 'condominios', condoIdToUse, 'owners', firebaseUser.uid);
-          const oldSnap = await getDoc(oldOwnerRef);
+          const newOwnerRef = doc(db, 'condominios', condoIdToUse, 'propietarios', firebaseUser.uid);
+          
+          const [oldSnap, newSnap] = await Promise.all([
+            getDoc(oldOwnerRef),
+            getDoc(newOwnerRef)
+          ]);
 
-          if (oldSnap.exists()) {
+          if (newSnap.exists()) {
+            userData = newSnap.data();
+          } else if (oldSnap.exists()) {
             userData = oldSnap.data();
-          } else {
-            // Intento B: Nueva estructura (propietarios)
-            const newOwnerRef = doc(db, 'condominios', condoIdToUse, 'propietarios', firebaseUser.uid);
-            const newSnap = await getDoc(newOwnerRef);
-            if (newSnap.exists()) {
-              userData = newSnap.data();
-            }
           }
 
           if (userData) {
             setOwnerData(userData);
             
-            // Mapeo y Normalización de Roles EFAS
+            // NORMALIZACIÓN ESTRICTA: Evita rebotes por idioma del rol
             const rawRole = (userData.role || savedRole || '').toLowerCase();
-            if (rawRole === 'propietario' || rawRole === 'owner') {
-              setUserRole('owner');
-            } else if (rawRole === 'administrador' || rawRole === 'admin') {
-              setUserRole('admin');
-            } else {
-              setUserRole(rawRole);
+            let finalRole = rawRole;
+
+            if (['propietario', 'owner', 'residente'].includes(rawRole)) {
+              finalRole = 'owner';
+            } else if (['administrador', 'admin', 'junta'].includes(rawRole)) {
+              finalRole = 'admin';
             }
 
-            // 2. Suscripción a Configuración (Logo, Nombre, etc.)
+            setUserRole(finalRole);
+            localStorage.setItem('userRole', finalRole); // Actualizamos persistencia
+
+            // Suscripción a Configuración
             const settingsRef = doc(db, 'condominios', condoIdToUse, 'config', 'mainSettings');
-            onSnapshot(settingsRef, 
-              (s) => {
-                if (s.exists()) setCompanyInfo(s.data().companyInfo);
-              },
-              () => {
-                // Fallback si no hay permisos o no existe
-                setCompanyInfo({ name: "EFAS CondoSys" });
-              }
-            );
+            onSnapshot(settingsRef, (s) => {
+              if (s.exists()) setCompanyInfo(s.data().companyInfo);
+            }, () => {
+              setCompanyInfo({ name: "EFAS CondoSys" });
+            });
+          } else {
+            // Fallback si no está en la base de datos pero hay rol guardado
+            if (savedRole) setUserRole(savedRole);
           }
         }
       } catch (error) {
@@ -114,15 +124,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => unsubAuth();
-  }, []);
+  }, [activeCondoId]);
 
   return (
     <AuthContext.Provider value={{ user, ownerData, companyInfo, loading, role, isSuperAdmin, activeCondoId, workingCondoId }}>
       {!loading ? children : (
-        <div className="h-screen flex items-center justify-center bg-[#1A1D23]">
+        <div className="h-screen flex flex-col items-center justify-center bg-[#1A1D23]">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#F28705] mx-auto mb-4"></div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Sincronizando EFAS...</p>
+            <div className="relative mb-6">
+              <div className="h-14 w-14 border-4 border-[#F28705]/10 border-t-[#F28705] rounded-full animate-spin mx-auto"></div>
+              <div className="absolute inset-0 bg-[#F28705]/5 blur-xl rounded-full animate-pulse"></div>
+            </div>
+            <p className="text-[10px] font-black uppercase tracking-[0.5em] text-white/40 animate-pulse">
+              EFAS CONDOSYS: Sincronizando
+            </p>
           </div>
         </div>
       )}

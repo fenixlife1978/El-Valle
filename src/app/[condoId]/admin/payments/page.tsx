@@ -46,9 +46,9 @@ type Owner = {
     role?: string;
 };
 type BeneficiaryRow = { id: string; owner: Owner | null; searchTerm: string; amount: string; selectedProperty: { street: string, house: string } | null; };
-type PaymentMethod = 'movil' | 'transferencia' | '';
+type PaymentMethod = 'movil' | 'transferencia' | 'efectivo_bs' | 'efectivo_usd' | 'zelle' | '';
 type Debt = { id: string; ownerId: string; year: number; month: number; amountUSD: number; description: string; status: 'pending' | 'paid' | 'vencida'; property: { street: string; house: string }; paidAmountUSD?: number;};
-type Payment = { id: string; beneficiaries: { ownerId: string; ownerName: string; amount: number; street?: string; house?: string; }[]; beneficiaryIds: string[]; totalAmount: number; exchangeRate: number; paymentDate: Timestamp; reportedAt: Timestamp; paymentMethod: 'transferencia' | 'movil' | 'efectivo' | 'zelle'; bank: string; reference: string; status: 'pendiente' | 'aprobado' | 'rechazado'; receiptUrl?: string; observations?: string; receiptNumbers?: { [ownerId: string]: string }; type?: string; };
+type Payment = { id: string; beneficiaries: { ownerId: string; ownerName: string; amount: number; street?: string; house?: string; }[]; beneficiaryIds: string[]; totalAmount: number; exchangeRate: number; paymentDate: Timestamp; reportedAt: Timestamp; paymentMethod: 'transferencia' | 'movil' | 'efectivo' | 'zelle' | 'efectivo_bs' | 'efectivo_usd'; bank: string; reference: string; status: 'pendiente' | 'aprobado' | 'rechazado'; receiptUrl?: string; observations?: string; receiptNumbers?: { [ownerId: string]: string }; type?: string; };
 type ReceiptData = { payment: Payment; beneficiary: any; ownerName: string; ownerUnit: string; paidDebts: Debt[]; previousBalance: number; currentBalance: number; qrCodeUrl?: string; receiptNumber: string; } | null;
 type PaymentDetails = { paymentMethod: 'movil' | 'transferencia' | ''; bank: string; otherBank: string; reference: string; };
 
@@ -883,7 +883,19 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
                     <div className="grid md:grid-cols-2 gap-6">
                         <div className="space-y-2"><Label>Fecha del Pago</Label><Popover><PopoverTrigger asChild><Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !paymentDate && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{paymentDate ? format(paymentDate, "PPP", { locale: es }) : <span>Seleccione</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar mode="single" selected={paymentDate} onSelect={setPaymentDate} initialFocus locale={es} disabled={(date) => date > new Date()} /></PopoverContent></Popover></div>
                         <div className="space-y-2"><Label>Tasa de Cambio (Bs.)</Label><Input type="number" value={exchangeRate || ''} onChange={(e) => setExchangeRate(parseFloat(e.target.value) || null)} placeholder="Tasa del día del pago" /><p className="text-xs text-muted-foreground">{exchangeRateMessage}</p></div>
-                        <div className="space-y-2"><Label>Método de Pago</Label><Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="transferencia">Transferencia</SelectItem><SelectItem value="movil">Pago Móvil</SelectItem></SelectContent></Select></div>
+                        <div className="space-y-2">
+                            <Label>Método de Pago</Label>
+                            <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}>
+                                <SelectTrigger><SelectValue/></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="transferencia">Transferencia</SelectItem>
+                                    <SelectItem value="movil">Pago Móvil</SelectItem>
+                                    <SelectItem value="efectivo_bs">Efectivo Bs.</SelectItem>
+                                    <SelectItem value="efectivo_usd">Efectivo USD</SelectItem>
+                                    <SelectItem value="zelle">Zelle</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
                         <div className="space-y-2"><Label>Banco Emisor</Label><Button type="button" variant="outline" className="w-full justify-start text-left font-normal" onClick={() => setIsBankModalOpen(true)}>{bank || "Seleccione un banco..."}</Button></div>
                         {bank === 'Otro' && <div className="space-y-2"><Label>Nombre del Otro Banco</Label><Input value={otherBank} onChange={(e) => setOtherBank(e.target.value)} /></div>}
                         <div className="space-y-2"><Label>Referencia</Label><Input value={reference} onChange={(e) => setReference(e.target.value.replace(/\D/g, ''))}/></div>

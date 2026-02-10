@@ -302,6 +302,9 @@ export default function OwnerPaymentCalculatorPage({ params }: { params: { condo
                                 <SelectContent>
                                     <SelectItem value="transferencia">Transferencia</SelectItem>
                                     <SelectItem value="movil">Pago Móvil</SelectItem>
+                                    <SelectItem value="efectivo_bs">Efectivo Bs.</SelectItem>
+                                    <SelectItem value="efectivo_usd">Efectivo USD</SelectItem>
+                                    <SelectItem value="zelle">Zelle</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>

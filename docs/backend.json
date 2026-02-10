@@ -123,7 +123,7 @@
             "exchangeRate": {"type": "number"},
             "paymentDate": {"type": "string", "format": "date-time"},
             "reportedAt": {"type": "string", "format": "date-time"},
-            "paymentMethod": {"type": "string", "enum": ["transferencia", "movil", "adelanto", "conciliacion"]},
+            "paymentMethod": {"type": "string", "enum": ["transferencia", "movil", "adelanto", "conciliacion", "efectivo", "zelle", "efectivo_bs", "efectivo_usd"]},
             "bank": {"type": "string"},
             "reference": {"type": "string"},
             "status": {"type": "string", "enum": ["pendiente", "aprobado", "rechazado"]},
@@ -484,4 +484,3 @@
     "providers": ["password", "google.com"]
   }
 }
-

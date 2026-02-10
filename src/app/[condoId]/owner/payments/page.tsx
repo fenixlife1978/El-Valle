@@ -44,7 +44,7 @@ type BeneficiaryRow = {
     selectedProperty: { street: string, house: string } | null;
 };
 
-type PaymentMethod = 'movil' | 'transferencia' | '';
+type PaymentMethod = 'movil' | 'transferencia' | 'efectivo_bs' | 'efectivo_usd' | 'zelle' | '';
 
 
 function ReportPaymentComponent() {
@@ -309,6 +309,9 @@ function ReportPaymentComponent() {
                                     <SelectContent>
                                         <SelectItem value="transferencia">Transferencia</SelectItem>
                                         <SelectItem value="movil">Pago Móvil</SelectItem>
+                                        <SelectItem value="efectivo_bs">Efectivo Bs.</SelectItem>
+                                        <SelectItem value="efectivo_usd">Efectivo USD</SelectItem>
+                                        <SelectItem value="zelle">Zelle</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
