@@ -89,7 +89,6 @@ export default function FinancialBalancePage({ params }: { params: { condoId: st
     const { requestAuthorization } = useAuthorization();
     const { user: currentUser, activeCondoId: authActiveCondoId } = useAuth();
     
-    // Nueva estructura: obtenemos el ID de los params
     const sId = typeof window !== 'undefined' ? localStorage.getItem('support_mode_id') : null;
     const isSuperAdmin = currentUser?.email === 'vallecondo@gmail.com';
     const workingCondoId = params.condoId || (isSuperAdmin ? sId : authActiveCondoId);
@@ -121,7 +120,6 @@ export default function FinancialBalancePage({ params }: { params: { condoId: st
             const fromDate = startOfMonth(new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1));
             const toDate = endOfMonth(fromDate);
     
-            // Run all queries in parallel
             const [
                 configSnap,
                 paymentsSnap,
@@ -153,7 +151,6 @@ export default function FinancialBalancePage({ params }: { params: { condoId: st
                 ))
             ]);
     
-            // Process config
             if (configSnap.exists()) {
                 const d = configSnap.data();
                 setCompanyInfo({
@@ -163,20 +160,24 @@ export default function FinancialBalancePage({ params }: { params: { condoId: st
                 });
             }
     
-            // Process payments (Ingresos)
             const totalIngresos = paymentsSnap.docs.reduce((sum, doc) => sum + (doc.data().totalAmount || 0), 0);
             
-            // Process general expenses (Egresos)
             const listaEgresos = expensesSnap.docs.map(d => ({
                 id: d.id,
                 fecha: format(d.data().date.toDate(), 'dd/MM/yyyy'),
                 descripcion: d.data().description,
                 monto: d.data().amount,
-                category: d.data().category || 'General'
+                category: d.data().category || 'General',
+                paymentSource: d.data().paymentSource || 'banco'
             }));
-            const totalEgresos = listaEgresos.reduce((sum, item) => sum + item.monto, 0);
-    
-            // Process Petty Cash (Caja Chica)
+
+            const totalEgresosBanco = listaEgresos
+                .filter(e => e.paymentSource === 'banco')
+                .reduce((sum, item) => sum + item.monto, 0);
+
+            const egresosEfectivo = listaEgresos
+                .filter(e => e.paymentSource === 'efectivo_bs' || e.paymentSource === 'efectivo_usd');
+
             const sInicialCC = prevPettySnap.docs.reduce((sum, doc) => {
                 const data = doc.data();
                 return sum + (data.type === 'ingreso' ? data.amount : -data.amount);
@@ -184,22 +185,35 @@ export default function FinancialBalancePage({ params }: { params: { condoId: st
     
             const movsCC = currentPettySnap.docs.map(d => ({ id: d.id, ...d.data() })) as PettyCashMovement[];
             const reposCC = movsCC.filter(m => m.type === 'ingreso').reduce((sum, m) => sum + m.amount, 0);
-            const gastosCC = movsCC.filter(m => m.type === 'egreso').reduce((sum, m) => sum + m.amount, 0);
-            const sFinalCC = sInicialCC + reposCC - gastosCC;
+            
+            const gastosFromMovs = movsCC.filter(m => m.type === 'egreso').reduce((sum, m) => sum + m.amount, 0);
+            const gastosFromGastosCollection = egresosEfectivo.reduce((sum, item) => sum + item.monto, 0);
+            const gastosTotalesCC = gastosFromMovs + gastosFromGastosCollection;
+
+            const sFinalCC = sInicialCC + reposCC - gastosTotalesCC;
     
-            // Set state
+            const egresosEfectivoAsMovs: PettyCashMovement[] = egresosEfectivo.map(e => ({
+                id: e.id,
+                date: Timestamp.fromDate(parse(e.fecha, 'dd/MM/yyyy', new Date())),
+                description: e.descripcion,
+                amount: e.monto,
+                type: 'egreso'
+            }));
+
+            const combinedMovs = [...movsCC, ...egresosEfectivoAsMovs].sort((a,b) => a.date.toMillis() - b.date.toMillis());
+
             setIngresos([{ concepto: 'Recaudación por Cobranza', real: totalIngresos, category: 'Ingresos Ordinarios' }]);
             setEgresos(listaEgresos);
-            setCajaChicaMovs(movsCC);
-            setCajaChica({ saldoInicial: sInicialCC, reposiciones: reposCC, gastos: gastosCC, saldoFinal: sFinalCC });
+            setCajaChicaMovs(combinedMovs);
+            setCajaChica({ saldoInicial: sInicialCC, reposiciones: reposCC, gastos: gastosTotalesCC, saldoFinal: sFinalCC });
             
-            // Final calculations
             setEstadoFinal(prev => {
-                const saldoBancos = prev.saldoAnterior + totalIngresos - totalEgresos;
+                const saldoBancos = prev.saldoAnterior + totalIngresos - totalEgresosBanco;
+                const totalEgresosGeneral = totalEgresosBanco + gastosTotalesCC;
                 return {
                     ...prev,
                     totalIngresos,
-                    totalEgresos,
+                    totalEgresos: totalEgresosGeneral,
                     saldoBancos,
                     disponibilidadTotal: saldoBancos + sFinalCC
                 };
@@ -286,11 +300,11 @@ export default function FinancialBalancePage({ params }: { params: { condoId: st
 
         autoTable(docPDF, {
             startY: (docPDF as any).lastAutoTable.finalY + 8,
-            head: [['DETALLES DE GASTOS Y EGRESOS', 'FECHA', 'MONTO Bs.']],
-            body: data.egresos.length > 0 ? data.egresos.map((e: any) => [e.descripcion.toUpperCase(), e.fecha, formatCurrency(e.monto)]) : [['NO SE REPORTARON GASTOS', '-', '0,00']],
+            head: [['DETALLES DE GASTOS Y EGRESOS', 'FECHA', 'FUENTE', 'MONTO Bs.']],
+            body: data.egresos.length > 0 ? data.egresos.map((e: any) => [e.descripcion.toUpperCase(), e.fecha, (e.paymentSource || 'banco').replace('_', ' ').toUpperCase(), formatCurrency(e.monto)]) : [['NO SE REPORTARON GASTOS', '-', '-', '0,00']],
             theme: 'striped', headStyles: { fillColor: [225, 29, 72] },
             styles: { fontSize: 8 },
-            columnStyles: { 2: { halign: 'right', fontStyle: 'bold' } }
+            columnStyles: { 3: { halign: 'right', fontStyle: 'bold' } }
         });
 
         const fY = (docPDF as any).lastAutoTable.finalY + 10;
@@ -371,7 +385,7 @@ export default function FinancialBalancePage({ params }: { params: { condoId: st
                 </Card>
                 <Card className="rounded-[2.5rem] border-2 shadow-lg overflow-hidden bg-white">
                     <CardHeader className="bg-rose-50 p-6 flex flex-row justify-between items-center border-b"><CardTitle className="text-lg font-black uppercase italic text-rose-900">Egresos Registrados</CardTitle><Badge className="bg-rose-500 font-black">{formatCurrency(estadoFinal.totalEgresos)} Bs.</Badge></CardHeader>
-                    <div className="max-h-[250px] overflow-auto"><Table><TableBody>{egresos.map((egr) => (<TableRow key={egr.id}><TableCell className="p-4"><p className="font-bold text-[10px] uppercase text-slate-800">{egr.descripcion}</p><p className="text-[8px] opacity-50 text-slate-500">{egr.fecha}</p></TableCell><TableCell className="text-right font-black text-rose-600 p-4">{formatCurrency(egr.monto)}</TableCell></TableRow>))}</TableBody></Table></div>
+                    <div className="max-h-[250px] overflow-auto"><Table><TableBody>{egresos.map((egr) => (<TableRow key={egr.id}><TableCell className="p-4"><p className="font-bold text-[10px] uppercase text-slate-800">{egr.descripcion}</p><p className="text-[8px] opacity-50 text-slate-500">{egr.fecha} - <span className="font-black">{(egr.paymentSource || 'banco').replace('_', ' ').toUpperCase()}</span></p></TableCell><TableCell className="text-right font-black text-rose-600 p-4">{formatCurrency(egr.monto)}</TableCell></TableRow>))}</TableBody></Table></div>
                 </Card>
             </div>
 

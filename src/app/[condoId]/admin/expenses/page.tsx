@@ -30,6 +30,7 @@ type Expense = {
     date: Timestamp;
     reference: string;
     createdAt: Timestamp;
+    paymentSource?: 'banco' | 'efectivo_bs' | 'efectivo_usd';
 };
 
 const formatToTwoDecimals = (num: number) => {
@@ -44,6 +45,7 @@ const yearOptions = Array.from({ length: 10 }, (_, i) => String(new Date().getFu
 
 function RegisterExpenseForm({ workingCondoId, onSave }: { workingCondoId: string | null, onSave: () => void }) {
   const [loading, setLoading] = useState(false);
+  const [category, setCategory] = useState('');
   const { toast } = useToast();
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -56,62 +58,47 @@ function RegisterExpenseForm({ workingCondoId, onSave }: { workingCondoId: strin
     setLoading(true);
     const formData = new FormData(e.currentTarget);
     const dateValue = formData.get("date") as string;
-    const category = formData.get("category") as string;
+    const currentCategory = formData.get("category") as string;
     const amount = parseFloat(formData.get("amount") as string);
     const description = (formData.get("description") as string).toUpperCase();
     const reference = (formData.get("reference") as string).toUpperCase();
+    const paymentSource = currentCategory === 'Caja Chica' ? 'banco' : (formData.get("paymentSource") as string) || 'banco';
     const fullDate = new Date(`${dateValue}T00:00:00`);
 
     try {
-      if (category === 'Caja Chica') {
+      if (currentCategory === 'Caja Chica') {
         const batch = writeBatch(db);
         
-        // 1. Gasto general
         const expenseRef = doc(collection(db, "condominios", workingCondoId, "gastos"));
         batch.set(expenseRef, {
-            description,
-            amount,
-            category,
-            date: Timestamp.fromDate(fullDate),
-            reference,
-            createdAt: serverTimestamp(),
+            description, amount, category: currentCategory, date: Timestamp.fromDate(fullDate),
+            reference, createdAt: serverTimestamp(), paymentSource,
         });
 
-        // 2. Ciclo de reposición en Caja Chica
         const replenishmentRef = doc(collection(db, "condominios", workingCondoId, "petty_cash_replenishments"));
         batch.set(replenishmentRef, {
-            date: Timestamp.fromDate(fullDate),
-            amount,
-            description: `ASIGNACIÓN: ${description}`,
-            expenses: [],
-            sourceExpenseId: expenseRef.id 
+            date: Timestamp.fromDate(fullDate), amount, description: `ASIGNACIÓN: ${description}`,
+            expenses: [], sourceExpenseId: expenseRef.id 
         });
 
-        // 3. Movimiento de INGRESO en el libro de Caja Chica
         const movementRef = doc(collection(db, "condominios", workingCondoId, "cajaChica_movimientos"));
         batch.set(movementRef, {
-            date: Timestamp.fromDate(fullDate),
-            description: `INGRESO POR ASIGNACIÓN: ${description}`,
-            amount,
-            type: 'ingreso',
-            replenishmentId: replenishmentRef.id
+            date: Timestamp.fromDate(fullDate), description: `INGRESO POR ASIGNACIÓN: ${description}`,
+            amount, type: 'ingreso', replenishmentId: replenishmentRef.id
         });
 
         await batch.commit();
         toast({ title: "Gasto y Fondo Registrados", description: `Se ha añadido un ingreso de Bs. ${amount} a la Caja Chica.` });
       } else {
         await addDoc(collection(db, "condominios", workingCondoId, "gastos"), {
-          description,
-          amount,
-          category,
-          date: Timestamp.fromDate(fullDate),
-          reference,
-          createdAt: serverTimestamp(),
+          description, amount, category: currentCategory, date: Timestamp.fromDate(fullDate),
+          reference, createdAt: serverTimestamp(), paymentSource,
         });
         toast({ title: "Gasto registrado correctamente" });
       }
       
       (e.target as HTMLFormElement).reset();
+      setCategory('');
       onSave();
     } catch (error) {
       toast({ variant: "destructive", title: "Error al guardar", description: (error as Error).message });
@@ -145,8 +132,21 @@ function RegisterExpenseForm({ workingCondoId, onSave }: { workingCondoId: strin
                     <Input name="amount" type="number" step="0.01" className="bg-input border-none h-14 rounded-2xl font-bold text-primary text-xl" required />
                 </div>
                 <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase text-muted-foreground ml-2">Fuente de Pago</label>
+                    <Select name="paymentSource" required defaultValue="banco" disabled={category === 'Caja Chica'}>
+                        <SelectTrigger className="bg-input border-none h-14 rounded-2xl font-bold text-foreground">
+                            <SelectValue placeholder="Seleccione Fuente" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="banco">Banco</SelectItem>
+                            <SelectItem value="efectivo_bs">Efectivo Bs.</SelectItem>
+                            <SelectItem value="efectivo_usd">Efectivo USD</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="space-y-2">
                     <label className="text-[10px] font-black uppercase text-muted-foreground ml-2">Categoría</label>
-                    <Select name="category" required>
+                    <Select name="category" onValueChange={setCategory} required>
                         <SelectTrigger className="bg-input border-none h-14 rounded-2xl font-bold text-foreground">
                             <SelectValue placeholder="Seleccione Categoría" />
                         </SelectTrigger>
@@ -158,12 +158,12 @@ function RegisterExpenseForm({ workingCondoId, onSave }: { workingCondoId: strin
                             <SelectItem value="Telefonia e Internet">Telefonia e Internet</SelectItem>
                             <SelectItem value="Gastos ExtraOrdinarios">Gastos ExtraOrdinarios</SelectItem>
                             <SelectItem value="Reparaciones Generales">Reparaciones Generales</SelectItem>
-                            <SelectItem value="Caja Chica">Caja Chica</SelectItem>
+                            <SelectItem value="Caja Chica">Fondo de Caja Chica (Desde Banco)</SelectItem>
                             <SelectItem value="Otros Gastos">Otros Gastos</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
-                <div className="space-y-2 md:col-span-2">
+                <div className="space-y-2">
                     <label className="text-[10px] font-black uppercase text-muted-foreground ml-2">Fecha del Movimiento</label>
                     <Input name="date" type="date" defaultValue={format(new Date(), 'yyyy-MM-dd')} className="bg-input border-none h-14 rounded-2xl font-bold text-foreground" required />
                 </div>
@@ -326,18 +326,20 @@ export default function ExpensesPage() {
 
         autoTable(doc, {
             startY: startY + 10,
-            head: [['Fecha', 'Descripción', 'Referencia', 'Categoría', 'Monto (Bs.)']],
+            head: [['Fecha', 'Descripción', 'Referencia', 'Categoría', 'Fuente', 'Monto (Bs.)']],
             body: filteredExpenses.map(exp => [
                 format(exp.date.toDate(), 'dd/MM/yyyy'),
                 exp.description,
                 exp.reference,
                 exp.category,
+                exp.paymentSource?.replace('_', ' ') || 'Banco',
                 formatToTwoDecimals(exp.amount)
             ]),
-            foot: [['', '', '', 'Total Egresos', formatToTwoDecimals(totalFilteredAmount)]],
+            foot: [['', '', '', '', 'Total Egresos', formatToTwoDecimals(totalFilteredAmount)]],
             headStyles: { fillColor: [239, 68, 68] },
             footStyles: { fillColor: [185, 28, 28], textColor: 255, fontStyle: 'bold' },
-            bodyStyles: { textColor: [0, 0, 0] } // Explicitly set body text to black
+            bodyStyles: { textColor: [0, 0, 0] }, // Explicitly set body text to black
+            columnStyles: { 5: { halign: 'right' } }
         });
 
         doc.save(`reporte_egresos_${filterYear}_${filterMonth}.pdf`);
@@ -407,6 +409,7 @@ export default function ExpensesPage() {
                                             <TableCell>
                                                 <p className="font-black text-foreground uppercase italic">{expense.description}</p>
                                                 <p className="text-[9px] text-muted-foreground font-bold">REF: {expense.reference}</p>
+                                                {expense.paymentSource && <Badge variant={expense.paymentSource === 'banco' ? 'secondary' : 'default'} className="mt-1 text-[9px] font-black uppercase">{expense.paymentSource.replace('_', ' ')}</Badge>}
                                             </TableCell>
                                             <TableCell>
                                                 <Badge className="bg-primary/10 text-primary border-none shadow-none font-black text-[9px] uppercase px-3">
