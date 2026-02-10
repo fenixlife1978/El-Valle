@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
@@ -72,6 +70,8 @@ function ReportPaymentComponent() {
     const [isBankModalOpen, setIsBankModalOpen] = useState(false);
     const [isInfoDialogOpen, setIsInfoDialogOpen] = useState(false);
 
+    const isCashPayment = paymentMethod === 'efectivo_bs' || paymentMethod === 'efectivo_usd';
+
     useEffect(() => {
         if (!condoId) return;
         const q = query(collection(db, "condominios", condoId, "owners"), where("role", "==", "propietario"));
@@ -128,6 +128,17 @@ function ReportPaymentComponent() {
         }
         fetchRate();
     }, [paymentDate, condoId]);
+    
+    useEffect(() => {
+        if (isCashPayment) {
+            setBank('Efectivo');
+            setReference('EFECTIVO');
+        } else {
+            if (bank === 'Efectivo') setBank('');
+            if (reference === 'EFECTIVO') setReference('');
+        }
+    }, [isCashPayment]);
+
 
     useEffect(() => {
         const bs = parseFloat(totalAmount);
@@ -192,8 +203,11 @@ function ReportPaymentComponent() {
     };
 
     const validateForm = async (): Promise<{ isValid: boolean, error?: string }> => {
-        if (!paymentDate || !exchangeRate || !paymentMethod || !bank || !totalAmount || Number(totalAmount) <= 0 || reference.length < 4) {
-             return { isValid: false, error: 'Por favor, complete todos los campos de la transacción (referencia min. 4 dígitos).' };
+        if (!paymentDate || !exchangeRate || !paymentMethod || !totalAmount || Number(totalAmount) <= 0) {
+            return { isValid: false, error: 'Por favor, complete los campos de fecha, tasa, método y monto.' };
+        }
+        if (!isCashPayment && (!bank || reference.length < 4)) {
+            return { isValid: false, error: 'Complete el banco y la referencia (mín. 4 dígitos) para pagos bancarios.' };
         }
         if (!receiptImage) {
             return { isValid: false, error: 'Debe adjuntar una imagen del comprobante de pago.' };
@@ -205,13 +219,16 @@ function ReportPaymentComponent() {
             return { isValid: false, error: 'El monto total no coincide con la suma de los montos asignados a los beneficiarios.' };
         }
         if (!condoId) return { isValid: false, error: "No se encontró un condominio activo." };
-        try {
-            const q = query(collection(db, "condominios", condoId, "payments"), where("reference", "==", reference), where("totalAmount", "==", Number(totalAmount)), where("paymentDate", "==", Timestamp.fromDate(paymentDate)));
-            if (!(await getDocs(q)).empty) {
-                return { isValid: false, error: 'Ya existe un reporte de pago con esta misma referencia, monto y fecha.' };
+        
+        if (!isCashPayment) {
+            try {
+                const q = query(collection(db, "condominios", condoId, "payments"), where("reference", "==", reference), where("totalAmount", "==", Number(totalAmount)), where("paymentDate", "==", Timestamp.fromDate(paymentDate)));
+                if (!(await getDocs(q)).empty) {
+                    return { isValid: false, error: 'Ya existe un reporte de pago con esta misma referencia, monto y fecha.' };
+                }
+            } catch (dbError) {
+                 return { isValid: false, error: "No se pudo verificar si el pago ya existe. Intente de nuevo." };
             }
-        } catch (dbError) {
-             return { isValid: false, error: "No se pudo verificar si el pago ya existe. Intente de nuevo." };
         }
         return { isValid: true };
     };
@@ -245,8 +262,8 @@ function ReportPaymentComponent() {
                 paymentDate: Timestamp.fromDate(paymentDate!),
                 exchangeRate: exchangeRate,
                 paymentMethod: paymentMethod,
-                bank: bank === 'Otro' ? otherBank : bank,
-                reference: reference,
+                bank: isCashPayment ? 'Efectivo' : (bank === 'Otro' ? otherBank : bank),
+                reference: isCashPayment ? 'EFECTIVO' : reference,
                 totalAmount: Number(totalAmount),
                 beneficiaries: beneficiaries,
                 beneficiaryIds: Array.from(new Set(beneficiaries.map(b => b.ownerId))),
@@ -317,12 +334,12 @@ function ReportPaymentComponent() {
                             </div>
                             <div className="space-y-2">
                                 <Label className="text-primary uppercase text-xs font-bold tracking-wider">Banco Emisor</Label>
-                                <Button type="button" variant="outline" className="w-full justify-start text-left font-normal pl-12 pr-4 py-6 bg-input border-border rounded-2xl text-base hover:bg-input" onClick={() => setIsBankModalOpen(true)} disabled={isSubmitting}>
+                                <Button type="button" variant="outline" className="w-full justify-start text-left font-normal pl-12 pr-4 py-6 bg-input border-border rounded-2xl text-base hover:bg-input" onClick={() => setIsBankModalOpen(true)} disabled={isSubmitting || isCashPayment}>
                                     <Banknote className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                                    {bank || "Seleccione un banco..."}
+                                    {isCashPayment ? 'No Aplica' : bank || "Seleccione un banco..."}
                                 </Button>
                             </div>
-                            {bank === 'Otro' && (
+                            {bank === 'Otro' && !isCashPayment && (
                                 <div className="space-y-2">
                                     <Label className="text-primary uppercase text-xs font-bold tracking-wider">Nombre del Otro Banco</Label>
                                     <div className="relative flex items-center">
@@ -335,7 +352,7 @@ function ReportPaymentComponent() {
                                 <Label className="text-primary uppercase text-xs font-bold tracking-wider">Referencia</Label>
                                 <div className="relative flex items-center">
                                     <Hash className="absolute left-4 h-5 w-5 text-muted-foreground" />
-                                    <Input value={reference} onChange={(e) => setReference(e.target.value.replace(/\D/g, '').slice(0, 6))} maxLength={6} className="pl-12 pr-4 py-6 bg-input border-border rounded-2xl text-base" placeholder="Últimos 6 dígitos" disabled={isSubmitting}/>
+                                    <Input value={reference} onChange={(e) => setReference(e.target.value.replace(/\D/g, '').slice(0, 6))} maxLength={6} className="pl-12 pr-4 py-6 bg-input border-border rounded-2xl text-base" placeholder="Últimos 6 dígitos" disabled={isSubmitting || isCashPayment} />
                                 </div>
                             </div>
                             <div className="space-y-2">

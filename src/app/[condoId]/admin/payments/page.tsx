@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
@@ -729,6 +727,7 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
     const [isBankModalOpen, setIsBankModalOpen] = useState(false);
 
     const ownersCollectionName = condoId === 'condo_01' ? 'owners' : 'propietarios';
+    const isCashPayment = paymentMethod === 'efectivo_bs' || paymentMethod === 'efectivo_usd';
 
     useEffect(() => {
         if (!condoId) return;
@@ -774,6 +773,17 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
         }
         fetchRate();
     }, [paymentDate, condoId]);
+    
+    useEffect(() => {
+        if (isCashPayment) {
+            setBank('Efectivo');
+            setReference('EFECTIVO');
+        } else {
+            if (bank === 'Efectivo') setBank('');
+            if (reference === 'EFECTIVO') setReference('');
+        }
+    }, [isCashPayment]);
+
 
     useEffect(() => {
         const bs = parseFloat(totalAmount);
@@ -817,14 +827,17 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
     };
     
     const validateForm = async (): Promise<{ isValid: boolean, error?: string }> => {
-        if (!paymentDate || !exchangeRate || !paymentMethod || !bank || !totalAmount || Number(totalAmount) <= 0 || reference.length < 4) return { isValid: false, error: 'Complete todos los campos de la transacción (referencia min. 4 dígitos).' };
+        if (!paymentDate || !exchangeRate || !paymentMethod || !totalAmount || Number(totalAmount) <= 0) return { isValid: false, error: 'Complete los campos de fecha, tasa, método y monto.' };
+        if (!isCashPayment && (!bank || reference.length < 4)) return { isValid: false, error: 'Complete el banco y la referencia (mín. 4 dígitos) para pagos bancarios.' };
         if (beneficiaryRows.some(row => !row.owner || !row.amount || Number(row.amount) <= 0 || !row.selectedProperty)) return { isValid: false, error: 'Complete la información para cada beneficiario.' };
         if (Math.abs(balance) > 0.01) return { isValid: false, error: 'El monto total no coincide con la suma de los montos asignados.' };
         if (!condoId) return { isValid: false, error: "No se encontró un condominio activo." };
-        try {
-            const q = query(collection(db, "condominios", condoId, "payments"), where("reference", "==", reference), where("totalAmount", "==", Number(totalAmount)), where("paymentDate", "==", Timestamp.fromDate(paymentDate)));
-            if (!(await getDocs(q)).empty) return { isValid: false, error: 'Ya existe un reporte con esta misma referencia, monto y fecha.' };
-        } catch (dbError) { return { isValid: false, error: "No se pudo verificar si el pago ya existe." }; }
+        if(!isCashPayment) {
+            try {
+                const q = query(collection(db, "condominios", condoId, "payments"), where("reference", "==", reference), where("totalAmount", "==", Number(totalAmount)), where("paymentDate", "==", Timestamp.fromDate(paymentDate)));
+                if (!(await getDocs(q)).empty) return { isValid: false, error: 'Ya existe un reporte con esta misma referencia, monto y fecha.' };
+            } catch (dbError) { return { isValid: false, error: "No se pudo verificar si el pago ya existe." }; }
+        }
         return { isValid: true };
     };
 
@@ -847,7 +860,7 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
 
         try {
             const beneficiaries = beneficiaryRows.map(row => ({ ownerId: row.owner!.id, ownerName: row.owner!.name, ...(row.selectedProperty && { street: row.selectedProperty.street, house: row.selectedProperty.house }), amount: Number(row.amount) }));
-            const paymentData = { reportedBy: authUser.uid, beneficiaries, beneficiaryIds: beneficiaries.map(b=>b.ownerId), totalAmount: Number(totalAmount), exchangeRate, paymentDate: Timestamp.fromDate(paymentDate!), paymentMethod, bank: bank === 'Otro' ? otherBank : bank, reference, receiptUrl: receiptImage, status: 'pendiente', reportedAt: serverTimestamp() };
+            const paymentData = { reportedBy: authUser.uid, beneficiaries, beneficiaryIds: beneficiaries.map(b=>b.ownerId), totalAmount: Number(totalAmount), exchangeRate, paymentDate: Timestamp.fromDate(paymentDate!), paymentMethod, bank: isCashPayment ? 'Efectivo' : (bank === 'Otro' ? otherBank : bank), reference: isCashPayment ? 'EFECTIVO' : reference, receiptUrl: receiptImage, status: 'pendiente', reportedAt: serverTimestamp() };
             
             await addDoc(collection(db, "condominios", condoId, "payments"), paymentData);
 
@@ -895,9 +908,9 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
                                 </SelectContent>
                             </Select>
                         </div>
-                        <div className="space-y-2"><Label>Banco Emisor</Label><Button type="button" variant="outline" className="w-full justify-start text-left font-normal" onClick={() => setIsBankModalOpen(true)}>{bank || "Seleccione un banco..."}</Button></div>
-                        {bank === 'Otro' && <div className="space-y-2"><Label>Nombre del Otro Banco</Label><Input value={otherBank} onChange={(e) => setOtherBank(e.target.value)} /></div>}
-                        <div className="space-y-2"><Label>Referencia</Label><Input value={reference} onChange={(e) => setReference(e.target.value.replace(/\D/g, ''))}/></div>
+                        <div className="space-y-2"><Label>Banco Emisor</Label><Button type="button" variant="outline" className="w-full justify-start text-left font-normal" onClick={() => setIsBankModalOpen(true)} disabled={isSubmitting || isCashPayment}>{isCashPayment ? 'No Aplica' : (bank || "Seleccione un banco...")}</Button></div>
+                        {bank === 'Otro' && <div className="space-y-2"><Label>Nombre del Otro Banco</Label><Input value={otherBank} onChange={(e) => setOtherBank(e.target.value)} disabled={isSubmitting} /></div>}
+                        <div className="space-y-2"><Label>Referencia</Label><Input value={reference} onChange={(e) => setReference(e.target.value.replace(/\D/g, ''))} disabled={isSubmitting || isCashPayment}/></div>
                     </div>
                     <div className="space-y-2"><Label>Comprobante (Opcional)</Label><Input type="file" onChange={handleImageUpload} />{receiptImage && <p className="text-xs text-green-600">Comprobante cargado.</p>}</div>
                     <div className="grid md:grid-cols-2 gap-6">

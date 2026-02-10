@@ -21,8 +21,8 @@ const InferPaymentDetailsOutputSchema = z.object({
   totalAmount: z.number().describe('The numeric total amount of the payment.'),
   paymentDate: z.string().describe(`The date of the payment in 'yyyy-MM-dd' format. Today's date is ${format(new Date(), 'yyyy-MM-dd')}.`),
   paymentMethod: z.enum(paymentMethods).describe('The payment method used.'),
-  bank: z.enum(venezuelanBanks).describe('The source bank of the payment.'),
-  reference: z.string().describe('The payment reference number, containing only digits.'),
+  bank: z.enum(venezuelanBanks).describe('The source bank of the payment. If the payment method is cash (efectivo), use "otro".'),
+  reference: z.string().describe('The payment reference number. If the payment method is cash, use the word "EFECTIVO". For other methods, it should contain only digits.'),
 });
 export type InferPaymentDetailsOutput = z.infer<typeof InferPaymentDetailsOutputSchema>;
 
@@ -49,8 +49,8 @@ Key Information to Extract:
 - Amount: The total amount paid in Bolivars (Bs.). Extract only the number.
 - Date: The date the payment was made. If the user says "hoy" (today), "ayer" (yesterday), or provides a date, convert it to 'yyyy-MM-dd' format. Today is ${format(new Date(), 'yyyy-MM-dd')}.
 - Method: Determine if it was a 'movil' (Pago Móvil), 'transferencia' (Transferencia), 'efectivo_bs' (Efectivo Bs.), or 'efectivo_usd' (Efectivo USD).
-- Bank: Identify the bank. Common banks are Banesco, Mercantil, Provincial, Banco de Venezuela (BDV), BNC, Tesoro. If you cannot identify a specific bank, use 'otro'.
-- Reference: Extract the reference number. It should be a string of digits.
+- Bank: Identify the bank. Common banks are Banesco, Mercantil, Provincial, Banco de Venezuela (BDV), BNC, Tesoro. If it is a cash payment ('efectivo_bs' or 'efectivo_usd'), you MUST use 'otro'.
+- Reference: Extract the reference number. It should be a string of digits. If it is a cash payment, you MUST return the exact word "EFECTIVO".
 
 Analyze the following text and return the structured data.
 
@@ -69,8 +69,15 @@ const inferPaymentDetailsFlow = ai.defineFlow(
     if (!output) {
       throw new Error('AI failed to infer payment details.');
     }
-    // Sanitize reference to ensure it only contains digits
-    output.reference = output.reference.replace(/\D/g, '');
+    
+    if (output.paymentMethod === 'efectivo_bs' || output.paymentMethod === 'efectivo_usd') {
+        output.bank = 'otro';
+        output.reference = 'EFECTIVO';
+    } else {
+        // Sanitize reference to ensure it only contains digits for non-cash payments
+        output.reference = output.reference.replace(/\D/g, '');
+    }
+    
     return output;
   }
 );
