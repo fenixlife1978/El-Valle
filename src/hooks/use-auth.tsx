@@ -24,20 +24,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [companyInfo, setCompanyInfo] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   
-  // Inicializamos desde localStorage para evitar el "hueco" de tiempo que causa el rebote
-  const [role, setUserRole] = useState<string | null>(
-    typeof window !== 'undefined' ? localStorage.getItem('userRole') : null
-  );
-  const [activeCondoId, setActiveCondoId] = useState<string | null>(
-    typeof window !== 'undefined' ? localStorage.getItem('activeCondoId') : null
-  );
-  const [workingCondoId, setWorkingCondoId] = useState<string | null>(
-    typeof window !== 'undefined' ? localStorage.getItem('workingCondoId') : null
-  );
+  // Persistencia inmediata
+  const [role, setUserRole] = useState<string | null>(null);
+  const [activeCondoId, setActiveCondoId] = useState<string | null>(null);
+  const [workingCondoId, setWorkingCondoId] = useState<string | null>(null);
 
   const isSuperAdmin = user?.email === 'vallecondo@gmail.com';
 
   useEffect(() => {
+    // 1. Cargar estados desde localStorage al montar por primera vez
+    const savedCondo = localStorage.getItem('activeCondoId');
+    const savedRole = localStorage.getItem('userRole');
+    if (savedCondo) {
+        setActiveCondoId(savedCondo);
+        setWorkingCondoId(savedCondo);
+    }
+    if (savedRole) setUserRole(savedRole);
+
     const unsubAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       if (!firebaseUser) {
         setUser(null);
@@ -51,47 +54,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       setUser(firebaseUser);
 
-      // Recuperar IDs del login
-      const savedCondoId = localStorage.getItem('activeCondoId');
-      const savedRole = localStorage.getItem('userRole');
+      // Re-validar contra localStorage por si el estado se perdió
+      const currentCondoId = savedCondo || localStorage.getItem('activeCondoId');
 
       // Caso Super Admin
       if (firebaseUser.email === 'vallecondo@gmail.com') {
         setUserRole('super-admin');
-        setActiveCondoId(savedCondoId);
-        setWorkingCondoId(savedCondoId || 'condo_01');
+        setActiveCondoId(currentCondoId);
+        setWorkingCondoId(currentCondoId || 'condo_01');
         setLoading(false);
         return;
       }
 
       try {
-        const condoIdToUse = savedCondoId || activeCondoId;
-        
-        if (condoIdToUse) {
-          setActiveCondoId(condoIdToUse);
-          setWorkingCondoId(condoIdToUse);
-
-          let userData = null;
-
-          // Búsqueda en Doble Estructura (Detección de Propietario/Admin)
-          const oldOwnerRef = doc(db, 'condominios', condoIdToUse, 'owners', firebaseUser.uid);
-          const newOwnerRef = doc(db, 'condominios', condoIdToUse, 'propietarios', firebaseUser.uid);
+        if (currentCondoId) {
+          // Búsqueda en Doble Estructura
+          const oldOwnerRef = doc(db, 'condominios', currentCondoId, 'owners', firebaseUser.uid);
+          const newOwnerRef = doc(db, 'condominios', currentCondoId, 'propietarios', firebaseUser.uid);
           
           const [oldSnap, newSnap] = await Promise.all([
             getDoc(oldOwnerRef),
             getDoc(newOwnerRef)
           ]);
 
-          if (newSnap.exists()) {
-            userData = newSnap.data();
-          } else if (oldSnap.exists()) {
-            userData = oldSnap.data();
-          }
+          let userData = null;
+          if (newSnap.exists()) userData = newSnap.data();
+          else if (oldSnap.exists()) userData = oldSnap.data();
 
           if (userData) {
             setOwnerData(userData);
             
-            // NORMALIZACIÓN ESTRICTA: Evita rebotes por idioma del rol
+            // Normalización Robusta
             const rawRole = (userData.role || savedRole || '').toLowerCase();
             let finalRole = rawRole;
 
@@ -102,29 +95,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
 
             setUserRole(finalRole);
-            localStorage.setItem('userRole', finalRole); // Actualizamos persistencia
+            localStorage.setItem('userRole', finalRole);
 
             // Suscripción a Configuración
-            const settingsRef = doc(db, 'condominios', condoIdToUse, 'config', 'mainSettings');
+            const settingsRef = doc(db, 'condominios', currentCondoId, 'config', 'mainSettings');
             onSnapshot(settingsRef, (s) => {
               if (s.exists()) setCompanyInfo(s.data().companyInfo);
-            }, () => {
-              setCompanyInfo({ name: "EFAS CondoSys" });
             });
-          } else {
-            // Fallback si no está en la base de datos pero hay rol guardado
-            if (savedRole) setUserRole(savedRole);
           }
         }
       } catch (error) {
-        console.error("Error en Sincronización EFAS:", error);
+        console.error("EFAS Sync Error:", error);
       } finally {
-        setLoading(false);
+        // Pequeño delay para que los estados de role y condoId se asienten
+        // antes de apagar el Loader y disparar los Layouts.
+        setTimeout(() => setLoading(false), 100);
       }
     });
 
     return () => unsubAuth();
-  }, [activeCondoId]);
+  }, []); // Sin dependencias para evitar reinicios del observador
 
   return (
     <AuthContext.Provider value={{ user, ownerData, companyInfo, loading, role, isSuperAdmin, activeCondoId, workingCondoId }}>

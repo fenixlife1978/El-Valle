@@ -1,6 +1,6 @@
 'use client';
 
-import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
+import { Card, CardHeader, CardContent, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -19,8 +19,8 @@ import Marquee from "@/components/ui/marquee";
 
 // --- TIPOS ---
 type Anuncio = { id: string; urlImagen: string; titulo: string; descripcion?: string; published?: boolean; };
-type Debt = { id: string; year: number; month: number; amountUSD: number; description: string; status: 'pending' | 'paid' | 'vencida'; paidAmountUSD?: number; property: { street: string, house: string }; published?: boolean; };
-type Payment = { id: string; status: 'pendiente' | 'aprobado' | 'rechazado'; totalAmount: number; paymentDate: any; reference: string; beneficiaryIds: string[]; beneficiaries: { ownerId: string; ownerName: string; amount: number; street?: string; house?: string; }[]; exchangeRate: number; };
+type Debt = { id: string; year: number; month: number; amountUSD: number; description: string; status: string; paidAmountUSD?: number; property?: { street: string, house: string }; published?: boolean; };
+type Payment = { id: string; status: string; totalAmount: number; paymentDate: any; reference: string; beneficiaryIds: string[]; beneficiaries: { ownerId: string; ownerName: string; amount: number; street?: string; house?: string; }[]; exchangeRate: number; };
 
 const monthsLocale: { [key: number]: string } = { 1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril', 5: 'Mayo', 6: 'Junio', 7: 'Julio', 8: 'Agosto', 9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre' };
 const formatCurrency = (num: number) => num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -35,65 +35,74 @@ export default function OwnerDashboardPage() {
     const [anuncios, setAnuncios] = useState<Anuncio[]>([]);
     const [now, setNow] = useState<Date | null>(null);
 
-    // --- EFECTO DE DATOS ---
     useEffect(() => {
         setNow(new Date());
 
-        // Solo procedemos si auth ha terminado y tenemos los IDs necesarios
-        if (authLoading) return;
-        if (!user || !activeCondoId) {
-            setLoadingData(false);
-            return;
-        }
+        if (authLoading || !user || !activeCondoId) return;
 
         setLoadingData(true);
 
-        // 1. Cargar Anuncios (Billboard)
+        // 1. Cargar Anuncios
         const unsubAnuncios = onSnapshot(
             query(collection(db, "condominios", activeCondoId, "billboard_announcements"), where("published", "==", true)), 
             (snapshot) => {
-                const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Anuncio));
-                setAnuncios(data);
+                setAnuncios(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Anuncio)));
             }
         );
 
-        // 2. Cargar Deudas (Debts) - Filtrado por ownerId del usuario logueado
-        const unsubDebts = onSnapshot(
-            query(
-                collection(db, 'condominios', activeCondoId, 'debts'), 
-                where('ownerId', '==', user.uid),
-                where('published', '==', true),
-                orderBy('year', 'desc'), 
-                orderBy('month', 'desc')
-            ),
+        // 2. Lógica de Deudas (Dual: deudas + debts) con tipado explícito
+        const processDebts = (snap: any) => snap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as Debt));
+
+        // Subcolección NUEVA (deudas)
+        const unsubNewDebts = onSnapshot(
+            query(collection(db, 'condominios', activeCondoId, 'deudas'), where('ownerId', '==', user.uid), where('published', '==', true)),
             (snap) => {
-                const debtsData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Debt));
-                setDebts(debtsData);
+                const newData = processDebts(snap);
+                setDebts(prev => {
+                    const others = prev.filter(d => !newData.find((n: Debt) => n.id === d.id));
+                    return [...newData, ...others].sort((a, b) => b.year - a.year || b.month - a.month);
+                });
             }
         );
 
-        // 3. Cargar Pagos (Payments)
+        // Subcolección VIEJA (debts)
+        const unsubOldDebts = onSnapshot(
+            query(collection(db, 'condominios', activeCondoId, 'debts'), where('ownerId', '==', user.uid), where('published', '==', true)),
+            (snap) => {
+                const oldData = processDebts(snap);
+                setDebts(prev => {
+                    const others = prev.filter(d => !oldData.find((o: Debt) => o.id === d.id));
+                    return [...oldData, ...others].sort((a, b) => b.year - a.year || b.month - a.month);
+                });
+            }
+        );
+
+        // 3. Cargar Pagos
         const unsubPayments = onSnapshot(
             query(collection(db, 'condominios', activeCondoId, 'payments'), where('beneficiaryIds', 'array-contains', user.uid)),
             (snap) => {
                 const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Payment));
                 setPayments(list.sort((a, b) => (b.paymentDate?.toMillis() || 0) - (a.paymentDate?.toMillis() || 0)));
                 setLoadingData(false);
-            },
-            (error) => {
-                console.error("Error cargando pagos:", error);
-                setLoadingData(false);
             }
         );
 
-        return () => { unsubAnuncios(); unsubDebts(); unsubPayments(); };
+        return () => { 
+            unsubAnuncios(); 
+            unsubNewDebts(); 
+            unsubOldDebts(); 
+            unsubPayments(); 
+        };
     }, [user, activeCondoId, authLoading]);
 
-    // --- LÓGICA DE ESTADÍSTICAS ---
+    // --- CÁLCULOS DE ESTADO ---
     const stats = useMemo(() => {
-        const pendingDebts = debts.filter(d => d.status === 'pending' || d.status === 'vencida');
-        const totalPendingUSD = pendingDebts.reduce((sum, d) => sum + d.amountUSD - (d.paidAmountUSD || 0), 0);
-        const isSolvente = totalPendingUSD <= 0.01;
+        const pendingStatus = ['pending', 'vencida', 'pendiente', 'atrasada'];
+        const pendingDebts = debts.filter(d => pendingStatus.includes(d.status.toLowerCase()));
+        
+        const totalPendingUSD = pendingDebts.reduce((sum, d) => sum + (d.amountUSD || 0) - (d.paidAmountUSD || 0), 0);
+        const isSolvente = totalPendingUSD <= 0.05;
+        
         let oldestDebtDate = 'N/A';
         let isVencida = false;
 
@@ -107,27 +116,22 @@ export default function OwnerDashboardPage() {
         }
         return { totalPendingUSD, isSolvente, oldestDebtDate, isVencida };
     }, [debts, now]);
-    
-    // Pantalla de carga unificada
+
     if (authLoading || (loadingData && !ownerData)) {
         return (
             <div className="h-screen flex flex-col items-center justify-center bg-[#1A1D23]">
                 <Loader2 className="animate-spin text-[#F28705] h-12 w-12" />
-                <p className="mt-4 font-black uppercase text-[10px] tracking-[0.3em] text-white/60">
-                    Sincronizando EFAS CondoSys...
-                </p>
+                <p className="mt-4 font-black uppercase text-[10px] tracking-[0.3em] text-white/60">Sincronizando EFAS...</p>
             </div>
         );
     }
-    
-    // Si no hay datos tras la carga, redirigir
+
     if (!user || !ownerData) {
         router.replace('/welcome');
         return null;
     }
 
-    const statusVariant = stats.isSolvente ? 'success' : stats.isVencida ? 'destructive' : 'warning';
-    const primaryProperty = ownerData.properties?.[0] || { street: 'Sin asignar', house: '#' };
+    const primaryProperty = ownerData.properties?.[0] || { street: 'Residencia', house: 'S/N' };
 
     return (
         <div className="space-y-6 md:space-y-8 p-4 md:p-8 max-w-7xl mx-auto animate-in fade-in duration-700 font-montserrat">
@@ -136,14 +140,14 @@ export default function OwnerDashboardPage() {
                     👋 ¡Hola, {ownerData.name?.split(' ')[0]}!
                 </h1>
                 <p className="text-slate-400 font-medium">
-                    Panel de autogestión: <span className="text-[#F28705] font-bold">{companyInfo?.name || 'EFAS CondoSys'}</span>
+                    Portal: <span className="text-[#F28705] font-bold uppercase">{companyInfo?.name || 'EFAS CondoSys'}</span>
                 </p>
             </header>
             
             <div className="relative w-full overflow-hidden rounded-xl bg-[#F28705]/5 border border-[#F28705]/10 text-[#F28705] py-2">
                 <Marquee pauseOnHover className="[--duration:30s]">
                     <span className="px-4 text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2">
-                        <AlertCircle className="h-4 w-4"/> Pague antes del día 05 para evitar recargos • Reporte sus pagos en esta plataforma • EFAS CondoSys
+                        <AlertCircle className="h-4 w-4"/> REPORTE SUS PAGOS A TRAVÉS DE ESTA PLATAFORMA • EFAS CONDOSYS
                     </span>
                 </Marquee>
             </div>
@@ -160,7 +164,7 @@ export default function OwnerDashboardPage() {
                                 {primaryProperty.street} - {primaryProperty.house}
                             </CardDescription>
                         </div>
-                        <Badge variant={statusVariant} className="uppercase font-black px-3 rounded-lg tracking-widest text-[10px]">
+                        <Badge variant={stats.isSolvente ? 'success' : stats.isVencida ? 'destructive' : 'warning'} className="uppercase font-black px-3 rounded-lg tracking-widest text-[10px]">
                             {stats.isSolvente ? 'Solvente' : stats.isVencida ? 'Deuda Vencida' : 'Pendiente'}
                         </Badge>
                     </CardHeader>
@@ -224,7 +228,7 @@ export default function OwnerDashboardPage() {
                             {loadingData ? (
                                 <TableRow><TableCell colSpan={4} className="text-center py-10"><Loader2 className="animate-spin mx-auto text-[#F28705]"/></TableCell></TableRow>
                             ) : payments.length === 0 ? (
-                                <TableRow><TableCell colSpan={4} className="text-center py-10 text-muted-foreground font-bold italic">No se encontraron pagos registrados.</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={4} className="text-center py-10 text-muted-foreground font-bold italic">No hay pagos registrados.</TableCell></TableRow>
                             ) : (
                                 payments.slice(0, 5).map(p => {
                                     const ben = p.beneficiaries?.find(b => b.ownerId === user.uid);

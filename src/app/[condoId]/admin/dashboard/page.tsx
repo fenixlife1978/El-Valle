@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Loader2, Receipt, Building2, Users, Banknote, Landmark } from "lucide-react"; 
@@ -16,10 +17,10 @@ const formatToTwoDecimals = (num: number) => {
     return num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-export default function AdminDashboardPage({ params }: { params: Promise<{ condoId: string }> }) {
+export default function AdminDashboardPage() {
     const { loading: authLoading } = useAuth();
-    const resolvedParams = React.use(params);
-    const workingCondoId = resolvedParams.condoId;
+    const params = useParams();
+    const workingCondoId = params.condoId as string;
 
     const [loading, setLoading] = useState(true);
     const [stats, setStats] = useState({

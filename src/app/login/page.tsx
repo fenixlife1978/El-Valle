@@ -72,55 +72,52 @@ function LoginPage() {
 
             const activeCondoId = condoSnap.docs[0].id;
             let userData = null;
-            let finalRole = '';
 
-            // 4. BÚSQUEDA SECUENCIAL (VIEJA -> NUEVA ESTRUCTURA)
-            
-            // Intento A: Vieja estructura (Subcolección 'owners')
+            // 4. BÚSQUEDA EN DOBLE ESTRUCTURA (vieja: owners, nueva: propietarios)
             const oldRef = doc(db, 'condominios', activeCondoId, 'owners', userId);
-            const oldSnap = await getDoc(oldRef);
+            const newRef = doc(db, 'condominios', activeCondoId, 'propietarios', userId);
+            
+            const [oldSnap, newSnap] = await Promise.all([getDoc(oldRef), getDoc(newRef)]);
 
-            if (oldSnap.exists()) {
+            if (newSnap.exists()) {
+                userData = newSnap.data();
+            } else if (oldSnap.exists()) {
                 userData = oldSnap.data();
-                console.log("[EFAS] Usuario encontrado en estructura antigua (owners)");
-            } else {
-                // Intento B: Nueva estructura (Subcolección 'propietarios')
-                const newRef = doc(db, 'condominios', activeCondoId, 'propietarios', userId);
-                const newSnap = await getDoc(newRef);
-                
-                if (newSnap.exists()) {
-                    userData = newSnap.data();
-                    console.log("[EFAS] Usuario encontrado en nueva estructura (propietarios)");
-                }
             }
 
             if (!userData) {
                 await signOut(auth);
-                throw new Error("No estás registrado en este condominio.");
+                throw new Error("No tienes un perfil registrado en este condominio.");
             }
 
-            // 5. Normalización de Roles
-            const dbRole = (userData.role || '').toLowerCase(); // "propietario" o "administrador"
+            // 5. NORMALIZACIÓN DE ROL (Crucial para concordar con use-auth)
+            const dbRoleRaw = (userData.role || '').toLowerCase();
+            let normalizedDbRole = '';
 
-            const isAuthorized = portalType === 'admin' 
-                ? (dbRole === 'administrador' || dbRole === 'admin')
-                : (dbRole === 'propietario' || dbRole === 'owner');
+            if (['admin', 'administrador', 'junta'].includes(dbRoleRaw)) {
+                normalizedDbRole = 'admin';
+            } else if (['owner', 'propietario', 'residente'].includes(dbRoleRaw)) {
+                normalizedDbRole = 'owner';
+            }
 
-            if (!isAuthorized) {
+            // Validar si el rol de la DB coincide con el portal seleccionado (portalType)
+            if (normalizedDbRole !== portalType) {
                 await signOut(auth);
-                throw new Error(`Acceso denegado: Tu rol es ${dbRole}.`);
+                const roleDisplay = dbRoleRaw.charAt(0).toUpperCase() + dbRoleRaw.slice(1);
+                throw new Error(`Acceso denegado: Tu usuario tiene perfil de ${roleDisplay}, no de ${portalType === 'admin' ? 'Administrador' : 'Propietario'}.`);
             }
 
-            // 6. Guardar estado y redirigir
+            // 6. GUARDAR ESTADO DE PERSISTENCIA (Sincronizado con EFAS)
             localStorage.setItem('activeCondoId', activeCondoId);
             localStorage.setItem('workingCondoId', activeCondoId);
-            localStorage.setItem('userRole', portalType!);
+            localStorage.setItem('userRole', normalizedDbRole); // Guardamos el normalizado ('admin' u 'owner')
 
             toast({ title: "¡Éxito!", description: "Sincronizando comunidad..." });
 
+            // Usamos replace y un pequeño delay para asegurar la escritura en localStorage
             setTimeout(() => {
-                window.location.href = `/${activeCondoId}/${portalType}/dashboard`;
-            }, 500);
+                window.location.href = `/${activeCondoId}/${normalizedDbRole}/dashboard`;
+            }, 300);
 
         } catch (err: any) {
             setLoading(false);
@@ -130,6 +127,7 @@ function LoginPage() {
         }
     };
 
+    // ... (El resto del JSX se mantiene igual, ya está muy bien diseñado)
     return (
         <main className="min-h-screen flex flex-col items-center justify-center bg-background p-4 font-montserrat">
             <Card className="w-full max-w-sm border-border shadow-2xl rounded-[2.5rem] bg-card/80 backdrop-blur-xl overflow-hidden">

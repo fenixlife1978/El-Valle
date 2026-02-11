@@ -12,40 +12,44 @@ export default function WelcomePage() {
     const isRedirecting = useRef(false);
 
     useEffect(() => {
+        // Solo actuar si ya terminó de cargar y hay un usuario logueado
         if (loading || !user || isRedirecting.current) return;
 
-        // Solo intentamos la redirección automática SI existen AMBOS datos.
-        // Si falta uno, NO hacemos router.replace y dejamos que el usuario elija.
-        const condoId = activeCondoId || localStorage.getItem('activeCondoId');
-        const savedRole = role || localStorage.getItem('userRole');
-
+        // 1. Caso Super Admin (Email fijo de EFAS)
         if (user.email === 'vallecondo@gmail.com') {
             isRedirecting.current = true;
             router.replace('/super-admin');
             return;
         }
 
-        // EL CAMBIO: Solo redirigir si tenemos la ruta completa. 
-        // Si no, forzamos que isRedirecting sea false para mostrar los botones.
+        // 2. Obtener datos de persistencia
+        const condoId = activeCondoId || localStorage.getItem('activeCondoId');
+        const savedRole = role || localStorage.getItem('userRole');
+
+        // 3. Redirección automática si ya tenemos la sesión completa
         if (condoId && savedRole) {
             let pathSegment = '';
-            if (['admin', 'administrador'].includes(savedRole.toLowerCase())) pathSegment = 'admin';
-            else if (['owner', 'propietario', 'propietarios'].includes(savedRole.toLowerCase())) pathSegment = 'owner';
+            const normalizedRole = savedRole.toLowerCase();
+
+            if (['admin', 'administrador'].includes(normalizedRole)) {
+                pathSegment = 'admin';
+            } else if (['owner', 'propietario', 'residente'].includes(normalizedRole)) {
+                pathSegment = 'owner';
+            }
 
             if (pathSegment) {
                 isRedirecting.current = true;
-                router.replace(`/${condoId}/${pathSegment}/dashboard`);
+                // Pequeño timeout para asegurar que el router está listo
+                setTimeout(() => {
+                    router.replace(`/${condoId}/${pathSegment}/dashboard`);
+                }, 100);
             }
-        } else {
-            // Si llegamos aquí y no hay datos, nos aseguramos de que NO esté en estado redirecting
-            isRedirecting.current = false;
         }
     }, [user, role, loading, activeCondoId, router]);
 
-
-    // UI DE CARGA: Si hay usuario pero no hay rol/condoId aún, BLOQUEAMOS la pantalla
-    // para evitar que el usuario haga clicks que rompan el flujo.
-    if (loading || (user && !isRedirecting.current && (!role || !activeCondoId))) {
+    // UI DE CARGA: Solo mostramos el loader si realmente estamos cargando 
+    // o si el proceso de redirección ya comenzó.
+    if (loading || (user && isRedirecting.current)) {
         return (
             <div className="min-h-screen flex flex-col items-center justify-center bg-[#1A1D23]">
                 <Loader2 className="h-10 w-10 animate-spin text-[#F28705] mb-4" />
@@ -56,6 +60,7 @@ export default function WelcomePage() {
         );
     }
 
+    // Si llegamos aquí, es porque el usuario debe elegir un portal
     return (
         <div className="min-h-screen w-full font-montserrat bg-background">
             <div className="absolute top-8 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center text-center w-full">
@@ -67,6 +72,7 @@ export default function WelcomePage() {
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 h-screen">
+                {/* PORTAL ADMINISTRADOR */}
                 <div 
                     onClick={() => router.push('/login?role=admin')}
                     className="relative bg-card text-foreground flex flex-col items-center justify-center p-12 text-center group cursor-pointer transition-all duration-300 hover:bg-slate-900"
@@ -76,9 +82,11 @@ export default function WelcomePage() {
                             <Shield className="h-12 w-12 text-[#F28705]" />
                         </div>
                         <h2 className="text-3xl font-black uppercase italic">Administrador</h2>
+                        <p className="text-[10px] text-muted-foreground mt-2 uppercase tracking-widest font-bold">Gestión y Finanzas</p>
                     </div>
                 </div>
 
+                {/* PORTAL PROPIETARIO */}
                 <div 
                     onClick={() => router.push('/login?role=owner')}
                     className="relative bg-secondary text-foreground flex flex-col items-center justify-center p-12 text-center group cursor-pointer transition-all duration-300 hover:bg-[#F28705]"
@@ -88,6 +96,7 @@ export default function WelcomePage() {
                             <User className="h-12 w-12 text-white" />
                         </div>
                         <h2 className="text-3xl font-black uppercase italic text-white">Propietario</h2>
+                        <p className="text-[10px] text-white/60 mt-2 uppercase tracking-widest font-bold">Pagos y Consultas</p>
                     </div>
                 </div>
             </div>
