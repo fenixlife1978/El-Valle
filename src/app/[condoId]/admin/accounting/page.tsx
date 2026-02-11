@@ -1,7 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useParams } from 'next/navigation';
+import React, { useState, useEffect, useCallback, useMemo, use } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, Timestamp } from 'firebase/firestore';
 import { Download, RefreshCw, Landmark, Banknote, DollarSign, Wallet } from 'lucide-react';
@@ -54,6 +53,10 @@ interface Transaction {
     balance: number;
 }
 
+interface PageProps {
+    params: Promise<{ condoId: string }>;
+}
+
 const formatCurrency = (amount: number): string => {
     if (typeof amount !== 'number') return '0,00';
     return amount.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -62,9 +65,10 @@ const formatCurrency = (amount: number): string => {
 const months = Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: format(new Date(2000, i), 'MMMM', { locale: es }) }));
 const years = Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear() - i));
 
-const AccountingPage = () => {
-    const params = useParams();
-    const workingCondoId = params.condoId as string;
+const AccountingPage = ({ params }: PageProps) => {
+    // DESENVOLVER PARAMS (Solución al error de Next.js)
+    const resolvedParams = use(params);
+    const workingCondoId = resolvedParams.condoId;
 
     const { toast } = useToast();
     const { companyInfo } = useAuth();
