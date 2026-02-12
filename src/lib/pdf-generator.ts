@@ -1,16 +1,16 @@
 
 'use client';
 
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import JsBarcode from 'jsbarcode';
-
 const formatCurrency = (num: number) => {
     if (typeof num !== 'number' || isNaN(num)) return '0,00';
     return num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-export const generatePaymentReceipt = (paymentData: any, condoLogoUrl: string | null, outputType: 'download' | 'blob' = 'download'): Blob | null => {
+export const generatePaymentReceipt = async (paymentData: any, condoLogoUrl: string | null, outputType: 'download' | 'blob' = 'download'): Promise<Blob | null> => {
+  const { default: jsPDF } = await import('jspdf');
+  const { default: autoTable } = await import('jspdf-autotable');
+  const { default: JsBarcode } = await import('jsbarcode');
+
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',

@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
@@ -426,9 +427,9 @@ function VerificationComponent({ condoId }: { condoId: string }) {
         
         try {
             if (action === 'download') {
-                generatePaymentReceipt(dataForPdf, companyInfo.logo, 'download');
+                await generatePaymentReceipt(dataForPdf, companyInfo.logo, 'download');
             } else if (navigator.share) {
-                const pdfBlob = generatePaymentReceipt(dataForPdf, companyInfo.logo, 'blob');
+                const pdfBlob = await generatePaymentReceipt(dataForPdf, companyInfo.logo, 'blob');
                 if (pdfBlob) {
                     const pdfFile = new File([pdfBlob], `Recibo_${data.ownerName.replace(/\s/g, '_')}.pdf`, { type: 'application/pdf' });
                     if (navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
@@ -447,7 +448,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
         } catch (error: any) {
             console.error('Error en Share/Download:', error);
             // Fallback to download if sharing fails
-            generatePaymentReceipt(dataForPdf, companyInfo.logo, 'download');
+            await generatePaymentReceipt(dataForPdf, companyInfo.logo, 'download');
             toast({ title: 'Compartir no disponible', description: 'Se ha iniciado la descarga del PDF.'});
         } finally {
             setIsGenerating(false);

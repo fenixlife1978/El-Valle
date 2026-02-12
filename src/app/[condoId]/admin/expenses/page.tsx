@@ -18,9 +18,6 @@ import { Loader2, PlusCircle, Trash2, Building2, CreditCard, Save, FileDown, Ban
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Badge } from '@/components/ui/badge';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import JsBarcode from 'jsbarcode';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 
@@ -296,6 +293,10 @@ export default function ExpensesPage() {
             toast({ variant: 'destructive', title: 'Error', description: 'Información de la empresa no cargada.' });
             return;
         }
+
+        const { default: jsPDF } = await import('jspdf');
+        const { default: autoTable } = await import('jspdf-autotable');
+        const { default: JsBarcode } = await import('jsbarcode');
 
         const doc = new jsPDF();
         const pageWidth = doc.internal.pageSize.getWidth();

@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -13,9 +14,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Download, Save, TrendingUp, TrendingDown, FileText } from "lucide-react";
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import JsBarcode from 'jsbarcode';
 
 // Types
 type FinancialItem = {
@@ -144,9 +142,13 @@ export default function FinancialBalancePage({ params }: { params: { condoId: st
         }
     };
 
-    const handleExportPDF = () => {
+    const handleExportPDF = async () => {
         if (!companyInfo) return toast({ variant: 'destructive', title: 'Error', description: 'Información del condominio no cargada.' });
         
+        const { default: jsPDF } = await import('jspdf');
+        const { default: autoTable } = await import('jspdf-autotable');
+        const { default: JsBarcode } = await import('jsbarcode');
+
         const period = `${monthOptions.find(m => m.value === selectedMonth)?.label} ${selectedYear}`;
         const docPDF = new jsPDF();
         

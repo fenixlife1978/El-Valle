@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -16,7 +17,6 @@ import { Trash2, Loader2, Search, XCircle, FileText, User, Info, Stamp, MoreHori
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import jsPDF from 'jspdf';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useAuthorization } from '@/hooks/use-authorization';
@@ -265,6 +265,7 @@ export default function CertificatesPage() {
   };
 
   const generatePDF = async (cert: any) => {
+    const { default: jsPDF } = await import('jspdf');
     const docPDF = new jsPDF();
     const margin = 20;
     const pageWidth = docPDF.internal.pageSize.getWidth();

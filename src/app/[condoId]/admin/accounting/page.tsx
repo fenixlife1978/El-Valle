@@ -1,14 +1,12 @@
+
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo, use } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, Timestamp } from 'firebase/firestore';
 import { Download, RefreshCw, Landmark, Banknote, DollarSign, Wallet } from 'lucide-react';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
-
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
@@ -53,10 +51,6 @@ interface Transaction {
     balance: number;
 }
 
-interface PageProps {
-    params: Promise<{ condoId: string }>;
-}
-
 const formatCurrency = (amount: number): string => {
     if (typeof amount !== 'number') return '0,00';
     return amount.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -65,13 +59,9 @@ const formatCurrency = (amount: number): string => {
 const months = Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: format(new Date(2000, i), 'MMMM', { locale: es }) }));
 const years = Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear() - i));
 
-const AccountingPage = ({ params }: PageProps) => {
-    // DESENVOLVER PARAMS (Solución al error de Next.js)
-    const resolvedParams = use(params);
-    const workingCondoId = resolvedParams.condoId;
-
+const AccountingPage = () => {
     const { toast } = useToast();
-    const { companyInfo } = useAuth();
+    const { companyInfo, workingCondoId } = useAuth();
 
     const [loading, setLoading] = useState(true);
     const [allPayments, setAllPayments] = useState<Payment[]>([]);
@@ -205,7 +195,10 @@ const AccountingPage = ({ params }: PageProps) => {
         }));
     }, [periodData]);
 
-    const handleExportPdf = (accountKey: keyof typeof periodData, accountName: string) => {
+    const handleExportPdf = async (accountKey: keyof typeof periodData, accountName: string) => {
+        const { default: jsPDF } = await import('jspdf');
+        const { default: autoTable } = await import('jspdf-autotable');
+
         const { transactions, startBalance } = periodData[accountKey];
         const doc = new jsPDF();
         const periodStr = `${months.find(m => m.value === selectedMonth)?.label} ${selectedYear}`;
