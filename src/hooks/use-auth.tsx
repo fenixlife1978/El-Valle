@@ -8,6 +8,7 @@ import { doc, onSnapshot, getDoc } from 'firebase/firestore';
 interface AuthContextType {
   user: User | null;
   ownerData: any | null;
+  userProfile: any | null; // Added for compatibility
   companyInfo: any | null;
   loading: boolean;
   role: string | null;
@@ -117,7 +118,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []); // Sin dependencias para evitar reinicios del observador
 
   return (
-    <AuthContext.Provider value={{ user, ownerData, companyInfo, loading, role, isSuperAdmin, activeCondoId, workingCondoId }}>
+    <AuthContext.Provider value={{ user, ownerData, userProfile: ownerData, companyInfo, loading, role, isSuperAdmin, activeCondoId, workingCondoId }}>
       {!loading ? children : (
         <div className="h-screen flex flex-col items-center justify-center bg-[#1A1D23]">
           <div className="text-center">

@@ -1,7 +1,6 @@
-
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, use } from 'react'; // Se agregó 'use'
 import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs, doc, setDoc, Timestamp, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
@@ -34,10 +33,26 @@ const formatCurrency = (amount: number): string => {
     return amount.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-export default function FinancialBalancePage({ params }: { params: { condoId: string }}) {
-    const { companyInfo } = useAuth();
+// Interface para las props de Next.js 16
+interface PageProps {
+    params: Promise<{ condoId: string }>;
+}
+
+export default function FinancialBalancePage({ params }: PageProps) {
+    // Desempaquetar params según Next.js 16
+    const resolvedParams = use(params);
+    const urlCondoId = resolvedParams.condoId;
+
+    const { companyInfo, userProfile, user } = useAuth();
     const { toast } = useToast();
-    const workingCondoId = params.condoId;
+
+    /**
+     * EFAS GuardianPro - Identificadores obligatorios
+     * Buscamos workingCondoId, pero si no existe en la DB usamos condominioId o el de la URL 
+     * para evitar que la aplicación haga rebote al welcome.
+     */
+    const workingCondoId = userProfile?.workingCondoId || userProfile?.condominioId || urlCondoId;
+    const activeId = userProfile?.activeId || user?.uid;
 
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -59,6 +74,7 @@ export default function FinancialBalancePage({ params }: { params: { condoId: st
                 const fromDate = new Date(year, month, 1);
                 const toDate = new Date(year, month + 1, 0, 23, 59, 59);
 
+                // Consulta de Ingresos (Pagos aprobados)
                 const paymentsQuery = query(
                     collection(db, 'condominios', workingCondoId, 'payments'),
                     where('paymentDate', '>=', fromDate),
@@ -77,6 +93,7 @@ export default function FinancialBalancePage({ params }: { params: { condoId: st
                 });
                 setIngresos(incomeData);
 
+                // Consulta de Egresos (Gastos registrados)
                 const expensesQuery = query(
                     collection(db, 'condominios', workingCondoId, 'gastos'),
                     where('date', '>=', fromDate),
@@ -122,6 +139,7 @@ export default function FinancialBalancePage({ params }: { params: { condoId: st
                 egresos,
                 estadoFinanciero: { saldoNeto },
                 notas,
+                createdBy: activeId, // Usamos activeId para auditoría
                 createdAt: serverTimestamp()
             });
 
@@ -130,6 +148,8 @@ export default function FinancialBalancePage({ params }: { params: { condoId: st
             await setDoc(publishedRef, {
                 type: 'balance',
                 sourceId: statementId,
+                publishedBy: activeId,
+                status: 'published', // Cumple con la regla de switch para publicar/unpublish
                 createdAt: serverTimestamp()
             });
 
@@ -159,6 +179,7 @@ export default function FinancialBalancePage({ params }: { params: { condoId: st
         docPDF.setFillColor(28, 43, 58);
         docPDF.rect(0, 0, pageWidth, headerHeight, 'F');
         docPDF.setTextColor(255, 255, 255);
+        
         if (companyInfo.logo) {
             try {
                 docPDF.addImage(companyInfo.logo, 'PNG', 14, 6.5, 12, 12);
@@ -166,9 +187,10 @@ export default function FinancialBalancePage({ params }: { params: { condoId: st
                 console.error("PDF Logo Error:", e);
             }
         }
-        docPDF.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name, 35, 12);
-        docPDF.setFontSize(8).setFont('helvetica', 'normal').text(`RIF: ${companyInfo.rif}`, 35, 17);
-        docPDF.setFontSize(12).setFont('helvetica', 'bold').text('EFAS CondoSys', pageWidth - margin, 15, { align: 'right' });
+        
+        docPDF.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name || 'Condominio', 35, 12);
+        docPDF.setFontSize(8).setFont('helvetica', 'normal').text(`RIF: ${companyInfo.rif || 'N/A'}`, 35, 17);
+        docPDF.setFontSize(12).setFont('helvetica', 'bold').text('EFAS GuardianPro', pageWidth - margin, 15, { align: 'right' });
         docPDF.setFontSize(8).setFont('helvetica', 'normal').text('BALANCE FINANCIERO OFICIAL', pageWidth - margin, 20, { align: 'right' });
         docPDF.setTextColor(0, 0, 0);
 
@@ -277,11 +299,18 @@ export default function FinancialBalancePage({ params }: { params: { condoId: st
                                     </TableHeader>
                                     <TableBody>
                                         {ingresos.map((item, idx) => (
-                                            <TableRow key={`in-${idx}`}><TableCell>{item.dia}</TableCell><TableCell>{item.concepto}</TableCell><TableCell className="text-right">{formatCurrency(item.monto)}</TableCell></TableRow>
+                                            <TableRow key={`in-${idx}`}>
+                                                <TableCell>{item.dia}</TableCell>
+                                                <TableCell>{item.concepto}</TableCell>
+                                                <TableCell className="text-right">{formatCurrency(item.monto)}</TableCell>
+                                            </TableRow>
                                         ))}
                                     </TableBody>
                                     <TableFooter>
-                                        <TableRow className="font-bold"><TableCell colSpan={2}>Total Ingresos</TableCell><TableCell className="text-right">{formatCurrency(totalIngresos)}</TableCell></TableRow>
+                                        <TableRow className="font-bold">
+                                            <TableCell colSpan={2}>Total Ingresos</TableCell>
+                                            <TableCell className="text-right">{formatCurrency(totalIngresos)}</TableCell>
+                                        </TableRow>
                                     </TableFooter>
                                 </Table>
                             </CardContent>
@@ -301,11 +330,18 @@ export default function FinancialBalancePage({ params }: { params: { condoId: st
                                     </TableHeader>
                                     <TableBody>
                                         {egresos.map((item, idx) => (
-                                            <TableRow key={`out-${idx}`}><TableCell>{item.dia}</TableCell><TableCell>{item.concepto}</TableCell><TableCell className="text-right">{formatCurrency(item.monto)}</TableCell></TableRow>
+                                            <TableRow key={`out-${idx}`}>
+                                                <TableCell>{item.dia}</TableCell>
+                                                <TableCell>{item.concepto}</TableCell>
+                                                <TableCell className="text-right">{formatCurrency(item.monto)}</TableCell>
+                                            </TableRow>
                                         ))}
                                     </TableBody>
                                      <TableFooter>
-                                        <TableRow className="font-bold"><TableCell colSpan={2}>Total Egresos</TableCell><TableCell className="text-right">{formatCurrency(totalEgresos)}</TableCell></TableRow>
+                                        <TableRow className="font-bold">
+                                            <TableCell colSpan={2}>Total Egresos</TableCell>
+                                            <TableCell className="text-right">{formatCurrency(totalEgresos)}</TableCell>
+                                        </TableRow>
                                     </TableFooter>
                                 </Table>
                             </CardContent>
@@ -316,15 +352,29 @@ export default function FinancialBalancePage({ params }: { params: { condoId: st
                         <Card>
                             <CardHeader><CardTitle>Resumen del Mes</CardTitle></CardHeader>
                             <CardContent className="space-y-4">
-                                <div className="flex justify-between items-center text-lg"><span className="text-muted-foreground">Total Ingresos:</span> <span className="font-bold text-green-600">Bs. {formatCurrency(totalIngresos)}</span></div>
-                                <div className="flex justify-between items-center text-lg"><span className="text-muted-foreground">Total Egresos:</span> <span className="font-bold text-red-600">Bs. {formatCurrency(totalEgresos)}</span></div>
-                                <div className="flex justify-between items-center text-xl font-bold border-t pt-4 mt-4"><span className="text-foreground">SALDO NETO:</span> <span className="text-primary">Bs. {formatCurrency(saldoNeto)}</span></div>
+                                <div className="flex justify-between items-center text-lg">
+                                    <span className="text-muted-foreground">Total Ingresos:</span> 
+                                    <span className="font-bold text-green-600">Bs. {formatCurrency(totalIngresos)}</span>
+                                </div>
+                                <div className="flex justify-between items-center text-lg">
+                                    <span className="text-muted-foreground">Total Egresos:</span> 
+                                    <span className="font-bold text-red-600">Bs. {formatCurrency(totalEgresos)}</span>
+                                </div>
+                                <div className="flex justify-between items-center text-xl font-bold border-t pt-4 mt-4">
+                                    <span className="text-foreground">SALDO NETO:</span> 
+                                    <span className="text-primary">Bs. {formatCurrency(saldoNeto)}</span>
+                                </div>
                             </CardContent>
                         </Card>
                          <Card>
                             <CardHeader><CardTitle>Notas Adicionales</CardTitle></CardHeader>
                             <CardContent>
-                                <Textarea value={notas} onChange={(e) => setNotas(e.target.value)} placeholder="Añada observaciones, aclaratorias o información relevante para este período..." className="min-h-[120px]" />
+                                <Textarea 
+                                    value={notas} 
+                                    onChange={(e) => setNotas(e.target.value)} 
+                                    placeholder="Añada observaciones, aclaratorias o información relevante para este período..." 
+                                    className="min-h-[120px]" 
+                                />
                             </CardContent>
                         </Card>
                         <Card>
