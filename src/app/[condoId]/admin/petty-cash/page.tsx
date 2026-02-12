@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, use, useCallback } from 'react';
 import { db, storage } from '@/lib/firebase';
 import { collection, query, orderBy, onSnapshot, addDoc, deleteDoc, doc, Timestamp, writeBatch, where, getDocs } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -64,11 +64,13 @@ const formatToTwoDecimals = (num: number) => {
     return (Math.round(num * 100) / 100).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-export default function PettyCashManager({ params }: { params: { condoId: string } }) {
-    const { user } = useAuth();
+export default function PettyCashManager({ params }: { params: Promise<{ condoId: string }> }) {
+    const resolvedParams = use(params);
+    const urlCondoId = resolvedParams.condoId;
+    const { user, ownerData } = useAuth();
     const { toast } = useToast();
-    const workingCondoId = params.condoId;
-    const activeCondoId = params.condoId;
+    const workingCondoId = ownerData?.workingCondoId || ownerData?.condominioId || urlCondoId;
+    const activeCondoId = ownerData?.activeId || user?.uid;
     
     // States
     const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -777,3 +779,4 @@ export default function PettyCashManager({ params }: { params: { condoId: string
         </div>
     );
 }
+
