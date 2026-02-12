@@ -1,56 +1,29 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, use } from 'react'; // Se agregó 'use'
+import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, query, where, getDocs, doc, setDoc, Timestamp, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, setDoc, serverTimestamp, Timestamp, getDoc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Download, Save, TrendingUp, TrendingDown, FileText } from "lucide-react";
+import { Loader2, Download, Save, Plus, Trash2 } from "lucide-react";
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
-// Types
-type FinancialItem = {
-    dia: string;
-    concepto: string;
-    monto: number;
-    categoria: string;
+const formatCurrency = (num: number) => {
+    if (typeof num !== 'number' || isNaN(num)) return '0,00';
+    return num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-type Payment = { paymentDate: Timestamp; totalAmount: number; beneficiaries: { ownerName: string }[]; };
-type Expense = { date: Timestamp; amount: number; description: string; category: string; };
-
-const monthOptions = Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: format(new Date(2000, i), 'MMMM', { locale: es }) }));
-const yearOptions = Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear() - i));
-
-const formatCurrency = (amount: number): string => {
-    if (typeof amount !== 'number' || isNaN(amount)) return '0,00';
-    return amount.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-};
-
-// Interface para las props de Next.js 16
-interface PageProps {
-    params: Promise<{ condoId: string }>;
-}
-
-export default function FinancialBalancePage({ params }: PageProps) {
-    // Desempaquetar params según Next.js 16
-    const resolvedParams = use(params);
-    const urlCondoId = resolvedParams.condoId;
-
-    const { companyInfo, userProfile, user } = useAuth();
+export default function FinancialBalancePage({ params }: { params: { condoId: string } }) {
+    const { condoId: urlCondoId } = params;
+    const { userProfile, user } = useAuth();
     const { toast } = useToast();
 
-    /**
-     * EFAS GuardianPro - Identificadores obligatorios
-     * Buscamos workingCondoId, pero si no existe en la DB usamos condominioId o el de la URL 
-     * para evitar que la aplicación haga rebote al welcome.
-     */
     const workingCondoId = userProfile?.workingCondoId || userProfile?.condominioId || urlCondoId;
     const activeId = userProfile?.activeId || user?.uid;
 
@@ -59,14 +32,39 @@ export default function FinancialBalancePage({ params }: PageProps) {
     const [selectedMonth, setSelectedMonth] = useState(String(new Date().getMonth() + 1));
     const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
 
-    const [ingresos, setIngresos] = useState<FinancialItem[]>([]);
-    const [egresos, setEgresos] = useState<FinancialItem[]>([]);
+    const [saldoAnteriorBanco, setSaldoAnteriorBanco] = useState(0);
+    const [ingresosOrdinarios, setIngresosOrdinarios] = useState(0);
+    const [otrosIngresos, setOtrosIngresos] = useState<{ concepto: string, monto: number }[]>([]);
+    const [egresosBanco, setEgresosBanco] = useState<{ concepto: string, monto: number }[]>([]);
+    
+    const [cajaChicaBS, setCajaChicaBS] = useState(0);
+    const [cajaChicaUSD, setCajaChicaUSD] = useState(0);
     const [notas, setNotas] = useState("");
+    
+    const [companyData, setCompanyData] = useState<any>(null);
 
     useEffect(() => {
         if (!workingCondoId) return;
 
-        const fetchData = async () => {
+        const fetchConfig = async () => {
+            try {
+                const configRef = doc(db, 'condominios', workingCondoId, 'config', 'mainSettings');
+                const configSnap = await getDoc(configRef);
+                if (configSnap.exists()) {
+                    setCompanyData(configSnap.data().companyInfo);
+                    console.log("Configuración cargada desde mainSettings");
+                }
+            } catch (error) {
+                console.error("Error al cargar mainSettings:", error);
+            }
+        };
+        fetchConfig();
+    }, [workingCondoId]);
+
+    useEffect(() => {
+        if (!workingCondoId) return;
+
+        const fetchAutomaticData = async () => {
             setLoading(true);
             try {
                 const year = parseInt(selectedYear);
@@ -74,324 +72,399 @@ export default function FinancialBalancePage({ params }: PageProps) {
                 const fromDate = new Date(year, month, 1);
                 const toDate = new Date(year, month + 1, 0, 23, 59, 59);
 
-                // Consulta de Ingresos (Pagos aprobados)
-                const paymentsQuery = query(
+                const pQuery = query(
                     collection(db, 'condominios', workingCondoId, 'payments'),
                     where('paymentDate', '>=', fromDate),
                     where('paymentDate', '<=', toDate),
-                    where('status', '==', 'aprobado')
+                    where('status', '==', 'aprobado'),
+                    where('paymentMethod', 'in', ['transferencia', 'movil'])
                 );
-                const paymentsSnap = await getDocs(paymentsQuery);
-                const incomeData: FinancialItem[] = paymentsSnap.docs.map(doc => {
-                    const data = doc.data() as Payment;
-                    return {
-                        dia: format(data.paymentDate.toDate(), 'dd'),
-                        concepto: `PAGO DE ${data.beneficiaries.map(b => b.ownerName).join(', ')}`,
-                        monto: data.totalAmount,
-                        categoria: 'cuotas_ordinarias'
-                    };
-                });
-                setIngresos(incomeData);
+                const pSnap = await getDocs(pQuery);
+                const totalBancario = pSnap.docs.reduce((sum, d) => sum + (d.data().totalAmount || 0), 0);
+                setIngresosOrdinarios(totalBancario);
 
-                // Consulta de Egresos (Gastos registrados)
-                const expensesQuery = query(
+                const eQuery = query(
                     collection(db, 'condominios', workingCondoId, 'gastos'),
                     where('date', '>=', fromDate),
-                    where('date', '<=', toDate)
+                    where('date', '<=', toDate),
+                    where('paymentSource', '==', 'banco')
                 );
-                const expensesSnap = await getDocs(expensesQuery);
-                const expenseData: FinancialItem[] = expensesSnap.docs.map(doc => {
-                    const data = doc.data() as Expense;
-                    return {
-                        dia: format(data.date.toDate(), 'dd'),
-                        concepto: data.description,
-                        monto: data.amount,
-                        categoria: data.category
-                    };
-                });
-                setEgresos(expenseData);
+                const eSnap = await getDocs(eQuery);
+                setEgresosBanco(eSnap.docs.map(d => ({ 
+                    concepto: d.data().description, 
+                    monto: d.data().amount 
+                })));
+
+                const ccQuery = query(
+                    collection(db, 'condominios', workingCondoId, 'cajaChica_movimientos')
+                );
+                const ccSnap = await getDocs(ccQuery);
+                const saldoCajaChica = ccSnap.docs.reduce((acc, doc) => {
+                    const data = doc.data();
+                    return data.type === 'ingreso' ? acc + data.amount : acc - data.amount;
+                }, 0);
+                setCajaChicaBS(saldoCajaChica);
+                setCajaChicaUSD(0);
 
             } catch (error) {
-                console.error("Error fetching financial data:", error);
-                toast({ variant: 'destructive', title: 'Error al cargar datos' });
+                console.error(error);
+                toast({ variant: 'destructive', title: 'Error al cargar montos automáticos' });
             } finally {
                 setLoading(false);
             }
         };
 
-        fetchData();
+        fetchAutomaticData();
     }, [selectedMonth, selectedYear, workingCondoId, toast]);
 
-    const totalIngresos = useMemo(() => ingresos.reduce((sum, item) => sum + item.monto, 0), [ingresos]);
-    const totalEgresos = useMemo(() => egresos.reduce((sum, item) => sum + item.monto, 0), [egresos]);
-    const saldoNeto = totalIngresos - totalEgresos;
+    const totalIngresosMes = useMemo(() => 
+        ingresosOrdinarios + otrosIngresos.reduce((sum, i) => sum + i.monto, 0), 
+    [ingresosOrdinarios, otrosIngresos]);
+    
+    const totalEgresosMes = useMemo(() => 
+        egresosBanco.reduce((sum, e) => sum + e.monto, 0), 
+    [egresosBanco]);
 
-    const handleSaveAndPublish = async () => {
+    const disponibilidadBancaria = (saldoAnteriorBanco + totalIngresosMes) - totalEgresosMes;
+
+    const agregarLineaIngreso = () => setOtrosIngresos([...otrosIngresos, { concepto: '', monto: 0 }]);
+    const eliminarLineaIngreso = (index: number) => setOtrosIngresos(otrosIngresos.filter((_, i) => i !== index));
+    const agregarLineaEgreso = () => setEgresosBanco([...egresosBanco, { concepto: '', monto: 0 }]);
+    const eliminarLineaEgreso = (index: number) => setEgresosBanco(egresosBanco.filter((_, i) => i !== index));
+
+    const handleSave = async () => {
         if (!workingCondoId) return;
         setSaving(true);
         try {
-            const statementId = `${selectedYear}-${selectedMonth.padStart(2, '0')}`;
-            const statementRef = doc(db, 'condominios', workingCondoId, 'financial_statements', statementId);
-            
-            await setDoc(statementRef, {
-                id: statementId,
-                ingresos,
-                egresos,
-                estadoFinanciero: { saldoNeto },
+            const docId = `${selectedYear}-${selectedMonth.padStart(2, '0')}`;
+            await setDoc(doc(db, 'condominios', workingCondoId, 'financial_statements', docId), {
+                periodo: docId,
+                saldoAnteriorBanco,
+                ingresos: [
+                    { dia: '01', concepto: 'INGRESOS ORDINARIOS (CUOTAS DEL MES)', monto: ingresosOrdinarios },
+                    ...otrosIngresos.map(i => ({ dia: 'VAR', concepto: i.concepto, monto: i.monto }))
+                ],
+                egresos: egresosBanco.map(e => ({ dia: 'VAR', concepto: e.concepto, monto: e.monto })),
+                estadoFinanciero: {
+                    saldoNeto: disponibilidadBancaria,
+                    saldoEfectivoBS: cajaChicaBS,
+                    saldoEfectivoUSD: cajaChicaUSD
+                },
                 notas,
-                createdBy: activeId, // Usamos activeId para auditoría
-                createdAt: serverTimestamp()
+                updatedBy: activeId,
+                updatedAt: serverTimestamp()
             });
-
-            const publicationId = `balance-${statementId}`;
-            const publishedRef = doc(db, 'condominios', workingCondoId, 'published_reports', publicationId);
-            await setDoc(publishedRef, {
-                type: 'balance',
-                sourceId: statementId,
-                publishedBy: activeId,
-                status: 'published', // Cumple con la regla de switch para publicar/unpublish
-                createdAt: serverTimestamp()
-            });
-
-            toast({ title: "Publicado", description: "El balance financiero es ahora visible para los propietarios." });
-        } catch (error) {
-            console.error("Error saving/publishing:", error);
-            toast({ variant: 'destructive', title: 'Error al publicar' });
+            toast({ title: "Balance Guardado Exitosamente" });
+        } catch (e) {
+            toast({ variant: 'destructive', title: "Error al guardar" });
         } finally {
             setSaving(false);
         }
     };
-
+    
     const handleExportPDF = async () => {
-        if (!companyInfo) return toast({ variant: 'destructive', title: 'Error', description: 'Información del condominio no cargada.' });
+        const info = companyData || userProfile?.companyInfo; 
         
+        if (!info) {
+            return toast({ variant: 'destructive', title: 'Error', description: 'No se encontró companyInfo. Espere a que cargue o configúrelo en Ajustes.' });
+        }
+    
         const { default: jsPDF } = await import('jspdf');
         const { default: autoTable } = await import('jspdf-autotable');
-        const { default: JsBarcode } = await import('jsbarcode');
-
-        const period = `${monthOptions.find(m => m.value === selectedMonth)?.label} ${selectedYear}`;
         const docPDF = new jsPDF();
         
         const pageWidth = docPDF.internal.pageSize.getWidth();
-        const headerHeight = 35;
         const margin = 14;
 
-        docPDF.setFillColor(28, 43, 58);
-        docPDF.rect(0, 0, pageWidth, headerHeight, 'F');
-        docPDF.setTextColor(255, 255, 255);
-        
-        if (companyInfo.logo) {
-            try {
-                docPDF.addImage(companyInfo.logo, 'PNG', 14, 6.5, 12, 12);
-            } catch (e) {
-                console.error("PDF Logo Error:", e);
-            }
+        if (info.logo) {
+             try { docPDF.addImage(info.logo, 'PNG', margin, margin, 20, 20); } catch (e) { console.error(e); }
         }
-        
-        docPDF.setFontSize(12).setFont('helvetica', 'bold').text(companyInfo.name || 'Condominio', 35, 12);
-        docPDF.setFontSize(8).setFont('helvetica', 'normal').text(`RIF: ${companyInfo.rif || 'N/A'}`, 35, 17);
-        docPDF.setFontSize(12).setFont('helvetica', 'bold').text('EFAS GuardianPro', pageWidth - margin, 15, { align: 'right' });
-        docPDF.setFontSize(8).setFont('helvetica', 'normal').text('BALANCE FINANCIERO OFICIAL', pageWidth - margin, 20, { align: 'right' });
-        docPDF.setTextColor(0, 0, 0);
+        docPDF.setFontSize(12).setFont('helvetica', 'bold').text(info.name, margin + 25, margin + 8);
+        docPDF.setFontSize(9).setFont('helvetica', 'normal').text(`RIF: ${info.rif || 'N/A'}`, margin + 25, margin + 14);
 
-        let startY = headerHeight + 30;
-
-        const canvas = document.createElement('canvas');
-        const barcodeValue = `BF-${selectedYear}-${selectedMonth}`;
-        try {
-            JsBarcode(canvas, barcodeValue, { format: "CODE128", height: 30, width: 1.5, displayValue: false, margin: 0 });
-            docPDF.addImage(canvas.toDataURL("image/png"), 'PNG', pageWidth - margin - 55, headerHeight + 5, 50, 15);
-            docPDF.setFontSize(8).text(barcodeValue, pageWidth - margin - 55, headerHeight + 23);
-        } catch (e) {}
-
-        docPDF.setFontSize(16).setFont('helvetica', 'bold').text('ESTADO DE RESULTADOS', pageWidth / 2, startY, { align: 'center' });
-        docPDF.setFontSize(12).setFont('helvetica', 'normal').text(`Correspondiente al período de ${period}`, pageWidth / 2, startY + 7, { align: 'center' });
-
-        startY += 25;
-
+        const period = `${format(new Date(parseInt(selectedYear), parseInt(selectedMonth) -1), 'MMMM', {locale: es})} ${selectedYear}`;
+        docPDF.setFontSize(16).setFont('helvetica', 'bold').text('ESTADO DE RESULTADOS', pageWidth / 2, margin + 30, { align: 'center'});
+        docPDF.setFontSize(10).setFont('helvetica', 'normal').text(`Correspondiente al período de ${period}`, pageWidth / 2, margin + 37, { align: 'center'});
+    
+        let startY = 60;
+    
         autoTable(docPDF, {
-            head: [['DÍA', 'INGRESOS', 'MONTO (Bs.)']],
-            body: ingresos.map(i => [i.dia, i.concepto, { content: formatCurrency(i.monto), styles: { halign: 'right' } }]),
-            foot: [[{ content: 'TOTAL INGRESOS', colSpan: 2, styles: { halign: 'right' } }, { content: formatCurrency(totalIngresos), styles: { halign: 'right' } }]],
+            head: [['CONCEPTO DE INGRESO', 'MONTO (Bs.)']],
+            body: [
+                ['SALDO ANTERIOR EN BANCO', formatCurrency(saldoAnteriorBanco)],
+                ['INGRESOS ORDINARIOS (CUOTAS DEL MES)', formatCurrency(ingresosOrdinarios)],
+                ...otrosIngresos.map(i => [i.concepto.toUpperCase(), formatCurrency(i.monto)])
+            ],
+            foot: [[
+                { content: 'TOTAL INGRESOS', styles: { halign: 'right' } },
+                { content: formatCurrency(saldoAnteriorBanco + totalIngresosMes), styles: { halign: 'right' } },
+            ]],
+            startY,
+            theme: 'grid',
+            headStyles: { fillColor: [30, 80, 180] },
+            footStyles: { fillColor: [30, 80, 180], textColor: [255,255,255] },
+            columnStyles: { 1: { halign: 'right' } }
+        });
+    
+        startY = (docPDF as any).lastAutoTable.finalY + 10;
+    
+        autoTable(docPDF, {
+            head: [['EGRESOS DE BANCO / PAGOS', 'MONTO (Bs.)']],
+            body: egresosBanco.map(e => [e.concepto.toUpperCase(), formatCurrency(e.monto)]),
+            foot: [[
+                { content: 'TOTAL EGRESOS DEL MES', styles: { halign: 'right' } },
+                { content: formatCurrency(totalEgresosMes), styles: { halign: 'right' } },
+            ]],
             startY,
             theme: 'striped',
-            headStyles: { fillColor: [30, 80, 180], halign: 'center' },
-            footStyles: { fillColor: [30, 80, 180], textColor: 255, fontStyle: 'bold' }
+            headStyles: { fillColor: [200, 0, 0] },
+            footStyles: { fillColor: [200, 0, 0], textColor: [255,255,255] },
+            columnStyles: { 1: { halign: 'right' } }
         });
+    
+        startY = (docPDF as any).lastAutoTable.finalY + 15;
+    
+        docPDF.setFontSize(12).setFont('helvetica', 'bold');
+        docPDF.text(`DISPONIBILIDAD EN BANCO: Bs. ${formatCurrency(disponibilidadBancaria)}`, 14, startY);
         
-        startY = (docPDF as any).lastAutoTable.finalY + 10;
-        
-        autoTable(docPDF, {
-            head: [['DÍA', 'EGRESOS', 'MONTO (Bs.)']],
-            body: egresos.map(e => [e.dia, e.concepto, { content: formatCurrency(e.monto), styles: { halign: 'right' } }]),
-            foot: [[{ content: 'TOTAL EGRESOS', colSpan: 2, styles: { halign: 'right' } }, { content: formatCurrency(totalEgresos), styles: { halign: 'right' } }]],
-            startY,
-            theme: 'striped',
-            headStyles: { fillColor: [220, 53, 69], halign: 'center' },
-            footStyles: { fillColor: [220, 53, 69], textColor: 255, fontStyle: 'bold' }
-        });
-        
-        startY = (docPDF as any).lastAutoTable.finalY + 10;
-        
-        docPDF.setFontSize(11).setFont('helvetica', 'bold');
-        docPDF.setFillColor(230, 240, 255).rect(margin, startY - 5, pageWidth - margin * 2, 10, 'F');
-        docPDF.setTextColor(30, 80, 180).text('SALDO NETO (Ingresos - Egresos)', margin + 2, startY);
-        docPDF.text(formatCurrency(saldoNeto), pageWidth - margin - 2, startY, { align: 'right' });
-        
-        startY += 20;
-        docPDF.setTextColor(0, 0, 0);
-        docPDF.setFontSize(10).text('Notas:', margin, startY);
-        docPDF.setFontSize(10).setFont('helvetica', 'normal').text(notas, margin, startY + 5, { maxWidth: 180 });
-
-        docPDF.save(`Balance_Financiero_${selectedYear}_${selectedMonth}.pdf`);
+        startY += 10;
+        docPDF.setFillColor(245, 245, 245);
+        docPDF.rect(14, startY, pageWidth - (margin * 2), 25, 'F');
+        docPDF.setFontSize(10).text('FONDO DE CAJA CHICA AL CIERRE:', 18, startY + 8);
+        docPDF.setFontSize(11).text(`TOTAL EFECTIVO BOLÍVARES (Bs.): ${formatCurrency(cajaChicaBS)}`, 18, startY + 16);
+        docPDF.text(`TOTAL EFECTIVO DÓLARES (USD): $${formatCurrency(cajaChicaUSD)}`, 18, startY + 22);
+    
+        docPDF.save(`Balance_${selectedMonth}_${selectedYear}.pdf`);
     };
 
     return (
-        <div className="space-y-8">
-            <div className="mb-10">
-                <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">
-                    Balance <span className="text-primary">Financiero Mensual</span>
-                </h2>
-                <div className="h-1.5 w-20 bg-primary mt-2 rounded-full"></div>
-                <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">
-                    Genere, guarde y publique el estado de resultados del mes.
-                </p>
+        <div className="max-w-5xl mx-auto p-6 space-y-6">
+            <div className="flex justify-between items-end">
+                <div>
+                    <h1 className="text-3xl font-black uppercase tracking-tighter">Balance <span className="text-primary">Financiero</span></h1>
+                    <p className="text-muted-foreground text-sm font-bold uppercase tracking-widest">EFAS GuardianPro - {workingCondoId}</p>
+                </div>
+                <div className="flex gap-2">
+                    <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                        <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            {Array.from({length:12}, (_,i)=> (
+                                <SelectItem key={i+1} value={String(i+1)}>{format(new Date(2000, i), 'MMMM', {locale:es})}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <Input className="w-24" type="number" value={selectedYear} onChange={(e)=>setSelectedYear(e.target.value)} />
+                </div>
             </div>
 
-            <Card>
-                <CardHeader className="flex-row items-center justify-between">
-                    <div>
-                        <CardTitle>Selector de Período</CardTitle>
-                        <CardDescription>Filtre los movimientos por mes y año.</CardDescription>
-                    </div>
-                    <div className="flex gap-2">
-                        <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                            <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
-                            <SelectContent>{monthOptions.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent>
-                        </Select>
-                        <Select value={selectedYear} onValueChange={setSelectedYear}>
-                            <SelectTrigger className="w-[120px]"><SelectValue /></SelectTrigger>
-                            <SelectContent>{yearOptions.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
-                        </Select>
-                    </div>
+            {loading ? <div className="flex justify-center items-center h-64"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div> : <>
+            
+            <Card className="border-2">
+                <CardHeader className="bg-slate-50 border-b">
+                    <CardTitle className="text-sm uppercase tracking-widest">INGRESOS DEL PERÍODO</CardTitle>
                 </CardHeader>
+                <CardContent className="p-0">
+                    <Table>
+                        <TableHeader>
+                            <TableRow className="bg-slate-100/50">
+                                <TableHead className="w-[70%]">CONCEPTO / DESCRIPCIÓN</TableHead>
+                                <TableHead className="text-right">MONTO (BS.)</TableHead>
+                                <TableHead className="w-10"></TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            <TableRow className="bg-blue-50/30">
+                                <TableCell className="font-bold text-blue-700">SALDO ANTERIOR EN BANCO</TableCell>
+                                <TableCell>
+                                    <Input 
+                                        type="number" 
+                                        className="text-right font-bold" 
+                                        value={saldoAnteriorBanco} 
+                                        onChange={(e) => setSaldoAnteriorBanco(Number(e.target.value))}
+                                    />
+                                </TableCell>
+                                <TableCell />
+                            </TableRow>
+                            <TableRow>
+                                <TableCell className="font-medium">INGRESOS ORDINARIOS (PAGO DE CUOTAS DEL MES - BANCO)</TableCell>
+                                <TableCell>
+                                    <Input 
+                                        type="number" 
+                                        className="text-right" 
+                                        value={ingresosOrdinarios} 
+                                        onChange={(e) => setIngresosOrdinarios(Number(e.target.value))}
+                                    />
+                                </TableCell>
+                                <TableCell />
+                            </TableRow>
+                            {otrosIngresos.map((linea, idx) => (
+                                <TableRow key={`in-${idx}`}>
+                                    <TableCell>
+                                        <Input 
+                                            placeholder="Concepto de ingreso manual..." 
+                                            value={linea.concepto}
+                                            onChange={(e) => {
+                                                const newArr = [...otrosIngresos];
+                                                newArr[idx].concepto = e.target.value;
+                                                setOtrosIngresos(newArr);
+                                            }}
+                                        />
+                                    </TableCell>
+                                    <TableCell>
+                                        <Input 
+                                            type="number" 
+                                            className="text-right"
+                                            value={linea.monto}
+                                            onChange={(e) => {
+                                                const newArr = [...otrosIngresos];
+                                                newArr[idx].monto = Number(e.target.value);
+                                                setOtrosIngresos(newArr);
+                                            }}
+                                        />
+                                    </TableCell>
+                                    <TableCell>
+                                        <Button variant="ghost" size="icon" onClick={() => eliminarLineaIngreso(idx)}>
+                                            <Trash2 className="h-4 w-4 text-red-500" />
+                                        </Button>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                        <TableFooter>
+                             <TableRow>
+                                <TableCell>
+                                    <Button variant="outline" size="sm" onClick={agregarLineaIngreso}>
+                                        <Plus className="h-4 w-4 mr-2" /> Otros Ingresos
+                                    </Button>
+                                </TableCell>
+                                <TableCell className="text-right font-black text-green-600 text-lg">
+                                    TOTAL INGRESOS: Bs. {formatCurrency(saldoAnteriorBanco + totalIngresosMes)}
+                                </TableCell>
+                                <TableCell />
+                            </TableRow>
+                        </TableFooter>
+                    </Table>
+                </CardContent>
             </Card>
 
-            {loading ? (
-                <div className="flex justify-center items-center h-64">
-                    <Loader2 className="h-10 w-10 animate-spin text-primary" />
-                </div>
-            ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-                    <div className="space-y-6">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="flex items-center gap-2"><TrendingUp className="text-green-500"/> Ingresos</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>Día</TableHead>
-                                            <TableHead>Concepto</TableHead>
-                                            <TableHead className="text-right">Monto</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {ingresos.map((item, idx) => (
-                                            <TableRow key={`in-${idx}`}>
-                                                <TableCell>{item.dia}</TableCell>
-                                                <TableCell>{item.concepto}</TableCell>
-                                                <TableCell className="text-right">{formatCurrency(item.monto)}</TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                    <TableFooter>
-                                        <TableRow className="font-bold">
-                                            <TableCell colSpan={2}>Total Ingresos</TableCell>
-                                            <TableCell className="text-right">{formatCurrency(totalIngresos)}</TableCell>
-                                        </TableRow>
-                                    </TableFooter>
-                                </Table>
-                            </CardContent>
-                        </Card>
-                         <Card>
-                            <CardHeader>
-                                <CardTitle className="flex items-center gap-2"><TrendingDown className="text-red-500"/> Egresos</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>Día</TableHead>
-                                            <TableHead>Concepto</TableHead>
-                                            <TableHead className="text-right">Monto</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {egresos.map((item, idx) => (
-                                            <TableRow key={`out-${idx}`}>
-                                                <TableCell>{item.dia}</TableCell>
-                                                <TableCell>{item.concepto}</TableCell>
-                                                <TableCell className="text-right">{formatCurrency(item.monto)}</TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                     <TableFooter>
-                                        <TableRow className="font-bold">
-                                            <TableCell colSpan={2}>Total Egresos</TableCell>
-                                            <TableCell className="text-right">{formatCurrency(totalEgresos)}</TableCell>
-                                        </TableRow>
-                                    </TableFooter>
-                                </Table>
-                            </CardContent>
-                        </Card>
-                    </div>
+            <Card className="border-2">
+                <CardHeader className="bg-slate-50 border-b">
+                    <CardTitle className="text-sm uppercase tracking-widest text-destructive">EGRESOS DEL PERÍODO</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                    <Table>
+                         <TableHeader>
+                            <TableRow className="bg-slate-100/50">
+                                <TableHead className="w-[70%]">CONCEPTO / DESCRIPCIÓN</TableHead>
+                                <TableHead className="text-right">MONTO (BS.)</TableHead>
+                                <TableHead className="w-10"></TableHead>
+                            </TableRow>
+                        </TableHeader>
+                         <TableBody>
+                             {egresosBanco.map((linea, idx) => (
+                                <TableRow key={`out-${idx}`}>
+                                    <TableCell>
+                                        <Input 
+                                            placeholder="Concepto de egreso manual..." 
+                                            value={linea.concepto}
+                                            onChange={(e) => {
+                                                const newArr = [...egresosBanco];
+                                                newArr[idx].concepto = e.target.value;
+                                                setEgresosBanco(newArr);
+                                            }}
+                                        />
+                                    </TableCell>
+                                    <TableCell>
+                                        <Input 
+                                            type="number" 
+                                            className="text-right"
+                                            value={linea.monto}
+                                            onChange={(e) => {
+                                                const newArr = [...egresosBanco];
+                                                newArr[idx].monto = Number(e.target.value);
+                                                setEgresosBanco(newArr);
+                                            }}
+                                        />
+                                    </TableCell>
+                                    <TableCell>
+                                        <Button variant="ghost" size="icon" onClick={() => eliminarLineaEgreso(idx)}>
+                                            <Trash2 className="h-4 w-4 text-red-500" />
+                                        </Button>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                         </TableBody>
+                         <TableFooter>
+                            <TableRow>
+                                <TableCell>
+                                    <Button variant="outline" size="sm" onClick={agregarLineaEgreso}>
+                                        <Plus className="h-4 w-4 mr-2" /> Otros Egresos
+                                    </Button>
+                                </TableCell>
+                                <TableCell className="text-right font-black text-destructive text-lg">
+                                    TOTAL EGRESOS: Bs. {formatCurrency(totalEgresosMes)}
+                                </TableCell>
+                                <TableCell />
+                            </TableRow>
+                         </TableFooter>
+                    </Table>
+                </CardContent>
+            </Card>
 
-                     <div className="space-y-6 lg:sticky lg:top-24">
-                        <Card>
-                            <CardHeader><CardTitle>Resumen del Mes</CardTitle></CardHeader>
-                            <CardContent className="space-y-4">
-                                <div className="flex justify-between items-center text-lg">
-                                    <span className="text-muted-foreground">Total Ingresos:</span> 
-                                    <span className="font-bold text-green-600">Bs. {formatCurrency(totalIngresos)}</span>
-                                </div>
-                                <div className="flex justify-between items-center text-lg">
-                                    <span className="text-muted-foreground">Total Egresos:</span> 
-                                    <span className="font-bold text-red-600">Bs. {formatCurrency(totalEgresos)}</span>
-                                </div>
-                                <div className="flex justify-between items-center text-xl font-bold border-t pt-4 mt-4">
-                                    <span className="text-foreground">SALDO NETO:</span> 
-                                    <span className="text-primary">Bs. {formatCurrency(saldoNeto)}</span>
-                                </div>
-                            </CardContent>
-                        </Card>
-                         <Card>
-                            <CardHeader><CardTitle>Notas Adicionales</CardTitle></CardHeader>
-                            <CardContent>
-                                <Textarea 
-                                    value={notas} 
-                                    onChange={(e) => setNotas(e.target.value)} 
-                                    placeholder="Añada observaciones, aclaratorias o información relevante para este período..." 
-                                    className="min-h-[120px]" 
-                                />
-                            </CardContent>
-                        </Card>
-                        <Card>
-                            <CardHeader><CardTitle>Acciones</CardTitle></CardHeader>
-                            <CardFooter className="flex-col gap-2">
-                                <Button onClick={handleExportPDF} variant="outline" className="w-full">
-                                    <Download className="mr-2 h-4 w-4"/> Exportar a PDF
-                                </Button>
-                                <Button onClick={handleSaveAndPublish} disabled={saving} className="w-full">
-                                    {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4" />}
-                                    Guardar y Publicar
-                                </Button>
-                            </CardFooter>
-                        </Card>
-                    </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <Card className="border-orange-200 bg-orange-50/20">
+                    <CardHeader><CardTitle className="text-sm text-orange-700 uppercase">Caja Chica (Cierre Mensual)</CardTitle></CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="flex justify-between items-center">
+                            <span className="text-xs font-bold uppercase">Disponible Efectivo Bs.</span>
+                            <Input 
+                                type="number" 
+                                className="w-40 text-right bg-white" 
+                                value={cajaChicaBS} 
+                                readOnly
+                            />
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-xs font-bold uppercase">Disponible Efectivo USD</span>
+                            <Input 
+                                type="number" 
+                                className="w-40 text-right bg-white" 
+                                value={cajaChicaUSD} 
+                                onChange={(e)=>setCajaChicaUSD(Number(e.target.value))}
+                            />
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card className="border-primary/20 bg-primary/5">
+                    <CardHeader><CardTitle className="text-sm uppercase">Resumen de Disponibilidad</CardTitle></CardHeader>
+                    <CardContent className="space-y-2">
+                         <div className="flex justify-between text-sm"><span>Total Ingresos + Saldo Ant:</span> <b>Bs. {formatCurrency(saldoAnteriorBanco + totalIngresosMes)}</b></div>
+                         <div className="flex justify-between text-sm"><span>Total Egresos (Banco):</span> <b className="text-red-600">- Bs. {formatCurrency(totalEgresosMes)}</b></div>
+                         <div className="flex justify-between text-lg border-t pt-2 mt-2"><span>DISPONIBLE BANCO:</span> <b className="text-primary">Bs. {formatCurrency(disponibilidadBancaria)}</b></div>
+                    </CardContent>
+                </Card>
+            </div>
+
+            <CardFooter className="flex justify-between bg-slate-900 p-6 rounded-xl text-white">
+                <Textarea 
+                    placeholder="Notas y observaciones del balance..." 
+                    className="w-2/3 bg-slate-800 border-slate-700" 
+                    value={notas} 
+                    onChange={(e)=>setNotas(e.target.value)}
+                />
+                <div className="flex flex-col gap-2">
+                    <Button variant="secondary" className="w-full" onClick={handleSave} disabled={saving}>
+                        {saving ? <Loader2 className="animate-spin h-4 w-4 mr-2"/> : <Save className="h-4 w-4 mr-2"/>} 
+                        Guardar Balance
+                    </Button>
+                    <Button variant="default" className="w-full bg-primary text-white" onClick={handleExportPDF}>
+                        <Download className="h-4 w-4 mr-2"/> Generar PDF Oficial
+                    </Button>
                 </div>
-            )}
+            </CardFooter>
+            </>
+            }
         </div>
     );
 }
