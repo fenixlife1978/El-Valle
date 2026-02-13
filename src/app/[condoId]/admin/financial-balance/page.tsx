@@ -1,6 +1,7 @@
+
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, use } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs, doc, setDoc, serverTimestamp, Timestamp, getDoc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
@@ -14,14 +15,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2, Download, Save, Plus, Trash2 } from "lucide-react";
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import JsBarcode from 'jsbarcode';
+
 
 const formatCurrency = (num: number) => {
     if (typeof num !== 'number' || isNaN(num)) return '0,00';
     return num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-export default function FinancialBalancePage({ params }: { params: { condoId: string } }) {
-    const { condoId: urlCondoId } = params;
+export default function FinancialBalancePage({ params }: { params: Promise<{ condoId: string }> }) {
+    const resolvedParams = use(params);
+    const { condoId: urlCondoId } = resolvedParams;
     const { userProfile, user } = useAuth();
     const { toast } = useToast();
 
@@ -170,8 +176,6 @@ export default function FinancialBalancePage({ params }: { params: { condoId: st
             return toast({ variant: 'destructive', title: 'Error', description: 'No se encontró companyInfo. Espere a que cargue o configúrelo en Ajustes.' });
         }
     
-        const { default: jsPDF } = await import('jspdf');
-        const { default: autoTable } = await import('jspdf-autotable');
         const docPDF = new jsPDF();
         
         const pageWidth = docPDF.internal.pageSize.getWidth();
