@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { Loader2, PlusCircle, Trash2, Building2, CreditCard, Save, FileDown, Banknote, Landmark, DollarSign } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -183,57 +183,62 @@ const ExpensesTable = ({ expenses, handleDelete }: { expenses: Expense[], handle
     const totalAmount = useMemo(() => expenses.reduce((sum, exp) => sum + exp.amount, 0), [expenses]);
 
     return (
-        <Table>
-            <TableHeader className="bg-secondary/30">
-                <TableRow className="h-16 hover:bg-transparent border-border/50">
-                    <TableHead className="text-muted-foreground px-8 font-bold text-xs uppercase">Fecha</TableHead>
-                    <TableHead className="text-muted-foreground font-bold text-xs uppercase">Descripción</TableHead>
-                    <TableHead className="text-muted-foreground font-bold text-xs uppercase">Categoría</TableHead>
-                    <TableHead className="text-right text-muted-foreground font-bold text-xs uppercase">Monto (Bs.)</TableHead>
-                    <TableHead className="text-right text-muted-foreground px-8 font-bold text-xs uppercase">Acción</TableHead>
-                </TableRow>
-            </TableHeader>
-            <TableBody>
-                {expenses.length === 0 ? (
-                    <TableRow>
-                        <TableCell colSpan={5} className="text-center py-20 text-muted-foreground/50 font-black uppercase italic tracking-widest">No hay egresos registrados para este período y fuente.</TableCell>
+        <div className="rounded-xl border border-border/50 overflow-hidden">
+            <Table>
+                <TableHeader className="bg-secondary/30">
+                    <TableRow className="h-16 hover:bg-transparent border-border/50">
+                        <TableHead className="text-muted-foreground px-8 font-bold text-xs uppercase">Fecha</TableHead>
+                        <TableHead className="text-muted-foreground font-bold text-xs uppercase">Descripción</TableHead>
+                        <TableHead className="text-muted-foreground font-bold text-xs uppercase">Categoría</TableHead>
+                        <TableHead className="text-right text-muted-foreground font-bold text-xs uppercase">Monto (Bs.)</TableHead>
+                        <TableHead className="text-right text-muted-foreground px-8 font-bold text-xs uppercase">Acción</TableHead>
                     </TableRow>
-                ) : (
-                    expenses.map(expense => (
-                        <TableRow key={expense.id} className="h-20 hover:bg-secondary/20 transition-colors border-b border-border/50">
-                            <TableCell className="px-8 font-bold text-muted-foreground">
-                                {expense.date ? format(expense.date.toDate(), 'dd/MM/yyyy') : '---'}
-                            </TableCell>
-                            <TableCell>
-                                <p className="font-black text-foreground uppercase italic">{expense.description}</p>
-                                <p className="text-[9px] text-muted-foreground font-bold">REF: {expense.reference}</p>
-                            </TableCell>
-                            <TableCell>
-                                <Badge className="bg-primary/10 text-primary border-none shadow-none font-black text-[9px] uppercase px-3">
-                                    {expense.category}
-                                </Badge>
-                            </TableCell>
-                            <TableCell className="text-right font-black text-destructive text-xl italic tracking-tighter">
-                                - Bs. {formatToTwoDecimals(expense.amount)}
-                            </TableCell>
-                            <TableCell className="text-right px-8">
-                                <Button variant="ghost" size="icon" onClick={() => handleDelete(expense.id)} className="text-red-300/50 hover:text-red-500 hover:bg-destructive/10 rounded-full">
-                                    <Trash2 className="h-5 w-5"/>
-                                </Button>
-                            </TableCell>
+                </TableHeader>
+                <TableBody>
+                    {expenses.length === 0 ? (
+                        <TableRow>
+                            <TableCell colSpan={5} className="text-center py-20 text-muted-foreground/50 font-black uppercase italic tracking-widest">No hay egresos registrados para este período y fuente.</TableCell>
                         </TableRow>
-                    ))
-                )}
-            </TableBody>
-            <CardFooter className="bg-secondary/10">
-                <div className="flex justify-end items-center w-full p-4">
-                    <span className="text-muted-foreground font-bold text-xs uppercase mr-4">Total del Período:</span>
-                    <span className="font-black text-destructive text-2xl italic tracking-tighter">
-                        - Bs. {formatToTwoDecimals(totalAmount)}
-                    </span>
-                </div>
-            </CardFooter>
-        </Table>
+                    ) : (
+                        expenses.map(expense => (
+                            <TableRow key={expense.id} className="h-20 hover:bg-secondary/20 transition-colors border-b border-border/50">
+                                <TableCell className="px-8 font-bold text-muted-foreground">
+                                    {expense.date ? format(expense.date.toDate(), 'dd/MM/yyyy') : '---'}
+                                </TableCell>
+                                <TableCell>
+                                    <p className="font-black text-foreground uppercase italic">{expense.description}</p>
+                                    <p className="text-[9px] text-muted-foreground font-bold">REF: {expense.reference}</p>
+                                </TableCell>
+                                <TableCell>
+                                    <Badge className="bg-primary/10 text-primary border-none shadow-none font-black text-[9px] uppercase px-3">
+                                        {expense.category}
+                                    </Badge>
+                                </TableCell>
+                                <TableCell className="text-right font-black text-destructive text-xl italic tracking-tighter">
+                                    - Bs. {formatToTwoDecimals(expense.amount)}
+                                </TableCell>
+                                <TableCell className="text-right px-8">
+                                    <Button variant="ghost" size="icon" onClick={() => handleDelete(expense.id)} className="text-red-300/50 hover:text-red-500 hover:bg-destructive/10 rounded-full">
+                                        <Trash2 className="h-5 w-5"/>
+                                    </Button>
+                                </TableCell>
+                            </TableRow>
+                        ))
+                    )}
+                </TableBody>
+                <TableFooter className="bg-secondary/10">
+                    <TableRow className="hover:bg-transparent">
+                        <TableCell colSpan={4} className="text-right py-6">
+                            <span className="text-muted-foreground font-bold text-xs uppercase mr-4">Total del Período:</span>
+                            <span className="font-black text-destructive text-2xl italic tracking-tighter">
+                                - Bs. {formatToTwoDecimals(totalAmount)}
+                            </span>
+                        </TableCell>
+                        <TableCell />
+                    </TableRow>
+                </TableFooter>
+            </Table>
+        </div>
     );
 }
 
