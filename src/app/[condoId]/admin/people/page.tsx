@@ -6,7 +6,7 @@ import {
     useEffect, 
     useMemo 
 } from 'react';
-import { useParams } from 'next/navigation'; // NUEVO: Para detectar el ID de la ruta
+import { useParams } from 'next/navigation';
 import { 
     collection, 
     onSnapshot, 
@@ -31,7 +31,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { PlusCircle, Edit, Trash2, Loader2, Search, MoreHorizontal, Building, Save } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Loader2, Search, MoreHorizontal, Building, Save, Home } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 type Role = 'propietario' | 'administrador';
@@ -53,19 +53,13 @@ const emptyOwner: Owner = {
 };
 
 export default function OwnersManagement() {
-    const params = useParams(); // Detectar [condoId]
+    const params = useParams();
     const { toast } = useToast();
     const { requestAuthorization } = useAuthorization();
-    const { user: currentUser, activeCondoId } = useAuth();
+    const { user: currentUser, activeCondoId, userProfile } = useAuth();
 
-    /**
-     * LÓGICA DE IDENTIFICACIÓN DE EFAS CondoSys
-     * Prioridad: URL > Soporte > AuthActivo
-     */
     const urlCondoId = params?.condoId as string;
-    const sId = typeof window !== 'undefined' ? localStorage.getItem('support_mode_id') : null;
-    const isSuperAdmin = currentUser?.email === 'vallecondo@gmail.com';
-    const workingCondoId = urlCondoId || (isSuperAdmin ? sId : activeCondoId);
+    const workingCondoId = userProfile?.workingCondoId || userProfile?.condominioId || urlCondoId;
     
     const ownersCollectionName = workingCondoId === 'condo_01' ? 'owners' : 'propietarios';
 
@@ -78,10 +72,9 @@ export default function OwnersManagement() {
     const [searchTerm, setSearchTerm] = useState('');
 
     useEffect(() => {
-        if (!workingCondoId) return;
+        if (!workingCondoId || workingCondoId === '[condoId]') return;
 
         setLoading(true);
-        // Todas las queries apuntan estrictamente al condominio en uso
         const ownersRef = collection(db, 'condominios', workingCondoId, ownersCollectionName);
         
         const unsubscribe = onSnapshot(ownersRef, (snapshot) => {
@@ -126,19 +119,23 @@ export default function OwnersManagement() {
             return;
         }
 
+        if (role === 'propietario' && (!properties[0]?.street || !properties[0]?.house)) {
+            toast({ variant: 'destructive', title: 'Ubicación requerida', description: 'Calle y Casa son obligatorios para propietarios.' });
+            return;
+        }
+
         requestAuthorization(async () => {
             setLoading(true);
             try {
                 if (id) {
-                    // Actualización
                     const userRef = doc(db, "condominios", workingCondoId, ownersCollectionName, id);
                     await setDoc(userRef, {
-                        name, role, balance: Number(balance), properties,
+                        name, role, balance: Number(balance), 
+                        properties: role === 'propietario' ? properties : [],
                         updatedAt: serverTimestamp()
                     }, { merge: true });
                     toast({ title: "Usuario actualizado" });
                 } else {
-                    // Creación (Usa secondaryAuth para no cerrar la sesión del admin actual)
                     if (!password || password.length < 6) {
                         toast({ variant: 'destructive', title: 'Contraseña débil', description: 'Mínimo 6 caracteres.' });
                         setLoading(false);
@@ -147,8 +144,6 @@ export default function OwnersManagement() {
                     
                     const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email!, password);
                     const newUser = userCredential.user;
-
-                    // Cerrar sesión del secundario inmediatamente
                     await signOut(secondaryAuth);
 
                     const userRef = doc(db, "condominios", workingCondoId, ownersCollectionName, newUser.uid);
@@ -156,8 +151,8 @@ export default function OwnersManagement() {
                         uid: newUser.uid,
                         name, email, role, 
                         balance: Number(balance), 
-                        properties,
-                        condominioId: workingCondoId, // Vínculo obligatorio
+                        properties: role === 'propietario' ? properties : [],
+                        condominioId: workingCondoId,
                         createdAt: serverTimestamp()
                     });
                     
@@ -186,7 +181,6 @@ export default function OwnersManagement() {
         }
     };
 
-    // Componente interno para tarjetas de usuario
     const UserCard = ({ user }: { user: Owner }) => (
         <Card className="flex flex-col bg-card border-border hover:border-primary/50 shadow-sm hover:shadow-lg transition-all duration-300 rounded-[2rem]">
             <CardHeader className="flex flex-row items-center gap-4 space-y-0 pb-2">
@@ -298,50 +292,21 @@ export default function OwnersManagement() {
                 </Tabs>
             </div>
 
-            {/* Diálogos de Gestión */}
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent className="sm:max-w-md rounded-2xl">
-                    <DialogHeader>
-                        <DialogTitle className="text-2xl font-black uppercase italic tracking-tighter">
-                            {currentOwner.id ? 'Editar' : 'Nuevo'} <span className="text-primary">Perfil</span>
+                <DialogContent className="sm:max-w-md rounded-3xl border-none shadow-2xl overflow-hidden bg-card">
+                    <DialogHeader className="bg-primary/10 p-6 -m-6 mb-4">
+                        <DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-primary">
+                            {currentOwner.id ? 'Editar' : 'Nuevo'} Perfil
                         </DialogTitle>
                     </DialogHeader>
-                    <div className="space-y-4 py-4">
-                        <div className="space-y-2">
-                            <Label className="text-[10px] font-black uppercase text-muted-foreground">Nombre Completo</Label>
-                            <Input 
-                                className="font-bold uppercase"
-                                value={currentOwner.name}
-                                onChange={(e) => setCurrentOwner({...currentOwner, name: e.target.value})}
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label className="text-[10px] font-black uppercase text-muted-foreground">Correo Electrónico</Label>
-                            <Input 
-                                type="email"
-                                disabled={!!currentOwner.id}
-                                className="font-bold"
-                                value={currentOwner.email || ''}
-                                onChange={(e) => setCurrentOwner({...currentOwner, email: e.target.value})}
-                            />
-                        </div>
-                        {!currentOwner.id && (
-                            <div className="space-y-2">
-                                <Label className="text-[10px] font-black uppercase text-muted-foreground">Contraseña Inicial</Label>
-                                <Input 
-                                    type="password"
-                                    placeholder="Mínimo 6 caracteres"
-                                    onChange={(e) => setCurrentOwner({...currentOwner, password: e.target.value})}
-                                />
-                            </div>
-                        )}
-                        <div className="space-y-2">
-                            <Label className="text-[10px] font-black uppercase text-muted-foreground">Rol de Usuario</Label>
+                    <div className="space-y-5 py-4">
+                        <div className="space-y-1.5">
+                            <Label className="text-[10px] font-black uppercase text-muted-foreground ml-2">Rol de Usuario</Label>
                             <Select 
                                 value={currentOwner.role}
                                 onValueChange={(v: Role) => setCurrentOwner({...currentOwner, role: v})}
                             >
-                                <SelectTrigger className="font-bold uppercase text-xs">
+                                <SelectTrigger className="font-bold uppercase text-xs h-12 rounded-2xl bg-input border-none">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -350,26 +315,98 @@ export default function OwnersManagement() {
                                 </SelectContent>
                             </Select>
                         </div>
+
+                        <div className="space-y-1.5">
+                            <Label className="text-[10px] font-black uppercase text-muted-foreground ml-2">Nombre Completo</Label>
+                            <Input 
+                                className="font-bold uppercase h-12 rounded-2xl bg-input border-none"
+                                placeholder="NOMBRE Y APELLIDO"
+                                value={currentOwner.name}
+                                onChange={(e) => setCurrentOwner({...currentOwner, name: e.target.value})}
+                            />
+                        </div>
+
+                        {currentOwner.role === 'propietario' && (
+                            <div className="grid grid-cols-2 gap-4 animate-in slide-in-from-top-2 duration-300">
+                                <div className="space-y-1.5">
+                                    <Label className="text-[10px] font-black uppercase text-muted-foreground ml-2">Calle / Sector</Label>
+                                    <div className="relative">
+                                        <Input 
+                                            className="font-bold uppercase h-12 rounded-2xl bg-input border-none pl-10"
+                                            placeholder="CALLE 1"
+                                            value={currentOwner.properties?.[0]?.street || ''}
+                                            onChange={(e) => {
+                                                const props = [...(currentOwner.properties || [])];
+                                                if (props.length === 0) props.push({ street: '', house: '' });
+                                                props[0].street = e.target.value;
+                                                setCurrentOwner({...currentOwner, properties: props});
+                                            }}
+                                        />
+                                        <Building className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                    </div>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label className="text-[10px] font-black uppercase text-muted-foreground ml-2">Casa / Unidad</Label>
+                                    <div className="relative">
+                                        <Input 
+                                            className="font-bold uppercase h-12 rounded-2xl bg-input border-none pl-10"
+                                            placeholder="CASA 10"
+                                            value={currentOwner.properties?.[0]?.house || ''}
+                                            onChange={(e) => {
+                                                const props = [...(currentOwner.properties || [])];
+                                                if (props.length === 0) props.push({ street: '', house: '' });
+                                                props[0].house = e.target.value;
+                                                setCurrentOwner({...currentOwner, properties: props});
+                                            }}
+                                        />
+                                        <Home className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="space-y-1.5">
+                            <Label className="text-[10px] font-black uppercase text-muted-foreground ml-2">Correo Electrónico</Label>
+                            <Input 
+                                type="email"
+                                disabled={!!currentOwner.id}
+                                className="font-bold h-12 rounded-2xl bg-input border-none"
+                                placeholder="correo@ejemplo.com"
+                                value={currentOwner.email || ''}
+                                onChange={(e) => setCurrentOwner({...currentOwner, email: e.target.value})}
+                            />
+                        </div>
+
+                        {!currentOwner.id && (
+                            <div className="space-y-1.5">
+                                <Label className="text-[10px] font-black uppercase text-muted-foreground ml-2">Contraseña Inicial</Label>
+                                <Input 
+                                    type="password"
+                                    placeholder="••••••"
+                                    className="h-12 rounded-2xl bg-input border-none"
+                                    onChange={(e) => setCurrentOwner({...currentOwner, password: e.target.value})}
+                                />
+                            </div>
+                        )}
                     </div>
-                    <DialogFooter className="gap-2">
-                        <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="font-bold uppercase text-[10px]">Cancelar</Button>
-                        <Button onClick={handleSaveOwner} disabled={loading} className="bg-primary hover:bg-primary/90 font-bold uppercase text-[10px]">
-                            {loading ? <Loader2 className="animate-spin" /> : <Save className="mr-2 h-4 w-4" />} Guardar Registro
+                    <DialogFooter className="gap-2 mt-4">
+                        <Button variant="ghost" onClick={() => setIsDialogOpen(false)} className="font-bold uppercase text-[10px] rounded-xl h-12">Cancelar</Button>
+                        <Button onClick={handleSaveOwner} disabled={loading} className="bg-primary hover:bg-primary/90 font-black uppercase text-[10px] tracking-widest flex-1 h-12 rounded-xl shadow-lg shadow-primary/20">
+                            {loading ? <Loader2 className="animate-spin" /> : <Save className="mr-2 h-4 w-4" />} {currentOwner.id ? 'Actualizar' : 'Crear'} Perfil
                         </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
 
-            {/* Diálogo de Eliminación */}
             <Dialog open={!!userToDelete} onOpenChange={() => setUserToDelete(null)}>
-                <DialogContent className="rounded-2xl">
+                <DialogContent className="rounded-3xl border-none">
                     <DialogHeader>
                         <DialogTitle className="text-red-600 font-black uppercase tracking-tighter italic">¿Eliminar Registro?</DialogTitle>
                     </DialogHeader>
-                    <p className="text-muted-foreground font-medium">Esta acción desvinculará a <b>{userToDelete?.name}</b> de <b>{workingCondoId}</b>. No se eliminarán sus pagos históricos, pero perderá acceso.</p>
+                    <p className="text-muted-foreground font-medium text-sm leading-relaxed">Esta acción desvinculará a <b>{userToDelete?.name}</b> de <b>{workingCondoId}</b>. El usuario ya no podrá acceder a este condominio.</p>
                     <DialogFooter className="mt-6 gap-2">
-                        <Button variant="ghost" onClick={() => setUserToDelete(null)} className="font-bold uppercase text-[10px]">Cancelar</Button>
-                        <Button variant="destructive" onClick={handleConfirmDelete} className="font-bold uppercase text-[10px]">Confirmar Eliminación</Button>
+                        <Button variant="ghost" onClick={() => setUserToDelete(null)} className="font-bold uppercase text-[10px] h-12 rounded-xl">Cancelar</Button>
+                        <Button variant="destructive" onClick={handleConfirmDelete} className="font-black uppercase text-[10px] h-12 rounded-xl">Confirmar Eliminación</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
