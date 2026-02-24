@@ -7,8 +7,8 @@ import { signOut } from 'firebase/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { 
-  Loader2, Trash2, Settings2, RefreshCcw, LogOut, 
-  Edit2, Check, X, ShieldAlert 
+  Loader2, Trash2, Settings2, LogOut, 
+  Edit2, Check, ShieldAlert 
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
@@ -27,14 +27,20 @@ export default function SuperAdminPage() {
   const router = useRouter();
 
   useEffect(() => {
-    if (!authLoading && user?.email === 'vallecondo@gmail.com') {
+    if (!authLoading && user?.email?.toLowerCase() === 'vallecondo@gmail.com') {
       const unsub = onSnapshot(collection(db, 'condominios'), (snap) => {
         setCondos(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         setLoading(false);
+      }, (err) => {
+        console.error("Error cargando condominios:", err);
+        toast({ variant: 'destructive', title: "Error de Acceso", description: "No se pudieron cargar los datos maestros." });
+        setLoading(false);
       });
       return () => unsub();
+    } else if (!authLoading && user) {
+        setLoading(false);
     }
-  }, [user, authLoading]);
+  }, [user, authLoading, toast]);
 
   const handleCreate = async () => {
     if (!newCondoName) return;
@@ -48,14 +54,9 @@ export default function SuperAdminPage() {
         registrationKey: `KEY-${Math.floor(1000 + Math.random() * 9000)}`,
         status: 'active',
         createdAt: new Date().toISOString(),
-        rif: "", 
-        logo: "", 
-        direccion: "",
-        telefono: "",
-        correo_contacto: ""
       });
       setNewCondoName('');
-      toast({ title: "Servicio Activado", description: "Campos de configuración inicializados." });
+      toast({ title: "Servicio Activado", description: "Condominio registrado exitosamente." });
     } catch (e) { 
       toast({ variant: 'destructive', title: "Error al crear" }); 
     }
@@ -75,11 +76,13 @@ export default function SuperAdminPage() {
 
   const handleSupport = (id: string) => {
     localStorage.setItem('support_mode_id', id);
-    router.push(`/${id}/admin/dashboard`);
+    localStorage.setItem('activeCondoId', id);
+    window.location.href = `/${id}/admin/dashboard`;
   };
   
   const handleLogout = async () => {
     await signOut(auth);
+    localStorage.clear();
     router.replace('/');
   };
 
@@ -89,20 +92,23 @@ export default function SuperAdminPage() {
       await updateDoc(doc(db, 'condominios', id), { status: newStatus });
       toast({ title: "Estado actualizado", description: `Condominio ${newStatus === 'active' ? 'activado' : 'suspendido'}` });
     } catch (e) {
-      toast({ variant: 'destructive', title: "Error de permisos", description: "No se pudo actualizar el estado." });
+      toast({ variant: 'destructive', title: "Error de permisos" });
     }
   };
 
-  if (loading) return (
+  if (authLoading || (loading && condos.length === 0)) return (
     <div className="flex h-screen items-center justify-center bg-background">
-        <Loader2 className="animate-spin text-[#f59e0b] h-10 w-10" />
+        <div className="flex flex-col items-center gap-4">
+            <Loader2 className="animate-spin text-[#f59e0b] h-10 w-10" />
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground animate-pulse">Cargando Maestro...</p>
+        </div>
     </div>
   );
 
   return (
     <div className="min-h-screen bg-background p-8 font-sans">
       <div className="max-w-6xl mx-auto flex justify-between items-start mb-8">
-        <div className="mb-10">
+        <div>
             <h2 className="text-4xl font-black text-foreground uppercase tracking-tighter italic drop-shadow-sm">
                 Panel <span className="text-primary">Maestro</span>
             </h2>
@@ -111,11 +117,9 @@ export default function SuperAdminPage() {
                 Control global de condominios y servicios.
             </p>
         </div>
-        <div className="flex gap-2">
-          <Button onClick={handleLogout} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground font-bold rounded-xl px-6 uppercase italic">
-            <LogOut className="w-4 h-4 mr-2" /> Salir
-          </Button>
-        </div>
+        <Button onClick={handleLogout} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground font-bold rounded-xl px-6 uppercase italic">
+          <LogOut className="w-4 h-4 mr-2" /> Salir
+        </Button>
       </div>
 
       <div className="max-w-6xl mx-auto mb-10">
@@ -143,7 +147,7 @@ export default function SuperAdminPage() {
               <th className="p-8">Cliente / ID</th>
               <th className="p-8">Key de Acceso</th>
               <th className="p-8">Estatus</th>
-              <th className="p-8">Control de Acceso</th>
+              <th className="p-8">Control</th>
               <th className="p-8 text-right">Acciones</th>
             </tr>
           </thead>
@@ -173,13 +177,10 @@ export default function SuperAdminPage() {
                   </span>
                 </td>
                 <td className="p-8">
-                  <div className="flex items-center gap-2">
-                      <Switch 
-                          checked={condo.status === 'active'} 
-                          onCheckedChange={() => toggleStatus(condo.id, condo.status)}
-                          aria-label={`Estado del condominio ${condo.name}`}
-                      />
-                  </div>
+                  <Switch 
+                      checked={condo.status === 'active'} 
+                      onCheckedChange={() => toggleStatus(condo.id, condo.status)}
+                  />
                 </td>
                 <td className="p-8 text-right flex justify-end gap-2">
                   {editingId === condo.id ? (
