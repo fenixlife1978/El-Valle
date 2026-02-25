@@ -635,7 +635,19 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         <DialogHeader><DialogTitle>Detalles del Pago - {selectedPayment?.reference}</DialogTitle>{selectedPayment && <DialogDescription>Reportado el {format(selectedPayment.reportedAt.toDate(), 'dd/MM/yyyy HH:mm')}</DialogDescription>}</DialogHeader>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4 max-h-[70vh] overflow-y-auto">
                             <div className="space-y-4">
-                                <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Beneficiarios</CardTitle></CardHeader><CardContent>{selectedPayment?.beneficiaries.map((b, i) => (<div key={b.ownerId || i} className="text-sm flex justify-between items-center"><span><User className="inline h-4 w-4 mr-1"/>{b.ownerName}</span><span className="font-bold">{formatCurrency(b.amount)}</span></div>))}</CardContent></Card>
+                                <Card>
+                                    <CardHeader className="pb-2">
+                                        <CardTitle className="text-sm">Beneficiarios</CardTitle>
+                                    </CardHeader>
+                                    <CardContent>
+                                        {selectedPayment?.beneficiaries.map((b, i) => (
+                                            <div key={b.ownerId || `ben-${i}`} className="text-sm flex justify-between items-center">
+                                                <span><User className="inline h-4 w-4 mr-1"/>{b.ownerName}</span>
+                                                <span className="font-bold">{formatCurrency(b.amount)}</span>
+                                            </div>
+                                        ))}
+                                    </CardContent>
+                                </Card>
                                 <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Detalles de la Transacción</CardTitle></CardHeader><CardContent className="text-sm space-y-1"><p><strong>Monto Total:</strong> {formatCurrency(selectedPayment?.totalAmount || 0)}</p><p><strong>Fecha:</strong> {selectedPayment ? format(selectedPayment.paymentDate.toDate(), 'dd/MM/yyyy') : ''}</p><p><strong>Método:</strong> {selectedPayment?.paymentMethod}</p><p><strong>Banco:</strong> {selectedPayment?.bank}</p></CardContent></Card>
                                 {selectedPayment?.status === 'rechazado' && (<Alert variant="destructive"><AlertTriangle className="h-4 w-4" /><AlertDescription><strong>Motivo del Rechazo:</strong> {selectedPayment.observations}</AlertDescription></Alert>)}
                                 {selectedPayment?.status === 'pendiente' && (
@@ -676,7 +688,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                                                             </li>
                                                         ))}
                                                         {liquidatedDetails.balanceCredit > 0 && (
-                                                            <li className="flex justify-between items-center p-2 rounded-md bg-green-50 text-green-700">
+                                                            <li key="balance-credit" className="flex justify-between items-center p-2 rounded-md bg-green-50 text-green-700">
                                                                 <p className="font-semibold">Abono a Saldo a Favor</p>
                                                                 <span className="font-mono font-bold">Bs. {formatCurrency(liquidatedDetails.balanceCredit)}</span>
                                                             </li>
@@ -931,9 +943,27 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
                                 {row.owner && (
                                   <div className="mt-4 space-y-2">
                                     <Label>Asignar a Propiedad</Label>
-                                    <Select onValueChange={(v) => { const props = Array.isArray(row.owner?.properties) ? row.owner.properties : []; const found = props.find(p => `${p.street}-${p.house}` === v); updateBeneficiaryRow(row.id, { selectedProperty: found || null });}} value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''} disabled={loading || !row.owner || !Array.isArray(row.owner.properties)}>
-                                      <SelectTrigger><SelectValue placeholder={Array.isArray(row.owner.properties) ? "Seleccione una propiedad..." : "Usuario sin propiedades"} /></SelectTrigger>
-                                      <SelectContent>{Array.isArray(row.owner?.properties) ? (row.owner.properties.map((p, pIdx) => (<SelectItem key={`${p.street}-${p.house}-${pIdx}`} value={`${p.street}-${p.house}`}>{`${p.street} - ${p.house}`}</SelectItem>))) : (<SelectItem value="none" disabled>No hay propiedades</SelectItem>)}</SelectContent>
+                                    <Select 
+                                      onValueChange={(v) => { 
+                                        const props = Array.isArray(row.owner?.properties) ? row.owner.properties : []; 
+                                        const found = props.find(p => `${p.street}-${p.house}` === v); 
+                                        updateBeneficiaryRow(row.id, { selectedProperty: found || null });
+                                      }} 
+                                      value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''} 
+                                      disabled={loading || !row.owner || !Array.isArray(row.owner.properties)}
+                                    >
+                                      <SelectTrigger className="rounded-xl">
+                                        <SelectValue placeholder={Array.isArray(row.owner.properties) ? "Seleccione una propiedad..." : "Usuario sin propiedades"} />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {Array.isArray(row.owner?.properties) ? (row.owner.properties.map((p, pIdx) => (
+                                          <SelectItem key={`${p.street}-${p.house}-${pIdx}`} value={`${p.street}-${p.house}`}>
+                                            {`${p.street} - ${p.house}`}
+                                          </SelectItem>
+                                        ))) : (
+                                          <SelectItem value="none" disabled>No hay propiedades</SelectItem>
+                                        )}
+                                      </SelectContent>
                                     </Select>
                                   </div>
                                 )}
