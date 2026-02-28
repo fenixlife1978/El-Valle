@@ -17,8 +17,6 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import JsBarcode from 'jsbarcode';
-
 
 const formatCurrency = (num: number) => {
     if (typeof num !== 'number' || isNaN(num)) return '0,00';
@@ -40,7 +38,8 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
     const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
 
     const [saldoAnteriorBanco, setSaldoAnteriorBanco] = useState(0);
-    const [ingresosOrdinarios, setIngresosOrdinarios] = useState(0);
+    const [ingresosOrdinariosBanco, setIngresosOrdinariosBanco] = useState(0);
+    const [ingresosOrdinariosEfectivo, setIngresosOrdinariosEfectivo] = useState(0);
     const [otrosIngresos, setOtrosIngresos] = useState<{ concepto: string, monto: number }[]>([]);
     const [egresosBanco, setEgresosBanco] = useState<{ concepto: string, monto: number }[]>([]);
     
@@ -59,7 +58,6 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 const configSnap = await getDoc(configRef);
                 if (configSnap.exists()) {
                     setCompanyData(configSnap.data().companyInfo);
-                    console.log("Configuración cargada desde mainSettings");
                 }
             } catch (error) {
                 console.error("Error al cargar mainSettings:", error);
@@ -79,17 +77,32 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 const fromDate = new Date(year, month, 1);
                 const toDate = new Date(year, month + 1, 0, 23, 59, 59);
 
+                // 1. Obtener todos los pagos aprobados del mes
                 const pQuery = query(
                     collection(db, 'condominios', workingCondoId, 'payments'),
                     where('paymentDate', '>=', fromDate),
                     where('paymentDate', '<=', toDate),
-                    where('status', '==', 'aprobado'),
-                    where('paymentMethod', 'in', ['transferencia', 'movil'])
+                    where('status', '==', 'aprobado')
                 );
                 const pSnap = await getDocs(pQuery);
-                const totalBancario = pSnap.docs.reduce((sum, d) => sum + (d.data().totalAmount || 0), 0);
-                setIngresosOrdinarios(totalBancario);
+                
+                let totalBancario = 0;
+                let totalEfectivo = 0;
 
+                pSnap.forEach(doc => {
+                    const data = doc.data();
+                    const amount = data.totalAmount || 0;
+                    if (['transferencia', 'movil'].includes(data.paymentMethod)) {
+                        totalBancario += amount;
+                    } else if (['efectivo_bs', 'efectivo_usd'].includes(data.paymentMethod)) {
+                        totalEfectivo += amount;
+                    }
+                });
+
+                setIngresosOrdinariosBanco(totalBancario);
+                setIngresosOrdinariosEfectivo(totalEfectivo);
+
+                // 2. Obtener gastos del mes (Solo Banco)
                 const eQuery = query(
                     collection(db, 'condominios', workingCondoId, 'gastos'),
                     where('date', '>=', fromDate),
@@ -102,6 +115,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                     monto: d.data().amount 
                 })));
 
+                // 3. Obtener saldo actual de Caja Chica
                 const ccQuery = query(
                     collection(db, 'condominios', workingCondoId, 'cajaChica_movimientos')
                 );
@@ -111,7 +125,6 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                     return data.type === 'ingreso' ? acc + data.amount : acc - data.amount;
                 }, 0);
                 setCajaChicaBS(saldoCajaChica);
-                setCajaChicaUSD(0);
 
             } catch (error) {
                 console.error(error);
@@ -125,8 +138,8 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
     }, [selectedMonth, selectedYear, workingCondoId, toast]);
 
     const totalIngresosMes = useMemo(() => 
-        ingresosOrdinarios + otrosIngresos.reduce((sum, i) => sum + i.monto, 0), 
-    [ingresosOrdinarios, otrosIngresos]);
+        ingresosOrdinariosBanco + ingresosOrdinariosEfectivo + otrosIngresos.reduce((sum, i) => sum + i.monto, 0), 
+    [ingresosOrdinariosBanco, ingresosOrdinariosEfectivo, otrosIngresos]);
     
     const totalEgresosMes = useMemo(() => 
         egresosBanco.reduce((sum, e) => sum + e.monto, 0), 
@@ -148,7 +161,8 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 periodo: docId,
                 saldoAnteriorBanco,
                 ingresos: [
-                    { dia: '01', concepto: 'INGRESOS ORDINARIOS (CUOTAS DEL MES)', monto: ingresosOrdinarios },
+                    { dia: '01', concepto: 'INGRESOS ORDINARIOS (PAGO MÓVIL / TRANSF.)', monto: ingresosOrdinariosBanco },
+                    { dia: '01', concepto: 'INGRESOS ORDINARIOS (EFECTIVO)', monto: ingresosOrdinariosEfectivo },
                     ...otrosIngresos.map(i => ({ dia: 'VAR', concepto: i.concepto, monto: i.monto }))
                 ],
                 egresos: egresosBanco.map(e => ({ dia: 'VAR', concepto: e.concepto, monto: e.monto })),
@@ -173,11 +187,10 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
         const info = companyData || userProfile?.companyInfo; 
         
         if (!info) {
-            return toast({ variant: 'destructive', title: 'Error', description: 'No se encontró companyInfo. Espere a que cargue o configúrelo en Ajustes.' });
+            return toast({ variant: 'destructive', title: 'Error', description: 'No se encontró información del condominio.' });
         }
     
         const docPDF = new jsPDF();
-        
         const pageWidth = docPDF.internal.pageSize.getWidth();
         const margin = 14;
 
@@ -187,7 +200,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
         docPDF.setFontSize(12).setFont('helvetica', 'bold').text(info.name, margin + 25, margin + 8);
         docPDF.setFontSize(9).setFont('helvetica', 'normal').text(`RIF: ${info.rif || 'N/A'}`, margin + 25, margin + 14);
 
-        const period = `${format(new Date(parseInt(selectedYear), parseInt(selectedMonth) -1), 'MMMM', {locale: es})} ${selectedYear}`;
+        const period = `${format(new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1), 'MMMM', {locale: es})} ${selectedYear}`;
         docPDF.setFontSize(16).setFont('helvetica', 'bold').text('ESTADO DE RESULTADOS', pageWidth / 2, margin + 30, { align: 'center'});
         docPDF.setFontSize(10).setFont('helvetica', 'normal').text(`Correspondiente al período de ${period}`, pageWidth / 2, margin + 37, { align: 'center'});
     
@@ -197,7 +210,8 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
             head: [['CONCEPTO DE INGRESO', 'MONTO (Bs.)']],
             body: [
                 ['SALDO ANTERIOR EN BANCO', formatCurrency(saldoAnteriorBanco)],
-                ['INGRESOS ORDINARIOS (CUOTAS DEL MES)', formatCurrency(ingresosOrdinarios)],
+                ['INGRESOS ORDINARIOS (PAGO MÓVIL / TRANSF.)', formatCurrency(ingresosOrdinariosBanco)],
+                ['INGRESOS ORDINARIOS (EFECTIVO)', formatCurrency(ingresosOrdinariosEfectivo)],
                 ...otrosIngresos.map(i => [i.concepto.toUpperCase(), formatCurrency(i.monto)])
             ],
             foot: [[
@@ -237,7 +251,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
         docPDF.rect(14, startY, pageWidth - (margin * 2), 25, 'F');
         docPDF.setFontSize(10).text('FONDO DE CAJA CHICA AL CIERRE:', 18, startY + 8);
         docPDF.setFontSize(11).text(`TOTAL EFECTIVO BOLÍVARES (Bs.): ${formatCurrency(cajaChicaBS)}`, 18, startY + 16);
-        docPDF.text(`TOTAL EFECTIVO DÓLARES (USD): $${formatCurrency(cajaChicaUSD)}`, 18, startY + 22);
+        docPDF.text(`TOTAL EFECTIVO DÓLARES (USD): $ ${cajaChicaUSD.toLocaleString()}`, 18, startY + 22);
     
         docPDF.save(`Balance_${selectedMonth}_${selectedYear}.pdf`);
     };
@@ -291,13 +305,25 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                                 <TableCell />
                             </TableRow>
                             <TableRow>
-                                <TableCell className="font-medium">INGRESOS ORDINARIOS (PAGO DE CUOTAS DEL MES - BANCO)</TableCell>
+                                <TableCell className="font-medium">INGRESOS ORDINARIOS (PAGO MÓVIL / TRANSF. - BANCO)</TableCell>
                                 <TableCell>
                                     <Input 
                                         type="number" 
                                         className="text-right" 
-                                        value={ingresosOrdinarios} 
-                                        onChange={(e) => setIngresosOrdinarios(Number(e.target.value))}
+                                        value={ingresosOrdinariosBanco} 
+                                        onChange={(e) => setIngresosOrdinariosBanco(Number(e.target.value))}
+                                    />
+                                </TableCell>
+                                <TableCell />
+                            </TableRow>
+                            <TableRow>
+                                <TableCell className="font-medium">INGRESOS ORDINARIOS (EFECTIVO - CAJA)</TableCell>
+                                <TableCell>
+                                    <Input 
+                                        type="number" 
+                                        className="text-right" 
+                                        value={ingresosOrdinariosEfectivo} 
+                                        onChange={(e) => setIngresosOrdinariosEfectivo(Number(e.target.value))}
                                     />
                                 </TableCell>
                                 <TableCell />
@@ -395,8 +421,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                                         <Button variant="ghost" size="icon" onClick={() => eliminarLineaEgreso(idx)}>
                                             <Trash2 className="h-4 w-4 text-red-500" />
                                         </Button>
-                                    </TableCell>
-                                </TableRow>
+                                    </TableRow>
                             ))}
                          </TableBody>
                          <TableFooter>
