@@ -1,4 +1,3 @@
-
 'use client';
 
 import {
@@ -57,7 +56,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                 { href: `/${condoId}/admin/debts`, label: "Gestión de Deudas" },
                 { href: `/${condoId}/admin/financial-balance`, label: "Balance Financiero" },
                 { href: `/${condoId}/admin/accounting`, label: "Contabilidad" },
-                { href: `/${condoId}/admin/expenses`, label: "Gestión de Egresos" },
                 { href: `/${condoId}/admin/reports`, label: "Informes" },
                 { href: `/${condoId}/admin/billboard`, label: "Cartelera" },
                 { href: `/${condoId}/admin/surveys`, label: "Encuestas" },
