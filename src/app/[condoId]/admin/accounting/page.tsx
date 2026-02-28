@@ -202,22 +202,22 @@ const AccountingPage = () => {
                 </p>
             </div>
             
-            <Card className="rounded-3xl border-none shadow-sm">
+            <Card className="rounded-3xl border-none shadow-sm bg-white">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0">
                     <div>
-                        <CardTitle>Selector de Período</CardTitle>
-                        <CardDescription>Filtre los libros contables dinámicos de Tesorería.</CardDescription>
+                        <CardTitle className="text-slate-900">Selector de Período</CardTitle>
+                        <CardDescription className="text-slate-500">Filtre los libros contables dinámicos de Tesorería.</CardDescription>
                     </div>
                     <div className="flex gap-2">
                         <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                            <SelectTrigger className="w-[180px] rounded-xl"><SelectValue /></SelectTrigger>
+                            <SelectTrigger className="w-[180px] rounded-xl bg-slate-50 text-slate-900 border-slate-200"><SelectValue /></SelectTrigger>
                             <SelectContent>{months.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent>
                         </Select>
                         <Select value={selectedYear} onValueChange={setSelectedYear}>
-                            <SelectTrigger className="w-[120px] rounded-xl"><SelectValue /></SelectTrigger>
+                            <SelectTrigger className="w-[120px] rounded-xl bg-slate-50 text-slate-900 border-slate-200"><SelectValue /></SelectTrigger>
                             <SelectContent>{years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
                         </Select>
-                        <Button onClick={() => fetchData()} variant="outline" size="icon" className="rounded-xl">
+                        <Button onClick={() => fetchData()} variant="outline" size="icon" className="rounded-xl border-slate-200 text-slate-600">
                             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                         </Button>
                     </div>
@@ -225,46 +225,46 @@ const AccountingPage = () => {
             </Card>
 
             <Tabs defaultValue="libroMayor">
-                <TabsList className="flex flex-wrap h-auto gap-2 bg-slate-100/50 p-2 rounded-3xl">
-                    <TabsTrigger value="libroMayor" className="rounded-2xl font-black uppercase text-[10px] px-6">Libro Mayor</TabsTrigger>
+                <TabsList className="flex flex-wrap h-auto gap-2 bg-slate-200 p-2 rounded-3xl">
+                    <TabsTrigger value="libroMayor" className="rounded-2xl font-black uppercase text-[10px] px-6 text-slate-600 data-[state=active]:bg-white data-[state=active]:text-slate-900">Libro Mayor</TabsTrigger>
                     {accounts.map(acc => (
-                         <TabsTrigger key={acc.id} value={acc.id} className="rounded-2xl font-black uppercase text-[10px] px-6">
+                         <TabsTrigger key={acc.id} value={acc.id} className="rounded-2xl font-black uppercase text-[10px] px-6 text-slate-600 data-[state=active]:bg-white data-[state=active]:text-slate-900">
                             {acc.nombre}
                          </TabsTrigger>
                     ))}
                 </TabsList>
 
                 <TabsContent value="libroMayor" className="mt-4">
-                    <Card className="rounded-[2.5rem] border-none shadow-2xl overflow-hidden">
+                    <Card className="rounded-[2.5rem] border-none shadow-2xl overflow-hidden bg-white">
                         <CardHeader className="bg-slate-900 text-white p-8">
-                            <CardTitle className="flex items-center gap-3 italic">
+                            <CardTitle className="flex items-center gap-3 italic text-white">
                                 <History className="text-[#f59e0b]" /> Libro Mayor Consolidado
                             </CardTitle>
                         </CardHeader>
                         <CardContent className="p-0">
                              <Table>
                                 <TableHeader className="bg-slate-50">
-                                    <TableRow>
-                                        <TableHead className="text-[10px] font-black uppercase px-8">Cuenta</TableHead>
-                                        <TableHead className="text-right text-[10px] font-black uppercase">Saldo Anterior</TableHead>
-                                        <TableHead className="text-right text-[10px] font-black uppercase">Créditos (+)</TableHead>
-                                        <TableHead className="text-right text-[10px] font-black uppercase">Débitos (-)</TableHead>
-                                        <TableHead className="text-right text-[10px] font-black uppercase pr-8">Saldo Final</TableHead>
+                                    <TableRow className="border-slate-200">
+                                        <TableHead className="text-[10px] font-black uppercase px-8 text-slate-700">Cuenta</TableHead>
+                                        <TableHead className="text-right text-[10px] font-black uppercase text-slate-700">Saldo Anterior</TableHead>
+                                        <TableHead className="text-right text-[10px] font-black uppercase text-slate-700">Créditos (+)</TableHead>
+                                        <TableHead className="text-right text-[10px] font-black uppercase text-slate-700">Débitos (-)</TableHead>
+                                        <TableHead className="text-right text-[10px] font-black uppercase pr-8 text-slate-700">Saldo Final</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {generalLedger.map(acc => {
                                         const Icon = getAccountIcon(acc.tipo);
                                         return (
-                                            <TableRow key={acc.accountId} className="font-medium hover:bg-slate-50">
+                                            <TableRow key={acc.accountId} className="font-medium hover:bg-slate-50 border-slate-100">
                                                 <TableCell className="font-bold flex items-center gap-2 px-8 py-6">
                                                     <Icon className="h-4 w-4 text-[#0081c9]" />
-                                                    <span className="uppercase text-xs">{acc.accountName}</span>
+                                                    <span className="uppercase text-xs text-slate-900">{acc.accountName}</span>
                                                 </TableCell>
-                                                <TableCell className="text-right font-mono">{formatCurrency(acc.startBalance)}</TableCell>
+                                                <TableCell className="text-right font-mono text-slate-700">{formatCurrency(acc.startBalance)}</TableCell>
                                                 <TableCell className="text-right text-green-600 font-bold">+{formatCurrency(acc.totalCredit)}</TableCell>
                                                 <TableCell className="text-right text-red-600 font-bold">-{formatCurrency(acc.totalDebit)}</TableCell>
-                                                <TableCell className="text-right font-black italic text-lg pr-8">Bs. {formatCurrency(acc.endBalance)}</TableCell>
+                                                <TableCell className="text-right font-black italic text-lg pr-8 text-slate-900">Bs. {formatCurrency(acc.endBalance)}</TableCell>
                                             </TableRow>
                                         );
                                     })}
@@ -278,30 +278,30 @@ const AccountingPage = () => {
                     const { transactions, startBalance } = periodData[acc.id] || { transactions: [], startBalance: 0 };
                     return (
                         <TabsContent key={acc.id} value={acc.id} className="mt-4">
-                            <Card className="rounded-[2.5rem] border-none shadow-2xl overflow-hidden">
-                                <CardHeader className="flex flex-row items-center justify-between space-y-0 bg-slate-50 border-b p-8">
+                            <Card className="rounded-[2.5rem] border-none shadow-2xl overflow-hidden bg-white">
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 bg-slate-50 border-b border-slate-100 p-8">
                                     <div>
-                                        <CardTitle className="uppercase italic">Libro Diario: {acc.nombre}</CardTitle>
-                                        <CardDescription className="font-bold uppercase text-[9px] tracking-widest mt-1">Registros del mes seleccionado</CardDescription>
+                                        <CardTitle className="uppercase italic text-slate-900">Libro Diario: {acc.nombre}</CardTitle>
+                                        <CardDescription className="font-bold uppercase text-[9px] tracking-widest mt-1 text-slate-500">Registros del mes seleccionado</CardDescription>
                                     </div>
-                                    <Button onClick={() => handleExportPdf(acc.id, acc.nombre)} variant="outline" className="rounded-xl font-bold uppercase text-[10px]">
+                                    <Button onClick={() => handleExportPdf(acc.id, acc.nombre)} variant="outline" className="rounded-xl font-bold uppercase text-[10px] border-slate-200 text-slate-700 hover:bg-slate-100">
                                         <Download className="mr-2 h-4 w-4" /> Exportar PDF
                                     </Button>
                                 </CardHeader>
                                 <CardContent className="p-0">
                                     <Table>
                                         <TableHeader className="bg-slate-100/50">
-                                            <TableRow>
-                                                <TableHead className="text-[10px] font-black uppercase px-8">Fecha</TableHead>
-                                                <TableHead className="text-[10px] font-black uppercase">Descripción</TableHead>
-                                                <TableHead className="text-[10px] font-black uppercase">Ref.</TableHead>
-                                                <TableHead className="text-right text-[10px] font-black uppercase">Crédito</TableHead>
-                                                <TableHead className="text-right text-[10px] font-black uppercase">Débito</TableHead>
-                                                <TableHead className="text-right text-[10px] font-black uppercase pr-8">Saldo</TableHead>
+                                            <TableRow className="border-slate-200">
+                                                <TableHead className="text-[10px] font-black uppercase px-8 text-slate-700">Fecha</TableHead>
+                                                <TableHead className="text-[10px] font-black uppercase text-slate-700">Descripción</TableHead>
+                                                <TableHead className="text-[10px] font-black uppercase text-slate-700">Ref.</TableHead>
+                                                <TableHead className="text-right text-[10px] font-black uppercase text-slate-700">Crédito</TableHead>
+                                                <TableHead className="text-right text-[10px] font-black uppercase text-slate-700">Débito</TableHead>
+                                                <TableHead className="text-right text-[10px] font-black uppercase pr-8 text-slate-700">Saldo</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            <TableRow className="bg-slate-50 font-black text-[10px] tracking-widest italic">
+                                            <TableRow className="bg-slate-50 font-black text-[10px] tracking-widest italic text-slate-900 border-slate-200">
                                                 <TableCell colSpan={5} className="px-8 py-4">SALDO ANTERIOR AL PERÍODO</TableCell>
                                                 <TableCell className="text-right pr-8">{formatCurrency(startBalance)}</TableCell>
                                             </TableRow>
@@ -309,13 +309,13 @@ const AccountingPage = () => {
                                                 <TableRow><TableCell colSpan={6} className="text-center py-20 text-slate-400 font-bold italic">Sin movimientos en este período para esta cuenta</TableCell></TableRow>
                                             ) : (
                                                 transactions.map((tx, idx) => (
-                                                    <TableRow key={idx} className="hover:bg-slate-50 transition-colors">
+                                                    <TableRow key={idx} className="hover:bg-slate-50 transition-colors border-slate-100">
                                                         <TableCell className="whitespace-nowrap px-8 font-bold text-slate-500 text-xs">{format(tx.date, 'dd/MM/yy')}</TableCell>
                                                         <TableCell className="font-black text-slate-900 uppercase italic text-xs">{tx.description}</TableCell>
                                                         <TableCell className="text-[9px] font-bold text-slate-400 uppercase">{tx.reference}</TableCell>
                                                         <TableCell className="text-right text-green-600 font-black">{tx.credit ? `+${formatCurrency(tx.credit)}` : '-'}</TableCell>
                                                         <TableCell className="text-right text-red-600 font-black">{tx.debit ? `-${formatCurrency(tx.debit)}` : '-'}</TableCell>
-                                                        <TableCell className="text-right font-bold pr-8">Bs. {formatCurrency(tx.balance)}</TableCell>
+                                                        <TableCell className="text-right font-bold pr-8 text-slate-900">Bs. {formatCurrency(tx.balance)}</TableCell>
                                                     </TableRow>
                                                 ))
                                             )}
