@@ -33,7 +33,8 @@ import {
     Calendar as CalendarIcon,
     Building2,
     CheckCircle2,
-    BadgeInfo
+    BadgeInfo,
+    Info
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -144,7 +145,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
         setIsSubmitting(true);
         try {
             await addDoc(collection(db, 'condominios', condoId, 'cuentas'), {
-                nombre: accountForm.nombre.toUpperCase(),
+                nombre: accountForm.nombre.toUpperCase().trim(),
                 tipo: accountForm.tipo,
                 saldoActual: parseFloat(accountForm.saldoInicial) || 0,
                 createdAt: serverTimestamp()
@@ -175,7 +176,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                 const currentSaldo = accountDoc.data().saldoActual || 0;
                 const newSaldo = transForm.tipo === 'ingreso' ? currentSaldo + montoNum : currentSaldo - montoNum;
 
-                if (transForm.tipo === 'egreso' && newSaldo < 0) {
+                if (transForm.tipo === 'egreso' && newSaldo < -0.01) {
                     throw new Error("Saldo insuficiente en la cuenta seleccionada.");
                 }
 

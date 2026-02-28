@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
@@ -11,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Calculator, CalendarIcon, Check, CheckCircle, Clock, DollarSign, Eye, FileText, Hash, Loader2, Upload, Banknote, Info, X, Save, FileUp, UserPlus, Trash2, XCircle, Search, ChevronDown, Minus, Equal, Receipt, AlertTriangle, User, MoreHorizontal, Download, Share2 } from 'lucide-react';
+import { ArrowLeft, Calculator, CalendarIcon, Check, CheckCircle, Clock, DollarSign, Eye, FileText, Hash, Loader2, Upload, Banknote, Info, X, Save, FileUp, UserPlus, Trash2, XCircle, Search, ChevronDown, Minus, Equal, Receipt, AlertTriangle, User, MoreHorizontal, Download, Share2, CheckCircle2 } from 'lucide-react';
 import { format, isBefore, startOfMonth, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn, compressImage } from '@/lib/utils';
@@ -188,7 +189,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 const accountsSnap = await getDocs(collection(db, 'condominios', condoId, 'cuentas'));
                 const accounts = accountsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
                 
-                // Determinar Cuenta de Destino según método (Insensible a mayúsculas)
+                // Determinar Cuenta de Destino según método
                 let targetAccountName = "";
                 if (['movil', 'transferencia'].includes(payment.paymentMethod)) {
                     targetAccountName = "BANCO DE VENEZUELA";
@@ -199,6 +200,10 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 const targetAccount = accounts.find((acc: any) => 
                     acc.nombre?.toUpperCase().trim() === targetAccountName
                 );
+
+                if (!targetAccount) {
+                    throw new Error(`Falta cuenta en Tesorería: Debe crear una cuenta llamada "${targetAccountName}" antes de aprobar este pago.`);
+                }
     
                 await runTransaction(db, async (transaction) => {
                     const paymentRef = doc(db, 'condominios', condoId, 'payments', payment.id);
@@ -207,15 +212,9 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                     const ownerRefs = beneficiaryIds.map(id => doc(db, 'condominios', condoId, ownersCollectionName, id));
                     const ownerDocs = await Promise.all(ownerRefs.map(ref => transaction.get(ref)));
 
-                    let targetAccountRef = null;
-                    let currentAccountBalance = 0;
-                    if (targetAccount) {
-                        targetAccountRef = doc(db, 'condominios', condoId, 'cuentas', targetAccount.id);
-                        const accDoc = await transaction.get(targetAccountRef);
-                        if (accDoc.exists()) {
-                            currentAccountBalance = accDoc.data().saldoActual || 0;
-                        }
-                    }
+                    const targetAccountRef = doc(db, 'condominios', condoId, 'cuentas', targetAccount.id);
+                    const accDoc = await transaction.get(targetAccountRef);
+                    const currentAccountBalance = accDoc.data()?.saldoActual || 0;
     
                     for (const beneficiary of payment.beneficiaries) {
                         const ownerDoc = ownerDocs.find(d => d.id === beneficiary.ownerId);
@@ -288,22 +287,22 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         receiptNumbers[beneficiary.ownerId] = `REC-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 90000) + 10000)}`;
                     }
 
-                    if (targetAccountRef) {
-                        transaction.update(targetAccountRef, { saldoActual: currentAccountBalance + payment.totalAmount });
-                        const newTransRef = doc(collection(db, 'condominios', condoId, 'transacciones'));
-                        transaction.set(newTransRef, {
-                            monto: payment.totalAmount,
-                            tipo: 'ingreso',
-                            cuentaId: targetAccount!.id,
-                            nombreCuenta: targetAccount!.nombre,
-                            descripcion: `PAGO RECIBIDO: ${payment.beneficiaries.map(b => b.ownerName).join(', ')}`,
-                            referencia: payment.reference,
-                            fecha: payment.paymentDate,
-                            createdBy: user?.email,
-                            createdAt: serverTimestamp(),
-                            sourcePaymentId: payment.id
-                        });
-                    }
+                    // Actualizar Tesorería
+                    transaction.update(targetAccountRef, { saldoActual: currentAccountBalance + payment.totalAmount });
+                    const newTransRef = doc(collection(db, 'condominios', condoId, 'transacciones'));
+                    transaction.set(newTransRef, {
+                        monto: payment.totalAmount,
+                        tipo: 'ingreso',
+                        cuentaId: targetAccount!.id,
+                        nombreCuenta: targetAccount!.nombre,
+                        descripcion: `PAGO RECIBIDO: ${payment.beneficiaries.map(b => b.ownerName).join(', ')}`,
+                        referencia: payment.reference,
+                        fecha: payment.paymentDate,
+                        createdBy: user?.email,
+                        createdAt: serverTimestamp(),
+                        sourcePaymentId: payment.id
+                    });
+                    
                     transaction.update(paymentRef, { status: 'aprobado', observations: 'Pago verificado y aplicado por la administración.', receiptNumbers });
                 });
                 
@@ -343,27 +342,30 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 const paymentRef = doc(db, 'condominios', condoId, 'payments', paymentToDelete.id);
                 const paidDebtsQuery = query(collection(db, 'condominios', condoId, 'debts'), where('paymentId', '==', paymentToDelete.id));
                 const transactionsQuery = query(collection(db, 'condominios', condoId, 'transacciones'), where('sourcePaymentId', '==', paymentToDelete.id));
+                
                 await runTransaction(db, async (transaction) => {
                     const paymentDoc = await transaction.get(paymentRef);
                     if (!paymentDoc.exists()) return;
                     const paymentData = paymentDoc.data() as Payment;
+                    
                     const paidDebtsSnapshot = await getDocs(paidDebtsQuery);
                     const txSnapshot = await getDocs(transactionsQuery);
+                    
                     const ownerRefs = paymentData.beneficiaries.map(b => doc(db, 'condominios', condoId, ownersCollectionName, b.ownerId));
                     const ownerDocs = await Promise.all(ownerRefs.map(ref => transaction.get(ref)));
-                    let targetAccountRef = null;
-                    let targetAccDoc = null;
+                    
                     if (txSnapshot.docs.length > 0) {
                         const txData = txSnapshot.docs[0].data();
-                        targetAccountRef = doc(db, 'condominios', condoId, 'cuentaId', txData.cuentaId); // Fixed potential bug in doc path
-                        targetAccountRef = doc(db, 'condominios', condoId, 'cuentas', txData.cuentaId);
-                        targetAccDoc = await transaction.get(targetAccountRef);
-                    }
-                    if (targetAccountRef && targetAccDoc?.exists()) {
-                        const currentAccBalance = targetAccDoc.data().saldoActual || 0;
-                        transaction.update(targetAccountRef, { saldoActual: Math.max(0, currentAccBalance - paymentData.totalAmount) });
+                        const targetAccountRef = doc(db, 'condominios', condoId, 'cuentas', txData.cuentaId);
+                        const targetAccDoc = await transaction.get(targetAccountRef);
+                        
+                        if (targetAccDoc.exists()) {
+                            const currentAccBalance = targetAccDoc.data().saldoActual || 0;
+                            transaction.update(targetAccountRef, { saldoActual: Math.max(0, currentAccBalance - paymentData.totalAmount) });
+                        }
                         txSnapshot.forEach(txDoc => transaction.delete(txDoc.ref));
                     }
+
                     let totalAmountAppliedToDebts = 0;
                     paidDebtsSnapshot.forEach(debtDoc => {
                         const debtData = debtDoc.data() as Debt;
@@ -375,6 +377,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                             paidAmountUSD: deleteField()
                         });
                     });
+
                     const totalSurplus = paymentData.totalAmount - totalAmountAppliedToDebts;
                     if (totalSurplus > 0.01) {
                          ownerDocs.forEach(ownerDoc => {
@@ -718,7 +721,7 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
                                         {!row.owner ? (<><div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Buscar por nombre..." className="pl-9" value={row.searchTerm} onChange={(e) => updateBeneficiaryRow(row.id, { searchTerm: e.target.value })} /></div>{row.searchTerm.length >= 2 && <Card className="border rounded-md"><ScrollArea className="h-32">{getFilteredOwners(row.searchTerm).map(owner => (<div key={owner.id} onClick={() => handleOwnerSelect(row.id, owner)} className="p-2 hover:bg-muted cursor-pointer border-b last:border-b-0"><p className="font-medium text-sm">{owner.name}</p></div>))}</ScrollArea></Card>}</>)
                                         : (<div className="p-3 bg-background rounded-md flex items-center justify-between"><div><p className="font-semibold">{row.owner.name}</p></div><Button variant="ghost" size="icon" onClick={() => removeBeneficiaryRow(row.id)} disabled={beneficiaryRows.length === 1}><XCircle className="h-5 w-5 text-destructive" /></Button></div>)}
                                     </div>
-                                    <div className="space-y-2"><Input type="number" placeholder="Monto Bs." value={row.amount} onChange={(e) => updateBeneficiaryRow(row.id, { amount: e.target.value })} /></div>
+                                    <div className="space-y-2"><Input type="number" placeholder="Monto Bs." value={row.amount} onChange={(e) => updateBeneficiaryRow(row.id, { amount: e.target.value })} disabled={loading || !row.owner} /></div>
                                 </div>
                             </Card>
                         ))}

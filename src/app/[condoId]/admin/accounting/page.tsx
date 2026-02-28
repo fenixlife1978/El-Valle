@@ -1,9 +1,10 @@
+
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, Timestamp, where, query, orderBy, getDocs, runTransaction, doc } from 'firebase/firestore';
-import { Download, RefreshCw, Landmark, Coins, Wallet, History, Zap, Loader2 } from 'lucide-react';
+import { collection, onSnapshot, Timestamp, where, query, orderBy, getDocs, runTransaction, doc, addDoc } from 'firebase/firestore';
+import { Download, RefreshCw, Landmark, Coins, Wallet, History, Zap, Loader2, Info } from 'lucide-react';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -148,7 +149,7 @@ const AccountingPage = () => {
     const handleSyncPeriod = async () => {
         if (!workingCondoId) return;
         setIsSyncing(true);
-        toast({ title: "Sincronizando...", description: "Verificando consistencia entre Pagos y Tesorería." });
+        toast({ title: "Sincronizando...", description: "Verificando consistencia y auto-aprovisionando cuentas." });
 
         try {
             const fromDate = startOfMonth(new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1));
@@ -161,12 +162,12 @@ const AccountingPage = () => {
                 where('paymentDate', '<=', toDate)
             ));
 
+            let repairsCount = 0;
+
             await runTransaction(db, async (transaction) => {
                 const accountsQuerySnap = await getDocs(collection(db, 'condominios', workingCondoId, 'cuentas'));
-                const currentAccounts = accountsQuerySnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+                let currentAccounts = accountsQuerySnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
                 
-                let repairsCount = 0;
-
                 for (const pDoc of paymentsSnap.docs) {
                     const p = pDoc.data();
                     const exists = allTransactions.some(tx => tx.sourcePaymentId === pDoc.id);
@@ -176,7 +177,22 @@ const AccountingPage = () => {
                         if (['movil', 'transferencia'].includes(p.paymentMethod)) targetName = "BANCO DE VENEZUELA";
                         else if (['efectivo_bs', 'efectivo'].includes(p.paymentMethod)) targetName = "CAJA PRINCIPAL";
 
-                        const account = currentAccounts.find((a: any) => a.nombre?.toUpperCase().trim() === targetName);
+                        let account = currentAccounts.find((a: any) => a.nombre?.toUpperCase().trim() === targetName);
+                        
+                        // AUTO-PROVISIÓN: Si la cuenta no existe, crearla dinámicamente
+                        if (!account) {
+                            const newAccRef = doc(collection(db, 'condominios', workingCondoId, 'cuentas'));
+                            const newAccData = {
+                                nombre: targetName,
+                                tipo: targetName === "CAJA PRINCIPAL" ? 'efectivo' : 'banco',
+                                saldoActual: 0,
+                                createdAt: serverTimestamp()
+                            };
+                            transaction.set(newAccRef, newAccData);
+                            account = { id: newAccRef.id, ...newAccData };
+                            currentAccounts.push(account);
+                        }
+
                         if (account) {
                             const txRef = doc(collection(db, 'condominios', workingCondoId, 'transacciones'));
                             transaction.set(txRef, {
@@ -188,7 +204,7 @@ const AccountingPage = () => {
                                 referencia: p.reference,
                                 fecha: p.paymentDate,
                                 sourcePaymentId: pDoc.id,
-                                createdAt: Timestamp.now(),
+                                createdAt: serverTimestamp(),
                                 createdBy: user?.email
                             });
 
@@ -207,13 +223,13 @@ const AccountingPage = () => {
                 }
             });
 
-            toast({ title: "Sincronización Exitosa", description: "Se han generado los asientos contables y actualizado los saldos físicos." });
+            toast({ title: "Sincronización Exitosa", description: `Se han generado ${repairsCount} asientos y actualizado los saldos físicos.` });
         } catch (e) {
             if (e === "no_repairs_needed") {
                 toast({ title: "Todo al día", description: "No se detectaron discrepancias en este período." });
             } else {
                 console.error(e);
-                toast({ variant: 'destructive', title: "Error", description: "No se pudo completar la sincronización." });
+                toast({ variant: 'destructive', title: "Error", description: "Fallo durante la sincronización atómica." });
             }
         } finally {
             setIsSyncing(false);
@@ -331,7 +347,9 @@ const AccountingPage = () => {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {generalLedger.map(acc => {
+                                    {generalLedger.length === 0 ? (
+                                        <TableRow><TableCell colSpan={5} className="text-center py-20 text-slate-400 font-bold italic uppercase text-[10px]">No se detectaron cuentas activas</TableCell></TableRow>
+                                    ) : generalLedger.map(acc => {
                                         const Icon = getAccountIcon(acc.tipo);
                                         return (
                                             <TableRow key={acc.accountId} className="font-medium hover:bg-slate-50 border-slate-100 transition-colors">
