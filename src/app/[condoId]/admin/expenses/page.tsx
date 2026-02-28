@@ -4,7 +4,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { db } from '@/lib/firebase';
 import { 
     collection, addDoc, onSnapshot, deleteDoc, doc, 
-    serverTimestamp, query, orderBy, Timestamp, writeBatch
+    serverTimestamp, query, orderBy, Timestamp, writeBatch,
+    increment, getDocs
 } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { Button } from '@/components/ui/button';
@@ -13,12 +14,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
-import { Loader2, PlusCircle, Trash2, Building2, CreditCard, Save, FileDown, Banknote, Landmark, Coins } from 'lucide-react';
+import { Loader2, PlusCircle, Trash2, Building2, CreditCard, Save, FileDown, Banknote, Landmark, Coins, WalletCards } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-
 
 type Expense = {
     id: string;
@@ -28,7 +28,15 @@ type Expense = {
     date: Timestamp;
     reference: string;
     createdAt: Timestamp;
-    paymentSource?: 'banco' | 'caja_principal' | 'caja_chica';
+    paymentSource?: string; // Ahora guardará el ID de la cuenta o el nombre normalizado
+    accountId?: string;
+};
+
+type Account = {
+    id: string;
+    nombre: string;
+    saldoActual: number;
+    tipo: string;
 };
 
 const formatToTwoDecimals = (num: number) => {
@@ -44,7 +52,16 @@ const yearOptions = Array.from({ length: 10 }, (_, i) => String(new Date().getFu
 function RegisterExpenseForm({ workingCondoId, onSave }: { workingCondoId: string | null, onSave: () => void }) {
   const [loading, setLoading] = useState(false);
   const [category, setCategory] = useState('');
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (!workingCondoId) return;
+    const unsub = onSnapshot(collection(db, 'condominios', workingCondoId, 'cuentas'), (snap) => {
+        setAccounts(snap.docs.map(d => ({ id: d.id, ...d.data() } as Account)));
+    });
+    return () => unsub();
+  }, [workingCondoId]);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -60,53 +77,74 @@ function RegisterExpenseForm({ workingCondoId, onSave }: { workingCondoId: strin
     const amount = parseFloat(formData.get("amount") as string);
     const description = (formData.get("description") as string).toUpperCase();
     const reference = (formData.get("reference") as string).toUpperCase();
-    const paymentSource = currentCategory === 'Caja Chica' ? 'banco' : (formData.get("paymentSource") as string) || 'banco';
+    const accountId = formData.get("paymentSource") as string;
     const fullDate = new Date(`${dateValue}T00:00:00`);
 
+    const selectedAccount = accounts.find(a => a.id === accountId);
+
     try {
+      const batch = writeBatch(db);
+      const expenseRef = doc(collection(db, "condominios", workingCondoId, "gastos"));
+      
+      // 1. Registro del Gasto
+      batch.set(expenseRef, {
+          description, 
+          amount, 
+          category: currentCategory, 
+          date: Timestamp.fromDate(fullDate),
+          reference, 
+          createdAt: serverTimestamp(), 
+          paymentSource: selectedAccount?.nombre || 'Desconocido',
+          accountId: accountId
+      });
+
+      // 2. Lógica Multicuenta: Afectar saldo si hay cuenta seleccionada
+      if (accountId && selectedAccount) {
+          const accountRef = doc(db, 'condominios', workingCondoId, 'cuentas', accountId);
+          
+          // Descontamos el saldo usando increment negativo
+          batch.update(accountRef, {
+              saldoActual: increment(-amount)
+          });
+
+          // 3. Crear asiento en el Libro Diario (Transacciones)
+          const transRef = doc(collection(db, 'condominios', workingCondoId, 'transacciones'));
+          batch.set(transRef, {
+              monto: amount,
+              tipo: 'egreso',
+              cuentaId: accountId,
+              nombreCuenta: selectedAccount.nombre,
+              descripcion: `GASTO: ${description}`,
+              referencia: reference,
+              fecha: Timestamp.fromDate(fullDate),
+              createdAt: serverTimestamp()
+          });
+      }
+
+      // Lógica especial para reposición de Caja Chica
       if (currentCategory === 'Caja Chica') {
-        const batch = writeBatch(db);
-        
-        const expenseRef = doc(collection(db, "condominios", workingCondoId, "gastos"));
-        batch.set(expenseRef, {
-            description, amount, category: currentCategory, date: Timestamp.fromDate(fullDate),
-            reference, createdAt: serverTimestamp(), paymentSource,
-        });
+        // Buscamos la cuenta de Caja Chica para sumarle el ingreso
+        const cajaChicaAcc = accounts.find(a => a.nombre?.toUpperCase().trim() === "CAJA CHICA");
+        if (cajaChicaAcc) {
+            const ccRef = doc(db, 'condominios', workingCondoId, 'cuentas', cajaChicaAcc.id);
+            batch.update(ccRef, { saldoActual: increment(amount) });
 
-        const replenishmentRef = doc(collection(db, "condominios", workingCondoId, "petty_cash_replenishments"));
-        batch.set(replenishmentRef, {
-            date: Timestamp.fromDate(fullDate), amount, description: `ASIGNACIÓN: ${description}`,
-            expenses: [], sourceExpenseId: expenseRef.id 
-        });
+            const replenishmentRef = doc(collection(db, "condominios", workingCondoId, "petty_cash_replenishments"));
+            batch.set(replenishmentRef, {
+                date: Timestamp.fromDate(fullDate), amount, description: `ASIGNACIÓN: ${description}`,
+                expenses: [], sourceExpenseId: expenseRef.id 
+            });
 
-        const movementRef = doc(collection(db, "condominios", workingCondoId, "cajaChica_movimientos"));
-        batch.set(movementRef, {
-            date: Timestamp.fromDate(fullDate), description: `INGRESO POR ASIGNACIÓN: ${description}`,
-            amount, type: 'ingreso', replenishmentId: replenishmentRef.id
-        });
-
-        await batch.commit();
-        toast({ title: "Gasto y Fondo Registrados", description: `Se ha añadido un ingreso de Bs. ${amount} a la Caja Chica.` });
-      } else {
-        const collectionName = paymentSource === 'caja_principal' ? 'cajaPrincipal_movimientos' : 'gastos';
-        
-        if (paymentSource === 'caja_principal') {
-            await addDoc(collection(db, "condominios", workingCondoId, "cajaPrincipal_movimientos"), {
-                date: Timestamp.fromDate(fullDate),
-                description: `GASTO: ${description}`,
-                amount,
-                type: 'egreso',
-                source: 'manual',
-                reference
+            const movementRef = doc(collection(db, "condominios", workingCondoId, "cajaChica_movimientos"));
+            batch.set(movementRef, {
+                date: Timestamp.fromDate(fullDate), description: `INGRESO POR ASIGNACIÓN: ${description}`,
+                amount, type: 'ingreso', replenishmentId: replenishmentRef.id
             });
         }
-
-        await addDoc(collection(db, "condominios", workingCondoId, "gastos"), {
-          description, amount, category: currentCategory, date: Timestamp.fromDate(fullDate),
-          reference, createdAt: serverTimestamp(), paymentSource,
-        });
-        toast({ title: "Gasto registrado correctamente" });
       }
+
+      await batch.commit();
+      toast({ title: "Gasto procesado", description: "El egreso ha sido registrado y el saldo de la cuenta actualizado." });
       
       (e.target as HTMLFormElement).reset();
       setCategory('');
@@ -125,7 +163,7 @@ function RegisterExpenseForm({ workingCondoId, onSave }: { workingCondoId: strin
         <CardTitle className="flex items-center gap-3 text-foreground font-black uppercase italic">
             <PlusCircle className="text-primary h-6 w-6"/> Nuevo Registro de Egreso
         </CardTitle>
-        <CardDescription className="font-bold text-muted-foreground">Complete los datos del comprobante o factura.</CardDescription>
+        <CardDescription className="font-bold text-muted-foreground">Implementación Multicuenta con Sincronización de Saldo.</CardDescription>
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="p-8 space-y-6">
@@ -143,15 +181,17 @@ function RegisterExpenseForm({ workingCondoId, onSave }: { workingCondoId: strin
                     <Input name="amount" type="number" step="0.01" className="bg-input border-none h-14 rounded-2xl font-bold text-primary text-xl" required />
                 </div>
                 <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase text-muted-foreground ml-2">Fuente de Pago</label>
-                    <Select name="paymentSource" required defaultValue="banco" disabled={category === 'Caja Chica'}>
+                    <label className="text-[10px] font-black uppercase text-muted-foreground ml-2">Cuenta de Origen (Pago)</label>
+                    <Select name="paymentSource" required>
                         <SelectTrigger className="bg-input border-none h-14 rounded-2xl font-bold text-foreground">
-                            <SelectValue placeholder="Seleccione Fuente" />
+                            <SelectValue placeholder="Seleccione Cuenta de Tesorería" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="banco">Banco</SelectItem>
-                            <SelectItem value="caja_principal">Caja Principal (Efectivo)</SelectItem>
-                            <SelectItem value="caja_chica">Caja Chica</SelectItem>
+                            {accounts.map(acc => (
+                                <SelectItem key={acc.id} value={acc.id}>
+                                    {acc.nombre} (Bs. {formatToTwoDecimals(acc.saldoActual)})
+                                </SelectItem>
+                            ))}
                         </SelectContent>
                     </Select>
                 </div>
@@ -169,7 +209,7 @@ function RegisterExpenseForm({ workingCondoId, onSave }: { workingCondoId: strin
                             <SelectItem value="Telefonia e Internet">Telefonia e Internet</SelectItem>
                             <SelectItem value="Gastos ExtraOrdinarios">Gastos ExtraOrdinarios</SelectItem>
                             <SelectItem value="Reparaciones Generales">Reparaciones Generales</SelectItem>
-                            <SelectItem value="Caja Chica">Fondo de Caja Chica (Desde Banco)</SelectItem>
+                            <SelectItem value="Caja Chica">Reposición de Caja Chica (Desde Banco)</SelectItem>
                             <SelectItem value="Otros Gastos">Otros Gastos</SelectItem>
                         </SelectContent>
                     </Select>
@@ -183,7 +223,7 @@ function RegisterExpenseForm({ workingCondoId, onSave }: { workingCondoId: strin
         <CardFooter className="bg-secondary/20 p-8">
             <Button type="submit" disabled={loading || !workingCondoId} className="w-full h-16 bg-primary hover:bg-primary/90 text-primary-foreground font-black rounded-2xl text-lg shadow-xl uppercase tracking-widest transition-all">
                 {loading ? <Loader2 className="mr-2 h-6 w-6 animate-spin"/> : <Save className="mr-2 h-6 w-6"/>}
-                Guardar Egreso
+                Registrar y Afectar Cuentas
             </Button>
         </CardFooter>
       </form>
@@ -201,7 +241,7 @@ const ExpensesTable = ({ expenses, handleDelete }: { expenses: Expense[], handle
                     <TableRow className="h-16 hover:bg-transparent border-border/50">
                         <TableHead className="text-muted-foreground px-8 font-bold text-xs uppercase">Fecha</TableHead>
                         <TableHead className="text-muted-foreground font-bold text-xs uppercase">Descripción</TableHead>
-                        <TableHead className="text-muted-foreground font-bold text-xs uppercase">Categoría</TableHead>
+                        <TableHead className="text-muted-foreground font-bold text-xs uppercase">Fuente / Cuenta</TableHead>
                         <TableHead className="text-right text-muted-foreground font-bold text-xs uppercase">Monto (Bs.)</TableHead>
                         <TableHead className="text-right text-muted-foreground px-8 font-bold text-xs uppercase">Acción</TableHead>
                     </TableRow>
@@ -209,7 +249,7 @@ const ExpensesTable = ({ expenses, handleDelete }: { expenses: Expense[], handle
                 <TableBody>
                     {expenses.length === 0 ? (
                         <TableRow>
-                            <TableCell colSpan={5} className="text-center py-20 text-muted-foreground/50 font-black uppercase italic tracking-widest">No hay egresos registrados para este período y fuente.</TableCell>
+                            <TableCell colSpan={5} className="text-center py-20 text-muted-foreground/50 font-black uppercase italic tracking-widest">No hay egresos registrados para este período.</TableCell>
                         </TableRow>
                     ) : (
                         expenses.map(expense => (
@@ -219,11 +259,11 @@ const ExpensesTable = ({ expenses, handleDelete }: { expenses: Expense[], handle
                                 </TableCell>
                                 <TableCell>
                                     <p className="font-black text-foreground uppercase italic">{expense.description}</p>
-                                    <p className="text-[9px] text-muted-foreground font-bold">REF: {expense.reference}</p>
+                                    <p className="text-[9px] text-muted-foreground font-bold">REF: {expense.reference} • {expense.category}</p>
                                 </TableCell>
                                 <TableCell>
-                                    <Badge className="bg-primary/10 text-primary border-none shadow-none font-black text-[9px] uppercase px-3">
-                                        {expense.category}
+                                    <Badge className="bg-primary/10 text-primary border-none shadow-none font-black text-[9px] uppercase px-3 gap-1.5">
+                                        <WalletCards className="h-3 w-3" /> {expense.paymentSource || 'N/A'}
                                     </Badge>
                                 </TableCell>
                                 <TableCell className="text-right font-black text-destructive text-xl italic tracking-tighter">
@@ -288,14 +328,10 @@ export default function ExpensesPage() {
             );
         });
     }, [expenses, filterYear, filterMonth]);
-    
-    const bankExpenses = useMemo(() => filteredExpenses.filter(e => e.paymentSource === 'banco'), [filteredExpenses]);
-    const mainCashExpenses = useMemo(() => filteredExpenses.filter(e => e.paymentSource === 'caja_principal'), [filteredExpenses]);
-    const pettyCashExpenses = useMemo(() => filteredExpenses.filter(e => e.paymentSource === 'caja_chica'), [filteredExpenses]);
 
     const handleDelete = async (id: string) => {
         if (!workingCondoId) return;
-        if(window.confirm('¿Eliminar este registro de egreso permanentemente?')) {
+        if(window.confirm('¿Eliminar este registro de egreso permanentemente? Nota: Esto no revertirá automáticamente el saldo de la cuenta de origen.')) {
             try {
                 await deleteDoc(doc(db, "condominios", workingCondoId, "gastos", id));
                 toast({ title: "Gasto eliminado" });
@@ -369,13 +405,13 @@ export default function ExpensesPage() {
 
         autoTable(doc, {
             startY: startY + 10,
-            head: [['Fecha', 'Descripción', 'Referencia', 'Categoría', 'Fuente', 'Monto (Bs.)']],
+            head: [['Fecha', 'Descripción', 'Referencia', 'Categoría', 'Fuente/Cuenta', 'Monto (Bs.)']],
             body: filteredExpenses.map(exp => [
                 format(exp.date.toDate(), 'dd/MM/yyyy'),
                 exp.description,
                 exp.reference,
                 exp.category,
-                exp.paymentSource?.replace('_', ' ') || 'Banco',
+                exp.paymentSource || 'N/A',
                 formatToTwoDecimals(exp.amount)
             ]),
             foot: [['', '', '', '', 'Total Egresos', formatToTwoDecimals(filteredExpenses.reduce((sum, exp) => sum + exp.amount, 0))]],
@@ -396,7 +432,7 @@ export default function ExpensesPage() {
                 </h2>
                 <div className="h-1.5 w-20 bg-amber-500 mt-2 rounded-full"></div>
                 <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">
-                    Registro y control de todos los gastos del condominio.
+                    Registro y control de todos los gastos del condominio con impacto directo en Tesorería.
                 </p>
             </div>
 
@@ -428,18 +464,7 @@ export default function ExpensesPage() {
                      {loading ? (
                         <div className="flex justify-center items-center h-40"><Loader2 className="h-10 w-10 animate-spin text-primary"/></div>
                     ) : (
-                        <Tabs defaultValue="banco">
-                            <TabsList className="grid w-full grid-cols-3 bg-secondary/20 rounded-2xl h-auto p-1.5">
-                                <TabsTrigger value="banco" className="rounded-xl h-12 text-xs md:text-sm font-black gap-2"><Landmark className="h-4 w-4"/> Banco</TabsTrigger>
-                                <TabsTrigger value="caja_principal" className="rounded-xl h-12 text-xs md:text-sm font-black gap-2"><Coins className="h-4 w-4"/> Caja Principal</TabsTrigger>
-                                <TabsTrigger value="caja_chica" className="rounded-xl h-12 text-xs md:text-sm font-black gap-2"><WalletCards className="h-4 w-4"/> Caja Chica</TabsTrigger>
-                            </TabsList>
-                            <div className="mt-4">
-                                <TabsContent value="banco"><ExpensesTable expenses={bankExpenses} handleDelete={handleDelete} /></TabsContent>
-                                <TabsContent value="caja_principal"><ExpensesTable expenses={mainCashExpenses} handleDelete={handleDelete} /></TabsContent>
-                                <TabsContent value="caja_chica"><ExpensesTable expenses={pettyCashExpenses} handleDelete={handleDelete} /></TabsContent>
-                            </div>
-                        </Tabs>
+                        <ExpensesTable expenses={filteredExpenses} handleDelete={handleDelete} />
                     )}
                 </CardContent>
             </Card>
