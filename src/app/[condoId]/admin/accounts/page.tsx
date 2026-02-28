@@ -15,7 +15,8 @@ import {
     addDoc,
     serverTimestamp,
     writeBatch,
-    deleteDoc
+    deleteDoc,
+    updateDoc
 } from 'firebase/firestore';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -36,7 +37,10 @@ import {
     CheckCircle2,
     BadgeInfo,
     Info,
-    AlertTriangle
+    AlertTriangle,
+    Edit,
+    MoreVertical,
+    MoreHorizontal
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -54,6 +58,7 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 // --- Tipos ---
 interface Account {
@@ -96,6 +101,12 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
     const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false);
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
     const [accountToDelete, setAccountToDelete] = useState<Account | null>(null);
+
+    // Transaction Edit/Delete states
+    const [isEditTxDialogOpen, setIsEditTxDialogOpen] = useState(false);
+    const [isDeleteTxDialogOpen, setIsDeleteTxDialogOpen] = useState(false);
+    const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
+    const [editTxData, setEditTxData] = useState({ descripcion: '', referencia: '' });
 
     // Form States
     const [accountForm, setAccountForm] = useState({ nombre: '', tipo: 'banco' as any, saldoInicial: '0' });
@@ -143,7 +154,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
         return () => { unsubAccounts(); unsubTx(); };
     }, [condoId]);
 
-    // --- Lógica de Transacciones ---
+    // --- Lógica de Cuentas ---
     const handleSaveAccount = async () => {
         if (!accountForm.nombre) return;
         setIsSubmitting(true);
@@ -179,6 +190,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
         }
     };
 
+    // --- Lógica de Transacciones ---
     const handleSaveTransaction = async () => {
         if (!transForm.cuentaId || !transForm.monto || !transForm.descripcion) return;
         setIsSubmitting(true);
@@ -199,7 +211,6 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                     throw new Error("Saldo insuficiente en la cuenta seleccionada.");
                 }
 
-                // 1. Crear transacción
                 const newTransRef = doc(transColRef);
                 transaction.set(newTransRef, {
                     monto: montoNum,
@@ -213,7 +224,6 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                     createdAt: serverTimestamp()
                 });
 
-                // 2. Actualizar Saldo Cuenta
                 transaction.update(cuentaRef, { saldoActual: newSaldo });
             });
 
@@ -222,6 +232,54 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
             setTransactionForm({ monto: '', tipo: 'egreso', cuentaId: '', descripcion: '', referencia: '', fecha: new Date() });
         } catch (error: any) {
             toast({ variant: 'destructive', title: "Fallo en transacción", description: error.message });
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleDeleteTransaction = async () => {
+        if (!selectedTx || !condoId) return;
+        setIsSubmitting(true);
+        try {
+            await runTransaction(db, async (transaction) => {
+                const txRef = doc(db, 'condominios', condoId, 'transacciones', selectedTx.id);
+                const accRef = doc(db, 'condominios', condoId, 'cuentas', selectedTx.cuentaId);
+                
+                const accSnap = await transaction.get(accRef);
+                if (!accSnap.exists()) throw new Error("La cuenta no existe.");
+                
+                const currentBalance = accSnap.data().saldoActual || 0;
+                // Revertimos el balance: si era ingreso, lo restamos; si era egreso, lo sumamos
+                const adjustment = selectedTx.tipo === 'ingreso' ? -selectedTx.monto : selectedTx.monto;
+                const newBalance = currentBalance + adjustment;
+
+                transaction.update(accRef, { saldoActual: newBalance });
+                transaction.delete(txRef);
+            });
+            toast({ title: "Movimiento eliminado", description: "El saldo ha sido revertido automáticamente." });
+            setIsDeleteTxDialogOpen(false);
+            setSelectedTx(null);
+        } catch (error: any) {
+            toast({ variant: 'destructive', title: "Error", description: error.message });
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleUpdateTx = async () => {
+        if (!selectedTx || !condoId || !editTxData.descripcion) return;
+        setIsSubmitting(true);
+        try {
+            await updateDoc(doc(db, 'condominios', condoId, 'transacciones', selectedTx.id), {
+                descripcion: editTxData.descripcion.toUpperCase(),
+                referencia: editTxData.referencia.toUpperCase(),
+                updatedAt: serverTimestamp()
+            });
+            toast({ title: "Movimiento actualizado" });
+            setIsEditTxDialogOpen(false);
+            setSelectedTx(null);
+        } catch (e) {
+            toast({ variant: 'destructive', title: "Error" });
         } finally {
             setIsSubmitting(false);
         }
@@ -251,36 +309,35 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
 
                 const destSaldo = destSnap.data().saldoActual || 0;
 
-                // Registro Salida
                 const outRef = doc(collection(db, 'condominios', condoId, 'transacciones'));
                 transaction.set(outRef, {
                     monto: montoNum,
                     tipo: 'egreso',
                     cuentaId: transferForm.origenId,
                     nombreCuenta: srcSnap.data().nombre,
-                    descripcion: `TRANSFERENCIA ENVIADA: ${transferForm.descripcion.toUpperCase()}`,
+                    descripcion: `TRASLADO: ${transferForm.descripcion.toUpperCase()}`,
                     fecha: Timestamp.now(),
-                    category: 'transferencia'
+                    category: 'transferencia',
+                    createdAt: serverTimestamp()
                 });
 
-                // Registro Entrada
                 const inRef = doc(collection(db, 'condominios', condoId, 'transacciones'));
                 transaction.set(inRef, {
                     monto: montoNum,
                     tipo: 'ingreso',
                     cuentaId: transferForm.destinoId,
                     nombreCuenta: destSnap.data().nombre,
-                    descripcion: `TRANSFERENCIA RECIBIDA: ${transferForm.descripcion.toUpperCase()}`,
+                    descripcion: `RECEPCIÓN TRASLADO: ${transferForm.descripcion.toUpperCase()}`,
                     fecha: Timestamp.now(),
-                    category: 'transferencia'
+                    category: 'transferencia',
+                    createdAt: serverTimestamp()
                 });
 
-                // Actualizar Saldos
                 transaction.update(srcRef, { saldoActual: srcSaldo - montoNum });
                 transaction.update(destRef, { saldoActual: destSaldo + montoNum });
             });
 
-            toast({ title: "Transferencia completada" });
+            toast({ title: "Traslado completado" });
             setIsTransferDialogOpen(false);
             setTransferForm({ origenId: '', destinoId: '', monto: '', descripcion: 'Transferencia entre cuentas' });
         } catch (error: any) {
@@ -298,7 +355,6 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
         const doc = new jsPDF();
         const info = companyInfo || { name: 'EFAS CondoSys', rif: 'J-00000000-0' };
 
-        // Header
         doc.setFillColor(15, 23, 42);
         doc.rect(0, 0, 210, 30, 'F');
         doc.setTextColor(255, 255, 255);
@@ -356,7 +412,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                         <Download className="mr-2 h-4 w-4" /> Reporte Período
                     </Button>
                     <Button onClick={() => setIsTransferDialogOpen(true)} variant="secondary" className="bg-slate-900 hover:bg-slate-800 text-white font-black uppercase text-[10px] rounded-xl h-12">
-                        <ArrowRightLeft className="mr-2 h-4 w-4" /> Transferir
+                        <ArrowRightLeft className="mr-2 h-4 w-4" /> Trasladar
                     </Button>
                     <Button onClick={() => setIsTransactionDialogOpen(true)} className="bg-[#F28705] hover:bg-[#d17504] text-white font-black uppercase text-[10px] rounded-xl h-12 shadow-lg shadow-orange-500/20">
                         <PlusCircle className="mr-2 h-4 w-4" /> Nuevo Movimiento
@@ -373,7 +429,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                     </Card>
                 ) : (
                     accounts.map(acc => (
-                        <Card key={acc.id} className="rounded-[2rem] border-none shadow-sm hover:shadow-xl transition-all duration-300 group bg-white">
+                        <Card key={acc.id} className="rounded-[2rem] border-none shadow-sm hover:shadow-xl transition-all duration-300 group bg-white relative overflow-hidden">
                             <CardHeader className="pb-2">
                                 <CardTitle className="text-[9px] font-black uppercase tracking-widest text-slate-400 flex items-center justify-between">
                                     <span className="flex items-center gap-2">
@@ -384,16 +440,15 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                                         <Button 
                                             variant="ghost" 
                                             size="icon" 
-                                            className="h-6 w-6 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                            className="h-8 w-8 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-all"
                                             onClick={(e) => {
                                                 e.stopPropagation();
                                                 setAccountToDelete(acc);
                                                 setIsDeleteDialogOpen(true);
                                             }}
                                         >
-                                            <Trash2 className="h-3 w-3" />
+                                            <Trash2 className="h-4 w-4" />
                                         </Button>
-                                        <BadgeInfo className="h-3 w-3 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />
                                     </div>
                                 </CardTitle>
                             </CardHeader>
@@ -406,16 +461,14 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                         </Card>
                     ))
                 )}
-                {accounts.length > 0 && (
-                    <Button 
-                        variant="ghost" 
-                        onClick={() => setIsAccountDialogOpen(true)}
-                        className="h-full border-2 border-dashed border-slate-200 rounded-[2rem] hover:bg-slate-100 hover:border-slate-300 flex flex-col items-center justify-center py-8 bg-white/50"
-                    >
-                        <PlusCircle className="h-6 w-6 text-slate-300 mb-2" />
-                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Nueva Cuenta</span>
-                    </Button>
-                )}
+                <Button 
+                    variant="ghost" 
+                    onClick={() => setIsAccountDialogOpen(true)}
+                    className="h-full border-2 border-dashed border-slate-200 rounded-[2rem] hover:bg-slate-100 hover:border-slate-300 flex flex-col items-center justify-center py-8 bg-white/50"
+                >
+                    <PlusCircle className="h-6 w-6 text-slate-300 mb-2" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Nueva Cuenta</span>
+                </Button>
             </div>
 
             {/* Historial de Transacciones */}
@@ -454,11 +507,12 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                                     <TableHead className="text-[10px] font-black uppercase text-slate-700">Cuenta</TableHead>
                                     <TableHead className="text-[10px] font-black uppercase text-slate-700">Descripción</TableHead>
                                     <TableHead className="text-right text-[10px] font-black uppercase px-8 text-slate-700">Monto (Bs.)</TableHead>
+                                    <TableHead className="text-center text-[10px] font-black uppercase text-slate-700">Acción</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {transactions.length === 0 ? (
-                                    <TableRow><TableCell colSpan={4} className="text-center py-20 text-slate-400 italic font-bold uppercase tracking-widest text-xs">No se registran movimientos</TableCell></TableRow>
+                                    <TableRow><TableCell colSpan={5} className="text-center py-20 text-slate-400 italic font-bold uppercase tracking-widest text-xs">No se registran movimientos</TableCell></TableRow>
                                 ) : (
                                     transactions.map(tx => (
                                         <TableRow key={tx.id} className="hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0">
@@ -475,6 +529,28 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                                             <TableCell className={cn("text-right font-black italic text-lg px-8", tx.tipo === 'ingreso' ? 'text-green-600' : 'text-red-600')}>
                                                 {tx.tipo === 'ingreso' ? '+' : '-'} {formatCurrency(tx.monto)}
                                             </TableCell>
+                                            <TableCell className="text-center">
+                                                <DropdownMenu>
+                                                    <DropdownMenuTrigger asChild>
+                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-900"><MoreVertical className="h-4 w-4"/></Button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent align="end">
+                                                        <DropdownMenuItem onClick={() => {
+                                                            setSelectedTx(tx);
+                                                            setEditTxData({ descripcion: tx.descripcion, referencia: tx.referencia || '' });
+                                                            setIsEditTxDialogOpen(true);
+                                                        }} className="gap-2 font-bold uppercase text-[10px]">
+                                                            <Edit className="h-3 w-3 text-sky-500" /> Editar
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem onClick={() => {
+                                                            setSelectedTx(tx);
+                                                            setIsDeleteTxDialogOpen(true);
+                                                        }} className="gap-2 font-bold uppercase text-[10px] text-red-600">
+                                                            <Trash2 className="h-3 w-3" /> Eliminar
+                                                        </DropdownMenuItem>
+                                                    </DropdownMenuContent>
+                                                </DropdownMenu>
+                                            </TableCell>
                                         </TableRow>
                                     ))
                                 )}
@@ -484,9 +560,8 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                 </CardContent>
             </Card>
 
-            {/* --- Diálogos --- */}
+            {/* --- Diálogos de Cuentas --- */}
 
-            {/* Nueva Cuenta */}
             <Dialog open={isAccountDialogOpen} onOpenChange={setIsAccountDialogOpen}>
                 <DialogContent className="rounded-[2rem] border-none shadow-2xl bg-white text-slate-900">
                     <DialogHeader>
@@ -524,19 +599,17 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                 </DialogContent>
             </Dialog>
 
-            {/* Eliminar Cuenta */}
             <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
                 <DialogContent className="rounded-[2rem] border-none shadow-2xl bg-white text-slate-900">
                     <DialogHeader>
                         <DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-slate-900">¿Eliminar <span className="text-red-500">Cuenta</span>?</DialogTitle>
                         <DialogDescription className="text-slate-500 font-bold">
                             Esta acción eliminará la cuenta "{accountToDelete?.nombre}" de forma permanente. 
-                            Las transacciones históricas permanecerán en el sistema pero la cuenta dejará de estar disponible para nuevos movimientos.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-100 rounded-2xl text-red-700">
                         <AlertTriangle className="h-6 w-6 shrink-0" />
-                        <p className="text-xs font-bold leading-tight uppercase">Atención: Esta operación no se puede deshacer.</p>
+                        <p className="text-xs font-bold leading-tight uppercase">Atención: Se borrará solo el acceso; los movimientos históricos quedarán en la base de datos.</p>
                     </div>
                     <DialogFooter className="gap-2 mt-4">
                         <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)} className="rounded-xl h-12 font-bold flex-1 border-slate-200 text-slate-600">Cancelar</Button>
@@ -547,7 +620,8 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                 </DialogContent>
             </Dialog>
 
-            {/* Nuevo Movimiento */}
+            {/* --- Diálogos de Transacciones --- */}
+
             <Dialog open={isTransactionDialogOpen} onOpenChange={setIsTransactionDialogOpen}>
                 <DialogContent className="rounded-[2rem] border-none shadow-2xl bg-white text-slate-900">
                     <DialogHeader>
@@ -613,7 +687,49 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                 </DialogContent>
             </Dialog>
 
-            {/* Transferencia */}
+            <Dialog open={isDeleteTxDialogOpen} onOpenChange={setIsDeleteTxDialogOpen}>
+                <DialogContent className="rounded-[2rem] border-none shadow-2xl bg-white text-slate-900">
+                    <DialogHeader>
+                        <DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-slate-900">¿Eliminar <span className="text-red-500">Movimiento</span>?</DialogTitle>
+                        <DialogDescription className="text-slate-500 font-bold">
+                            Esta acción revertirá automáticamente el monto de <b>Bs. {formatCurrency(selectedTx?.monto || 0)}</b> en el saldo de la cuenta <b>{selectedTx?.nombreCuenta}</b>.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter className="gap-2 mt-4">
+                        <Button variant="outline" onClick={() => setIsDeleteTxDialogOpen(false)} className="rounded-xl h-12 font-bold flex-1 border-slate-200 text-slate-600">Cancelar</Button>
+                        <Button onClick={handleDeleteTransaction} disabled={isSubmitting} variant="destructive" className="rounded-xl h-12 font-black uppercase text-[10px] flex-1">
+                            {isSubmitting ? <Loader2 className="animate-spin" /> : "Confirmar Reversión"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={isEditTxDialogOpen} onOpenChange={setIsEditTxDialogOpen}>
+                <DialogContent className="rounded-[2rem] border-none shadow-2xl bg-white text-slate-900">
+                    <DialogHeader>
+                        <DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-slate-900">Editar <span className="text-sky-500">Movimiento</span></DialogTitle>
+                        <DialogDescription className="text-slate-500 font-bold">
+                            Solo puede modificar la descripción y referencia por seguridad.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="space-y-2">
+                            <Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Descripción</Label>
+                            <Input value={editTxData.descripcion} onChange={e => setEditTxData({...editTxData, descripcion: e.target.value})} className="rounded-xl h-12 font-bold bg-slate-50 border-slate-200 text-slate-900" />
+                        </div>
+                        <div className="space-y-2">
+                            <Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Referencia</Label>
+                            <Input value={editTxData.referencia} onChange={e => setEditTxData({...editTxData, referencia: e.target.value})} className="rounded-xl h-12 font-bold bg-slate-50 border-slate-200 text-slate-900" />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button onClick={handleUpdateTx} disabled={isSubmitting} className="w-full bg-slate-900 text-white font-black uppercase h-12 rounded-xl">
+                            {isSubmitting ? <Loader2 className="animate-spin" /> : "Guardar Cambios"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
             <Dialog open={isTransferDialogOpen} onOpenChange={setIsTransferDialogOpen}>
                 <DialogContent className="rounded-[2rem] border-none shadow-2xl bg-white text-slate-900">
                     <DialogHeader>
