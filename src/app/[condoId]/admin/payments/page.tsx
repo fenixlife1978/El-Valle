@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/Dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
 import { ArrowLeft, Calculator, CalendarIcon, Check, CheckCircle, Clock, DollarSign, Eye, FileText, Hash, Loader2, Upload, Banknote, Info, X, Save, FileUp, UserPlus, Trash2, XCircle, Search, ChevronDown, Minus, Equal, Receipt, AlertTriangle, User, MoreHorizontal, Download, Share2 } from 'lucide-react';
 import { format, isBefore, startOfMonth, addMonths } from 'date-fns';
@@ -570,10 +570,10 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                                                                     <DropdownMenuSeparator />
                                                                     {p.beneficiaries.length === 1 ? (
                                                                         <>
-                                                                            <DropdownMenuItem onClick={() => prepareAndGenerateReceipt('download', p, p.beneficiaries[0])} disabled={isGenerating}>
+                                                                            <DropdownMenuItem key={`${p.id}-dl`} onClick={() => prepareAndGenerateReceipt('download', p, p.beneficiaries[0])} disabled={isGenerating}>
                                                                                 {isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Download className="mr-2 h-4 w-4" />} Exportar PDF
                                                                             </DropdownMenuItem>
-                                                                            <DropdownMenuItem onClick={() => prepareAndGenerateReceipt('share', p, p.beneficiaries[0])} disabled={isGenerating}>
+                                                                            <DropdownMenuItem key={`${p.id}-sh`} onClick={() => prepareAndGenerateReceipt('share', p, p.beneficiaries[0])} disabled={isGenerating}>
                                                                                 <Share2 className="mr-2 h-4 w-4" /> Compartir Recibo
                                                                             </DropdownMenuItem>
                                                                         </>
@@ -716,10 +716,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
         </Card>
     );
 }
-
-// ... rest of file (ReportPaymentComponent, PaymentCalculatorComponent, PaymentsPage, PaymentsPageWrapper)
-// ... remains unchanged
-// ...
 
 // --- COMPONENT: REPORT PAYMENT COMPONENT (for Admin) ---
 function ReportPaymentComponent({ condoId }: { condoId: string }) {
