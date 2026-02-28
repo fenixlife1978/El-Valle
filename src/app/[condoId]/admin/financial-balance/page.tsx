@@ -65,7 +65,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
 
         const unsubCuentas = onSnapshot(collection(db, 'condominios', workingCondoId, 'cuentas'), (snap) => {
             const accounts = snap.docs.map(d => d.data());
-            const bdv = accounts.find(a => a.nombre?.toUpperCase().trim() === 'BANCO DE VENEZUELA');
+            const bdv = accounts.find(a => a.nombre?.toUpperCase().trim().includes('VENEZUELA'));
             const cp = accounts.find(a => a.nombre?.toUpperCase().trim() === 'CAJA PRINCIPAL');
             const cc = accounts.find(a => a.nombre?.toUpperCase().trim() === 'CAJA CHICA');
             
@@ -90,7 +90,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 const fromDate = startOfMonth(new Date(year, month, 1));
                 const toDate = endOfMonth(fromDate);
 
-                // INGRESOS
+                // INGRESOS REALES APROBADOS
                 const pQuery = query(
                     collection(db, 'condominios', workingCondoId, 'payments'),
                     where('paymentDate', '>=', fromDate),
@@ -109,7 +109,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 setIngresosOrdinariosBanco(totalBancario);
                 setIngresosOrdinariosEfectivo(totalEfectivo);
 
-                // EGRESOS
+                // EGRESOS REALES REGISTRADOS
                 const tQuery = query(
                     collection(db, 'condominios', workingCondoId, 'transacciones'), 
                     where('fecha', '>=', fromDate), 
@@ -135,7 +135,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
 
     const totalEgresosBanco = useMemo(() => 
         egresosTesorería
-            .filter(e => e.cuenta.toUpperCase().includes("BANCO"))
+            .filter(e => e.cuenta.toUpperCase().includes("BANCO") || e.cuenta.toUpperCase().includes("VENEZUELA"))
             .reduce((sum, e) => sum + e.monto, 0), 
     [egresosTesorería]);
 
@@ -147,7 +147,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
 
     const totalEgresosMes = useMemo(() => egresosTesorería.reduce((sum, e) => sum + e.monto, 0), [egresosTesorería]);
     
-    // CALCULOS PARA EL PDF (Consistencia Contable)
+    // CALCULOS DE INTEGRIDAD CONTABLE
     const saldoCierreBancoCalculado = (saldoAnteriorBanco + ingresosOrdinariosBanco) - totalEgresosBanco;
     const saldoCierreCajaCalculado = ingresosOrdinariosEfectivo - totalEgresosCaja;
 
@@ -198,11 +198,11 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
             head: [['CONCEPTO DE INGRESO', 'MONTO (BS.)']],
             body: [
                 ['SALDO ANTERIOR BANCO', formatCurrency(saldoAnteriorBanco)],
-                ['INGRESOS BANCO (PAGO MÓVIL / TRANSF.)', formatCurrency(ingresosOrdinariosBanco)],
-                ['INGRESOS EFECTIVO (CAJA PRINCIPAL)', formatCurrency(ingresosOrdinariosEfectivo)]
+                ['INGRESOS BANCO (DIGITAL)', formatCurrency(ingresosOrdinariosBanco)],
+                ['INGRESOS EFECTIVO (CAJA)', formatCurrency(ingresosOrdinariosEfectivo)]
             ],
             headStyles: { fillColor: [0, 129, 201] },
-            styles: { textColor: [0, 0, 0] },
+            styles: { textColor: [0, 0, 0], fontStyle: 'bold' },
             columnStyles: { 1: { halign: 'right' } }
         });
 
@@ -210,7 +210,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
             startY: (docPDF as any).lastAutoTable.finalY + 10,
             head: [['FECHA/CONCEPTO', 'CUENTA ORIGEN', 'MONTO (BS.)']],
             body: egresosTesorería.map(e => [e.concepto, e.cuenta, formatCurrency(e.monto)]),
-            foot: [['TOTAL EGRESOS', '', formatCurrency(totalEgresosMes)]],
+            foot: [['TOTAL EGRESOS DEL PERIODO', '', formatCurrency(totalEgresosMes)]],
             headStyles: { fillColor: [239, 68, 68] },
             footStyles: { fillColor: [185, 28, 28], textColor: 255, fontStyle: 'bold' },
             styles: { textColor: [0, 0, 0] },
@@ -219,15 +219,18 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
 
         const finalY = (docPDF as any).lastAutoTable.finalY + 15;
         docPDF.setFont('helvetica', 'bold').setFontSize(11);
-        docPDF.text("SALDOS CONTABLES AL CIERRE (Consolidado):", 14, finalY);
+        docPDF.text("PROYECCIÓN DE SALDOS AL CIERRE:", 14, finalY);
         docPDF.setFont('helvetica', 'normal').setFontSize(10);
-        docPDF.text(`BANCO DE VENEZUELA: Bs. ${formatCurrency(saldoCierreBancoCalculado)}`, 14, finalY + 7);
+        docPDF.text(`BANCO DE VENEZUELA (CONTABLE): Bs. ${formatCurrency(saldoCierreBancoCalculado)}`, 14, finalY + 7);
         docPDF.text(`CAJA PRINCIPAL (EFECTIVO): Bs. ${formatCurrency(saldoCierreCajaCalculado)}`, 14, finalY + 14);
-        docPDF.text(`CAJA CHICA: Bs. ${formatCurrency(realBalances.cajaChica)}`, 14, finalY + 21);
+        
+        docPDF.setFont('helvetica', 'bold').text("SALDOS REALES EN TESORERÍA (VERIFICADOS):", 14, finalY + 25);
+        docPDF.text(`DISPONIBILIDAD BANCARIA: Bs. ${formatCurrency(realBalances.banco)}`, 14, finalY + 32);
+        docPDF.text(`DISPONIBILIDAD CAJA CHICA: Bs. ${formatCurrency(realBalances.cajaChica)}`, 14, finalY + 39);
 
         if (notas) {
-            docPDF.setFont('helvetica', 'bold').text("NOTAS:", 14, finalY + 35);
-            docPDF.setFont('helvetica', 'normal').setFontSize(9).text(notas, 14, finalY + 40, { maxWidth: 180 });
+            docPDF.setFont('helvetica', 'bold').text("OBSERVACIONES:", 14, finalY + 55);
+            docPDF.setFont('helvetica', 'normal').setFontSize(9).text(notas, 14, finalY + 60, { maxWidth: 180 });
         }
 
         docPDF.save(`Balance_${selectedYear}_${selectedMonth}_${info.name.replace(/ /g, '_')}.pdf`);
@@ -240,7 +243,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                     <h1 className="text-3xl font-black uppercase italic tracking-tighter text-slate-900 leading-none">
                         Balance <span className="text-[#0081c9]">Financiero</span>
                     </h1>
-                    <p className="text-[10px] font-black uppercase text-slate-500 tracking-[0.3em] mt-2">Resumen Operativo Mensual</p>
+                    <p className="text-[10px] font-black uppercase text-slate-500 tracking-[0.3em] mt-2">Integridad Contable Digital</p>
                 </div>
                 <div className="flex gap-2">
                     <Button onClick={handleExportPDF} variant="outline" className="rounded-xl border-slate-200 text-slate-700 font-bold h-10 px-4 bg-white hover:bg-slate-50">
@@ -263,7 +266,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                         </div>
                         <Landmark className="absolute top-6 right-6 h-12 w-12 text-white/10" />
                         <div className="mt-4 pt-4 border-t border-white/10 relative z-10">
-                            <p className="text-[9px] font-bold text-slate-400 uppercase">Proyección Contable Banco:</p>
+                            <p className="text-[9px] font-bold text-slate-400 uppercase">Proyección Contable:</p>
                             <p className="text-sm font-bold text-sky-400">Bs. {formatCurrency(saldoCierreBancoCalculado)}</p>
                         </div>
                     </Card>
@@ -293,16 +296,16 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                         <CardContent className="p-0">
                             <Table>
                                 <TableBody>
-                                    <TableRow className="bg-blue-50/30">
+                                    <TableRow className="bg-blue-50/30 border-b border-slate-100">
                                         <TableCell className="font-bold text-slate-900 text-xs">SALDO ANTERIOR BANCO</TableCell>
                                         <TableCell className="p-2"><Input type="number" className="text-right bg-white font-bold h-8 rounded-lg text-slate-900 border-slate-200" value={saldoAnteriorBanco} onChange={e=>setSaldoAnteriorBanco(Number(e.target.value))}/></TableCell>
                                     </TableRow>
-                                    <TableRow>
-                                        <TableCell className="text-slate-700 text-xs font-medium uppercase">Ingresos Banco (Digital)</TableCell>
+                                    <TableRow className="border-b border-slate-50">
+                                        <TableCell className="text-slate-700 text-xs font-black uppercase">Ingresos Banco (Digital)</TableCell>
                                         <TableCell className="text-right font-black text-slate-900">Bs. {formatCurrency(ingresosOrdinariosBanco)}</TableCell>
                                     </TableRow>
-                                    <TableRow>
-                                        <TableCell className="text-slate-700 text-xs font-medium uppercase">Ingresos Efectivo (Caja)</TableCell>
+                                    <TableRow className="border-none">
+                                        <TableCell className="text-slate-700 text-xs font-black uppercase">Ingresos Efectivo (Caja)</TableCell>
                                         <TableCell className="text-right font-black text-emerald-600">Bs. {formatCurrency(ingresosOrdinariosEfectivo)}</TableCell>
                                     </TableRow>
                                 </TableBody>
@@ -322,11 +325,11 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                                 </TableHeader>
                                 <TableBody>
                                     {egresosTesorería.length === 0 ? (
-                                        <TableRow><TableCell colSpan={2} className="text-center py-10 text-slate-400 italic text-xs">No se registraron egresos en este período.</TableCell></TableRow>
+                                        <TableRow><TableCell colSpan={2} className="text-center py-10 text-slate-400 italic text-xs font-bold">No se registraron egresos en este período.</TableCell></TableRow>
                                     ) : egresosTesorería.map((egreso, i) => (
                                         <TableRow key={i} className="border-b border-slate-50">
                                             <TableCell className="py-3">
-                                                <div className="text-slate-900 font-bold uppercase text-[10px]">{egreso.concepto}</div>
+                                                <div className="text-slate-900 font-black uppercase text-[10px] italic">{egreso.concepto}</div>
                                                 <div className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">ORIGEN: {egreso.cuenta}</div>
                                             </TableCell>
                                             <TableCell className="text-right font-black text-red-600">Bs. {formatCurrency(egreso.monto)}</TableCell>

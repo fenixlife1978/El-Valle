@@ -14,7 +14,8 @@ import {
     addDoc,
     serverTimestamp,
     deleteDoc,
-    updateDoc
+    updateDoc,
+    increment
 } from 'firebase/firestore';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -151,8 +152,6 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
             await runTransaction(db, async (transaction) => {
                 const accountDoc = await transaction.get(cuentaRef);
                 if (!accountDoc.exists()) throw new Error("La cuenta no existe.");
-                const currentSaldo = accountDoc.data().saldoActual || 0;
-                const newSaldo = transForm.tipo === 'ingreso' ? currentSaldo + montoNum : currentSaldo - montoNum;
                 
                 const newTransRef = doc(collection(db, 'condominios', condoId, 'transacciones'));
                 transaction.set(newTransRef, {
@@ -161,7 +160,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                     referencia: transForm.referencia.toUpperCase(), fecha: Timestamp.fromDate(transForm.fecha),
                     createdBy: user?.email, createdAt: serverTimestamp()
                 });
-                transaction.update(cuentaRef, { saldoActual: newSaldo });
+                transaction.update(cuentaRef, { saldoActual: increment(transForm.tipo === 'ingreso' ? montoNum : -montoNum) });
             });
             toast({ title: "Movimiento procesado con éxito" });
             setIsTransactionDialogOpen(false);
@@ -177,13 +176,9 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
             await runTransaction(db, async (transaction) => {
                 const txRef = doc(db, 'condominios', condoId, 'transacciones', selectedTx.id);
                 const accRef = doc(db, 'condominios', condoId, 'cuentas', selectedTx.cuentaId);
-                const accSnap = await transaction.get(accRef);
                 
-                if (accSnap.exists()) {
-                    const currentBalance = accSnap.data().saldoActual || 0;
-                    const adjustment = selectedTx.tipo === 'ingreso' ? -selectedTx.monto : selectedTx.monto;
-                    transaction.update(accRef, { saldoActual: currentBalance + adjustment });
-                }
+                const adjustment = selectedTx.tipo === 'ingreso' ? -selectedTx.monto : selectedTx.monto;
+                transaction.update(accRef, { saldoActual: increment(adjustment) });
                 transaction.delete(txRef);
             });
             toast({ title: "Movimiento eliminado", description: "El saldo ha sido revertido automáticamente." });
@@ -237,8 +232,8 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                     fecha: Timestamp.now(), createdAt: serverTimestamp(), createdBy: user?.email
                 });
 
-                transaction.update(srcRef, { saldoActual: srcSaldo - montoNum });
-                transaction.update(destRef, { saldoActual: (destSnap.data().saldoActual || 0) + montoNum });
+                transaction.update(srcRef, { saldoActual: increment(-montoNum) });
+                transaction.update(destRef, { saldoActual: increment(montoNum) });
             });
             toast({ title: "Traslado completado" });
             setIsTransferDialogOpen(false);

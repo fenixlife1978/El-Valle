@@ -90,13 +90,17 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 const condoFeeUSD = settingsDoc.data()?.condoFee || 0;
                 const costBs = condoFeeUSD * payment.exchangeRate;
 
+                // LOGICA DE HITO CONTABLE: Identificación de cuenta destino
                 let targetAccountName = "";
                 if (['movil', 'transferencia'].includes(payment.paymentMethod)) targetAccountName = "BANCO DE VENEZUELA";
                 else if (['efectivo_bs', 'efectivo'].includes(payment.paymentMethod)) targetAccountName = "CAJA PRINCIPAL";
 
-                // Búsqueda previa de la cuenta fuera de la transacción para obtener el ID real
+                // Búsqueda exhaustiva de la cuenta física en Tesorería
                 const accountsSnap = await getDocs(collection(db, 'condominios', condoId, 'cuentas'));
-                let targetAccDoc = accountsSnap.docs.find(d => d.data().nombre?.toUpperCase().trim() === targetAccountName);
+                let targetAccDoc = accountsSnap.docs.find(d => {
+                    const name = d.data().nombre?.toUpperCase().trim();
+                    return name === targetAccountName || (targetAccountName === "BANCO DE VENEZUELA" && name?.includes("VENEZUELA"));
+                });
                 
                 let accountId = "";
                 let accountExists = false;
@@ -104,7 +108,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 if (targetAccDoc) {
                     accountId = targetAccDoc.id;
                     accountExists = true;
-                } else {
+                } else if (targetAccountName) {
                     const newAccRef = doc(collection(db, 'condominios', condoId, 'cuentas'));
                     accountId = newAccRef.id;
                 }
@@ -162,42 +166,49 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         receiptNumbers[beneficiary.ownerId] = `REC-${Date.now()}-${beneficiary.ownerId.slice(-4)}`;
                     }
 
-                    // ACTUALIZACIÓN DE SALDO EN TESORERÍA (HITO CONTABLE)
-                    const accountRef = doc(db, 'condominios', condoId, 'cuentas', accountId);
-                    if (!accountExists) {
-                        transaction.set(accountRef, { 
-                            nombre: targetAccountName, 
-                            tipo: targetAccountName === "CAJA PRINCIPAL" ? "efectivo" : "banco", 
-                            saldoActual: payment.totalAmount, 
-                            createdAt: serverTimestamp() 
+                    // IMPACTO REAL EN TESORERÍA: Actualización de Saldo Físico
+                    if (accountId && targetAccountName) {
+                        const accountRef = doc(db, 'condominios', condoId, 'cuentas', accountId);
+                        const montoAsiento = Number(payment.totalAmount);
+
+                        if (!accountExists) {
+                            transaction.set(accountRef, { 
+                                nombre: targetAccountName, 
+                                tipo: targetAccountName === "CAJA PRINCIPAL" ? "efectivo" : "banco", 
+                                saldoActual: montoAsiento, 
+                                createdAt: serverTimestamp() 
+                            });
+                        } else {
+                            transaction.update(accountRef, { saldoActual: increment(montoAsiento) });
+                        }
+                        
+                        // ASIENTO OBLIGATORIO EN LIBRO DIARIO
+                        transaction.set(doc(collection(db, 'condominios', condoId, 'transacciones')), {
+                            monto: montoAsiento, 
+                            tipo: 'ingreso', 
+                            cuentaId: accountId, 
+                            nombreCuenta: targetAccountName,
+                            descripcion: `INGRESO: PAGO DE ${payment.beneficiaries.map(b => b.ownerName).join(', ')}`,
+                            referencia: payment.reference, 
+                            fecha: payment.paymentDate, 
+                            sourcePaymentId: payment.id,
+                            createdAt: serverTimestamp(), 
+                            createdBy: user?.email
                         });
-                    } else {
-                        transaction.update(accountRef, { saldoActual: increment(payment.totalAmount) });
                     }
-                    
-                    // ASIENTO EN LIBRO DIARIO
-                    transaction.set(doc(collection(db, 'condominios', condoId, 'transacciones')), {
-                        monto: payment.totalAmount, 
-                        tipo: 'ingreso', 
-                        cuentaId: accountId, 
-                        nombreCuenta: targetAccountName,
-                        descripcion: `PAGO APROBADO: ${payment.beneficiaries.map(b => b.ownerName).join(', ')}`,
-                        referencia: payment.reference, 
-                        fecha: payment.paymentDate, 
-                        sourcePaymentId: payment.id,
-                        createdAt: serverTimestamp(), 
-                        createdBy: user?.email
-                    });
 
                     transaction.update(doc(db, 'condominios', condoId, 'payments', payment.id), { 
                         status: 'aprobado', 
                         receiptNumbers, 
-                        observations: 'Validado y asentado en Tesorería.' 
+                        observations: 'Hito contable validado y saldo sincronizado.' 
                     });
                 });
-                toast({ title: "Hito Contable Completado", description: "El saldo ha sido sumado a Tesorería y los libros están al día." });
+                toast({ title: "Pago Aprobado", description: `Saldo sumado a ${targetAccountName} exitosamente.` });
                 setSelectedPayment(null);
-            } catch (error: any) { toast({ variant: 'destructive', title: "Error", description: error.message }); }
+            } catch (error: any) { 
+                console.error(error);
+                toast({ variant: 'destructive', title: "Falla en transacción", description: error.message }); 
+            }
             finally { setIsVerifying(false); }
         });
     };
@@ -222,6 +233,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             try {
                 const paymentRef = doc(db, 'condominios', condoId, 'payments', paymentToDelete.id);
                 const txSnap = await getDocs(query(collection(db, 'condominios', condoId, 'transacciones'), where('sourcePaymentId', '==', paymentToDelete.id)));
+                
                 await runTransaction(db, async (transaction) => {
                     const payDoc = await transaction.get(paymentRef);
                     if (payDoc.data()?.status === 'aprobado') {
@@ -235,7 +247,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                     }
                     transaction.delete(paymentRef);
                 });
-                toast({ title: "Pago Revertido", description: "El saldo fue descontado de Tesorería." });
+                toast({ title: "Pago Revertido", description: "El saldo fue descontado de Tesorería automáticamente." });
                 setPaymentToDelete(null);
             } catch (e) { toast({ variant: 'destructive', title: "Error" }); }
             finally { setIsVerifying(false); }
@@ -261,7 +273,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
         <Card className="rounded-[2rem] border-none shadow-sm bg-white">
             <CardHeader className="p-8">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <CardTitle className="text-slate-900 font-black uppercase italic">Validación de Ingresos</CardTitle>
+                    <CardTitle className="text-slate-900 font-black uppercase italic tracking-tighter">Bandeja de Verificación</CardTitle>
                     <div className="relative w-full md:w-64">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                         <Input placeholder="Referencia o Nombre..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9 rounded-xl bg-slate-50 border-slate-200 text-slate-900 font-bold" />
@@ -283,7 +295,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                                 <TableBody>
                                     {filteredPayments.length === 0 ? (<TableRow><TableCell colSpan={5} className="h-32 text-center text-slate-400 font-bold italic">Sin registros en esta bandeja.</TableCell></TableRow>) : 
                                     filteredPayments.map(p => (
-                                        <TableRow key={p.id} className="hover:bg-slate-50 border-slate-50">
+                                        <TableRow key={p.id} className="hover:bg-slate-50 border-slate-50 transition-colors">
                                             <TableCell className="px-8 py-5"><div className="font-black text-slate-900 text-xs uppercase">{p.beneficiaries.map(b => b.ownerName).join(', ')}</div><div className="text-[9px] font-black text-primary uppercase mt-0.5">{p.paymentMethod}</div></TableCell>
                                             <TableCell className="text-slate-500 font-bold text-xs">{format(p.paymentDate.toDate(), 'dd/MM/yy')}</TableCell>
                                             <TableCell className="font-black text-slate-900 text-sm">Bs. {formatCurrency(p.totalAmount)}</TableCell>
