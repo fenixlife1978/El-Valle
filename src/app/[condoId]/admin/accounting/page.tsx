@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, Timestamp, where, query, orderBy, getDocs, runTransaction, doc, serverTimestamp, increment } from 'firebase/firestore';
-import { Download, RefreshCw, Landmark, Coins, Wallet, History, Zap, Loader2 } from 'lucide-react';
+import { RefreshCw, History, Zap, Loader2, BookCopy } from 'lucide-react';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -31,7 +31,7 @@ const years = Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear(
 
 const AccountingPage = () => {
     const { toast } = useToast();
-    const { companyInfo, workingCondoId, user } = useAuth();
+    const { workingCondoId, user } = useAuth();
 
     const [loading, setLoading] = useState(true);
     const [isSyncing, setIsSyncing] = useState(false);
@@ -44,9 +44,13 @@ const AccountingPage = () => {
     useEffect(() => {
         if (!workingCondoId) return;
         setLoading(true);
-        const unsubAccounts = onSnapshot(collection(db, 'condominios', workingCondoId, 'cuentas'), snap => setAccounts(snap.docs.map(d => ({ id: d.id, ...d.data() } as Account))));
-        const unsubTx = onSnapshot(query(collection(db, 'condominios', workingCondoId, 'transacciones'), orderBy('fecha', 'asc')), snap => setAllTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction))));
-        setLoading(false);
+        const unsubAccounts = onSnapshot(collection(db, 'condominios', workingCondoId, 'cuentas'), snap => {
+            setAccounts(snap.docs.map(d => ({ id: d.id, ...d.data() } as Account)));
+        });
+        const unsubTx = onSnapshot(query(collection(db, 'condominios', workingCondoId, 'transacciones'), orderBy('fecha', 'asc')), snap => {
+            setAllTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction)));
+            setLoading(false);
+        });
         return () => { unsubAccounts(); unsubTx(); };
     }, [workingCondoId]);
 
@@ -112,29 +116,38 @@ const AccountingPage = () => {
                     const p = pDoc.data();
                     if (allTransactions.some(tx => tx.sourcePaymentId === pDoc.id)) continue;
 
-                    let target = "";
-                    if (['movil', 'transferencia'].includes(p.paymentMethod)) target = "BANCO DE VENEZUELA";
-                    else if (['efectivo_bs', 'efectivo'].includes(p.paymentMethod)) target = "CAJA PRINCIPAL";
-                    if (!target) continue;
+                    let targetName = "";
+                    if (['movil', 'transferencia'].includes(p.paymentMethod)) targetName = "BANCO DE VENEZUELA";
+                    else if (['efectivo_bs', 'efectivo'].includes(p.paymentMethod)) targetName = "CAJA PRINCIPAL";
+                    
+                    if (!targetName) continue;
 
-                    let acc = currentAccounts.find((a: any) => a.nombre?.toUpperCase().trim() === target);
-                    let accId = "";
-                    if (!acc) {
-                        const newRef = doc(collection(db, 'condominios', workingCondoId, 'cuentas'));
-                        const newData = { nombre: target, tipo: target === "CAJA PRINCIPAL" ? 'efectivo' : 'banco', saldoActual: 0, createdAt: serverTimestamp() };
-                        transaction.set(newRef, newData);
-                        accId = newRef.id;
-                        acc = { id: accId, ...newData };
-                        currentAccounts.push(acc);
-                    } else { accId = acc.id; }
+                    let account = currentAccounts.find((a: any) => a.nombre?.toUpperCase().trim() === targetName);
+                    let accountId = "";
+
+                    if (!account) {
+                        const newAccRef = doc(collection(db, 'condominios', workingCondoId, 'cuentas'));
+                        const newAccData = {
+                            nombre: targetName,
+                            tipo: targetName === "CAJA PRINCIPAL" ? 'efectivo' : 'banco',
+                            saldoActual: 0,
+                            createdAt: serverTimestamp()
+                        };
+                        transaction.set(newAccRef, newAccData);
+                        accountId = newAccRef.id;
+                        account = { id: accountId, ...newAccData };
+                        currentAccounts.push(account);
+                    } else {
+                        accountId = account.id;
+                    }
 
                     transaction.set(doc(collection(db, 'condominios', workingCondoId, 'transacciones')), {
-                        monto: p.totalAmount, tipo: 'ingreso', cuentaId: accId, nombreCuenta: target,
+                        monto: p.totalAmount, tipo: 'ingreso', cuentaId: accountId, nombreCuenta: targetName,
                         descripcion: `SINCRONIZACIÓN: PAGO DE ${p.beneficiaries?.[0]?.ownerName || 'PROPIETARIO'}`,
                         referencia: p.reference, fecha: p.paymentDate, sourcePaymentId: pDoc.id,
                         createdAt: serverTimestamp(), createdBy: user?.email
                     });
-                    transaction.update(doc(db, 'condominios', workingCondoId, 'cuentas', accId), { saldoActual: increment(p.totalAmount) });
+                    transaction.update(doc(db, 'condominios', workingCondoId, 'cuentas', accountId), { saldoActual: increment(p.totalAmount) });
                     count++;
                 }
                 if (count === 0) throw "no_needed";
@@ -142,12 +155,22 @@ const AccountingPage = () => {
             toast({ title: "Sincronización Exitosa", description: `Se procesaron ${count} hitos contables faltantes.` });
         } catch (e) {
             if (e === "no_needed") toast({ title: "Todo al día" });
-            else toast({ variant: 'destructive', title: "Error" });
+            else {
+                console.error(e);
+                toast({ variant: 'destructive', title: "Error en sincronización" });
+            }
         } finally { setIsSyncing(false); }
     };
 
+    if (loading) return (
+        <div className="flex flex-col h-[70vh] items-center justify-center gap-4">
+            <Loader2 className="animate-spin h-12 w-12 text-[#0081c9]" />
+            <p className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-400 animate-pulse italic">EFAS CONTABILIDAD: Cargando Libros</p>
+        </div>
+    );
+
     return (
-        <div className="space-y-8">
+        <div className="space-y-8 animate-in fade-in duration-500">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-10">
                 <div>
                     <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">Contabilidad <span className="text-[#0081c9]">Digital</span></h2>
@@ -161,7 +184,7 @@ const AccountingPage = () => {
             
             <Card className="rounded-3xl border-none shadow-sm bg-white">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                    <div><CardTitle className="text-slate-900">Período Fiscal</CardTitle><CardDescription className="text-slate-500">Seleccione el mes a auditar.</CardDescription></div>
+                    <div><CardTitle className="text-slate-900 font-black uppercase text-sm tracking-widest">Período Fiscal</CardTitle><CardDescription className="text-slate-500 font-bold">Seleccione el mes a auditar.</CardDescription></div>
                     <div className="flex gap-2">
                         <Select value={selectedMonth} onValueChange={setSelectedMonth}><SelectTrigger className="w-36 rounded-xl bg-slate-50 text-slate-900 border-slate-200 font-bold"><SelectValue /></SelectTrigger><SelectContent>{months.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent></Select>
                         <Select value={selectedYear} onValueChange={setSelectedYear}><SelectTrigger className="w-24 rounded-xl bg-slate-50 text-slate-900 border-slate-200 font-bold"><SelectValue /></SelectTrigger><SelectContent>{years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent></Select>
@@ -171,32 +194,35 @@ const AccountingPage = () => {
 
             <Tabs defaultValue="mayor">
                 <TabsList className="flex flex-wrap h-auto gap-2 bg-slate-200 p-2 rounded-3xl">
-                    <TabsTrigger value="mayor" className="rounded-2xl font-black uppercase text-[10px] px-6 text-slate-600 data-[state=active]:bg-white data-[state=active]:text-slate-900">Libro Mayor</TabsTrigger>
-                    {visibleAccounts.map(acc => <TabsTrigger key={acc.id} value={acc.id} className="rounded-2xl font-black uppercase text-[10px] px-6 text-slate-600 data-[state=active]:bg-white data-[state=active]:text-slate-900">{acc.nombre}</TabsTrigger>)}
+                    <TabsTrigger value="mayor" className="rounded-2xl font-black uppercase text-[10px] px-6 text-slate-600 data-[state=active]:bg-white data-[state=active]:text-slate-900 shadow-sm transition-all">Libro Mayor</TabsTrigger>
+                    {visibleAccounts.map(acc => <TabsTrigger key={acc.id} value={acc.id} className="rounded-2xl font-black uppercase text-[10px] px-6 text-slate-600 data-[state=active]:bg-white data-[state=active]:text-slate-900 shadow-sm transition-all">{acc.nombre}</TabsTrigger>)}
                 </TabsList>
 
                 <TabsContent value="mayor" className="mt-4">
                     <Card className="rounded-[2.5rem] border-none shadow-2xl overflow-hidden bg-white">
-                        <CardHeader className="bg-slate-900 text-white p-8"><CardTitle className="flex items-center gap-3 italic uppercase"><History className="text-[#f59e0b]" /> Libro Mayor Consolidado</CardTitle></CardHeader>
+                        <CardHeader className="bg-slate-900 text-white p-8"><CardTitle className="flex items-center gap-3 italic uppercase font-black"><History className="text-[#f59e0b]" /> Libro Mayor Consolidado</CardTitle></CardHeader>
                         <CardContent className="p-0">
                              <Table>
                                 <TableHeader className="bg-slate-50"><TableRow className="border-slate-200">
-                                    <TableHead className="text-[10px] font-black uppercase px-8 text-slate-700">Cuenta</TableHead>
+                                    <TableHead className="text-[10px] font-black uppercase px-8 py-6 text-slate-700">Cuenta</TableHead>
                                     <TableHead className="text-right text-[10px] font-black uppercase text-slate-700">Anterior</TableHead>
                                     <TableHead className="text-right text-[10px] font-black uppercase text-slate-700">Ingresos (+)</TableHead>
                                     <TableHead className="text-right text-[10px] font-black uppercase text-slate-700">Egresos (-)</TableHead>
-                                    <TableHead className="text-right text-[10px] font-black uppercase pr-8 text-slate-700">Final</TableHead>
+                                    <TableHead className="text-right text-[10px] font-black uppercase pr-8 text-slate-700">Saldo Final</TableHead>
                                 </TableRow></TableHeader>
                                 <TableBody>
                                     {generalLedger.map(acc => (
-                                        <TableRow key={acc.accountId} className="font-medium hover:bg-slate-50 transition-colors">
-                                            <TableCell className="font-bold px-8 py-6 uppercase text-xs text-slate-900">{acc.accountName}</TableCell>
-                                            <TableCell className="text-right text-slate-500 font-bold">{formatCurrency(acc.startBalance)}</TableCell>
-                                            <TableCell className="text-right text-green-600 font-black">+{formatCurrency(acc.totalCredit)}</TableCell>
+                                        <TableRow key={acc.accountId} className="font-medium hover:bg-slate-50 transition-colors border-slate-100">
+                                            <TableCell className="font-black px-8 py-6 uppercase text-xs text-slate-900">{acc.accountName}</TableCell>
+                                            <TableCell className="text-right text-slate-500 font-bold">Bs. {formatCurrency(acc.startBalance)}</TableCell>
+                                            <TableCell className="text-right text-emerald-600 font-black">+{formatCurrency(acc.totalCredit)}</TableCell>
                                             <TableCell className="text-right text-red-600 font-black">-{formatCurrency(acc.totalDebit)}</TableCell>
                                             <TableCell className="text-right font-black italic text-lg pr-8 text-slate-900">Bs. {formatCurrency(acc.endBalance)}</TableCell>
                                         </TableRow>
                                     ))}
+                                    {generalLedger.length === 0 && (
+                                        <TableRow><TableCell colSpan={5} className="text-center py-20 text-slate-400 italic font-bold">No hay cuentas configuradas para este período.</TableCell></TableRow>
+                                    )}
                                 </TableBody>
                             </Table>
                         </CardContent>
@@ -208,21 +234,24 @@ const AccountingPage = () => {
                     return (
                         <TabsContent key={acc.id} value={acc.id} className="mt-4">
                             <Card className="rounded-[2.5rem] border-none shadow-2xl overflow-hidden bg-white">
-                                <CardHeader className="bg-slate-50 border-b p-8"><CardTitle className="uppercase italic text-slate-900 font-black">Libro Diario: {acc.nombre}</CardTitle></CardHeader>
+                                <CardHeader className="bg-slate-50 border-b p-8"><CardTitle className="uppercase italic text-slate-900 font-black flex items-center gap-2"><BookCopy className="text-[#0081c9]"/> Libro Diario: {acc.nombre}</CardTitle></CardHeader>
                                 <CardContent className="p-0">
                                     <Table>
-                                        <TableHeader className="bg-slate-100/50"><TableRow className="border-slate-200"><TableHead className="px-8 text-[10px] font-black uppercase text-slate-700">Fecha</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-700">Descripción</TableHead><TableHead className="text-right text-[10px] font-black uppercase text-slate-700">Haber</TableHead><TableHead className="text-right text-[10px] font-black uppercase text-slate-700">Debe</TableHead><TableHead className="text-right text-[10px] font-black uppercase pr-8 text-slate-700">Saldo</TableHead></TableRow></TableHeader>
+                                        <TableHeader className="bg-slate-100/50"><TableRow className="border-slate-200"><TableHead className="px-8 py-6 text-[10px] font-black uppercase text-slate-700">Fecha</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-700">Descripción</TableHead><TableHead className="text-right text-[10px] font-black uppercase text-slate-700">Haber (+)</TableHead><TableHead className="text-right text-[10px] font-black uppercase text-slate-700">Debe (-)</TableHead><TableHead className="text-right text-[10px] font-black uppercase pr-8 text-slate-700">Saldo Progresivo</TableHead></TableRow></TableHeader>
                                         <TableBody>
-                                            <TableRow className="bg-slate-50/80 text-[10px] font-black text-slate-500 italic"><TableCell colSpan={4} className="px-8 py-4">SALDO INICIAL DEL MES</TableCell><TableCell className="text-right pr-8">{formatCurrency(startBalance)}</TableCell></TableRow>
+                                            <TableRow className="bg-slate-50/80 text-[10px] font-black text-slate-500 italic"><TableCell colSpan={4} className="px-8 py-4">SALDO INICIAL DEL MES</TableCell><TableCell className="text-right pr-8">Bs. {formatCurrency(startBalance)}</TableCell></TableRow>
                                             {transactions.map((tx, i) => (
                                                 <TableRow key={i} className="hover:bg-slate-50 transition-colors border-slate-100">
-                                                    <TableCell className="px-8 font-bold text-slate-500 text-xs">{format(tx.date, 'dd/MM/yy')}</TableCell>
-                                                    <TableCell className="font-black text-slate-900 uppercase italic text-xs">{tx.description}</TableCell>
+                                                    <TableCell className="px-8 py-5 font-bold text-slate-500 text-xs">{format(tx.date, 'dd/MM/yy')}</TableCell>
+                                                    <TableCell className="font-black text-slate-900 uppercase italic text-xs leading-tight">{tx.description}</TableCell>
                                                     <TableCell className="text-right text-emerald-600 font-black">{tx.credit ? `+${formatCurrency(tx.credit)}` : '-'}</TableCell>
                                                     <TableCell className="text-right text-red-600 font-black">{tx.debit ? `-${formatCurrency(tx.debit)}` : '-'}</TableCell>
                                                     <TableCell className="text-right font-black pr-8 text-slate-900">Bs. {formatCurrency(tx.balance)}</TableCell>
                                                 </TableRow>
                                             ))}
+                                            {transactions.length === 0 && (
+                                                <TableRow><TableCell colSpan={5} className="text-center py-20 text-slate-400 italic font-bold">Sin movimientos registrados para esta cuenta en el mes.</TableCell></TableRow>
+                                            )}
                                         </TableBody>
                                     </Table>
                                 </CardContent>
