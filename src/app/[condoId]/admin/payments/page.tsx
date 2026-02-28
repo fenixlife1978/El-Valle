@@ -130,14 +130,14 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                     for (const beneficiary of payment.beneficiaries) {
                         const ownerRef = doc(db, 'condominios', condoId, ownersCollectionName, beneficiary.ownerId);
                         transaction.update(ownerRef, { balance: increment(beneficiary.amount) });
-                        receiptNumbers[beneficiary.ownerId] = `REC-${Date.now().substring(6)}-${beneficiary.ownerId.slice(-4)}`.toUpperCase();
+                        receiptNumbers[beneficiary.ownerId] = `REC-${Date.now().toString().substring(6)}-${beneficiary.ownerId.slice(-4)}`.toUpperCase();
                     }
 
                     if (targetAccountId) {
                         const accountRef = doc(db, 'condominios', condoId, 'cuentas', targetAccountId);
                         transaction.update(accountRef, { saldoActual: increment(payment.totalAmount) });
 
-                        const statsRef = doc(db, 'condominios', workingCondoId || condoId, 'financial_stats', monthId);
+                        const statsRef = doc(db, 'condominios', condoId, 'financial_stats', monthId);
                         transaction.set(statsRef, {
                             periodo: monthId,
                             saldoBancarioReal: increment(targetAccountName === "BANCO DE VENEZUELA" ? payment.totalAmount : 0),
@@ -272,12 +272,15 @@ function VerificationComponent({ condoId }: { condoId: string }) {
         requestAuthorization(async () => {
             setIsVerifying(true);
             try {
+                const isApproved = paymentToDelete.status === 'aprobado';
                 const monthId = format(paymentToDelete.paymentDate.toDate(), 'yyyy-MM');
                 const transSnap = await getDocs(query(collection(db, 'condominios', condoId, 'transacciones'), where('sourcePaymentId', '==', paymentToDelete.id)));
                 
                 await runTransaction(db, async (transaction) => {
-                    const payDoc = await transaction.get(doc(db, 'condominios', condoId, 'payments', paymentToDelete.id));
-                    if (payDoc.data()?.status === 'aprobado') {
+                    const payRef = doc(db, 'condominios', condoId, 'payments', paymentToDelete.id);
+                    const payDoc = await transaction.get(payRef);
+                    
+                    if (payDoc.exists() && payDoc.data()?.status === 'aprobado') {
                         for (const ben of paymentToDelete.beneficiaries) {
                             const ownerRef = doc(db, 'condominios', condoId, ownersCollectionName, ben.ownerId);
                             transaction.update(ownerRef, { balance: increment(-ben.amount) });
@@ -295,11 +298,11 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                             transSnap.forEach(d => transaction.delete(d.ref));
                         }
                     }
-                    transaction.delete(doc(db, 'condominios', condoId, 'payments', paymentToDelete.id));
+                    transaction.delete(payRef);
                 });
-                toast({ title: "Pago Eliminado y Revertido" });
+                toast({ title: isApproved ? "Pago Revertido y Eliminado" : "Registro de Pago Eliminado" });
                 setPaymentToDelete(null);
-            } catch (e) { toast({ variant: 'destructive', title: "Error al revertir" }); }
+            } catch (e) { toast({ variant: 'destructive', title: "Error al eliminar" }); }
             finally { setIsVerifying(false); }
         });
     };
@@ -339,7 +342,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                                                 <DropdownMenu>
                                                     <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="text-slate-500 hover:text-white"><MoreHorizontal className="h-5 w-5"/></Button></DropdownMenuTrigger>
                                                     <DropdownMenuContent align="end" className="rounded-xl border-white/10 shadow-2xl bg-slate-900 text-white">
-                                                        <DropdownMenuItem onClick={() => setSelectedPayment(p)} className="font-black uppercase text-[10px] p-3 gap-2"><Eye className="h-4 w-4 text-primary" /> Detalles de Auditoría</DropdownMenuItem>
+                                                        <DropdownMenuItem onClick={() => setSelectedPayment(p)} className="font-black uppercase text-[10px] p-3 gap-2"><Eye className="h-4 w-4 text-primary" /> Ver Detalles</DropdownMenuItem>
                                                         
                                                         {p.status === 'aprobado' && (
                                                             <>
@@ -384,6 +387,15 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                                                                 <DropdownMenuItem onClick={() => { setSelectedPayment(p); setRejectionReason(''); }} className="text-red-500 font-black uppercase text-[10px] p-3 gap-2"><XCircle className="h-4 w-4" /> Rechazar Pago</DropdownMenuItem>
                                                             </>
                                                         )}
+
+                                                        {p.status === 'rechazado' && (
+                                                            <>
+                                                                <DropdownMenuSeparator className="bg-white/5"/>
+                                                                <DropdownMenuItem onClick={() => setPaymentToDelete(p)} className="text-red-500 font-black uppercase text-[10px] p-3 gap-2">
+                                                                    <Trash2 className="h-4 w-4"/> Eliminar Registro
+                                                                </DropdownMenuItem>
+                                                            </>
+                                                        )}
                                                     </DropdownMenuContent>
                                                 </DropdownMenu>
                                             </TableCell>
@@ -398,7 +410,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
 
             <Dialog open={!!selectedPayment} onOpenChange={() => setSelectedPayment(null)}>
                 <DialogContent className="max-w-2xl rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white">
-                    <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-white">Auditoría del <span className="text-primary">Reporte</span></DialogTitle></DialogHeader>
+                    <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-white">Detalles del <span className="text-primary">Reporte</span></DialogTitle></DialogHeader>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 py-6">
                         <div className="space-y-6">
                             <div className="bg-slate-800 p-6 rounded-3xl border border-white/5">
@@ -407,6 +419,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                                 <div className="mt-6 pt-6 border-t border-white/10 flex justify-between items-center"><span className="text-[10px] font-black uppercase text-white tracking-widest">Total Reportado:</span><span className="text-2xl font-black text-white italic">Bs. {formatCurrency(selectedPayment?.totalAmount || 0)}</span></div>
                             </div>
                             {selectedPayment?.status === 'pendiente' && (<div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Motivo del Rechazo</Label><Textarea value={rejectionReason} onChange={e => setRejectionReason(e.target.value)} className="rounded-2xl bg-slate-800 border-none font-bold text-white min-h-[100px]" placeholder="Ej: Referencia no coincide con extracto bancario..." /></div>)}
+                            {selectedPayment?.status === 'rechazado' && selectedPayment.observations && (<div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl"><p className="text-[10px] font-black text-red-400 uppercase tracking-widest mb-1">Motivo del Rechazo:</p><p className="text-sm font-bold text-white italic">{selectedPayment.observations}</p></div>)}
                         </div>
                         <div className="relative aspect-[3/4] bg-slate-800 rounded-3xl overflow-hidden border border-white/5 group">
                             {selectedPayment?.receiptUrl ? (<Image src={selectedPayment.receiptUrl} alt="Comprobante" fill className="object-contain p-2" />) : (<div className="flex h-full items-center justify-center text-slate-600 font-black uppercase italic text-xs">Sin imagen adjunta</div>)}
@@ -420,9 +433,13 @@ function VerificationComponent({ condoId }: { condoId: string }) {
 
             <Dialog open={!!paymentToDelete} onOpenChange={() => setPaymentToDelete(null)}>
                 <DialogContent className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white">
-                    <DialogHeader><DialogTitle className="text-xl font-black uppercase italic text-red-500">¿Revertir Transacción Maestra?</DialogTitle></DialogHeader>
-                    <p className="text-slate-400 font-bold text-sm leading-relaxed uppercase tracking-tight">Se restará el saldo de los propietarios, se debitará el dinero de la cuenta real y se eliminará el asiento contable.</p>
-                    <DialogFooter className="gap-2 mt-8"><Button variant="ghost" onClick={() => setPaymentToDelete(null)} className="rounded-xl font-black uppercase text-[10px] h-12 text-white">Cancelar</Button><Button onClick={handleDeletePayment} disabled={isVerifying} className="bg-red-600 hover:bg-red-700 text-white rounded-xl font-black uppercase text-[10px] h-12 shadow-lg shadow-red-600/20">Revertir Definitivamente</Button></DialogFooter>
+                    <DialogHeader><DialogTitle className="text-xl font-black uppercase italic text-red-500">¿Eliminar Registro Definitivamente?</DialogTitle></DialogHeader>
+                    <p className="text-slate-400 font-bold text-sm leading-relaxed uppercase tracking-tight">
+                        {paymentToDelete?.status === 'aprobado' 
+                            ? "Esta acción revertirá los saldos de los propietarios, debitará el dinero de la cuenta bancaria y eliminará el asiento contable."
+                            : "Se borrará permanentemente el registro de este reporte de la base de datos."}
+                    </p>
+                    <DialogFooter className="gap-2 mt-8"><Button variant="ghost" onClick={() => setPaymentToDelete(null)} className="rounded-xl font-black uppercase text-[10px] h-12 text-white">Cancelar</Button><Button onClick={handleDeletePayment} disabled={isVerifying} className="bg-red-600 hover:bg-red-700 text-white rounded-xl font-black uppercase text-[10px] h-12 shadow-lg shadow-red-600/20">Confirmar Eliminación</Button></DialogFooter>
                 </DialogContent>
             </Dialog>
         </Card>
@@ -454,12 +471,12 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
         const q = query(collection(db, "condominios", condoId, ownersCollectionName), where("role", "==", "propietario"));
         return onSnapshot(q, (snapshot) => {
             const ownersData: Owner[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner));
-            // Excluir Super Admin por email o rol
+            // Excluir Super Admin por email
             setAllOwners(ownersData.filter(o => o.email !== 'vallecondo@gmail.com').sort((a, b) => (a.name || '').localeCompare(b.name || '')));
         });
     }, [condoId, ownersCollectionName]);
 
-    // Iniciar con un beneficiario vacío
+    // Iniciar con un beneficiario vacío (sin pre-carga automática)
     useEffect(() => {
         setBeneficiaryRows([{
             id: Date.now().toString(),
