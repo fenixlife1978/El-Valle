@@ -87,9 +87,12 @@ const AccountingPage = () => {
         return () => cleanup?.();
     }, [fetchData]);
 
-    // Filtrar cuentas para NO mostrar "Caja Principal" en las pestañas de contabilidad
+    // Filtrar cuentas para ocultar "CAJA PRINCIPAL (EFECTIVO BS)" y mostrar el resto
     const visibleAccounts = useMemo(() => {
-        return accounts.filter(acc => acc.nombre?.toUpperCase().trim() !== "CAJA PRINCIPAL");
+        return accounts.filter(acc => {
+            const name = acc.nombre?.toUpperCase().trim();
+            return name !== "CAJA PRINCIPAL (EFECTIVO BS)";
+        });
     }, [accounts]);
 
     const periodData = useMemo(() => {
@@ -137,7 +140,7 @@ const AccountingPage = () => {
     }, [accounts, allTransactions, selectedMonth, selectedYear]);
 
     const generalLedger = useMemo(() => {
-        return accounts.map(acc => {
+        return visibleAccounts.map(acc => {
             const data = periodData[acc.id] || { startBalance: 0, transactions: [], endBalance: 0 };
             return {
                 accountName: acc.nombre,
@@ -149,7 +152,7 @@ const AccountingPage = () => {
                 endBalance: data.endBalance
             };
         });
-    }, [accounts, periodData]);
+    }, [visibleAccounts, periodData]);
 
     const handleSyncPeriod = async () => {
         if (!workingCondoId) return;
