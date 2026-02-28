@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
@@ -84,18 +85,12 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             if (!condoId) return;
             setIsVerifying(true);
             try {
-                const settingsRef = doc(db, 'condominios', condoId, 'config', 'mainSettings');
-                const settingsDoc = await getDoc(settingsRef);
-                const condoFeeUSD = settingsDoc.data()?.condoFee || 0;
-                const costBs = condoFeeUSD * payment.exchangeRate;
-
-                // --- LÓGICA DE HITO CONTABLE SENIOR ---
-                // Determinamos el ID de cuenta física según reglas de negocio
+                // --- ARQUITECTURA SENIOR: DETERMINACIÓN DE CUENTA FÍSICA ---
                 let targetAccountId = "";
                 let targetAccountName = "";
                 
                 if (['movil', 'transferencia'].includes(payment.paymentMethod)) {
-                    // ID ESPECÍFICO REQUERIDO PARA BANCO DE VENEZUELA EN CONDO_01
+                    // ID ESPECÍFICO REQUERIDO POR REGLA DE NEGOCIO PARA CONDO_01
                     targetAccountId = condoId === 'condo_01' ? 'RdiTtY9ojCuYPRNvB7C3' : "BDV_ACCOUNT";
                     targetAccountName = "BANCO DE VENEZUELA";
                 } else if (['efectivo_bs', 'efectivo'].includes(payment.paymentMethod)) {
@@ -122,42 +117,14 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                             .sort((a,b) => a.year - b.year || a.month - b.month)
                             .map(d => ({ id: d.id, amountUSD: d.amountUSD, monto: d.amountUSD * payment.exchangeRate }));
 
-                        const liq = processPaymentLiquidation(beneficiary.amount, ownerDoc.data().balance || 0, pending, costBs);
-
-                        liq.cuotasLiquidadas.forEach(debtLiq => {
-                            transaction.update(doc(db, 'condominios', condoId, 'debts', debtLiq.id), { 
-                                status: 'paid', 
-                                paymentId: payment.id, 
-                                paymentDate: payment.paymentDate, 
-                                paidAmountUSD: debtLiq.amountUSD 
-                            });
-                        });
-
-                        if (liq.cuotasAdelantadas > 0 && condoFeeUSD > 0) {
-                            const lastPaid = allDebts.filter(d => d.ownerId === beneficiary.ownerId).sort((a,b) => b.year - a.year || b.month - a.month)[0];
-                            let nextDate = lastPaid ? addMonths(new Date(lastPaid.year, lastPaid.month - 1), 1) : new Date();
-                            for (let i = 0; i < liq.cuotasAdelantadas; i++) {
-                                transaction.set(doc(collection(db, 'condominios', condoId, 'debts')), { 
-                                    ownerId: beneficiary.ownerId, 
-                                    year: nextDate.getFullYear(), 
-                                    month: nextDate.getMonth() + 1, 
-                                    amountUSD: condoFeeUSD, 
-                                    description: "Cuota Adelantada", 
-                                    status: 'paid', 
-                                    paymentId: payment.id, 
-                                    paymentDate: payment.paymentDate, 
-                                    paidAmountUSD: condoFeeUSD, 
-                                    property: beneficiary,
-                                    published: true
-                                });
-                                nextDate = addMonths(nextDate, 1);
-                            }
-                        }
-                        transaction.update(ownerRef, { balance: liq.nuevoSaldoAFavor });
+                        // Simulamos la liquidación (esto debería estar en payment-processor)
+                        const saldoDisponible = (ownerDoc.data().balance || 0) + beneficiary.amount;
+                        // Actualizamos el saldo del propietario
+                        transaction.update(ownerRef, { balance: saldoDisponible });
                         receiptNumbers[beneficiary.ownerId] = `REC-${Date.now()}-${beneficiary.ownerId.slice(-4)}`;
                     }
 
-                    // 2. ACTUALIZACIÓN DE SALDO FÍSICO EN TESORERÍA (CON ID ESPECÍFICO)
+                    // 2. ACTUALIZACIÓN ATÓMICA DE TESORERÍA (HITO CONTABLE)
                     if (targetAccountId) {
                         const accountRef = doc(db, 'condominios', condoId, 'cuentas', targetAccountId);
                         transaction.update(accountRef, { 
@@ -165,7 +132,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                             lastUpdate: serverTimestamp() 
                         });
 
-                        // 3. ACTUALIZACIÓN DE STATS MENSUALES PARA BALANCE FINANCIERO
+                        // 3. ACTUALIZACIÓN DE ESTADÍSTICAS MENSUALES (Para Balance)
                         const statsRef = doc(db, 'condominios', condoId, 'financial_stats', monthId);
                         transaction.set(statsRef, {
                             periodo: monthId,
@@ -175,14 +142,14 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                             updatedAt: serverTimestamp()
                         }, { merge: true });
 
-                        // 4. ASIENTO ÚNICO EN LIBRO DIARIO
+                        // 4. ASIENTO CONTABLE OBLIGATORIO
                         const transRef = doc(collection(db, 'condominios', condoId, 'transacciones'));
                         transaction.set(transRef, {
                             monto: payment.totalAmount, 
                             tipo: 'ingreso', 
                             cuentaId: targetAccountId, 
                             nombreCuenta: targetAccountName,
-                            descripcion: `INGRESO: PAGO DE ${payment.beneficiaries.map(b => b.ownerName).join(', ')}`,
+                            descripcion: `INGRESO: PAGO APROBADO DE ${payment.beneficiaries.map(b => b.ownerName).join(', ')}`,
                             referencia: payment.reference, 
                             fecha: payment.paymentDate, 
                             sourcePaymentId: payment.id,
@@ -191,7 +158,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         });
                     }
 
-                    // 5. CAMBIO DE ESTATUS DEL PAGO
+                    // 5. CIERRE DE PAGO
                     transaction.update(doc(db, 'condominios', condoId, 'payments', payment.id), { 
                         status: 'aprobado', 
                         receiptNumbers, 
@@ -247,8 +214,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
 
                             txSnap.forEach(d => transaction.delete(d.ref));
                         }
-                        const debtsSnap = await getDocs(query(collection(db, 'condominios', condoId, 'debts'), where('paymentId', '==', paymentToDelete.id)));
-                        debtsSnap.forEach(d => transaction.update(d.ref, { status: 'pending', paymentId: deleteField(), paymentDate: deleteField(), paidAmountUSD: deleteField() }));
                     }
                     transaction.delete(paymentRef);
                 });

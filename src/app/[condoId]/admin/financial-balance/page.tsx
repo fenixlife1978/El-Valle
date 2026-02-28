@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo, use } from 'react';
@@ -66,7 +67,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
         const unsubCuentas = onSnapshot(collection(db, 'condominios', workingCondoId, 'cuentas'), (snap) => {
             const accounts = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
             
-            // Priorizamos por ID específico si estamos en condo_01
+            // Priorizamos por ID específico para Banco de Venezuela en condo_01
             const bdv = workingCondoId === 'condo_01' 
                 ? accounts.find(a => a.id === 'RdiTtY9ojCuYPRNvB7C3') 
                 : accounts.find(a => a.nombre?.toUpperCase().includes('VENEZUELA'));
@@ -101,29 +102,29 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 const statsSnap = await getDoc(statsRef);
                 if (statsSnap.exists()) {
                     const s = statsSnap.data();
-                    // Aquí podríamos complementar datos si fuera necesario
+                    setIngresosOrdinariosBanco(s.saldoBancarioReal || 0);
+                    setIngresosOrdinariosEfectivo(s.saldoCajaReal || 0);
+                } else {
+                    // Fallback a conteo manual si no hay hito procesado
+                    const pQuery = query(
+                        collection(db, 'condominios', workingCondoId, 'payments'),
+                        where('paymentDate', '>=', fromDate),
+                        where('paymentDate', '<=', toDate),
+                        where('status', '==', 'aprobado')
+                    );
+                    const pSnap = await getDocs(pQuery);
+                    let totalBancario = 0;
+                    let totalEfectivo = 0;
+                    pSnap.forEach(doc => {
+                        const data = doc.data();
+                        if (['transferencia', 'movil'].includes(data.paymentMethod)) totalBancario += data.totalAmount;
+                        else if (['efectivo_bs', 'efectivo'].includes(data.paymentMethod)) totalEfectivo += data.totalAmount;
+                    });
+                    setIngresosOrdinariosBanco(totalBancario);
+                    setIngresosOrdinariosEfectivo(totalEfectivo);
                 }
 
-                // 2. INGRESOS REALES APROBADOS
-                const pQuery = query(
-                    collection(db, 'condominios', workingCondoId, 'payments'),
-                    where('paymentDate', '>=', fromDate),
-                    where('paymentDate', '<=', toDate),
-                    where('status', '==', 'aprobado')
-                );
-                const pSnap = await getDocs(pQuery);
-                
-                let totalBancario = 0;
-                let totalEfectivo = 0;
-                pSnap.forEach(doc => {
-                    const data = doc.data();
-                    if (['transferencia', 'movil'].includes(data.paymentMethod)) totalBancario += data.totalAmount;
-                    else if (['efectivo_bs', 'efectivo'].includes(data.paymentMethod)) totalEfectivo += data.totalAmount;
-                });
-                setIngresosOrdinariosBanco(totalBancario);
-                setIngresosOrdinariosEfectivo(totalEfectivo);
-
-                // 3. EGRESOS REALES REGISTRADOS
+                // 2. EGRESOS REALES REGISTRADOS
                 const tQuery = query(
                     collection(db, 'condominios', workingCondoId, 'transacciones'), 
                     where('fecha', '>=', fromDate), 
@@ -133,7 +134,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 );
                 const tSnap = await getDocs(tQuery);
                 setEgresosTesorería(tSnap.docs.map(d => ({ 
-                    concepto: d.data().descripcion || d.data().description || "SIN CONCEPTO", 
+                    concepto: d.data().descripcion || "SIN CONCEPTO", 
                     monto: d.data().monto,
                     cuenta: d.data().nombreCuenta || "S/D"
                 })));
