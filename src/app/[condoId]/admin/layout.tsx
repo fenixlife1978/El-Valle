@@ -15,8 +15,7 @@ import {
     FileSearch,
     Receipt,
     BookCopy,
-    Scale,
-    Vault
+    Scale
 } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { usePathname, useRouter, useParams } from 'next/navigation';
@@ -51,7 +50,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             icon: Grid3X3,
             label: "Utilidades",
             items: [
-                { href: `/${condoId}/admin/cash-vault`, label: "Caja Principal" },
                 { href: `/${condoId}/admin/debts`, label: "Gestión de Deudas" },
                 { href: `/${condoId}/admin/financial-balance`, label: "Balance Financiero" },
                 { href: `/${condoId}/admin/accounting`, label: "Contabilidad" },
@@ -78,7 +76,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         label: 'Más', 
         isCentral: true,
         subMenu: [
-            { href: `/${condoId}/admin/cash-vault`, icon: Vault, label: "Bóveda" },
             { href: `/${condoId}/admin/debts`, icon: WalletCards, label: "Deudas" },
             { href: `/${condoId}/admin/surveys`, icon: ClipboardList, label: "Encuestas" },
             { href: `/${condoId}/admin/people`, icon: Users, label: "Personas" },
