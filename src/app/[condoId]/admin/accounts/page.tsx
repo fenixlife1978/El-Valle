@@ -327,12 +327,12 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                     <h2 className="text-4xl font-black text-slate-900 uppercase italic tracking-tighter leading-none">
                         Cuentas y <span className="text-[#F28705]">Tesorería</span>
                     </h2>
-                    <p className="text-slate-400 font-bold text-[10px] uppercase tracking-[0.3em] mt-3 flex items-center gap-2">
+                    <p className="text-slate-500 font-bold text-[10px] uppercase tracking-[0.3em] mt-3 flex items-center gap-2">
                         <Wallet className="h-3 w-3" /> Control de Disponibilidad y Flujo de Caja
                     </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                    <Button onClick={handleGeneratePDF} variant="outline" className="font-bold uppercase text-[10px] rounded-xl h-12">
+                    <Button onClick={handleGeneratePDF} variant="outline" className="font-bold uppercase text-[10px] rounded-xl h-12 border-slate-300 text-slate-700 hover:bg-slate-100">
                         <Download className="mr-2 h-4 w-4" /> Reporte Período
                     </Button>
                     <Button onClick={() => setIsTransferDialogOpen(true)} variant="secondary" className="bg-slate-900 hover:bg-slate-800 text-white font-black uppercase text-[10px] rounded-xl h-12">
@@ -347,24 +347,24 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
             {/* Resumen de Cuentas */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 {accounts.length === 0 ? (
-                    <Card className="col-span-full p-8 border-dashed flex flex-col items-center justify-center">
+                    <Card className="col-span-full p-8 border-dashed border-slate-300 flex flex-col items-center justify-center bg-white">
                         <p className="text-slate-400 font-bold italic mb-4">No hay cuentas configuradas</p>
-                        <Button onClick={() => setIsAccountDialogOpen(true)} variant="outline">Crear Primera Cuenta</Button>
+                        <Button onClick={() => setIsAccountDialogOpen(true)} variant="outline" className="border-slate-300 text-slate-700">Crear Primera Cuenta</Button>
                     </Card>
                 ) : (
                     accounts.map(acc => (
-                        <Card key={acc.id} className="rounded-[2rem] border-none shadow-sm hover:shadow-xl transition-all duration-300 group">
+                        <Card key={acc.id} className="rounded-[2rem] border-none shadow-sm hover:shadow-xl transition-all duration-300 group bg-white">
                             <CardHeader className="pb-2">
                                 <CardTitle className="text-[9px] font-black uppercase tracking-widest text-slate-400 flex items-center justify-between">
                                     <span className="flex items-center gap-2">
                                         {acc.tipo === 'banco' ? <Landmark className="h-3 w-3 text-sky-500" /> : <Wallet className="h-3 w-3 text-emerald-500" />}
-                                        {acc.tipo}
+                                        <span className="text-slate-500">{acc.tipo}</span>
                                     </span>
-                                    <BadgeInfo className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    <BadgeInfo className="h-3 w-3 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />
                                 </CardTitle>
                             </CardHeader>
                             <CardContent>
-                                <div className="text-sm font-bold text-slate-500 uppercase truncate mb-1">{acc.nombre}</div>
+                                <div className="text-sm font-bold text-slate-600 uppercase truncate mb-1">{acc.nombre}</div>
                                 <div className="text-2xl font-black italic tracking-tight text-slate-900">
                                     Bs. {formatCurrency(acc.saldoActual)}
                                 </div>
@@ -376,7 +376,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                     <Button 
                         variant="ghost" 
                         onClick={() => setIsAccountDialogOpen(true)}
-                        className="h-full border-2 border-dashed rounded-[2rem] hover:bg-slate-100 flex flex-col items-center justify-center py-8"
+                        className="h-full border-2 border-dashed border-slate-200 rounded-[2rem] hover:bg-slate-100 hover:border-slate-300 flex flex-col items-center justify-center py-8 bg-white/50"
                     >
                         <PlusCircle className="h-6 w-6 text-slate-300 mb-2" />
                         <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Nueva Cuenta</span>
@@ -398,7 +398,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                                         {format(dateRange.from, 'dd MMM', {locale: es})} - {format(dateRange.to, 'dd MMM', {locale: es})}
                                     </Button>
                                 </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0" align="end">
+                                <PopoverContent className="w-auto p-0 bg-white border-slate-200" align="end">
                                     <Calendar
                                         initialFocus
                                         mode="range"
@@ -415,24 +415,24 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                     <div className="overflow-x-auto">
                         <Table>
                             <TableHeader>
-                                <TableRow className="bg-slate-50/50 hover:bg-transparent">
-                                    <TableHead className="text-[10px] font-black uppercase px-8 h-14">Fecha</TableHead>
-                                    <TableHead className="text-[10px] font-black uppercase">Cuenta</TableHead>
-                                    <TableHead className="text-[10px] font-black uppercase">Descripción</TableHead>
-                                    <TableHead className="text-right text-[10px] font-black uppercase px-8">Monto (Bs.)</TableHead>
+                                <TableRow className="bg-slate-50 hover:bg-transparent">
+                                    <TableHead className="text-[10px] font-black uppercase px-8 h-14 text-slate-700">Fecha</TableHead>
+                                    <TableHead className="text-[10px] font-black uppercase text-slate-700">Cuenta</TableHead>
+                                    <TableHead className="text-[10px] font-black uppercase text-slate-700">Descripción</TableHead>
+                                    <TableHead className="text-right text-[10px] font-black uppercase px-8 text-slate-700">Monto (Bs.)</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {transactions.length === 0 ? (
-                                    <TableRow><TableCell colSpan={4} className="text-center py-20 text-slate-400 italic">No se registran movimientos</TableCell></TableRow>
+                                    <TableRow><TableCell colSpan={4} className="text-center py-20 text-slate-400 italic font-bold uppercase tracking-widest text-xs">No se registran movimientos</TableCell></TableRow>
                                 ) : (
                                     transactions.map(tx => (
-                                        <TableRow key={tx.id} className="hover:bg-slate-50 transition-colors border-b last:border-0">
+                                        <TableRow key={tx.id} className="hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0">
                                             <TableCell className="px-8 py-5 font-bold text-slate-500 text-xs">
                                                 {format(tx.fecha.toDate(), 'dd/MM/yy HH:mm')}
                                             </TableCell>
                                             <TableCell>
-                                                <Badge variant="outline" className="text-[9px] font-black uppercase bg-slate-100">{tx.nombreCuenta}</Badge>
+                                                <Badge variant="outline" className="text-[9px] font-black uppercase bg-slate-100 text-slate-700 border-slate-200">{tx.nombreCuenta}</Badge>
                                             </TableCell>
                                             <TableCell>
                                                 <div className="font-black text-slate-900 uppercase italic text-xs">{tx.descripcion}</div>
@@ -454,22 +454,22 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
 
             {/* Nueva Cuenta */}
             <Dialog open={isAccountDialogOpen} onOpenChange={setIsAccountDialogOpen}>
-                <DialogContent className="rounded-[2rem] border-none shadow-2xl">
+                <DialogContent className="rounded-[2rem] border-none shadow-2xl bg-white text-slate-900">
                     <DialogHeader>
-                        <DialogTitle className="text-2xl font-black uppercase italic tracking-tighter">Nueva <span className="text-[#F28705]">Cuenta</span></DialogTitle>
-                        <DialogDescription>Añada una cuenta bancaria o caja física.</DialogDescription>
+                        <DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-slate-900">Nueva <span className="text-[#F28705]">Cuenta</span></DialogTitle>
+                        <DialogDescription className="text-slate-500">Añada una cuenta bancaria o caja física.</DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
                         <div className="space-y-2">
-                            <Label className="text-[10px] font-black uppercase text-slate-400">Nombre de la Cuenta</Label>
-                            <Input placeholder="Ej: BANCO DE VENEZUELA" value={accountForm.nombre} onChange={e => setAccountForm({...accountForm, nombre: e.target.value})} className="rounded-xl h-12 font-bold" />
+                            <Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Nombre de la Cuenta</Label>
+                            <Input placeholder="Ej: BANCO DE VENEZUELA" value={accountForm.nombre} onChange={e => setAccountForm({...accountForm, nombre: e.target.value})} className="rounded-xl h-12 font-bold bg-slate-50 border-slate-200 text-slate-900" />
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
-                                <Label className="text-[10px] font-black uppercase text-slate-400">Tipo</Label>
+                                <Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Tipo</Label>
                                 <Select value={accountForm.tipo} onValueChange={v => setAccountForm({...accountForm, tipo: v as any})}>
-                                    <SelectTrigger className="rounded-xl h-12"><SelectValue /></SelectTrigger>
-                                    <SelectContent>
+                                    <SelectTrigger className="rounded-xl h-12 bg-slate-50 border-slate-200 text-slate-900 font-bold"><SelectValue /></SelectTrigger>
+                                    <SelectContent className="bg-white border-slate-200 text-slate-900">
                                         <SelectItem value="banco">Banco</SelectItem>
                                         <SelectItem value="efectivo">Efectivo</SelectItem>
                                         <SelectItem value="otros">Otros</SelectItem>
@@ -477,13 +477,13 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                                 </Select>
                             </div>
                             <div className="space-y-2">
-                                <Label className="text-[10px] font-black uppercase text-slate-400">Saldo Inicial</Label>
-                                <Input type="number" value={accountForm.saldoInicial} onChange={e => setAccountForm({...accountForm, saldoInicial: e.target.value})} className="rounded-xl h-12 font-bold" />
+                                <Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Saldo Inicial</Label>
+                                <Input type="number" value={accountForm.saldoInicial} onChange={e => setAccountForm({...accountForm, saldoInicial: e.target.value})} className="rounded-xl h-12 font-bold bg-slate-50 border-slate-200 text-slate-900" />
                             </div>
                         </div>
                     </div>
                     <DialogFooter>
-                        <Button onClick={handleSaveAccount} disabled={isSubmitting} className="w-full bg-slate-900 text-white font-black uppercase h-12 rounded-xl">
+                        <Button onClick={handleSaveAccount} disabled={isSubmitting} className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black uppercase h-12 rounded-xl">
                             {isSubmitting ? <Loader2 className="animate-spin" /> : "Crear Cuenta"}
                         </Button>
                     </DialogFooter>
@@ -492,28 +492,28 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
 
             {/* Nuevo Movimiento */}
             <Dialog open={isTransactionDialogOpen} onOpenChange={setIsTransactionDialogOpen}>
-                <DialogContent className="rounded-[2rem] border-none shadow-2xl">
+                <DialogContent className="rounded-[2rem] border-none shadow-2xl bg-white text-slate-900">
                     <DialogHeader>
-                        <DialogTitle className="text-2xl font-black uppercase italic tracking-tighter">Registrar <span className="text-[#F28705]">Movimiento</span></DialogTitle>
-                        <DialogDescription>Afecta el saldo de la cuenta de forma instantánea.</DialogDescription>
+                        <DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-slate-900">Registrar <span className="text-[#F28705]">Movimiento</span></DialogTitle>
+                        <DialogDescription className="text-slate-500">Afecta el saldo de la cuenta de forma instantánea.</DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
-                                <Label className="text-[10px] font-black uppercase text-slate-400">Tipo</Label>
+                                <Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Tipo</Label>
                                 <Select value={transForm.tipo} onValueChange={(v: any) => setTransactionForm({...transForm, tipo: v})}>
-                                    <SelectTrigger className="rounded-xl h-12 font-bold"><SelectValue /></SelectTrigger>
-                                    <SelectContent>
+                                    <SelectTrigger className="rounded-xl h-12 font-bold bg-slate-50 border-slate-200 text-slate-900"><SelectValue /></SelectTrigger>
+                                    <SelectContent className="bg-white border-slate-200 text-slate-900">
                                         <SelectItem value="ingreso" className="text-green-600 font-bold">Ingreso (+)</SelectItem>
                                         <SelectItem value="egreso" className="text-red-600 font-bold">Egreso (-)</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
                             <div className="space-y-2">
-                                <Label className="text-[10px] font-black uppercase text-slate-400">Cuenta Afectada</Label>
+                                <Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Cuenta Afectada</Label>
                                 <Select value={transForm.cuentaId} onValueChange={v => setTransactionForm({...transForm, cuentaId: v})}>
-                                    <SelectTrigger className="rounded-xl h-12 font-bold"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
-                                    <SelectContent>
+                                    <SelectTrigger className="rounded-xl h-12 font-bold bg-slate-50 border-slate-200 text-slate-900"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                                    <SelectContent className="bg-white border-slate-200 text-slate-900">
                                         {accounts.map(acc => (
                                             <SelectItem key={acc.id} value={acc.id}>{acc.nombre} (Bs. {formatCurrency(acc.saldoActual)})</SelectItem>
                                         ))}
@@ -523,28 +523,28 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
-                                <Label className="text-[10px] font-black uppercase text-slate-400">Monto</Label>
-                                <Input type="number" placeholder="0.00" value={transForm.monto} onChange={e => setTransactionForm({...transForm, monto: e.target.value})} className="rounded-xl h-12 font-black text-lg" />
+                                <Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Monto</Label>
+                                <Input type="number" placeholder="0.00" value={transForm.monto} onChange={e => setTransactionForm({...transForm, monto: e.target.value})} className="rounded-xl h-12 font-black text-lg bg-slate-50 border-slate-200 text-slate-900" />
                             </div>
                             <div className="space-y-2">
-                                <Label className="text-[10px] font-black uppercase text-slate-400">Fecha</Label>
+                                <Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Fecha</Label>
                                 <Popover>
                                     <PopoverTrigger asChild>
-                                        <Button variant="outline" className="w-full h-12 rounded-xl justify-start font-bold">
+                                        <Button variant="outline" className="w-full h-12 rounded-xl justify-start font-bold bg-slate-50 border-slate-200 text-slate-900 hover:bg-slate-100">
                                             <CalendarIcon className="mr-2 h-4 w-4" /> {format(transForm.fecha, 'dd/MM/yyyy')}
                                         </Button>
                                     </PopoverTrigger>
-                                    <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={transForm.fecha} onSelect={(d: any) => d && setTransactionForm({...transForm, fecha: d})} locale={es}/></PopoverContent>
+                                    <PopoverContent className="w-auto p-0 bg-white border-slate-200"><Calendar mode="single" selected={transForm.fecha} onSelect={(d: any) => d && setTransactionForm({...transForm, fecha: d})} locale={es}/></PopoverContent>
                                 </Popover>
                             </div>
                         </div>
                         <div className="space-y-2">
-                            <Label className="text-[10px] font-black uppercase text-slate-400">Descripción</Label>
-                            <Input placeholder="Ej: Pago de servicios públicos" value={transForm.descripcion} onChange={e => setTransactionForm({...transForm, descripcion: e.target.value})} className="rounded-xl h-12 font-bold" />
+                            <Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Descripción</Label>
+                            <Input placeholder="Ej: Pago de servicios públicos" value={transForm.descripcion} onChange={e => setTransactionForm({...transForm, descripcion: e.target.value})} className="rounded-xl h-12 font-bold bg-slate-50 border-slate-200 text-slate-900" />
                         </div>
                         <div className="space-y-2">
-                            <Label className="text-[10px] font-black uppercase text-slate-400">Referencia (Opcional)</Label>
-                            <Input placeholder="Nº de comprobante" value={transForm.referencia} onChange={e => setTransactionForm({...transForm, referencia: e.target.value})} className="rounded-xl h-12" />
+                            <Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Referencia (Opcional)</Label>
+                            <Input placeholder="Nº de comprobante" value={transForm.referencia} onChange={e => setTransactionForm({...transForm, referencia: e.target.value})} className="rounded-xl h-12 bg-slate-50 border-slate-200 text-slate-900 font-bold" />
                         </div>
                     </div>
                     <DialogFooter>
@@ -558,39 +558,39 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
 
             {/* Transferencia */}
             <Dialog open={isTransferDialogOpen} onOpenChange={setIsTransferDialogOpen}>
-                <DialogContent className="rounded-[2rem] border-none shadow-2xl">
+                <DialogContent className="rounded-[2rem] border-none shadow-2xl bg-white text-slate-900">
                     <DialogHeader>
-                        <DialogTitle className="text-2xl font-black uppercase italic tracking-tighter">Trasladar <span className="text-[#F28705]">Fondos</span></DialogTitle>
-                        <DialogDescription>Mueve dinero entre tus cuentas de forma atómica.</DialogDescription>
+                        <DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-slate-900">Trasladar <span className="text-[#F28705]">Fondos</span></DialogTitle>
+                        <DialogDescription className="text-slate-500">Mueve dinero entre tus cuentas de forma atómica.</DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
-                                <Label className="text-[10px] font-black uppercase text-slate-400">Cuenta Origen</Label>
+                                <Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Cuenta Origen</Label>
                                 <Select value={transferForm.origenId} onValueChange={v => setTransferForm({...transferForm, origenId: v})}>
-                                    <SelectTrigger className="rounded-xl h-12 font-bold"><SelectValue placeholder="Sale de..." /></SelectTrigger>
-                                    <SelectContent>{accounts.map(acc => <SelectItem key={acc.id} value={acc.id}>{acc.nombre}</SelectItem>)}</SelectContent>
+                                    <SelectTrigger className="rounded-xl h-12 font-bold bg-slate-50 border-slate-200 text-slate-900"><SelectValue placeholder="Sale de..." /></SelectTrigger>
+                                    <SelectContent className="bg-white border-slate-200 text-slate-900">{accounts.map(acc => <SelectItem key={acc.id} value={acc.id}>{acc.nombre}</SelectItem>)}</SelectContent>
                                 </Select>
                             </div>
                             <div className="space-y-2">
-                                <Label className="text-[10px] font-black uppercase text-slate-400">Cuenta Destino</Label>
+                                <Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Cuenta Destino</Label>
                                 <Select value={transferForm.destinoId} onValueChange={v => setTransferForm({...transferForm, destinoId: v})}>
-                                    <SelectTrigger className="rounded-xl h-12 font-bold"><SelectValue placeholder="Entra a..." /></SelectTrigger>
-                                    <SelectContent>{accounts.map(acc => <SelectItem key={acc.id} value={acc.id}>{acc.nombre}</SelectItem>)}</SelectContent>
+                                    <SelectTrigger className="rounded-xl h-12 font-bold bg-slate-50 border-slate-200 text-slate-900"><SelectValue placeholder="Entra a..." /></SelectTrigger>
+                                    <SelectContent className="bg-white border-slate-200 text-slate-900">{accounts.map(acc => <SelectItem key={acc.id} value={acc.id}>{acc.nombre}</SelectItem>)}</SelectContent>
                                 </Select>
                             </div>
                         </div>
                         <div className="space-y-2">
-                            <Label className="text-[10px] font-black uppercase text-slate-400">Monto a Trasladar</Label>
-                            <Input type="number" placeholder="0.00" value={transferForm.monto} onChange={e => setTransferForm({...transferForm, monto: e.target.value})} className="rounded-xl h-12 font-black text-xl" />
+                            <Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Monto a Trasladar</Label>
+                            <Input type="number" placeholder="0.00" value={transferForm.monto} onChange={e => setTransferForm({...transferForm, monto: e.target.value})} className="rounded-xl h-12 font-black text-xl bg-slate-50 border-slate-200 text-slate-900" />
                         </div>
                         <div className="space-y-2">
-                            <Label className="text-[10px] font-black uppercase text-slate-400">Motivo / Descripción</Label>
-                            <Input value={transferForm.descripcion} onChange={e => setTransferForm({...transferForm, descripcion: e.target.value})} className="rounded-xl h-12 font-bold" />
+                            <Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Motivo / Descripción</Label>
+                            <Input value={transferForm.descripcion} onChange={e => setTransferForm({...transferForm, descripcion: e.target.value})} className="rounded-xl h-12 font-bold bg-slate-50 border-slate-200 text-slate-900" />
                         </div>
                     </div>
                     <DialogFooter>
-                        <Button onClick={handleTransfer} disabled={isSubmitting} className="w-full bg-slate-900 text-white font-black uppercase h-14 rounded-2xl">
+                        <Button onClick={handleTransfer} disabled={isSubmitting} className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black uppercase h-14 rounded-2xl">
                             {isSubmitting ? <Loader2 className="animate-spin" /> : "Ejecutar Traslado"}
                         </Button>
                     </DialogFooter>
