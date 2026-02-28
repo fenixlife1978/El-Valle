@@ -87,10 +87,11 @@ const AccountingPage = () => {
         return () => cleanup?.();
     }, [fetchData]);
 
-    // Filtrar cuentas para ocultar "CAJA PRINCIPAL (EFECTIVO BS)" y mostrar el resto
+    // Filtrar cuentas para ocultar exactamente "CAJA PRINCIPAL (EFECTIVO BS)" y mostrar el resto (incluyendo "CAJA PRINCIPAL")
     const visibleAccounts = useMemo(() => {
         return accounts.filter(acc => {
             const name = acc.nombre?.toUpperCase().trim();
+            // Excluimos la cuenta señalada que no presenta movimientos
             return name !== "CAJA PRINCIPAL (EFECTIVO BS)";
         });
     }, [accounts]);
