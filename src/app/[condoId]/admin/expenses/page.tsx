@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -14,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
-import { Loader2, PlusCircle, Trash2, Building2, CreditCard, Save, FileDown, Banknote, Landmark, DollarSign } from 'lucide-react';
+import { Loader2, PlusCircle, Trash2, Building2, CreditCard, Save, FileDown, Banknote, Landmark, Coins } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Badge } from '@/components/ui/badge';
@@ -29,7 +28,7 @@ type Expense = {
     date: Timestamp;
     reference: string;
     createdAt: Timestamp;
-    paymentSource?: 'banco' | 'efectivo_bs' | 'efectivo_usd';
+    paymentSource?: 'banco' | 'caja_principal' | 'caja_chica';
 };
 
 const formatToTwoDecimals = (num: number) => {
@@ -89,6 +88,19 @@ function RegisterExpenseForm({ workingCondoId, onSave }: { workingCondoId: strin
         await batch.commit();
         toast({ title: "Gasto y Fondo Registrados", description: `Se ha añadido un ingreso de Bs. ${amount} a la Caja Chica.` });
       } else {
+        const collectionName = paymentSource === 'caja_principal' ? 'cajaPrincipal_movimientos' : 'gastos';
+        
+        if (paymentSource === 'caja_principal') {
+            await addDoc(collection(db, "condominios", workingCondoId, "cajaPrincipal_movimientos"), {
+                date: Timestamp.fromDate(fullDate),
+                description: `GASTO: ${description}`,
+                amount,
+                type: 'egreso',
+                source: 'manual',
+                reference
+            });
+        }
+
         await addDoc(collection(db, "condominios", workingCondoId, "gastos"), {
           description, amount, category: currentCategory, date: Timestamp.fromDate(fullDate),
           reference, createdAt: serverTimestamp(), paymentSource,
@@ -138,8 +150,8 @@ function RegisterExpenseForm({ workingCondoId, onSave }: { workingCondoId: strin
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="banco">Banco</SelectItem>
-                            <SelectItem value="efectivo_bs">Efectivo Bs.</SelectItem>
-                            <SelectItem value="efectivo_usd">Efectivo USD</SelectItem>
+                            <SelectItem value="caja_principal">Caja Principal (Efectivo)</SelectItem>
+                            <SelectItem value="caja_chica">Caja Chica</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
@@ -278,8 +290,8 @@ export default function ExpensesPage() {
     }, [expenses, filterYear, filterMonth]);
     
     const bankExpenses = useMemo(() => filteredExpenses.filter(e => e.paymentSource === 'banco'), [filteredExpenses]);
-    const cashBsExpenses = useMemo(() => filteredExpenses.filter(e => e.paymentSource === 'efectivo_bs'), [filteredExpenses]);
-    const cashUsdExpenses = useMemo(() => filteredExpenses.filter(e => e.paymentSource === 'efectivo_usd'), [filteredExpenses]);
+    const mainCashExpenses = useMemo(() => filteredExpenses.filter(e => e.paymentSource === 'caja_principal'), [filteredExpenses]);
+    const pettyCashExpenses = useMemo(() => filteredExpenses.filter(e => e.paymentSource === 'caja_chica'), [filteredExpenses]);
 
     const handleDelete = async (id: string) => {
         if (!workingCondoId) return;
@@ -419,13 +431,13 @@ export default function ExpensesPage() {
                         <Tabs defaultValue="banco">
                             <TabsList className="grid w-full grid-cols-3 bg-secondary/20 rounded-2xl h-auto p-1.5">
                                 <TabsTrigger value="banco" className="rounded-xl h-12 text-xs md:text-sm font-black gap-2"><Landmark className="h-4 w-4"/> Banco</TabsTrigger>
-                                <TabsTrigger value="efectivo_bs" className="rounded-xl h-12 text-xs md:text-sm font-black gap-2"><Banknote className="h-4 w-4"/> Efectivo Bs.</TabsTrigger>
-                                <TabsTrigger value="efectivo_usd" className="rounded-xl h-12 text-xs md:text-sm font-black gap-2"><DollarSign className="h-4 w-4"/> Efectivo USD</TabsTrigger>
+                                <TabsTrigger value="caja_principal" className="rounded-xl h-12 text-xs md:text-sm font-black gap-2"><Coins className="h-4 w-4"/> Caja Principal</TabsTrigger>
+                                <TabsTrigger value="caja_chica" className="rounded-xl h-12 text-xs md:text-sm font-black gap-2"><WalletCards className="h-4 w-4"/> Caja Chica</TabsTrigger>
                             </TabsList>
                             <div className="mt-4">
                                 <TabsContent value="banco"><ExpensesTable expenses={bankExpenses} handleDelete={handleDelete} /></TabsContent>
-                                <TabsContent value="efectivo_bs"><ExpensesTable expenses={cashBsExpenses} handleDelete={handleDelete} /></TabsContent>
-                                <TabsContent value="efectivo_usd"><ExpensesTable expenses={cashUsdExpenses} handleDelete={handleDelete} /></TabsContent>
+                                <TabsContent value="caja_principal"><ExpensesTable expenses={mainCashExpenses} handleDelete={handleDelete} /></TabsContent>
+                                <TabsContent value="caja_chica"><ExpensesTable expenses={pettyCashExpenses} handleDelete={handleDelete} /></TabsContent>
                             </div>
                         </Tabs>
                     )}

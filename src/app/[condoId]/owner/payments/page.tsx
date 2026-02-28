@@ -43,7 +43,7 @@ type BeneficiaryRow = {
     selectedProperty: { street: string, house: string } | null;
 };
 
-type PaymentMethod = 'movil' | 'transferencia' | 'efectivo_bs' | 'efectivo_usd' | '';
+type PaymentMethod = 'movil' | 'transferencia' | 'efectivo_bs' | '';
 
 
 function ReportPaymentComponent() {
@@ -70,7 +70,7 @@ function ReportPaymentComponent() {
     const [isBankModalOpen, setIsBankModalOpen] = useState(false);
     const [isInfoDialogOpen, setIsInfoDialogOpen] = useState(false);
 
-    const isCashPayment = paymentMethod === 'efectivo_bs' || paymentMethod === 'efectivo_usd';
+    const isCashPayment = paymentMethod === 'efectivo_bs';
 
     useEffect(() => {
         if (!condoId) return;
@@ -328,7 +328,6 @@ function ReportPaymentComponent() {
                                         <SelectItem value="transferencia">Transferencia</SelectItem>
                                         <SelectItem value="movil">Pago Móvil</SelectItem>
                                         <SelectItem value="efectivo_bs">Efectivo Bs.</SelectItem>
-                                        <SelectItem value="efectivo_usd">Efectivo USD</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>

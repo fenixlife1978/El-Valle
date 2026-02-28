@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
@@ -10,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/Dialog";
 import { useToast } from '@/hooks/use-toast';
 import { ArrowLeft, Calculator, CalendarIcon, Check, CheckCircle, Clock, DollarSign, Eye, FileText, Hash, Loader2, Upload, Banknote, Info, X, Save, FileUp, UserPlus, Trash2, XCircle, Search, ChevronDown, Minus, Equal, Receipt, AlertTriangle, User, MoreHorizontal, Download, Share2 } from 'lucide-react';
 import { format, isBefore, startOfMonth, addMonths } from 'date-fns';
@@ -45,9 +44,9 @@ type Owner = {
     role?: string;
 };
 type BeneficiaryRow = { id: string; owner: Owner | null; searchTerm: string; amount: string; selectedProperty: { street: string, house: string } | null; };
-type PaymentMethod = 'movil' | 'transferencia' | 'efectivo_bs' | 'efectivo_usd' | '';
+type PaymentMethod = 'movil' | 'transferencia' | 'efectivo_bs' | '';
 type Debt = { id: string; ownerId: string; year: number; month: number; amountUSD: number; description: string; status: 'pending' | 'paid' | 'vencida'; property: { street: string; house: string }; paidAmountUSD?: number;};
-type Payment = { id: string; beneficiaries: { ownerId: string; ownerName: string; amount: number; street?: string; house?: string; }[]; beneficiaryIds: string[]; totalAmount: number; exchangeRate: number; paymentDate: Timestamp; reportedAt: Timestamp; paymentMethod: 'transferencia' | 'movil' | 'efectivo_bs' | 'efectivo_usd'; bank: string; reference: string; status: 'pendiente' | 'aprobado' | 'rechazado'; receiptUrl?: string; observations?: string; receiptNumbers?: { [ownerId: string]: string }; type?: string; };
+type Payment = { id: string; beneficiaries: { ownerId: string; ownerName: string; amount: number; street?: string; house?: string; }[]; beneficiaryIds: string[]; totalAmount: number; exchangeRate: number; paymentDate: Timestamp; reportedAt: Timestamp; paymentMethod: 'transferencia' | 'movil' | 'efectivo_bs'; bank: string; reference: string; status: 'pendiente' | 'aprobado' | 'rechazado'; receiptUrl?: string; observations?: string; receiptNumbers?: { [ownerId: string]: string }; type?: string; };
 type ReceiptData = { payment: Payment; beneficiary: any; ownerName: string; ownerUnit: string; paidDebts: Debt[]; previousBalance: number; currentBalance: number; qrCodeUrl?: string; receiptNumber: string; } | null;
 type PaymentDetails = { paymentMethod: 'movil' | 'transferencia' | ''; bank: string; otherBank: string; reference: string; };
 
@@ -744,7 +743,7 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
     const [isBankModalOpen, setIsBankModalOpen] = useState(false);
 
     const ownersCollectionName = condoId === 'condo_01' ? 'owners' : 'propietarios';
-    const isCashPayment = paymentMethod === 'efectivo_bs' || paymentMethod === 'efectivo_usd';
+    const isCashPayment = paymentMethod === 'efectivo_bs';
 
     useEffect(() => {
         if (!condoId) return;
@@ -921,7 +920,6 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
                                     <SelectItem value="transferencia">Transferencia</SelectItem>
                                     <SelectItem value="movil">Pago Móvil</SelectItem>
                                     <SelectItem value="efectivo_bs">Efectivo Bs.</SelectItem>
-                                    <SelectItem value="efectivo_usd">Efectivo USD</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>

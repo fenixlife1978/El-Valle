@@ -15,7 +15,8 @@ import {
     FileSearch,
     Receipt,
     BookCopy,
-    Scale
+    Scale,
+    Coins
 } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { usePathname, useRouter, useParams } from 'next/navigation';
@@ -53,8 +54,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                 { href: `/${condoId}/admin/debts`, label: "Gestión de Deudas" },
                 { href: `/${condoId}/admin/financial-balance`, label: "Balance Financiero" },
                 { href: `/${condoId}/admin/accounting`, label: "Contabilidad" },
-                { href: `/${condoId}/admin/expenses`, label: "Gestión de Egresos" },
+                { href: `/${condoId}/admin/main-cash`, label: "Caja Principal (Efectivo)" },
                 { href: `/${condoId}/admin/petty-cash`, label: "Caja Chica" },
+                { href: `/${condoId}/admin/expenses`, label: "Gestión de Egresos" },
                 { href: `/${condoId}/admin/reports`, label: "Informes" },
                 { href: `/${condoId}/admin/billboard`, label: "Cartelera" },
                 { href: `/${condoId}/admin/surveys`, label: "Encuestas" },
@@ -76,8 +78,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         label: 'Más', 
         isCentral: true,
         subMenu: [
+            { href: `/${condoId}/admin/main-cash`, icon: Coins, label: "Caja Principal" },
             { href: `/${condoId}/admin/debts`, icon: WalletCards, label: "Deudas" },
-            { href: `/${condoId}/admin/surveys`, icon: ClipboardList, label: "Encuestas" },
             { href: `/${condoId}/admin/people`, icon: Users, label: "Personas" },
             { href: `/${condoId}/admin/settings`, icon: Settings, label: "Ajustes" },
         ]

@@ -14,7 +14,7 @@ import { format } from 'date-fns';
 const venezuelanBanks = [
     'banesco', 'mercantil', 'provincial', 'bdv', 'bnc', 'tesoro', 'otro'
 ] as const;
-const paymentMethods = ['movil', 'transferencia', 'efectivo_bs', 'efectivo_usd'] as const;
+const paymentMethods = ['movil', 'transferencia', 'efectivo_bs'] as const;
 
 // We define a strict output schema. The AI will do its best to conform to this.
 const InferPaymentDetailsOutputSchema = z.object({
@@ -48,8 +48,8 @@ The user will provide text that might be informal or contain abbreviations. You 
 Key Information to Extract:
 - Amount: The total amount paid in Bolivars (Bs.). Extract only the number.
 - Date: The date the payment was made. If the user says "hoy" (today), "ayer" (yesterday), or provides a date, convert it to 'yyyy-MM-dd' format. Today is ${format(new Date(), 'yyyy-MM-dd')}.
-- Method: Determine if it was a 'movil' (Pago Móvil), 'transferencia' (Transferencia), 'efectivo_bs' (Efectivo Bs.), or 'efectivo_usd' (Efectivo USD).
-- Bank: Identify the bank. Common banks are Banesco, Mercantil, Provincial, Banco de Venezuela (BDV), BNC, Tesoro. If it is a cash payment ('efectivo_bs' or 'efectivo_usd'), you MUST use 'otro'.
+- Method: Determine if it was a 'movil' (Pago Móvil), 'transferencia' (Transferencia), or 'efectivo_bs' (Efectivo Bs.).
+- Bank: Identify the bank. Common banks are Banesco, Mercantil, Provincial, Banco de Venezuela (BDV), BNC, Tesoro. If it is a cash payment ('efectivo_bs'), you MUST use 'otro'.
 - Reference: Extract the reference number. It should be a string of digits. If it is a cash payment, you MUST return the exact word "EFECTIVO".
 
 Analyze the following text and return the structured data.
@@ -70,7 +70,7 @@ const inferPaymentDetailsFlow = ai.defineFlow(
       throw new Error('AI failed to infer payment details.');
     }
     
-    if (output.paymentMethod === 'efectivo_bs' || output.paymentMethod === 'efectivo_usd') {
+    if (output.paymentMethod === 'efectivo_bs') {
         output.bank = 'otro';
         output.reference = 'EFECTIVO';
     } else {

@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -300,7 +298,6 @@ export default function OwnerPaymentCalculatorPage({ params }: { params: { condo
                                     <SelectItem value="transferencia">Transferencia</SelectItem>
                                     <SelectItem value="movil">Pago Móvil</SelectItem>
                                     <SelectItem value="efectivo_bs">Efectivo Bs.</SelectItem>
-                                    <SelectItem value="efectivo_usd">Efectivo USD</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>

@@ -1,10 +1,9 @@
-
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, Timestamp } from 'firebase/firestore';
-import { Download, RefreshCw, Landmark, Banknote, DollarSign, Wallet } from 'lucide-react';
+import { collection, onSnapshot, Timestamp, where, query } from 'firebase/firestore';
+import { Download, RefreshCw, Landmark, Banknote, Coins, Wallet } from 'lucide-react';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -19,17 +18,27 @@ import { useAuth } from '@/hooks/use-auth';
 // --- TYPES ---
 interface Payment {
     paymentDate: Timestamp;
-    paymentMethod: 'transferencia' | 'movil' | 'efectivo_bs' | 'efectivo_usd';
+    paymentMethod: 'transferencia' | 'movil' | 'efectivo_bs';
     totalAmount: number;
     description: string;
     reference?: string;
+    status: string;
 }
 
 interface Expense {
     date: Timestamp;
-    paymentSource?: 'banco' | 'efectivo_bs' | 'efectivo_usd';
+    paymentSource?: 'banco' | 'caja_principal' | 'caja_chica';
     amount: number;
     description: string;
+    reference?: string;
+}
+
+interface MainCashMovement {
+    id: string;
+    type: 'ingreso' | 'egreso';
+    amount: number;
+    description: string;
+    date: Timestamp;
     reference?: string;
 }
 
@@ -66,6 +75,7 @@ const AccountingPage = () => {
     const [loading, setLoading] = useState(true);
     const [allPayments, setAllPayments] = useState<Payment[]>([]);
     const [allExpenses, setAllExpenses] = useState<Expense[]>([]);
+    const [allMainCash, setAllMainCash] = useState<MainCashMovement[]>([]);
     const [allPettyCash, setAllPettyCash] = useState<PettyCashMovement[]>([]);
     const [selectedMonth, setSelectedMonth] = useState(String(new Date().getMonth() + 1));
     const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
@@ -74,12 +84,14 @@ const AccountingPage = () => {
         if (!workingCondoId) return;
         setLoading(true);
 
-        // Escuchas en tiempo real (Real-time updates)
-        const unsubPayments = onSnapshot(collection(db, 'condominios', workingCondoId, 'payments'), 
+        const unsubPayments = onSnapshot(query(collection(db, 'condominios', workingCondoId, 'payments'), where('status', '==', 'aprobado')), 
             snap => setAllPayments(snap.docs.map(d => d.data() as Payment)));
         
         const unsubExpenses = onSnapshot(collection(db, 'condominios', workingCondoId, 'gastos'), 
             snap => setAllExpenses(snap.docs.map(d => d.data() as Expense)));
+
+        const unsubMain = onSnapshot(collection(db, 'condominios', workingCondoId, 'cajaPrincipal_movimientos'), 
+            snap => setAllMainCash(snap.docs.map(d => ({ id: d.id, ...d.data() } as MainCashMovement))));
         
         const unsubPetty = onSnapshot(collection(db, 'condominios', workingCondoId, 'cajaChica_movimientos'), 
             snap => setAllPettyCash(snap.docs.map(d => d.data() as PettyCashMovement)));
@@ -88,6 +100,7 @@ const AccountingPage = () => {
         return () => {
             unsubPayments();
             unsubExpenses();
+            unsubMain();
             unsubPetty();
         };
     }, [workingCondoId]);
@@ -103,75 +116,48 @@ const AccountingPage = () => {
         
         const accounts = {
             banco: { transactions: [] as Transaction[], startBalance: 0, endBalance: 0 },
-            efectivoBs: { transactions: [] as Transaction[], startBalance: 0, endBalance: 0 },
-            efectivoUsd: { transactions: [] as Transaction[], startBalance: 0, endBalance: 0 },
+            cajaPrincipal: { transactions: [] as Transaction[], startBalance: 0, endBalance: 0 },
             cajaChica: { transactions: [] as Transaction[], startBalance: 0, endBalance: 0 },
         };
 
-        const processTransactions = (
-            items: (Payment | Expense)[], 
-            accountKey: keyof typeof accounts, 
-            type: 'credit' | 'debit', 
-            dateKey: 'paymentDate' | 'date', 
-            sourceField: 'paymentMethod' | 'paymentSource', 
-            sourceValue: string[]
-        ) => {
-            items.forEach(item => {
-                const dateRaw = (item as any)[dateKey];
-                if (!dateRaw) return;
-                const date = dateRaw.toDate();
-                if (!(sourceValue.includes((item as any)[sourceField]))) return;
-                
-                const amount = 'totalAmount' in item ? item.totalAmount : item.amount;
-                const entry: Transaction = {
-                    date,
-                    description: item.description || 'N/A',
-                    reference: item.reference || 'N/A',
-                    credit: type === 'credit' ? amount : 0,
-                    debit: type === 'debit' ? amount : 0,
-                    balance: 0
-                };
-
-                if (date < fromDate) {
-                    accounts[accountKey].startBalance += entry.credit - entry.debit;
-                } else if (date <= toDate) {
-                    accounts[accountKey].transactions.push(entry);
-                }
-            });
-        };
-
         // Procesar Banco
-        processTransactions(allPayments, 'banco', 'credit', 'paymentDate', 'paymentMethod', ['transferencia', 'movil']);
-        processTransactions(allExpenses, 'banco', 'debit', 'date', 'paymentSource', ['banco']);
-        
-        // Procesar Efectivo Bs
-        processTransactions(allPayments, 'efectivoBs', 'credit', 'paymentDate', 'paymentMethod', ['efectivo_bs']);
-        processTransactions(allExpenses, 'efectivoBs', 'debit', 'date', 'paymentSource', ['efectivo_bs']);
-        
-        // Procesar Efectivo USD
-        processTransactions(allPayments, 'efectivoUsd', 'credit', 'paymentDate', 'paymentMethod', ['efectivo_usd']);
-        processTransactions(allExpenses, 'efectivoUsd', 'debit', 'date', 'paymentSource', ['efectivo_usd']);
-        
+        allPayments.filter(p => ['transferencia', 'movil'].includes(p.paymentMethod)).forEach(p => {
+            const date = p.paymentDate.toDate();
+            const entry: Transaction = { date, description: p.description || 'PAGO RECIBIDO', reference: p.reference || 'N/A', credit: p.totalAmount, debit: 0, balance: 0 };
+            if (date < fromDate) accounts.banco.startBalance += entry.credit;
+            else if (date <= toDate) accounts.banco.transactions.push(entry);
+        });
+        allExpenses.filter(e => e.paymentSource === 'banco').forEach(e => {
+            const date = e.date.toDate();
+            const entry: Transaction = { date, description: e.description, reference: e.reference || 'GASTO', credit: 0, debit: e.amount, balance: 0 };
+            if (date < fromDate) accounts.banco.startBalance -= entry.debit;
+            else if (date <= toDate) accounts.banco.transactions.push(entry);
+        });
+
+        // Procesar Caja Principal
+        allPayments.filter(p => p.paymentMethod === 'efectivo_bs').forEach(p => {
+            const date = p.paymentDate.toDate();
+            const entry: Transaction = { date, description: `PAGO EFECTIVO BS: ${p.description || 'PROPIETARIO'}`, reference: p.reference || 'N/A', credit: p.totalAmount, debit: 0, balance: 0 };
+            if (date < fromDate) accounts.cajaPrincipal.startBalance += entry.credit;
+            else if (date <= toDate) accounts.cajaPrincipal.transactions.push(entry);
+        });
+        allMainCash.forEach(m => {
+            const date = m.date.toDate();
+            const entry: Transaction = { date, description: m.description, reference: m.reference || 'MANUAL', credit: m.type === 'ingreso' ? m.amount : 0, debit: m.type === 'egreso' ? m.amount : 0, balance: 0 };
+            if (date < fromDate) accounts.cajaPrincipal.startBalance += (entry.credit - entry.debit);
+            else if (date <= toDate) accounts.cajaPrincipal.transactions.push(entry);
+        });
+
         // Procesar Caja Chica
         allPettyCash.forEach(item => {
             if (!item.date) return;
             const date = item.date.toDate();
-            const entry: Transaction = { 
-                date, 
-                description: item.description, 
-                reference: item.reference || 'Caja Chica', 
-                credit: item.type === 'ingreso' ? item.amount : 0, 
-                debit: item.type === 'egreso' ? item.amount : 0,
-                balance: 0
-            };
-            if (date < fromDate) {
-                accounts.cajaChica.startBalance += entry.credit - entry.debit;
-            } else if (date <= toDate) {
-                accounts.cajaChica.transactions.push(entry);
-            }
+            const entry: Transaction = { date, description: item.description, reference: item.reference || 'Caja Chica', credit: item.type === 'ingreso' ? item.amount : 0, debit: item.type === 'egreso' ? item.amount : 0, balance: 0 };
+            if (date < fromDate) accounts.cajaChica.startBalance += (entry.credit - entry.debit);
+            else if (date <= toDate) accounts.cajaChica.transactions.push(entry);
         });
 
-        // Calcular balances corrientes y finales
+        // Calcular balances
         Object.values(accounts).forEach(acc => {
             acc.transactions.sort((a, b) => a.date.getTime() - b.date.getTime());
             let runningBalance = acc.startBalance;
@@ -183,7 +169,7 @@ const AccountingPage = () => {
         });
 
         return accounts;
-    }, [allPayments, allExpenses, allPettyCash, selectedMonth, selectedYear]);
+    }, [allPayments, allExpenses, allMainCash, allPettyCash, selectedMonth, selectedYear]);
 
     const generalLedger = useMemo(() => {
         return Object.entries(periodData).map(([key, data]) => ({
@@ -224,11 +210,7 @@ const AccountingPage = () => {
                 ])
             ],
             headStyles: { fillColor: [0, 129, 201] },
-            columnStyles: {
-                3: { halign: 'right' },
-                4: { halign: 'right' },
-                5: { halign: 'right', fontStyle: 'bold' }
-            }
+            columnStyles: { 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right', fontStyle: 'bold' } }
         });
 
         doc.save(`Libro_Diario_${accountName}_${selectedYear}_${selectedMonth}.pdf`);
@@ -236,8 +218,7 @@ const AccountingPage = () => {
 
     const accountTitles: Record<string, { title: string, icon: React.ElementType }> = {
         banco: { title: 'Banco', icon: Landmark },
-        efectivoBs: { title: 'Efectivo Bs.', icon: Banknote },
-        efectivoUsd: { title: 'Efectivo USD (Eq. Bs.)', icon: DollarSign },
+        cajaPrincipal: { title: 'Caja Principal (Cobranza)', icon: Coins },
         cajaChica: { title: 'Caja Chica', icon: Wallet },
     };
 
@@ -276,7 +257,7 @@ const AccountingPage = () => {
             </Card>
 
             <Tabs defaultValue="libroMayor">
-                <TabsList className="grid w-full grid-cols-5">
+                <TabsList className="grid w-full grid-cols-4">
                     <TabsTrigger value="libroMayor">Libro Mayor</TabsTrigger>
                     {Object.keys(accountTitles).map(key => (
                          <TabsTrigger key={key} value={key}>{accountTitles[key].title}</TabsTrigger>
@@ -285,10 +266,7 @@ const AccountingPage = () => {
 
                 <TabsContent value="libroMayor" className="mt-4">
                     <Card>
-                        <CardHeader>
-                            <CardTitle>Libro Mayor</CardTitle>
-                            <CardDescription>Resumen de saldos, créditos y débitos de todas las cuentas.</CardDescription>
-                        </CardHeader>
+                        <CardHeader><CardTitle>Libro Mayor</CardTitle></CardHeader>
                         <CardContent>
                              <Table>
                                 <TableHeader>
@@ -314,15 +292,6 @@ const AccountingPage = () => {
                                         </TableRow>
                                     ))}
                                 </TableBody>
-                                 <TableFooter className="bg-slate-50">
-                                    <TableRow className="font-bold">
-                                        <TableCell>TOTAL CONSOLIDADO</TableCell>
-                                        <TableCell className="text-right">{formatCurrency(generalLedger.reduce((s, a) => s + a.startBalance, 0))}</TableCell>
-                                        <TableCell className="text-right">{formatCurrency(generalLedger.reduce((s, a) => s + a.totalCredit, 0))}</TableCell>
-                                        <TableCell className="text-right">{formatCurrency(generalLedger.reduce((s, a) => s + a.totalDebit, 0))}</TableCell>
-                                        <TableCell className="text-right text-[#0081c9]">{formatCurrency(generalLedger.reduce((s, a) => s + a.endBalance, 0))}</TableCell>
-                                    </TableRow>
-                                 </TableFooter>
                             </Table>
                         </CardContent>
                     </Card>
@@ -336,13 +305,8 @@ const AccountingPage = () => {
                         <TabsContent key={key} value={key} className="mt-4">
                             <Card>
                                 <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                                    <div>
-                                        <CardTitle>Libro Diario: {title}</CardTitle>
-                                        <CardDescription>Movimientos del período: {months.find(m => m.value === selectedMonth)?.label} {selectedYear}</CardDescription>
-                                    </div>
-                                    <Button onClick={() => handleExportPdf(accountKey, title)} variant="outline">
-                                        <Download className="mr-2 h-4 w-4" /> Exportar PDF
-                                    </Button>
+                                    <div><CardTitle>Libro Diario: {title}</CardTitle></div>
+                                    <Button onClick={() => handleExportPdf(accountKey, title)} variant="outline"><Download className="mr-2 h-4 w-4" /> PDF</Button>
                                 </CardHeader>
                                 <CardContent>
                                     <Table>
@@ -351,30 +315,23 @@ const AccountingPage = () => {
                                                 <TableHead>Fecha</TableHead>
                                                 <TableHead>Descripción</TableHead>
                                                 <TableHead>Ref.</TableHead>
-                                                <TableHead className="text-right">Crédito (Bs)</TableHead>
-                                                <TableHead className="text-right">Débito (Bs)</TableHead>
-                                                <TableHead className="text-right">Saldo (Bs)</TableHead>
+                                                <TableHead className="text-right">Crédito</TableHead>
+                                                <TableHead className="text-right">Débito</TableHead>
+                                                <TableHead className="text-right">Saldo</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            <TableRow className="bg-slate-50 font-bold">
-                                                <TableCell colSpan={5}>SALDO ANTERIOR</TableCell>
-                                                <TableCell className="text-right">{formatCurrency(startBalance)}</TableCell>
-                                            </TableRow>
-                                            {transactions.length === 0 ? (
-                                                <TableRow><TableCell colSpan={6} className="h-24 text-center text-slate-400">Sin movimientos en este período.</TableCell></TableRow>
-                                            ) : (
-                                                transactions.map((tx, idx) => (
-                                                    <TableRow key={idx}>
-                                                        <TableCell className="whitespace-nowrap">{format(tx.date, 'dd/MM/yyyy')}</TableCell>
-                                                        <TableCell className="max-w-[300px] truncate">{tx.description}</TableCell>
-                                                        <TableCell>{tx.reference}</TableCell>
-                                                        <TableCell className="text-right text-green-600">{tx.credit ? formatCurrency(tx.credit) : '-'}</TableCell>
-                                                        <TableCell className="text-right text-red-600">{tx.debit ? formatCurrency(tx.debit) : '-'}</TableCell>
-                                                        <TableCell className="text-right font-medium">{formatCurrency(tx.balance)}</TableCell>
-                                                    </TableRow>
-                                                ))
-                                            )}
+                                            <TableRow className="bg-slate-50 font-bold"><TableCell colSpan={5}>SALDO ANTERIOR</TableCell><TableCell className="text-right">{formatCurrency(startBalance)}</TableCell></TableRow>
+                                            {transactions.map((tx, idx) => (
+                                                <TableRow key={idx}>
+                                                    <TableCell className="whitespace-nowrap">{format(tx.date, 'dd/MM/yy')}</TableCell>
+                                                    <TableCell>{tx.description}</TableCell>
+                                                    <TableCell className="text-[10px]">{tx.reference}</TableCell>
+                                                    <TableCell className="text-right text-green-600">{tx.credit ? formatCurrency(tx.credit) : '-'}</TableCell>
+                                                    <TableCell className="text-right text-red-600">{tx.debit ? formatCurrency(tx.debit) : '-'}</TableCell>
+                                                    <TableCell className="text-right font-medium">{formatCurrency(tx.balance)}</TableCell>
+                                                </TableRow>
+                                            ))}
                                         </TableBody>
                                     </Table>
                                 </CardContent>
