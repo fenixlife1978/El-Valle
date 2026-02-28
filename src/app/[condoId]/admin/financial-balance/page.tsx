@@ -139,8 +139,17 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
             .reduce((sum, e) => sum + e.monto, 0), 
     [egresosTesorería]);
 
+    const totalEgresosCaja = useMemo(() => 
+        egresosTesorería
+            .filter(e => e.cuenta.toUpperCase().includes("CAJA PRINCIPAL"))
+            .reduce((sum, e) => sum + e.monto, 0), 
+    [egresosTesorería]);
+
     const totalEgresosMes = useMemo(() => egresosTesorería.reduce((sum, e) => sum + e.monto, 0), [egresosTesorería]);
-    const disponibilidadBancariaEstimada = (saldoAnteriorBanco + ingresosOrdinariosBanco) - totalEgresosBanco;
+    
+    // CALCULOS PARA EL PDF (Consistencia Contable)
+    const saldoCierreBancoCalculado = (saldoAnteriorBanco + ingresosOrdinariosBanco) - totalEgresosBanco;
+    const saldoCierreCajaCalculado = ingresosOrdinariosEfectivo - totalEgresosCaja;
 
     const handleSave = async () => {
         if (!workingCondoId) return;
@@ -203,17 +212,17 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
             body: egresosTesorería.map(e => [e.concepto, e.cuenta, formatCurrency(e.monto)]),
             foot: [['TOTAL EGRESOS', '', formatCurrency(totalEgresosMes)]],
             headStyles: { fillColor: [239, 68, 68] },
-            footStyles: { fillColor: [185, 28, 28], textColor: 255 },
+            footStyles: { fillColor: [185, 28, 28], textColor: 255, fontStyle: 'bold' },
             styles: { textColor: [0, 0, 0] },
             columnStyles: { 2: { halign: 'right' } }
         });
 
         const finalY = (docPDF as any).lastAutoTable.finalY + 15;
         docPDF.setFont('helvetica', 'bold').setFontSize(11);
-        docPDF.text("SALDOS REALES EN TESORERÍA AL CIERRE:", 14, finalY);
+        docPDF.text("SALDOS CONTABLES AL CIERRE (Consolidado):", 14, finalY);
         docPDF.setFont('helvetica', 'normal').setFontSize(10);
-        docPDF.text(`BANCO DE VENEZUELA: Bs. ${formatCurrency(realBalances.banco)}`, 14, finalY + 7);
-        docPDF.text(`CAJA PRINCIPAL (EFECTIVO): Bs. ${formatCurrency(realBalances.cajaPrincipal)}`, 14, finalY + 14);
+        docPDF.text(`BANCO DE VENEZUELA: Bs. ${formatCurrency(saldoCierreBancoCalculado)}`, 14, finalY + 7);
+        docPDF.text(`CAJA PRINCIPAL (EFECTIVO): Bs. ${formatCurrency(saldoCierreCajaCalculado)}`, 14, finalY + 14);
         docPDF.text(`CAJA CHICA: Bs. ${formatCurrency(realBalances.cajaChica)}`, 14, finalY + 21);
 
         if (notas) {
@@ -254,8 +263,8 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                         </div>
                         <Landmark className="absolute top-6 right-6 h-12 w-12 text-white/10" />
                         <div className="mt-4 pt-4 border-t border-white/10 relative z-10">
-                            <p className="text-[9px] font-bold text-slate-400 uppercase">Estimado Contable Banco:</p>
-                            <p className="text-sm font-bold text-sky-400">Bs. {formatCurrency(disponibilidadBancariaEstimada)}</p>
+                            <p className="text-[9px] font-bold text-slate-400 uppercase">Proyección Contable Banco:</p>
+                            <p className="text-sm font-bold text-sky-400">Bs. {formatCurrency(saldoCierreBancoCalculado)}</p>
                         </div>
                     </Card>
 

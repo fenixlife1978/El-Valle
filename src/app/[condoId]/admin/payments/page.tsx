@@ -94,28 +94,28 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 if (['movil', 'transferencia'].includes(payment.paymentMethod)) targetAccountName = "BANCO DE VENEZUELA";
                 else if (['efectivo_bs', 'efectivo'].includes(payment.paymentMethod)) targetAccountName = "CAJA PRINCIPAL";
 
+                // Búsqueda previa de la cuenta fuera de la transacción para obtener el ID real
+                const accountsSnap = await getDocs(collection(db, 'condominios', condoId, 'cuentas'));
+                let targetAccDoc = accountsSnap.docs.find(d => d.data().nombre?.toUpperCase().trim() === targetAccountName);
+                
+                let accountId = "";
+                let accountExists = false;
+
+                if (targetAccDoc) {
+                    accountId = targetAccDoc.id;
+                    accountExists = true;
+                } else {
+                    const newAccRef = doc(collection(db, 'condominios', condoId, 'cuentas'));
+                    accountId = newAccRef.id;
+                }
+
                 await runTransaction(db, async (transaction) => {
-                    const accountsSnap = await getDocs(collection(db, 'condominios', condoId, 'cuentas'));
-                    let targetAcc = accountsSnap.docs.find(d => d.data().nombre?.toUpperCase().trim() === targetAccountName);
-                    let accountId = "";
-
-                    if (!targetAcc) {
-                        const newAccRef = doc(collection(db, 'condominios', condoId, 'cuentas'));
-                        const newAccData = { 
-                            nombre: targetAccountName, 
-                            tipo: targetAccountName === "CAJA PRINCIPAL" ? "efectivo" : "banco", 
-                            saldoActual: 0, 
-                            createdAt: serverTimestamp() 
-                        };
-                        transaction.set(newAccRef, newAccData);
-                        accountId = newAccRef.id;
-                    } else { 
-                        accountId = targetAcc.id; 
-                    }
-
                     const beneficiaryIds = payment.beneficiaries.map(b => b.ownerId);
+                    
+                    // Obtener deudas
                     const allDebtsSnap = await getDocs(query(collection(db, 'condominios', condoId, 'debts'), where('ownerId', 'in', beneficiaryIds)));
                     const allDebts = allDebtsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Debt));
+                    
                     const receiptNumbers: { [ownerId: string]: string } = {};
 
                     for (const beneficiary of payment.beneficiaries) {
@@ -163,7 +163,17 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                     }
 
                     // ACTUALIZACIÓN DE SALDO EN TESORERÍA (HITO CONTABLE)
-                    transaction.update(doc(db, 'condominios', condoId, 'cuentas', accountId), { saldoActual: increment(payment.totalAmount) });
+                    const accountRef = doc(db, 'condominios', condoId, 'cuentas', accountId);
+                    if (!accountExists) {
+                        transaction.set(accountRef, { 
+                            nombre: targetAccountName, 
+                            tipo: targetAccountName === "CAJA PRINCIPAL" ? "efectivo" : "banco", 
+                            saldoActual: payment.totalAmount, 
+                            createdAt: serverTimestamp() 
+                        });
+                    } else {
+                        transaction.update(accountRef, { saldoActual: increment(payment.totalAmount) });
+                    }
                     
                     // ASIENTO EN LIBRO DIARIO
                     transaction.set(doc(collection(db, 'condominios', condoId, 'transacciones')), {
