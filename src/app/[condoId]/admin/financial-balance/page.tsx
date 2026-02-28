@@ -8,7 +8,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
-import { Input } from "@/input";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Save, Download, Landmark, Coins, Wallet, FileText } from "lucide-react";
@@ -20,6 +20,11 @@ const formatCurrency = (num: number) => {
     if (typeof num !== 'number' || isNaN(num)) return '0,00';
     return num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
+
+const months = Array.from({ length: 12 }, (_, i) => ({
+    value: String(i + 1),
+    label: format(new Date(2000, i), 'MMMM', { locale: es }),
+}));
 
 export default function FinancialBalancePage({ params }: { params: Promise<{ condoId: string }> }) {
     const resolvedParams = use(params);
@@ -159,7 +164,6 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
         const info = authCompanyInfo || companyData || { name: 'EFAS CondoSys', rif: 'J-00000000-0' };
         const monthName = months.find(m => m.value === selectedMonth)?.label || '';
 
-        // Header
         doc.setFillColor(15, 23, 42);
         doc.rect(0, 0, 210, 30, 'F');
         doc.setTextColor(255, 255, 255);
@@ -170,7 +174,6 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
         doc.setTextColor(0, 0, 0);
         doc.setFontSize(12).text(`Período: ${monthName.toUpperCase()} ${selectedYear}`, 14, 45);
 
-        // Tabla de Ingresos
         autoTable(doc, {
             startY: 55,
             head: [['CONCEPTO DE INGRESO', 'MONTO (BS.)']],
@@ -183,7 +186,6 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
             columnStyles: { 1: { halign: 'right' } }
         });
 
-        // Tabla de Egresos
         autoTable(doc, {
             startY: (doc as any).lastAutoTable.finalY + 10,
             head: [['CONCEPTO DE EGRESO', 'MONTO (BS.)']],
@@ -194,7 +196,6 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
             columnStyles: { 1: { halign: 'right' } }
         });
 
-        // Resumen de Saldos Reales
         const finalY = (doc as any).lastAutoTable.finalY + 15;
         doc.setFont('helvetica', 'bold').setFontSize(11);
         doc.text("SALDOS REALES EN TESORERÍA AL CIERRE:", 14, finalY);

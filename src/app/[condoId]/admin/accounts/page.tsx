@@ -46,7 +46,7 @@ import autoTable from 'jspdf-autotable';
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/input";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -287,7 +287,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
     const handleTransfer = async () => {
         if (!transferForm.origenId || !transferForm.destinoId || !transferForm.monto) return;
         if (transferForm.origenId === transferForm.destinoId) {
-            toast({ variant: 'destructive', title: "Error", description: "La cuenta de origen y destino no pueden ser iguales." });
+            toast({ variant: 'destructive', title: 'Error', description: "La cuenta de origen y destino no pueden ser iguales." });
             return;
         }
 
