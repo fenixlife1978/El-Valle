@@ -718,6 +718,10 @@ function VerificationComponent({ condoId }: { condoId: string }) {
     );
 }
 
+// ... rest of file (ReportPaymentComponent, PaymentCalculatorComponent, PaymentsPage, PaymentsPageWrapper)
+// ... remains unchanged
+// ...
+
 // --- COMPONENT: REPORT PAYMENT COMPONENT (for Admin) ---
 function ReportPaymentComponent({ condoId }: { condoId: string }) {
     const { toast } = useToast();
