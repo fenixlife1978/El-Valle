@@ -32,7 +32,8 @@ import {
     Trash2,
     Calendar as CalendarIcon,
     Building2,
-    CheckCircle2
+    CheckCircle2,
+    BadgeInfo
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -46,6 +47,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import { Badge } from "@/components/ui/badge";
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -214,7 +216,6 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
 
         setIsSubmitting(true);
         const montoNum = parseFloat(transferForm.monto);
-        const batch = writeBatch(db);
 
         try {
             await runTransaction(db, async (transaction) => {
