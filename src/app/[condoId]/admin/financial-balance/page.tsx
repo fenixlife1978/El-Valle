@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo, use } from 'react';
@@ -108,7 +109,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 setIngresosOrdinariosBanco(totalBancario);
                 setIngresosOrdinariosEfectivo(totalEfectivo);
 
-                // EGRESOS (DESDE TRANSACCIONES PARA PRECISIÓN DE CUENTA)
+                // EGRESOS
                 const tQuery = query(
                     collection(db, 'condominios', workingCondoId, 'transacciones'), 
                     where('fecha', '>=', fromDate), 
@@ -132,7 +133,6 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
         fetchAutomaticData();
     }, [selectedMonth, selectedYear, workingCondoId]);
 
-    // LÓGICA DE HITO: Separar egresos para no afectar el estimado bancario con gastos de caja
     const totalEgresosBanco = useMemo(() => 
         egresosTesorería
             .filter(e => e.cuenta.toUpperCase().includes("BANCO"))
@@ -140,8 +140,6 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
     [egresosTesorería]);
 
     const totalEgresosMes = useMemo(() => egresosTesorería.reduce((sum, e) => sum + e.monto, 0), [egresosTesorería]);
-    
-    // El estimado bancario SOLO debe restar egresos que salieron del banco
     const disponibilidadBancariaEstimada = (saldoAnteriorBanco + ingresosOrdinariosBanco) - totalEgresosBanco;
 
     const handleSave = async () => {
@@ -195,6 +193,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 ['INGRESOS EFECTIVO (CAJA PRINCIPAL)', formatCurrency(ingresosOrdinariosEfectivo)]
             ],
             headStyles: { fillColor: [0, 129, 201] },
+            styles: { textColor: [0, 0, 0] },
             columnStyles: { 1: { halign: 'right' } }
         });
 
@@ -205,6 +204,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
             foot: [['TOTAL EGRESOS', '', formatCurrency(totalEgresosMes)]],
             headStyles: { fillColor: [239, 68, 68] },
             footStyles: { fillColor: [185, 28, 28], textColor: 255 },
+            styles: { textColor: [0, 0, 0] },
             columnStyles: { 2: { halign: 'right' } }
         });
 
@@ -225,7 +225,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
     };
 
     return (
-        <div className="max-w-5xl mx-auto p-6 space-y-6 bg-slate-50 min-h-screen">
+        <div className="max-w-5xl mx-auto p-6 space-y-6 bg-slate-50 min-h-screen font-montserrat">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-4">
                 <div>
                     <h1 className="text-3xl font-black uppercase italic tracking-tighter text-slate-900 leading-none">
@@ -239,7 +239,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                     </Button>
                     <Select value={selectedMonth} onValueChange={setSelectedMonth}>
                         <SelectTrigger className="w-36 bg-white text-slate-900 border-slate-200 font-bold h-10 rounded-xl"><SelectValue /></SelectTrigger>
-                        <SelectContent className="bg-white">{Array.from({length:12}, (_,i)=>(<SelectItem key={i+1} value={String(i+1)}>{format(new Date(2000,i), 'MMMM', {locale:es})}</SelectItem>))}</SelectContent>
+                        <SelectContent className="bg-white">{Array.from({length:12}, (_,i)=>(<SelectItem key={i+1} value={String(i+1)} className="text-slate-900">{format(new Date(2000,i), 'MMMM', {locale:es})}</SelectItem>))}</SelectContent>
                     </Select>
                     <Input className="w-24 bg-white text-slate-900 border-slate-200 font-bold h-10 rounded-xl" type="number" value={selectedYear} onChange={(e)=>setSelectedYear(e.target.value)} />
                 </div>

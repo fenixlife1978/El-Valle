@@ -101,10 +101,17 @@ function VerificationComponent({ condoId }: { condoId: string }) {
 
                     if (!targetAcc) {
                         const newAccRef = doc(collection(db, 'condominios', condoId, 'cuentas'));
-                        const newAccData = { nombre: targetAccountName, tipo: targetAccountName === "CAJA PRINCIPAL" ? "efectivo" : "banco", saldoActual: 0, createdAt: serverTimestamp() };
+                        const newAccData = { 
+                            nombre: targetAccountName, 
+                            tipo: targetAccountName === "CAJA PRINCIPAL" ? "efectivo" : "banco", 
+                            saldoActual: 0, 
+                            createdAt: serverTimestamp() 
+                        };
                         transaction.set(newAccRef, newAccData);
                         accountId = newAccRef.id;
-                    } else { accountId = targetAcc.id; }
+                    } else { 
+                        accountId = targetAcc.id; 
+                    }
 
                     const beneficiaryIds = payment.beneficiaries.map(b => b.ownerId);
                     const allDebtsSnap = await getDocs(query(collection(db, 'condominios', condoId, 'debts'), where('ownerId', 'in', beneficiaryIds)));
@@ -123,14 +130,31 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         const liq = processPaymentLiquidation(beneficiary.amount, ownerDoc.data().balance || 0, pending, costBs);
 
                         liq.cuotasLiquidadas.forEach(debtLiq => {
-                            transaction.update(doc(db, 'condominios', condoId, 'debts', debtLiq.id), { status: 'paid', paymentId: payment.id, paymentDate: payment.paymentDate, paidAmountUSD: debtLiq.amountUSD });
+                            transaction.update(doc(db, 'condominios', condoId, 'debts', debtLiq.id), { 
+                                status: 'paid', 
+                                paymentId: payment.id, 
+                                paymentDate: payment.paymentDate, 
+                                paidAmountUSD: debtLiq.amountUSD 
+                            });
                         });
 
                         if (liq.cuotasAdelantadas > 0 && condoFeeUSD > 0) {
                             const lastPaid = allDebts.filter(d => d.ownerId === beneficiary.ownerId).sort((a,b) => b.year - a.year || b.month - a.month)[0];
                             let nextDate = lastPaid ? addMonths(new Date(lastPaid.year, lastPaid.month - 1), 1) : new Date();
                             for (let i = 0; i < liq.cuotasAdelantadas; i++) {
-                                transaction.set(doc(collection(db, 'condominios', condoId, 'debts')), { ownerId: beneficiary.ownerId, year: nextDate.getFullYear(), month: nextDate.getMonth() + 1, amountUSD: condoFeeUSD, description: "Cuota Adelantada", status: 'paid', paymentId: payment.id, paymentDate: payment.paymentDate, paidAmountUSD: condoFeeUSD, property: beneficiary });
+                                transaction.set(doc(collection(db, 'condominios', condoId, 'debts')), { 
+                                    ownerId: beneficiary.ownerId, 
+                                    year: nextDate.getFullYear(), 
+                                    month: nextDate.getMonth() + 1, 
+                                    amountUSD: condoFeeUSD, 
+                                    description: "Cuota Adelantada", 
+                                    status: 'paid', 
+                                    paymentId: payment.id, 
+                                    paymentDate: payment.paymentDate, 
+                                    paidAmountUSD: condoFeeUSD, 
+                                    property: beneficiary,
+                                    published: true
+                                });
                                 nextDate = addMonths(nextDate, 1);
                             }
                         }
@@ -138,14 +162,28 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         receiptNumbers[beneficiary.ownerId] = `REC-${Date.now()}-${beneficiary.ownerId.slice(-4)}`;
                     }
 
+                    // ACTUALIZACIÓN DE SALDO EN TESORERÍA (HITO CONTABLE)
                     transaction.update(doc(db, 'condominios', condoId, 'cuentas', accountId), { saldoActual: increment(payment.totalAmount) });
+                    
+                    // ASIENTO EN LIBRO DIARIO
                     transaction.set(doc(collection(db, 'condominios', condoId, 'transacciones')), {
-                        monto: payment.totalAmount, tipo: 'ingreso', cuentaId: accountId, nombreCuenta: targetAccountName,
+                        monto: payment.totalAmount, 
+                        tipo: 'ingreso', 
+                        cuentaId: accountId, 
+                        nombreCuenta: targetAccountName,
                         descripcion: `PAGO APROBADO: ${payment.beneficiaries.map(b => b.ownerName).join(', ')}`,
-                        referencia: payment.reference, fecha: payment.paymentDate, sourcePaymentId: payment.id,
-                        createdAt: serverTimestamp(), createdBy: user?.email
+                        referencia: payment.reference, 
+                        fecha: payment.paymentDate, 
+                        sourcePaymentId: payment.id,
+                        createdAt: serverTimestamp(), 
+                        createdBy: user?.email
                     });
-                    transaction.update(doc(db, 'condominios', condoId, 'payments', payment.id), { status: 'aprobado', receiptNumbers, observations: 'Validado y asentado en Tesorería.' });
+
+                    transaction.update(doc(db, 'condominios', condoId, 'payments', payment.id), { 
+                        status: 'aprobado', 
+                        receiptNumbers, 
+                        observations: 'Validado y asentado en Tesorería.' 
+                    });
                 });
                 toast({ title: "Hito Contable Completado", description: "El saldo ha sido sumado a Tesorería y los libros están al día." });
                 setSelectedPayment(null);
@@ -223,9 +261,9 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             <CardContent className="p-0">
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
                     <TabsList className="grid grid-cols-3 mx-8 mb-6 h-12 bg-slate-100 rounded-xl p-1">
-                        <TabsTrigger value="pendiente" className="rounded-lg font-bold data-[state=active]:bg-white data-[state=active]:text-slate-900 shadow-sm transition-all">Pendientes</TabsTrigger>
-                        <TabsTrigger value="aprobado" className="rounded-lg font-bold data-[state=active]:bg-white data-[state=active]:text-slate-900 shadow-sm transition-all">Aprobados</TabsTrigger>
-                        <TabsTrigger value="rechazado" className="rounded-lg font-bold data-[state=active]:bg-white data-[state=active]:text-slate-900 shadow-sm transition-all">Rechazados</TabsTrigger>
+                        <TabsTrigger value="pendiente" className="rounded-lg font-bold data-[state=active]:bg-white data-[state=active]:text-slate-900 shadow-sm transition-all text-slate-600">Pendientes</TabsTrigger>
+                        <TabsTrigger value="aprobado" className="rounded-lg font-bold data-[state=active]:bg-white data-[state=active]:text-slate-900 shadow-sm transition-all text-slate-600">Aprobados</TabsTrigger>
+                        <TabsTrigger value="rechazado" className="rounded-lg font-bold data-[state=active]:bg-white data-[state=active]:text-slate-900 shadow-sm transition-all text-slate-600">Rechazados</TabsTrigger>
                     </TabsList>
                     
                     {loading ? <div className="text-center p-20"><Loader2 className="animate-spin h-10 w-10 mx-auto text-primary" /></div> : (
@@ -243,10 +281,10 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                                             <TableCell className="text-right pr-8">
                                                 <DropdownMenu>
                                                     <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="text-slate-400 hover:text-slate-900"><MoreHorizontal className="h-4 w-4"/></Button></DropdownMenuTrigger>
-                                                    <DropdownMenuContent align="end" className="rounded-xl border-slate-200 shadow-xl">
+                                                    <DropdownMenuContent align="end" className="rounded-xl border-slate-200 shadow-xl bg-white">
                                                         <DropdownMenuItem onClick={() => setSelectedPayment(p)} className="font-bold text-xs text-slate-700 p-3"><Eye className="mr-2 h-4 w-4" /> Detalles</DropdownMenuItem>
                                                         {p.status === 'pendiente' ? (<><DropdownMenuSeparator /><DropdownMenuItem onClick={() => handleApprove(p)} className="text-emerald-600 font-black uppercase text-[10px] p-3"><CheckCircle className="mr-2 h-4 w-4" /> Validar y Asentar</DropdownMenuItem><DropdownMenuItem onClick={() => { setSelectedPayment(p); setRejectionReason(''); }} className="text-red-600 font-black uppercase text-[10px] p-3"><XCircle className="mr-2 h-4 w-4" /> Rechazar</DropdownMenuItem></>) : 
-                                                        p.status === 'aprobado' && (<><DropdownMenuSeparator /><DropdownMenuSub><DropdownMenuSubTrigger className="font-bold text-xs text-slate-700 p-3"><Download className="mr-2 h-4 w-4" /> Recibos PDF</DropdownMenuSubTrigger><DropdownMenuPortal><DropdownMenuSubContent className="rounded-xl">{p.beneficiaries.map(b => <DropdownMenuItem key={b.ownerId} onClick={() => prepareReceipt(p, b)} className="text-[10px] font-black uppercase p-3">{b.ownerName}</DropdownMenuItem>)}</DropdownMenuSubContent></DropdownMenuPortal></DropdownMenuSub><DropdownMenuItem onClick={() => setPaymentToDelete(p)} className="text-red-600 font-bold text-xs p-3"><Trash2 className="mr-2 h-4 w-4"/> Revertir Pago</DropdownMenuItem></>)}
+                                                        p.status === 'aprobado' && (<><DropdownMenuSeparator /><DropdownMenuSub><DropdownMenuSubTrigger className="font-bold text-xs text-slate-700 p-3"><Download className="mr-2 h-4 w-4" /> Recibos PDF</DropdownMenuSubTrigger><DropdownMenuPortal><DropdownMenuSubContent className="rounded-xl bg-white">{p.beneficiaries.map(b => <DropdownMenuItem key={b.ownerId} onClick={() => prepareReceipt(p, b)} className="text-[10px] font-black uppercase p-3">{b.ownerName}</DropdownMenuItem>)}</DropdownMenuSubContent></DropdownMenuPortal></DropdownMenuSub><DropdownMenuItem onClick={() => setPaymentToDelete(p)} className="text-red-600 font-bold text-xs p-3"><Trash2 className="mr-2 h-4 w-4"/> Revertir Pago</DropdownMenuItem></>)}
                                                     </DropdownMenuContent>
                                                 </DropdownMenu>
                                             </TableCell>
@@ -261,7 +299,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
 
             <Dialog open={!!selectedPayment} onOpenChange={() => setSelectedPayment(null)}>
                 <DialogContent className="max-w-2xl rounded-[2rem] border-none shadow-2xl bg-white text-slate-900">
-                    <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter">Detalles del Reporte</DialogTitle><DialogDescription className="font-bold text-slate-400">Ref: {selectedPayment?.reference}</DialogDescription></DialogHeader>
+                    <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-slate-900">Detalles del Reporte</DialogTitle><DialogDescription className="font-bold text-slate-400">Ref: {selectedPayment?.reference}</DialogDescription></DialogHeader>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 py-4">
                         <div className="space-y-6">
                             <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100">
@@ -269,7 +307,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                                 {selectedPayment?.beneficiaries.map((b, i) => (<div key={i} className="flex justify-between items-center py-2 border-b border-white last:border-0"><span className="font-black text-slate-700 text-xs uppercase">{b.ownerName}</span><span className="font-black text-slate-900">Bs. {formatCurrency(b.amount)}</span></div>))}
                                 <div className="mt-4 pt-4 border-t border-slate-200 flex justify-between items-center"><span className="text-[10px] font-black uppercase text-slate-900">Total Transacción:</span><span className="text-lg font-black text-[#0081c9]">Bs. {formatCurrency(selectedPayment?.totalAmount || 0)}</span></div>
                             </div>
-                            {selectedPayment?.status === 'pendiente' && (<div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Motivo de Rechazo (si aplica)</Label><Textarea value={rejectionReason} onChange={e => setRejectionReason(e.target.value)} className="rounded-2xl bg-slate-50 border-slate-200 font-bold" placeholder="Escriba aquí..." /></div>)}
+                            {selectedPayment?.status === 'pendiente' && (<div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Motivo de Rechazo (si aplica)</Label><Textarea value={rejectionReason} onChange={e => setRejectionReason(e.target.value)} className="rounded-2xl bg-slate-50 border-slate-200 font-bold text-slate-900" placeholder="Escriba aquí..." /></div>)}
                         </div>
                         <div className="relative aspect-[3/4] bg-slate-100 rounded-3xl overflow-hidden border border-slate-200 flex items-center justify-center">
                             {selectedPayment?.receiptUrl ? (<Image src={selectedPayment.receiptUrl} alt="Comprobante" fill className="object-contain" />) : (<div className="text-center text-slate-300 font-black uppercase italic text-xs">Sin imagen adjunta</div>)}
@@ -285,7 +323,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 <DialogContent className="rounded-[2rem] border-none shadow-2xl bg-white text-slate-900">
                     <DialogHeader><DialogTitle className="text-xl font-black uppercase italic text-red-600">¿Revertir Transacción?</DialogTitle></DialogHeader>
                     <p className="text-slate-500 font-bold text-sm leading-relaxed uppercase">Esta acción restará el monto de los saldos de Tesorería y devolverá las deudas a estatus "Pendiente".</p>
-                    <DialogFooter className="gap-2 mt-6"><Button variant="outline" onClick={() => setPaymentToDelete(null)} className="rounded-xl font-bold h-12">Cancelar</Button><Button onClick={handleDeletePayment} disabled={isVerifying} variant="destructive" className="rounded-xl font-black uppercase h-12 shadow-lg">Confirmar Reversión</Button></DialogFooter>
+                    <DialogFooter className="gap-2 mt-6"><Button variant="outline" onClick={() => setPaymentToDelete(null)} className="rounded-xl font-bold h-12 text-slate-900">Cancelar</Button><Button onClick={handleDeletePayment} disabled={isVerifying} variant="destructive" className="rounded-xl font-black uppercase h-12 shadow-lg">Confirmar Reversión</Button></DialogFooter>
                 </DialogContent>
             </Dialog>
         </Card>
@@ -294,7 +332,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
 
 function ReportPaymentComponent({ condoId }: { condoId: string }) {
     const { toast } = useToast();
-    const { user: authUser } = useAuth();
+    const { user: authUser, ownerData: authOwnerData } = useAuth();
     const [allOwners, setAllOwners] = useState<Owner[]>([]);
     const [loading, setLoading] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -306,7 +344,7 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
     const [reference, setReference] = useState('');
     const [totalAmount, setTotalAmount] = useState<string>('');
     const [receiptImage, setReceiptImage] = useState<string | null>(null);
-    const [beneficiaryRows, setBeneficiaryRows] = useState<BeneficiaryRow[]>([{ id: Date.now().toString(), owner: null, searchTerm: '', amount: '', selectedProperty: null }]);
+    const [beneficiaryRows, setBeneficiaryRows] = useState<BeneficiaryRow[]>([]);
     const [isBankModalOpen, setIsBankModalOpen] = useState(false);
     const ownersCollectionName = condoId === 'condo_01' ? 'owners' : 'propietarios';
     const isCashPayment = paymentMethod === 'efectivo_bs';
@@ -319,6 +357,18 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
             setAllOwners(ownersData.sort((a, b) => (a.name || '').localeCompare(b.name || '')));
         });
     }, [condoId, ownersCollectionName]);
+
+    useEffect(() => {
+        if (authOwnerData && authUser) {
+           setBeneficiaryRows([{
+               id: Date.now().toString(),
+               owner: { id: authUser.uid, name: authOwnerData.name, properties: authOwnerData.properties },
+               searchTerm: '',
+               amount: '',
+               selectedProperty: authOwnerData.properties?.[0] || null
+           }]);
+       }
+   }, [authOwnerData, authUser]);
 
     useEffect(() => {
         if (!condoId) return;
@@ -359,16 +409,20 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
         if (!authUser || !condoId || !exchangeRate || !totalAmount) return;
         setIsSubmitting(true);
         try {
-            const beneficiaries = beneficiaryRows.map(row => ({ ownerId: row.owner!.id, ownerName: row.owner!.name, ...(row.selectedProperty && { street: row.selectedProperty.street, house: row.selectedProperty.house }), amount: Number(row.amount) }));
+            const beneficiaries = beneficiaryRows.map(row => ({ 
+                ownerId: row.owner!.id, 
+                ownerName: row.owner!.name, 
+                ...(row.selectedProperty && { street: row.selectedProperty.street, house: row.selectedProperty.house }), 
+                amount: Number(row.amount) 
+            }));
             await addDoc(collection(db, "condominios", condoId, "payments"), { 
                 reportedBy: authUser.uid, beneficiaries, beneficiaryIds: beneficiaries.map(b=>b.ownerId), 
                 totalAmount: Number(totalAmount), exchangeRate, paymentDate: Timestamp.fromDate(paymentDate!), 
                 paymentMethod, bank: isCashPayment ? 'Efectivo' : (bank === 'Otro' ? otherBank : bank), 
-                reference: isCashPayment ? 'EFEVTIVO' : reference, receiptUrl: receiptImage, 
+                reference: isCashPayment ? 'EFECTIVO' : reference, receiptUrl: receiptImage, 
                 status: 'pendiente', reportedAt: serverTimestamp() 
             });
             toast({ title: 'Pago Reportado' });
-            setBeneficiaryRows([{ id: Date.now().toString(), owner: null, searchTerm: '', amount: '', selectedProperty: null }]);
             setTotalAmount(''); setReference(''); setReceiptImage(null);
         } catch (error) { toast({ variant: "destructive", title: "Error" }); } 
         finally { setIsSubmitting(false); }
@@ -380,26 +434,51 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
             <form onSubmit={handleSubmit}>
                 <CardContent className="p-8 space-y-8">
                     <div className="grid md:grid-cols-2 gap-6">
-                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Fecha</Label><Popover><PopoverTrigger asChild><Button variant="outline" className="w-full h-12 rounded-xl font-bold bg-slate-50 border-slate-200"><CalendarIcon className="mr-2 h-4 w-4" />{paymentDate ? format(paymentDate, "PPP", { locale: es }) : "Seleccione"}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar mode="single" selected={paymentDate} onSelect={setPaymentDate} locale={es} /></PopoverContent></Popover></div>
-                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Tasa BCV</Label><Input type="number" value={exchangeRate || ''} readOnly className="h-12 rounded-xl bg-slate-100 font-black" /></div>
-                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Método</Label><Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}><SelectTrigger className="h-12 rounded-xl font-bold bg-slate-50 border-slate-200"><SelectValue/></SelectTrigger><SelectContent className="bg-white"><SelectItem value="transferencia">Transferencia</SelectItem><SelectItem value="movil">Pago Móvil</SelectItem><SelectItem value="efectivo_bs">Efectivo Bs.</SelectItem></SelectContent></Select></div>
-                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Banco</Label><Button type="button" variant="outline" className="w-full h-12 rounded-xl font-bold bg-slate-50 border-slate-200 text-left justify-start" onClick={() => setIsBankModalOpen(true)} disabled={isCashPayment}>{isCashPayment ? 'EFECTIVO' : (bank || "Seleccionar...")}</Button></div>
-                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Referencia</Label><Input value={reference} onChange={(e) => setReference(e.target.value.replace(/\D/g, ''))} disabled={isCashPayment} className="h-12 rounded-xl font-black bg-slate-50 border-slate-200" /></div>
-                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Total Bs.</Label><Input type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} className="h-12 rounded-xl font-black text-lg bg-slate-50 border-slate-200" /></div>
+                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Fecha</Label><Popover><PopoverTrigger asChild><Button variant="outline" className="w-full h-12 rounded-xl font-bold bg-slate-50 border-slate-200 text-slate-900"><CalendarIcon className="mr-2 h-4 w-4" />{paymentDate ? format(paymentDate, "PPP", { locale: es }) : "Seleccione"}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar mode="single" selected={paymentDate} onSelect={setPaymentDate} locale={es} /></PopoverContent></Popover></div>
+                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Tasa BCV</Label><Input type="number" value={exchangeRate || ''} readOnly className="h-12 rounded-xl bg-slate-100 font-black text-slate-900" /></div>
+                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Método</Label><Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}><SelectTrigger className="h-12 rounded-xl font-bold bg-slate-50 border-slate-200 text-slate-900"><SelectValue/></SelectTrigger><SelectContent className="bg-white"><SelectItem value="transferencia" className="text-slate-900">Transferencia</SelectItem><SelectItem value="movil" className="text-slate-900">Pago Móvil</SelectItem><SelectItem value="efectivo_bs" className="text-slate-900">Efectivo Bs.</SelectItem></SelectContent></Select></div>
+                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Banco</Label><Button type="button" variant="outline" className="w-full h-12 rounded-xl font-bold bg-slate-50 border-slate-200 text-left justify-start text-slate-900" onClick={() => setIsBankModalOpen(true)} disabled={isCashPayment}>{isCashPayment ? 'EFECTIVO' : (bank || "Seleccionar...")}</Button></div>
+                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Referencia</Label><Input value={reference} onChange={(e) => setReference(e.target.value.replace(/\D/g, ''))} disabled={isCashPayment} className="h-12 rounded-xl font-black bg-slate-50 border-slate-200 text-slate-900" /></div>
+                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Total Bs.</Label><Input type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} className="h-12 rounded-xl font-black text-lg bg-slate-50 border-slate-200 text-slate-900" /></div>
                     </div>
                     <div className="space-y-4">
                         {beneficiaryRows.map((row) => (
                             <Card key={row.id} className="p-6 bg-slate-50 border-slate-100 rounded-3xl">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div className="space-y-2">
-                                        {!row.owner ? (<div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" /><Input placeholder="Buscar residente..." className="pl-9 h-12 rounded-xl bg-white border-slate-200" value={row.searchTerm} onChange={(e) => updateBeneficiaryRow(row.id, { searchTerm: e.target.value })} />{row.searchTerm.length >= 2 && <Card className="absolute z-10 w-full mt-1 border shadow-lg rounded-xl overflow-hidden"><ScrollArea className="h-32">{getFilteredOwners(row.searchTerm).map(o => (<div key={o.id} onClick={() => handleOwnerSelect(row.id, o)} className="p-3 hover:bg-slate-50 cursor-pointer font-bold text-xs uppercase">{o.name}</div>))}</ScrollArea></Card>}</div>) : 
+                                        {!row.owner ? (<div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" /><Input placeholder="Buscar residente..." className="pl-9 h-12 rounded-xl bg-white border-slate-200 text-slate-900" value={row.searchTerm} onChange={(e) => updateBeneficiaryRow(row.id, { searchTerm: e.target.value })} />{row.searchTerm.length >= 2 && <Card className="absolute z-10 w-full mt-1 border shadow-lg rounded-xl overflow-hidden bg-white"><ScrollArea className="h-32">{getFilteredOwners(row.searchTerm).map(o => (<div key={o.id} onClick={() => handleOwnerSelect(row.id, o)} className="p-3 hover:bg-slate-50 cursor-pointer font-bold text-xs uppercase text-slate-900">{o.name}</div>))}</ScrollArea></Card>}</div>) : 
                                         (<div className="p-4 bg-white rounded-2xl border border-slate-100 flex justify-between items-center"><p className="font-black text-slate-900 uppercase text-xs">{row.owner.name}</p><Button variant="ghost" size="icon" onClick={() => removeBeneficiaryRow(row.id)} className="text-red-400"><XCircle className="h-5 w-5" /></Button></div>)}
+                                        {row.owner && (
+                                            <div className="space-y-1 mt-2">
+                                                <Label className="text-[10px] uppercase font-bold text-slate-500">Asignar a Propiedad</Label>
+                                                <Select 
+                                                    onValueChange={(v) => {
+                                                        const found = row.owner?.properties.find(p => `${p.street}-${p.house}` === v);
+                                                        updateBeneficiaryRow(row.id, { selectedProperty: found || null });
+                                                    }} 
+                                                    value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''}
+                                                >
+                                                    <SelectTrigger className="rounded-xl h-10 bg-white border-slate-200 text-slate-900">
+                                                        <SelectValue placeholder="Seleccione propiedad..." />
+                                                    </SelectTrigger>
+                                                    <SelectContent className="bg-white">
+                                                        {row.owner.properties.map((p, pIdx) => (
+                                                            <SelectItem key={`${p.street}-${p.house}-${pIdx}`} value={`${p.street}-${p.house}`} className="text-slate-900">
+                                                                {p.street} - {p.house}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        )}
                                     </div>
-                                    <Input type="number" placeholder="Monto Bs." value={row.amount} onChange={(e) => updateBeneficiaryRow(row.id, { amount: e.target.value })} disabled={!row.owner} className="h-12 rounded-xl font-black bg-white border-slate-200" />
+                                    <Input type="number" placeholder="Monto Bs." value={row.amount} onChange={(e) => updateBeneficiaryRow(row.id, { amount: e.target.value })} disabled={!row.owner} className="h-12 rounded-xl font-black bg-white border-slate-200 text-slate-900" />
                                 </div>
                             </Card>
                         ))}
-                        <Button type="button" variant="outline" size="sm" onClick={addBeneficiaryRow} className="rounded-xl font-black uppercase text-[10px]"><UserPlus className="mr-2 h-4 w-4"/>Añadir Beneficiario</Button>
+                        <Button type="button" variant="outline" size="sm" onClick={addBeneficiaryRow} className="rounded-xl font-black uppercase text-[10px] text-slate-900 border-slate-300">
+                            <UserPlus className="mr-2 h-4 w-4"/>Añadir Beneficiario
+                        </Button>
                     </div>
                 </CardContent>
                 <CardFooter className="bg-slate-50 p-8 border-t flex justify-end gap-4"><div className={cn("font-black text-lg", balance !== 0 ? 'text-red-600' : 'text-emerald-600')}>Dif: Bs. {formatCurrency(balance)}</div><Button type="submit" disabled={isSubmitting || Math.abs(balance) > 0.01} className="h-14 px-10 rounded-2xl bg-slate-900 text-white font-black uppercase italic shadow-xl">{isSubmitting ? <Loader2 className="animate-spin"/> : 'Reportar Pago'}</Button></CardFooter>
@@ -415,14 +494,14 @@ function PaymentsPage() {
     const router = useRouter();
     const activeTab = searchParams?.get('tab') ?? 'verify';
     return (
-        <div className="space-y-10 animate-in fade-in duration-500">
+        <div className="space-y-10 animate-in fade-in duration-500 font-montserrat">
             <div className="mb-10">
                 <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">Gestión de <span className="text-[#0081c9]">Pagos</span></h2>
                 <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
                 <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">Hitos contables y conciliación de saldos en tiempo real.</p>
             </div>
             <Tabs value={activeTab} onValueChange={(v) => router.push(`/${condoId}/admin/payments?tab=${v}`)}>
-                <TabsList className="grid w-full grid-cols-2 bg-slate-200 h-14 rounded-2xl p-1"><TabsTrigger value="verify" className="rounded-xl font-black uppercase text-xs data-[state=active]:bg-white data-[state=active]:text-slate-900">Verificación</TabsTrigger><TabsTrigger value="report" className="rounded-xl font-black uppercase text-xs data-[state=active]:bg-white data-[state=active]:text-slate-900">Reporte Manual</TabsTrigger></TabsList>
+                <TabsList className="grid w-full grid-cols-2 bg-slate-200 h-14 rounded-2xl p-1"><TabsTrigger value="verify" className="rounded-xl font-black uppercase text-xs data-[state=active]:bg-white data-[state=active]:text-slate-900 text-slate-600 transition-all">Verificación</TabsTrigger><TabsTrigger value="report" className="rounded-xl font-black uppercase text-xs data-[state=active]:bg-white data-[state=active]:text-slate-900 text-slate-600 transition-all">Reporte Manual</TabsTrigger></TabsList>
                 <TabsContent value="verify" className="mt-8"><VerificationComponent condoId={condoId} /></TabsContent>
                 <TabsContent value="report" className="mt-8"><ReportPaymentComponent condoId={condoId} /></TabsContent>
             </Tabs>

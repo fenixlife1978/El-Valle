@@ -29,10 +29,9 @@ import {
     Trash2,
     Calendar as CalendarIcon,
     CheckCircle2,
-    AlertTriangle,
     Edit,
     MoreVertical,
-    XCircle
+    FileText
 } from 'lucide-react';
 
 import { Button } from "@/components/ui/button";
@@ -84,7 +83,6 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     
-    // Estados de Diálogos
     const [isAccountDialogOpen, setIsAccountDialogOpen] = useState(false);
     const [isTransactionDialogOpen, setIsTransactionDialogOpen] = useState(false);
     const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false);
@@ -155,8 +153,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                 if (!accountDoc.exists()) throw new Error("La cuenta no existe.");
                 const currentSaldo = accountDoc.data().saldoActual || 0;
                 const newSaldo = transForm.tipo === 'ingreso' ? currentSaldo + montoNum : currentSaldo - montoNum;
-                if (transForm.tipo === 'egreso' && newSaldo < -0.01) throw new Error("Saldo insuficiente en la cuenta.");
-
+                
                 const newTransRef = doc(collection(db, 'condominios', condoId, 'transacciones'));
                 transaction.set(newTransRef, {
                     monto: montoNum, tipo: transForm.tipo, cuentaId: transForm.cuentaId,
@@ -184,7 +181,6 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                 
                 if (accSnap.exists()) {
                     const currentBalance = accSnap.data().saldoActual || 0;
-                    // REVERSIÓN: Si borramos ingreso, restamos. Si borramos egreso, sumamos.
                     const adjustment = selectedTx.tipo === 'ingreso' ? -selectedTx.monto : selectedTx.monto;
                     transaction.update(accRef, { saldoActual: currentBalance + adjustment });
                 }
@@ -281,14 +277,15 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                 t.tipo.toUpperCase(), 
                 formatCurrency(t.monto)
             ]), 
-            headStyles: { fillColor: [15, 23, 42] } 
+            headStyles: { fillColor: [15, 23, 42] },
+            styles: { fontSize: 8, textColor: [0, 0, 0] }
         });
         
         docPDF.save(`Reporte_Tesoreria_${format(new Date(), 'yyyy_MM_dd')}.pdf`);
     };
 
     if (loading) return (
-        <div className="flex h-[70vh] flex-col items-center justify-center gap-4">
+        <div className="flex h-[70vh] flex-col items-center justify-center gap-4 bg-slate-50">
             <Loader2 className="h-12 w-12 animate-spin text-[#F28705]" />
             <p className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-400 animate-pulse italic">EFAS CONDOSYS: Sincronizando Tesorería</p>
         </div>
@@ -302,7 +299,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                     <p className="text-slate-500 font-bold text-[10px] uppercase tracking-[0.3em] mt-3 flex items-center gap-2"><Wallet className="h-3 w-3" /> Control de Disponibilidad y Flujo de Caja Atómico</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                    <Button onClick={handleGeneratePDF} variant="outline" className="font-bold uppercase text-[10px] rounded-xl h-12 border-slate-300 text-slate-700 shadow-sm bg-white">
+                    <Button onClick={handleGeneratePDF} variant="outline" className="font-bold uppercase text-[10px] rounded-xl h-12 border-slate-300 text-slate-700 shadow-sm bg-white hover:bg-slate-50">
                         <Download className="mr-2 h-4 w-4" /> Reporte Período
                     </Button>
                     <Button onClick={() => setIsTransferDialogOpen(true)} variant="secondary" className="bg-slate-900 hover:bg-slate-800 text-white font-black uppercase text-[10px] rounded-xl h-12 shadow-md">
@@ -316,7 +313,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 {accounts.map(acc => (
-                    <Card key={acc.id} className="rounded-[2rem] border-none shadow-sm hover:shadow-xl transition-all group bg-white overflow-hidden relative">
+                    <Card key={acc.id} className="rounded-[2rem] border-none shadow-sm hover:shadow-xl transition-all group bg-white overflow-hidden relative border border-slate-100">
                         <CardHeader className="pb-2">
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
@@ -334,8 +331,8 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                         </CardContent>
                     </Card>
                 ))}
-                <Button variant="ghost" onClick={() => setIsAccountDialogOpen(true)} className="h-full border-2 border-dashed border-slate-200 rounded-[2rem] hover:bg-slate-100 flex flex-col items-center justify-center py-8 bg-white/50">
-                    <PlusCircle className="h-6 w-6 text-slate-300 mb-2" />
+                <Button variant="ghost" onClick={() => setIsAccountDialogOpen(true)} className="h-full border-2 border-dashed border-slate-200 rounded-[2rem] hover:bg-slate-100 flex flex-col items-center justify-center py-8 bg-white/50 group">
+                    <PlusCircle className="h-6 w-6 text-slate-300 mb-2 group-hover:text-[#F28705] transition-colors" />
                     <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Nueva Cuenta</span>
                 </Button>
             </div>
@@ -347,7 +344,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                         <div className="flex items-center gap-2 bg-white/10 p-1 rounded-xl">
                             <Popover>
                                 <PopoverTrigger asChild>
-                                    <Button variant="ghost" className="h-9 text-[10px] font-bold text-white">
+                                    <Button variant="ghost" className="h-9 text-[10px] font-bold text-white hover:bg-white/20">
                                         {format(dateRange.from, 'dd MMM', {locale: es})} - {format(dateRange.to, 'dd MMM', {locale: es})}
                                     </Button>
                                 </PopoverTrigger>
@@ -385,7 +382,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                                             <TableCell className="text-center">
                                                 <DropdownMenu>
                                                     <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-900"><MoreVertical className="h-4 w-4"/></Button></DropdownMenuTrigger>
-                                                    <DropdownMenuContent align="end" className="rounded-xl border-slate-200 shadow-xl">
+                                                    <DropdownMenuContent align="end" className="rounded-xl border-slate-200 shadow-xl bg-white">
                                                         <DropdownMenuItem onClick={() => { setSelectedTx(tx); setEditTxData({ descripcion: tx.descripcion, referencia: tx.referencia || '' }); setIsEditTxDialogOpen(true); }} className="gap-2 font-black uppercase text-[10px] text-slate-700 p-3"><Edit className="h-3 w-3 text-sky-500" /> Editar</DropdownMenuItem>
                                                         <DropdownMenuItem onClick={() => { setSelectedTx(tx); setIsDeleteTxDialogOpen(true); }} className="gap-2 font-black uppercase text-[10px] text-red-600 p-3"><Trash2 className="h-3 w-3" /> Eliminar</DropdownMenuItem>
                                                     </DropdownMenuContent>
@@ -403,12 +400,12 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
             {/* Diálogos */}
             <Dialog open={isAccountDialogOpen} onOpenChange={setIsAccountDialogOpen}>
                 <DialogContent className="rounded-[2rem] border-none shadow-2xl bg-white text-slate-900">
-                    <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter">Nueva <span className="text-[#F28705]">Cuenta</span></DialogTitle></DialogHeader>
+                    <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-slate-900">Nueva <span className="text-[#F28705]">Cuenta</span></DialogTitle></DialogHeader>
                     <div className="grid gap-4 py-4">
-                        <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Nombre</Label><Input placeholder="BANCO DE VENEZUELA" value={accountForm.nombre} onChange={e => setAccountForm({...accountForm, nombre: e.target.value})} className="rounded-xl h-12 font-bold bg-slate-50 border-slate-200" /></div>
+                        <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Nombre</Label><Input placeholder="BANCO DE VENEZUELA" value={accountForm.nombre} onChange={e => setAccountForm({...accountForm, nombre: e.target.value})} className="rounded-xl h-12 font-bold bg-slate-50 border-slate-200 text-slate-900" /></div>
                         <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Tipo</Label><Select value={accountForm.tipo} onValueChange={v => setAccountForm({...accountForm, tipo: v as any})}><SelectTrigger className="rounded-xl h-12 bg-slate-50 border-slate-200 font-bold"><SelectValue /></SelectTrigger><SelectContent className="bg-white"><SelectItem value="banco">Banco</SelectItem><SelectItem value="efectivo">Efectivo</SelectItem><SelectItem value="otros">Otros</SelectItem></SelectContent></Select></div>
-                            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Saldo Inicial</Label><Input type="number" value={accountForm.saldoInicial} onChange={e => setAccountForm({...accountForm, saldoInicial: e.target.value})} className="rounded-xl h-12 font-bold bg-slate-50 border-slate-200" /></div>
+                            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Tipo</Label><Select value={accountForm.tipo} onValueChange={v => setAccountForm({...accountForm, tipo: v as any})}><SelectTrigger className="rounded-xl h-12 bg-slate-50 border-slate-200 font-bold text-slate-900"><SelectValue /></SelectTrigger><SelectContent className="bg-white"><SelectItem value="banco" className="text-slate-900">Banco</SelectItem><SelectItem value="efectivo" className="text-slate-900">Efectivo</SelectItem><SelectItem value="otros" className="text-slate-900">Otros</SelectItem></SelectContent></Select></div>
+                            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Saldo Inicial</Label><Input type="number" value={accountForm.saldoInicial} onChange={e => setAccountForm({...accountForm, saldoInicial: e.target.value})} className="rounded-xl h-12 font-bold bg-slate-50 border-slate-200 text-slate-900" /></div>
                         </div>
                     </div>
                     <DialogFooter><Button onClick={handleSaveAccount} disabled={isSubmitting} className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black uppercase h-12 rounded-xl">{isSubmitting ? <Loader2 className="animate-spin" /> : "Crear Cuenta"}</Button></DialogFooter>
@@ -417,52 +414,49 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
 
             <Dialog open={isTransactionDialogOpen} onOpenChange={setIsTransactionDialogOpen}>
                 <DialogContent className="rounded-[2rem] border-none shadow-2xl bg-white text-slate-900">
-                    <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter">Registrar <span className="text-[#F28705]">Movimiento</span></DialogTitle></DialogHeader>
+                    <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-slate-900">Registrar <span className="text-[#F28705]">Movimiento</span></DialogTitle></DialogHeader>
                     <div className="grid gap-4 py-4">
                         <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Tipo</Label><Select value={transForm.tipo} onValueChange={(v: any) => setTransactionForm({...transForm, tipo: v})}><SelectTrigger className="rounded-xl h-12 font-bold bg-slate-50 border-slate-200"><SelectValue /></SelectTrigger><SelectContent className="bg-white"><SelectItem value="ingreso" className="text-green-600 font-bold">Ingreso (+)</SelectItem><SelectItem value="egreso" className="text-red-600 font-bold">Egreso (-)</SelectItem></SelectContent></Select></div>
-                            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Cuenta</Label><Select value={transForm.cuentaId} onValueChange={v => setTransactionForm({...transForm, cuentaId: v})}><SelectTrigger className="rounded-xl h-12 font-bold bg-slate-50 border-slate-200"><SelectValue placeholder="Seleccionar..." /></SelectTrigger><SelectContent className="bg-white">{accounts.map(acc => (<SelectItem key={acc.id} value={acc.id}>{acc.nombre} (Bs. {formatCurrency(acc.saldoActual)})</SelectItem>))}</SelectContent></Select></div>
+                            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Tipo</Label><Select value={transForm.tipo} onValueChange={(v: any) => setTransactionForm({...transForm, tipo: v})}><SelectTrigger className="rounded-xl h-12 font-bold bg-slate-50 border-slate-200 text-slate-900"><SelectValue /></SelectTrigger><SelectContent className="bg-white"><SelectItem value="ingreso" className="text-green-600 font-bold">Ingreso (+)</SelectItem><SelectItem value="egreso" className="text-red-600 font-bold">Egreso (-)</SelectItem></SelectContent></Select></div>
+                            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Cuenta</Label><Select value={transForm.cuentaId} onValueChange={v => setTransactionForm({...transForm, cuentaId: v})}><SelectTrigger className="rounded-xl h-12 font-bold bg-slate-50 border-slate-200 text-slate-900"><SelectValue placeholder="Seleccionar..." /></SelectTrigger><SelectContent className="bg-white">{accounts.map(acc => (<SelectItem key={acc.id} value={acc.id} className="text-slate-900">{acc.nombre} (Bs. {formatCurrency(acc.saldoActual)})</SelectItem>))}</SelectContent></Select></div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Monto Bs.</Label><Input type="number" placeholder="0.00" value={transForm.monto} onChange={e => setTransactionForm({...transForm, monto: e.target.value})} className="rounded-xl h-12 font-black text-lg bg-slate-50 border-slate-200" /></div>
-                            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Fecha</Label><Popover><PopoverTrigger asChild><Button variant="outline" className="w-full h-12 rounded-xl justify-start font-bold bg-slate-50 border-slate-200"><CalendarIcon className="mr-2 h-4 w-4" /> {format(transForm.fecha, 'dd/MM/yyyy')}</Button></PopoverTrigger><PopoverContent className="w-auto p-0 bg-white border-slate-200 shadow-2xl rounded-2xl"><Calendar mode="single" selected={transForm.fecha} onSelect={(d: any) => d && setTransactionForm({...transForm, fecha: d})} locale={es}/></PopoverContent></Popover></div>
+                            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Monto Bs.</Label><Input type="number" placeholder="0.00" value={transForm.monto} onChange={e => setTransactionForm({...transForm, monto: e.target.value})} className="rounded-xl h-12 font-black text-lg bg-slate-50 border-slate-200 text-slate-900" /></div>
+                            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Fecha</Label><Popover><PopoverTrigger asChild><Button variant="outline" className="w-full h-12 rounded-xl justify-start font-bold bg-slate-50 border-slate-200 text-slate-900"><CalendarIcon className="mr-2 h-4 w-4" /> {format(transForm.fecha, 'dd/MM/yyyy')}</Button></PopoverTrigger><PopoverContent className="w-auto p-0 bg-white border-slate-200 shadow-2xl rounded-2xl"><Calendar mode="single" selected={transForm.fecha} onSelect={(d: any) => d && setTransactionForm({...transForm, fecha: d})} locale={es}/></PopoverContent></Popover></div>
                         </div>
-                        <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Descripción</Label><Input placeholder="EJ: PAGO DE SERVICIOS" value={transForm.descripcion} onChange={e => setTransactionForm({...transForm, descripcion: e.target.value})} className="rounded-xl h-12 font-bold bg-slate-50 border-slate-200" /></div>
-                        <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Referencia (Opcional)</Label><Input placeholder="EJ: 123456" value={transForm.referencia} onChange={e => setTransactionForm({...transForm, referencia: e.target.value})} className="rounded-xl h-12 font-bold bg-slate-50 border-slate-200" /></div>
+                        <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Descripción</Label><Input placeholder="EJ: PAGO DE SERVICIOS" value={transForm.descripcion} onChange={e => setTransactionForm({...transForm, descripcion: e.target.value})} className="rounded-xl h-12 font-bold bg-slate-50 border-slate-200 text-slate-900" /></div>
+                        <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Referencia (Opcional)</Label><Input placeholder="EJ: 123456" value={transForm.referencia} onChange={e => setTransactionForm({...transForm, referencia: e.target.value})} className="rounded-xl h-12 font-bold bg-slate-50 border-slate-200 text-slate-900" /></div>
                     </div>
                     <DialogFooter><Button onClick={handleSaveTransaction} disabled={isSubmitting} className="w-full bg-[#F28705] hover:bg-orange-600 text-white font-black uppercase h-14 rounded-2xl shadow-xl">{isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <CheckCircle2 className="mr-2 h-5 w-5" />}Procesar Movimiento</Button></DialogFooter>
                 </DialogContent>
             </Dialog>
 
-            {/* Diálogo de Traslado */}
             <Dialog open={isTransferDialogOpen} onOpenChange={setIsTransferDialogOpen}>
                 <DialogContent className="rounded-[2rem] border-none shadow-2xl bg-white text-slate-900">
-                    <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter">Trasladar <span className="text-[#F28705]">Fondos</span></DialogTitle></DialogHeader>
+                    <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-slate-900">Trasladar <span className="text-[#F28705]">Fondos</span></DialogTitle></DialogHeader>
                     <div className="grid gap-4 py-4">
                         <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Cuenta Origen</Label><Select value={transferForm.origenId} onValueChange={v => setTransferForm({...transferForm, origenId: v})}><SelectTrigger className="rounded-xl h-12 bg-slate-50 font-bold border-slate-200"><SelectValue placeholder="Desde..." /></SelectTrigger><SelectContent className="bg-white">{accounts.map(acc => (<SelectItem key={acc.id} value={acc.id}>{acc.nombre} (Bs. {formatCurrency(acc.saldoActual)})</SelectItem>))}</SelectContent></Select></div>
-                            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Cuenta Destino</Label><Select value={transferForm.destinoId} onValueChange={v => setTransferForm({...transferForm, destinoId: v})}><SelectTrigger className="rounded-xl h-12 bg-slate-50 font-bold border-slate-200"><SelectValue placeholder="Hacia..." /></SelectTrigger><SelectContent className="bg-white">{accounts.map(acc => (<SelectItem key={acc.id} value={acc.id} disabled={acc.id === transferForm.origenId}>{acc.nombre}</SelectItem>))}</SelectContent></Select></div>
+                            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Cuenta Origen</Label><Select value={transferForm.origenId} onValueChange={v => setTransferForm({...transferForm, origenId: v})}><SelectTrigger className="rounded-xl h-12 bg-slate-50 font-bold border-slate-200 text-slate-900"><SelectValue placeholder="Desde..." /></SelectTrigger><SelectContent className="bg-white">{accounts.map(acc => (<SelectItem key={acc.id} value={acc.id} className="text-slate-900">{acc.nombre} (Bs. {formatCurrency(acc.saldoActual)})</SelectItem>))}</SelectContent></Select></div>
+                            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Cuenta Destino</Label><Select value={transferForm.destinoId} onValueChange={v => setTransferForm({...transferForm, destinoId: v})}><SelectTrigger className="rounded-xl h-12 bg-slate-50 font-bold border-slate-200 text-slate-900"><SelectValue placeholder="Hacia..." /></SelectTrigger><SelectContent className="bg-white">{accounts.map(acc => (<SelectItem key={acc.id} value={acc.id} disabled={acc.id === transferForm.origenId} className="text-slate-900">{acc.nombre}</SelectItem>))}</SelectContent></Select></div>
                         </div>
-                        <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Monto del Traslado (Bs.)</Label><Input type="number" placeholder="0.00" value={transferForm.monto} onChange={e => setTransferForm({...transferForm, monto: e.target.value})} className="rounded-xl h-12 font-black text-lg bg-slate-50 border-slate-200" /></div>
-                        <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Motivo / Notas</Label><Input placeholder="EJ: FONDEO DE CAJA CHICA" value={transferForm.descripcion} onChange={e => setTransferForm({...transferForm, descripcion: e.target.value})} className="rounded-xl h-12 font-bold bg-slate-50 border-slate-200" /></div>
+                        <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Monto del Traslado (Bs.)</Label><Input type="number" placeholder="0.00" value={transferForm.monto} onChange={e => setTransferForm({...transferForm, monto: e.target.value})} className="rounded-xl h-12 font-black text-lg bg-slate-50 border-slate-200 text-slate-900" /></div>
+                        <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Motivo / Notas</Label><Input placeholder="EJ: FONDEO DE CAJA CHICA" value={transferForm.descripcion} onChange={e => setTransferForm({...transferForm, descripcion: e.target.value})} className="rounded-xl h-12 font-bold bg-slate-50 border-slate-200 text-slate-900" /></div>
                     </div>
                     <DialogFooter><Button onClick={handleTransfer} disabled={isSubmitting} className="w-full bg-slate-900 text-white font-black uppercase h-14 rounded-2xl shadow-xl">{isSubmitting ? <Loader2 className="animate-spin mr-2" /> : "Ejecutar Traslado"}</Button></DialogFooter>
                 </DialogContent>
             </Dialog>
 
-            {/* Diálogo Editar Transacción */}
             <Dialog open={isEditTxDialogOpen} onOpenChange={setIsEditTxDialogOpen}>
                 <DialogContent className="rounded-[2rem] border-none shadow-2xl bg-white text-slate-900">
-                    <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter">Editar <span className="text-sky-500">Movimiento</span></DialogTitle></DialogHeader>
+                    <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-slate-900">Editar <span className="text-sky-500">Movimiento</span></DialogTitle></DialogHeader>
                     <div className="grid gap-4 py-4">
-                        <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Descripción</Label><Input value={editTxData.descripcion} onChange={e => setEditTxData({...editTxData, descripcion: e.target.value})} className="rounded-xl h-12 font-bold bg-slate-50 border-slate-200" /></div>
-                        <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Referencia</Label><Input value={editTxData.referencia} onChange={e => setEditTxData({...editTxData, referencia: e.target.value})} className="rounded-xl h-12 font-bold bg-slate-50 border-slate-200" /></div>
+                        <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Descripción</Label><Input value={editTxData.descripcion} onChange={e => setEditTxData({...editTxData, descripcion: e.target.value})} className="rounded-xl h-12 font-bold bg-slate-50 border-slate-200 text-slate-900" /></div>
+                        <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Referencia</Label><Input value={editTxData.referencia} onChange={e => setEditTxData({...editTxData, referencia: e.target.value})} className="rounded-xl h-12 font-bold bg-slate-50 border-slate-200 text-slate-900" /></div>
                     </div>
                     <DialogFooter><Button onClick={handleUpdateTx} disabled={isSubmitting} className="w-full bg-slate-900 text-white font-black uppercase h-12 rounded-xl">Guardar Cambios</Button></DialogFooter>
                 </DialogContent>
             </Dialog>
 
-            {/* Diálogo Eliminar Transacción */}
             <Dialog open={isDeleteTxDialogOpen} onOpenChange={setIsDeleteTxDialogOpen}>
                 <DialogContent className="rounded-[2rem] border-none shadow-2xl bg-white text-slate-900">
                     <DialogHeader>
@@ -473,13 +467,12 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                         <p className="text-xs font-bold text-red-800 uppercase tracking-tight">Atención: El monto de Bs. {formatCurrency(selectedTx?.monto || 0)} será {selectedTx?.tipo === 'ingreso' ? 'restado' : 'sumado'} del saldo actual.</p>
                     </div>
                     <DialogFooter className="gap-2 mt-4">
-                        <Button variant="outline" onClick={() => setIsDeleteTxDialogOpen(false)} className="rounded-xl h-12 font-bold">Cancelar</Button>
+                        <Button variant="outline" onClick={() => setIsDeleteTxDialogOpen(false)} className="rounded-xl h-12 font-bold text-slate-900">Cancelar</Button>
                         <Button onClick={handleDeleteTransaction} disabled={isSubmitting} variant="destructive" className="rounded-xl h-12 font-black uppercase">Confirmar Eliminación</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
 
-            {/* Diálogo Eliminar Cuenta */}
             <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
                 <DialogContent className="rounded-[2rem] border-none shadow-2xl bg-white text-slate-900">
                     <DialogHeader>
@@ -487,7 +480,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                         <DialogDescription className="font-bold text-slate-500">Se borrará la cuenta "{accountToDelete?.nombre}". Los movimientos históricos permanecerán en el sistema pero no estarán asociados a una cuenta activa.</DialogDescription>
                     </DialogHeader>
                     <DialogFooter className="gap-2 mt-4">
-                        <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)} className="rounded-xl h-12 font-bold">Cancelar</Button>
+                        <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)} className="rounded-xl h-12 font-bold text-slate-900">Cancelar</Button>
                         <Button onClick={handleDeleteAccount} disabled={isSubmitting} variant="destructive" className="rounded-xl h-12 font-black uppercase">Eliminar Cuenta</Button>
                     </DialogFooter>
                 </DialogContent>
