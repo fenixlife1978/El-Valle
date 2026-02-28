@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo, use } from 'react';
@@ -55,15 +54,15 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
         getDoc(configRef).then(snap => { if (snap.exists()) setCompanyData(snap.data().companyInfo); });
     }, [workingCondoId]);
 
-    // Escucha en tiempo real de las cuentas de tesorería para obtener los saldos dinámicos reales
+    // Escucha en tiempo real de las cuentas de tesorería (robusta e insensible a mayúsculas)
     useEffect(() => {
         if (!workingCondoId) return;
 
         const unsubCuentas = onSnapshot(collection(db, 'condominios', workingCondoId, 'cuentas'), (snap) => {
             const accounts = snap.docs.map(d => d.data());
-            const bdv = accounts.find(a => a.nombre?.toUpperCase() === 'BANCO DE VENEZUELA');
-            const cp = accounts.find(a => a.nombre?.toUpperCase() === 'CAJA PRINCIPAL');
-            const cc = accounts.find(a => a.nombre?.toUpperCase() === 'CAJA CHICA');
+            const bdv = accounts.find(a => a.nombre?.toUpperCase().trim() === 'BANCO DE VENEZUELA');
+            const cp = accounts.find(a => a.nombre?.toUpperCase().trim() === 'CAJA PRINCIPAL');
+            const cc = accounts.find(a => a.nombre?.toUpperCase().trim() === 'CAJA CHICA');
             
             setRealBalances({
                 banco: bdv?.saldoActual || 0,
@@ -86,7 +85,6 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 const fromDate = startOfMonth(new Date(year, month, 1));
                 const toDate = endOfMonth(fromDate);
 
-                // 1. Obtener Ingresos desde Pagos Aprobados del mes seleccionado
                 const pQuery = query(
                     collection(db, 'condominios', workingCondoId, 'payments'),
                     where('paymentDate', '>=', fromDate),
@@ -100,12 +98,11 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 pSnap.forEach(doc => {
                     const data = doc.data();
                     if (['transferencia', 'movil'].includes(data.paymentMethod)) totalBancario += data.totalAmount;
-                    else if (data.paymentMethod === 'efectivo_bs') totalEfectivo += data.totalAmount;
+                    else if (['efectivo_bs', 'efectivo'].includes(data.paymentMethod)) totalEfectivo += data.totalAmount;
                 });
                 setIngresosOrdinariosBanco(totalBancario);
                 setIngresosOrdinariosEfectivo(totalEfectivo);
 
-                // 2. Obtener Egresos desde Tesorería (Transacciones tipo 'egreso') del mes seleccionado
                 const tQuery = query(
                     collection(db, 'condominios', workingCondoId, 'transacciones'), 
                     where('fecha', '>=', fromDate), 
@@ -275,7 +272,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                         {saving ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2 h-5 w-5" />} Guardar Balance del Período
                     </Button>
                 </CardFooter>
-            </>}
+            </> }
         </div>
     );
 }

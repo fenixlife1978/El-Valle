@@ -20,8 +20,6 @@ import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { BankSelectionModal } from '@/components/bank-selection-modal';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -31,9 +29,7 @@ import { useAuthorization } from '@/hooks/use-authorization';
 import { generatePaymentReceipt } from '@/lib/pdf-generator';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuPortal } from '@/components/ui/dropdown-menu';
 import { Textarea } from '@/components/ui/textarea';
-import Link from 'next/link';
 import { processPaymentLiquidation } from '@/lib/payment-processor';
-
 
 // --- HELPERS ---
 const formatCurrency = (num: number) => {
@@ -53,9 +49,6 @@ type BeneficiaryRow = { id: string; owner: Owner | null; searchTerm: string; amo
 type PaymentMethod = 'movil' | 'transferencia' | 'efectivo_bs' | '';
 type Debt = { id: string; ownerId: string; year: number; month: number; amountUSD: number; description: string; status: 'pending' | 'paid' | 'vencida'; property: { street: string; house: string }; paidAmountUSD?: number;};
 type Payment = { id: string; beneficiaries: { ownerId: string; ownerName: string; amount: number; street?: string; house?: string; }[]; beneficiaryIds: string[]; totalAmount: number; exchangeRate: number; paymentDate: Timestamp; reportedAt: Timestamp; paymentMethod: 'transferencia' | 'movil' | 'efectivo_bs'; bank: string; reference: string; status: 'pendiente' | 'aprobado' | 'rechazado'; receiptUrl?: string; observations?: string; receiptNumbers?: { [ownerId: string]: string }; type?: string; };
-type ReceiptData = { payment: Payment; beneficiary: any; ownerName: string; ownerUnit: string; paidDebts: Debt[]; previousBalance: number; currentBalance: number; qrCodeUrl?: string; receiptNumber: string; } | null;
-type PaymentDetails = { paymentMethod: 'movil' | 'transferencia' | ''; bank: string; otherBank: string; reference: string; };
-
 
 // --- VERIFICATION COMPONENT ---
 function VerificationComponent({ condoId }: { condoId: string }) {
@@ -170,7 +163,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             if (!condoId) return;
             setIsVerifying(true);
             try {
-                // --- PRE-TRANSACTION READS ---
                 const settingsRef = doc(db, 'condominios', condoId, 'config', 'mainSettings');
                 const settingsDoc = await getDoc(settingsRef);
                 if (!settingsDoc.exists() || !settingsDoc.data().condoFee) {
@@ -190,22 +182,22 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 const accountsSnap = await getDocs(collection(db, 'condominios', condoId, 'cuentas'));
                 const accounts = accountsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
                 
-                // Determinar Cuenta de Destino según método
+                // Determinar Cuenta de Destino según método (Insensible a mayúsculas)
                 let targetAccountName = "";
                 if (['movil', 'transferencia'].includes(payment.paymentMethod)) {
                     targetAccountName = "BANCO DE VENEZUELA";
-                } else if (payment.paymentMethod === 'efectivo_bs') {
+                } else if (['efectivo_bs', 'efectivo'].includes(payment.paymentMethod)) {
                     targetAccountName = "CAJA PRINCIPAL";
                 }
 
-                const targetAccount = accounts.find((acc: any) => acc.nombre === targetAccountName);
+                const targetAccount = accounts.find((acc: any) => 
+                    acc.nombre?.toUpperCase().trim() === targetAccountName
+                );
     
-                // --- START TRANSACTION ---
                 await runTransaction(db, async (transaction) => {
                     const paymentRef = doc(db, 'condominios', condoId, 'payments', payment.id);
                     const receiptNumbers: { [ownerId: string]: string } = {};
     
-                    // --- TRANSACTION READ PHASE ---
                     const ownerRefs = beneficiaryIds.map(id => doc(db, 'condominios', condoId, ownersCollectionName, id));
                     const ownerDocs = await Promise.all(ownerRefs.map(ref => transaction.get(ref)));
 
@@ -219,7 +211,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         }
                     }
     
-                    // --- LOGIC & WRITE PHASE ---
                     for (const beneficiary of payment.beneficiaries) {
                         const ownerDoc = ownerDocs.find(d => d.id === beneficiary.ownerId);
                         if (!ownerDoc || !ownerDoc.exists()) throw new Error(`El propietario ${beneficiary.ownerName} no fue encontrado.`);
@@ -243,7 +234,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         
                         const liquidationResult = processPaymentLiquidation(montoRecibido, saldoAFavorPrevio, cuotasPendientes, costoCuotaActualBs);
     
-                        // 1. Update liquidated pending debts
                         for (const liquidada of liquidationResult.cuotasLiquidadas) {
                             const debtRef = doc(db, 'condominios', condoId, 'debts', liquidada.id);
                             transaction.update(debtRef, {
@@ -254,15 +244,12 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                             });
                         }
     
-                        // 2. Handle advance payments
                         if (liquidationResult.cuotasAdelantadas > 0 && condoFeeUSD > 0) {
                             let lastPaidPeriod = { year: 1970, month: 0 };
-                            
                             const allPotentiallyPaidDebts = allOwnerDebts.map(d => {
                                 const isNewlyLiquidated = liquidationResult.cuotasLiquidadas.some(l => l.id === d.id);
                                 return { ...d, status: isNewlyLiquidated ? 'paid' : d.status };
                             });
-
                             allPotentiallyPaidDebts.forEach(d => {
                                 if (d.status === 'paid') {
                                     if (d.year > lastPaidPeriod.year || (d.year === lastPaidPeriod.year && d.month > lastPaidPeriod.month)) {
@@ -270,13 +257,10 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                                     }
                                 }
                             });
-                            
                             let nextPeriodDate = addMonths(new Date(lastPaidPeriod.year, lastPaidPeriod.month, 0), 1);
-
                             for (let i = 0; i < liquidationResult.cuotasAdelantadas; i++) {
                                 const futureYear = nextPeriodDate.getFullYear();
                                 const futureMonth = nextPeriodDate.getMonth() + 1;
-                                
                                 const debtRef = doc(collection(db, "condominios", condoId, "debts"));
                                 transaction.set(debtRef, {
                                     ownerId: beneficiary.ownerId,
@@ -294,26 +278,18 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                                 nextPeriodDate = addMonths(nextPeriodDate, 1);
                             }
                         }
-    
-                        // 3. Update owner's balance
                         transaction.update(ownerDoc.ref, { balance: liquidationResult.nuevoSaldoAFavor });
-                        
-                        // 4. Generate receipt number
                         receiptNumbers[beneficiary.ownerId] = `REC-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 90000) + 10000)}`;
                     }
 
-                    // --- SINCRONIZACIÓN CON TESORERÍA ---
                     if (targetAccountRef) {
-                        // 1. Actualizar Saldo de la Cuenta
                         transaction.update(targetAccountRef, { saldoActual: currentAccountBalance + payment.totalAmount });
-
-                        // 2. Registrar Transacción en Historial Centralizado
                         const newTransRef = doc(collection(db, 'condominios', condoId, 'transacciones'));
                         transaction.set(newTransRef, {
                             monto: payment.totalAmount,
                             tipo: 'ingreso',
                             cuentaId: targetAccount!.id,
-                            nombreCuenta: targetAccountName,
+                            nombreCuenta: targetAccount!.nombre,
                             descripcion: `PAGO RECIBIDO: ${payment.beneficiaries.map(b => b.ownerName).join(', ')}`,
                             referencia: payment.reference,
                             fecha: payment.paymentDate,
@@ -322,13 +298,11 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                             sourcePaymentId: payment.id
                         });
                     }
-    
                     transaction.update(paymentRef, { status: 'aprobado', observations: 'Pago verificado y aplicado por la administración.', receiptNumbers });
                 });
                 
                 toast({ title: 'Pago Aprobado', description: 'El pago ha sido procesado y reflejado en Tesorería.', className: 'bg-green-100 border-green-400 text-green-800' });
                 setSelectedPayment(null);
-    
             } catch (error: any) {
                 toast({ variant: 'destructive', title: 'Error al Aprobar', description: error.message || 'No se pudo completar la transacción.' });
             } finally {
@@ -357,29 +331,20 @@ function VerificationComponent({ condoId }: { condoId: string }) {
 
     const handleDeletePayment = async () => {
         if (!paymentToDelete || !condoId) return;
-    
         requestAuthorization(async () => {
             setIsVerifying(true);
             try {
                 const paymentRef = doc(db, 'condominios', condoId, 'payments', paymentToDelete.id);
                 const paidDebtsQuery = query(collection(db, 'condominios', condoId, 'debts'), where('paymentId', '==', paymentToDelete.id));
                 const transactionsQuery = query(collection(db, 'condominios', condoId, 'transacciones'), where('sourcePaymentId', '==', paymentToDelete.id));
-                
                 await runTransaction(db, async (transaction) => {
-                    // --- 1. FASE DE LECTURA ---
                     const paymentDoc = await transaction.get(paymentRef);
                     if (!paymentDoc.exists()) return;
-                    
                     const paymentData = paymentDoc.data() as Payment;
                     const paidDebtsSnapshot = await getDocs(paidDebtsQuery);
                     const txSnapshot = await getDocs(transactionsQuery);
-    
-                    const ownerRefs = paymentData.beneficiaries.map(b => {
-                        return doc(db, 'condominios', condoId, ownersCollectionName, b.ownerId);
-                    });
+                    const ownerRefs = paymentData.beneficiaries.map(b => doc(db, 'condominios', condoId, ownersCollectionName, b.ownerId));
                     const ownerDocs = await Promise.all(ownerRefs.map(ref => transaction.get(ref)));
-
-                    // Cargar cuentas para reversión si aplica
                     let targetAccountRef = null;
                     let targetAccDoc = null;
                     if (txSnapshot.docs.length > 0) {
@@ -387,17 +352,11 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         targetAccountRef = doc(db, 'condominios', condoId, 'cuentas', txData.cuentaId);
                         targetAccDoc = await transaction.get(targetAccountRef);
                     }
-    
-                    // --- 2. FASE DE LÓGICA & ESCRITURA ---
-                    
-                    // Reversión en Tesorería
                     if (targetAccountRef && targetAccDoc?.exists()) {
                         const currentAccBalance = targetAccDoc.data().saldoActual || 0;
                         transaction.update(targetAccountRef, { saldoActual: Math.max(0, currentAccBalance - paymentData.totalAmount) });
                         txSnapshot.forEach(txDoc => transaction.delete(txDoc.ref));
                     }
-
-                    // Reversión de Deudas
                     let totalAmountAppliedToDebts = 0;
                     paidDebtsSnapshot.forEach(debtDoc => {
                         const debtData = debtDoc.data() as Debt;
@@ -409,8 +368,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                             paidAmountUSD: deleteField()
                         });
                     });
-
-                    // Reversión de Saldo a Favor
                     const totalSurplus = paymentData.totalAmount - totalAmountAppliedToDebts;
                     if (totalSurplus > 0.01) {
                          ownerDocs.forEach(ownerDoc => {
@@ -420,13 +377,10 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                             }
                         });
                     }
-    
                     transaction.delete(paymentRef);
                 });
-    
                 toast({ title: 'Pago Eliminado', description: 'El pago y sus efectos financieros han sido revertidos.' });
                 setPaymentToDelete(null);
-    
             } catch (error: any) {
                 console.error("Error deleting payment:", error);
                 toast({ variant: 'destructive', title: 'Error al eliminar', description: error.message });
@@ -443,36 +397,27 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             toast({ variant: 'destructive', title: 'Error', description: 'Configure la identidad del condominio en Ajustes.' });
             return;
         }
-        
         setIsGenerating(true);
         try {
             const ownerRef = doc(db, 'condominios', condoId, ownersCollectionName, beneficiary.ownerId);
             const ownerSnap = await getDoc(ownerRef);
             if (!ownerSnap.exists()) throw new Error('Perfil no encontrado.');
             const ownerData = ownerSnap.data();
-    
-            const paidDebtsSnapshot = await getDocs(
-                query(collection(db, 'condominios', condoId, 'debts'), where('paymentId', '==', payment.id), where('ownerId', '==', beneficiary.ownerId))
-            );
+            const paidDebtsSnapshot = await getDocs(query(collection(db, 'condominios', condoId, 'debts'), where('paymentId', '==', payment.id), where('ownerId', '==', beneficiary.ownerId)));
             const paidDebts = paidDebtsSnapshot.docs.map(d => d.data() as Debt);
-            
             const totalDebtPaidWithPayment = paidDebts.reduce((sum, debt) => sum + ((debt.paidAmountUSD || debt.amountUSD) * payment.exchangeRate), 0);
             const previousBalance = (ownerData.balance || 0) - (beneficiary.amount - totalDebtPaidWithPayment);
             const receiptNumber = payment.receiptNumbers?.[beneficiary.ownerId] || `N/A-${payment.id.slice(-5)}`;
-    
             const conceptsForPdf = paidDebts.map(debt => [
                 `${MONTHS_LOCALE[debt.month]} ${debt.year}`,
                 `${debt.description} (${debt.property?.street}-${debt.property?.house})`,
                 `$${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}`,
                 formatCurrency((debt.paidAmountUSD || debt.amountUSD) * payment.exchangeRate)
             ]);
-
             if (paidDebts.length === 0 && beneficiary.amount > 0) {
                 conceptsForPdf.push(['', 'Abono a Saldo a Favor', '', formatCurrency(beneficiary.amount)]);
             }
-
             const totalDebtPaidInBs = paidDebts.reduce((sum, debt) => sum + ((debt.paidAmountUSD || debt.amountUSD) * payment.exchangeRate), 0);
-
             const dataForPdf = {
                 condoName: companyInfo.name,
                 rif: companyInfo.rif,
@@ -490,10 +435,8 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 currentBalance: formatCurrency(ownerData.balance || 0),
                 observations: payment.observations || 'Sin observaciones.'
             };
-            
-            if (action === 'download') {
-                await generatePaymentReceipt(dataForPdf, companyInfo.logo, 'download');
-            } else if (navigator.share) {
+            if (action === 'download') { await generatePaymentReceipt(dataForPdf, companyInfo.logo, 'download'); } 
+            else if (navigator.share) {
                 const pdfBlob = await generatePaymentReceipt(dataForPdf, companyInfo.logo, 'blob');
                 if (pdfBlob) {
                     const pdfFile = new File([pdfBlob], `Recibo_${ownerData.name.replace(/\s/g, '_')}.pdf`, { type: 'application/pdf' });
@@ -502,12 +445,8 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                     }
                 }
             }
-    
-        } catch (error: any) {
-            toast({ variant: 'destructive', title: 'Error', description: error.message });
-        } finally {
-            setIsGenerating(false);
-        }
+        } catch (error: any) { toast({ variant: 'destructive', title: 'Error', description: error.message }); } 
+        finally { setIsGenerating(false); }
     };
     
     return (
@@ -657,14 +596,13 @@ function VerificationComponent({ condoId }: { condoId: string }) {
     );
 }
 
-// --- REPORT PAYMENT COMPONENT (for Admin) ---
+// --- REPORT PAYMENT COMPONENT ---
 function ReportPaymentComponent({ condoId }: { condoId: string }) {
     const { toast } = useToast();
     const { user: authUser } = useAuth();
     const [allOwners, setAllOwners] = useState<Owner[]>([]);
     const [loading, setLoading] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
-
     const [paymentDate, setPaymentDate] = useState<Date | undefined>(new Date());
     const [exchangeRate, setExchangeRate] = useState<number | null>(null);
     const [exchangeRateMessage, setExchangeRateMessage] = useState('');
@@ -677,10 +615,8 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
     const [amountUSD, setAmountUSD] = useState<string>('');
     const [beneficiaryRows, setBeneficiaryRows] = useState<BeneficiaryRow[]>([{ id: Date.now().toString(), owner: null, searchTerm: '', amount: '', selectedProperty: null }]);
     const [isBankModalOpen, setIsBankModalOpen] = useState(false);
-
     const ownersCollectionName = condoId === 'condo_01' ? 'owners' : 'propietarios';
     const isCashPayment = paymentMethod === 'efectivo_bs';
-
     useEffect(() => {
         if (!condoId) return;
         const q = query(collection(db, "condominios", condoId, ownersCollectionName), where("role", "==", "propietario"));
@@ -690,7 +626,6 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
         });
         return () => unsubscribe();
     }, [condoId, ownersCollectionName]);
-    
     useEffect(() => {
         if (!condoId) return;
         const fetchRate = async () => {
@@ -705,41 +640,23 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
                         const allRates = (settings.exchangeRates || []);
                         const paymentDateString = format(paymentDate, 'yyyy-MM-dd');
                         const applicableRates = allRates.filter((r:any) => r.date <= paymentDateString).sort((a:any, b:any) => b.date.localeCompare(a.date));
-                        if (applicableRates.length > 0) {
-                             setExchangeRate(applicableRates[0].rate);
-                             setExchangeRateMessage('');
-                        } else {
-                           setExchangeRateMessage('No hay tasa para esta fecha.');
-                        }
+                        if (applicableRates.length > 0) { setExchangeRate(applicableRates[0].rate); setExchangeRateMessage(''); } 
+                        else { setExchangeRateMessage('No hay tasa para esta fecha.'); }
                     }
                 }
-            } catch (e) {
-                 console.error(e);
-            }
+            } catch (e) { console.error(e); }
         }
         fetchRate();
     }, [paymentDate, condoId]);
-    
     useEffect(() => {
-        if (isCashPayment) {
-            setBank('Efectivo');
-            setReference('EFECTIVO');
-        } else {
-            if (bank === 'Efectivo') setBank('');
-            if (reference === 'EFECTIVO') setReference('');
-        }
-    }, [isCashPayment, bank, reference]);
-
-
+        if (isCashPayment) { setBank('Efectivo'); setReference('EFECTIVO'); } 
+        else { if (bank === 'Efectivo') setBank(''); if (reference === 'EFECTIVO') setReference(''); }
+    }, [isCashPayment]);
     useEffect(() => {
         const bs = parseFloat(totalAmount);
-        if (!isNaN(bs) && exchangeRate && exchangeRate > 0) {
-            setAmountUSD((bs / exchangeRate).toFixed(2));
-        } else {
-            setAmountUSD('');
-        }
+        if (!isNaN(bs) && exchangeRate && exchangeRate > 0) { setAmountUSD((bs / exchangeRate).toFixed(2)); } 
+        else { setAmountUSD(''); }
     }, [totalAmount, exchangeRate]);
-
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -751,43 +668,27 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
         } catch (error) { toast({ variant: 'destructive', title: 'Error de imagen' }); } 
         finally { setLoading(false); }
     };
-    
     const assignedTotal = useMemo(() => beneficiaryRows.reduce((acc, row) => acc + (Number(row.amount) || 0), 0), [beneficiaryRows]);
     const balance = useMemo(() => (Number(totalAmount) || 0) - assignedTotal, [totalAmount, assignedTotal]);
     const updateBeneficiaryRow = (id: string, updates: Partial<BeneficiaryRow>) => setBeneficiaryRows(rows => rows.map(row => (row.id === id ? { ...row, ...updates } : row)));
     const handleOwnerSelect = (rowId: string, owner: Owner) => updateBeneficiaryRow(rowId, { owner, searchTerm: '', selectedProperty: owner.properties?.[0] || null });
     const addBeneficiaryRow = () => setBeneficiaryRows(rows => [...rows, { id: Date.now().toString(), owner: null, searchTerm: '', amount: '', selectedProperty: null }]);
-    const removeBeneficiaryRow = (id: string) => {
-        if (beneficiaryRows.length > 1) { setBeneficiaryRows(rows => rows.filter(row => row.id !== id)); } 
-    };
-    const getFilteredOwners = (searchTerm: string) => {
-        if (!searchTerm || searchTerm.length < 2) return [];
-        return allOwners.filter(owner => owner.name?.toLowerCase().includes(searchTerm.toLowerCase()));
-    };
-    
+    const removeBeneficiaryRow = (id: string) => { if (beneficiaryRows.length > 1) { setBeneficiaryRows(rows => rows.filter(row => row.id !== id)); } };
+    const getFilteredOwners = (searchTerm: string) => { if (!searchTerm || searchTerm.length < 2) return []; return allOwners.filter(owner => owner.name?.toLowerCase().includes(searchTerm.toLowerCase())); };
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!authUser || !condoId || !exchangeRate || !totalAmount) return;
         setIsSubmitting(true);
-
         try {
             const beneficiaries = beneficiaryRows.map(row => ({ ownerId: row.owner!.id, ownerName: row.owner!.name, ...(row.selectedProperty && { street: row.selectedProperty.street, house: row.selectedProperty.house }), amount: Number(row.amount) }));
             const paymentData = { reportedBy: authUser.uid, beneficiaries, beneficiaryIds: beneficiaries.map(b=>b.ownerId), totalAmount: Number(totalAmount), exchangeRate, paymentDate: Timestamp.fromDate(paymentDate!), paymentMethod, bank: isCashPayment ? 'Efectivo' : (bank === 'Otro' ? otherBank : bank), reference: isCashPayment ? 'EFECTIVO' : reference, receiptUrl: receiptImage, status: 'pendiente', reportedAt: serverTimestamp() };
-            
             await addDoc(collection(db, "condominios", condoId, "payments"), paymentData);
             toast({ title: 'Pago Reportado' });
             setBeneficiaryRows([{ id: Date.now().toString(), owner: null, searchTerm: '', amount: '', selectedProperty: null }]);
-            setTotalAmount('');
-            setReference('');
-            setReceiptImage(null);
-
-        } catch (error) {
-            toast({ variant: "destructive", title: "Error" });
-        } finally {
-            setIsSubmitting(false);
-        }
+            setTotalAmount(''); setReference(''); setReceiptImage(null);
+        } catch (error) { toast({ variant: "destructive", title: "Error" }); } 
+        finally { setIsSubmitting(false); }
     };
-
     return (
         <Card>
             <CardHeader><CardTitle>Reportar Pago Manualmente</CardTitle></CardHeader>
@@ -796,17 +697,7 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
                     <div className="grid md:grid-cols-2 gap-6">
                         <div className="space-y-2"><Label>Fecha</Label><Popover><PopoverTrigger asChild><Button variant={"outline"} className="w-full justify-start text-left"><CalendarIcon className="mr-2 h-4 w-4" />{paymentDate ? format(paymentDate, "PPP", { locale: es }) : <span>Seleccione</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar mode="single" selected={paymentDate} onSelect={setPaymentDate} locale={es} /></PopoverContent></Popover></div>
                         <div className="space-y-2"><Label>Tasa</Label><Input type="number" value={exchangeRate || ''} readOnly className="bg-muted" /><p className="text-[10px] text-muted-foreground">{exchangeRateMessage}</p></div>
-                        <div className="space-y-2">
-                            <Label>Método</Label>
-                            <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}>
-                                <SelectTrigger><SelectValue/></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="transferencia">Transferencia</SelectItem>
-                                    <SelectItem value="movil">Pago Móvil</SelectItem>
-                                    <SelectItem value="efectivo_bs">Efectivo Bs.</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
+                        <div className="space-y-2"><Label>Método</Label><Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="transferencia">Transferencia</SelectItem><SelectItem value="movil">Pago Móvil</SelectItem><SelectItem value="efectivo_bs">Efectivo Bs.</SelectItem></SelectContent></Select></div>
                         <div className="space-y-2"><Label>Banco</Label><Button type="button" variant="outline" className="w-full justify-start text-left font-normal" onClick={() => setIsBankModalOpen(true)} disabled={isCashPayment}>{isCashPayment ? 'No Aplica' : (bank || "Seleccionar...")}</Button></div>
                         <div className="space-y-2"><Label>Referencia</Label><Input value={reference} onChange={(e) => setReference(e.target.value.replace(/\D/g, ''))} disabled={isCashPayment}/></div>
                         <div className="space-y-2"><Label>Monto Bs.</Label><Input type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} /></div>
@@ -834,8 +725,7 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
     );
 }
 
-
-// --- COMPONENT: PAYMENT CALCULATOR (ADMIN) ---
+// --- COMPONENT: PAYMENT CALCULATOR ---
 function PaymentCalculatorComponent({ condoId }: { condoId: string }) {
     const { toast } = useToast();
     const { user: authUser } = useAuth();
@@ -847,9 +737,7 @@ function PaymentCalculatorComponent({ condoId }: { condoId: string }) {
     const [loadingDebts, setLoadingDebts] = useState(false);
     const [activeRate, setActiveRate] = useState(0);
     const [condoFee, setCondoFee] = useState(0);
-
     const ownersCollectionName = condoId === 'condo_01' ? 'owners' : 'propietarios';
-
     useEffect(() => {
         if (!condoId) { setLoadingOwners(false); return; }
         const q = query(collection(db, "condominios", condoId, ownersCollectionName), where("role", "==", "propietario"));
@@ -860,7 +748,6 @@ function PaymentCalculatorComponent({ condoId }: { condoId: string }) {
         });
         return () => unsubscribe();
     }, [condoId, ownersCollectionName]);
-
     useEffect(() => {
         if (!selectedOwner || !condoId) { setOwnerDebts([]); return; }
         setLoadingDebts(true);
@@ -874,7 +761,6 @@ function PaymentCalculatorComponent({ condoId }: { condoId: string }) {
                 setActiveRate(activeRateObj?.rate || (rates[0]?.rate) || 0);
             }
         });
-
         const debtsQuery = query(collection(db, "condominios", condoId, "debts"), where("ownerId", "==", selectedOwner.id));
         const debtsUnsubscribe = onSnapshot(debtsQuery, (snapshot) => {
             const debtsData: Debt[] = [];
@@ -884,12 +770,7 @@ function PaymentCalculatorComponent({ condoId }: { condoId: string }) {
         });
         return () => { settingsUnsubscribe(); debtsUnsubscribe(); };
     }, [selectedOwner, condoId]);
-
-    const filteredOwners = useMemo(() => {
-        if (!searchTerm) return [];
-        return allOwners.filter(owner => owner.name?.toLowerCase().includes(searchTerm.toLowerCase()));
-    }, [searchTerm, allOwners]);
-
+    const filteredOwners = useMemo(() => { if (!searchTerm) return []; return allOwners.filter(owner => owner.name?.toLowerCase().includes(searchTerm.toLowerCase())); }, [searchTerm, allOwners]);
     if (!selectedOwner) {
         return (
             <Card>
@@ -907,7 +788,6 @@ function PaymentCalculatorComponent({ condoId }: { condoId: string }) {
             </Card>
         )
     }
-
     return (
         <div>
             <Button variant="outline" onClick={() => setSelectedOwner(null)} className="mb-4"><ArrowLeft className="mr-2 h-4 w-4"/>Cambiar</Button>
@@ -916,14 +796,11 @@ function PaymentCalculatorComponent({ condoId }: { condoId: string }) {
     );
 }
 
-
-// --- UI for Calculator (reused) ---
+// --- UI for Calculator ---
 function PaymentCalculatorUI({ owner, debts, activeRate, condoFee, condoId, showReportButton = true }: { owner: any; debts: Debt[]; activeRate: number; condoFee: number, condoId: string | null, showReportButton?: boolean }) {
     const [selectedPendingDebts, setSelectedPendingDebts] = useState<string[]>([]);
     const [selectedAdvanceMonths, setSelectedAdvanceMonths] = useState<string[]>([]);
-    const router = useRouter();
     const now = new Date();
-    
     const pendingDebts = useMemo(() => debts.filter(d => d.status === 'pending' || d.status === 'vencida').sort((a,b) => a.year - b.year || a.month - b.month), [debts]);
     const futureMonths = useMemo(() => {
         const paidAdvanceMonths = debts.filter(d => d.status === 'paid' && d.description.includes('Adelantado')).map(d => `${d.year}-${String(d.month).padStart(2, '0')}`);
@@ -933,7 +810,6 @@ function PaymentCalculatorUI({ owner, debts, activeRate, condoFee, condoId, show
             return { value, label: format(date, 'MMMM yyyy', { locale: es }), disabled: paidAdvanceMonths.includes(value) };
         });
     }, [debts, now]);
-
     const paymentCalculator = useMemo(() => {
         const dueMonthsTotalUSD = pendingDebts.filter(d => selectedPendingDebts.includes(d.id)).reduce((sum, debt) => sum + debt.amountUSD, 0);
         const advanceMonthsTotalUSD = selectedAdvanceMonths.length * condoFee;
@@ -941,43 +817,14 @@ function PaymentCalculatorUI({ owner, debts, activeRate, condoFee, condoId, show
         const totalToPay = Math.max(0, totalDebtBs - (owner.balance || 0));
         return { totalToPay, hasSelection: selectedPendingDebts.length > 0 || selectedAdvanceMonths.length > 0, dueMonthsCount: selectedPendingDebts.length, advanceMonthsCount: selectedAdvanceMonths.length, totalDebtBs, balanceInFavor: owner.balance || 0, condoFee };
     }, [selectedPendingDebts, selectedAdvanceMonths, pendingDebts, activeRate, condoFee, owner]);
-    
     return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
             <div className="lg:col-span-2 space-y-4">
-                <Card>
-                    <CardHeader><CardTitle>Deudas Pendientes</CardTitle></CardHeader>
-                    <CardContent className="p-0">
-                       <Table>
-                            <TableHeader><TableRow><TableHead className="w-[50px] text-center">Pagar</TableHead><TableHead>Período</TableHead><TableHead>Concepto</TableHead><TableHead className="text-right">Monto (Bs.)</TableHead></TableRow></TableHeader>
-                            <TableBody>
-                                {pendingDebts.length === 0 ? <TableRow><TableCell colSpan={4} className="h-24 text-center">Sin deudas.</TableCell></TableRow> : 
-                                 pendingDebts.map((debt) => (
-                                    <TableRow key={debt.id}>
-                                        <TableCell className="text-center"><Checkbox onCheckedChange={() => setSelectedPendingDebts(p => p.includes(debt.id) ? p.filter(id=>id!==debt.id) : [...p, debt.id])} checked={selectedPendingDebts.includes(debt.id)} /></TableCell>
-                                        <TableCell className="font-medium">{MONTHS_LOCALE[debt.month]} {debt.year}</TableCell>
-                                        <TableCell>{debt.description}</TableCell>
-                                        <TableCell className="text-right">Bs. {formatCurrency(debt.amountUSD * activeRate)}</TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader><CardTitle>Meses Adelantados</CardTitle></CardHeader>
-                    <CardContent><div className="grid grid-cols-2 gap-4">{futureMonths.map(month => <Button key={month.value} type="button" variant={selectedAdvanceMonths.includes(month.value) ? 'default' : 'outline'} className="flex items-center gap-2" onClick={() => setSelectedAdvanceMonths(p => p.includes(month.value) ? p.filter(m=>m!==month.value) : [...p, month.value])} disabled={month.disabled}>{selectedAdvanceMonths.includes(month.value) && <Check className="h-4 w-4" />} {month.label}</Button>)}</div></CardContent>
-                </Card>
+                <Card><CardHeader><CardTitle>Deudas Pendientes</CardTitle></CardHeader><CardContent className="p-0"><Table><TableHeader><TableRow><TableHead className="w-[50px] text-center">Pagar</TableHead><TableHead>Período</TableHead><TableHead>Concepto</TableHead><TableHead className="text-right">Monto (Bs.)</TableHead></TableRow></TableHeader><TableBody>{pendingDebts.length === 0 ? <TableRow><TableCell colSpan={4} className="h-24 text-center">Sin deudas.</TableCell></TableRow> : pendingDebts.map((debt) => (<TableRow key={debt.id}><TableCell className="text-center"><Checkbox onCheckedChange={() => setSelectedPendingDebts(p => p.includes(debt.id) ? p.filter(id=>id!==debt.id) : [...p, debt.id])} checked={selectedPendingDebts.includes(debt.id)} /></TableCell><TableCell className="font-medium">{MONTHS_LOCALE[debt.month]} {debt.year}</TableCell><TableCell>{debt.description}</TableCell><TableCell className="text-right">Bs. {formatCurrency(debt.amountUSD * activeRate)}</TableCell></TableRow>))}</TableBody></Table></CardContent></Card>
+                <Card><CardHeader><CardTitle>Meses Adelantados</CardTitle></CardHeader><CardContent><div className="grid grid-cols-2 gap-4">{futureMonths.map(month => <Button key={month.value} type="button" variant={selectedAdvanceMonths.includes(month.value) ? 'default' : 'outline'} className="flex items-center gap-2" onClick={() => setSelectedAdvanceMonths(p => p.includes(month.value) ? p.filter(m=>m!==month.value) : [...p, month.value])} disabled={month.disabled}>{selectedAdvanceMonths.includes(month.value) && <Check className="h-4 w-4" />} {month.label}</Button>)}</div></CardContent></Card>
             </div>
             <div className="lg:sticky lg:top-20">
-                 {paymentCalculator.hasSelection && <Card>
-                     <CardHeader><CardTitle className="flex items-center"><Calculator className="mr-2 h-5 w-5"/> Resumen</CardTitle></CardHeader>
-                    <CardContent className="space-y-3">
-                        <div className="flex justify-between text-lg"><span>Sub-Total Deuda:</span><span>Bs. {formatCurrency(paymentCalculator.totalDebtBs)}</span></div>
-                        <div className="flex justify-between text-md text-green-500"><span>Saldo a Favor:</span><span>- Bs. {formatCurrency(paymentCalculator.balanceInFavor)}</span></div>
-                        <hr className="my-2"/><div className="flex justify-between items-center text-2xl font-bold"><span>TOTAL:</span><span className="text-primary">Bs. {formatCurrency(paymentCalculator.totalToPay)}</span></div>
-                    </CardContent>
-                </Card>}
+                 {paymentCalculator.hasSelection && <Card><CardHeader><CardTitle className="flex items-center"><Calculator className="mr-2 h-5 w-5"/> Resumen</CardTitle></CardHeader><CardContent className="space-y-3"><div className="flex justify-between text-lg"><span>Sub-Total Deuda:</span><span>Bs. {formatCurrency(paymentCalculator.totalDebtBs)}</span></div><div className="flex justify-between text-md text-green-500"><span>Saldo a Favor:</span><span>- Bs. {formatCurrency(paymentCalculator.balanceInFavor)}</span></div><hr className="my-2"/><div className="flex justify-between items-center text-2xl font-bold"><span>TOTAL:</span><span className="text-primary">Bs. {formatCurrency(paymentCalculator.totalToPay)}</span></div></CardContent></Card>}
             </div>
         </div>
     );
@@ -987,39 +834,20 @@ function PaymentsPage() {
     const searchParams = useSearchParams();
     const condoId = useParams()?.condoId as string;
     const router = useRouter();
-
     const activeTab = searchParams?.get('tab') ?? 'verify';
-
-    const handleTabChange = (value: string) => {
-        router.push(`/${condoId}/admin/payments?tab=${value}`, { scroll: false });
-    };
-
+    const handleTabChange = (value: string) => { router.push(`/${condoId}/admin/payments?tab=${value}`, { scroll: false }); };
     return (
         <div className="space-y-6">
             <div className="mb-10">
-                <h2 className="text-4xl font-black text-foreground uppercase tracking-tighter italic drop-shadow-sm">
-                    Gestión de <span className="text-primary">Pagos</span>
-                </h2>
+                <h2 className="text-4xl font-black text-foreground uppercase tracking-tighter italic drop-shadow-sm">Gestión de <span className="text-primary">Pagos</span></h2>
                 <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
-                <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">
-                   Verificación de pagos, reportes manuales y calculadora de cuotas.
-                </p>
+                <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">Verificación de pagos, reportes manuales y calculadora de cuotas.</p>
             </div>
             <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-                 <TabsList className="grid w-full grid-cols-3">
-                    <TabsTrigger value="verify">Verificación</TabsTrigger>
-                    <TabsTrigger value="report">Reporte Manual</TabsTrigger>
-                    <TabsTrigger value="calculator">Calculadora</TabsTrigger>
-                </TabsList>
-                <TabsContent value="verify" className="mt-6">
-                    <VerificationComponent condoId={condoId} />
-                </TabsContent>
-                <TabsContent value="report" className="mt-6">
-                    <ReportPaymentComponent condoId={condoId} />
-                </TabsContent>
-                <TabsContent value="calculator" className="mt-6">
-                    <PaymentCalculatorComponent condoId={condoId} />
-                </TabsContent>
+                 <TabsList className="grid w-full grid-cols-3"><TabsTrigger value="verify">Verificación</TabsTrigger><TabsTrigger value="report">Reporte Manual</TabsTrigger><TabsTrigger value="calculator">Calculadora</TabsTrigger></TabsList>
+                <TabsContent value="verify" className="mt-6"><VerificationComponent condoId={condoId} /></TabsContent>
+                <TabsContent value="report" className="mt-6"><ReportPaymentComponent condoId={condoId} /></TabsContent>
+                <TabsContent value="calculator" className="mt-6"><PaymentCalculatorComponent condoId={condoId} /></TabsContent>
             </Tabs>
         </div>
     );
@@ -1031,9 +859,5 @@ const MONTHS_LOCALE: { [key: number]: string } = {
 };
 
 export default function PaymentsPageWrapper() {
-    return (
-        <Suspense fallback={<div className="flex h-64 items-center justify-center"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>}>
-            <PaymentsPage />
-        </Suspense>
-    );
+    return (<Suspense fallback={<div className="flex h-64 items-center justify-center"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>}><PaymentsPage /></Suspense>);
 }

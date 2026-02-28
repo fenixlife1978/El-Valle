@@ -1,9 +1,8 @@
-
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, Timestamp, where, query, orderBy, getDocs, writeBatch, doc } from 'firebase/firestore';
+import { collection, onSnapshot, Timestamp, where, query, orderBy, getDocs, runTransaction, doc } from 'firebase/firestore';
 import { Download, RefreshCw, Landmark, Coins, Wallet, History, Zap, Loader2 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -155,7 +154,6 @@ const AccountingPage = () => {
             const fromDate = startOfMonth(new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1));
             const toDate = endOfMonth(fromDate);
 
-            // 1. Obtener pagos aprobados del mes
             const paymentsSnap = await getDocs(query(
                 collection(db, 'condominios', workingCondoId, 'payments'),
                 where('status', '==', 'aprobado'),
@@ -163,48 +161,60 @@ const AccountingPage = () => {
                 where('paymentDate', '<=', toDate)
             ));
 
-            const batch = writeBatch(db);
-            let repairsCount = 0;
+            await runTransaction(db, async (transaction) => {
+                const accountsQuerySnap = await getDocs(collection(db, 'condominios', workingCondoId, 'cuentas'));
+                const currentAccounts = accountsQuerySnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+                
+                let repairsCount = 0;
 
-            for (const pDoc of paymentsSnap.docs) {
-                const p = pDoc.data();
-                const exists = allTransactions.some(tx => tx.sourcePaymentId === pDoc.id);
+                for (const pDoc of paymentsSnap.docs) {
+                    const p = pDoc.data();
+                    const exists = allTransactions.some(tx => tx.sourcePaymentId === pDoc.id);
 
-                if (!exists) {
-                    // Determinar cuenta destino
-                    let targetName = "";
-                    if (['movil', 'transferencia'].includes(p.paymentMethod)) targetName = "BANCO DE VENEZUELA";
-                    else if (p.paymentMethod === 'efectivo_bs') targetName = "CAJA PRINCIPAL";
+                    if (!exists) {
+                        let targetName = "";
+                        if (['movil', 'transferencia'].includes(p.paymentMethod)) targetName = "BANCO DE VENEZUELA";
+                        else if (['efectivo_bs', 'efectivo'].includes(p.paymentMethod)) targetName = "CAJA PRINCIPAL";
 
-                    const account = accounts.find(a => a.nombre === targetName);
-                    if (account) {
-                        const txRef = doc(collection(db, 'condominios', workingCondoId, 'transacciones'));
-                        batch.set(txRef, {
-                            monto: p.totalAmount,
-                            tipo: 'ingreso',
-                            cuentaId: account.id,
-                            nombreCuenta: targetName,
-                            descripcion: `SINCRONIZACIÓN: PAGO DE ${p.beneficiaries?.[0]?.ownerName || 'PROPIETARIO'}`,
-                            referencia: p.reference,
-                            fecha: p.paymentDate,
-                            sourcePaymentId: pDoc.id,
-                            createdAt: Timestamp.now(),
-                            createdBy: user?.email
-                        });
-                        repairsCount++;
+                        const account = currentAccounts.find((a: any) => a.nombre?.toUpperCase().trim() === targetName);
+                        if (account) {
+                            const txRef = doc(collection(db, 'condominios', workingCondoId, 'transacciones'));
+                            transaction.set(txRef, {
+                                monto: p.totalAmount,
+                                tipo: 'ingreso',
+                                cuentaId: account.id,
+                                nombreCuenta: account.nombre,
+                                descripcion: `SINCRONIZACIÓN: PAGO DE ${p.beneficiaries?.[0]?.ownerName || 'PROPIETARIO'}`,
+                                referencia: p.reference,
+                                fecha: p.paymentDate,
+                                sourcePaymentId: pDoc.id,
+                                createdAt: Timestamp.now(),
+                                createdBy: user?.email
+                            });
+
+                            const accRef = doc(db, 'condominios', workingCondoId, 'cuentas', account.id);
+                            const newBalance = (account.saldoActual || 0) + p.totalAmount;
+                            transaction.update(accRef, { saldoActual: newBalance });
+                            
+                            account.saldoActual = newBalance;
+                            repairsCount++;
+                        }
                     }
                 }
-            }
 
-            if (repairsCount > 0) {
-                await batch.commit();
-                toast({ title: "Sincronización Exitosa", description: `Se han generado ${repairsCount} asientos contables faltantes.` });
-            } else {
-                toast({ title: "Todo al día", description: "No se detectaron discrepancias en este período." });
-            }
+                if (repairsCount === 0) {
+                    throw "no_repairs_needed";
+                }
+            });
+
+            toast({ title: "Sincronización Exitosa", description: "Se han generado los asientos contables y actualizado los saldos físicos." });
         } catch (e) {
-            console.error(e);
-            toast({ variant: 'destructive', title: "Error", description: "No se pudo completar la sincronización." });
+            if (e === "no_repairs_needed") {
+                toast({ title: "Todo al día", description: "No se detectaron discrepancias en este período." });
+            } else {
+                console.error(e);
+                toast({ variant: 'destructive', title: "Error", description: "No se pudo completar la sincronización." });
+            }
         } finally {
             setIsSyncing(false);
         }
