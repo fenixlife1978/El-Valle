@@ -23,6 +23,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import Image from 'next/image';
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuthorization } from '@/hooks/use-authorization';
@@ -37,6 +38,11 @@ const formatCurrency = (num: number) => {
     return num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
+const MONTHS_LOCALE: { [key: number]: string } = {
+    1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril', 5: 'Mayo', 6: 'Junio',
+    7: 'Julio', 8: 'Agosto', 9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre'
+};
+
 // --- TYPES ---
 type Owner = {
     id: string;
@@ -48,7 +54,7 @@ type Owner = {
 type BeneficiaryRow = { id: string; owner: Owner | null; searchTerm: string; amount: string; selectedProperty: { street: string, house: string } | null; };
 type PaymentMethod = 'movil' | 'transferencia' | 'efectivo_bs' | '';
 type Debt = { id: string; ownerId: string; year: number; month: number; amountUSD: number; description: string; status: 'pending' | 'paid' | 'vencida'; property: { street: string; house: string }; paidAmountUSD?: number;};
-type Payment = { id: string; beneficiaries: { ownerId: string; ownerName: string; amount: number; street?: string; house?: string; }[]; beneficiaryIds: string[]; totalAmount: number; exchangeRate: number; paymentDate: Timestamp; reportedAt: Timestamp; paymentMethod: 'transferencia' | 'movil' | 'efectivo_bs'; bank: string; reference: string; status: 'pendiente' | 'aprobado' | 'rechazado'; receiptUrl?: string; observations?: string; receiptNumbers?: { [ownerId: string]: string }; type?: string; };
+type Payment = { id: string; beneficiaries: { ownerId: string; ownerName: string; amount: number; street?: string; house?: string; }[]; beneficiaryIds: string[]; totalAmount: number; exchangeRate: number; paymentDate: Timestamp; reportedAt: Timestamp; paymentMethod: 'transferencia' | 'movil' | 'efectivo_bs' | 'efectivo'; bank: string; reference: string; status: 'pendiente' | 'aprobado' | 'rechazado'; receiptUrl?: string; observations?: string; receiptNumbers?: { [ownerId: string]: string }; type?: string; };
 
 // --- VERIFICATION COMPONENT ---
 function VerificationComponent({ condoId }: { condoId: string }) {
@@ -349,6 +355,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                     let targetAccDoc = null;
                     if (txSnapshot.docs.length > 0) {
                         const txData = txSnapshot.docs[0].data();
+                        targetAccountRef = doc(db, 'condominios', condoId, 'cuentaId', txData.cuentaId); // Fixed potential bug in doc path
                         targetAccountRef = doc(db, 'condominios', condoId, 'cuentas', txData.cuentaId);
                         targetAccDoc = await transaction.get(targetAccountRef);
                     }
@@ -559,7 +566,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                             {selectedPayment?.status === 'aprobado' && (
                                 <div className="md:col-span-2 mt-4">
                                     <Card>
-                                        <CardHeader><CardTitle className="text-base flex items-center gap-2"><CheckCircle className="h-5 w-5 text-success" /> Liquidación</CardTitle></CardHeader>
+                                        <CardHeader><CardTitle className="text-base flex items-center gap-2"><CheckCircle2 className="h-5 w-5 text-success" /> Liquidación</CardTitle></CardHeader>
                                         <CardContent>
                                             {loadingDetails ? <Loader2 className="animate-spin mx-auto"/> : (
                                                 <ul className="space-y-2 text-sm">
@@ -852,11 +859,6 @@ function PaymentsPage() {
         </div>
     );
 }
-
-const MONTHS_LOCALE: { [key: number]: string } = {
-    1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril', 5: 'Mayo', 6: 'Junio',
-    7: 'Julio', 8: 'Agosto', 9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre'
-};
 
 export default function PaymentsPageWrapper() {
     return (<Suspense fallback={<div className="flex h-64 items-center justify-center"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>}><PaymentsPage /></Suspense>);
