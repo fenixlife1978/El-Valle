@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
@@ -719,7 +718,35 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="space-y-2">
                                         {!row.owner ? (<><div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Buscar por nombre..." className="pl-9" value={row.searchTerm} onChange={(e) => updateBeneficiaryRow(row.id, { searchTerm: e.target.value })} /></div>{row.searchTerm.length >= 2 && <Card className="border rounded-md"><ScrollArea className="h-32">{getFilteredOwners(row.searchTerm).map(owner => (<div key={owner.id} onClick={() => handleOwnerSelect(row.id, owner)} className="p-2 hover:bg-muted cursor-pointer border-b last:border-b-0"><p className="font-medium text-sm">{owner.name}</p></div>))}</ScrollArea></Card>}</>)
-                                        : (<div className="p-3 bg-background rounded-md flex items-center justify-between"><div><p className="font-semibold">{row.owner.name}</p></div><Button variant="ghost" size="icon" onClick={() => removeBeneficiaryRow(row.id)} disabled={beneficiaryRows.length === 1}><XCircle className="h-5 w-5 text-destructive" /></Button></div>)}
+                                        : (
+                                            <div className="p-3 bg-background rounded-md space-y-3">
+                                                <div className="flex items-center justify-between">
+                                                    <p className="font-semibold text-slate-900">{row.owner.name}</p>
+                                                    <Button variant="ghost" size="icon" onClick={() => removeBeneficiaryRow(row.id)} disabled={beneficiaryRows.length === 1}><XCircle className="h-5 w-5 text-destructive" /></Button>
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <Label className="text-[10px] uppercase font-bold text-slate-500">Asignar a Propiedad</Label>
+                                                    <Select 
+                                                        onValueChange={(v) => {
+                                                            const found = row.owner?.properties.find(p => `${p.street}-${p.house}` === v);
+                                                            updateBeneficiaryRow(row.id, { selectedProperty: found || null });
+                                                        }} 
+                                                        value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''}
+                                                    >
+                                                        <SelectTrigger className="h-9 bg-slate-50 border-slate-200 text-slate-900">
+                                                            <SelectValue placeholder="Seleccione propiedad..." />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            {row.owner.properties.map((p, pIdx) => (
+                                                                <SelectItem key={`${p.street}-${p.house}-${pIdx}`} value={`${p.street}-${p.house}`}>
+                                                                    {p.street} - {p.house}
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="space-y-2"><Input type="number" placeholder="Monto Bs." value={row.amount} onChange={(e) => updateBeneficiaryRow(row.id, { amount: e.target.value })} disabled={loading || !row.owner} /></div>
                                 </div>

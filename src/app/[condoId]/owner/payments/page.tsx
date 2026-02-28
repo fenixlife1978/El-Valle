@@ -72,15 +72,17 @@ function ReportPaymentComponent() {
 
     const isCashPayment = paymentMethod === 'efectivo_bs';
 
+    const ownersCollectionName = condoId === 'condo_01' ? 'owners' : 'propietarios';
+
     useEffect(() => {
         if (!condoId) return;
-        const q = query(collection(db, "condominios", condoId, "owners"), where("role", "==", "propietario"));
+        const q = query(collection(db, "condominios", condoId, ownersCollectionName), where("role", "==", "propietario"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const ownersData: Owner[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner));
             setAllOwners(ownersData.sort((a, b) => (a.name || '').localeCompare(b.name || '')));
         });
         return () => unsubscribe();
-    }, [condoId]);
+    }, [condoId, ownersCollectionName]);
     
     useEffect(() => {
          if (authOwnerData && authUser) {
@@ -275,12 +277,12 @@ function ReportPaymentComponent() {
             
             const paymentRef = await addDoc(collection(db, "condominios", condoId, "payments"), paymentData);
             
-            const q = query(collection(db, 'condominios', condoId, 'owners'), where('role', '==', 'administrador'));
+            const q = query(collection(db, 'condominios', condoId, ownersCollectionName), where('role', '==', 'administrador'));
             const adminSnapshot = await getDocs(q);
 
             const batch = writeBatch(db);
             adminSnapshot.forEach(adminDoc => {
-                const notificationsRef = doc(collection(db, `condominios/${condoId}/owners/${adminDoc.id}/notifications`));
+                const notificationsRef = doc(collection(db, `condominios/${condoId}/${ownersCollectionName}/${adminDoc.id}/notifications`));
                 batch.set(notificationsRef, {
                     title: "Nuevo Pago Reportado",
                     body: `${authOwnerData?.name || 'Un propietario'} ha reportado un nuevo pago por Bs. ${totalAmount}.`,
@@ -399,45 +401,38 @@ function ReportPaymentComponent() {
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <div className="space-y-2"><Label htmlFor={`search-${row.id}`}>Beneficiario {index + 1}</Label>
                                                 {!row.owner ? (<><div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input id={`search-${row.id}`} placeholder="Buscar por nombre..." className="pl-9" value={row.searchTerm} onChange={(e) => updateBeneficiaryRow(row.id, { searchTerm: e.target.value })} disabled={loading} /></div>{row.searchTerm.length >= 2 && getFilteredOwners(row.searchTerm).length > 0 && <Card className="border rounded-md"><ScrollArea className="h-32">{getFilteredOwners(row.searchTerm).map(owner => (<div key={owner.id} onClick={() => handleOwnerSelect(row.id, owner)} className="p-2 hover:bg-muted cursor-pointer border-b last:border-b-0"><p className="font-medium text-sm">{owner.name}</p></div>))}</ScrollArea></Card>}</>)
-                                                : (<div className="p-3 bg-background rounded-md flex items-center justify-between"><div><p className="font-semibold text-primary">{row.owner.name}</p></div><Button variant="ghost" size="icon" onClick={() => removeBeneficiaryRow(row.id)} disabled={loading || beneficiaryRows.length === 1}><XCircle className="h-5 w-5 text-destructive" /></Button></div>)}
+                                                : (
+                                                    <div className="p-3 bg-background rounded-md space-y-3">
+                                                        <div className="flex items-center justify-between">
+                                                            <p className="font-semibold text-primary">{row.owner.name}</p>
+                                                            <Button variant="ghost" size="icon" onClick={() => removeBeneficiaryRow(row.id)} disabled={loading || beneficiaryRows.length === 1}><XCircle className="h-5 w-5 text-destructive" /></Button>
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                            <Label className="text-[10px] uppercase font-bold text-slate-500">Asignar a Propiedad</Label>
+                                                            <Select 
+                                                                onValueChange={(v) => {
+                                                                    const found = row.owner?.properties.find(p => `${p.street}-${p.house}` === v);
+                                                                    updateBeneficiaryRow(row.id, { selectedProperty: found || null });
+                                                                }} 
+                                                                value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''}
+                                                            >
+                                                                <SelectTrigger className="rounded-xl h-10 bg-slate-50 border-slate-200 text-slate-900">
+                                                                    <SelectValue placeholder="Seleccione propiedad..." />
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                    {row.owner.properties.map((p, pIdx) => (
+                                                                        <SelectItem key={`${p.street}-${p.house}-${pIdx}`} value={`${p.street}-${p.house}`}>
+                                                                            {p.street} - {p.house}
+                                                                        </SelectItem>
+                                                                    ))}
+                                                                </SelectContent>
+                                                            </Select>
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
                                             <div className="space-y-2"><Label htmlFor={`amount-${row.id}`}>Monto Asignado (Bs.)</Label><Input id={`amount-${row.id}`} type="number" placeholder="0.00" value={row.amount} onChange={(e) => updateBeneficiaryRow(row.id, { amount: e.target.value })} disabled={loading || !row.owner} /></div>
                                         </div>
-                                        {row.owner && (
-                                          <div className="mt-4 space-y-2">
-                                            <Label>Asignar a Propiedad</Label>
-                                            <Select 
-                                              onValueChange={(v) => {
-                                                const props = Array.isArray(row.owner?.properties) ? row.owner.properties : [];
-                                                const found = props.find(p => `${p.street}-${p.house}` === v);
-                                                updateBeneficiaryRow(row.id, { selectedProperty: found || null });
-                                              }} 
-                                              value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''} 
-                                              disabled={loading || !row.owner || !Array.isArray(row.owner.properties)}
-                                            >
-                                              <SelectTrigger className="rounded-xl">
-                                                <SelectValue 
-                                                  placeholder={
-                                                    Array.isArray(row.owner.properties) && row.owner.properties.length > 0
-                                                      ? "Seleccione una propiedad..." 
-                                                      : "Usuario sin propiedades"
-                                                  } 
-                                                />
-                                              </SelectTrigger>
-                                              <SelectContent>
-                                                {Array.isArray(row.owner?.properties) && row.owner.properties.length > 0 ? (
-                                                  row.owner.properties.map((p, pIdx) => (
-                                                    <SelectItem key={`${p.street}-${p.house}-${pIdx}`} value={`${p.street}-${p.house}`}>
-                                                      {`${p.street} - ${p.house}`}
-                                                    </SelectItem>
-                                                  ))
-                                                ) : (
-                                                  <SelectItem value="none" disabled>No hay propiedades disponibles</SelectItem>
-                                                )}
-                                              </SelectContent>
-                                            </Select>
-                                          </div>
-                                        )}
                                         {beneficiaryRows.length > 1 && <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive" onClick={() => removeBeneficiaryRow(row.id)} disabled={loading}><Trash2 className="h-4 w-4"/></Button>}
                                     </Card>
                                 ))}
