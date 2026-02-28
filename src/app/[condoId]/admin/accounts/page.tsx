@@ -14,7 +14,8 @@ import {
     where,
     addDoc,
     serverTimestamp,
-    writeBatch
+    writeBatch,
+    deleteDoc
 } from 'firebase/firestore';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -34,7 +35,8 @@ import {
     Building2,
     CheckCircle2,
     BadgeInfo,
-    Info
+    Info,
+    AlertTriangle
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -92,6 +94,8 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
     const [isAccountDialogOpen, setIsAccountDialogOpen] = useState(false);
     const [isTransactionDialogOpen, setIsTransactionDialogOpen] = useState(false);
     const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false);
+    const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+    const [accountToDelete, setAccountToDelete] = useState<Account | null>(null);
 
     // Form States
     const [accountForm, setAccountForm] = useState({ nombre: '', tipo: 'banco' as any, saldoInicial: '0' });
@@ -155,6 +159,21 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
             setAccountForm({ nombre: '', tipo: 'banco', saldoInicial: '0' });
         } catch (e) {
             toast({ variant: 'destructive', title: "Error al crear cuenta" });
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleDeleteAccount = async () => {
+        if (!accountToDelete || !condoId) return;
+        setIsSubmitting(true);
+        try {
+            await deleteDoc(doc(db, 'condominios', condoId, 'cuentas', accountToDelete.id));
+            toast({ title: "Cuenta eliminada correctamente" });
+            setIsDeleteDialogOpen(false);
+            setAccountToDelete(null);
+        } catch (e) {
+            toast({ variant: 'destructive', title: "Error al eliminar la cuenta" });
         } finally {
             setIsSubmitting(false);
         }
@@ -361,7 +380,21 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                                         {acc.tipo === 'banco' ? <Landmark className="h-3 w-3 text-sky-500" /> : <Wallet className="h-3 w-3 text-emerald-500" />}
                                         <span className="text-slate-500">{acc.tipo}</span>
                                     </span>
-                                    <BadgeInfo className="h-3 w-3 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    <div className="flex gap-1">
+                                        <Button 
+                                            variant="ghost" 
+                                            size="icon" 
+                                            className="h-6 w-6 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setAccountToDelete(acc);
+                                                setIsDeleteDialogOpen(true);
+                                            }}
+                                        >
+                                            <Trash2 className="h-3 w-3" />
+                                        </Button>
+                                        <BadgeInfo className="h-3 w-3 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    </div>
                                 </CardTitle>
                             </CardHeader>
                             <CardContent>
@@ -486,6 +519,29 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                     <DialogFooter>
                         <Button onClick={handleSaveAccount} disabled={isSubmitting} className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black uppercase h-12 rounded-xl">
                             {isSubmitting ? <Loader2 className="animate-spin" /> : "Crear Cuenta"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Eliminar Cuenta */}
+            <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+                <DialogContent className="rounded-[2rem] border-none shadow-2xl bg-white text-slate-900">
+                    <DialogHeader>
+                        <DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-slate-900">¿Eliminar <span className="text-red-500">Cuenta</span>?</DialogTitle>
+                        <DialogDescription className="text-slate-500 font-bold">
+                            Esta acción eliminará la cuenta "{accountToDelete?.nombre}" de forma permanente. 
+                            Las transacciones históricas permanecerán en el sistema pero la cuenta dejará de estar disponible para nuevos movimientos.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-100 rounded-2xl text-red-700">
+                        <AlertTriangle className="h-6 w-6 shrink-0" />
+                        <p className="text-xs font-bold leading-tight uppercase">Atención: Esta operación no se puede deshacer.</p>
+                    </div>
+                    <DialogFooter className="gap-2 mt-4">
+                        <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)} className="rounded-xl h-12 font-bold flex-1 border-slate-200 text-slate-600">Cancelar</Button>
+                        <Button onClick={handleDeleteAccount} disabled={isSubmitting} variant="destructive" className="rounded-xl h-12 font-black uppercase text-[10px] flex-1">
+                            {isSubmitting ? <Loader2 className="animate-spin" /> : "Confirmar Eliminación"}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
