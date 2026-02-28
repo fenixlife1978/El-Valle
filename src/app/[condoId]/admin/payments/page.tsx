@@ -12,11 +12,11 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
-import { Search, CheckCircle, XCircle, Eye, MoreHorizontal, Download, Loader2, Calendar as CalendarIcon, Banknote, UserPlus, CheckCircle2, WalletCards, ArrowLeft, Trash2, Hash, FileText } from 'lucide-react';
+import { Search, CheckCircle, XCircle, Eye, MoreHorizontal, Download, Loader2, Calendar as CalendarIcon, Banknote, UserPlus, CheckCircle2, WalletCards, ArrowLeft, Trash2, Hash, FileText, Save } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn, compressImage } from '@/lib/utils';
-import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc, where, getDocs, Timestamp, runTransaction, updateDoc, deleteDoc, deleteField, orderBy, increment, setDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc, where, getDocs, Timestamp, runTransaction, updateDoc, deleteDoc, increment, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { BankSelectionModal } from '@/components/bank-selection-modal';
@@ -24,12 +24,10 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import Image from 'next/image';
 import { useAuthorization } from '@/hooks/use-authorization';
-import { generatePaymentReceipt } from '@/lib/pdf-generator';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuPortal } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 
 const formatCurrency = (num: number) => {
     if (typeof num !== 'number' || isNaN(num)) return '0,00';
@@ -46,7 +44,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
     const { requestAuthorization } = useAuthorization();
     const { toast } = useToast();
 
-    const [companyInfo, setCompanyInfo] = useState<any | null>(null);
     const [payments, setPayments] = useState<Payment[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -60,8 +57,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
 
     useEffect(() => {
         if (!condoId) return;
-        const settingsRef = doc(db, 'condominios', condoId, 'config', 'mainSettings');
-        onSnapshot(settingsRef, (snap) => { if (snap.exists()) setCompanyInfo(snap.data().companyInfo); });
         const q = query(collection(db, 'condominios', condoId, 'payments'), orderBy('reportedAt', 'desc'));
         return onSnapshot(q, (snapshot) => {
             setPayments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Payment)));
@@ -83,7 +78,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             if (!condoId) return;
             setIsVerifying(true);
             try {
-                // RUTA BLINDADA BANCO DE VENEZUELA
                 const BDV_ACCOUNT_ID = "RdiTtY9ojCuYPRNvB7C3";
                 const CAJA_PRINCIPAL_ID = "CAJA_PRINCIPAL_ID";
                 
@@ -101,10 +95,8 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 const monthId = format(payment.paymentDate.toDate(), 'yyyy-MM');
 
                 await runTransaction(db, async (transaction) => {
-                    const beneficiaryIds = payment.beneficiaries.map(b => b.ownerId);
                     const receiptNumbers: { [ownerId: string]: string } = {};
 
-                    // 1. ACTUALIZAR SALDO A FAVOR DE PROPIETARIOS
                     for (const beneficiary of payment.beneficiaries) {
                         const ownerRef = doc(db, 'condominios', condoId, ownersCollectionName, beneficiary.ownerId);
                         const ownerDoc = await transaction.get(ownerRef);
@@ -115,7 +107,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         receiptNumbers[beneficiary.ownerId] = `REC-${Date.now()}-${beneficiary.ownerId.slice(-4)}`;
                     }
 
-                    // 2. AFECTACIÓN ATÓMICA DE TESORERÍA
                     if (targetAccountId) {
                         const accountRef = doc(db, 'condominios', condoId, 'cuentas', targetAccountId);
                         const accSnap = await transaction.get(accountRef);
@@ -131,7 +122,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                             transaction.update(accountRef, { saldoActual: increment(payment.totalAmount) });
                         }
 
-                        // 3. ACTUALIZAR HITO FINANCIERO MENSUAL
                         const statsRef = doc(db, 'condominios', condoId, 'financial_stats', monthId);
                         transaction.set(statsRef, {
                             periodo: monthId,
@@ -141,7 +131,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                             updatedAt: serverTimestamp()
                         }, { merge: true });
 
-                        // 4. GENERAR ASIENTO EN LIBRO DIARIO
                         const transRef = doc(collection(db, 'condominios', condoId, 'transacciones'));
                         transaction.set(transRef, {
                             monto: payment.totalAmount, 
@@ -157,7 +146,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         });
                     }
 
-                    // 5. CERRAR EL REPORTE DE PAGO
                     transaction.update(doc(db, 'condominios', condoId, 'payments', payment.id), { 
                         status: 'aprobado', 
                         receiptNumbers, 
@@ -165,10 +153,9 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                     });
                 });
 
-                toast({ title: "Pago Validado", description: "El dinero ha sido acreditado en la cuenta real y asentado en libros." });
+                toast({ title: "Pago Validado", description: "Sincronizado en libros bancarios exitosamente." });
                 setSelectedPayment(null);
             } catch (error: any) { 
-                console.error("Error en hito contable:", error);
                 toast({ variant: 'destructive', title: "Falla en Sincronización", description: error.message }); 
             }
             finally { setIsVerifying(false); }
@@ -202,24 +189,20 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 await runTransaction(db, async (transaction) => {
                     const payDoc = await transaction.get(doc(db, 'condominios', condoId, 'payments', paymentToDelete.id));
                     if (payDoc.data()?.status === 'aprobado') {
-                        // Revertir saldos de propietarios
                         for (const ben of paymentToDelete.beneficiaries) {
                             const ownerRef = doc(db, 'condominios', condoId, ownersCollectionName, ben.ownerId);
                             transaction.update(ownerRef, { balance: increment(-ben.amount) });
                         }
                         
-                        // Revertir Tesorería y Estadísticas
                         if (!transSnap.empty) {
                             const tx = transSnap.docs[0].data();
                             transaction.update(doc(db, 'condominios', condoId, 'cuentas', tx.cuentaId), { saldoActual: increment(-paymentToDelete.totalAmount) });
-                            
                             const statsRef = doc(db, 'condominios', condoId, 'financial_stats', monthId);
                             transaction.update(statsRef, {
                                 saldoBancarioReal: increment(tx.nombreCuenta === "BANCO DE VENEZUELA" ? -paymentToDelete.totalAmount : 0),
                                 saldoCajaReal: increment(tx.nombreCuenta === "CAJA PRINCIPAL" ? -paymentToDelete.totalAmount : 0),
                                 totalIngresosMes: increment(-paymentToDelete.totalAmount)
                             });
-                            
                             transSnap.forEach(d => transaction.delete(d.ref));
                         }
                     }
@@ -474,7 +457,12 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
                         <Button type="button" variant="outline" size="sm" onClick={addBeneficiaryRow} className="rounded-xl font-black uppercase text-[10px] border-white/10 text-slate-400 hover:bg-white/5"><UserPlus className="mr-2 h-4 w-4 text-primary"/>Añadir Beneficiario</Button>
                     </div>
                 </CardContent>
-                <CardFooter className="bg-white/5 p-8 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-6"><div className={cn("font-black text-2xl italic tracking-tighter uppercase", balance !== 0 ? 'text-red-500' : 'text-emerald-500')}>Diferencia: Bs. {formatCurrency(balance)}</div><Button type="submit" disabled={isSubmitting || Math.abs(balance) > 0.01} className="h-16 px-12 rounded-2xl bg-primary hover:bg-primary/90 text-slate-900 font-black uppercase italic tracking-widest shadow-2xl shadow-primary/20 transition-all active:scale-95">{isSubmitting ? <Loader2 className="animate-spin mr-2"/> : <Save className="mr-2 h-5 w-5" />} REGISTRAR PAGO Y ASENTAR</Button></CardFooter>
+                <CardFooter className="bg-white/5 p-8 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-6">
+                    <div className={cn("font-black text-2xl italic tracking-tighter uppercase", balance !== 0 ? 'text-red-500' : 'text-emerald-500')}>Diferencia: Bs. {formatCurrency(balance)}</div>
+                    <Button type="submit" disabled={isSubmitting || Math.abs(balance) > 0.01} className="h-16 px-12 rounded-2xl bg-primary hover:bg-primary/90 text-slate-900 font-black uppercase italic tracking-widest shadow-2xl shadow-primary/20 transition-all active:scale-95">
+                        {isSubmitting ? <Loader2 className="animate-spin mr-2"/> : <Save className="mr-2 h-5 w-5" />} REGISTRAR PAGO Y ASENTAR
+                    </Button>
+                </CardFooter>
             </form>
             <BankSelectionModal isOpen={isBankModalOpen} onOpenChange={setIsBankModalOpen} selectedValue={bank} onSelect={(v) => { setBank(v); setIsBankModalOpen(false); }} />
         </Card>
