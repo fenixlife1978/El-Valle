@@ -35,6 +35,12 @@ import Link from 'next/link';
 import { processPaymentLiquidation } from '@/lib/payment-processor';
 
 
+// --- HELPERS ---
+const formatCurrency = (num: number) => {
+    if (typeof num !== 'number' || isNaN(num)) return '0,00';
+    return num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
 // --- TYPES ---
 type Owner = {
     id: string;
@@ -936,8 +942,6 @@ function PaymentCalculatorUI({ owner, debts, activeRate, condoFee, condoId, show
         return { totalToPay, hasSelection: selectedPendingDebts.length > 0 || selectedAdvanceMonths.length > 0, dueMonthsCount: selectedPendingDebts.length, advanceMonthsCount: selectedAdvanceMonths.length, totalDebtBs, balanceInFavor: owner.balance || 0, condoFee };
     }, [selectedPendingDebts, selectedAdvanceMonths, pendingDebts, activeRate, condoFee, owner]);
     
-    const formatCurrency = (num: number) => num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
     return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
             <div className="lg:col-span-2 space-y-4">
