@@ -18,8 +18,18 @@ import { useAuth } from '@/hooks/use-auth';
 
 // --- TYPES ---
 interface Account { id: string; nombre: string; tipo: string; saldoActual: number; }
-interface Transaction { id: string; fecha: Timestamp; monto: number; tipo: 'ingreso' | 'egreso'; cuentaId: string; nombreCuenta: string; descripcion: string; referencia?: string; sourcePaymentId?: string; }
-interface ProcessedTransaction { date: Date; description: string; reference: string; credit: number; debit: number; balance: number; }
+interface Transaction { 
+    id: string; 
+    fecha: Timestamp; 
+    monto: number; 
+    tipo: 'ingreso' | 'egreso'; 
+    cuentaId: string; 
+    nombreCuenta: string; 
+    descripcion: string; 
+    referencia?: string; 
+    sourcePaymentId?: string; 
+}
+interface ProcessedTransaction { date: Date; descripcion: string; reference: string; credit: number; debit: number; balance: number; }
 
 const formatCurrency = (amount: number): string => {
     if (typeof amount !== 'number') return '0,00';
@@ -54,11 +64,6 @@ const AccountingPage = () => {
         return () => { unsubAccounts(); unsubTx(); };
     }, [workingCondoId]);
 
-    // FILTRO ESTRICTO: Excluimos la cuenta duplicada para limpieza visual
-    const visibleAccounts = useMemo(() => {
-        return accounts.filter(acc => acc.nombre?.toUpperCase().trim() !== "CAJA PRINCIPAL (EFECTIVO BS)");
-    }, [accounts]);
-
     const periodData = useMemo(() => {
         const fromDate = startOfMonth(new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1));
         const toDate = endOfMonth(fromDate);
@@ -69,9 +74,12 @@ const AccountingPage = () => {
         allTransactions.forEach(tx => {
             const date = tx.fecha.toDate();
             const entry: ProcessedTransaction = { 
-                date, description: tx.description, reference: tx.referencia || 'N/A', 
+                date, 
+                descripcion: tx.descripcion || 'SIN CONCEPTO', 
+                reference: tx.referencia || 'N/A', 
                 credit: tx.tipo === 'ingreso' ? tx.monto : 0, 
-                debit: tx.tipo === 'egreso' ? tx.monto : 0, balance: 0 
+                debit: tx.tipo === 'egreso' ? tx.monto : 0, 
+                balance: 0 
             };
             if (accountData[tx.cuentaId]) {
                 if (date < fromDate) accountData[tx.cuentaId].startBalance += (entry.credit - entry.debit);
@@ -90,7 +98,7 @@ const AccountingPage = () => {
     }, [accounts, allTransactions, selectedMonth, selectedYear]);
 
     const generalLedger = useMemo(() => {
-        return visibleAccounts.map(acc => {
+        return accounts.map(acc => {
             const data = periodData[acc.id] || { startBalance: 0, transactions: [], endBalance: 0 };
             return {
                 accountName: acc.nombre, accountId: acc.id, tipo: acc.tipo,
@@ -98,7 +106,7 @@ const AccountingPage = () => {
                 totalDebit: data.transactions.reduce((sum, tx) => sum + tx.debit, 0), endBalance: data.endBalance
             };
         });
-    }, [visibleAccounts, periodData]);
+    }, [accounts, periodData]);
 
     const handleSyncPeriod = async () => {
         if (!workingCondoId) return;
@@ -115,7 +123,6 @@ const AccountingPage = () => {
 
                 for (const pDoc of paySnap.docs) {
                     const p = pDoc.data();
-                    // EVITAR ASIENTO DOBLE: Si ya tiene un hito en transacciones, saltar.
                     if (allTransactions.some(tx => tx.sourcePaymentId === pDoc.id)) continue;
 
                     let targetName = "";
@@ -143,7 +150,6 @@ const AccountingPage = () => {
                         accountId = account.id;
                     }
 
-                    // ASIENTO ÚNICO EXCLUSIVO
                     transaction.set(doc(collection(db, 'condominios', workingCondoId, 'transacciones')), {
                         monto: p.totalAmount, tipo: 'ingreso', cuentaId: accountId, nombreCuenta: targetName,
                         descripcion: `SINCRONIZACIÓN: PAGO DE ${p.beneficiaries?.[0]?.ownerName || 'PROPIETARIO'}`,
@@ -156,7 +162,7 @@ const AccountingPage = () => {
                 }
                 if (count === 0) throw "no_needed";
             });
-            toast({ title: "Sincronización Exitosa", description: `Se procesaron ${count} hitos contables faltantes sin duplicados.` });
+            toast({ title: "Sincronización Exitosa", description: `Se procesaron ${count} hitos contables faltantes.` });
         } catch (e) {
             if (e === "no_needed") toast({ title: "Todo al día" });
             else {
@@ -179,10 +185,10 @@ const AccountingPage = () => {
                 <div>
                     <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">Contabilidad <span className="text-[#0081c9]">Digital</span></h2>
                     <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
-                    <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">Asientos únicos y mayor consolidado atómico.</p>
+                    <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">Asientos únicos y libros mayores por cuenta.</p>
                 </div>
                 <Button onClick={handleSyncPeriod} disabled={isSyncing} variant="outline" className="rounded-xl border-[#0081c9] text-[#0081c9] font-black uppercase text-[10px] h-12 shadow-sm hover:bg-blue-50">
-                    {isSyncing ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Zap className="mr-2 h-4 w-4" />} Sincronizar Hitos
+                    {isSyncing ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Zap className="mr-2 h-4 w-4" />} Sincronizar Período
                 </Button>
             </div>
             
@@ -190,8 +196,8 @@ const AccountingPage = () => {
                 <CardHeader className="flex flex-row items-center justify-between space-y-0">
                     <div><CardTitle className="text-slate-900 font-black uppercase text-sm tracking-widest">Período Fiscal</CardTitle><CardDescription className="text-slate-500 font-bold">Seleccione el mes a auditar.</CardDescription></div>
                     <div className="flex gap-2">
-                        <Select value={selectedMonth} onValueChange={setSelectedMonth}><SelectTrigger className="w-36 rounded-xl bg-slate-50 text-slate-900 border-slate-200 font-bold"><SelectValue /></SelectTrigger><SelectContent>{months.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent></Select>
-                        <Select value={selectedYear} onValueChange={setSelectedYear}><SelectTrigger className="w-24 rounded-xl bg-slate-50 text-slate-900 border-slate-200 font-bold"><SelectValue /></SelectTrigger><SelectContent>{years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent></Select>
+                        <Select value={selectedMonth} onValueChange={setSelectedMonth}><SelectTrigger className="w-36 rounded-xl bg-slate-50 text-slate-900 border-slate-200 font-bold"><SelectValue /></SelectTrigger><SelectContent className="bg-white">{months.map(m => <SelectItem key={m.value} value={m.value} className="text-slate-900">{m.label}</SelectItem>)}</SelectContent></Select>
+                        <Select value={selectedYear} onValueChange={setSelectedYear}><SelectTrigger className="w-24 rounded-xl bg-slate-50 text-slate-900 border-slate-200 font-bold"><SelectValue /></SelectTrigger><SelectContent className="bg-white">{years.map(y => <SelectItem key={y} value={y} className="text-slate-900">{y}</SelectItem>)}</SelectContent></Select>
                     </div>
                 </CardHeader>
             </Card>
@@ -199,7 +205,7 @@ const AccountingPage = () => {
             <Tabs defaultValue="mayor">
                 <TabsList className="flex flex-wrap h-auto gap-2 bg-slate-200 p-2 rounded-3xl">
                     <TabsTrigger value="mayor" className="rounded-2xl font-black uppercase text-[10px] px-6 text-slate-600 data-[state=active]:bg-white data-[state=active]:text-slate-900 shadow-sm transition-all">Libro Mayor</TabsTrigger>
-                    {visibleAccounts.map(acc => <TabsTrigger key={acc.id} value={acc.id} className="rounded-2xl font-black uppercase text-[10px] px-6 text-slate-600 data-[state=active]:bg-white data-[state=active]:text-slate-900 shadow-sm transition-all">{acc.nombre}</TabsTrigger>)}
+                    {accounts.map(acc => <TabsTrigger key={acc.id} value={acc.id} className="rounded-2xl font-black uppercase text-[10px] px-6 text-slate-600 data-[state=active]:bg-white data-[state=active]:text-slate-900 shadow-sm transition-all">{acc.nombre}</TabsTrigger>)}
                 </TabsList>
 
                 <TabsContent value="mayor" className="mt-4">
@@ -209,7 +215,7 @@ const AccountingPage = () => {
                              <Table>
                                 <TableHeader className="bg-slate-50"><TableRow className="border-slate-200">
                                     <TableHead className="text-[10px] font-black uppercase px-8 py-6 text-slate-700">Cuenta</TableHead>
-                                    <TableHead className="text-right text-[10px] font-black uppercase text-slate-700">Anterior</TableHead>
+                                    <TableHead className="text-right text-[10px] font-black uppercase text-slate-700">Saldo Anterior</TableHead>
                                     <TableHead className="text-right text-[10px] font-black uppercase text-slate-700">Ingresos (+)</TableHead>
                                     <TableHead className="text-right text-[10px] font-black uppercase text-slate-700">Egresos (-)</TableHead>
                                     <TableHead className="text-right text-[10px] font-black uppercase pr-8 text-slate-700">Saldo Final</TableHead>
@@ -224,16 +230,13 @@ const AccountingPage = () => {
                                             <TableCell className="text-right font-black italic text-lg pr-8 text-slate-900">Bs. {formatCurrency(acc.endBalance)}</TableCell>
                                         </TableRow>
                                     ))}
-                                    {generalLedger.length === 0 && (
-                                        <TableRow><TableCell colSpan={5} className="text-center py-20 text-slate-400 italic font-bold">No hay cuentas operativas para este período.</TableCell></TableRow>
-                                    )}
                                 </TableBody>
                             </Table>
                         </CardContent>
                     </Card>
                 </TabsContent>
                 
-                {visibleAccounts.map(acc => {
+                {accounts.map(acc => {
                     const { transactions, startBalance } = periodData[acc.id] || { transactions: [], startBalance: 0 };
                     return (
                         <TabsContent key={acc.id} value={acc.id} className="mt-4">
@@ -241,20 +244,20 @@ const AccountingPage = () => {
                                 <CardHeader className="bg-slate-50 border-b p-8"><CardTitle className="uppercase italic text-slate-900 font-black flex items-center gap-2"><BookCopy className="text-[#0081c9]"/> Libro Diario: {acc.nombre}</CardTitle></CardHeader>
                                 <CardContent className="p-0">
                                     <Table>
-                                        <TableHeader className="bg-slate-100/50"><TableRow className="border-slate-200"><TableHead className="px-8 py-6 text-[10px] font-black uppercase text-slate-700">Fecha</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-700">Descripción</TableHead><TableHead className="text-right text-[10px] font-black uppercase text-slate-700">Haber (+)</TableHead><TableHead className="text-right text-[10px] font-black uppercase text-slate-700">Debe (-)</TableHead><TableHead className="text-right text-[10px] font-black uppercase pr-8 text-slate-700">Saldo Progresivo</TableHead></TableRow></TableHeader>
+                                        <TableHeader className="bg-slate-100/50"><TableRow className="border-slate-200"><TableHead className="px-8 py-6 text-[10px] font-black uppercase text-slate-700">Fecha</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-700">Descripción</TableHead><TableHead className="text-right text-[10px] font-black uppercase text-slate-700">Ingreso (+)</TableHead><TableHead className="text-right text-[10px] font-black uppercase text-slate-700">Egreso (-)</TableHead><TableHead className="text-right text-[10px] font-black uppercase pr-8 text-slate-700">Saldo Progresivo</TableHead></TableRow></TableHeader>
                                         <TableBody>
-                                            <TableRow className="bg-slate-50/80 text-[10px] font-black text-slate-500 italic"><TableCell colSpan={4} className="px-8 py-4">SALDO INICIAL DEL MES</TableCell><TableCell className="text-right pr-8">Bs. {formatCurrency(startBalance)}</TableCell></TableRow>
+                                            <TableRow className="bg-slate-50/80 text-[10px] font-black text-slate-500 italic"><TableCell colSpan={4} className="px-8 py-4">SALDO INICIAL DEL PERÍODO</TableCell><TableCell className="text-right pr-8">Bs. {formatCurrency(startBalance)}</TableCell></TableRow>
                                             {transactions.map((tx, i) => (
                                                 <TableRow key={i} className="hover:bg-slate-50 transition-colors border-slate-100">
                                                     <TableCell className="px-8 py-5 font-bold text-slate-500 text-xs">{format(tx.date, 'dd/MM/yy')}</TableCell>
-                                                    <TableCell className="font-black text-slate-900 uppercase italic text-xs leading-tight">{tx.description}</TableCell>
+                                                    <TableCell className="font-black text-slate-900 uppercase italic text-xs leading-tight">{tx.descripcion}</TableCell>
                                                     <TableCell className="text-right text-emerald-600 font-black">{tx.credit ? `+${formatCurrency(tx.credit)}` : '-'}</TableCell>
                                                     <TableCell className="text-right text-red-600 font-black">{tx.debit ? `-${formatCurrency(tx.debit)}` : '-'}</TableCell>
                                                     <TableCell className="text-right font-black pr-8 text-slate-900">Bs. {formatCurrency(tx.balance)}</TableCell>
                                                 </TableRow>
                                             ))}
                                             {transactions.length === 0 && (
-                                                <TableRow><TableCell colSpan={5} className="text-center py-20 text-slate-400 italic font-bold">Sin movimientos registrados para esta cuenta en el mes.</TableCell></TableRow>
+                                                <TableRow><TableCell colSpan={5} className="text-center py-20 text-slate-400 italic font-bold">Sin movimientos registrados en este período.</TableCell></TableRow>
                                             )}
                                         </TableBody>
                                     </Table>

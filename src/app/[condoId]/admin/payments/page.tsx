@@ -90,6 +90,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 const condoFeeUSD = settingsDoc.data()?.condoFee || 0;
                 const costBs = condoFeeUSD * payment.exchangeRate;
 
+                // DETERMINAR CUENTA DESTINO
                 let targetAccountName = "";
                 if (['movil', 'transferencia'].includes(payment.paymentMethod)) targetAccountName = "BANCO DE VENEZUELA";
                 else if (['efectivo_bs', 'efectivo'].includes(payment.paymentMethod)) targetAccountName = "CAJA PRINCIPAL";
@@ -145,6 +146,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         receiptNumbers[beneficiary.ownerId] = `REC-${Date.now()}-${beneficiary.ownerId.slice(-4)}`;
                     }
 
+                    // IMPACTO EN TESORERÍA Y LIBRO DIARIO
                     if (targetAccountName) {
                         const accountsSnap = await getDocs(collection(db, 'condominios', condoId, 'cuentas'));
                         let account = accountsSnap.docs.find(d => d.data().nombre?.toUpperCase().trim() === targetAccountName);
@@ -155,27 +157,43 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                             transaction.update(doc(db, 'condominios', condoId, 'cuentas', accountId), { saldoActual: increment(payment.totalAmount) });
                         } else {
                             const newAccRef = doc(collection(db, 'condominios', condoId, 'cuentas'));
-                            transaction.set(newAccRef, { nombre: targetAccountName, tipo: targetAccountName === "CAJA PRINCIPAL" ? "efectivo" : "banco", saldoActual: payment.totalAmount, createdAt: serverTimestamp() });
+                            const initialData = { 
+                                nombre: targetAccountName, 
+                                tipo: targetAccountName === "CAJA PRINCIPAL" ? "efectivo" : "banco", 
+                                saldoActual: payment.totalAmount, 
+                                createdAt: serverTimestamp() 
+                            };
+                            transaction.set(newAccRef, initialData);
                             accountId = newAccRef.id;
                         }
 
+                        // ASIENTO ÚNICO CON DESCRIPCIÓN COMPLETA
                         transaction.set(doc(collection(db, 'condominios', condoId, 'transacciones')), {
-                            monto: payment.totalAmount, tipo: 'ingreso', cuentaId: accountId, nombreCuenta: targetAccountName,
+                            monto: payment.totalAmount, 
+                            tipo: 'ingreso', 
+                            cuentaId: accountId, 
+                            nombreCuenta: targetAccountName,
                             descripcion: `INGRESO: PAGO DE ${payment.beneficiaries.map(b => b.ownerName).join(', ')}`,
-                            referencia: payment.reference, fecha: payment.paymentDate, sourcePaymentId: payment.id,
-                            createdAt: serverTimestamp(), createdBy: user?.email
+                            referencia: payment.reference, 
+                            fecha: payment.paymentDate, 
+                            sourcePaymentId: payment.id,
+                            createdAt: serverTimestamp(), 
+                            createdBy: user?.email
                         });
                     }
 
                     transaction.update(doc(db, 'condominios', condoId, 'payments', payment.id), { 
                         status: 'aprobado', 
                         receiptNumbers, 
-                        observations: 'Hito contable validado.' 
+                        observations: 'Hito contable validado y asimilado en Tesorería.' 
                     });
                 });
-                toast({ title: "Pago Aprobado", description: "Saldo actualizado en Tesorería." });
+                toast({ title: "Pago Aprobado", description: "El saldo ha sido sumado a la cuenta correspondiente en Tesorería." });
                 setSelectedPayment(null);
-            } catch (error: any) { toast({ variant: 'destructive', title: "Falla", description: error.message }); }
+            } catch (error: any) { 
+                console.error(error);
+                toast({ variant: 'destructive', title: "Falla de Proceso", description: error.message }); 
+            }
             finally { setIsVerifying(false); }
         });
     };
@@ -214,7 +232,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                     }
                     transaction.delete(paymentRef);
                 });
-                toast({ title: "Pago Revertido", description: "Saldo ajustado en Tesorería." });
+                toast({ title: "Pago Revertido", description: "Los saldos han sido restados de Tesorería." });
                 setPaymentToDelete(null);
             } catch (e) { toast({ variant: 'destructive', title: "Error" }); }
             finally { setIsVerifying(false); }
@@ -240,10 +258,10 @@ function VerificationComponent({ condoId }: { condoId: string }) {
         <Card className="rounded-[2rem] border-none shadow-sm bg-white">
             <CardHeader className="p-8">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <CardTitle className="text-slate-900 font-black uppercase italic tracking-tighter">Bandeja de Verificación</CardTitle>
+                    <CardTitle className="text-slate-900 font-black uppercase italic tracking-tighter leading-none">Bandeja de <span className="text-primary">Verificación</span></CardTitle>
                     <div className="relative w-full md:w-64">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                        <Input placeholder="Buscar..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9 rounded-xl bg-slate-50 border-slate-200 text-slate-900 font-bold" />
+                        <Input placeholder="Buscar por nombre o ref..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9 rounded-xl bg-slate-50 border-slate-200 text-slate-900 font-bold" />
                     </div>
                 </div>
             </CardHeader>
@@ -260,7 +278,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                             <Table>
                                 <TableHeader className="bg-slate-50"><TableRow className="border-slate-100"><TableHead className="px-8 py-6 text-[10px] font-black uppercase text-slate-500">Beneficiarios</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-500">Fecha</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-500">Monto</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-500">Ref.</TableHead><TableHead className="text-right pr-8 text-[10px] font-black uppercase text-slate-500">Acción</TableHead></TableRow></TableHeader>
                                 <TableBody>
-                                    {filteredPayments.length === 0 ? (<TableRow><TableCell colSpan={5} className="h-32 text-center text-slate-400 font-bold italic">Sin registros.</TableCell></TableRow>) : 
+                                    {filteredPayments.length === 0 ? (<TableRow><TableCell colSpan={5} className="h-32 text-center text-slate-400 font-bold italic">Sin registros en esta bandeja.</TableCell></TableRow>) : 
                                     filteredPayments.map(p => (
                                         <TableRow key={p.id} className="hover:bg-slate-50 border-slate-50 transition-colors">
                                             <TableCell className="px-8 py-5"><div className="font-black text-slate-900 text-xs uppercase">{p.beneficiaries.map(b => b.ownerName).join(', ')}</div><div className="text-[9px] font-black text-primary uppercase mt-0.5">{p.paymentMethod}</div></TableCell>
@@ -294,7 +312,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                             <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100">
                                 <p className="text-[10px] font-black uppercase text-slate-400 mb-3 tracking-widest">Desglose de Montos</p>
                                 {selectedPayment?.beneficiaries.map((b, i) => (<div key={i} className="flex justify-between items-center py-2 border-b border-white last:border-0"><span className="font-black text-slate-700 text-xs uppercase">{b.ownerName}</span><span className="font-black text-slate-900">Bs. {formatCurrency(b.amount)}</span></div>))}
-                                <div className="mt-4 pt-4 border-t border-slate-200 flex justify-between items-center"><span className="text-[10px] font-black uppercase text-slate-900">Total:</span><span className="text-lg font-black text-[#0081c9]">Bs. {formatCurrency(selectedPayment?.totalAmount || 0)}</span></div>
+                                <div className="mt-4 pt-4 border-t border-slate-200 flex justify-between items-center"><span className="text-[10px] font-black uppercase text-slate-900">Total:</span><span className="text-lg font-black text-primary">Bs. {formatCurrency(selectedPayment?.totalAmount || 0)}</span></div>
                             </div>
                             {selectedPayment?.status === 'pendiente' && (<div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Motivo de Rechazo</Label><Textarea value={rejectionReason} onChange={e => setRejectionReason(e.target.value)} className="rounded-2xl bg-slate-50 border-slate-200 font-bold text-slate-900" /></div>)}
                         </div>
@@ -311,7 +329,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             <Dialog open={!!paymentToDelete} onOpenChange={() => setPaymentToDelete(null)}>
                 <DialogContent className="rounded-[2rem] border-none shadow-2xl bg-white text-slate-900">
                     <DialogHeader><DialogTitle className="text-xl font-black uppercase italic text-red-600">¿Revertir Transacción?</DialogTitle></DialogHeader>
-                    <p className="text-slate-500 font-bold text-sm leading-relaxed uppercase">Se ajustarán los saldos de Tesorería y deudas.</p>
+                    <p className="text-slate-500 font-bold text-sm leading-relaxed uppercase">Se ajustarán los saldos de Tesorería y las deudas volverán a estar pendientes.</p>
                     <DialogFooter className="gap-2 mt-6"><Button variant="outline" onClick={() => setPaymentToDelete(null)} className="rounded-xl font-bold h-12 text-slate-900">Cancelar</Button><Button onClick={handleDeletePayment} disabled={isVerifying} variant="destructive" className="rounded-xl font-black uppercase h-12 shadow-lg">Confirmar</Button></DialogFooter>
                 </DialogContent>
             </Dialog>
@@ -485,7 +503,7 @@ function PaymentsPage() {
     return (
         <div className="space-y-10 animate-in fade-in duration-500 font-montserrat">
             <div className="mb-10">
-                <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">Gestión de <span className="text-[#0081c9]">Pagos</span></h2>
+                <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">Gestión de <span className="text-primary">Pagos</span></h2>
                 <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
                 <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">Hitos contables y conciliación en tiempo real.</p>
             </div>
