@@ -12,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
-import { Search, CheckCircle, XCircle, Eye, MoreHorizontal, Download, Loader2, Calendar as CalendarIcon, Banknote, UserPlus, CheckCircle2, WalletCards, ArrowLeft } from 'lucide-react';
+import { Search, CheckCircle, XCircle, Eye, MoreHorizontal, Download, Loader2, Calendar as CalendarIcon, Banknote, UserPlus, CheckCircle2, WalletCards, ArrowLeft, Trash2 } from 'lucide-react';
 import { format, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn, compressImage } from '@/lib/utils';
@@ -90,33 +90,12 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 const condoFeeUSD = settingsDoc.data()?.condoFee || 0;
                 const costBs = condoFeeUSD * payment.exchangeRate;
 
-                // LOGICA DE HITO CONTABLE: Identificación de cuenta destino
                 let targetAccountName = "";
                 if (['movil', 'transferencia'].includes(payment.paymentMethod)) targetAccountName = "BANCO DE VENEZUELA";
                 else if (['efectivo_bs', 'efectivo'].includes(payment.paymentMethod)) targetAccountName = "CAJA PRINCIPAL";
 
-                // Búsqueda exhaustiva de la cuenta física en Tesorería
-                const accountsSnap = await getDocs(collection(db, 'condominios', condoId, 'cuentas'));
-                let targetAccDoc = accountsSnap.docs.find(d => {
-                    const name = d.data().nombre?.toUpperCase().trim();
-                    return name === targetAccountName || (targetAccountName === "BANCO DE VENEZUELA" && name?.includes("VENEZUELA"));
-                });
-                
-                let accountId = "";
-                let accountExists = false;
-
-                if (targetAccDoc) {
-                    accountId = targetAccDoc.id;
-                    accountExists = true;
-                } else if (targetAccountName) {
-                    const newAccRef = doc(collection(db, 'condominios', condoId, 'cuentas'));
-                    accountId = newAccRef.id;
-                }
-
                 await runTransaction(db, async (transaction) => {
                     const beneficiaryIds = payment.beneficiaries.map(b => b.ownerId);
-                    
-                    // Obtener deudas
                     const allDebtsSnap = await getDocs(query(collection(db, 'condominios', condoId, 'debts'), where('ownerId', 'in', beneficiaryIds)));
                     const allDebts = allDebtsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Debt));
                     
@@ -166,49 +145,37 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         receiptNumbers[beneficiary.ownerId] = `REC-${Date.now()}-${beneficiary.ownerId.slice(-4)}`;
                     }
 
-                    // IMPACTO REAL EN TESORERÍA: Actualización de Saldo Físico
-                    if (accountId && targetAccountName) {
-                        const accountRef = doc(db, 'condominios', condoId, 'cuentas', accountId);
-                        const montoAsiento = Number(payment.totalAmount);
-
-                        if (!accountExists) {
-                            transaction.set(accountRef, { 
-                                nombre: targetAccountName, 
-                                tipo: targetAccountName === "CAJA PRINCIPAL" ? "efectivo" : "banco", 
-                                saldoActual: montoAsiento, 
-                                createdAt: serverTimestamp() 
-                            });
-                        } else {
-                            transaction.update(accountRef, { saldoActual: increment(montoAsiento) });
-                        }
+                    if (targetAccountName) {
+                        const accountsSnap = await getDocs(collection(db, 'condominios', condoId, 'cuentas'));
+                        let account = accountsSnap.docs.find(d => d.data().nombre?.toUpperCase().trim() === targetAccountName);
                         
-                        // ASIENTO OBLIGATORIO EN LIBRO DIARIO
+                        let accountId = "";
+                        if (account) {
+                            accountId = account.id;
+                            transaction.update(doc(db, 'condominios', condoId, 'cuentas', accountId), { saldoActual: increment(payment.totalAmount) });
+                        } else {
+                            const newAccRef = doc(collection(db, 'condominios', condoId, 'cuentas'));
+                            transaction.set(newAccRef, { nombre: targetAccountName, tipo: targetAccountName === "CAJA PRINCIPAL" ? "efectivo" : "banco", saldoActual: payment.totalAmount, createdAt: serverTimestamp() });
+                            accountId = newAccRef.id;
+                        }
+
                         transaction.set(doc(collection(db, 'condominios', condoId, 'transacciones')), {
-                            monto: montoAsiento, 
-                            tipo: 'ingreso', 
-                            cuentaId: accountId, 
-                            nombreCuenta: targetAccountName,
+                            monto: payment.totalAmount, tipo: 'ingreso', cuentaId: accountId, nombreCuenta: targetAccountName,
                             descripcion: `INGRESO: PAGO DE ${payment.beneficiaries.map(b => b.ownerName).join(', ')}`,
-                            referencia: payment.reference, 
-                            fecha: payment.paymentDate, 
-                            sourcePaymentId: payment.id,
-                            createdAt: serverTimestamp(), 
-                            createdBy: user?.email
+                            referencia: payment.reference, fecha: payment.paymentDate, sourcePaymentId: payment.id,
+                            createdAt: serverTimestamp(), createdBy: user?.email
                         });
                     }
 
                     transaction.update(doc(db, 'condominios', condoId, 'payments', payment.id), { 
                         status: 'aprobado', 
                         receiptNumbers, 
-                        observations: 'Hito contable validado y saldo sincronizado.' 
+                        observations: 'Hito contable validado.' 
                     });
                 });
-                toast({ title: "Pago Aprobado", description: `Saldo sumado a ${targetAccountName} exitosamente.` });
+                toast({ title: "Pago Aprobado", description: "Saldo actualizado en Tesorería." });
                 setSelectedPayment(null);
-            } catch (error: any) { 
-                console.error(error);
-                toast({ variant: 'destructive', title: "Falla en transacción", description: error.message }); 
-            }
+            } catch (error: any) { toast({ variant: 'destructive', title: "Falla", description: error.message }); }
             finally { setIsVerifying(false); }
         });
     };
@@ -247,7 +214,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                     }
                     transaction.delete(paymentRef);
                 });
-                toast({ title: "Pago Revertido", description: "El saldo fue descontado de Tesorería automáticamente." });
+                toast({ title: "Pago Revertido", description: "Saldo ajustado en Tesorería." });
                 setPaymentToDelete(null);
             } catch (e) { toast({ variant: 'destructive', title: "Error" }); }
             finally { setIsVerifying(false); }
@@ -255,15 +222,15 @@ function VerificationComponent({ condoId }: { condoId: string }) {
     };
 
     const prepareReceipt = async (payment: Payment, ben: any) => {
-        if (!companyInfo) return toast({ variant: 'destructive', title: "Configuración de empresa faltante" });
+        if (!companyInfo) return toast({ variant: 'destructive', title: "Configuración faltante" });
         try {
             const data = {
                 condoName: companyInfo.name, rif: companyInfo.rif, ownerName: ben.ownerName,
                 method: payment.paymentMethod, bank: payment.bank, reference: payment.reference,
                 date: format(payment.paymentDate.toDate(), 'dd/MM/yyyy'), rate: formatCurrency(payment.exchangeRate),
                 receiptNumber: payment.receiptNumbers?.[ben.ownerId] || 'N/A', receivedAmount: formatCurrency(ben.amount),
-                currentBalance: '0,00', totalDebtPaid: formatCurrency(ben.amount), prevBalance: '0,00', observations: 'Hito contable automatizado.',
-                concepts: [['Liquidación Progresiva', `Casa: ${ben.house || 'S/D'}`, '', formatCurrency(ben.amount)]]
+                currentBalance: '0,00', totalDebtPaid: formatCurrency(ben.amount), prevBalance: '0,00', observations: 'Generado automáticamente.',
+                concepts: [['Abono de Cuota', `Propiedad: ${ben.house || 'S/D'}`, '', formatCurrency(ben.amount)]]
             };
             await generatePaymentReceipt(data, companyInfo.logo, 'download');
         } catch (e) { toast({ variant: 'destructive', title: "Error PDF" }); }
@@ -276,7 +243,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                     <CardTitle className="text-slate-900 font-black uppercase italic tracking-tighter">Bandeja de Verificación</CardTitle>
                     <div className="relative w-full md:w-64">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                        <Input placeholder="Referencia o Nombre..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9 rounded-xl bg-slate-50 border-slate-200 text-slate-900 font-bold" />
+                        <Input placeholder="Buscar..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9 rounded-xl bg-slate-50 border-slate-200 text-slate-900 font-bold" />
                     </div>
                 </div>
             </CardHeader>
@@ -293,7 +260,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                             <Table>
                                 <TableHeader className="bg-slate-50"><TableRow className="border-slate-100"><TableHead className="px-8 py-6 text-[10px] font-black uppercase text-slate-500">Beneficiarios</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-500">Fecha</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-500">Monto</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-500">Ref.</TableHead><TableHead className="text-right pr-8 text-[10px] font-black uppercase text-slate-500">Acción</TableHead></TableRow></TableHeader>
                                 <TableBody>
-                                    {filteredPayments.length === 0 ? (<TableRow><TableCell colSpan={5} className="h-32 text-center text-slate-400 font-bold italic">Sin registros en esta bandeja.</TableCell></TableRow>) : 
+                                    {filteredPayments.length === 0 ? (<TableRow><TableCell colSpan={5} className="h-32 text-center text-slate-400 font-bold italic">Sin registros.</TableCell></TableRow>) : 
                                     filteredPayments.map(p => (
                                         <TableRow key={p.id} className="hover:bg-slate-50 border-slate-50 transition-colors">
                                             <TableCell className="px-8 py-5"><div className="font-black text-slate-900 text-xs uppercase">{p.beneficiaries.map(b => b.ownerName).join(', ')}</div><div className="text-[9px] font-black text-primary uppercase mt-0.5">{p.paymentMethod}</div></TableCell>
@@ -321,22 +288,22 @@ function VerificationComponent({ condoId }: { condoId: string }) {
 
             <Dialog open={!!selectedPayment} onOpenChange={() => setSelectedPayment(null)}>
                 <DialogContent className="max-w-2xl rounded-[2rem] border-none shadow-2xl bg-white text-slate-900">
-                    <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-slate-900">Detalles del Reporte</DialogTitle><DialogDescription className="font-bold text-slate-400">Ref: {selectedPayment?.reference}</DialogDescription></DialogHeader>
+                    <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-slate-900">Detalles del Reporte</DialogTitle></DialogHeader>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 py-4">
                         <div className="space-y-6">
                             <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100">
-                                <p className="text-[10px] font-black uppercase text-slate-400 mb-3 tracking-widest">Asignación de Montos</p>
+                                <p className="text-[10px] font-black uppercase text-slate-400 mb-3 tracking-widest">Desglose de Montos</p>
                                 {selectedPayment?.beneficiaries.map((b, i) => (<div key={i} className="flex justify-between items-center py-2 border-b border-white last:border-0"><span className="font-black text-slate-700 text-xs uppercase">{b.ownerName}</span><span className="font-black text-slate-900">Bs. {formatCurrency(b.amount)}</span></div>))}
-                                <div className="mt-4 pt-4 border-t border-slate-200 flex justify-between items-center"><span className="text-[10px] font-black uppercase text-slate-900">Total Transacción:</span><span className="text-lg font-black text-[#0081c9]">Bs. {formatCurrency(selectedPayment?.totalAmount || 0)}</span></div>
+                                <div className="mt-4 pt-4 border-t border-slate-200 flex justify-between items-center"><span className="text-[10px] font-black uppercase text-slate-900">Total:</span><span className="text-lg font-black text-[#0081c9]">Bs. {formatCurrency(selectedPayment?.totalAmount || 0)}</span></div>
                             </div>
-                            {selectedPayment?.status === 'pendiente' && (<div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Motivo de Rechazo (si aplica)</Label><Textarea value={rejectionReason} onChange={e => setRejectionReason(e.target.value)} className="rounded-2xl bg-slate-50 border-slate-200 font-bold text-slate-900" placeholder="Escriba aquí..." /></div>)}
+                            {selectedPayment?.status === 'pendiente' && (<div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Motivo de Rechazo</Label><Textarea value={rejectionReason} onChange={e => setRejectionReason(e.target.value)} className="rounded-2xl bg-slate-50 border-slate-200 font-bold text-slate-900" /></div>)}
                         </div>
-                        <div className="relative aspect-[3/4] bg-slate-100 rounded-3xl overflow-hidden border border-slate-200 flex items-center justify-center">
-                            {selectedPayment?.receiptUrl ? (<Image src={selectedPayment.receiptUrl} alt="Comprobante" fill className="object-contain" />) : (<div className="text-center text-slate-300 font-black uppercase italic text-xs">Sin imagen adjunta</div>)}
+                        <div className="relative aspect-[3/4] bg-slate-100 rounded-3xl overflow-hidden border border-slate-200">
+                            {selectedPayment?.receiptUrl ? (<Image src={selectedPayment.receiptUrl} alt="Comprobante" fill className="object-contain" />) : (<div className="flex h-full items-center justify-center text-slate-300 font-black uppercase italic text-xs">Sin comprobante</div>)}
                         </div>
                     </div>
                     {selectedPayment?.status === 'pendiente' && (
-                        <DialogFooter className="gap-3 mt-4"><Button variant="ghost" onClick={() => handleReject(selectedPayment!)} disabled={isVerifying} className="text-red-600 font-black uppercase text-[10px]">Rechazar Reporte</Button><Button onClick={() => handleApprove(selectedPayment!)} disabled={isVerifying} className="bg-slate-900 hover:bg-slate-800 text-white font-black uppercase text-[10px] h-12 rounded-xl flex-1 shadow-lg">{isVerifying ? <Loader2 className="animate-spin" /> : "Validar y Asentar en Tesorería"}</Button></DialogFooter>
+                        <DialogFooter className="gap-3 mt-4"><Button variant="ghost" onClick={() => handleReject(selectedPayment!)} disabled={isVerifying} className="text-red-600 font-black uppercase text-[10px]">Rechazar</Button><Button onClick={() => handleApprove(selectedPayment!)} disabled={isVerifying} className="bg-slate-900 hover:bg-slate-800 text-white font-black uppercase text-[10px] h-12 rounded-xl flex-1 shadow-lg">Validar y Asentar</Button></DialogFooter>
                     )}
                 </DialogContent>
             </Dialog>
@@ -344,8 +311,8 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             <Dialog open={!!paymentToDelete} onOpenChange={() => setPaymentToDelete(null)}>
                 <DialogContent className="rounded-[2rem] border-none shadow-2xl bg-white text-slate-900">
                     <DialogHeader><DialogTitle className="text-xl font-black uppercase italic text-red-600">¿Revertir Transacción?</DialogTitle></DialogHeader>
-                    <p className="text-slate-500 font-bold text-sm leading-relaxed uppercase">Esta acción restará el monto de los saldos de Tesorería y devolverá las deudas a estatus "Pendiente".</p>
-                    <DialogFooter className="gap-2 mt-6"><Button variant="outline" onClick={() => setPaymentToDelete(null)} className="rounded-xl font-bold h-12 text-slate-900">Cancelar</Button><Button onClick={handleDeletePayment} disabled={isVerifying} variant="destructive" className="rounded-xl font-black uppercase h-12 shadow-lg">Confirmar Reversión</Button></DialogFooter>
+                    <p className="text-slate-500 font-bold text-sm leading-relaxed uppercase">Se ajustarán los saldos de Tesorería y deudas.</p>
+                    <DialogFooter className="gap-2 mt-6"><Button variant="outline" onClick={() => setPaymentToDelete(null)} className="rounded-xl font-bold h-12 text-slate-900">Cancelar</Button><Button onClick={handleDeletePayment} disabled={isVerifying} variant="destructive" className="rounded-xl font-black uppercase h-12 shadow-lg">Confirmar</Button></DialogFooter>
                 </DialogContent>
             </Dialog>
         </Card>
@@ -481,7 +448,7 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
                                                     value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''}
                                                 >
                                                     <SelectTrigger className="rounded-xl h-10 bg-white border-slate-200 text-slate-900">
-                                                        <SelectValue placeholder="Seleccione propiedad..." />
+                                                        <SelectValue placeholder="Propiedad..." />
                                                     </SelectTrigger>
                                                     <SelectContent className="bg-white">
                                                         {row.owner.properties.map((p, pIdx) => (
@@ -499,7 +466,7 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
                             </Card>
                         ))}
                         <Button type="button" variant="outline" size="sm" onClick={addBeneficiaryRow} className="rounded-xl font-black uppercase text-[10px] text-slate-900 border-slate-300">
-                            <UserPlus className="mr-2 h-4 w-4"/>Añadir Beneficiario
+                            <UserPlus className="mr-2 h-4 w-4"/>Beneficiario
                         </Button>
                     </div>
                 </CardContent>
@@ -520,7 +487,7 @@ function PaymentsPage() {
             <div className="mb-10">
                 <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">Gestión de <span className="text-[#0081c9]">Pagos</span></h2>
                 <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
-                <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">Hitos contables y conciliación de saldos en tiempo real.</p>
+                <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">Hitos contables y conciliación en tiempo real.</p>
             </div>
             <Tabs value={activeTab} onValueChange={(v) => router.push(`/${condoId}/admin/payments?tab=${v}`)}>
                 <TabsList className="grid w-full grid-cols-2 bg-slate-200 h-14 rounded-2xl p-1"><TabsTrigger value="verify" className="rounded-xl font-black uppercase text-xs data-[state=active]:bg-white data-[state=active]:text-slate-900 text-slate-600 transition-all">Verificación</TabsTrigger><TabsTrigger value="report" className="rounded-xl font-black uppercase text-xs data-[state=active]:bg-white data-[state=active]:text-slate-900 text-slate-600 transition-all">Reporte Manual</TabsTrigger></TabsList>

@@ -34,8 +34,6 @@ import {
     CheckCircle2,
     Edit,
     MoreVertical,
-    FileText,
-    RefreshCcw,
     ShieldCheck
 } from 'lucide-react';
 
@@ -84,7 +82,6 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
     const { toast } = useToast();
 
     const [loading, setLoading] = useState(true);
-    const [isAuditing, setIsAuditing] = useState(false);
     const [accounts, setAccounts] = useState<Account[]>([]);
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -118,42 +115,6 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
         });
         return () => { unsubAccounts(); unsubTx(); };
     }, [condoId]);
-
-    // FUNCIÓN MAESTRA: Auditar saldos desde transacciones para corregir discrepancias
-    const handleAuditSaldos = async () => {
-        if (!condoId) return;
-        setIsAuditing(true);
-        try {
-            const txSnap = await getDocs(collection(db, 'condominios', condoId, 'transacciones'));
-            const accSnap = await getDocs(collection(db, 'condominios', condoId, 'cuentas'));
-            
-            const auditBalances: Record<string, number> = {};
-            accSnap.forEach(d => { auditBalances[d.id] = 0; });
-
-            txSnap.forEach(d => {
-                const tx = d.data();
-                if (auditBalances[tx.cuentaId] !== undefined) {
-                    auditBalances[tx.cuentaId] += tx.tipo === 'ingreso' ? tx.monto : -tx.monto;
-                }
-            });
-
-            const batch = runTransaction(db, async (transaction) => {
-                for (const accId in auditBalances) {
-                    transaction.update(doc(db, 'condominios', condoId, 'cuentas', accId), {
-                        saldoActual: auditBalances[accId]
-                    });
-                }
-            });
-
-            await batch;
-            toast({ title: "Auditoría Completada", description: "Los saldos han sido recalculados basándose en el historial de transacciones." });
-        } catch (e) {
-            console.error(e);
-            toast({ variant: 'destructive', title: "Error en Auditoría" });
-        } finally {
-            setIsAuditing(false);
-        }
-    };
 
     const handleSaveAccount = async () => {
         if (!accountForm.nombre) return;
@@ -335,9 +296,6 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                     <p className="text-slate-500 font-bold text-[10px] uppercase tracking-[0.3em] mt-3 flex items-center gap-2"><Wallet className="h-3 w-3" /> Control de Disponibilidad y Flujo de Caja Atómico</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                    <Button onClick={handleAuditSaldos} disabled={isAuditing} variant="outline" className="font-bold uppercase text-[10px] rounded-xl h-12 border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100">
-                        {isAuditing ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <ShieldCheck className="mr-2 h-4 w-4" />} Auditar y Recalcular
-                    </Button>
                     <Button onClick={handleGeneratePDF} variant="outline" className="font-bold uppercase text-[10px] rounded-xl h-12 border-slate-300 text-slate-700 shadow-sm bg-white hover:bg-slate-50">
                         <Download className="mr-2 h-4 w-4" /> Reporte Período
                     </Button>
