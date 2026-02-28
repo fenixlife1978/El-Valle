@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo, use } from 'react';
@@ -11,9 +12,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFoo
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Download, Save, Plus, Trash2 } from "lucide-react";
+import { Loader2, Save, Download, Landmark, Coins, Wallet } from "lucide-react";
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { Label } from '@/components/ui/label';
 
 const formatCurrency = (num: number) => {
     if (typeof num !== 'number' || isNaN(num)) return '0,00';
@@ -36,13 +38,15 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
     const [saldoAnteriorBanco, setSaldoAnteriorBanco] = useState(0);
     const [ingresosOrdinariosBanco, setIngresosOrdinariosBanco] = useState(0);
     const [ingresosOrdinariosEfectivo, setIngresosOrdinariosEfectivo] = useState(0);
-    const [otrosIngresos, setOtrosIngresos] = useState<{ concepto: string, monto: number }[]>([]);
     const [egresosTesorería, setEgresosTesorería] = useState<{ concepto: string, monto: number }[]>([]);
     
-    const [cajaPrincipalBS, setCajaPrincipalBS] = useState(0);
-    const [cajaChicaBS, setCajaChicaBS] = useState(0);
-    const [notas, setNotas] = useState("");
+    const [realBalances, setRealBalances] = useState({
+        banco: 0,
+        cajaPrincipal: 0,
+        cajaChica: 0
+    });
     
+    const [notas, setNotas] = useState("");
     const [companyData, setCompanyData] = useState<any>(null);
 
     useEffect(() => {
@@ -51,17 +55,21 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
         getDoc(configRef).then(snap => { if (snap.exists()) setCompanyData(snap.data().companyInfo); });
     }, [workingCondoId]);
 
-    // Escucha en tiempo real de las cuentas de tesorería para obtener los saldos dinámicos
+    // Escucha en tiempo real de las cuentas de tesorería para obtener los saldos dinámicos reales
     useEffect(() => {
         if (!workingCondoId) return;
 
         const unsubCuentas = onSnapshot(collection(db, 'condominios', workingCondoId, 'cuentas'), (snap) => {
             const accounts = snap.docs.map(d => d.data());
+            const bdv = accounts.find(a => a.nombre?.toUpperCase() === 'BANCO DE VENEZUELA');
             const cp = accounts.find(a => a.nombre?.toUpperCase() === 'CAJA PRINCIPAL');
             const cc = accounts.find(a => a.nombre?.toUpperCase() === 'CAJA CHICA');
             
-            setCajaPrincipalBS(cp?.saldoActual || 0);
-            setCajaChicaBS(cc?.saldoActual || 0);
+            setRealBalances({
+                banco: bdv?.saldoActual || 0,
+                cajaPrincipal: cp?.saldoActual || 0,
+                cajaChica: cc?.saldoActual || 0
+            });
         });
 
         return () => unsubCuentas();
@@ -78,7 +86,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 const fromDate = startOfMonth(new Date(year, month, 1));
                 const toDate = endOfMonth(fromDate);
 
-                // 1. Obtener Ingresos desde Pagos Aprobados
+                // 1. Obtener Ingresos desde Pagos Aprobados del mes seleccionado
                 const pQuery = query(
                     collection(db, 'condominios', workingCondoId, 'payments'),
                     where('paymentDate', '>=', fromDate),
@@ -97,7 +105,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 setIngresosOrdinariosBanco(totalBancario);
                 setIngresosOrdinariosEfectivo(totalEfectivo);
 
-                // 2. Obtener Egresos desde Tesorería (Transacciones tipo 'egreso')
+                // 2. Obtener Egresos desde Tesorería (Transacciones tipo 'egreso') del mes seleccionado
                 const tQuery = query(
                     collection(db, 'condominios', workingCondoId, 'transacciones'), 
                     where('fecha', '>=', fromDate), 
@@ -120,9 +128,8 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
         fetchAutomaticData();
     }, [selectedMonth, selectedYear, workingCondoId]);
 
-    const totalIngresosMes = useMemo(() => ingresosOrdinariosBanco + ingresosOrdinariosEfectivo + otrosIngresos.reduce((sum, i) => sum + i.monto, 0), [ingresosOrdinariosBanco, ingresosOrdinariosEfectivo, otrosIngresos]);
     const totalEgresosMes = useMemo(() => egresosTesorería.reduce((sum, e) => sum + e.monto, 0), [egresosTesorería]);
-    const disponibilidadBancaria = (saldoAnteriorBanco + ingresosOrdinariosBanco + otrosIngresos.reduce((sum,i)=>sum+i.monto,0)) - totalEgresosMes;
+    const disponibilidadBancariaEstimada = (saldoAnteriorBanco + ingresosOrdinariosBanco) - totalEgresosMes;
 
     const handleSave = async () => {
         if (!workingCondoId) return;
@@ -134,11 +141,14 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 saldoAnteriorBanco,
                 ingresos: [
                     { concepto: 'BANCO (PAGO MÓVIL / TRANSF.)', monto: ingresosOrdinariosBanco },
-                    { concepto: 'CAJA PRINCIPAL (EFECTIVO BS)', monto: ingresosOrdinariosEfectivo },
-                    ...otrosIngresos
+                    { concepto: 'CAJA PRINCIPAL (EFECTIVO BS)', monto: ingresosOrdinariosEfectivo }
                 ],
                 egresos: egresosTesorería,
-                estadoFinanciero: { saldoNeto: disponibilidadBancaria, saldoCajaPrincipal: cajaPrincipalBS, saldoCajaChica: cajaChicaBS },
+                estadoFinanciero: { 
+                    saldoNetoBanco: realBalances.banco, 
+                    saldoCajaPrincipal: realBalances.cajaPrincipal, 
+                    saldoCajaChica: realBalances.cajaChica 
+                },
                 notas, updatedAt: serverTimestamp()
             });
             toast({ title: "Balance Guardado" });
@@ -147,92 +157,113 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
 
     return (
         <div className="max-w-5xl mx-auto p-6 space-y-6">
-            <div className="flex justify-between items-end">
-                <h1 className="text-3xl font-black uppercase italic tracking-tighter text-slate-900">Balance <span className="text-[#0081c9]">Financiero</span></h1>
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-4">
+                <div>
+                    <h1 className="text-3xl font-black uppercase italic tracking-tighter text-slate-900 leading-none">
+                        Balance <span className="text-[#0081c9]">Financiero</span>
+                    </h1>
+                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-[0.3em] mt-2">Resumen Operativo Mensual</p>
+                </div>
                 <div className="flex gap-2">
                     <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                        <SelectTrigger className="w-32 bg-white text-slate-900 border-slate-200"><SelectValue /></SelectTrigger>
+                        <SelectTrigger className="w-36 bg-white text-slate-900 border-slate-200 font-bold"><SelectValue /></SelectTrigger>
                         <SelectContent>{Array.from({length:12}, (_,i)=>(<SelectItem key={i+1} value={String(i+1)}>{format(new Date(2000,i), 'MMMM', {locale:es})}</SelectItem>))}</SelectContent>
                     </Select>
-                    <Input className="w-24 bg-white text-slate-900 border-slate-200" type="number" value={selectedYear} onChange={(e)=>setSelectedYear(e.target.value)} />
+                    <Input className="w-24 bg-white text-slate-900 border-slate-200 font-bold" type="number" value={selectedYear} onChange={(e)=>setSelectedYear(e.target.value)} />
                 </div>
             </div>
 
-            {loading ? <Loader2 className="animate-spin mx-auto h-10 w-10 text-[#0081c9]" /> : <>
-                <Card className="rounded-[2rem] border-none shadow-sm overflow-hidden bg-white">
-                    <CardHeader className="bg-slate-50 border-b"><CardTitle className="text-[10px] font-black uppercase tracking-widest text-slate-500">Ingresos del Período</CardTitle></CardHeader>
-                    <CardContent className="p-0">
-                        <Table>
-                            <TableBody>
-                                <TableRow className="bg-blue-50/30">
-                                    <TableCell className="font-bold text-slate-900">SALDO ANTERIOR BANCO</TableCell>
-                                    <TableCell><Input type="number" className="text-right bg-white font-bold" value={saldoAnteriorBanco} onChange={e=>setSaldoAnteriorBanco(Number(e.target.value))}/></TableCell>
-                                </TableRow>
-                                <TableRow>
-                                    <TableCell className="text-slate-700">INGRESOS ORDINARIOS (BANCO)</TableCell>
-                                    <TableCell className="text-right font-black text-slate-900">Bs. {formatCurrency(ingresosOrdinariosBanco)}</TableCell>
-                                </TableRow>
-                                <TableRow>
-                                    <TableCell className="text-slate-700">INGRESOS ORDINARIOS (CAJA PRINCIPAL)</TableCell>
-                                    <TableCell className="text-right font-black text-amber-600">Bs. {formatCurrency(ingresosOrdinariosEfectivo)}</TableCell>
-                                </TableRow>
-                            </TableBody>
-                        </Table>
-                    </CardContent>
-                </Card>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <Card className="bg-slate-900 text-white p-8 rounded-[2rem] border-none shadow-xl">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-[#f59e0b]">Disponibilidad Estimada en Banco</p>
-                        <p className="text-4xl font-black italic mt-2">Bs. {formatCurrency(disponibilidadBancaria)}</p>
-                        <p className="text-[9px] font-bold text-slate-400 mt-4 uppercase">Calculado: (Saldo Ant. + Ingresos Banco) - Egresos Tesorería</p>
+            {loading ? <div className="py-20 flex justify-center"><Loader2 className="animate-spin h-10 w-10 text-[#0081c9]" /></div> : <>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <Card className="rounded-[2rem] border-none shadow-xl bg-slate-900 text-white p-6 flex flex-col justify-between">
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-[#f59e0b]">Saldo Real en Banco</p>
+                            <p className="text-3xl font-black italic mt-1">Bs. {formatCurrency(realBalances.banco)}</p>
+                        </div>
+                        <Landmark className="absolute top-6 right-6 h-10 w-10 text-white/10" />
+                        <div className="mt-4 pt-4 border-t border-white/10">
+                            <p className="text-[9px] font-bold text-slate-400 uppercase">Estimado Contable Mes:</p>
+                            <p className="text-sm font-bold text-sky-400">Bs. {formatCurrency(disponibilidadBancariaEstimada)}</p>
+                        </div>
                     </Card>
-                    <div className="space-y-4">
-                        <Card className="p-6 bg-white border-none shadow-sm rounded-[2rem]">
-                            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Saldo Real Caja Principal (Bs.)</p>
-                            <p className="text-2xl font-black text-slate-900 mt-1">Bs. {formatCurrency(cajaPrincipalBS)}</p>
-                        </Card>
-                        <Card className="p-6 bg-white border-none shadow-sm rounded-[2rem]">
-                            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Saldo Real Caja Chica (Bs.)</p>
-                            <p className="text-2xl font-black text-slate-900 mt-1">Bs. {formatCurrency(cajaChicaBS)}</p>
-                        </Card>
-                    </div>
+
+                    <Card className="rounded-[2rem] border-none shadow-xl bg-white p-6 flex flex-col justify-between border border-slate-100">
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600">Saldo Real Caja Principal</p>
+                            <p className="text-3xl font-black italic mt-1 text-slate-900">Bs. {formatCurrency(realBalances.cajaPrincipal)}</p>
+                        </div>
+                        <Coins className="absolute top-6 right-6 h-10 w-10 text-slate-100" />
+                        <div className="mt-4 pt-4 border-t border-slate-50">
+                            <p className="text-[9px] font-bold text-slate-400 uppercase italic">Ingresos Efectivo Mes:</p>
+                            <p className="text-sm font-bold text-emerald-600">Bs. {formatCurrency(ingresosOrdinariosEfectivo)}</p>
+                        </div>
+                    </Card>
+
+                    <Card className="rounded-[2rem] border-none shadow-xl bg-white p-6 flex flex-col justify-center border border-slate-100">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Fondo de Caja Chica</p>
+                        <p className="text-3xl font-black italic mt-1 text-slate-900">Bs. {formatCurrency(realBalances.cajaChica)}</p>
+                        <Wallet className="absolute top-6 right-6 h-10 w-10 text-slate-100" />
+                    </Card>
                 </div>
 
-                <Card className="rounded-[2rem] border-none shadow-sm overflow-hidden bg-white mt-6">
-                    <CardHeader className="bg-slate-50 border-b"><CardTitle className="text-[10px] font-black uppercase tracking-widest text-slate-500">Egresos Registrados en Tesorería</CardTitle></CardHeader>
-                    <CardContent className="p-0">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead className="text-slate-700 font-black text-[10px]">CONCEPTO</TableHead>
-                                    <TableHead className="text-right text-slate-700 font-black text-[10px]">MONTO (Bs.)</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {egresosTesorería.length === 0 ? (
-                                    <TableRow><TableCell colSpan={2} className="text-center py-10 text-slate-400 italic">No hay egresos registrados en este período.</TableCell></TableRow>
-                                ) : egresosTesorería.map((egreso, i) => (
-                                    <TableRow key={i}>
-                                        <TableCell className="text-slate-900 font-bold uppercase text-xs">{egreso.concepto}</TableCell>
-                                        <TableCell className="text-right font-black text-red-600">Bs. {formatCurrency(egreso.monto)}</TableCell>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                    <Card className="rounded-[2rem] border-none shadow-sm overflow-hidden bg-white h-fit">
+                        <CardHeader className="bg-slate-50 border-b"><CardTitle className="text-[10px] font-black uppercase tracking-widest text-slate-500">Ingresos del Período</CardTitle></CardHeader>
+                        <CardContent className="p-0">
+                            <Table>
+                                <TableBody>
+                                    <TableRow className="bg-blue-50/30">
+                                        <TableCell className="font-bold text-slate-900 text-xs">SALDO ANTERIOR BANCO</TableCell>
+                                        <TableCell className="p-2"><Input type="number" className="text-right bg-white font-bold h-8 rounded-lg" value={saldoAnteriorBanco} onChange={e=>setSaldoAnteriorBanco(Number(e.target.value))}/></TableCell>
                                     </TableRow>
-                                ))}
-                            </TableBody>
-                            <TableFooter>
-                                <TableRow className="bg-slate-50">
-                                    <TableCell className="font-black text-slate-900 text-xs">TOTAL EGRESOS DEL MES</TableCell>
-                                    <TableCell className="text-right font-black text-red-700 text-lg">Bs. {formatCurrency(totalEgresosMes)}</TableCell>
-                                </TableRow>
-                            </TableFooter>
-                        </Table>
-                    </CardContent>
-                </Card>
+                                    <TableRow>
+                                        <TableCell className="text-slate-700 text-xs">INGRESOS BANCO (PAGO MÓVIL / TRANSF.)</TableCell>
+                                        <TableCell className="text-right font-black text-slate-900">Bs. {formatCurrency(ingresosOrdinariosBanco)}</TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                        <TableCell className="text-slate-700 text-xs">INGRESOS EFECTIVO (CAJA PRINCIPAL)</TableCell>
+                                        <TableCell className="text-right font-black text-emerald-600">Bs. {formatCurrency(ingresosOrdinariosEfectivo)}</TableCell>
+                                    </TableRow>
+                                </TableBody>
+                            </Table>
+                        </CardContent>
+                    </Card>
+
+                    <Card className="rounded-[2.5rem] border-none shadow-sm overflow-hidden bg-white">
+                        <CardHeader className="bg-slate-50 border-b"><CardTitle className="text-[10px] font-black uppercase tracking-widest text-slate-500">Egresos Registrados (Tesorería)</CardTitle></CardHeader>
+                        <CardContent className="p-0">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow className="bg-slate-100/20">
+                                        <TableHead className="text-slate-700 font-black text-[10px]">CONCEPTO</TableHead>
+                                        <TableHead className="text-right text-slate-700 font-black text-[10px]">MONTO (Bs.)</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {egresosTesorería.length === 0 ? (
+                                        <TableRow><TableCell colSpan={2} className="text-center py-10 text-slate-400 italic text-xs">No se registraron egresos en este período.</TableCell></TableRow>
+                                    ) : egresosTesorería.map((egreso, i) => (
+                                        <TableRow key={i}>
+                                            <TableCell className="text-slate-900 font-bold uppercase text-[10px] py-3">{egreso.concepto}</TableCell>
+                                            <TableCell className="text-right font-black text-red-600">Bs. {formatCurrency(egreso.monto)}</TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                                <TableFooter>
+                                    <TableRow className="bg-red-50">
+                                        <TableCell className="font-black text-red-900 text-[10px] uppercase">Total Egresos del Mes</TableCell>
+                                        <TableCell className="text-right font-black text-red-700 text-lg">Bs. {formatCurrency(totalEgresosMes)}</TableCell>
+                                    </TableRow>
+                                </TableFooter>
+                            </Table>
+                        </CardContent>
+                    </Card>
+                </div>
 
                 <div className="space-y-2 mt-6">
-                    <Label className="text-[10px] font-black uppercase text-slate-500 ml-4">Observaciones del Mes</Label>
+                    <Label className="text-[10px] font-black uppercase text-slate-500 ml-4">Observaciones y Notas del Balance</Label>
                     <Textarea 
-                        className="rounded-[2rem] bg-white border-slate-200 text-slate-900 font-medium p-6 min-h-[120px]" 
+                        className="rounded-[2rem] bg-white border-slate-200 text-slate-900 font-medium p-6 min-h-[120px] shadow-sm" 
                         value={notas} 
                         onChange={e => setNotas(e.target.value)} 
                         placeholder="Escriba notas relevantes sobre el balance aquí..."
@@ -240,7 +271,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 </div>
 
                 <CardFooter className="flex justify-end p-0 pt-6">
-                    <Button onClick={handleSave} disabled={saving} className="bg-[#0081c9] hover:bg-[#006ba8] h-14 rounded-2xl font-black uppercase px-10 text-white shadow-lg shadow-blue-500/20">
+                    <Button onClick={handleSave} disabled={saving} className="bg-[#0081c9] hover:bg-[#006ba8] h-14 rounded-2xl font-black uppercase px-10 text-white shadow-lg shadow-blue-500/20 transition-all active:scale-95">
                         {saving ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2 h-5 w-5" />} Guardar Balance del Período
                     </Button>
                 </CardFooter>
