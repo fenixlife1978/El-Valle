@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { db } from '@/lib/firebase';
 import { 
     collection, onSnapshot, doc, 
-    serverTimestamp, query, orderBy, Timestamp, writeBatch,
+    serverTimestamp, query, orderBy, Timestamp, runTransaction,
     increment, getDocs, where
 } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, PlusCircle, CreditCard } from 'lucide-react';
+import { Loader2, PlusCircle, CreditCard, WalletCards } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Badge } from '@/components/ui/badge';
@@ -82,28 +82,37 @@ function RegisterExpenseForm({ workingCondoId, onSave }: { workingCondoId: strin
     }
 
     try {
-      const batch = writeBatch(db);
-      const expenseRef = doc(collection(db, "condominios", workingCondoId, "gastos"));
-      
-      batch.set(expenseRef, {
-          description, amount, category, date, reference, createdAt: serverTimestamp(), 
-          paymentSource: selectedAcc.nombre, accountId: accountId
+      await runTransaction(db, async (transaction) => {
+          const accountRef = doc(db, 'condominios', workingCondoId, 'cuentas', accountId);
+          const accSnap = await transaction.get(accountRef);
+          
+          if (!accSnap.exists()) throw new Error("La cuenta seleccionada no existe.");
+          
+          const expenseRef = doc(collection(db, "condominios", workingCondoId, "gastos"));
+          const transRef = doc(collection(db, 'condominios', workingCondoId, 'transacciones'));
+
+          // 1. Registrar el Gasto
+          transaction.set(expenseRef, {
+              description, amount, category, date, reference, createdAt: serverTimestamp(), 
+              paymentSource: selectedAcc.nombre, accountId: accountId
+          });
+
+          // 2. Descontar ÚNICAMENTE de la cuenta seleccionada (Atómico)
+          transaction.update(accountRef, { saldoActual: increment(-amount) });
+
+          // 3. Crear Asiento Único en el Libro Diario
+          transaction.set(transRef, {
+              monto: amount, tipo: 'egreso', cuentaId: accountId, nombreCuenta: selectedAcc.nombre,
+              descripcion: `EGRESO: ${description}`, referencia: reference, fecha: date,
+              createdAt: serverTimestamp(), createdBy: user?.email, sourceExpenseId: expenseRef.id
+          });
       });
 
-      batch.update(doc(db, 'condominios', workingCondoId, 'cuentas', accountId), { saldoActual: increment(-amount) });
-
-      batch.set(doc(collection(db, 'condominios', workingCondoId, 'transacciones')), {
-          monto: amount, tipo: 'egreso', cuentaId: accountId, nombreCuenta: selectedAcc.nombre,
-          descripcion: `EGRESO: ${description}`, referencia: reference, fecha: date,
-          createdAt: serverTimestamp(), createdBy: user?.email, sourceExpenseId: expenseRef.id
-      });
-
-      await batch.commit();
-      toast({ title: "Gasto Procesado", description: "El monto ha sido descontado de Tesorería y asentado en el Libro Diario." });
+      toast({ title: "Gasto Procesado", description: "El monto ha sido descontado exclusivamente de la cuenta seleccionada." });
       (e.target as HTMLFormElement).reset();
       onSave();
     } catch (error: any) {
-      toast({ variant: "destructive", title: "Error", description: error.message });
+      toast({ variant: "destructive", title: "Fallo Contable", description: error.message });
     } finally {
       setLoading(false);
     }
@@ -115,14 +124,14 @@ function RegisterExpenseForm({ workingCondoId, onSave }: { workingCondoId: strin
         <CardTitle className="text-slate-900 font-black uppercase italic flex items-center gap-3">
             <PlusCircle className="text-primary h-6 w-6"/> Registrar Egreso Real
         </CardTitle>
-        <CardDescription className="font-bold text-slate-500 uppercase text-[10px] tracking-widest">Afectación directa de Tesorería y Libro Diario.</CardDescription>
+        <CardDescription className="font-bold text-slate-500 uppercase text-[10px] tracking-widest">Afectación exclusiva a la cuenta de origen seleccionada.</CardDescription>
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="p-8 grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Descripción</Label><Input name="description" className="h-12 rounded-xl bg-slate-50 text-slate-900 font-bold border-slate-200" required /></div>
             <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Referencia / Factura</Label><Input name="reference" className="h-12 rounded-xl bg-slate-50 text-slate-900 font-bold border-slate-200" required /></div>
             <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Monto Bs.</Label><Input name="amount" type="number" step="0.01" className="h-12 rounded-xl bg-slate-50 text-slate-900 font-black text-xl border-slate-200" required /></div>
-            <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Cuenta de Pago</Label><Select name="accountId" required><SelectTrigger className="h-12 rounded-xl bg-slate-50 text-slate-900 font-bold border-slate-200"><SelectValue placeholder="Seleccionar..." /></SelectTrigger><SelectContent className="bg-white">{accounts.map(acc => <SelectItem key={acc.id} value={acc.id}>{acc.nombre} (Bs. {formatToTwoDecimals(acc.saldoActual)})</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Cuenta de Pago (Salida Unica)</Label><Select name="accountId" required><SelectTrigger className="h-12 rounded-xl bg-slate-50 text-slate-900 font-bold border-slate-200"><SelectValue placeholder="Seleccionar..." /></SelectTrigger><SelectContent className="bg-white">{accounts.map(acc => <SelectItem key={acc.id} value={acc.id}>{acc.nombre} (Bs. {formatToTwoDecimals(acc.saldoActual)})</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Categoría</Label><Select name="category" required><SelectTrigger className="h-12 rounded-xl bg-slate-50 text-slate-900 font-bold border-slate-200"><SelectValue placeholder="Categoría..." /></SelectTrigger><SelectContent className="bg-white"><SelectItem value="Servicios">Servicios</SelectItem><SelectItem value="Mantenimiento">Mantenimiento</SelectItem><SelectItem value="Nomina">Nómina</SelectItem><SelectItem value="Otros">Otros</SelectItem></SelectContent></Select></div>
             <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Fecha</Label><Input name="date" type="date" defaultValue={format(new Date(), 'yyyy-MM-dd')} className="h-12 rounded-xl bg-slate-50 text-slate-900 font-bold border-slate-200" required /></div>
         </CardContent>
@@ -159,7 +168,7 @@ export default function ExpensesPage() {
             <div className="mb-10">
                 <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">Gestión de <span className="text-[#0081c9]">Egresos</span></h2>
                 <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
-                <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">Registro de gastos con impacto directo en Tesorería y Libros.</p>
+                <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">Registro atómico de gastos con impacto exclusivo en Tesorería y Libros.</p>
             </div>
 
             <RegisterExpenseForm workingCondoId={activeCondoId} onSave={() => {}} />
@@ -176,7 +185,7 @@ export default function ExpensesPage() {
                 </CardHeader>
                 <CardContent className="p-0">
                     <Table>
-                        <TableHeader className="bg-slate-50"><TableRow className="border-slate-100"><TableHead className="px-8 py-6 text-[10px] font-black uppercase text-slate-700">Fecha</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-700">Concepto</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-700">Cuenta</TableHead><TableHead className="text-right text-[10px] font-black uppercase pr-8 text-slate-700">Monto</TableHead></TableRow></TableHeader>
+                        <TableHeader className="bg-slate-50"><TableRow className="border-slate-100"><TableHead className="px-8 py-6 text-[10px] font-black uppercase text-slate-700">Fecha</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-700">Concepto</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-700">Cuenta de Salida</TableHead><TableHead className="text-right text-[10px] font-black uppercase pr-8 text-slate-700">Monto</TableHead></TableRow></TableHeader>
                         <TableBody>
                             {loading ? <TableRow><TableCell colSpan={4} className="text-center py-20"><Loader2 className="animate-spin mx-auto text-primary"/></TableCell></TableRow> : 
                              filteredExpenses.length === 0 ? <TableRow><TableCell colSpan={4} className="text-center py-20 text-slate-400 font-bold italic">Sin movimientos en este período.</TableCell></TableRow> : 

@@ -54,6 +54,7 @@ const AccountingPage = () => {
         return () => { unsubAccounts(); unsubTx(); };
     }, [workingCondoId]);
 
+    // FILTRO ESTRICTO: Excluimos la cuenta duplicada para limpieza visual
     const visibleAccounts = useMemo(() => {
         return accounts.filter(acc => acc.nombre?.toUpperCase().trim() !== "CAJA PRINCIPAL (EFECTIVO BS)");
     }, [accounts]);
@@ -68,7 +69,7 @@ const AccountingPage = () => {
         allTransactions.forEach(tx => {
             const date = tx.fecha.toDate();
             const entry: ProcessedTransaction = { 
-                date, description: tx.descripcion, reference: tx.referencia || 'N/A', 
+                date, description: tx.description, reference: tx.referencia || 'N/A', 
                 credit: tx.tipo === 'ingreso' ? tx.monto : 0, 
                 debit: tx.tipo === 'egreso' ? tx.monto : 0, balance: 0 
             };
@@ -114,6 +115,7 @@ const AccountingPage = () => {
 
                 for (const pDoc of paySnap.docs) {
                     const p = pDoc.data();
+                    // EVITAR ASIENTO DOBLE: Si ya tiene un hito en transacciones, saltar.
                     if (allTransactions.some(tx => tx.sourcePaymentId === pDoc.id)) continue;
 
                     let targetName = "";
@@ -141,18 +143,20 @@ const AccountingPage = () => {
                         accountId = account.id;
                     }
 
+                    // ASIENTO ÚNICO EXCLUSIVO
                     transaction.set(doc(collection(db, 'condominios', workingCondoId, 'transacciones')), {
                         monto: p.totalAmount, tipo: 'ingreso', cuentaId: accountId, nombreCuenta: targetName,
                         descripcion: `SINCRONIZACIÓN: PAGO DE ${p.beneficiaries?.[0]?.ownerName || 'PROPIETARIO'}`,
                         referencia: p.reference, fecha: p.paymentDate, sourcePaymentId: pDoc.id,
                         createdAt: serverTimestamp(), createdBy: user?.email
                     });
+                    
                     transaction.update(doc(db, 'condominios', workingCondoId, 'cuentas', accountId), { saldoActual: increment(p.totalAmount) });
                     count++;
                 }
                 if (count === 0) throw "no_needed";
             });
-            toast({ title: "Sincronización Exitosa", description: `Se procesaron ${count} hitos contables faltantes.` });
+            toast({ title: "Sincronización Exitosa", description: `Se procesaron ${count} hitos contables faltantes sin duplicados.` });
         } catch (e) {
             if (e === "no_needed") toast({ title: "Todo al día" });
             else {
@@ -175,7 +179,7 @@ const AccountingPage = () => {
                 <div>
                     <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">Contabilidad <span className="text-[#0081c9]">Digital</span></h2>
                     <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
-                    <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">Libros Diarios y Mayor Consolidado Atómico.</p>
+                    <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">Asientos únicos y mayor consolidado atómico.</p>
                 </div>
                 <Button onClick={handleSyncPeriod} disabled={isSyncing} variant="outline" className="rounded-xl border-[#0081c9] text-[#0081c9] font-black uppercase text-[10px] h-12 shadow-sm hover:bg-blue-50">
                     {isSyncing ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Zap className="mr-2 h-4 w-4" />} Sincronizar Hitos
@@ -221,7 +225,7 @@ const AccountingPage = () => {
                                         </TableRow>
                                     ))}
                                     {generalLedger.length === 0 && (
-                                        <TableRow><TableCell colSpan={5} className="text-center py-20 text-slate-400 italic font-bold">No hay cuentas configuradas para este período.</TableCell></TableRow>
+                                        <TableRow><TableCell colSpan={5} className="text-center py-20 text-slate-400 italic font-bold">No hay cuentas operativas para este período.</TableCell></TableRow>
                                     )}
                                 </TableBody>
                             </Table>
