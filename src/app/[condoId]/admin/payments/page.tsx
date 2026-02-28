@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
@@ -16,7 +15,7 @@ import { Search, CheckCircle, XCircle, Eye, MoreHorizontal, Download, Loader2, C
 import { format, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn, compressImage } from '@/lib/utils';
-import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc, where, getDocs, Timestamp, runTransaction, updateDoc, deleteDoc, deleteField, orderBy, increment } from 'firebase/firestore';
+import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc, where, getDocs, Timestamp, runTransaction, updateDoc, deleteDoc, deleteField, orderBy, increment, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { BankSelectionModal } from '@/components/bank-selection-modal';
@@ -90,10 +89,21 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 const condoFeeUSD = settingsDoc.data()?.condoFee || 0;
                 const costBs = condoFeeUSD * payment.exchangeRate;
 
-                // DETERMINAR CUENTA DESTINO
+                // --- LÓGICA DE HITO CONTABLE SENIOR ---
+                // Determinamos el ID de cuenta física según reglas de negocio
+                let targetAccountId = "";
                 let targetAccountName = "";
-                if (['movil', 'transferencia'].includes(payment.paymentMethod)) targetAccountName = "BANCO DE VENEZUELA";
-                else if (['efectivo_bs', 'efectivo'].includes(payment.paymentMethod)) targetAccountName = "CAJA PRINCIPAL";
+                
+                if (['movil', 'transferencia'].includes(payment.paymentMethod)) {
+                    // ID ESPECÍFICO REQUERIDO PARA BANCO DE VENEZUELA EN CONDO_01
+                    targetAccountId = condoId === 'condo_01' ? 'RdiTtY9ojCuYPRNvB7C3' : "BDV_ACCOUNT";
+                    targetAccountName = "BANCO DE VENEZUELA";
+                } else if (['efectivo_bs', 'efectivo'].includes(payment.paymentMethod)) {
+                    targetAccountId = "CAJA_PRINCIPAL_ID";
+                    targetAccountName = "CAJA PRINCIPAL";
+                }
+
+                const monthId = format(payment.paymentDate.toDate(), 'yyyy-MM');
 
                 await runTransaction(db, async (transaction) => {
                     const beneficiaryIds = payment.beneficiaries.map(b => b.ownerId);
@@ -102,6 +112,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                     
                     const receiptNumbers: { [ownerId: string]: string } = {};
 
+                    // 1. LIQUIDACIÓN DE DEUDAS Y SALDOS A FAVOR
                     for (const beneficiary of payment.beneficiaries) {
                         const ownerRef = doc(db, 'condominios', condoId, ownersCollectionName, beneficiary.ownerId);
                         const ownerDoc = await transaction.get(ownerRef);
@@ -146,32 +157,30 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         receiptNumbers[beneficiary.ownerId] = `REC-${Date.now()}-${beneficiary.ownerId.slice(-4)}`;
                     }
 
-                    // IMPACTO EN TESORERÍA Y LIBRO DIARIO
-                    if (targetAccountName) {
-                        const accountsSnap = await getDocs(collection(db, 'condominios', condoId, 'cuentas'));
-                        let account = accountsSnap.docs.find(d => d.data().nombre?.toUpperCase().trim() === targetAccountName);
-                        
-                        let accountId = "";
-                        if (account) {
-                            accountId = account.id;
-                            transaction.update(doc(db, 'condominios', condoId, 'cuentas', accountId), { saldoActual: increment(payment.totalAmount) });
-                        } else {
-                            const newAccRef = doc(collection(db, 'condominios', condoId, 'cuentas'));
-                            const initialData = { 
-                                nombre: targetAccountName, 
-                                tipo: targetAccountName === "CAJA PRINCIPAL" ? "efectivo" : "banco", 
-                                saldoActual: payment.totalAmount, 
-                                createdAt: serverTimestamp() 
-                            };
-                            transaction.set(newAccRef, initialData);
-                            accountId = newAccRef.id;
-                        }
+                    // 2. ACTUALIZACIÓN DE SALDO FÍSICO EN TESORERÍA (CON ID ESPECÍFICO)
+                    if (targetAccountId) {
+                        const accountRef = doc(db, 'condominios', condoId, 'cuentas', targetAccountId);
+                        transaction.update(accountRef, { 
+                            saldoActual: increment(payment.totalAmount),
+                            lastUpdate: serverTimestamp() 
+                        });
 
-                        // ASIENTO ÚNICO CON DESCRIPCIÓN COMPLETA
-                        transaction.set(doc(collection(db, 'condominios', condoId, 'transacciones')), {
+                        // 3. ACTUALIZACIÓN DE STATS MENSUALES PARA BALANCE FINANCIERO
+                        const statsRef = doc(db, 'condominios', condoId, 'financial_stats', monthId);
+                        transaction.set(statsRef, {
+                            periodo: monthId,
+                            saldoBancarioReal: increment(targetAccountName === "BANCO DE VENEZUELA" ? payment.totalAmount : 0),
+                            saldoCajaReal: increment(targetAccountName === "CAJA PRINCIPAL" ? payment.totalAmount : 0),
+                            totalIngresosMes: increment(payment.totalAmount),
+                            updatedAt: serverTimestamp()
+                        }, { merge: true });
+
+                        // 4. ASIENTO ÚNICO EN LIBRO DIARIO
+                        const transRef = doc(collection(db, 'condominios', condoId, 'transacciones'));
+                        transaction.set(transRef, {
                             monto: payment.totalAmount, 
                             tipo: 'ingreso', 
-                            cuentaId: accountId, 
+                            cuentaId: targetAccountId, 
                             nombreCuenta: targetAccountName,
                             descripcion: `INGRESO: PAGO DE ${payment.beneficiaries.map(b => b.ownerName).join(', ')}`,
                             referencia: payment.reference, 
@@ -182,16 +191,18 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         });
                     }
 
+                    // 5. CAMBIO DE ESTATUS DEL PAGO
                     transaction.update(doc(db, 'condominios', condoId, 'payments', payment.id), { 
                         status: 'aprobado', 
                         receiptNumbers, 
                         observations: 'Hito contable validado y asimilado en Tesorería.' 
                     });
                 });
-                toast({ title: "Pago Aprobado", description: "El saldo ha sido sumado a la cuenta correspondiente en Tesorería." });
+
+                toast({ title: "Pago Aprobado", description: "Hito contable registrado y saldo sumado al Banco de Venezuela." });
                 setSelectedPayment(null);
             } catch (error: any) { 
-                console.error(error);
+                console.error("Error en aprobación senior:", error);
                 toast({ variant: 'destructive', title: "Falla de Proceso", description: error.message }); 
             }
             finally { setIsVerifying(false); }
@@ -218,6 +229,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             try {
                 const paymentRef = doc(db, 'condominios', condoId, 'payments', paymentToDelete.id);
                 const txSnap = await getDocs(query(collection(db, 'condominios', condoId, 'transacciones'), where('sourcePaymentId', '==', paymentToDelete.id)));
+                const monthId = format(paymentToDelete.paymentDate.toDate(), 'yyyy-MM');
                 
                 await runTransaction(db, async (transaction) => {
                     const payDoc = await transaction.get(paymentRef);
@@ -225,6 +237,14 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         if (txSnap.docs.length > 0) {
                             const tx = txSnap.docs[0].data();
                             transaction.update(doc(db, 'condominios', condoId, 'cuentas', tx.cuentaId), { saldoActual: increment(-paymentToDelete.totalAmount) });
+                            
+                            const statsRef = doc(db, 'condominios', condoId, 'financial_stats', monthId);
+                            transaction.set(statsRef, {
+                                saldoBancarioReal: increment(tx.nombreCuenta === "BANCO DE VENEZUELA" ? -paymentToDelete.totalAmount : 0),
+                                saldoCajaReal: increment(tx.nombreCuenta === "CAJA PRINCIPAL" ? -paymentToDelete.totalAmount : 0),
+                                totalIngresosMes: increment(-paymentToDelete.totalAmount)
+                            }, { merge: true });
+
                             txSnap.forEach(d => transaction.delete(d.ref));
                         }
                         const debtsSnap = await getDocs(query(collection(db, 'condominios', condoId, 'debts'), where('paymentId', '==', paymentToDelete.id)));
@@ -276,7 +296,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                     {loading ? <div className="text-center p-20"><Loader2 className="animate-spin h-10 w-10 mx-auto text-primary" /></div> : (
                         <div className="overflow-x-auto">
                             <Table>
-                                <TableHeader className="bg-slate-50"><TableRow className="border-slate-100"><TableHead className="px-8 py-6 text-[10px] font-black uppercase text-slate-500">Beneficiarios</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-500">Fecha</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-500">Monto</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-500">Ref.</TableHead><TableHead className="text-right pr-8 text-[10px] font-black uppercase text-slate-500">Acción</TableHead></TableRow></TableHeader>
+                                <TableHeader className="bg-slate-50"><TableRow className="border-slate-100"><TableHead className="px-8 py-6 text-[10px] font-black uppercase text-slate-700">Beneficiarios</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-700">Fecha</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-700">Monto</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-700">Ref.</TableHead><TableHead className="text-right pr-8 text-[10px] font-black uppercase text-slate-700">Acción</TableHead></TableRow></TableHeader>
                                 <TableBody>
                                     {filteredPayments.length === 0 ? (<TableRow><TableCell colSpan={5} className="h-32 text-center text-slate-400 font-bold italic">Sin registros en esta bandeja.</TableCell></TableRow>) : 
                                     filteredPayments.map(p => (

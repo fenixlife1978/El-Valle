@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo, use } from 'react';
@@ -63,9 +62,15 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
     useEffect(() => {
         if (!workingCondoId) return;
 
+        // --- ESCUCHA DE SALDOS REALES ATÓMICOS ---
         const unsubCuentas = onSnapshot(collection(db, 'condominios', workingCondoId, 'cuentas'), (snap) => {
-            const accounts = snap.docs.map(d => d.data());
-            const bdv = accounts.find(a => a.nombre?.toUpperCase().trim().includes('VENEZUELA'));
+            const accounts = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+            
+            // Priorizamos por ID específico si estamos en condo_01
+            const bdv = workingCondoId === 'condo_01' 
+                ? accounts.find(a => a.id === 'RdiTtY9ojCuYPRNvB7C3') 
+                : accounts.find(a => a.nombre?.toUpperCase().includes('VENEZUELA'));
+                
             const cp = accounts.find(a => a.nombre?.toUpperCase().trim() === 'CAJA PRINCIPAL');
             const cc = accounts.find(a => a.nombre?.toUpperCase().trim() === 'CAJA CHICA');
             
@@ -89,8 +94,17 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 const month = parseInt(selectedMonth) - 1;
                 const fromDate = startOfMonth(new Date(year, month, 1));
                 const toDate = endOfMonth(fromDate);
+                const monthId = format(fromDate, 'yyyy-MM');
 
-                // INGRESOS REALES APROBADOS
+                // 1. CARGAR DATOS DE HITO MENSUAL (financial_stats)
+                const statsRef = doc(db, 'condominios', workingCondoId, 'financial_stats', monthId);
+                const statsSnap = await getDoc(statsRef);
+                if (statsSnap.exists()) {
+                    const s = statsSnap.data();
+                    // Aquí podríamos complementar datos si fuera necesario
+                }
+
+                // 2. INGRESOS REALES APROBADOS
                 const pQuery = query(
                     collection(db, 'condominios', workingCondoId, 'payments'),
                     where('paymentDate', '>=', fromDate),
@@ -109,7 +123,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 setIngresosOrdinariosBanco(totalBancario);
                 setIngresosOrdinariosEfectivo(totalEfectivo);
 
-                // EGRESOS REALES REGISTRADOS
+                // 3. EGRESOS REALES REGISTRADOS
                 const tQuery = query(
                     collection(db, 'condominios', workingCondoId, 'transacciones'), 
                     where('fecha', '>=', fromDate), 
@@ -119,7 +133,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 );
                 const tSnap = await getDocs(tQuery);
                 setEgresosTesorería(tSnap.docs.map(d => ({ 
-                    concepto: d.data().descripcion, 
+                    concepto: d.data().descripcion || d.data().description || "SIN CONCEPTO", 
                     monto: d.data().monto,
                     cuenta: d.data().nombreCuenta || "S/D"
                 })));
@@ -147,7 +161,6 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
 
     const totalEgresosMes = useMemo(() => egresosTesorería.reduce((sum, e) => sum + e.monto, 0), [egresosTesorería]);
     
-    // CALCULOS DE INTEGRIDAD CONTABLE
     const saldoCierreBancoCalculado = (saldoAnteriorBanco + ingresosOrdinariosBanco) - totalEgresosBanco;
     const saldoCierreCajaCalculado = ingresosOrdinariosEfectivo - totalEgresosCaja;
 
