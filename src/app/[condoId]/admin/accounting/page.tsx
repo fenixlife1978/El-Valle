@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, Timestamp, where, query, orderBy, getDocs, writeBatch, doc } from 'firebase/firestore';
-import { Download, RefreshCw, Landmark, Coins, Wallet, History, Zap } from 'lucide-react';
+import { Download, RefreshCw, Landmark, Coins, Wallet, History, Zap, Loader2 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 
