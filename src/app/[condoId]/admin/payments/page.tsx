@@ -12,11 +12,20 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
-import { Search, CheckCircle, XCircle, Eye, MoreHorizontal, Download, Loader2, Calendar as CalendarIcon, Banknote, UserPlus, CheckCircle2, WalletCards, ArrowLeft, Trash2, Hash, FileText, Save } from 'lucide-react';
+import { 
+    Search, CheckCircle, XCircle, Eye, MoreHorizontal, 
+    Download, Loader2, Calendar as CalendarIcon, Banknote, 
+    UserPlus, CheckCircle2, WalletCards, ArrowLeft, Trash2, 
+    Hash, FileText, Save, Share2, FileDown, UserCheck
+} from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn, compressImage } from '@/lib/utils';
-import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc, where, getDocs, Timestamp, runTransaction, updateDoc, deleteDoc, increment, orderBy } from 'firebase/firestore';
+import { 
+    collection, onSnapshot, query, addDoc, serverTimestamp, 
+    doc, getDoc, where, getDocs, Timestamp, runTransaction, 
+    updateDoc, deleteDoc, increment, orderBy 
+} from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { BankSelectionModal } from '@/components/bank-selection-modal';
@@ -27,20 +36,40 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Textarea } from '@/components/ui/textarea';
 import Image from 'next/image';
 import { useAuthorization } from '@/hooks/use-authorization';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
+import { 
+    DropdownMenu, DropdownMenuContent, DropdownMenuItem, 
+    DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuSub,
+    DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuPortal
+} from '@/components/ui/dropdown-menu';
+import { generatePaymentReceipt } from '@/lib/pdf-generator';
 
 const formatCurrency = (num: number) => {
     if (typeof num !== 'number' || isNaN(num)) return '0,00';
     return num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-type Owner = { id: string; name: string; properties: { street: string, house: string }[]; balance?: number; role?: string; };
+type Owner = { id: string; name: string; properties: { street: string, house: string }[]; balance?: number; role?: string; email?: string; };
 type BeneficiaryRow = { id: string; owner: Owner | null; searchTerm: string; amount: string; selectedProperty: { street: string, house: string } | null; };
 type PaymentMethod = 'movil' | 'transferencia' | 'efectivo_bs' | '';
-type Payment = { id: string; beneficiaries: { ownerId: string; ownerName: string; amount: number; street?: string; house?: string; }[]; beneficiaryIds: string[]; totalAmount: number; exchangeRate: number; paymentDate: Timestamp; reportedAt: Timestamp; paymentMethod: 'transferencia' | 'movil' | 'efectivo_bs' | 'efectivo'; bank: string; reference: string; status: 'pendiente' | 'aprobado' | 'rechazado'; receiptUrl?: string; observations?: string; receiptNumbers?: { [ownerId: string]: string }; };
+type Payment = { 
+    id: string; 
+    beneficiaries: { ownerId: string; ownerName: string; amount: number; street?: string; house?: string; }[]; 
+    beneficiaryIds: string[]; 
+    totalAmount: number; 
+    exchangeRate: number; 
+    paymentDate: Timestamp; 
+    reportedAt: Timestamp; 
+    paymentMethod: string; 
+    bank: string; 
+    reference: string; 
+    status: 'pendiente' | 'aprobado' | 'rechazado'; 
+    receiptUrl?: string; 
+    observations?: string; 
+    receiptNumbers?: { [ownerId: string]: string }; 
+};
 
 function VerificationComponent({ condoId }: { condoId: string }) {
-    const { user } = useAuth();
+    const { user, companyInfo } = useAuth();
     const { requestAuthorization } = useAuthorization();
     const { toast } = useToast();
 
@@ -84,10 +113,11 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 let targetAccountId = "";
                 let targetAccountName = "";
                 
-                if (['movil', 'transferencia', 'pagomovil', 'transferencias'].includes(payment.paymentMethod)) {
+                const method = payment.paymentMethod.toLowerCase();
+                if (['movil', 'transferencia', 'pagomovil', 'transferencias'].includes(method)) {
                     targetAccountId = BDV_ACCOUNT_ID;
                     targetAccountName = "BANCO DE VENEZUELA";
-                } else if (['efectivo_bs', 'efectivo'].includes(payment.paymentMethod)) {
+                } else if (['efectivo_bs', 'efectivo'].includes(method)) {
                     targetAccountId = CAJA_PRINCIPAL_ID;
                     targetAccountName = "CAJA PRINCIPAL";
                 }
@@ -99,30 +129,15 @@ function VerificationComponent({ condoId }: { condoId: string }) {
 
                     for (const beneficiary of payment.beneficiaries) {
                         const ownerRef = doc(db, 'condominios', condoId, ownersCollectionName, beneficiary.ownerId);
-                        const ownerDoc = await transaction.get(ownerRef);
-                        if (ownerDoc.exists()) {
-                            const newBalance = (ownerDoc.data().balance || 0) + beneficiary.amount;
-                            transaction.update(ownerRef, { balance: newBalance });
-                        }
-                        receiptNumbers[beneficiary.ownerId] = `REC-${Date.now()}-${beneficiary.ownerId.slice(-4)}`;
+                        transaction.update(ownerRef, { balance: increment(beneficiary.amount) });
+                        receiptNumbers[beneficiary.ownerId] = `REC-${Date.now().substring(6)}-${beneficiary.ownerId.slice(-4)}`.toUpperCase();
                     }
 
                     if (targetAccountId) {
                         const accountRef = doc(db, 'condominios', condoId, 'cuentas', targetAccountId);
-                        const accSnap = await transaction.get(accountRef);
-                        
-                        if (!accSnap.exists()) {
-                            transaction.set(accountRef, {
-                                nombre: targetAccountName,
-                                tipo: targetAccountName.includes("CAJA") ? 'efectivo' : 'banco',
-                                saldoActual: payment.totalAmount,
-                                createdAt: serverTimestamp()
-                            });
-                        } else {
-                            transaction.update(accountRef, { saldoActual: increment(payment.totalAmount) });
-                        }
+                        transaction.update(accountRef, { saldoActual: increment(payment.totalAmount) });
 
-                        const statsRef = doc(db, 'condominios', condoId, 'financial_stats', monthId);
+                        const statsRef = doc(db, 'condominios', workingCondoId || condoId, 'financial_stats', monthId);
                         transaction.set(statsRef, {
                             periodo: monthId,
                             saldoBancarioReal: increment(targetAccountName === "BANCO DE VENEZUELA" ? payment.totalAmount : 0),
@@ -162,6 +177,80 @@ function VerificationComponent({ condoId }: { condoId: string }) {
         });
     };
 
+    const handleExportPDF = async (payment: Payment, ownerId: string) => {
+        if (!companyInfo) return;
+        const beneficiary = payment.beneficiaries.find(b => b.ownerId === ownerId);
+        if (!beneficiary) return;
+
+        const data = {
+            condoName: companyInfo.name,
+            rif: companyInfo.rif,
+            receiptNumber: payment.receiptNumbers?.[ownerId] || 'S/N',
+            ownerName: beneficiary.ownerName,
+            method: payment.paymentMethod.toUpperCase(),
+            bank: payment.bank,
+            reference: payment.reference,
+            date: format(payment.paymentDate.toDate(), 'dd/MM/yyyy'),
+            rate: formatCurrency(payment.exchangeRate),
+            receivedAmount: formatCurrency(beneficiary.amount),
+            totalDebtPaid: formatCurrency(beneficiary.amount),
+            prevBalance: '0,00',
+            currentBalance: '0,00',
+            observations: payment.observations || 'PAGO VALIDADO',
+            concepts: [[
+                format(payment.paymentDate.toDate(), 'MM/yyyy'),
+                `${beneficiary.street || ''} ${beneficiary.house || ''}`.trim(),
+                (beneficiary.amount / payment.exchangeRate).toFixed(2),
+                formatCurrency(beneficiary.amount)
+            ]]
+        };
+
+        await generatePaymentReceipt(data, companyInfo.logo);
+    };
+
+    const handleSharePDF = async (payment: Payment, ownerId: string) => {
+        if (!companyInfo) return;
+        const beneficiary = payment.beneficiaries.find(b => b.ownerId === ownerId);
+        if (!beneficiary) return;
+
+        const data = {
+            condoName: companyInfo.name,
+            rif: companyInfo.rif,
+            receiptNumber: payment.receiptNumbers?.[ownerId] || 'S/N',
+            ownerName: beneficiary.ownerName,
+            method: payment.paymentMethod.toUpperCase(),
+            bank: payment.bank,
+            reference: payment.reference,
+            date: format(payment.paymentDate.toDate(), 'dd/MM/yyyy'),
+            rate: formatCurrency(payment.exchangeRate),
+            receivedAmount: formatCurrency(beneficiary.amount),
+            totalDebtPaid: formatCurrency(beneficiary.amount),
+            prevBalance: '0,00',
+            currentBalance: '0,00',
+            observations: payment.observations || 'PAGO VALIDADO',
+            concepts: [[
+                format(payment.paymentDate.toDate(), 'MM/yyyy'),
+                `${beneficiary.street || ''} ${beneficiary.house || ''}`.trim(),
+                (beneficiary.amount / payment.exchangeRate).toFixed(2),
+                formatCurrency(beneficiary.amount)
+            ]]
+        };
+
+        const blob = await generatePaymentReceipt(data, companyInfo.logo, 'blob');
+        if (blob && navigator.share) {
+            const file = new File([blob as Blob], `Recibo_${beneficiary.ownerName.replace(/ /g, '_')}.pdf`, { type: 'application/pdf' });
+            try {
+                await navigator.share({
+                    files: [file],
+                    title: 'Recibo de Pago EFAS',
+                    text: `Recibo de pago para ${beneficiary.ownerName}`
+                });
+            } catch (e) { console.error("Share failed", e); }
+        } else {
+            toast({ title: "Compartir no disponible", description: "Su navegador no soporta el envío directo de archivos." });
+        }
+    };
+
     const handleReject = (payment: Payment) => {
         if (!rejectionReason) return toast({ variant: 'destructive', title: "Se requiere un motivo" });
         requestAuthorization(async () => {
@@ -195,12 +284,12 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         }
                         
                         if (!transSnap.empty) {
-                            const tx = transSnap.docs[0].data();
-                            transaction.update(doc(db, 'condominios', condoId, 'cuentas', tx.cuentaId), { saldoActual: increment(-paymentToDelete.totalAmount) });
+                            const txData = transSnap.docs[0].data();
+                            transaction.update(doc(db, 'condominios', condoId, 'cuentas', txData.cuentaId), { saldoActual: increment(-paymentToDelete.totalAmount) });
                             const statsRef = doc(db, 'condominios', condoId, 'financial_stats', monthId);
                             transaction.update(statsRef, {
-                                saldoBancarioReal: increment(tx.nombreCuenta === "BANCO DE VENEZUELA" ? -paymentToDelete.totalAmount : 0),
-                                saldoCajaReal: increment(tx.nombreCuenta === "CAJA PRINCIPAL" ? -paymentToDelete.totalAmount : 0),
+                                saldoBancarioReal: increment(txData.nombreCuenta === "BANCO DE VENEZUELA" ? -paymentToDelete.totalAmount : 0),
+                                saldoCajaReal: increment(txData.nombreCuenta === "CAJA PRINCIPAL" ? -paymentToDelete.totalAmount : 0),
                                 totalIngresosMes: increment(-paymentToDelete.totalAmount)
                             });
                             transSnap.forEach(d => transaction.delete(d.ref));
@@ -251,8 +340,50 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                                                     <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="text-slate-500 hover:text-white"><MoreHorizontal className="h-5 w-5"/></Button></DropdownMenuTrigger>
                                                     <DropdownMenuContent align="end" className="rounded-xl border-white/10 shadow-2xl bg-slate-900 text-white">
                                                         <DropdownMenuItem onClick={() => setSelectedPayment(p)} className="font-black uppercase text-[10px] p-3 gap-2"><Eye className="h-4 w-4 text-primary" /> Detalles de Auditoría</DropdownMenuItem>
-                                                        {p.status === 'pendiente' ? (<><DropdownMenuSeparator className="bg-white/5"/><DropdownMenuItem onClick={() => handleApprove(p)} className="text-emerald-500 font-black uppercase text-[10px] p-3 gap-2"><CheckCircle className="h-4 w-4" /> Validar y Sincronizar</DropdownMenuItem><DropdownMenuItem onClick={() => { setSelectedPayment(p); setRejectionReason(''); }} className="text-red-500 font-black uppercase text-[10px] p-3 gap-2"><XCircle className="h-4 w-4" /> Rechazar Pago</DropdownMenuItem></>) : 
-                                                        p.status === 'aprobado' && (<><DropdownMenuSeparator className="bg-white/5"/><DropdownMenuItem onClick={() => setPaymentToDelete(p)} className="text-red-500 font-black uppercase text-[10px] p-3 gap-2"><Trash2 className="h-4 w-4"/> Revertir y Eliminar</DropdownMenuItem></>)}
+                                                        
+                                                        {p.status === 'aprobado' && (
+                                                            <>
+                                                                <DropdownMenuSeparator className="bg-white/5"/>
+                                                                <DropdownMenuSub>
+                                                                    <DropdownMenuSubTrigger className="font-black uppercase text-[10px] p-3 gap-2">
+                                                                        <FileDown className="h-4 w-4 text-sky-400" /> Exportar Recibos
+                                                                    </DropdownMenuSubTrigger>
+                                                                    <DropdownMenuPortal>
+                                                                        <DropdownMenuSubContent className="bg-slate-900 text-white border-white/10">
+                                                                            {p.beneficiaries.map(ben => (
+                                                                                <DropdownMenuItem key={ben.ownerId} onClick={() => handleExportPDF(p, ben.ownerId)} className="font-black uppercase text-[9px] p-2">
+                                                                                    {ben.ownerName}
+                                                                                </DropdownMenuItem>
+                                                                            ))}
+                                                                        </DropdownMenuSubContent>
+                                                                    </DropdownMenuPortal>
+                                                                </DropdownMenuSub>
+                                                                <DropdownMenuSub>
+                                                                    <DropdownMenuSubTrigger className="font-black uppercase text-[10px] p-3 gap-2">
+                                                                        <Share2 className="h-4 w-4 text-emerald-400" /> Compartir Recibos
+                                                                    </DropdownMenuSubTrigger>
+                                                                    <DropdownMenuPortal>
+                                                                        <DropdownMenuSubContent className="bg-slate-900 text-white border-white/10">
+                                                                            {p.beneficiaries.map(ben => (
+                                                                                <DropdownMenuItem key={ben.ownerId} onClick={() => handleSharePDF(p, ben.ownerId)} className="font-black uppercase text-[9px] p-2">
+                                                                                    {ben.ownerName}
+                                                                                </DropdownMenuItem>
+                                                                            ))}
+                                                                        </DropdownMenuSubContent>
+                                                                    </DropdownMenuPortal>
+                                                                </DropdownMenuSub>
+                                                                <DropdownMenuSeparator className="bg-white/5"/>
+                                                                <DropdownMenuItem onClick={() => setPaymentToDelete(p)} className="text-red-500 font-black uppercase text-[10px] p-3 gap-2"><Trash2 className="h-4 w-4"/> Revertir y Eliminar</DropdownMenuItem>
+                                                            </>
+                                                        )}
+
+                                                        {p.status === 'pendiente' && (
+                                                            <>
+                                                                <DropdownMenuSeparator className="bg-white/5"/>
+                                                                <DropdownMenuItem onClick={() => handleApprove(p)} className="text-emerald-500 font-black uppercase text-[10px] p-3 gap-2"><CheckCircle className="h-4 w-4" /> Validar y Sincronizar</DropdownMenuItem>
+                                                                <DropdownMenuItem onClick={() => { setSelectedPayment(p); setRejectionReason(''); }} className="text-red-500 font-black uppercase text-[10px] p-3 gap-2"><XCircle className="h-4 w-4" /> Rechazar Pago</DropdownMenuItem>
+                                                            </>
+                                                        )}
                                                     </DropdownMenuContent>
                                                 </DropdownMenu>
                                             </TableCell>
@@ -300,7 +431,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
 
 function ReportPaymentComponent({ condoId }: { condoId: string }) {
     const { toast } = useToast();
-    const { user: authUser, ownerData: authOwnerData } = useAuth();
+    const { user: authUser } = useAuth();
     const [allOwners, setAllOwners] = useState<Owner[]>([]);
     const [loading, setLoading] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -323,21 +454,21 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
         const q = query(collection(db, "condominios", condoId, ownersCollectionName), where("role", "==", "propietario"));
         return onSnapshot(q, (snapshot) => {
             const ownersData: Owner[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner));
-            setAllOwners(ownersData.sort((a, b) => (a.name || '').localeCompare(b.name || '')));
+            // Excluir Super Admin por email o rol
+            setAllOwners(ownersData.filter(o => o.email !== 'vallecondo@gmail.com').sort((a, b) => (a.name || '').localeCompare(b.name || '')));
         });
     }, [condoId, ownersCollectionName]);
 
+    // Iniciar con un beneficiario vacío
     useEffect(() => {
-        if (authOwnerData && authUser) {
-           setBeneficiaryRows([{
-               id: Date.now().toString(),
-               owner: { id: authUser.uid, name: authOwnerData.name, properties: authOwnerData.properties },
-               searchTerm: '',
-               amount: '',
-               selectedProperty: authOwnerData.properties?.[0] || null
-           }]);
-       }
-   }, [authOwnerData, authUser]);
+        setBeneficiaryRows([{
+            id: Date.now().toString(),
+            owner: null,
+            searchTerm: '',
+            amount: '',
+            selectedProperty: null
+        }]);
+    }, []);
 
     useEffect(() => {
         if (!condoId) return;
@@ -394,6 +525,7 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
             });
             toast({ title: 'Reporte Enviado a Auditoría' });
             setTotalAmount(''); setReference(''); setReceiptImage(null);
+            setBeneficiaryRows([{ id: Date.now().toString(), owner: null, searchTerm: '', amount: '', selectedProperty: null }]);
         } catch (error) { toast({ variant: "destructive", title: "Error de Guardado" }); } 
         finally { setIsSubmitting(false); }
     };
