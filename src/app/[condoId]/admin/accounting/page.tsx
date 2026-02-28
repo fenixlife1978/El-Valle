@@ -3,8 +3,8 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, Timestamp, where, query, orderBy, getDocs, runTransaction, doc, serverTimestamp, increment } from 'firebase/firestore';
-import { RefreshCw, History, Zap, Loader2, BookCopy } from 'lucide-react';
+import { collection, onSnapshot, Timestamp, where, query, orderBy, getDocs, runTransaction, doc, serverTimestamp, increment, setDoc } from 'firebase/firestore';
+import { RefreshCw, History, Zap, Loader2, BookCopy, AlertCircle } from 'lucide-react';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -114,50 +114,72 @@ const AccountingPage = () => {
         try {
             const from = startOfMonth(new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1));
             const to = endOfMonth(from);
+            const monthId = format(from, 'yyyy-MM');
+
+            // ID ESPECÍFICO REQUERIDO POR REGLA DE NEGOCIO
+            const BDV_ACCOUNT_ID = "RdiTtY9ojCuYPRNvB7C3";
+            const CAJA_PRINCIPAL_ID = "CAJA_PRINCIPAL_ID";
+
             const paySnap = await getDocs(query(collection(db, 'condominios', workingCondoId, 'payments'), where('status', '==', 'aprobado'), where('paymentDate', '>=', from), where('paymentDate', '<=', to)));
             
             let count = 0;
             await runTransaction(db, async (transaction) => {
-                const accountsQuerySnap = await getDocs(collection(db, 'condominios', workingCondoId, 'cuentas'));
-                let currentAccounts = accountsQuerySnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
-
                 for (const pDoc of paySnap.docs) {
                     const p = pDoc.data();
                     if (allTransactions.some(tx => tx.sourcePaymentId === pDoc.id)) continue;
 
-                    let targetName = "";
-                    if (['movil', 'transferencia'].includes(p.paymentMethod)) targetName = "BANCO DE VENEZUELA";
-                    else if (['efectivo_bs', 'efectivo'].includes(p.paymentMethod)) targetName = "CAJA PRINCIPAL";
+                    let targetAccountId = "";
+                    let targetAccountName = "";
+
+                    if (['movil', 'transferencia', 'pagomovil', 'transferencias'].includes(p.paymentMethod)) {
+                        targetAccountId = BDV_ACCOUNT_ID;
+                        targetAccountName = "BANCO DE VENEZUELA";
+                    } else if (['efectivo_bs', 'efectivo'].includes(p.paymentMethod)) {
+                        targetAccountId = CAJA_PRINCIPAL_ID;
+                        targetAccountName = "CAJA PRINCIPAL";
+                    }
                     
-                    if (!targetName) continue;
+                    if (!targetAccountId) continue;
 
-                    let account = currentAccounts.find((a: any) => a.nombre?.toUpperCase().trim() === targetName);
-                    let accountId = "";
+                    const accountRef = doc(db, 'condominios', workingCondoId, 'cuentas', targetAccountId);
+                    const accountSnap = await transaction.get(accountRef);
 
-                    if (!account) {
-                        const newAccRef = doc(collection(db, 'condominios', workingCondoId, 'cuentas'));
-                        const newAccData = {
-                            nombre: targetName,
-                            tipo: targetName === "CAJA PRINCIPAL" ? 'efectivo' : 'banco',
-                            saldoActual: 0,
+                    // Si no existe la cuenta, la creamos (excepto si es el BDV ID que debería existir)
+                    if (!accountSnap.exists()) {
+                        transaction.set(accountRef, {
+                            nombre: targetAccountName,
+                            tipo: targetAccountName.includes("CAJA") ? 'efectivo' : 'banco',
+                            saldoActual: p.totalAmount,
                             createdAt: serverTimestamp()
-                        };
-                        transaction.set(newAccRef, newAccData);
-                        accountId = newAccRef.id;
-                        account = { id: accountId, ...newAccData };
-                        currentAccounts.push(account);
+                        });
                     } else {
-                        accountId = account.id;
+                        transaction.update(accountRef, { saldoActual: increment(p.totalAmount) });
                     }
 
+                    // Registrar Asiento en Libro Diario
                     transaction.set(doc(collection(db, 'condominios', workingCondoId, 'transacciones')), {
-                        monto: p.totalAmount, tipo: 'ingreso', cuentaId: accountId, nombreCuenta: targetName,
+                        monto: p.totalAmount, 
+                        tipo: 'ingreso', 
+                        cuentaId: targetAccountId, 
+                        nombreCuenta: targetAccountName,
                         descripcion: `SINCRONIZACIÓN: PAGO DE ${p.beneficiaries?.[0]?.ownerName || 'PROPIETARIO'}`,
-                        referencia: p.reference, fecha: p.paymentDate, sourcePaymentId: pDoc.id,
-                        createdAt: serverTimestamp(), createdBy: user?.email
+                        referencia: p.reference, 
+                        fecha: p.paymentDate, 
+                        sourcePaymentId: pDoc.id,
+                        createdAt: serverTimestamp(), 
+                        createdBy: user?.email
                     });
+
+                    // Actualizar Estadísticas Financieras
+                    const statsRef = doc(db, 'condominios', workingCondoId, 'financial_stats', monthId);
+                    transaction.set(statsRef, {
+                        periodo: monthId,
+                        saldoBancarioReal: increment(targetAccountName === "BANCO DE VENEZUELA" ? p.totalAmount : 0),
+                        saldoCajaReal: increment(targetAccountName === "CAJA PRINCIPAL" ? p.totalAmount : 0),
+                        totalIngresosMes: increment(p.totalAmount),
+                        updatedAt: serverTimestamp()
+                    }, { merge: true });
                     
-                    transaction.update(doc(db, 'condominios', workingCondoId, 'cuentas', accountId), { saldoActual: increment(p.totalAmount) });
                     count++;
                 }
                 if (count === 0) throw "no_needed";
@@ -180,7 +202,7 @@ const AccountingPage = () => {
     );
 
     return (
-        <div className="space-y-8 animate-in fade-in duration-500">
+        <div className="space-y-8 animate-in fade-in duration-500 font-montserrat">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-10">
                 <div>
                     <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">Contabilidad <span className="text-[#0081c9]">Digital</span></h2>

@@ -67,12 +67,9 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
         const unsubCuentas = onSnapshot(collection(db, 'condominios', workingCondoId, 'cuentas'), (snap) => {
             const accounts = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
             
-            // Priorizamos por ID específico para Banco de Venezuela en condo_01
-            const bdv = workingCondoId === 'condo_01' 
-                ? accounts.find(a => a.id === 'RdiTtY9ojCuYPRNvB7C3') 
-                : accounts.find(a => a.nombre?.toUpperCase().includes('VENEZUELA'));
-                
-            const cp = accounts.find(a => a.nombre?.toUpperCase().trim() === 'CAJA PRINCIPAL');
+            // BUSCANDO POR ID ESPECÍFICO RdiTtY9ojCuYPRNvB7C3
+            const bdv = accounts.find(a => a.id === 'RdiTtY9ojCuYPRNvB7C3');
+            const cp = accounts.find(a => a.id === 'CAJA_PRINCIPAL_ID' || a.nombre?.toUpperCase().trim() === 'CAJA PRINCIPAL');
             const cc = accounts.find(a => a.nombre?.toUpperCase().trim() === 'CAJA CHICA');
             
             setRealBalances({
@@ -117,7 +114,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                     let totalEfectivo = 0;
                     pSnap.forEach(doc => {
                         const data = doc.data();
-                        if (['transferencia', 'movil'].includes(data.paymentMethod)) totalBancario += data.totalAmount;
+                        if (['transferencia', 'movil', 'pagomovil', 'transferencias'].includes(data.paymentMethod)) totalBancario += data.totalAmount;
                         else if (['efectivo_bs', 'efectivo'].includes(data.paymentMethod)) totalEfectivo += data.totalAmount;
                     });
                     setIngresosOrdinariosBanco(totalBancario);
@@ -233,12 +230,12 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
 
         const finalY = (docPDF as any).lastAutoTable.finalY + 15;
         docPDF.setFont('helvetica', 'bold').setFontSize(11);
-        docPDF.text("PROYECCIÓN DE SALDOS AL CIERRE:", 14, finalY);
+        docPDF.text("RESUMEN DE CIERRE:", 14, finalY);
         docPDF.setFont('helvetica', 'normal').setFontSize(10);
         docPDF.text(`BANCO DE VENEZUELA (CONTABLE): Bs. ${formatCurrency(saldoCierreBancoCalculado)}`, 14, finalY + 7);
         docPDF.text(`CAJA PRINCIPAL (EFECTIVO): Bs. ${formatCurrency(saldoCierreCajaCalculado)}`, 14, finalY + 14);
         
-        docPDF.setFont('helvetica', 'bold').text("SALDOS REALES EN TESORERÍA (VERIFICADOS):", 14, finalY + 25);
+        docPDF.setFont('helvetica', 'bold').text("SALDOS REALES EN TESORERÍA:", 14, finalY + 25);
         docPDF.text(`DISPONIBILIDAD BANCARIA: Bs. ${formatCurrency(realBalances.banco)}`, 14, finalY + 32);
         docPDF.text(`DISPONIBILIDAD CAJA CHICA: Bs. ${formatCurrency(realBalances.cajaChica)}`, 14, finalY + 39);
 
@@ -251,7 +248,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
     };
 
     return (
-        <div className="max-w-5xl mx-auto p-6 space-y-6 bg-slate-50 min-h-screen font-montserrat">
+        <div className="max-w-5xl mx-auto p-6 space-y-6 bg-slate-50 min-h-screen font-montserrat text-slate-900">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-4">
                 <div>
                     <h1 className="text-3xl font-black uppercase italic tracking-tighter text-slate-900 leading-none">
@@ -280,7 +277,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                         </div>
                         <Landmark className="absolute top-6 right-6 h-12 w-12 text-white/10" />
                         <div className="mt-4 pt-4 border-t border-white/10 relative z-10">
-                            <p className="text-[9px] font-bold text-slate-400 uppercase">Proyección Contable:</p>
+                            <p className="text-[9px] font-bold text-slate-400 uppercase">Cierre Estimado:</p>
                             <p className="text-sm font-bold text-sky-400">Bs. {formatCurrency(saldoCierreBancoCalculado)}</p>
                         </div>
                     </Card>

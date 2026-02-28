@@ -13,7 +13,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
 import { Search, CheckCircle, XCircle, Eye, MoreHorizontal, Download, Loader2, Calendar as CalendarIcon, Banknote, UserPlus, CheckCircle2, WalletCards, ArrowLeft, Trash2 } from 'lucide-react';
-import { format, addMonths } from 'date-fns';
+import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn, compressImage } from '@/lib/utils';
 import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, getDoc, where, getDocs, Timestamp, runTransaction, updateDoc, deleteDoc, deleteField, orderBy, increment, setDoc } from 'firebase/firestore';
@@ -30,7 +30,6 @@ import Image from 'next/image';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { generatePaymentReceipt } from '@/lib/pdf-generator';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuPortal } from '@/components/ui/dropdown-menu';
-import { processPaymentLiquidation } from '@/lib/payment-processor';
 
 const formatCurrency = (num: number) => {
     if (typeof num !== 'number' || isNaN(num)) return '0,00';
@@ -85,16 +84,18 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             if (!condoId) return;
             setIsVerifying(true);
             try {
-                // --- ARQUITECTURA SENIOR: DETERMINACIÓN DE CUENTA FÍSICA ---
+                // --- ARQUITECTURA SENIOR: DEFINICIÓN DE HITOS CONTABLES ---
+                const BDV_ACCOUNT_ID = "RdiTtY9ojCuYPRNvB7C3";
+                const CAJA_PRINCIPAL_ID = "CAJA_PRINCIPAL_ID";
+                
                 let targetAccountId = "";
                 let targetAccountName = "";
                 
-                if (['movil', 'transferencia'].includes(payment.paymentMethod)) {
-                    // ID ESPECÍFICO REQUERIDO POR REGLA DE NEGOCIO PARA CONDO_01
-                    targetAccountId = condoId === 'condo_01' ? 'RdiTtY9ojCuYPRNvB7C3' : "BDV_ACCOUNT";
+                if (['movil', 'transferencia', 'pagomovil', 'transferencias'].includes(payment.paymentMethod)) {
+                    targetAccountId = BDV_ACCOUNT_ID;
                     targetAccountName = "BANCO DE VENEZUELA";
                 } else if (['efectivo_bs', 'efectivo'].includes(payment.paymentMethod)) {
-                    targetAccountId = "CAJA_PRINCIPAL_ID";
+                    targetAccountId = CAJA_PRINCIPAL_ID;
                     targetAccountName = "CAJA PRINCIPAL";
                 }
 
@@ -113,26 +114,28 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         const ownerDoc = await transaction.get(ownerRef);
                         if (!ownerDoc.exists()) continue;
 
-                        const pending = allDebts.filter(d => d.ownerId === beneficiary.ownerId && (d.status === 'pending' || d.status === 'vencida'))
-                            .sort((a,b) => a.year - b.year || a.month - b.month)
-                            .map(d => ({ id: d.id, amountUSD: d.amountUSD, monto: d.amountUSD * payment.exchangeRate }));
-
-                        // Simulamos la liquidación (esto debería estar en payment-processor)
                         const saldoDisponible = (ownerDoc.data().balance || 0) + beneficiary.amount;
-                        // Actualizamos el saldo del propietario
                         transaction.update(ownerRef, { balance: saldoDisponible });
                         receiptNumbers[beneficiary.ownerId] = `REC-${Date.now()}-${beneficiary.ownerId.slice(-4)}`;
                     }
 
-                    // 2. ACTUALIZACIÓN ATÓMICA DE TESORERÍA (HITO CONTABLE)
+                    // 2. ACTUALIZACIÓN ATÓMICA DE TESORERÍA (AFECTACIÓN REAL)
                     if (targetAccountId) {
                         const accountRef = doc(db, 'condominios', condoId, 'cuentas', targetAccountId);
-                        transaction.update(accountRef, { 
-                            saldoActual: increment(payment.totalAmount),
-                            lastUpdate: serverTimestamp() 
-                        });
+                        const accSnap = await transaction.get(accountRef);
+                        
+                        if (!accSnap.exists()) {
+                            transaction.set(accountRef, {
+                                nombre: targetAccountName,
+                                tipo: targetAccountName.includes("CAJA") ? 'efectivo' : 'banco',
+                                saldoActual: payment.totalAmount,
+                                createdAt: serverTimestamp()
+                            });
+                        } else {
+                            transaction.update(accountRef, { saldoActual: increment(payment.totalAmount) });
+                        }
 
-                        // 3. ACTUALIZACIÓN DE ESTADÍSTICAS MENSUALES (Para Balance)
+                        // 3. ACTUALIZACIÓN DE ESTADÍSTICAS MENSUALES (Para Balance Financiero)
                         const statsRef = doc(db, 'condominios', condoId, 'financial_stats', monthId);
                         transaction.set(statsRef, {
                             periodo: monthId,
@@ -142,7 +145,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                             updatedAt: serverTimestamp()
                         }, { merge: true });
 
-                        // 4. ASIENTO CONTABLE OBLIGATORIO
+                        // 4. ASIENTO CONTABLE OBLIGATORIO EN LIBRO DIARIO
                         const transRef = doc(collection(db, 'condominios', condoId, 'transacciones'));
                         transaction.set(transRef, {
                             monto: payment.totalAmount, 
@@ -166,7 +169,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                     });
                 });
 
-                toast({ title: "Pago Aprobado", description: "Hito contable registrado y saldo sumado al Banco de Venezuela." });
+                toast({ title: "Pago Aprobado", description: "El monto ha sido sumado al saldo real de la cuenta y asentado en libros." });
                 setSelectedPayment(null);
             } catch (error: any) { 
                 console.error("Error en aprobación senior:", error);
@@ -240,7 +243,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
     };
 
     return (
-        <Card className="rounded-[2rem] border-none shadow-sm bg-white">
+        <Card className="rounded-[2rem] border-none shadow-sm bg-white font-montserrat">
             <CardHeader className="p-8">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                     <CardTitle className="text-slate-900 font-black uppercase italic tracking-tighter leading-none">Bandeja de <span className="text-primary">Verificación</span></CardTitle>
@@ -289,6 +292,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 </Tabs>
             </CardContent>
 
+            {/* Diálogos */}
             <Dialog open={!!selectedPayment} onOpenChange={() => setSelectedPayment(null)}>
                 <DialogContent className="max-w-2xl rounded-[2rem] border-none shadow-2xl bg-white text-slate-900">
                     <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-slate-900">Detalles del Reporte</DialogTitle></DialogHeader>
@@ -421,7 +425,7 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
     };
 
     return (
-        <Card className="rounded-[2.5rem] border-none shadow-sm bg-white overflow-hidden">
+        <Card className="rounded-[2.5rem] border-none shadow-sm bg-white overflow-hidden font-montserrat">
             <CardHeader className="bg-slate-50 border-b p-8"><CardTitle className="text-slate-900 font-black uppercase italic">Reportar Pago Manual</CardTitle></CardHeader>
             <form onSubmit={handleSubmit}>
                 <CardContent className="p-8 space-y-8">
