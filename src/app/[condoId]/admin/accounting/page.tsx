@@ -87,6 +87,11 @@ const AccountingPage = () => {
         return () => cleanup?.();
     }, [fetchData]);
 
+    // Filtrar cuentas para NO mostrar "Caja Principal" en las pestañas de contabilidad
+    const visibleAccounts = useMemo(() => {
+        return accounts.filter(acc => acc.nombre?.toUpperCase().trim() !== "CAJA PRINCIPAL");
+    }, [accounts]);
+
     const periodData = useMemo(() => {
         const fromDate = startOfMonth(new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1));
         const toDate = endOfMonth(fromDate);
@@ -321,7 +326,7 @@ const AccountingPage = () => {
             <Tabs defaultValue="libroMayor">
                 <TabsList className="flex flex-wrap h-auto gap-2 bg-slate-200 p-2 rounded-3xl">
                     <TabsTrigger value="libroMayor" className="rounded-2xl font-black uppercase text-[10px] px-6 text-slate-600 data-[state=active]:bg-white data-[state=active]:text-slate-900">Libro Mayor</TabsTrigger>
-                    {accounts.map(acc => (
+                    {visibleAccounts.map(acc => (
                          <TabsTrigger key={acc.id} value={acc.id} className="rounded-2xl font-black uppercase text-[10px] px-6 text-slate-600 data-[state=active]:bg-white data-[state=active]:text-slate-900">
                             {acc.nombre}
                          </TabsTrigger>
@@ -371,7 +376,7 @@ const AccountingPage = () => {
                     </Card>
                 </TabsContent>
                 
-                {accounts.map(acc => {
+                {visibleAccounts.map(acc => {
                     const { transactions, startBalance } = periodData[acc.id] || { transactions: [], startBalance: 0 };
                     return (
                         <TabsContent key={acc.id} value={acc.id} className="mt-4">
