@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo, use } from 'react';
@@ -47,7 +46,7 @@ import autoTable from 'jspdf-autotable';
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { Input } from "@/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -80,6 +79,7 @@ interface Transaction {
 }
 
 const formatCurrency = (num: number) => {
+    if (typeof num !== 'number' || isNaN(num)) return '0,00';
     return num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
@@ -249,7 +249,6 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                 if (!accSnap.exists()) throw new Error("La cuenta no existe.");
                 
                 const currentBalance = accSnap.data().saldoActual || 0;
-                // Revertimos el balance: si era ingreso, lo restamos; si era egreso, lo sumamos
                 const adjustment = selectedTx.tipo === 'ingreso' ? -selectedTx.monto : selectedTx.monto;
                 const newBalance = currentBalance + adjustment;
 
@@ -408,7 +407,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                     </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                    <Button onClick={handleGeneratePDF} variant="outline" className="font-bold uppercase text-[10px] rounded-xl h-12 border-slate-300 text-slate-700 hover:bg-slate-100">
+                    <Button onClick={handleGeneratePDF} variant="outline" className="font-bold uppercase text-[10px] rounded-xl h-12 border-slate-300 text-slate-700 hover:bg-slate-100 shadow-sm">
                         <Download className="mr-2 h-4 w-4" /> Reporte Período
                     </Button>
                     <Button onClick={() => setIsTransferDialogOpen(true)} variant="secondary" className="bg-slate-900 hover:bg-slate-800 text-white font-black uppercase text-[10px] rounded-xl h-12">
@@ -431,29 +430,26 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                     accounts.map(acc => (
                         <Card key={acc.id} className="rounded-[2rem] border-none shadow-sm hover:shadow-xl transition-all duration-300 group bg-white relative overflow-hidden">
                             <CardHeader className="pb-2">
-                                <CardTitle className="text-[9px] font-black uppercase tracking-widest text-slate-400 flex items-center justify-between">
-                                    <span className="flex items-center gap-2">
-                                        {acc.tipo === 'banco' ? <Landmark className="h-3 w-3 text-sky-500" /> : <Wallet className="h-3 w-3 text-emerald-500" />}
-                                        <span className="text-slate-500">{acc.tipo}</span>
-                                    </span>
-                                    <div className="flex gap-1">
-                                        <Button 
-                                            variant="ghost" 
-                                            size="icon" 
-                                            className="h-8 w-8 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-all"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                setAccountToDelete(acc);
-                                                setIsDeleteDialogOpen(true);
-                                            }}
-                                        >
-                                            <Trash2 className="h-4 w-4" />
-                                        </Button>
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        {acc.tipo === 'banco' ? <Landmark className="h-4 w-4 text-sky-500" /> : <Wallet className="h-4 w-4 text-emerald-500" />}
+                                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{acc.tipo}</span>
                                     </div>
-                                </CardTitle>
+                                    <Button 
+                                        variant="ghost" 
+                                        size="icon" 
+                                        className="h-8 w-8 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-all"
+                                        onClick={() => {
+                                            setAccountToDelete(acc);
+                                            setIsDeleteDialogOpen(true);
+                                        }}
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                </div>
                             </CardHeader>
                             <CardContent>
-                                <div className="text-sm font-bold text-slate-600 uppercase truncate mb-1">{acc.nombre}</div>
+                                <div className="text-sm font-black text-slate-700 uppercase truncate mb-1">{acc.nombre}</div>
                                 <div className="text-2xl font-black italic tracking-tight text-slate-900">
                                     Bs. {formatCurrency(acc.saldoActual)}
                                 </div>
@@ -502,7 +498,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                     <div className="overflow-x-auto">
                         <Table>
                             <TableHeader>
-                                <TableRow className="bg-slate-50 hover:bg-transparent">
+                                <TableRow className="bg-slate-50 hover:bg-transparent border-b border-slate-100">
                                     <TableHead className="text-[10px] font-black uppercase px-8 h-14 text-slate-700">Fecha</TableHead>
                                     <TableHead className="text-[10px] font-black uppercase text-slate-700">Cuenta</TableHead>
                                     <TableHead className="text-[10px] font-black uppercase text-slate-700">Descripción</TableHead>
@@ -523,8 +519,8 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                                                 <Badge variant="outline" className="text-[9px] font-black uppercase bg-slate-100 text-slate-700 border-slate-200">{tx.nombreCuenta}</Badge>
                                             </TableCell>
                                             <TableCell>
-                                                <div className="font-black text-slate-900 uppercase italic text-xs">{tx.descripcion}</div>
-                                                <div className="text-[9px] font-bold text-slate-400">REF: {tx.referencia || 'N/A'}</div>
+                                                <div className="font-black text-slate-900 uppercase italic text-xs leading-tight">{tx.descripcion}</div>
+                                                <div className="text-[9px] font-bold text-slate-400 mt-0.5">REF: {tx.referencia || 'N/A'}</div>
                                             </TableCell>
                                             <TableCell className={cn("text-right font-black italic text-lg px-8", tx.tipo === 'ingreso' ? 'text-green-600' : 'text-red-600')}>
                                                 {tx.tipo === 'ingreso' ? '+' : '-'} {formatCurrency(tx.monto)}
@@ -534,19 +530,19 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                                                     <DropdownMenuTrigger asChild>
                                                         <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-900"><MoreVertical className="h-4 w-4"/></Button>
                                                     </DropdownMenuTrigger>
-                                                    <DropdownMenuContent align="end">
+                                                    <DropdownMenuContent align="end" className="rounded-xl border-slate-200 shadow-xl">
                                                         <DropdownMenuItem onClick={() => {
                                                             setSelectedTx(tx);
                                                             setEditTxData({ descripcion: tx.descripcion, referencia: tx.referencia || '' });
                                                             setIsEditTxDialogOpen(true);
-                                                        }} className="gap-2 font-bold uppercase text-[10px]">
-                                                            <Edit className="h-3 w-3 text-sky-500" /> Editar
+                                                        }} className="gap-2 font-black uppercase text-[10px] text-slate-700 p-3">
+                                                            <Edit className="h-3 w-3 text-sky-500" /> Editar Descripción
                                                         </DropdownMenuItem>
                                                         <DropdownMenuItem onClick={() => {
                                                             setSelectedTx(tx);
                                                             setIsDeleteTxDialogOpen(true);
-                                                        }} className="gap-2 font-bold uppercase text-[10px] text-red-600">
-                                                            <Trash2 className="h-3 w-3" /> Eliminar
+                                                        }} className="gap-2 font-black uppercase text-[10px] text-red-600 p-3">
+                                                            <Trash2 className="h-3 w-3" /> Eliminar Movimiento
                                                         </DropdownMenuItem>
                                                     </DropdownMenuContent>
                                                 </DropdownMenu>
@@ -560,13 +556,13 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                 </CardContent>
             </Card>
 
-            {/* --- Diálogos de Cuentas --- */}
+            {/* --- Diálogos --- */}
 
             <Dialog open={isAccountDialogOpen} onOpenChange={setIsAccountDialogOpen}>
                 <DialogContent className="rounded-[2rem] border-none shadow-2xl bg-white text-slate-900">
                     <DialogHeader>
                         <DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-slate-900">Nueva <span className="text-[#F28705]">Cuenta</span></DialogTitle>
-                        <DialogDescription className="text-slate-500">Añada una cuenta bancaria o caja física.</DialogDescription>
+                        <DialogDescription className="text-slate-500 font-bold">Añada una cuenta bancaria o caja física al sistema.</DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
                         <div className="space-y-2">
@@ -609,7 +605,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                     </DialogHeader>
                     <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-100 rounded-2xl text-red-700">
                         <AlertTriangle className="h-6 w-6 shrink-0" />
-                        <p className="text-xs font-bold leading-tight uppercase">Atención: Se borrará solo el acceso; los movimientos históricos quedarán en la base de datos.</p>
+                        <p className="text-xs font-bold leading-tight uppercase">Atención: Se borrará solo el acceso; los movimientos históricos quedarán en la base de datos para auditoría.</p>
                     </div>
                     <DialogFooter className="gap-2 mt-4">
                         <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)} className="rounded-xl h-12 font-bold flex-1 border-slate-200 text-slate-600">Cancelar</Button>
@@ -620,13 +616,11 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                 </DialogContent>
             </Dialog>
 
-            {/* --- Diálogos de Transacciones --- */}
-
             <Dialog open={isTransactionDialogOpen} onOpenChange={setIsTransactionDialogOpen}>
                 <DialogContent className="rounded-[2rem] border-none shadow-2xl bg-white text-slate-900">
                     <DialogHeader>
                         <DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-slate-900">Registrar <span className="text-[#F28705]">Movimiento</span></DialogTitle>
-                        <DialogDescription className="text-slate-500">Afecta el saldo de la cuenta de forma instantánea.</DialogDescription>
+                        <DialogDescription className="text-slate-500 font-bold">Afecta el saldo de la cuenta de forma instantánea.</DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
                         <div className="grid grid-cols-2 gap-4">
@@ -646,7 +640,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                                     <SelectTrigger className="rounded-xl h-12 font-bold bg-slate-50 border-slate-200 text-slate-900"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
                                     <SelectContent className="bg-white border-slate-200 text-slate-900">
                                         {accounts.map(acc => (
-                                            <SelectItem key={acc.id} value={acc.id}>{acc.nombre} (Bs. {formatCurrency(acc.saldoActual)})</SelectItem>
+                                            <SelectItem key={acc.id} value={acc.id} className="text-slate-900 font-medium">{acc.nombre} (Bs. {formatCurrency(acc.saldoActual)})</SelectItem>
                                         ))}
                                     </SelectContent>
                                 </Select>
@@ -654,18 +648,18 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
-                                <Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Monto</Label>
+                                <Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Monto (Bs.)</Label>
                                 <Input type="number" placeholder="0.00" value={transForm.monto} onChange={e => setTransactionForm({...transForm, monto: e.target.value})} className="rounded-xl h-12 font-black text-lg bg-slate-50 border-slate-200 text-slate-900" />
                             </div>
                             <div className="space-y-2">
                                 <Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Fecha</Label>
                                 <Popover>
                                     <PopoverTrigger asChild>
-                                        <Button variant="outline" className="w-full h-12 rounded-xl justify-start font-bold bg-slate-50 border-slate-200 text-slate-900 hover:bg-slate-100">
+                                        <Button variant="outline" className="w-full h-12 rounded-xl justify-start font-bold bg-slate-50 border-slate-200 text-slate-900 hover:bg-slate-100 shadow-none">
                                             <CalendarIcon className="mr-2 h-4 w-4" /> {format(transForm.fecha, 'dd/MM/yyyy')}
                                         </Button>
                                     </PopoverTrigger>
-                                    <PopoverContent className="w-auto p-0 bg-white border-slate-200"><Calendar mode="single" selected={transForm.fecha} onSelect={(d: any) => d && setTransactionForm({...transForm, fecha: d})} locale={es}/></PopoverContent>
+                                    <PopoverContent className="w-auto p-0 bg-white border-slate-200 shadow-2xl rounded-2xl"><Calendar mode="single" selected={transForm.fecha} onSelect={(d: any) => d && setTransactionForm({...transForm, fecha: d})} locale={es}/></PopoverContent>
                                 </Popover>
                             </div>
                         </div>
@@ -697,7 +691,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                     </DialogHeader>
                     <DialogFooter className="gap-2 mt-4">
                         <Button variant="outline" onClick={() => setIsDeleteTxDialogOpen(false)} className="rounded-xl h-12 font-bold flex-1 border-slate-200 text-slate-600">Cancelar</Button>
-                        <Button onClick={handleDeleteTransaction} disabled={isSubmitting} variant="destructive" className="rounded-xl h-12 font-black uppercase text-[10px] flex-1">
+                        <Button onClick={handleDeleteTransaction} disabled={isSubmitting} variant="destructive" className="rounded-xl h-12 font-black uppercase text-[10px] flex-1 shadow-lg">
                             {isSubmitting ? <Loader2 className="animate-spin" /> : "Confirmar Reversión"}
                         </Button>
                     </DialogFooter>
@@ -709,7 +703,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                     <DialogHeader>
                         <DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-slate-900">Editar <span className="text-sky-500">Movimiento</span></DialogTitle>
                         <DialogDescription className="text-slate-500 font-bold">
-                            Solo puede modificar la descripción y referencia por seguridad.
+                            Solo puede modificar la descripción y referencia por seguridad contable.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
@@ -723,7 +717,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                         </div>
                     </div>
                     <DialogFooter>
-                        <Button onClick={handleUpdateTx} disabled={isSubmitting} className="w-full bg-slate-900 text-white font-black uppercase h-12 rounded-xl">
+                        <Button onClick={handleUpdateTx} disabled={isSubmitting} className="w-full bg-slate-900 text-white font-black uppercase h-12 rounded-xl shadow-lg">
                             {isSubmitting ? <Loader2 className="animate-spin" /> : "Guardar Cambios"}
                         </Button>
                     </DialogFooter>
@@ -734,27 +728,27 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                 <DialogContent className="rounded-[2rem] border-none shadow-2xl bg-white text-slate-900">
                     <DialogHeader>
                         <DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-slate-900">Trasladar <span className="text-[#F28705]">Fondos</span></DialogTitle>
-                        <DialogDescription className="text-slate-500">Mueve dinero entre tus cuentas de forma atómica.</DialogDescription>
+                        <DialogDescription className="text-slate-500 font-bold">Mueve dinero entre tus cuentas de forma atómica.</DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Cuenta Origen</Label>
                                 <Select value={transferForm.origenId} onValueChange={v => setTransferForm({...transferForm, origenId: v})}>
-                                    <SelectTrigger className="rounded-xl h-12 font-bold bg-slate-50 border-slate-200 text-slate-900"><SelectValue placeholder="Sale de..." /></SelectTrigger>
-                                    <SelectContent className="bg-white border-slate-200 text-slate-900">{accounts.map(acc => <SelectItem key={acc.id} value={acc.id}>{acc.nombre}</SelectItem>)}</SelectContent>
+                                    <SelectTrigger className="rounded-xl h-12 font-bold bg-slate-50 border-slate-200 text-slate-900 shadow-none"><SelectValue placeholder="Sale de..." /></SelectTrigger>
+                                    <SelectContent className="bg-white border-slate-200 text-slate-900">{accounts.map(acc => <SelectItem key={acc.id} value={acc.id} className="font-medium text-slate-900">{acc.nombre}</SelectItem>)}</SelectContent>
                                 </Select>
                             </div>
                             <div className="space-y-2">
                                 <Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Cuenta Destino</Label>
                                 <Select value={transferForm.destinoId} onValueChange={v => setTransferForm({...transferForm, destinoId: v})}>
-                                    <SelectTrigger className="rounded-xl h-12 font-bold bg-slate-50 border-slate-200 text-slate-900"><SelectValue placeholder="Entra a..." /></SelectTrigger>
-                                    <SelectContent className="bg-white border-slate-200 text-slate-900">{accounts.map(acc => <SelectItem key={acc.id} value={acc.id}>{acc.nombre}</SelectItem>)}</SelectContent>
+                                    <SelectTrigger className="rounded-xl h-12 font-bold bg-slate-50 border-slate-200 text-slate-900 shadow-none"><SelectValue placeholder="Entra a..." /></SelectTrigger>
+                                    <SelectContent className="bg-white border-slate-200 text-slate-900">{accounts.map(acc => <SelectItem key={acc.id} value={acc.id} className="font-medium text-slate-900">{acc.nombre}</SelectItem>)}</SelectContent>
                                 </Select>
                             </div>
                         </div>
                         <div className="space-y-2">
-                            <Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Monto a Trasladar</Label>
+                            <Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Monto a Trasladar (Bs.)</Label>
                             <Input type="number" placeholder="0.00" value={transferForm.monto} onChange={e => setTransferForm({...transferForm, monto: e.target.value})} className="rounded-xl h-12 font-black text-xl bg-slate-50 border-slate-200 text-slate-900" />
                         </div>
                         <div className="space-y-2">
@@ -763,7 +757,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                         </div>
                     </div>
                     <DialogFooter>
-                        <Button onClick={handleTransfer} disabled={isSubmitting} className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black uppercase h-14 rounded-2xl">
+                        <Button onClick={handleTransfer} disabled={isSubmitting} className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black uppercase h-14 rounded-2xl shadow-xl">
                             {isSubmitting ? <Loader2 className="animate-spin" /> : "Ejecutar Traslado"}
                         </Button>
                     </DialogFooter>
