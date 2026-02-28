@@ -1,9 +1,10 @@
+
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, Timestamp, where, query } from 'firebase/firestore';
-import { Download, RefreshCw, Landmark, Banknote, Coins, Wallet } from 'lucide-react';
+import { collection, onSnapshot, Timestamp, where, query, orderBy } from 'firebase/firestore';
+import { Download, RefreshCw, Landmark, Coins, Wallet, History } from 'lucide-react';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -16,42 +17,25 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from '@/hooks/use-auth';
 
 // --- TYPES ---
-interface Payment {
-    paymentDate: Timestamp;
-    paymentMethod: 'transferencia' | 'movil' | 'efectivo_bs';
-    totalAmount: number;
-    description: string;
-    reference?: string;
-    status: string;
-}
-
-interface Expense {
-    date: Timestamp;
-    paymentSource?: 'banco' | 'caja_principal' | 'caja_chica';
-    amount: number;
-    description: string;
-    reference?: string;
-}
-
-interface MainCashMovement {
+interface Account {
     id: string;
-    type: 'ingreso' | 'egreso';
-    amount: number;
-    description: string;
-    date: Timestamp;
-    reference?: string;
-}
-
-interface PettyCashMovement {
-    id: string;
-    type: 'ingreso' | 'egreso';
-    amount: number;
-    description: string;
-    date: Timestamp;
-    reference?: string;
+    nombre: string;
+    tipo: string;
+    saldoActual: number;
 }
 
 interface Transaction {
+    id: string;
+    fecha: Timestamp;
+    monto: number;
+    tipo: 'ingreso' | 'egreso';
+    cuentaId: string;
+    nombreCuenta: string;
+    descripcion: string;
+    referencia?: string;
+}
+
+interface ProcessedTransaction {
     date: Date;
     description: string;
     reference: string;
@@ -73,10 +57,9 @@ const AccountingPage = () => {
     const { companyInfo, workingCondoId } = useAuth();
 
     const [loading, setLoading] = useState(true);
-    const [allPayments, setAllPayments] = useState<Payment[]>([]);
-    const [allExpenses, setAllExpenses] = useState<Expense[]>([]);
-    const [allMainCash, setAllMainCash] = useState<MainCashMovement[]>([]);
-    const [allPettyCash, setAllPettyCash] = useState<PettyCashMovement[]>([]);
+    const [accounts, setAccounts] = useState<Account[]>([]);
+    const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
+    
     const [selectedMonth, setSelectedMonth] = useState(String(new Date().getMonth() + 1));
     const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
 
@@ -84,24 +67,18 @@ const AccountingPage = () => {
         if (!workingCondoId) return;
         setLoading(true);
 
-        const unsubPayments = onSnapshot(query(collection(db, 'condominios', workingCondoId, 'payments'), where('status', '==', 'aprobado')), 
-            snap => setAllPayments(snap.docs.map(d => d.data() as Payment)));
+        // 1. Cargar todas las cuentas definidas en Tesorería
+        const unsubAccounts = onSnapshot(collection(db, 'condominios', workingCondoId, 'cuentas'), 
+            snap => setAccounts(snap.docs.map(d => ({ id: d.id, ...d.data() } as Account))));
         
-        const unsubExpenses = onSnapshot(collection(db, 'condominios', workingCondoId, 'gastos'), 
-            snap => setAllExpenses(snap.docs.map(d => d.data() as Expense)));
-
-        const unsubMain = onSnapshot(collection(db, 'condominios', workingCondoId, 'cajaPrincipal_movimientos'), 
-            snap => setAllMainCash(snap.docs.map(d => ({ id: d.id, ...d.data() } as MainCashMovement))));
-        
-        const unsubPetty = onSnapshot(collection(db, 'condominios', workingCondoId, 'cajaChica_movimientos'), 
-            snap => setAllPettyCash(snap.docs.map(d => d.data() as PettyCashMovement)));
+        // 2. Cargar todos los movimientos registrados en Tesorería
+        const unsubTx = onSnapshot(query(collection(db, 'condominios', workingCondoId, 'transacciones'), orderBy('fecha', 'asc')), 
+            snap => setAllTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction))));
 
         setLoading(false);
         return () => {
-            unsubPayments();
-            unsubExpenses();
-            unsubMain();
-            unsubPetty();
+            unsubAccounts();
+            unsubTx();
         };
     }, [workingCondoId]);
 
@@ -114,51 +91,37 @@ const AccountingPage = () => {
         const fromDate = startOfMonth(new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1));
         const toDate = endOfMonth(fromDate);
         
-        const accounts = {
-            banco: { transactions: [] as Transaction[], startBalance: 0, endBalance: 0 },
-            cajaPrincipal: { transactions: [] as Transaction[], startBalance: 0, endBalance: 0 },
-            cajaChica: { transactions: [] as Transaction[], startBalance: 0, endBalance: 0 },
-        };
+        const accountData: Record<string, { transactions: ProcessedTransaction[], startBalance: number, endBalance: number }> = {};
 
-        // Procesar Banco
-        allPayments.filter(p => ['transferencia', 'movil'].includes(p.paymentMethod)).forEach(p => {
-            const date = p.paymentDate.toDate();
-            const entry: Transaction = { date, description: p.description || 'PAGO RECIBIDO', reference: p.reference || 'N/A', credit: p.totalAmount, debit: 0, balance: 0 };
-            if (date < fromDate) accounts.banco.startBalance += entry.credit;
-            else if (date <= toDate) accounts.banco.transactions.push(entry);
-        });
-        allExpenses.filter(e => e.paymentSource === 'banco').forEach(e => {
-            const date = e.date.toDate();
-            const entry: Transaction = { date, description: e.description, reference: e.reference || 'GASTO', credit: 0, debit: e.amount, balance: 0 };
-            if (date < fromDate) accounts.banco.startBalance -= entry.debit;
-            else if (date <= toDate) accounts.banco.transactions.push(entry);
+        // Inicializar datos para cada cuenta
+        accounts.forEach(acc => {
+            accountData[acc.id] = { transactions: [], startBalance: 0, endBalance: 0 };
         });
 
-        // Procesar Caja Principal
-        allPayments.filter(p => p.paymentMethod === 'efectivo_bs').forEach(p => {
-            const date = p.paymentDate.toDate();
-            const entry: Transaction = { date, description: `PAGO EFECTIVO BS: ${p.description || 'PROPIETARIO'}`, reference: p.reference || 'N/A', credit: p.totalAmount, debit: 0, balance: 0 };
-            if (date < fromDate) accounts.cajaPrincipal.startBalance += entry.credit;
-            else if (date <= toDate) accounts.cajaPrincipal.transactions.push(entry);
-        });
-        allMainCash.forEach(m => {
-            const date = m.date.toDate();
-            const entry: Transaction = { date, description: m.description, reference: m.reference || 'MANUAL', credit: m.type === 'ingreso' ? m.amount : 0, debit: m.type === 'egreso' ? m.amount : 0, balance: 0 };
-            if (date < fromDate) accounts.cajaPrincipal.startBalance += (entry.credit - entry.debit);
-            else if (date <= toDate) accounts.cajaPrincipal.transactions.push(entry);
+        // Procesar todas las transacciones históricas para calcular saldo inicial y filtrar período
+        allTransactions.forEach(tx => {
+            const date = tx.fecha.toDate();
+            const entry: ProcessedTransaction = { 
+                date, 
+                description: tx.descripcion, 
+                reference: tx.referencia || 'N/A', 
+                credit: tx.tipo === 'ingreso' ? tx.monto : 0, 
+                debit: tx.tipo === 'egreso' ? tx.monto : 0, 
+                balance: 0 
+            };
+
+            if (accountData[tx.cuentaId]) {
+                if (date < fromDate) {
+                    accountData[tx.cuentaId].startBalance += (entry.credit - entry.debit);
+                } else if (date <= toDate) {
+                    accountData[tx.cuentaId].transactions.push(entry);
+                }
+            }
         });
 
-        // Procesar Caja Chica
-        allPettyCash.forEach(item => {
-            if (!item.date) return;
-            const date = item.date.toDate();
-            const entry: Transaction = { date, description: item.description, reference: item.reference || 'Caja Chica', credit: item.type === 'ingreso' ? item.amount : 0, debit: item.type === 'egreso' ? item.amount : 0, balance: 0 };
-            if (date < fromDate) accounts.cajaChica.startBalance += (entry.credit - entry.debit);
-            else if (date <= toDate) accounts.cajaChica.transactions.push(entry);
-        });
-
-        // Calcular balances
-        Object.values(accounts).forEach(acc => {
+        // Calcular balances dinámicos por cada cuenta en el período
+        Object.keys(accountData).forEach(accId => {
+            const acc = accountData[accId];
             acc.transactions.sort((a, b) => a.date.getTime() - b.date.getTime());
             let runningBalance = acc.startBalance;
             acc.transactions.forEach(tx => {
@@ -168,24 +131,29 @@ const AccountingPage = () => {
             acc.endBalance = runningBalance;
         });
 
-        return accounts;
-    }, [allPayments, allExpenses, allMainCash, allPettyCash, selectedMonth, selectedYear]);
+        return accountData;
+    }, [accounts, allTransactions, selectedMonth, selectedYear]);
 
     const generalLedger = useMemo(() => {
-        return Object.entries(periodData).map(([key, data]) => ({
-            account: key as keyof typeof periodData,
-            startBalance: data.startBalance,
-            totalCredit: data.transactions.reduce((sum, tx) => sum + tx.credit, 0),
-            totalDebit: data.transactions.reduce((sum, tx) => sum + tx.debit, 0),
-            endBalance: data.endBalance
-        }));
-    }, [periodData]);
+        return accounts.map(acc => {
+            const data = periodData[acc.id] || { startBalance: 0, transactions: [], endBalance: 0 };
+            return {
+                accountName: acc.nombre,
+                accountId: acc.id,
+                tipo: acc.tipo,
+                startBalance: data.startBalance,
+                totalCredit: data.transactions.reduce((sum, tx) => sum + tx.credit, 0),
+                totalDebit: data.transactions.reduce((sum, tx) => sum + tx.debit, 0),
+                endBalance: data.endBalance
+            };
+        });
+    }, [accounts, periodData]);
 
-    const handleExportPdf = async (accountKey: keyof typeof periodData, accountName: string) => {
+    const handleExportPdf = async (accountId: string, accountName: string) => {
         const { default: jsPDF } = await import('jspdf');
         const { default: autoTable } = await import('jspdf-autotable');
 
-        const { transactions, startBalance } = periodData[accountKey];
+        const { transactions, startBalance } = periodData[accountId];
         const doc = new jsPDF();
         const periodStr = `${months.find(m => m.value === selectedMonth)?.label} ${selectedYear}`;
         
@@ -209,17 +177,17 @@ const AccountingPage = () => {
                     formatCurrency(tx.balance)
                 ])
             ],
-            headStyles: { fillColor: [0, 129, 201] },
+            headStyles: { fillColor: [15, 23, 42] },
             columnStyles: { 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right', fontStyle: 'bold' } }
         });
 
-        doc.save(`Libro_Diario_${accountName}_${selectedYear}_${selectedMonth}.pdf`);
+        doc.save(`Libro_Diario_${accountName.replace(/ /g, '_')}_${selectedYear}_${selectedMonth}.pdf`);
     };
 
-    const accountTitles: Record<string, { title: string, icon: React.ElementType }> = {
-        banco: { title: 'Banco', icon: Landmark },
-        cajaPrincipal: { title: 'Caja Principal (Cobranza)', icon: Coins },
-        cajaChica: { title: 'Caja Chica', icon: Wallet },
+    const getAccountIcon = (tipo: string) => {
+        if (tipo === 'banco') return Landmark;
+        if (tipo === 'efectivo') return Coins;
+        return Wallet;
     };
 
     return (
@@ -230,26 +198,26 @@ const AccountingPage = () => {
                 </h2>
                 <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
                 <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">
-                    {companyInfo?.name || "EFAS CondoSys"} - Control financiero preciso.
+                    {companyInfo?.name || "EFAS CondoSys"} - Libros Diarios y Mayor Dinámico.
                 </p>
             </div>
             
-            <Card>
+            <Card className="rounded-3xl border-none shadow-sm">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0">
                     <div>
                         <CardTitle>Selector de Período</CardTitle>
-                        <CardDescription>Filtre los libros contables por mes y año.</CardDescription>
+                        <CardDescription>Filtre los libros contables dinámicos de Tesorería.</CardDescription>
                     </div>
                     <div className="flex gap-2">
                         <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                            <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
+                            <SelectTrigger className="w-[180px] rounded-xl"><SelectValue /></SelectTrigger>
                             <SelectContent>{months.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent>
                         </Select>
                         <Select value={selectedYear} onValueChange={setSelectedYear}>
-                            <SelectTrigger className="w-[120px]"><SelectValue /></SelectTrigger>
+                            <SelectTrigger className="w-[120px] rounded-xl"><SelectValue /></SelectTrigger>
                             <SelectContent>{years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
                         </Select>
-                        <Button onClick={() => fetchData()} variant="outline" size="icon">
+                        <Button onClick={() => fetchData()} variant="outline" size="icon" className="rounded-xl">
                             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                         </Button>
                     </div>
@@ -257,81 +225,100 @@ const AccountingPage = () => {
             </Card>
 
             <Tabs defaultValue="libroMayor">
-                <TabsList className="grid w-full grid-cols-4">
-                    <TabsTrigger value="libroMayor">Libro Mayor</TabsTrigger>
-                    {Object.keys(accountTitles).map(key => (
-                         <TabsTrigger key={key} value={key}>{accountTitles[key].title}</TabsTrigger>
+                <TabsList className="flex flex-wrap h-auto gap-2 bg-slate-100/50 p-2 rounded-3xl">
+                    <TabsTrigger value="libroMayor" className="rounded-2xl font-black uppercase text-[10px] px-6">Libro Mayor</TabsTrigger>
+                    {accounts.map(acc => (
+                         <TabsTrigger key={acc.id} value={acc.id} className="rounded-2xl font-black uppercase text-[10px] px-6">
+                            {acc.nombre}
+                         </TabsTrigger>
                     ))}
                 </TabsList>
 
                 <TabsContent value="libroMayor" className="mt-4">
-                    <Card>
-                        <CardHeader><CardTitle>Libro Mayor</CardTitle></CardHeader>
-                        <CardContent>
+                    <Card className="rounded-[2.5rem] border-none shadow-2xl overflow-hidden">
+                        <CardHeader className="bg-slate-900 text-white p-8">
+                            <CardTitle className="flex items-center gap-3 italic">
+                                <History className="text-[#f59e0b]" /> Libro Mayor Consolidado
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-0">
                              <Table>
-                                <TableHeader>
+                                <TableHeader className="bg-slate-50">
                                     <TableRow>
-                                        <TableHead>Cuenta</TableHead>
-                                        <TableHead className="text-right">Saldo Anterior (Bs)</TableHead>
-                                        <TableHead className="text-right">Créditos (+) (Bs)</TableHead>
-                                        <TableHead className="text-right">Débitos (-) (Bs)</TableHead>
-                                        <TableHead className="text-right">Saldo Final (Bs)</TableHead>
+                                        <TableHead className="text-[10px] font-black uppercase px-8">Cuenta</TableHead>
+                                        <TableHead className="text-right text-[10px] font-black uppercase">Saldo Anterior</TableHead>
+                                        <TableHead className="text-right text-[10px] font-black uppercase">Créditos (+)</TableHead>
+                                        <TableHead className="text-right text-[10px] font-black uppercase">Débitos (-)</TableHead>
+                                        <TableHead className="text-right text-[10px] font-black uppercase pr-8">Saldo Final</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {generalLedger.map(acc => (
-                                        <TableRow key={acc.account} className="font-medium">
-                                            <TableCell className="font-bold flex items-center gap-2">
-                                                {React.createElement(accountTitles[acc.account].icon, { className: 'h-4 w-4 text-[#0081c9]' })}
-                                                {accountTitles[acc.account].title}
-                                            </TableCell>
-                                            <TableCell className="text-right">{formatCurrency(acc.startBalance)}</TableCell>
-                                            <TableCell className="text-right text-green-600">{formatCurrency(acc.totalCredit)}</TableCell>
-                                            <TableCell className="text-right text-red-600">{formatCurrency(acc.totalDebit)}</TableCell>
-                                            <TableCell className="text-right font-bold">{formatCurrency(acc.endBalance)}</TableCell>
-                                        </TableRow>
-                                    ))}
+                                    {generalLedger.map(acc => {
+                                        const Icon = getAccountIcon(acc.tipo);
+                                        return (
+                                            <TableRow key={acc.accountId} className="font-medium hover:bg-slate-50">
+                                                <TableCell className="font-bold flex items-center gap-2 px-8 py-6">
+                                                    <Icon className="h-4 w-4 text-[#0081c9]" />
+                                                    <span className="uppercase text-xs">{acc.accountName}</span>
+                                                </TableCell>
+                                                <TableCell className="text-right font-mono">{formatCurrency(acc.startBalance)}</TableCell>
+                                                <TableCell className="text-right text-green-600 font-bold">+{formatCurrency(acc.totalCredit)}</TableCell>
+                                                <TableCell className="text-right text-red-600 font-bold">-{formatCurrency(acc.totalDebit)}</TableCell>
+                                                <TableCell className="text-right font-black italic text-lg pr-8">Bs. {formatCurrency(acc.endBalance)}</TableCell>
+                                            </TableRow>
+                                        );
+                                    })}
                                 </TableBody>
                             </Table>
                         </CardContent>
                     </Card>
                 </TabsContent>
                 
-                {Object.keys(accountTitles).map(key => {
-                    const accountKey = key as keyof typeof periodData;
-                    const { title } = accountTitles[key];
-                    const { transactions, startBalance } = periodData[accountKey];
+                {accounts.map(acc => {
+                    const { transactions, startBalance } = periodData[acc.id] || { transactions: [], startBalance: 0 };
                     return (
-                        <TabsContent key={key} value={key} className="mt-4">
-                            <Card>
-                                <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                                    <div><CardTitle>Libro Diario: {title}</CardTitle></div>
-                                    <Button onClick={() => handleExportPdf(accountKey, title)} variant="outline"><Download className="mr-2 h-4 w-4" /> PDF</Button>
+                        <TabsContent key={acc.id} value={acc.id} className="mt-4">
+                            <Card className="rounded-[2.5rem] border-none shadow-2xl overflow-hidden">
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 bg-slate-50 border-b p-8">
+                                    <div>
+                                        <CardTitle className="uppercase italic">Libro Diario: {acc.nombre}</CardTitle>
+                                        <CardDescription className="font-bold uppercase text-[9px] tracking-widest mt-1">Registros del mes seleccionado</CardDescription>
+                                    </div>
+                                    <Button onClick={() => handleExportPdf(acc.id, acc.nombre)} variant="outline" className="rounded-xl font-bold uppercase text-[10px]">
+                                        <Download className="mr-2 h-4 w-4" /> Exportar PDF
+                                    </Button>
                                 </CardHeader>
-                                <CardContent>
+                                <CardContent className="p-0">
                                     <Table>
-                                        <TableHeader>
+                                        <TableHeader className="bg-slate-100/50">
                                             <TableRow>
-                                                <TableHead>Fecha</TableHead>
-                                                <TableHead>Descripción</TableHead>
-                                                <TableHead>Ref.</TableHead>
-                                                <TableHead className="text-right">Crédito</TableHead>
-                                                <TableHead className="text-right">Débito</TableHead>
-                                                <TableHead className="text-right">Saldo</TableHead>
+                                                <TableHead className="text-[10px] font-black uppercase px-8">Fecha</TableHead>
+                                                <TableHead className="text-[10px] font-black uppercase">Descripción</TableHead>
+                                                <TableHead className="text-[10px] font-black uppercase">Ref.</TableHead>
+                                                <TableHead className="text-right text-[10px] font-black uppercase">Crédito</TableHead>
+                                                <TableHead className="text-right text-[10px] font-black uppercase">Débito</TableHead>
+                                                <TableHead className="text-right text-[10px] font-black uppercase pr-8">Saldo</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            <TableRow className="bg-slate-50 font-bold"><TableCell colSpan={5}>SALDO ANTERIOR</TableCell><TableCell className="text-right">{formatCurrency(startBalance)}</TableCell></TableRow>
-                                            {transactions.map((tx, idx) => (
-                                                <TableRow key={idx}>
-                                                    <TableCell className="whitespace-nowrap">{format(tx.date, 'dd/MM/yy')}</TableCell>
-                                                    <TableCell>{tx.description}</TableCell>
-                                                    <TableCell className="text-[10px]">{tx.reference}</TableCell>
-                                                    <TableCell className="text-right text-green-600">{tx.credit ? formatCurrency(tx.credit) : '-'}</TableCell>
-                                                    <TableCell className="text-right text-red-600">{tx.debit ? formatCurrency(tx.debit) : '-'}</TableCell>
-                                                    <TableCell className="text-right font-medium">{formatCurrency(tx.balance)}</TableCell>
-                                                </TableRow>
-                                            ))}
+                                            <TableRow className="bg-slate-50 font-black text-[10px] tracking-widest italic">
+                                                <TableCell colSpan={5} className="px-8 py-4">SALDO ANTERIOR AL PERÍODO</TableCell>
+                                                <TableCell className="text-right pr-8">{formatCurrency(startBalance)}</TableCell>
+                                            </TableRow>
+                                            {transactions.length === 0 ? (
+                                                <TableRow><TableCell colSpan={6} className="text-center py-20 text-slate-400 font-bold italic">Sin movimientos en este período para esta cuenta</TableCell></TableRow>
+                                            ) : (
+                                                transactions.map((tx, idx) => (
+                                                    <TableRow key={idx} className="hover:bg-slate-50 transition-colors">
+                                                        <TableCell className="whitespace-nowrap px-8 font-bold text-slate-500 text-xs">{format(tx.date, 'dd/MM/yy')}</TableCell>
+                                                        <TableCell className="font-black text-slate-900 uppercase italic text-xs">{tx.description}</TableCell>
+                                                        <TableCell className="text-[9px] font-bold text-slate-400 uppercase">{tx.reference}</TableCell>
+                                                        <TableCell className="text-right text-green-600 font-black">{tx.credit ? `+${formatCurrency(tx.credit)}` : '-'}</TableCell>
+                                                        <TableCell className="text-right text-red-600 font-black">{tx.debit ? `-${formatCurrency(tx.debit)}` : '-'}</TableCell>
+                                                        <TableCell className="text-right font-bold pr-8">Bs. {formatCurrency(tx.balance)}</TableCell>
+                                                    </TableRow>
+                                                ))
+                                            )}
                                         </TableBody>
                                     </Table>
                                 </CardContent>

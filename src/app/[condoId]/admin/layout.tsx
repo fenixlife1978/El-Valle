@@ -57,8 +57,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                 { href: `/${condoId}/admin/debts`, label: "Gestión de Deudas" },
                 { href: `/${condoId}/admin/financial-balance`, label: "Balance Financiero" },
                 { href: `/${condoId}/admin/accounting`, label: "Contabilidad" },
-                { href: `/${condoId}/admin/main-cash`, label: "Caja Principal (Efectivo)" },
-                { href: `/${condoId}/admin/petty-cash`, label: "Caja Chica" },
                 { href: `/${condoId}/admin/expenses`, label: "Gestión de Egresos" },
                 { href: `/${condoId}/admin/reports`, label: "Informes" },
                 { href: `/${condoId}/admin/billboard`, label: "Cartelera" },
@@ -82,8 +80,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         isCentral: true,
         subMenu: [
             { href: `/${condoId}/admin/accounts`, icon: Wallet, label: "Tesorería" },
-            { href: `/${condoId}/admin/main-cash`, icon: Coins, label: "Caja Principal" },
             { href: `/${condoId}/admin/debts`, icon: WalletCards, label: "Deudas" },
+            { href: `/${condoId}/admin/financial-balance`, icon: Scale, label: "Balance" },
             { href: `/${condoId}/admin/settings`, icon: Settings, label: "Ajustes" },
         ]
       },

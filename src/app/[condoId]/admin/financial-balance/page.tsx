@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo, use } from 'react';
@@ -14,8 +15,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2, Download, Save, Plus, Trash2 } from "lucide-react";
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 
 const formatCurrency = (num: number) => {
     if (typeof num !== 'number' || isNaN(num)) return '0,00';
@@ -29,7 +28,6 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
     const { toast } = useToast();
 
     const workingCondoId = userProfile?.workingCondoId || userProfile?.condominioId || urlCondoId;
-    const activeId = userProfile?.activeId || user?.uid;
 
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -52,6 +50,22 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
         if (!workingCondoId) return;
         const configRef = doc(db, 'condominios', workingCondoId, 'config', 'mainSettings');
         getDoc(configRef).then(snap => { if (snap.exists()) setCompanyData(snap.data().companyInfo); });
+    }, [workingCondoId]);
+
+    // Escucha en tiempo real de las cuentas de tesorería para obtener los saldos dinámicos
+    useEffect(() => {
+        if (!workingCondoId) return;
+
+        const unsubCuentas = onSnapshot(collection(db, 'condominios', workingCondoId, 'cuentas'), (snap) => {
+            const accounts = snap.docs.map(d => d.data());
+            const cp = accounts.find(a => a.nombre?.toUpperCase() === 'CAJA PRINCIPAL');
+            const cc = accounts.find(a => a.nombre?.toUpperCase() === 'CAJA CHICA');
+            
+            setCajaPrincipalBS(cp?.saldoActual || 0);
+            setCajaChicaBS(cc?.saldoActual || 0);
+        });
+
+        return () => unsubCuentas();
     }, [workingCondoId]);
 
     useEffect(() => {
@@ -82,21 +96,6 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 });
                 setIngresosOrdinariosBanco(totalBancario);
                 setIngresosOrdinariosEfectivo(totalEfectivo);
-
-                // Caja Principal Balance
-                const cpQuery = query(collection(db, 'condominios', workingCondoId, 'cajaPrincipal_movimientos'));
-                const cpSnap = await getDocs(cpQuery);
-                let cpSaldo = totalEfectivo; // Automatic income already considered? 
-                // Wait, if payments are already counted above as "ingresosOrdinariosEfectivo", 
-                // we should only count manual movements here to avoid double counting.
-                cpSaldo = cpSnap.docs.reduce((acc, doc) => doc.data().type === 'ingreso' ? acc + doc.data().amount : acc - doc.data().amount, totalEfectivo);
-                setCajaPrincipalBS(cpSaldo);
-
-                // Caja Chica Balance
-                const ccQuery = query(collection(db, 'condominios', workingCondoId, 'cajaChica_movimientos'));
-                const ccSnap = await getDocs(ccQuery);
-                const ccSaldo = ccSnap.docs.reduce((acc, doc) => doc.data().type === 'ingreso' ? acc + doc.data().amount : acc - doc.data().amount, 0);
-                setCajaChicaBS(ccSaldo);
 
                 const eQuery = query(collection(db, 'condominios', workingCondoId, 'gastos'), where('date', '>=', fromDate), where('date', '<=', toDate), where('paymentSource', '==', 'banco'));
                 const eSnap = await getDocs(eQuery);
@@ -147,7 +146,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
 
             {loading ? <Loader2 className="animate-spin mx-auto h-10 w-10 text-primary" /> : <>
                 <Card>
-                    <CardHeader className="bg-slate-50 border-b"><CardTitle className="text-xs font-black uppercase tracking-widest">Ingresos del Período</CardTitle></CardHeader>
+                    <CardHeader className="bg-slate-50 border-b"><CardTitle className="text-xs font-black uppercase tracking-widest text-slate-500">Ingresos del Período</CardTitle></CardHeader>
                     <CardContent className="p-0">
                         <Table>
                             <TableBody>
@@ -169,25 +168,25 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 </Card>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <Card className="bg-slate-900 text-white p-6 rounded-[2rem]">
+                    <Card className="bg-slate-900 text-white p-6 rounded-[2rem] border-none shadow-xl">
                         <p className="text-[10px] font-black uppercase tracking-widest text-[#F28705]">Saldo Disponible en Banco</p>
                         <p className="text-3xl font-black italic mt-2">Bs. {formatCurrency(disponibilidadBancaria)}</p>
                     </Card>
                     <div className="space-y-4">
-                        <Card className="p-4 bg-amber-50 border-amber-200">
-                            <p className="text-[10px] font-black uppercase text-amber-700">Saldo Caja Principal (Bs.)</p>
+                        <Card className="p-4 bg-amber-50 border-amber-200 rounded-2xl">
+                            <p className="text-[10px] font-black uppercase text-amber-700">Saldo Dinámico Caja Principal (Bs.)</p>
                             <p className="text-xl font-black">Bs. {formatCurrency(cajaPrincipalBS)}</p>
                         </Card>
-                        <Card className="p-4 bg-blue-50 border-blue-200">
-                            <p className="text-[10px] font-black uppercase text-blue-700">Saldo Caja Chica (Bs.)</p>
+                        <Card className="p-4 bg-blue-50 border-blue-200 rounded-2xl">
+                            <p className="text-[10px] font-black uppercase text-blue-700">Saldo Dinámico Caja Chica (Bs.)</p>
                             <p className="text-xl font-black">Bs. {formatCurrency(cajaChicaBS)}</p>
                         </Card>
                     </div>
                 </div>
 
                 <CardFooter className="flex justify-end p-0">
-                    <Button onClick={handleSave} disabled={saving} className="bg-primary h-12 rounded-xl font-black uppercase px-8">
-                        {saving ? <Loader2 className="animate-spin" /> : "Guardar Balance del Mes"}
+                    <Button onClick={handleSave} disabled={saving} className="bg-primary h-12 rounded-xl font-black uppercase px-8 text-white">
+                        {saving ? <Loader2 className="animate-spin" /> : <Save className="mr-2 h-4 w-4" />} Guardar Balance del Mes
                     </Button>
                 </CardFooter>
             </>}
