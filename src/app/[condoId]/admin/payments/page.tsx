@@ -12,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
-import { Search, CheckCircle, XCircle, Eye, MoreHorizontal, Download, Loader2, Calendar as CalendarIcon, Banknote, UserPlus, CheckCircle2, WalletCards, ArrowLeft, Trash2 } from 'lucide-react';
+import { Search, CheckCircle, XCircle, Eye, MoreHorizontal, Download, Loader2, Calendar as CalendarIcon, Banknote, UserPlus, CheckCircle2, WalletCards, ArrowLeft, Trash2, Hash, FileText } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn, compressImage } from '@/lib/utils';
@@ -39,7 +39,6 @@ const formatCurrency = (num: number) => {
 type Owner = { id: string; name: string; properties: { street: string, house: string }[]; balance?: number; role?: string; };
 type BeneficiaryRow = { id: string; owner: Owner | null; searchTerm: string; amount: string; selectedProperty: { street: string, house: string } | null; };
 type PaymentMethod = 'movil' | 'transferencia' | 'efectivo_bs' | '';
-type Debt = { id: string; ownerId: string; year: number; month: number; amountUSD: number; description: string; status: 'pending' | 'paid' | 'vencida'; property: { street: string; house: string }; paidAmountUSD?: number;};
 type Payment = { id: string; beneficiaries: { ownerId: string; ownerName: string; amount: number; street?: string; house?: string; }[]; beneficiaryIds: string[]; totalAmount: number; exchangeRate: number; paymentDate: Timestamp; reportedAt: Timestamp; paymentMethod: 'transferencia' | 'movil' | 'efectivo_bs' | 'efectivo'; bank: string; reference: string; status: 'pendiente' | 'aprobado' | 'rechazado'; receiptUrl?: string; observations?: string; receiptNumbers?: { [ownerId: string]: string }; };
 
 function VerificationComponent({ condoId }: { condoId: string }) {
@@ -84,7 +83,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             if (!condoId) return;
             setIsVerifying(true);
             try {
-                // --- ARQUITECTURA SENIOR: DEFINICIÓN DE HITOS CONTABLES ---
+                // RUTA BLINDADA BANCO DE VENEZUELA
                 const BDV_ACCOUNT_ID = "RdiTtY9ojCuYPRNvB7C3";
                 const CAJA_PRINCIPAL_ID = "CAJA_PRINCIPAL_ID";
                 
@@ -103,22 +102,20 @@ function VerificationComponent({ condoId }: { condoId: string }) {
 
                 await runTransaction(db, async (transaction) => {
                     const beneficiaryIds = payment.beneficiaries.map(b => b.ownerId);
-                    const allDebtsSnap = await getDocs(query(collection(db, 'condominios', condoId, 'debts'), where('ownerId', 'in', beneficiaryIds)));
-                    
                     const receiptNumbers: { [ownerId: string]: string } = {};
 
-                    // 1. LIQUIDACIÓN DE DEUDAS Y SALDOS A FAVOR
+                    // 1. ACTUALIZAR SALDO A FAVOR DE PROPIETARIOS
                     for (const beneficiary of payment.beneficiaries) {
                         const ownerRef = doc(db, 'condominios', condoId, ownersCollectionName, beneficiary.ownerId);
                         const ownerDoc = await transaction.get(ownerRef);
-                        if (!ownerDoc.exists()) continue;
-
-                        const saldoDisponible = (ownerDoc.data().balance || 0) + beneficiary.amount;
-                        transaction.update(ownerRef, { balance: saldoDisponible });
+                        if (ownerDoc.exists()) {
+                            const newBalance = (ownerDoc.data().balance || 0) + beneficiary.amount;
+                            transaction.update(ownerRef, { balance: newBalance });
+                        }
                         receiptNumbers[beneficiary.ownerId] = `REC-${Date.now()}-${beneficiary.ownerId.slice(-4)}`;
                     }
 
-                    // 2. ACTUALIZACIÓN ATÓMICA DE TESORERÍA (AFECTACIÓN REAL)
+                    // 2. AFECTACIÓN ATÓMICA DE TESORERÍA
                     if (targetAccountId) {
                         const accountRef = doc(db, 'condominios', condoId, 'cuentas', targetAccountId);
                         const accSnap = await transaction.get(accountRef);
@@ -134,7 +131,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                             transaction.update(accountRef, { saldoActual: increment(payment.totalAmount) });
                         }
 
-                        // 3. ACTUALIZACIÓN DE ESTADÍSTICAS MENSUALES
+                        // 3. ACTUALIZAR HITO FINANCIERO MENSUAL
                         const statsRef = doc(db, 'condominios', condoId, 'financial_stats', monthId);
                         transaction.set(statsRef, {
                             periodo: monthId,
@@ -144,7 +141,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                             updatedAt: serverTimestamp()
                         }, { merge: true });
 
-                        // 4. ASIENTO CONTABLE OBLIGATORIO
+                        // 4. GENERAR ASIENTO EN LIBRO DIARIO
                         const transRef = doc(collection(db, 'condominios', condoId, 'transacciones'));
                         transaction.set(transRef, {
                             monto: payment.totalAmount, 
@@ -160,31 +157,34 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         });
                     }
 
-                    // 5. CIERRE DE PAGO
+                    // 5. CERRAR EL REPORTE DE PAGO
                     transaction.update(doc(db, 'condominios', condoId, 'payments', payment.id), { 
                         status: 'aprobado', 
                         receiptNumbers, 
-                        observations: 'Validado en Tesorería y Libros.' 
+                        observations: 'Auditado y Sincronizado en Libros.' 
                     });
                 });
 
-                toast({ title: "Pago Aprobado", description: "El monto ha sido sumado al saldo real y asentado en libros." });
+                toast({ title: "Pago Validado", description: "El dinero ha sido acreditado en la cuenta real y asentado en libros." });
                 setSelectedPayment(null);
             } catch (error: any) { 
-                console.error("Error en aprobación:", error);
-                toast({ variant: 'destructive', title: "Falla de Proceso", description: error.message }); 
+                console.error("Error en hito contable:", error);
+                toast({ variant: 'destructive', title: "Falla en Sincronización", description: error.message }); 
             }
             finally { setIsVerifying(false); }
         });
     };
 
     const handleReject = (payment: Payment) => {
-        if (!rejectionReason) return toast({ variant: 'destructive', title: "Razón requerida" });
+        if (!rejectionReason) return toast({ variant: 'destructive', title: "Se requiere un motivo" });
         requestAuthorization(async () => {
             setIsVerifying(true);
             try {
-                await updateDoc(doc(db, 'condominios', condoId, 'payments', payment.id), { status: 'rechazado', observations: rejectionReason });
-                toast({ title: "Pago Rechazado" });
+                await updateDoc(doc(db, 'condominios', condoId, 'payments', payment.id), { 
+                    status: 'rechazado', 
+                    observations: rejectionReason 
+                });
+                toast({ title: "Reporte Rechazado" });
                 setSelectedPayment(null);
             } catch (e) { toast({ variant: 'destructive', title: "Error" }); }
             finally { setIsVerifying(false); }
@@ -196,89 +196,80 @@ function VerificationComponent({ condoId }: { condoId: string }) {
         requestAuthorization(async () => {
             setIsVerifying(true);
             try {
-                const paymentRef = doc(db, 'condominios', condoId, 'payments', paymentToDelete.id);
-                const txSnap = await getDocs(query(collection(db, 'condominios', condoId, 'transacciones'), where('sourcePaymentId', '==', paymentToDelete.id)));
                 const monthId = format(paymentToDelete.paymentDate.toDate(), 'yyyy-MM');
+                const transSnap = await getDocs(query(collection(db, 'condominios', condoId, 'transacciones'), where('sourcePaymentId', '==', paymentToDelete.id)));
                 
                 await runTransaction(db, async (transaction) => {
-                    const payDoc = await transaction.get(paymentRef);
+                    const payDoc = await transaction.get(doc(db, 'condominios', condoId, 'payments', paymentToDelete.id));
                     if (payDoc.data()?.status === 'aprobado') {
-                        if (txSnap.docs.length > 0) {
-                            const tx = txSnap.docs[0].data();
+                        // Revertir saldos de propietarios
+                        for (const ben of paymentToDelete.beneficiaries) {
+                            const ownerRef = doc(db, 'condominios', condoId, ownersCollectionName, ben.ownerId);
+                            transaction.update(ownerRef, { balance: increment(-ben.amount) });
+                        }
+                        
+                        // Revertir Tesorería y Estadísticas
+                        if (!transSnap.empty) {
+                            const tx = transSnap.docs[0].data();
                             transaction.update(doc(db, 'condominios', condoId, 'cuentas', tx.cuentaId), { saldoActual: increment(-paymentToDelete.totalAmount) });
                             
                             const statsRef = doc(db, 'condominios', condoId, 'financial_stats', monthId);
-                            transaction.set(statsRef, {
+                            transaction.update(statsRef, {
                                 saldoBancarioReal: increment(tx.nombreCuenta === "BANCO DE VENEZUELA" ? -paymentToDelete.totalAmount : 0),
                                 saldoCajaReal: increment(tx.nombreCuenta === "CAJA PRINCIPAL" ? -paymentToDelete.totalAmount : 0),
                                 totalIngresosMes: increment(-paymentToDelete.totalAmount)
-                            }, { merge: true });
-
-                            txSnap.forEach(d => transaction.delete(d.ref));
+                            });
+                            
+                            transSnap.forEach(d => transaction.delete(d.ref));
                         }
                     }
-                    transaction.delete(paymentRef);
+                    transaction.delete(doc(db, 'condominios', condoId, 'payments', paymentToDelete.id));
                 });
-                toast({ title: "Pago Revertido" });
+                toast({ title: "Pago Eliminado y Revertido" });
                 setPaymentToDelete(null);
-            } catch (e) { toast({ variant: 'destructive', title: "Error" }); }
+            } catch (e) { toast({ variant: 'destructive', title: "Error al revertir" }); }
             finally { setIsVerifying(false); }
         });
     };
 
-    const prepareReceipt = async (payment: Payment, ben: any) => {
-        if (!companyInfo) return toast({ variant: 'destructive', title: "Configuración faltante" });
-        try {
-            const data = {
-                condoName: companyInfo.name, rif: companyInfo.rif, ownerName: ben.ownerName,
-                method: payment.paymentMethod, bank: payment.bank, reference: payment.reference,
-                date: format(payment.paymentDate.toDate(), 'dd/MM/yyyy'), rate: formatCurrency(payment.exchangeRate),
-                receiptNumber: payment.receiptNumbers?.[ben.ownerId] || 'N/A', receivedAmount: formatCurrency(ben.amount),
-                currentBalance: '0,00', totalDebtPaid: formatCurrency(ben.amount), prevBalance: '0,00', observations: 'Generado automáticamente.',
-                concepts: [['Abono de Cuota', `Propiedad: ${ben.house || 'S/D'}`, '', formatCurrency(ben.amount)]]
-            };
-            await generatePaymentReceipt(data, companyInfo.logo, 'download');
-        } catch (e) { toast({ variant: 'destructive', title: "Error PDF" }); }
-    };
-
     return (
-        <Card className="rounded-[2rem] border-none shadow-sm bg-white font-montserrat">
-            <CardHeader className="p-8">
+        <Card className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 overflow-hidden font-montserrat">
+            <CardHeader className="p-8 border-b border-white/5">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <CardTitle className="text-slate-900 font-black uppercase italic tracking-tighter leading-none">Bandeja de <span className="text-primary">Verificación</span></CardTitle>
+                    <CardTitle className="text-white font-black uppercase italic tracking-tighter text-2xl">Bandeja de <span className="text-primary">Validación</span></CardTitle>
                     <div className="relative w-full md:w-64">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                        <Input placeholder="Buscar..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9 rounded-xl bg-slate-50 border-slate-200 text-slate-900 font-bold" />
+                        <Input placeholder="Filtrar por ref o nombre..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9 rounded-xl bg-slate-800 border-none text-white font-bold" />
                     </div>
                 </div>
             </CardHeader>
             <CardContent className="p-0">
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
-                    <TabsList className="grid grid-cols-3 mx-8 mb-6 h-12 bg-slate-100 rounded-xl p-1">
-                        <TabsTrigger value="pendiente" className="rounded-lg font-bold">Pendientes</TabsTrigger>
-                        <TabsTrigger value="aprobado" className="rounded-lg font-bold">Aprobados</TabsTrigger>
-                        <TabsTrigger value="rechazado" className="rounded-lg font-bold">Rechazados</TabsTrigger>
+                    <TabsList className="grid grid-cols-3 mx-8 mt-6 mb-6 h-12 bg-slate-800/50 rounded-xl p-1">
+                        <TabsTrigger value="pendiente" className="rounded-lg font-black uppercase text-[10px]">Pendientes</TabsTrigger>
+                        <TabsTrigger value="aprobado" className="rounded-lg font-black uppercase text-[10px]">Aprobados</TabsTrigger>
+                        <TabsTrigger value="rechazado" className="rounded-lg font-black uppercase text-[10px]">Rechazados</TabsTrigger>
                     </TabsList>
                     
                     {loading ? <div className="text-center p-20"><Loader2 className="animate-spin h-10 w-10 mx-auto text-primary" /></div> : (
                         <div className="overflow-x-auto">
                             <Table>
-                                <TableHeader className="bg-slate-50"><TableRow className="border-slate-100"><TableHead className="px-8 py-6 text-[10px] font-black uppercase text-slate-700">Beneficiarios</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-700">Fecha</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-700">Monto</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-700">Ref.</TableHead><TableHead className="text-right pr-8 text-[10px] font-black uppercase text-slate-700">Acción</TableHead></TableRow></TableHeader>
+                                <TableHeader className="bg-slate-800/20"><TableRow className="border-white/5"><TableHead className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-widest">Residente / Beneficiarios</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Fecha Pago</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Monto Aprobado</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Ref. Bancaria</TableHead><TableHead className="text-right pr-8 text-[10px] font-black uppercase text-slate-400 tracking-widest">Acción</TableHead></TableRow></TableHeader>
                                 <TableBody>
-                                    {filteredPayments.length === 0 ? (<TableRow><TableCell colSpan={5} className="h-32 text-center text-slate-400 font-bold italic">Sin registros.</TableCell></TableRow>) : 
+                                    {filteredPayments.length === 0 ? (<TableRow><TableCell colSpan={5} className="h-40 text-center text-slate-500 font-bold italic uppercase tracking-widest text-[10px]">Sin reportes en esta categoría</TableCell></TableRow>) : 
                                     filteredPayments.map(p => (
-                                        <TableRow key={p.id} className="hover:bg-slate-50 border-slate-50 transition-colors">
-                                            <TableCell className="px-8 py-5"><div className="font-black text-slate-900 text-xs uppercase">{p.beneficiaries.map(b => b.ownerName).join(', ')}</div><div className="text-[9px] font-black text-primary uppercase mt-0.5">{p.paymentMethod}</div></TableCell>
-                                            <TableCell className="text-slate-500 font-bold text-xs">{format(p.paymentDate.toDate(), 'dd/MM/yy')}</TableCell>
-                                            <TableCell className="font-black text-slate-900 text-sm">Bs. {formatCurrency(p.totalAmount)}</TableCell>
-                                            <TableCell className="font-mono text-[10px] text-slate-400 font-bold">{p.reference}</TableCell>
+                                        <TableRow key={p.id} className="hover:bg-white/5 border-white/5 transition-colors">
+                                            <TableCell className="px-8 py-6"><div className="font-black text-white text-xs uppercase italic">{p.beneficiaries.map(b => b.ownerName).join(', ')}</div><div className="text-[9px] font-black text-primary uppercase mt-1 tracking-tighter">{p.paymentMethod} • {p.bank}</div></TableCell>
+                                            <TableCell className="text-slate-400 font-bold text-xs uppercase">{format(p.paymentDate.toDate(), 'dd/MM/yy')}</TableCell>
+                                            <TableCell className="font-black text-white text-lg italic tracking-tighter">Bs. {formatCurrency(p.totalAmount)}</TableCell>
+                                            <TableCell className="font-mono text-[10px] text-slate-500 font-black">{p.reference}</TableCell>
                                             <TableCell className="text-right pr-8">
                                                 <DropdownMenu>
-                                                    <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="text-slate-400 hover:text-slate-900"><MoreHorizontal className="h-4 w-4"/></Button></DropdownMenuTrigger>
-                                                    <DropdownMenuContent align="end" className="rounded-xl border-slate-200 shadow-xl bg-white">
-                                                        <DropdownMenuItem onClick={() => setSelectedPayment(p)} className="font-bold text-xs text-slate-700 p-3"><Eye className="mr-2 h-4 w-4" /> Detalles</DropdownMenuItem>
-                                                        {p.status === 'pendiente' ? (<><DropdownMenuSeparator /><DropdownMenuItem onClick={() => handleApprove(p)} className="text-emerald-600 font-black uppercase text-[10px] p-3"><CheckCircle className="mr-2 h-4 w-4" /> Validar y Asentar</DropdownMenuItem><DropdownMenuItem onClick={() => { setSelectedPayment(p); setRejectionReason(''); }} className="text-red-600 font-black uppercase text-[10px] p-3"><XCircle className="mr-2 h-4 w-4" /> Rechazar</DropdownMenuItem></>) : 
-                                                        p.status === 'aprobado' && (<><DropdownMenuSeparator /><DropdownMenuSub><DropdownMenuSubTrigger className="font-bold text-xs text-slate-700 p-3"><Download className="mr-2 h-4 w-4" /> Recibos PDF</DropdownMenuSubTrigger><DropdownMenuPortal><DropdownMenuSubContent className="rounded-xl bg-white">{p.beneficiaries.map(b => <DropdownMenuItem key={b.ownerId} onClick={() => prepareReceipt(p, b)} className="text-[10px] font-black uppercase p-3">{b.ownerName}</DropdownMenuItem>)}</DropdownMenuSubContent></DropdownMenuPortal></DropdownMenuSub><DropdownMenuItem onClick={() => setPaymentToDelete(p)} className="text-red-600 font-bold text-xs p-3"><Trash2 className="mr-2 h-4 w-4"/> Revertir Pago</DropdownMenuItem></>)}
+                                                    <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="text-slate-500 hover:text-white"><MoreHorizontal className="h-5 w-5"/></Button></DropdownMenuTrigger>
+                                                    <DropdownMenuContent align="end" className="rounded-xl border-white/10 shadow-2xl bg-slate-900 text-white">
+                                                        <DropdownMenuItem onClick={() => setSelectedPayment(p)} className="font-black uppercase text-[10px] p-3 gap-2"><Eye className="h-4 w-4 text-primary" /> Detalles de Auditoría</DropdownMenuItem>
+                                                        {p.status === 'pendiente' ? (<><DropdownMenuSeparator className="bg-white/5"/><DropdownMenuItem onClick={() => handleApprove(p)} className="text-emerald-500 font-black uppercase text-[10px] p-3 gap-2"><CheckCircle className="h-4 w-4" /> Validar y Sincronizar</DropdownMenuItem><DropdownMenuItem onClick={() => { setSelectedPayment(p); setRejectionReason(''); }} className="text-red-500 font-black uppercase text-[10px] p-3 gap-2"><XCircle className="h-4 w-4" /> Rechazar Pago</DropdownMenuItem></>) : 
+                                                        p.status === 'aprobado' && (<><DropdownMenuSeparator className="bg-white/5"/><DropdownMenuItem onClick={() => setPaymentToDelete(p)} className="text-red-500 font-black uppercase text-[10px] p-3 gap-2"><Trash2 className="h-4 w-4"/> Revertir y Eliminar</DropdownMenuItem></>)}
                                                     </DropdownMenuContent>
                                                 </DropdownMenu>
                                             </TableCell>
@@ -292,32 +283,32 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             </CardContent>
 
             <Dialog open={!!selectedPayment} onOpenChange={() => setSelectedPayment(null)}>
-                <DialogContent className="max-w-2xl rounded-[2rem] border-none shadow-2xl bg-white text-slate-900">
-                    <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-slate-900">Detalles del Reporte</DialogTitle></DialogHeader>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 py-4">
+                <DialogContent className="max-w-2xl rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white">
+                    <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-white">Auditoría del <span className="text-primary">Reporte</span></DialogTitle></DialogHeader>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 py-6">
                         <div className="space-y-6">
-                            <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100">
-                                <p className="text-[10px] font-black uppercase text-slate-400 mb-3 tracking-widest">Desglose</p>
-                                {selectedPayment?.beneficiaries.map((b, i) => (<div key={i} className="flex justify-between items-center py-2 border-b border-white last:border-0"><span className="font-black text-slate-700 text-xs uppercase">{b.ownerName}</span><span className="font-black text-slate-900">Bs. {formatCurrency(b.amount)}</span></div>))}
-                                <div className="mt-4 pt-4 border-t border-slate-200 flex justify-between items-center"><span className="text-[10px] font-black uppercase text-slate-900">Total:</span><span className="text-lg font-black text-primary">Bs. {formatCurrency(selectedPayment?.totalAmount || 0)}</span></div>
+                            <div className="bg-slate-800 p-6 rounded-3xl border border-white/5">
+                                <p className="text-[10px] font-black uppercase text-slate-500 mb-4 tracking-[0.2em]">Desglose de Asignación</p>
+                                {selectedPayment?.beneficiaries.map((b, i) => (<div key={i} className="flex justify-between items-center py-3 border-b border-white/5 last:border-0"><div className="flex flex-col"><span className="font-black text-white text-xs uppercase italic">{b.ownerName}</span><span className="text-[9px] font-bold text-slate-500 uppercase">{b.street} {b.house}</span></div><span className="font-black text-primary">Bs. {formatCurrency(b.amount)}</span></div>))}
+                                <div className="mt-6 pt-6 border-t border-white/10 flex justify-between items-center"><span className="text-[10px] font-black uppercase text-white tracking-widest">Total Reportado:</span><span className="text-2xl font-black text-white italic">Bs. {formatCurrency(selectedPayment?.totalAmount || 0)}</span></div>
                             </div>
-                            {selectedPayment?.status === 'pendiente' && (<div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Motivo de Rechazo</Label><Textarea value={rejectionReason} onChange={e => setRejectionReason(e.target.value)} className="rounded-2xl bg-slate-50 border-slate-200 font-bold text-slate-900" /></div>)}
+                            {selectedPayment?.status === 'pendiente' && (<div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Motivo del Rechazo</Label><Textarea value={rejectionReason} onChange={e => setRejectionReason(e.target.value)} className="rounded-2xl bg-slate-800 border-none font-bold text-white min-h-[100px]" placeholder="Ej: Referencia no coincide con extracto bancario..." /></div>)}
                         </div>
-                        <div className="relative aspect-[3/4] bg-slate-100 rounded-3xl overflow-hidden border border-slate-200">
-                            {selectedPayment?.receiptUrl ? (<Image src={selectedPayment.receiptUrl} alt="Comprobante" fill className="object-contain" />) : (<div className="flex h-full items-center justify-center text-slate-300 font-black uppercase italic text-xs">Sin imagen</div>)}
+                        <div className="relative aspect-[3/4] bg-slate-800 rounded-3xl overflow-hidden border border-white/5 group">
+                            {selectedPayment?.receiptUrl ? (<Image src={selectedPayment.receiptUrl} alt="Comprobante" fill className="object-contain p-2" />) : (<div className="flex h-full items-center justify-center text-slate-600 font-black uppercase italic text-xs">Sin imagen adjunta</div>)}
                         </div>
                     </div>
                     {selectedPayment?.status === 'pendiente' && (
-                        <DialogFooter className="gap-3 mt-4"><Button variant="ghost" onClick={() => handleReject(selectedPayment!)} disabled={isVerifying} className="text-red-600 font-black uppercase text-[10px]">Rechazar</Button><Button onClick={() => handleApprove(selectedPayment!)} disabled={isVerifying} className="bg-slate-900 hover:bg-slate-800 text-white font-black uppercase text-[10px] h-12 rounded-xl flex-1 shadow-lg">Validar y Asentar</Button></DialogFooter>
+                        <DialogFooter className="gap-3 mt-4"><Button variant="ghost" onClick={() => handleReject(selectedPayment!)} disabled={isVerifying} className="text-red-500 font-black uppercase text-[10px] hover:bg-red-500/10">Rechazar Pago</Button><Button onClick={() => handleApprove(selectedPayment!)} disabled={isVerifying} className="bg-primary hover:bg-primary/90 text-slate-900 font-black uppercase text-[10px] h-12 rounded-xl flex-1 shadow-lg shadow-primary/20 italic">Aprobar y Sincronizar Cuentas</Button></DialogFooter>
                     )}
                 </DialogContent>
             </Dialog>
 
             <Dialog open={!!paymentToDelete} onOpenChange={() => setPaymentToDelete(null)}>
-                <DialogContent className="rounded-[2rem] border-none shadow-2xl bg-white text-slate-900">
-                    <DialogHeader><DialogTitle className="text-xl font-black uppercase italic text-red-600">¿Revertir Transacción?</DialogTitle></DialogHeader>
-                    <p className="text-slate-500 font-bold text-sm leading-relaxed uppercase">Se ajustarán los saldos de Tesorería y Balance Financiero.</p>
-                    <DialogFooter className="gap-2 mt-6"><Button variant="outline" onClick={() => setPaymentToDelete(null)} className="rounded-xl font-bold h-12 text-slate-900">Cancelar</Button><Button onClick={handleDeletePayment} disabled={isVerifying} variant="destructive" className="rounded-xl font-black uppercase h-12 shadow-lg">Confirmar</Button></DialogFooter>
+                <DialogContent className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white">
+                    <DialogHeader><DialogTitle className="text-xl font-black uppercase italic text-red-500">¿Revertir Transacción Maestra?</DialogTitle></DialogHeader>
+                    <p className="text-slate-400 font-bold text-sm leading-relaxed uppercase tracking-tight">Se restará el saldo de los propietarios, se debitará el dinero de la cuenta real y se eliminará el asiento contable.</p>
+                    <DialogFooter className="gap-2 mt-8"><Button variant="ghost" onClick={() => setPaymentToDelete(null)} className="rounded-xl font-black uppercase text-[10px] h-12 text-white">Cancelar</Button><Button onClick={handleDeletePayment} disabled={isVerifying} className="bg-red-600 hover:bg-red-700 text-white rounded-xl font-black uppercase text-[10px] h-12 shadow-lg shadow-red-600/20">Revertir Definitivamente</Button></DialogFooter>
                 </DialogContent>
             </Dialog>
         </Card>
@@ -340,6 +331,7 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
     const [receiptImage, setReceiptImage] = useState<string | null>(null);
     const [beneficiaryRows, setBeneficiaryRows] = useState<BeneficiaryRow[]>([]);
     const [isBankModalOpen, setIsBankModalOpen] = useState(false);
+    
     const ownersCollectionName = condoId === 'condo_01' ? 'owners' : 'propietarios';
     const isCashPayment = paymentMethod === 'efectivo_bs';
 
@@ -385,13 +377,14 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
         try {
             const compressedBase64 = await compressImage(file, 800, 800);
             setReceiptImage(compressedBase64);
-            toast({ title: 'Imagen cargada' });
+            toast({ title: 'Imagen vinculada' });
         } catch (error) { toast({ variant: 'destructive', title: 'Error' }); } 
         finally { setLoading(false); }
     };
 
     const assignedTotal = useMemo(() => beneficiaryRows.reduce((acc, row) => acc + (Number(row.amount) || 0), 0), [beneficiaryRows]);
     const balance = useMemo(() => (Number(totalAmount) || 0) - assignedTotal, [totalAmount, assignedTotal]);
+    
     const updateBeneficiaryRow = (id: string, updates: Partial<BeneficiaryRow>) => setBeneficiaryRows(rows => rows.map(row => (row.id === id ? { ...row, ...updates } : row)));
     const handleOwnerSelect = (rowId: string, owner: Owner) => updateBeneficiaryRow(rowId, { owner, searchTerm: '', selectedProperty: owner.properties?.[0] || null });
     const addBeneficiaryRow = () => setBeneficiaryRows(rows => [...rows, { id: Date.now().toString(), owner: null, searchTerm: '', amount: '', selectedProperty: null }]);
@@ -416,35 +409,40 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
                 reference: isCashPayment ? 'EFECTIVO' : reference, receiptUrl: receiptImage, 
                 status: 'pendiente', reportedAt: serverTimestamp() 
             });
-            toast({ title: 'Reporte Enviado' });
+            toast({ title: 'Reporte Enviado a Auditoría' });
             setTotalAmount(''); setReference(''); setReceiptImage(null);
-        } catch (error) { toast({ variant: "destructive", title: "Error" }); } 
+        } catch (error) { toast({ variant: "destructive", title: "Error de Guardado" }); } 
         finally { setIsSubmitting(false); }
     };
 
     return (
-        <Card className="rounded-[2.5rem] border-none shadow-sm bg-white overflow-hidden font-montserrat">
-            <CardHeader className="bg-slate-50 border-b p-8"><CardTitle className="text-slate-900 font-black uppercase italic">Reportar Pago Manual</CardTitle></CardHeader>
+        <Card className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 overflow-hidden font-montserrat">
+            <CardHeader className="bg-white/5 p-8 border-b border-white/5"><CardTitle className="text-white font-black uppercase italic text-2xl tracking-tighter">Reporte <span className="text-primary">Manual</span> de Pago</CardTitle></CardHeader>
             <form onSubmit={handleSubmit}>
-                <CardContent className="p-8 space-y-8">
-                    <div className="grid md:grid-cols-2 gap-6">
-                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Fecha</Label><Popover><PopoverTrigger asChild><Button variant="outline" className="w-full h-12 rounded-xl font-bold bg-slate-50 border-slate-200 text-slate-900"><CalendarIcon className="mr-2 h-4 w-4" />{paymentDate ? format(paymentDate, "PPP", { locale: es }) : "Seleccione"}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar mode="single" selected={paymentDate} onSelect={setPaymentDate} locale={es} /></PopoverContent></Popover></div>
-                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Tasa</Label><Input type="number" value={exchangeRate || ''} readOnly className="h-12 rounded-xl bg-slate-100 font-black" /></div>
-                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Método</Label><Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}><SelectTrigger className="h-12 rounded-xl font-bold border-slate-200 text-slate-900"><SelectValue/></SelectTrigger><SelectContent className="bg-white"><SelectItem value="transferencia">Transferencia</SelectItem><SelectItem value="movil">Pago Móvil</SelectItem><SelectItem value="efectivo_bs">Efectivo Bs.</SelectItem></SelectContent></Select></div>
-                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Banco</Label><Button type="button" variant="outline" className="w-full h-12 rounded-xl font-bold border-slate-200 text-left justify-start text-slate-900" onClick={() => setIsBankModalOpen(true)} disabled={isCashPayment}>{isCashPayment ? 'EFECTIVO' : (bank || "Seleccionar...")}</Button></div>
-                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Ref.</Label><Input value={reference} onChange={(e) => setReference(e.target.value.replace(/\D/g, ''))} disabled={isCashPayment} className="h-12 rounded-xl font-black border-slate-200" /></div>
-                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Total Bs.</Label><Input type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} className="h-12 rounded-xl font-black text-lg border-slate-200" /></div>
+                <CardContent className="p-8 space-y-10">
+                    <div className="grid md:grid-cols-2 gap-8">
+                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Fecha de Pago</Label><Popover><PopoverTrigger asChild><Button variant="outline" className="w-full h-14 rounded-2xl font-black bg-slate-800 border-none text-white uppercase italic text-xs text-left justify-start"><CalendarIcon className="mr-3 h-5 w-5 text-primary" />{paymentDate ? format(paymentDate, "PPP", { locale: es }) : "Seleccione"}</Button></PopoverTrigger><PopoverContent className="w-auto p-0 bg-slate-900 border-white/10"><Calendar mode="single" selected={paymentDate} onSelect={setPaymentDate} locale={es} /></PopoverContent></Popover></div>
+                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Tasa Aplicada (Bs.)</Label><Input type="number" value={exchangeRate || ''} readOnly className="h-14 rounded-2xl bg-slate-800 border-none text-primary font-black text-lg italic" /></div>
+                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Método</Label><Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}><SelectTrigger className="h-14 rounded-2xl font-black bg-slate-800 border-none text-white uppercase italic text-xs"><SelectValue/></SelectTrigger><SelectContent className="bg-slate-900 border-white/10 text-white"><SelectItem value="transferencia">Transferencia</SelectItem><SelectItem value="movil">Pago Móvil</SelectItem><SelectItem value="efectivo_bs">Efectivo Bs.</SelectItem></SelectContent></Select></div>
+                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Banco Emisor</Label><Button type="button" variant="outline" className="w-full h-14 rounded-2xl font-black bg-slate-800 border-none text-white uppercase italic text-xs text-left justify-start" onClick={() => setIsBankModalOpen(true)} disabled={isCashPayment}>{isCashPayment ? 'EFECTIVO' : (bank || "Seleccionar Banco...")}</Button></div>
+                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Referencia Bancaria</Label><Input value={reference} onChange={(e) => setReference(e.target.value.replace(/\D/g, ''))} disabled={isCashPayment} className="h-14 rounded-2xl bg-slate-800 border-none text-white font-black italic tracking-widest" placeholder="6 DÍGITOS" /></div>
+                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Monto Total en Bs.</Label><Input type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} className="h-14 rounded-2xl bg-slate-800 border-none text-white font-black text-2xl italic text-right pr-6" placeholder="0,00" /></div>
                     </div>
-                    <div className="space-y-4">
-                        {beneficiaryRows.map((row) => (
-                            <Card key={row.id} className="p-6 bg-slate-50 border-slate-100 rounded-3xl">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div className="space-y-2">
-                                        {!row.owner ? (<div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" /><Input placeholder="Residente..." className="pl-9 h-12 rounded-xl bg-white border-slate-200" value={row.searchTerm} onChange={(e) => updateBeneficiaryRow(row.id, { searchTerm: e.target.value })} />{row.searchTerm.length >= 2 && <Card className="absolute z-10 w-full mt-1 border shadow-lg rounded-xl overflow-hidden bg-white"><ScrollArea className="h-32">{getFilteredOwners(row.searchTerm).map(o => (<div key={o.id} onClick={() => handleOwnerSelect(row.id, o)} className="p-3 hover:bg-slate-50 cursor-pointer font-bold text-xs uppercase">{o.name}</div>))}</ScrollArea></Card>}</div>) : 
-                                        (<div className="p-4 bg-white rounded-2xl border border-slate-100 flex justify-between items-center"><p className="font-black text-slate-900 uppercase text-xs">{row.owner.name}</p><Button variant="ghost" size="icon" onClick={() => removeBeneficiaryRow(row.id)} className="text-red-400"><XCircle className="h-5 w-5" /></Button></div>)}
+                    
+                    <div className="space-y-6">
+                        <Label className="text-[10px] font-black uppercase text-primary ml-2 tracking-[0.3em]">Asignación de Beneficiarios</Label>
+                        {beneficiaryRows.map((row, index) => (
+                            <div key={row.id} className="p-8 bg-white/5 border border-white/5 rounded-[2rem] relative space-y-6">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                    <div className="space-y-4">
+                                        {!row.owner ? (
+                                            <div className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" /><Input placeholder="Buscar Residente..." className="pl-12 h-14 rounded-2xl bg-slate-800 border-none text-white font-bold uppercase text-xs" value={row.searchTerm} onChange={(e) => updateBeneficiaryRow(row.id, { searchTerm: e.target.value })} />{row.searchTerm.length >= 2 && <Card className="absolute z-50 w-full mt-2 border-white/10 shadow-2xl rounded-2xl overflow-hidden bg-slate-900"><ScrollArea className="h-48">{getFilteredOwners(row.searchTerm).map(o => (<div key={o.id} onClick={() => handleOwnerSelect(row.id, o)} className="p-4 hover:bg-white/5 cursor-pointer font-black text-[10px] uppercase text-white border-b border-white/5 last:border-0">{o.name}</div>))}</ScrollArea></Card>}</div>
+                                        ) : (
+                                            <div className="p-5 bg-slate-800 rounded-2xl border border-white/5 flex justify-between items-center"><p className="font-black text-primary uppercase text-xs italic tracking-tighter">{row.owner.name}</p><Button variant="ghost" size="icon" onClick={() => removeBeneficiaryRow(row.id)} className="text-red-500 hover:bg-red-500/10"><XCircle className="h-5 w-5" /></Button></div>
+                                        )}
                                         {row.owner && (
-                                            <div className="space-y-1 mt-2">
-                                                <Label className="text-[10px] uppercase font-bold text-slate-500">Unidad</Label>
+                                            <div className="space-y-1.5">
+                                                <Label className="text-[9px] uppercase font-black text-slate-500 ml-2">Seleccionar Unidad</Label>
                                                 <Select 
                                                     onValueChange={(v) => {
                                                         const found = row.owner?.properties?.find(p => `${p.street}-${p.house}` === v);
@@ -452,12 +450,12 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
                                                     }} 
                                                     value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''}
                                                 >
-                                                    <SelectTrigger className="rounded-xl h-10 bg-white border-slate-200 text-slate-900">
-                                                        <SelectValue placeholder="Unidad..." />
+                                                    <SelectTrigger className="rounded-xl h-12 bg-slate-800 border-none text-white font-bold uppercase text-[10px]">
+                                                        <SelectValue placeholder="Propiedad..." />
                                                     </SelectTrigger>
-                                                    <SelectContent className="bg-white">
+                                                    <SelectContent className="bg-slate-900 border-white/10 text-white">
                                                         {row.owner.properties?.map((p, pIdx) => (
-                                                            <SelectItem key={`${p.street}-${p.house}-${pIdx}`} value={`${p.street}-${p.house}`} className="text-slate-900">
+                                                            <SelectItem key={`${p.street}-${p.house}-${pIdx}`} value={`${p.street}-${p.house}`} className="font-bold text-[10px]">
                                                                 {p.street} - {p.house}
                                                             </SelectItem>
                                                         ))}
@@ -466,14 +464,17 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
                                             </div>
                                         )}
                                     </div>
-                                    <Input type="number" placeholder="Monto Bs." value={row.amount} onChange={(e) => updateBeneficiaryRow(row.id, { amount: e.target.value })} disabled={!row.owner} className="h-12 rounded-xl font-black bg-white border-slate-200" />
+                                    <div className="space-y-1.5">
+                                        <Label className="text-[9px] uppercase font-black text-slate-500 ml-2">Monto Individual (Bs.)</Label>
+                                        <Input type="number" placeholder="0,00" value={row.amount} onChange={(e) => updateBeneficiaryRow(row.id, { amount: e.target.value })} disabled={!row.owner} className="h-14 rounded-2xl bg-slate-800 border-none text-white font-black text-xl italic text-right pr-6" />
+                                    </div>
                                 </div>
-                            </Card>
+                            </div>
                         ))}
-                        <Button type="button" variant="outline" size="sm" onClick={addBeneficiaryRow} className="rounded-xl font-black uppercase text-[10px]"><UserPlus className="mr-2 h-4 w-4"/>Beneficiario</Button>
+                        <Button type="button" variant="outline" size="sm" onClick={addBeneficiaryRow} className="rounded-xl font-black uppercase text-[10px] border-white/10 text-slate-400 hover:bg-white/5"><UserPlus className="mr-2 h-4 w-4 text-primary"/>Añadir Beneficiario</Button>
                     </div>
                 </CardContent>
-                <CardFooter className="bg-slate-50 p-8 border-t flex justify-end gap-4"><div className={cn("font-black text-lg", balance !== 0 ? 'text-red-600' : 'text-emerald-600')}>Dif: Bs. {formatCurrency(balance)}</div><Button type="submit" disabled={isSubmitting || Math.abs(balance) > 0.01} className="h-14 px-10 rounded-2xl bg-slate-900 text-white font-black uppercase italic shadow-xl">{isSubmitting ? <Loader2 className="animate-spin"/> : 'Registrar Pago'}</Button></CardFooter>
+                <CardFooter className="bg-white/5 p-8 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-6"><div className={cn("font-black text-2xl italic tracking-tighter uppercase", balance !== 0 ? 'text-red-500' : 'text-emerald-500')}>Diferencia: Bs. {formatCurrency(balance)}</div><Button type="submit" disabled={isSubmitting || Math.abs(balance) > 0.01} className="h-16 px-12 rounded-2xl bg-primary hover:bg-primary/90 text-slate-900 font-black uppercase italic tracking-widest shadow-2xl shadow-primary/20 transition-all active:scale-95">{isSubmitting ? <Loader2 className="animate-spin mr-2"/> : <Save className="mr-2 h-5 w-5" />} REGISTRAR PAGO Y ASENTAR</Button></CardFooter>
             </form>
             <BankSelectionModal isOpen={isBankModalOpen} onOpenChange={setIsBankModalOpen} selectedValue={bank} onSelect={(v) => { setBank(v); setIsBankModalOpen(false); }} />
         </Card>
@@ -486,14 +487,14 @@ function PaymentsPage() {
     const router = useRouter();
     const activeTab = searchParams?.get('tab') ?? 'verify';
     return (
-        <div className="space-y-10 animate-in fade-in duration-500 font-montserrat">
+        <div className="space-y-10 animate-in fade-in duration-700 font-montserrat">
             <div className="mb-10">
-                <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">Gestión de <span className="text-primary">Pagos</span></h2>
-                <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
-                <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">Hitos contables y afectación de Tesorería en tiempo real.</p>
+                <h2 className="text-4xl font-black text-foreground uppercase tracking-tighter italic drop-shadow-sm">Gestión de <span className="text-primary">Pagos</span></h2>
+                <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full shadow-[0_0_15px_rgba(245,158,11,0.3)]"></div>
+                <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">Auditoría centralizada y afectación inmediata de Tesorería.</p>
             </div>
             <Tabs value={activeTab} onValueChange={(v) => router.push(`/${condoId}/admin/payments?tab=${v}`)}>
-                <TabsList className="grid w-full grid-cols-2 bg-slate-200 h-14 rounded-2xl p-1"><TabsTrigger value="verify" className="rounded-xl font-black uppercase text-xs">Verificación</TabsTrigger><TabsTrigger value="report" className="rounded-xl font-black uppercase text-xs">Reporte Manual</TabsTrigger></TabsList>
+                <TabsList className="grid w-full grid-cols-2 bg-slate-800/50 h-16 rounded-2xl p-1"><TabsTrigger value="verify" className="rounded-xl font-black uppercase text-xs tracking-widest italic">Verificación Bancaria</TabsTrigger><TabsTrigger value="report" className="rounded-xl font-black uppercase text-xs tracking-widest italic">Reporte Directo</TabsTrigger></TabsList>
                 <TabsContent value="verify" className="mt-8"><VerificationComponent condoId={condoId} /></TabsContent>
                 <TabsContent value="report" className="mt-8"><ReportPaymentComponent condoId={condoId} /></TabsContent>
             </Tabs>
@@ -502,5 +503,5 @@ function PaymentsPage() {
 }
 
 export default function PaymentsPageWrapper() {
-    return (<Suspense fallback={<div className="flex h-64 items-center justify-center"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>}><PaymentsPage /></Suspense>);
+    return (<Suspense fallback={<div className="flex h-screen items-center justify-center bg-background"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>}><PaymentsPage /></Suspense>);
 }
