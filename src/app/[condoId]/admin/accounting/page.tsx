@@ -116,7 +116,7 @@ const AccountingPage = () => {
             const to = endOfMonth(from);
             const monthId = format(from, 'yyyy-MM');
 
-            // ID ESPECÍFICO REQUERIDO POR REGLA DE NEGOCIO
+            // ID ESPECÍFICO DE BANCO DE VENEZUELA
             const BDV_ACCOUNT_ID = "RdiTtY9ojCuYPRNvB7C3";
             const CAJA_PRINCIPAL_ID = "CAJA_PRINCIPAL_ID";
 
@@ -144,7 +144,6 @@ const AccountingPage = () => {
                     const accountRef = doc(db, 'condominios', workingCondoId, 'cuentas', targetAccountId);
                     const accountSnap = await transaction.get(accountRef);
 
-                    // Si no existe la cuenta, la creamos (excepto si es el BDV ID que debería existir)
                     if (!accountSnap.exists()) {
                         transaction.set(accountRef, {
                             nombre: targetAccountName,
@@ -162,7 +161,7 @@ const AccountingPage = () => {
                         tipo: 'ingreso', 
                         cuentaId: targetAccountId, 
                         nombreCuenta: targetAccountName,
-                        descripcion: `SINCRONIZACIÓN: PAGO DE ${p.beneficiaries?.[0]?.ownerName || 'PROPIETARIO'}`,
+                        descripcion: `SINCRONIZACIÓN: PAGO DE ${p.beneficiaries?.[0]?.ownerName || 'RESIDENTE'}`.toUpperCase(),
                         referencia: p.reference, 
                         fecha: p.paymentDate, 
                         sourcePaymentId: pDoc.id,
@@ -197,7 +196,7 @@ const AccountingPage = () => {
     if (loading) return (
         <div className="flex flex-col h-[70vh] items-center justify-center gap-4">
             <Loader2 className="animate-spin h-12 w-12 text-[#0081c9]" />
-            <p className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-400 animate-pulse italic">EFAS CONTABILIDAD: Cargando Libros</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-400 animate-pulse italic">Cargando Libros Contables...</p>
         </div>
     );
 
@@ -207,7 +206,7 @@ const AccountingPage = () => {
                 <div>
                     <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic drop-shadow-sm">Contabilidad <span className="text-[#0081c9]">Digital</span></h2>
                     <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full"></div>
-                    <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">Asientos únicos y libros mayores por cuenta.</p>
+                    <p className="text-slate-500 font-bold mt-3 text-sm uppercase tracking-wide">Asientos únicos y afectación real de tesorería.</p>
                 </div>
                 <Button onClick={handleSyncPeriod} disabled={isSyncing} variant="outline" className="rounded-xl border-[#0081c9] text-[#0081c9] font-black uppercase text-[10px] h-12 shadow-sm hover:bg-blue-50">
                     {isSyncing ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Zap className="mr-2 h-4 w-4" />} Sincronizar Período
@@ -216,7 +215,7 @@ const AccountingPage = () => {
             
             <Card className="rounded-3xl border-none shadow-sm bg-white">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                    <div><CardTitle className="text-slate-900 font-black uppercase text-sm tracking-widest">Período Fiscal</CardTitle><CardDescription className="text-slate-500 font-bold">Seleccione el mes a auditar.</CardDescription></div>
+                    <div><CardTitle className="text-slate-900 font-black uppercase text-sm tracking-widest">Período Fiscal</CardTitle><CardDescription className="text-slate-500 font-bold">Auditoría mensual de libros.</CardDescription></div>
                     <div className="flex gap-2">
                         <Select value={selectedMonth} onValueChange={setSelectedMonth}><SelectTrigger className="w-36 rounded-xl bg-slate-50 text-slate-900 border-slate-200 font-bold"><SelectValue /></SelectTrigger><SelectContent className="bg-white">{months.map(m => <SelectItem key={m.value} value={m.value} className="text-slate-900">{m.label}</SelectItem>)}</SelectContent></Select>
                         <Select value={selectedYear} onValueChange={setSelectedYear}><SelectTrigger className="w-24 rounded-xl bg-slate-50 text-slate-900 border-slate-200 font-bold"><SelectValue /></SelectTrigger><SelectContent className="bg-white">{years.map(y => <SelectItem key={y} value={y} className="text-slate-900">{y}</SelectItem>)}</SelectContent></Select>
@@ -226,8 +225,8 @@ const AccountingPage = () => {
 
             <Tabs defaultValue="mayor">
                 <TabsList className="flex flex-wrap h-auto gap-2 bg-slate-200 p-2 rounded-3xl">
-                    <TabsTrigger value="mayor" className="rounded-2xl font-black uppercase text-[10px] px-6 text-slate-600 data-[state=active]:bg-white data-[state=active]:text-slate-900 shadow-sm transition-all">Libro Mayor</TabsTrigger>
-                    {accounts.map(acc => <TabsTrigger key={acc.id} value={acc.id} className="rounded-2xl font-black uppercase text-[10px] px-6 text-slate-600 data-[state=active]:bg-white data-[state=active]:text-slate-900 shadow-sm transition-all">{acc.nombre}</TabsTrigger>)}
+                    <TabsTrigger value="mayor" className="rounded-2xl font-black uppercase text-[10px] px-6">Libro Mayor</TabsTrigger>
+                    {accounts.map(acc => <TabsTrigger key={acc.id} value={acc.id} className="rounded-2xl font-black uppercase text-[10px] px-6">{acc.nombre}</TabsTrigger>)}
                 </TabsList>
 
                 <TabsContent value="mayor" className="mt-4">
@@ -279,7 +278,7 @@ const AccountingPage = () => {
                                                 </TableRow>
                                             ))}
                                             {transactions.length === 0 && (
-                                                <TableRow><TableCell colSpan={5} className="text-center py-20 text-slate-400 italic font-bold">Sin movimientos registrados en este período.</TableCell></TableRow>
+                                                <TableRow><TableCell colSpan={5} className="text-center py-20 text-slate-400 italic font-bold">Sin movimientos registrados.</TableCell></TableRow>
                                             )}
                                         </TableBody>
                                     </Table>
