@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -16,7 +17,8 @@ import {
     Receipt,
     BookCopy,
     Scale,
-    Coins
+    Coins,
+    Wallet
 } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { usePathname, useRouter, useParams } from 'next/navigation';
@@ -51,6 +53,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             icon: Grid3X3,
             label: "Utilidades",
             items: [
+                { href: `/${condoId}/admin/accounts`, label: "Cuentas y Tesorería" },
                 { href: `/${condoId}/admin/debts`, label: "Gestión de Deudas" },
                 { href: `/${condoId}/admin/financial-balance`, label: "Balance Financiero" },
                 { href: `/${condoId}/admin/accounting`, label: "Contabilidad" },
@@ -78,9 +81,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         label: 'Más', 
         isCentral: true,
         subMenu: [
+            { href: `/${condoId}/admin/accounts`, icon: Wallet, label: "Tesorería" },
             { href: `/${condoId}/admin/main-cash`, icon: Coins, label: "Caja Principal" },
             { href: `/${condoId}/admin/debts`, icon: WalletCards, label: "Deudas" },
-            { href: `/${condoId}/admin/people`, icon: Users, label: "Personas" },
             { href: `/${condoId}/admin/settings`, icon: Settings, label: "Ajustes" },
         ]
       },
