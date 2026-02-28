@@ -1,9 +1,8 @@
-
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, Timestamp, where, query, orderBy, getDocs, runTransaction, doc, serverTimestamp } from 'firebase/firestore';
+import { collection, onSnapshot, Timestamp, where, query, orderBy, getDocs, runTransaction, doc, serverTimestamp, increment } from 'firebase/firestore';
 import { Download, RefreshCw, Landmark, Coins, Wallet, History, Zap, Loader2 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -87,11 +86,9 @@ const AccountingPage = () => {
         return () => cleanup?.();
     }, [fetchData]);
 
-    // Filtrar cuentas para ocultar exactamente "CAJA PRINCIPAL (EFECTIVO BS)" y mostrar el resto (incluyendo "CAJA PRINCIPAL")
     const visibleAccounts = useMemo(() => {
         return accounts.filter(acc => {
             const name = acc.nombre?.toUpperCase().trim();
-            // Excluimos la cuenta señalada que no presenta movimientos
             return name !== "CAJA PRINCIPAL (EFECTIVO BS)";
         });
     }, [accounts]);
@@ -158,7 +155,7 @@ const AccountingPage = () => {
     const handleSyncPeriod = async () => {
         if (!workingCondoId) return;
         setIsSyncing(true);
-        toast({ title: "Sincronizando...", description: "Verificando consistencia y auto-aprovisionando cuentas." });
+        toast({ title: "Sincronizando...", description: "Reparando saldos y asientos de Tesorería." });
 
         try {
             const fromDate = startOfMonth(new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1));
@@ -189,7 +186,8 @@ const AccountingPage = () => {
                         if (!targetName) continue;
 
                         let account = currentAccounts.find((a: any) => a.nombre?.toUpperCase().trim() === targetName);
-                        
+                        let accountId = "";
+
                         if (!account) {
                             const newAccRef = doc(collection(db, 'condominios', workingCondoId, 'cuentas'));
                             const newAccData = {
@@ -199,32 +197,30 @@ const AccountingPage = () => {
                                 createdAt: serverTimestamp()
                             };
                             transaction.set(newAccRef, newAccData);
-                            account = { id: newAccRef.id, ...newAccData };
+                            accountId = newAccRef.id;
+                            account = { id: accountId, ...newAccData };
                             currentAccounts.push(account);
+                        } else {
+                            accountId = account.id;
                         }
 
-                        if (account) {
-                            const txRef = doc(collection(db, 'condominios', workingCondoId, 'transacciones'));
-                            transaction.set(txRef, {
-                                monto: p.totalAmount,
-                                tipo: 'ingreso',
-                                cuentaId: account.id,
-                                nombreCuenta: account.nombre,
-                                descripcion: `SINCRONIZACIÓN: PAGO DE ${p.beneficiaries?.[0]?.ownerName || 'PROPIETARIO'}`,
-                                referencia: p.reference,
-                                fecha: p.paymentDate,
-                                sourcePaymentId: pDoc.id,
-                                createdAt: serverTimestamp(),
-                                createdBy: user?.email
-                            });
+                        const txRef = doc(collection(db, 'condominios', workingCondoId, 'transacciones'));
+                        transaction.set(txRef, {
+                            monto: p.totalAmount,
+                            tipo: 'ingreso',
+                            cuentaId: accountId,
+                            nombreCuenta: targetName,
+                            descripcion: `SINCRONIZACIÓN: PAGO DE ${p.beneficiaries?.[0]?.ownerName || 'PROPIETARIO'}`,
+                            referencia: p.reference,
+                            fecha: p.paymentDate,
+                            sourcePaymentId: pDoc.id,
+                            createdAt: serverTimestamp(),
+                            createdBy: user?.email
+                        });
 
-                            const accRef = doc(db, 'condominios', workingCondoId, 'cuentas', account.id);
-                            const newBalance = (account.saldoActual || 0) + p.totalAmount;
-                            transaction.update(accRef, { saldoActual: newBalance });
-                            
-                            account.saldoActual = newBalance;
-                            repairsCount++;
-                        }
+                        const accRef = doc(db, 'condominios', workingCondoId, 'cuentas', accountId);
+                        transaction.update(accRef, { saldoActual: increment(p.totalAmount) });
+                        repairsCount++;
                     }
                 }
 
@@ -233,13 +229,13 @@ const AccountingPage = () => {
                 }
             });
 
-            toast({ title: "Sincronización Exitosa", description: `Se han generado ${repairsCount} asientos y actualizado los saldos físicos.` });
+            toast({ title: "Sincronización Exitosa", description: `Se han generado ${repairsCount} asientos y actualizado los saldos reales.` });
         } catch (e) {
             if (e === "no_repairs_needed") {
-                toast({ title: "Todo al día", description: "No se detectaron discrepancias en este período." });
+                toast({ title: "Todo al día", description: "No se detectaron discrepancias." });
             } else {
                 console.error(e);
-                toast({ variant: 'destructive', title: "Error", description: "Fallo durante la sincronización atómica." });
+                toast({ variant: 'destructive', title: "Error", description: "Fallo durante la sincronización." });
             }
         } finally {
             setIsSyncing(false);
@@ -309,7 +305,7 @@ const AccountingPage = () => {
                 <CardHeader className="flex flex-row items-center justify-between space-y-0">
                     <div>
                         <CardTitle className="text-slate-900">Selector de Período</CardTitle>
-                        <CardDescription className="text-slate-500">Filtre los libros contables dinámicos de Tesorería.</CardDescription>
+                        <CardDescription className="text-slate-500">Filtre los libros contables dinámicos.</CardDescription>
                     </div>
                     <div className="flex gap-2">
                         <Select value={selectedMonth} onValueChange={setSelectedMonth}>
@@ -412,14 +408,14 @@ const AccountingPage = () => {
                                                 <TableCell className="text-right pr-8">{formatCurrency(startBalance)}</TableCell>
                                             </TableRow>
                                             {transactions.length === 0 ? (
-                                                <TableRow><TableCell colSpan={6} className="text-center py-20 text-slate-400 font-bold italic uppercase text-[10px] tracking-widest">Sin movimientos registrados en este período</TableCell></TableRow>
+                                                <TableRow><TableCell colSpan={6} className="text-center py-20 text-slate-400 font-bold italic uppercase text-[10px] tracking-widest">Sin movimientos registrados</TableCell></TableRow>
                                             ) : (
                                                 transactions.map((tx, idx) => (
                                                     <TableRow key={idx} className="hover:bg-slate-50 transition-colors border-slate-100">
                                                         <TableCell className="whitespace-nowrap px-8 font-bold text-slate-500 text-xs">{format(tx.date, 'dd/MM/yyyy')}</TableCell>
                                                         <TableCell className="font-black text-slate-900 uppercase italic text-xs">{tx.description}</TableCell>
                                                         <TableCell className="text-[9px] font-bold text-slate-400 uppercase">{tx.reference}</TableCell>
-                                                        <TableCell className="text-right text-green-600 font-black">{tx.credit ? `+${formatCurrency(tx.credit)}` : '-'}</TableCell>
+                                                        <TableCell className="text-right text-emerald-600 font-black">{tx.credit ? `+${formatCurrency(tx.credit)}` : '-'}</TableCell>
                                                         <TableCell className="text-right text-red-600 font-black">{tx.debit ? `-${formatCurrency(tx.debit)}` : '-'}</TableCell>
                                                         <TableCell className="text-right font-bold pr-8 text-slate-900">Bs. {formatCurrency(tx.balance)}</TableCell>
                                                     </TableRow>
