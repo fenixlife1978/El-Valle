@@ -3,8 +3,8 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, Timestamp, where, query, orderBy, getDocs, runTransaction, doc, addDoc } from 'firebase/firestore';
-import { Download, RefreshCw, Landmark, Coins, Wallet, History, Zap, Loader2, Info } from 'lucide-react';
+import { collection, onSnapshot, Timestamp, where, query, orderBy, getDocs, runTransaction, doc, serverTimestamp } from 'firebase/firestore';
+import { Download, RefreshCw, Landmark, Coins, Wallet, History, Zap, Loader2 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -177,9 +177,10 @@ const AccountingPage = () => {
                         if (['movil', 'transferencia'].includes(p.paymentMethod)) targetName = "BANCO DE VENEZUELA";
                         else if (['efectivo_bs', 'efectivo'].includes(p.paymentMethod)) targetName = "CAJA PRINCIPAL";
 
+                        if (!targetName) continue;
+
                         let account = currentAccounts.find((a: any) => a.nombre?.toUpperCase().trim() === targetName);
                         
-                        // AUTO-PROVISIÓN: Si la cuenta no existe, crearla dinámicamente
                         if (!account) {
                             const newAccRef = doc(collection(db, 'condominios', workingCondoId, 'cuentas'));
                             const newAccData = {
