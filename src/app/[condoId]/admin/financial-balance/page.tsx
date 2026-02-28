@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo, use } from 'react';
@@ -421,7 +420,8 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                                         <Button variant="ghost" size="icon" onClick={() => eliminarLineaEgreso(idx)}>
                                             <Trash2 className="h-4 w-4 text-red-500" />
                                         </Button>
-                                    </TableRow>
+                                    </TableCell>
+                                </TableRow>
                             ))}
                          </TableBody>
                          <TableFooter>
