@@ -38,6 +38,10 @@ const formatCurrency = (amount: number): string => {
 const months = Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: format(new Date(2000, i), 'MMMM', { locale: es }) }));
 const years = Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear() - i));
 
+// ID DE LA CUENTA BDV ACTUALIZADO
+const BDV_ACCOUNT_ID = "Hlc0ky0QdnaXIsuf19Od";
+const CAJA_PRINCIPAL_ID = "CAJA_PRINCIPAL_ID";
+
 const AccountingPage = () => {
     const { toast } = useToast();
     const { workingCondoId, user } = useAuth();
@@ -120,9 +124,6 @@ const AccountingPage = () => {
             const from = startOfMonth(new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1));
             const to = endOfMonth(from);
             const monthId = format(from, 'yyyy-MM');
-
-            const BDV_ACCOUNT_ID = "3PBNZdNqO6jbHRJfadT3";
-            const CAJA_PRINCIPAL_ID = "CAJA_PRINCIPAL_ID";
 
             const paySnap = await getDocs(query(collection(db, 'condominios', workingCondoId, 'payments'), where('status', '==', 'aprobado'), where('paymentDate', '>=', from), where('paymentDate', '<=', to)));
             

@@ -19,7 +19,7 @@ import {
     Hash, FileText, Save, Share2, FileDown,
     Calculator, Minus, Equal, Check, Receipt, X, DollarSign
 } from 'lucide-react';
-import { format, startOfMonth, addMonths, isBefore } from 'date-fns';
+import { format, startOfMonth, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn, compressImage } from '@/lib/utils';
 import { 
@@ -78,8 +78,8 @@ type Payment = {
     liquidatedConcepts?: LiquidatedConcept[];
 };
 
-// RUTA MAESTRA BANCO DE VENEZUELA (AFECTACIÓN EXCLUSIVA)
-const BDV_ACCOUNT_ID = "3PBNZdNqO6jbHRJfadT3";
+// RUTA MAESTRA BANCO DE VENEZUELA (AFECTACIÓN EXCLUSIVA ACTUALIZADA)
+const BDV_ACCOUNT_ID = "Hlc0ky0QdnaXIsuf19Od";
 const CAJA_PRINCIPAL_ID = "CAJA_PRINCIPAL_ID";
 
 function VerificationComponent({ condoId }: { condoId: string }) {
@@ -125,7 +125,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             setIsVerifying(true);
             try {
                 const method = (payment.paymentMethod || "").toLowerCase().trim();
-                // REGLA DE ORO: SI ES DIGITAL (MOVIL O TRANSFERENCIA), VA EXCLUSIVAMENTE AL BDV (3PBNZdNqO6jbHRJfadT3)
+                // REGLA DE ORO: SI ES DIGITAL (MOVIL O TRANSFERENCIA), VA EXCLUSIVAMENTE AL BDV (ID ACTUALIZADO)
                 const isDigital = method.includes('movil') || method.includes('transferencia') || method.includes('pagomovil');
                 const targetAccountId = isDigital ? BDV_ACCOUNT_ID : CAJA_PRINCIPAL_ID;
                 const targetAccountName = isDigital ? "BANCO DE VENEZUELA" : "CAJA PRINCIPAL";
@@ -145,7 +145,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
 
                         let funds = new Decimal(beneficiary.amount).plus(new Decimal(ownerSnap.data().balance || 0));
                         
-                        // 1. Liquidar deudas pendientes en orden cronológico
                         const debtsSnap = await getDocs(query(
                             collection(db, 'condominios', condoId, 'debts'),
                             where('ownerId', '==', beneficiary.ownerId),
@@ -176,7 +175,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                             } else break;
                         }
 
-                        // 2. Liquidar meses por adelantado
                         const advanceAmountBs = new Decimal(currentFee).times(payment.exchangeRate);
                         if (funds.gte(advanceAmountBs)) {
                             const allDebtsSnap = await getDocs(query(
@@ -224,7 +222,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                             }
                         }
 
-                        // 3. Registrar Abono si queda remanente menor a una cuota
                         if (funds.gt(0)) {
                             liquidatedConcepts.push({
                                 ownerId: beneficiary.ownerId,
@@ -239,11 +236,9 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         transaction.update(ownerRef, { balance: funds.toDecimalPlaces(2).toNumber() });
                     }
 
-                    // AFECTACIÓN FÍSICA DE CUENTA
                     const accountRef = doc(db, 'condominios', condoId, 'cuentas', targetAccountId);
                     transaction.update(accountRef, { saldoActual: increment(payment.totalAmount) });
 
-                    // AFECTACIÓN ESTADÍSTICA DEL MES
                     const statsRef = doc(db, 'condominios', condoId, 'financial_stats', monthId);
                     transaction.set(statsRef, {
                         periodo: monthId,
@@ -253,7 +248,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         updatedAt: serverTimestamp()
                     }, { merge: true });
 
-                    // ASIENTO EN LIBRO DIARIO
                     const transRef = doc(collection(db, 'condominios', condoId, 'transacciones'));
                     transaction.set(transRef, {
                         monto: payment.totalAmount, 
@@ -575,7 +569,7 @@ function ReportPaymentComponent() {
             const ownersData: Owner[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner));
             setAllOwners(ownersData.filter(o => (o as any).email !== 'vallecondo@gmail.com').sort((a, b) => (a.name || '').localeCompare(b.name || '')));
         });
-    }, [condoId]);
+    }, [condoId, ownersCollectionName]);
 
     useEffect(() => {
         if (!condoId) return;
@@ -695,7 +689,7 @@ function CalculatorComponent({ condoId, onReport }: { condoId: string, onReport:
         return onSnapshot(q, (snapshot) => {
             setAllOwners(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner)).filter(o => (o as any).email !== 'vallecondo@gmail.com').sort((a,b) => a.name.localeCompare(b.name)));
         });
-    }, [condoId]);
+    }, [condoId, ownersCollectionName]);
 
     useEffect(() => {
         if (!condoId) return;
