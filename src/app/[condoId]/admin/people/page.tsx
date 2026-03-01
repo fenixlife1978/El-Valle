@@ -31,7 +31,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { PlusCircle, Edit, Trash2, Loader2, Search, MoreHorizontal, Building, Save, Home } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Loader2, Search, MoreHorizontal, Building, Save, Home, Banknote } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 type Role = 'propietario' | 'administrador';
@@ -182,22 +182,22 @@ export default function OwnersManagement() {
     };
 
     const UserCard = ({ user }: { user: Owner }) => (
-        <Card className="flex flex-col bg-card border-border hover:border-primary/50 shadow-sm hover:shadow-lg transition-all duration-300 rounded-[2rem]">
+        <Card className="flex flex-col bg-slate-900 border-white/5 hover:border-primary/50 shadow-sm hover:shadow-lg transition-all duration-300 rounded-[2rem]">
             <CardHeader className="flex flex-row items-center gap-4 space-y-0 pb-2">
                 <div className="flex-grow">
-                    <CardTitle className="text-lg text-foreground font-black uppercase italic">{user.name || "Sin nombre"}</CardTitle>
-                    <CardDescription className="text-muted-foreground text-xs font-medium truncate">{user.email}</CardDescription>
+                    <CardTitle className="text-lg text-white font-black uppercase italic">{user.name || "Sin nombre"}</CardTitle>
+                    <CardDescription className="text-white/40 text-xs font-medium truncate italic">{user.email}</CardDescription>
                 </div>
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0 text-muted-foreground"><MoreHorizontal className="h-4 w-4" /></Button>
+                        <Button variant="ghost" className="h-8 w-8 p-0 text-white/20 hover:text-white"><MoreHorizontal className="h-4 w-4" /></Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => { setCurrentOwner(user); setIsDialogOpen(true); }}>
-                            <Edit className="mr-2 h-4 w-4" />Editar
+                    <DropdownMenuContent align="end" className="bg-slate-950 border-white/10">
+                        <DropdownMenuItem onClick={() => { setCurrentOwner(user); setIsDialogOpen(true); }} className="text-white/80 font-black uppercase text-[10px] gap-2">
+                            <Edit className="h-3 w-3 text-sky-500" /> Editar Perfil
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setUserToDelete(user)} className="text-red-500 font-bold">
-                            <Trash2 className="mr-2 h-4 w-4" />Eliminar
+                        <DropdownMenuItem onClick={() => setUserToDelete(user)} className="text-red-500 font-black uppercase text-[10px] gap-2">
+                            <Trash2 className="h-3 w-3" /> Eliminar Registro
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>
@@ -205,25 +205,25 @@ export default function OwnersManagement() {
             <CardContent className="flex-grow space-y-3">
                 {user.role === 'propietario' ? (
                     <>
-                        <div className="flex items-start gap-2 text-sm text-muted-foreground font-bold">
+                        <div className="flex items-start gap-2 text-sm text-white/60 font-bold">
                             <Building className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                            <span className="uppercase tracking-tight">
+                            <span className="uppercase tracking-tight italic">
                                 {user.properties?.length > 0 
                                     ? user.properties.map(p => `${p.street} ${p.house}`).join(' | ') 
                                     : "Sin ubicación"}
                             </span>
                         </div>
                         <div className="flex justify-between items-center pt-2">
-                             <Badge variant={user.balance > 0 ? "success" : "outline"} className={user.balance > 0 ? "bg-success/10 text-success border-success/20 font-black" : "font-bold"}>
+                             <Badge variant="outline" className={user.balance > 0 ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20 font-black italic" : "font-black text-white/20 italic"}>
                                 Bs. {(user.balance || 0).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
                             </Badge>
-                            <span className="text-[9px] uppercase font-black text-muted-foreground/50">Propietario</span>
+                            <span className="text-[9px] uppercase font-black text-white/20 italic tracking-widest">Residente</span>
                         </div>
                     </>
                 ) : (
                      <div className="flex justify-start items-center mt-2">
-                        <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-xs font-black uppercase tracking-widest px-3">
-                            Administrador
+                        <Badge variant="secondary" className="bg-sky-500/10 text-sky-400 border-sky-500/20 text-[9px] font-black uppercase tracking-[0.2em] px-3 italic">
+                            ADMINISTRADOR MASTER
                         </Badge>
                     </div>
                 )}
@@ -232,43 +232,43 @@ export default function OwnersManagement() {
     );
 
     return (
-        <div className="space-y-8 animate-in fade-in duration-500">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+        <div className="space-y-8 animate-in fade-in duration-500 font-montserrat bg-[#1A1D23] min-h-screen p-4 md:p-8">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 border-b border-white/5 pb-6">
                 <div>
-                    <h2 className="text-4xl font-black text-foreground uppercase tracking-tighter italic leading-none">
+                    <h2 className="text-4xl font-black text-white uppercase tracking-tighter italic leading-none">
                         Gestión de <span className="text-primary">Personas</span>
                     </h2>
-                    <p className="text-muted-foreground font-bold text-[10px] uppercase tracking-[0.3em] mt-2">
-                        ID ACTIVO: <span className="text-primary">{workingCondoId || "VERIFICANDO..."}</span>
+                    <p className="text-white/40 font-bold text-[10px] uppercase tracking-[0.3em] mt-3">
+                        COMUNIDAD ACTIVA EN: <span className="text-primary">{workingCondoId || "VERIFICANDO..."}</span>
                     </p>
                 </div>
-                <Button onClick={() => { setCurrentOwner(emptyOwner); setIsDialogOpen(true); }} className="bg-primary hover:bg-primary/90 font-bold uppercase text-xs tracking-widest px-6 h-12 rounded-xl">
+                <Button onClick={() => { setCurrentOwner(emptyOwner); setIsDialogOpen(true); }} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] px-8 h-12 rounded-xl shadow-lg shadow-primary/20 italic">
                     <PlusCircle className="mr-2 h-4 w-4" /> Nuevo Registro
                 </Button>
             </div>
 
             <div className="space-y-6">
                 <div className="relative">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
                     <Input 
-                        placeholder="Buscar por nombre, correo, calle o casa..." 
-                        className="pl-10 h-12 w-full rounded-full bg-card border-2 border-border focus-visible:ring-primary"
+                        placeholder="Buscar por nombre, ubicación o correo..." 
+                        className="pl-12 h-14 w-full rounded-2xl bg-slate-900 border-white/5 text-white font-black uppercase italic text-xs focus-visible:ring-primary"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
                 
                 <Tabs defaultValue="owners" className="w-full">
-                    <TabsList className="grid w-full grid-cols-2 bg-secondary/30 h-12 rounded-2xl">
-                        <TabsTrigger value="owners">Propietarios ({filteredOwners.length})</TabsTrigger>
-                        <TabsTrigger value="admins">Administradores ({filteredAdmins.length})</TabsTrigger>
+                    <TabsList className="grid w-full grid-cols-2 bg-slate-900/50 h-14 rounded-[2rem] p-1 border border-white/5">
+                        <TabsTrigger value="owners" className="rounded-2xl font-black uppercase text-[10px] italic">Propietarios ({filteredOwners.length})</TabsTrigger>
+                        <TabsTrigger value="admins" className="rounded-2xl font-black uppercase text-[10px] italic">Administradores ({filteredAdmins.length})</TabsTrigger>
                     </TabsList>
                     
-                    <div className="mt-6">
+                    <div className="mt-8">
                         {loading ? (
                             <div className="flex flex-col items-center justify-center py-20 gap-3">
                                 <Loader2 className="animate-spin h-10 w-10 text-primary" />
-                                <span className="text-[10px] font-black uppercase text-muted-foreground tracking-[0.4em]">Sincronizando Base de Datos</span>
+                                <span className="text-[10px] font-black uppercase text-white/20 tracking-[0.4em] italic">Sincronizando Archivos...</span>
                             </div>
                         ) : (
                             <>
@@ -276,14 +276,14 @@ export default function OwnersManagement() {
                                     {filteredOwners.length > 0 ? (
                                         filteredOwners.map(o => <UserCard key={o.id} user={o} />)
                                     ) : (
-                                        <div className="col-span-full py-20 text-center text-muted-foreground font-bold uppercase text-xs">No hay propietarios registrados</div>
+                                        <div className="col-span-full py-20 text-center text-white/20 font-black uppercase italic text-xs tracking-widest border-2 border-dashed border-white/5 rounded-[3rem]">No se registran propietarios</div>
                                     )}
                                 </TabsContent>
                                 <TabsContent value="admins" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                     {filteredAdmins.length > 0 ? (
                                         filteredAdmins.map(a => <UserCard key={a.id} user={a} />)
                                     ) : (
-                                        <div className="col-span-full py-20 text-center text-muted-foreground font-bold uppercase text-xs">No hay administradores registrados</div>
+                                        <div className="col-span-full py-20 text-center text-white/20 font-black uppercase italic text-xs tracking-widest border-2 border-dashed border-white/5 rounded-[3rem]">No se registran administradores</div>
                                     )}
                                 </TabsContent>
                             </>
@@ -293,46 +293,60 @@ export default function OwnersManagement() {
             </div>
 
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent className="sm:max-w-md rounded-3xl border-none shadow-2xl overflow-hidden bg-card">
-                    <DialogHeader className="bg-primary/10 p-6 -m-6 mb-4">
-                        <DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-primary">
-                            {currentOwner.id ? 'Editar' : 'Nuevo'} Perfil
+                <DialogContent className="sm:max-w-md rounded-[2.5rem] border-none shadow-2xl overflow-hidden bg-slate-900 text-white italic">
+                    <DialogHeader className="bg-white/5 p-8 -m-6 mb-4">
+                        <DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-white">
+                            {currentOwner.id ? 'Editar' : 'Nuevo'} <span className="text-primary">Perfil</span>
                         </DialogTitle>
                     </DialogHeader>
                     <div className="space-y-5 py-4">
                         <div className="space-y-1.5">
-                            <Label className="text-[10px] font-black uppercase text-muted-foreground ml-2">Rol de Usuario</Label>
+                            <Label className="text-[10px] font-black uppercase text-white/40 ml-2 tracking-widest">Rol de Usuario</Label>
                             <Select 
                                 value={currentOwner.role}
                                 onValueChange={(v: Role) => setCurrentOwner({...currentOwner, role: v})}
                             >
-                                <SelectTrigger className="font-bold uppercase text-xs h-12 rounded-2xl bg-input border-none">
+                                <SelectTrigger className="font-black uppercase text-[10px] h-12 rounded-xl bg-white/5 border-none">
                                     <SelectValue />
                                 </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="propietario">Propietario</SelectItem>
-                                    <SelectItem value="administrador">Administrador</SelectItem>
+                                <SelectContent className="bg-slate-950 border-white/10 text-white">
+                                    <SelectItem value="propietario" className="font-black italic">PROPIETARIO</SelectItem>
+                                    <SelectItem value="administrador" className="font-black italic">ADMINISTRADOR</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
 
                         <div className="space-y-1.5">
-                            <Label className="text-[10px] font-black uppercase text-muted-foreground ml-2">Nombre Completo</Label>
+                            <Label className="text-[10px] font-black uppercase text-white/40 ml-2 tracking-widest">Nombre Completo</Label>
                             <Input 
-                                className="font-bold uppercase h-12 rounded-2xl bg-input border-none"
+                                className="font-black uppercase h-12 rounded-xl bg-white/5 border-none text-white italic"
                                 placeholder="NOMBRE Y APELLIDO"
                                 value={currentOwner.name}
                                 onChange={(e) => setCurrentOwner({...currentOwner, name: e.target.value})}
                             />
                         </div>
 
+                        <div className="space-y-1.5">
+                            <Label className="text-[10px] font-black uppercase text-primary ml-2 tracking-widest flex items-center gap-2">
+                                <Banknote className="h-3 w-3" /> Saldo a Favor (Bs.)
+                            </Label>
+                            <Input 
+                                type="number"
+                                step="0.01"
+                                className="font-black h-12 rounded-xl bg-white/5 border-none text-emerald-500 text-xl italic"
+                                placeholder="0.00"
+                                value={currentOwner.balance}
+                                onChange={(e) => setCurrentOwner({...currentOwner, balance: parseFloat(e.target.value) || 0})}
+                            />
+                        </div>
+
                         {currentOwner.role === 'propietario' && (
                             <div className="grid grid-cols-2 gap-4 animate-in slide-in-from-top-2 duration-300">
                                 <div className="space-y-1.5">
-                                    <Label className="text-[10px] font-black uppercase text-muted-foreground ml-2">Calle / Sector</Label>
+                                    <Label className="text-[10px] font-black uppercase text-white/40 ml-2 tracking-widest">Calle / Sector</Label>
                                     <div className="relative">
                                         <Input 
-                                            className="font-bold uppercase h-12 rounded-2xl bg-input border-none pl-10"
+                                            className="font-black uppercase h-12 rounded-xl bg-white/5 border-none pl-10 text-white italic"
                                             placeholder="CALLE 1"
                                             value={currentOwner.properties?.[0]?.street || ''}
                                             onChange={(e) => {
@@ -342,14 +356,14 @@ export default function OwnersManagement() {
                                                 setCurrentOwner({...currentOwner, properties: props});
                                             }}
                                         />
-                                        <Building className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                        <Building className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
                                     </div>
                                 </div>
                                 <div className="space-y-1.5">
-                                    <Label className="text-[10px] font-black uppercase text-muted-foreground ml-2">Casa / Unidad</Label>
+                                    <Label className="text-[10px] font-black uppercase text-white/40 ml-2 tracking-widest">Casa / Unidad</Label>
                                     <div className="relative">
                                         <Input 
-                                            className="font-bold uppercase h-12 rounded-2xl bg-input border-none pl-10"
+                                            className="font-black uppercase h-12 rounded-xl bg-white/5 border-none pl-10 text-white italic"
                                             placeholder="CASA 10"
                                             value={currentOwner.properties?.[0]?.house || ''}
                                             onChange={(e) => {
@@ -359,18 +373,18 @@ export default function OwnersManagement() {
                                                 setCurrentOwner({...currentOwner, properties: props});
                                             }}
                                         />
-                                        <Home className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                        <Home className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
                                     </div>
                                 </div>
                             </div>
                         )}
 
                         <div className="space-y-1.5">
-                            <Label className="text-[10px] font-black uppercase text-muted-foreground ml-2">Correo Electrónico</Label>
+                            <Label className="text-[10px] font-black uppercase text-white/40 ml-2 tracking-widest">Correo Electrónico</Label>
                             <Input 
                                 type="email"
                                 disabled={!!currentOwner.id}
-                                className="font-bold h-12 rounded-2xl bg-input border-none"
+                                className="font-bold h-12 rounded-xl bg-white/5 border-none text-white italic"
                                 placeholder="correo@ejemplo.com"
                                 value={currentOwner.email || ''}
                                 onChange={(e) => setCurrentOwner({...currentOwner, email: e.target.value})}
@@ -379,34 +393,34 @@ export default function OwnersManagement() {
 
                         {!currentOwner.id && (
                             <div className="space-y-1.5">
-                                <Label className="text-[10px] font-black uppercase text-muted-foreground ml-2">Contraseña Inicial</Label>
+                                <Label className="text-[10px] font-black uppercase text-white/40 ml-2 tracking-widest">Contraseña Inicial</Label>
                                 <Input 
                                     type="password"
                                     placeholder="••••••"
-                                    className="h-12 rounded-2xl bg-input border-none"
+                                    className="h-12 rounded-xl bg-white/5 border-none text-white"
                                     onChange={(e) => setCurrentOwner({...currentOwner, password: e.target.value})}
                                 />
                             </div>
                         )}
                     </div>
                     <DialogFooter className="gap-2 mt-4">
-                        <Button variant="ghost" onClick={() => setIsDialogOpen(false)} className="font-bold uppercase text-[10px] rounded-xl h-12">Cancelar</Button>
-                        <Button onClick={handleSaveOwner} disabled={loading} className="bg-primary hover:bg-primary/90 font-black uppercase text-[10px] tracking-widest flex-1 h-12 rounded-xl shadow-lg shadow-primary/20">
-                            {loading ? <Loader2 className="animate-spin" /> : <Save className="mr-2 h-4 w-4" />} {currentOwner.id ? 'Actualizar' : 'Crear'} Perfil
+                        <Button variant="ghost" onClick={() => setIsDialogOpen(false)} className="font-black uppercase text-[10px] rounded-xl h-12 text-white/40">Cancelar</Button>
+                        <Button onClick={handleSaveOwner} disabled={loading} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-[0.2em] flex-1 h-14 rounded-2xl shadow-xl italic">
+                            {loading ? <Loader2 className="animate-spin" /> : <Save className="mr-2 h-4 w-4" />} {currentOwner.id ? 'Guardar Cambios' : 'Crear Perfil'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
 
             <Dialog open={!!userToDelete} onOpenChange={() => setUserToDelete(null)}>
-                <DialogContent className="rounded-3xl border-none">
+                <DialogContent className="rounded-[2rem] border-none bg-slate-900 text-white italic">
                     <DialogHeader>
-                        <DialogTitle className="text-red-600 font-black uppercase tracking-tighter italic">¿Eliminar Registro?</DialogTitle>
+                        <DialogTitle className="text-red-500 font-black uppercase italic text-xl tracking-tighter">¿Confirmar Eliminación?</DialogTitle>
                     </DialogHeader>
-                    <p className="text-muted-foreground font-medium text-sm leading-relaxed">Esta acción desvinculará a <b>{userToDelete?.name}</b> de <b>{workingCondoId}</b>. El usuario ya no podrá acceder a este condominio.</p>
-                    <DialogFooter className="mt-6 gap-2">
-                        <Button variant="ghost" onClick={() => setUserToDelete(null)} className="font-bold uppercase text-[10px] h-12 rounded-xl">Cancelar</Button>
-                        <Button variant="destructive" onClick={handleConfirmDelete} className="font-black uppercase text-[10px] h-12 rounded-xl">Confirmar Eliminación</Button>
+                    <p className="text-white/40 font-bold text-sm leading-relaxed mt-4">Esta acción desvinculará permanentemente a <b>{userToDelete?.name}</b> del sistema. Se perderá su historial de acceso, pero sus movimientos contables permanecerán auditables.</p>
+                    <DialogFooter className="mt-8 gap-2">
+                        <Button variant="ghost" onClick={() => setUserToDelete(null)} className="font-black uppercase text-[10px] h-12 rounded-xl">Cancelar</Button>
+                        <Button variant="destructive" onClick={handleConfirmDelete} className="font-black uppercase text-[10px] h-12 rounded-xl italic">Eliminar Ahora</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
