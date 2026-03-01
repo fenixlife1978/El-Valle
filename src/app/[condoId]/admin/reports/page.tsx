@@ -20,7 +20,7 @@ import { collection, getDocs, query, where, doc, getDoc, orderBy, Timestamp, add
 import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { Calendar } from "@/components/ui/calendar";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/tabs";
 import { Label } from '@/components/ui/label';
 import { format, addMonths, startOfMonth, parse, getYear, getMonth, isBefore, isEqual, differenceInCalendarMonths, differenceInMonths, endOfMonth, isSameMonth } from 'date-fns';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -1170,7 +1170,7 @@ export default function ReportsPage() {
         
         // --- Footer Balance ---
         doc.setFontSize(12).setFont('helvetica', 'bold');
-        doc.text(`Saldo a Favor Actual: Bs. ${formatToTwoDecimals(accountStatementData.balance)}`, margin, startY);
+        doc.text(`Saldo a Favor Actual: Bs. {formatToTwoDecimals(accountStatementData.balance)}`, margin, startY);
 
         doc.save(`${filename}.pdf`);
     };
@@ -1244,6 +1244,7 @@ export default function ReportsPage() {
 
         const filename = `reporte_mensual_${selectedYear}_${selectedMonth}`;
         const periodString = `Período: ${monthOptions.find(m => m.value === selectedMonth)?.label} ${selectedYear}`;
+        const totalAmount = data.reduce((sum, row) => sum + row.amount, 0);
 
         if (formatType === 'pdf') {
             const { default: jsPDF } = await import('jspdf');
@@ -1263,10 +1264,13 @@ export default function ReportsPage() {
             autoTable(doc, {
                 head: [['Propietario', 'Propiedad', 'Fecha Pago', 'Monto (Bs.)', 'Referencia', 'Meses Pagados']], 
                 body: data.map(row => [row.ownerName, row.properties, row.paymentDate, formatToTwoDecimals(row.amount), row.reference, row.paidMonths]),
+                foot: [['', '', 'TOTAL INGRESOS DEL MES', formatToTwoDecimals(totalAmount), '', '']],
                 startY: startY,
                 headStyles: { fillColor: [30, 80, 180] },
+                footStyles: { fillColor: [30, 80, 180], textColor: 255, fontStyle: 'bold' },
                 styles: { fontSize: 8, cellPadding: 2 },
                  columnStyles: {
+                    3: { halign: 'right' },
                     5: { cellWidth: 50 }, // Give more space for "Paid Months"
                 }
             });
@@ -1284,6 +1288,10 @@ export default function ReportsPage() {
                  { header: 'Meses Pagados', key: 'paidMonths', width: 40 },
              ];
              worksheet.addRows(data);
+             worksheet.addRow([]);
+             const footerRow = worksheet.addRow(['', '', 'TOTAL INGRESOS DEL MES', totalAmount, '', '']);
+             footerRow.font = { bold: true };
+
              const buffer = await workbook.xlsx.writeBuffer();
              const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
              const link = document.createElement('a');
@@ -1913,7 +1921,7 @@ export default function ReportsPage() {
                                         <TableHead>Propietario</TableHead>
                                         <TableHead>Propiedad</TableHead>
                                         <TableHead>Fecha Pago</TableHead>
-                                        <TableHead>Monto (Bs.)</TableHead>
+                                        <TableHead className="text-right">Monto (Bs.)</TableHead>
                                         <TableHead>Referencia</TableHead>
                                         <TableHead>Meses Pagados</TableHead>
                                     </TableRow>
@@ -1925,7 +1933,7 @@ export default function ReportsPage() {
                                                 <TableCell>{row.ownerName}</TableCell>
                                                 <TableCell>{row.properties}</TableCell>
                                                 <TableCell>{row.paymentDate}</TableCell>
-                                                <TableCell>{formatToTwoDecimals(row.amount)}</TableCell>
+                                                <TableCell className="text-right">{formatToTwoDecimals(row.amount)}</TableCell>
                                                 <TableCell>{row.reference}</TableCell>
                                                 <TableCell>{row.paidMonths}</TableCell>
                                             </TableRow>
@@ -1934,6 +1942,17 @@ export default function ReportsPage() {
                                         <TableRow><TableCell colSpan={6} className="h-24 text-center">No hay pagos aprobados en este período.</TableCell></TableRow>
                                     )}
                                 </TableBody>
+                                {monthlyReportData.length > 0 && (
+                                    <TableFooter>
+                                        <TableRow className="bg-muted/50 font-bold">
+                                            <TableCell colSpan={3} className="text-right uppercase text-[10px] tracking-widest">Total Ingresos del Mes</TableCell>
+                                            <TableCell className="text-right text-primary font-black">
+                                                Bs. {formatToTwoDecimals(monthlyReportData.reduce((acc, row) => acc + row.amount, 0))}
+                                            </TableCell>
+                                            <TableCell colSpan={2}></TableCell>
+                                        </TableRow>
+                                    </TableFooter>
+                                )}
                             </Table>
                         </CardContent>
                     </Card>
@@ -1996,7 +2015,7 @@ export default function ReportsPage() {
                                             </TableRow>
                                         ))
                                     ) : (
-                                        <TableRow><TableCell colSpan={4} className="h-24 text-center">No hay ingresos en el período seleccionado.</TableCell></TableRow>
+                                        <TableRow><TableCell colSpan={4} className="text-center py-20">No hay ingresos en el período seleccionado.</TableCell></TableRow>
                                     )}
                                 </TableBody>
                                 <TableFooter>
