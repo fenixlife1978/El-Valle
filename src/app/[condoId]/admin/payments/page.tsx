@@ -35,7 +35,6 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import { Checkbox } from '@/components/ui/checkbox';
 import Image from 'next/image';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { 
@@ -59,7 +58,7 @@ const formatCurrency = (num: number) => {
 type Owner = { id: string; name: string; properties: { street: string, house: string }[]; balance?: number; role?: string; email?: string; };
 type BeneficiaryRow = { id: string; owner: Owner | null; searchTerm: string; amount: string; selectedProperty: { street: string, house: string } | null; };
 type PaymentMethod = 'movil' | 'transferencia' | 'efectivo_bs' | '';
-type LiquidatedConcept = { ownerId: string; description: string; amountUSD: number; period: string };
+type LiquidatedConcept = { ownerId: string; description: string; amountUSD: number; period: string; type: 'deuda' | 'adelanto' | 'abono'; };
 type Payment = { 
     id: string; 
     beneficiaries: { ownerId: string; ownerName: string; amount: number; street?: string; house?: string; }[]; 
@@ -82,7 +81,7 @@ const BDV_ACCOUNT_ID = "3PBNZdNqO6jbHRJfadT3";
 const CAJA_PRINCIPAL_ID = "CAJA_PRINCIPAL_ID";
 
 function VerificationComponent({ condoId }: { condoId: string }) {
-    const { user, companyInfo, condoFee } = useAuth();
+    const { user, companyInfo } = useAuth();
     const { requestAuthorization } = useAuthorization();
     const { toast } = useToast();
 
@@ -129,6 +128,9 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 const targetAccountName = isDigital ? "BANCO DE VENEZUELA" : "CAJA PRINCIPAL";
                 const monthId = format(payment.paymentDate.toDate(), 'yyyy-MM');
 
+                const settingsSnap = await getDoc(doc(db, 'condominios', condoId, 'config', 'mainSettings'));
+                const currentFee = settingsSnap.exists() ? (settingsSnap.data().condoFee || 25) : 25;
+
                 await runTransaction(db, async (transaction) => {
                     const receiptNumbers: { [ownerId: string]: string } = {};
                     const liquidatedConcepts: LiquidatedConcept[] = [];
@@ -165,17 +167,15 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                                     ownerId: beneficiary.ownerId,
                                     description: debt.description,
                                     amountUSD: debt.amountUSD,
-                                    period: `${monthsLocale[debt.month]} ${debt.year}`
+                                    period: `${monthsLocale[debt.month]} ${debt.year}`,
+                                    type: 'deuda'
                                 });
                             } else break;
                         }
 
-                        // 2. Liquidar meses por adelantado si queda saldo y está al día
-                        const cFee = (condoFee || 25);
-                        const advanceAmountBs = new Decimal(cFee).times(payment.exchangeRate);
-                        
+                        // 2. Liquidar meses por adelantado
+                        const advanceAmountBs = new Decimal(currentFee).times(payment.exchangeRate);
                         if (funds.gte(advanceAmountBs)) {
-                            // Buscar el último mes registrado (ya sea pagado o pendiente)
                             const allDebtsSnap = await getDocs(query(
                                 collection(db, 'condominios', condoId, 'debts'),
                                 where('ownerId', '==', beneficiary.ownerId)
@@ -199,10 +199,10 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                                     property: { street: beneficiary.street || '', house: beneficiary.house || '' },
                                     year,
                                     month,
-                                    amountUSD: cFee,
+                                    amountUSD: currentFee,
                                     description: 'Cuota de Condominio (Adelantado)',
                                     status: 'paid',
-                                    paidAmountUSD: cFee,
+                                    paidAmountUSD: currentFee,
                                     paymentDate: payment.paymentDate,
                                     paymentId: payment.id,
                                     published: true
@@ -211,13 +211,25 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                                 liquidatedConcepts.push({
                                     ownerId: beneficiary.ownerId,
                                     description: 'CUOTA ADELANTADA',
-                                    amountUSD: cFee,
-                                    period: `${monthsLocale[month]} ${year}`
+                                    amountUSD: currentFee,
+                                    period: `${monthsLocale[month]} ${year}`,
+                                    type: 'adelanto'
                                 });
 
                                 funds = funds.minus(advanceAmountBs);
                                 nextMonthDate = addMonths(nextMonthDate, 1);
                             }
+                        }
+
+                        // 3. Registrar Abono si queda remanente menor a una cuota
+                        if (funds.gt(0)) {
+                            liquidatedConcepts.push({
+                                ownerId: beneficiary.ownerId,
+                                description: 'ABONO A SALDO A FAVOR',
+                                amountUSD: funds.div(payment.exchangeRate).toNumber(),
+                                period: 'SALDO',
+                                type: 'abono'
+                            });
                         }
 
                         receiptNumbers[beneficiary.ownerId] = `REC-${Date.now().toString().substring(6)}-${beneficiary.ownerId.slice(-4)}`.toUpperCase();
@@ -272,6 +284,8 @@ function VerificationComponent({ condoId }: { condoId: string }) {
         const beneficiary = payment.beneficiaries.find(b => b.ownerId === ownerId);
         if (!beneficiary) return;
 
+        const ownerConcepts = payment.liquidatedConcepts?.filter(c => c.ownerId === ownerId) || [];
+
         const data = {
             condoName: companyInfo.name,
             rif: companyInfo.rif,
@@ -287,12 +301,9 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             prevBalance: '0,00',
             currentBalance: '0,00',
             observations: payment.observations || 'PAGO VALIDADO',
-            concepts: [[
-                format(payment.paymentDate.toDate(), 'MM/yyyy'),
-                `${beneficiary.street || ''} ${beneficiary.house || ''}`.trim(),
-                (beneficiary.amount / payment.exchangeRate).toFixed(2),
-                formatCurrency(beneficiary.amount)
-            ]]
+            concepts: ownerConcepts.length > 0 
+                ? ownerConcepts.map(c => [c.period, c.description, c.amountUSD.toFixed(2), formatCurrency(c.amountUSD * payment.exchangeRate)])
+                : [[format(payment.paymentDate.toDate(), 'MM/yyyy'), 'ABONO A SALDO', (beneficiary.amount / payment.exchangeRate).toFixed(2), formatCurrency(beneficiary.amount)]]
         };
 
         await generatePaymentReceipt(data, companyInfo.logo);
@@ -303,6 +314,8 @@ function VerificationComponent({ condoId }: { condoId: string }) {
         const beneficiary = payment.beneficiaries.find(b => b.ownerId === ownerId);
         if (!beneficiary) return;
 
+        const ownerConcepts = payment.liquidatedConcepts?.filter(c => c.ownerId === ownerId) || [];
+
         const data = {
             condoName: companyInfo.name,
             rif: companyInfo.rif,
@@ -318,12 +331,9 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             prevBalance: '0,00',
             currentBalance: '0,00',
             observations: payment.observations || 'PAGO VALIDADO',
-            concepts: [[
-                format(payment.paymentDate.toDate(), 'MM/yyyy'),
-                `${beneficiary.street || ''} ${beneficiary.house || ''}`.trim(),
-                (beneficiary.amount / payment.exchangeRate).toFixed(2),
-                formatCurrency(beneficiary.amount)
-            ]]
+            concepts: ownerConcepts.length > 0 
+                ? ownerConcepts.map(c => [c.period, c.description, c.amountUSD.toFixed(2), formatCurrency(c.amountUSD * payment.exchangeRate)])
+                : [[format(payment.paymentDate.toDate(), 'MM/yyyy'), 'ABONO A SALDO', (beneficiary.amount / payment.exchangeRate).toFixed(2), formatCurrency(beneficiary.amount)]]
         };
 
         const blob = await generatePaymentReceipt(data, companyInfo.logo, 'blob');
@@ -333,21 +343,8 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 await navigator.share({ files: [file], title: 'Recibo de Pago', text: `Comprobante para ${beneficiary.ownerName}` });
             } catch (e) { console.error(e); }
         } else {
-            toast({ title: "Compartir no disponible", description: "Su navegador no soporta el envío de archivos." });
+            toast({ title: "No disponible", description: "Navegador no compatible con Web Share." });
         }
-    };
-
-    const handleReject = (payment: Payment) => {
-        if (!rejectionReason) return toast({ variant: 'destructive', title: "Indique un motivo" });
-        requestAuthorization(async () => {
-            setIsVerifying(true);
-            try {
-                await updateDoc(doc(db, 'condominios', condoId, 'payments', payment.id), { status: 'rechazado', observations: rejectionReason });
-                toast({ title: "Reporte Rechazado" });
-                setSelectedPayment(null);
-            } catch (e) { toast({ variant: 'destructive', title: "Error" }); }
-            finally { setIsVerifying(false); }
-        });
     };
 
     const handleDeletePayment = async () => {
@@ -387,7 +384,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
     };
 
     return (
-        <Card className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 overflow-hidden font-montserrat">
+        <Card className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 overflow-hidden font-montserrat italic">
             <CardHeader className="p-8 border-b border-white/5">
                 <div className="flex flex-col md:flex-row justify-between items-center gap-4">
                     <CardTitle className="text-white font-black uppercase italic text-2xl tracking-tighter">Bandeja de <span className="text-primary">Validación</span></CardTitle>
@@ -420,7 +417,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                                             <TableCell className="text-right pr-8">
                                                 <DropdownMenu>
                                                     <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="text-slate-500 hover:text-white"><MoreHorizontal className="h-5 w-5"/></Button></DropdownMenuTrigger>
-                                                    <DropdownMenuContent align="end" className="rounded-xl border-white/10 shadow-2xl bg-slate-900 text-white">
+                                                    <DropdownMenuContent align="end" className="rounded-xl border-white/10 shadow-2xl bg-slate-900 text-white italic">
                                                         <DropdownMenuItem onClick={() => setSelectedPayment(p)} className="font-black uppercase text-[10px] p-3 gap-2"><Eye className="h-4 w-4 text-primary" /> Ver Detalles</DropdownMenuItem>
                                                         
                                                         {p.status === 'aprobado' && (
@@ -428,13 +425,13 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                                                                 <DropdownMenuSeparator className="bg-white/5"/>
                                                                 <DropdownMenuSub>
                                                                     <DropdownMenuSubTrigger className="font-black uppercase text-[10px] p-3 gap-2"><FileDown className="h-4 w-4 text-sky-400" /> Exportar PDF</DropdownMenuSubTrigger>
-                                                                    <DropdownMenuPortal><DropdownMenuSubContent className="bg-slate-900 text-white border-white/10">
+                                                                    <DropdownMenuPortal><DropdownMenuSubContent className="bg-slate-900 text-white border-white/10 italic">
                                                                         {p.beneficiaries.map(ben => (<DropdownMenuItem key={ben.ownerId} onClick={() => handleExportPDF(p, ben.ownerId)} className="font-black uppercase text-[9px] p-2">{ben.ownerName}</DropdownMenuItem>))}
                                                                     </DropdownMenuSubContent></DropdownMenuPortal>
                                                                 </DropdownMenuSub>
                                                                 <DropdownMenuSub>
                                                                     <DropdownMenuSubTrigger className="font-black uppercase text-[10px] p-3 gap-2"><Share2 className="h-4 w-4 text-emerald-400" /> Compartir</DropdownMenuSubTrigger>
-                                                                    <DropdownMenuPortal><DropdownMenuSubContent className="bg-slate-900 text-white border-white/10">
+                                                                    <DropdownMenuPortal><DropdownMenuSubContent className="bg-slate-900 text-white border-white/10 italic">
                                                                         {p.beneficiaries.map(ben => (<DropdownMenuItem key={ben.ownerId} onClick={() => handleSharePDF(p, ben.ownerId)} className="font-black uppercase text-[9px] p-2">{ben.ownerName}</DropdownMenuItem>))}
                                                                     </DropdownMenuSubContent></DropdownMenuPortal>
                                                                 </DropdownMenuSub>
@@ -470,7 +467,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             </CardContent>
 
             <Dialog open={!!selectedPayment} onOpenChange={() => setSelectedPayment(null)}>
-                <DialogContent className="max-w-2xl rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white font-montserrat max-h-[90vh] overflow-y-auto">
+                <DialogContent className="max-w-2xl rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white font-montserrat max-h-[90vh] overflow-y-auto italic">
                     <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter">Detalle del <span className="text-primary">Reporte</span></DialogTitle></DialogHeader>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 py-6">
                         <div className="space-y-6">
@@ -517,7 +514,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             </Dialog>
 
             <Dialog open={!!paymentToDelete} onOpenChange={() => setPaymentToDelete(null)}>
-                <DialogContent className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white font-montserrat">
+                <DialogContent className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white font-montserrat italic">
                     <DialogHeader><DialogTitle className="text-xl font-black uppercase italic text-red-500">¿Confirmar Eliminación?</DialogTitle></DialogHeader>
                     <p className="text-slate-400 font-bold text-sm uppercase">Se borrará permanentemente el registro. Si estaba aprobado, los saldos serán revertidos automáticamente.</p>
                     <DialogFooter className="gap-2 mt-8"><Button variant="ghost" onClick={() => setPaymentToDelete(null)} className="rounded-xl font-black uppercase text-[10px] h-12">Cancelar</Button><Button onClick={handleDeletePayment} className="bg-red-600 rounded-xl font-black uppercase text-[10px] h-12 italic">Confirmar Borrado</Button></DialogFooter>
@@ -553,8 +550,7 @@ function ReportPaymentComponent() {
         const q = query(collection(db, "condominios", condoId, ownersCollectionName), where("role", "==", "propietario"));
         return onSnapshot(q, (snapshot) => {
             const ownersData: Owner[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner));
-            // Filtro Maestro: Excluir Super Admin y asegurar campo vacío inicial
-            setAllOwners(ownersData.filter(o => o.email !== 'vallecondo@gmail.com').sort((a, b) => (a.name || '').localeCompare(b.name || '')));
+            setAllOwners(ownersData.filter(o => (o as any).email !== 'vallecondo@gmail.com').sort((a, b) => (a.name || '').localeCompare(b.name || '')));
         });
     }, [condoId]);
 
@@ -614,7 +610,7 @@ function ReportPaymentComponent() {
     };
 
     return (
-        <Card className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 overflow-hidden font-montserrat">
+        <Card className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 overflow-hidden font-montserrat italic">
             <CardHeader className="bg-white/5 p-8 border-b border-white/5"><CardTitle className="text-white font-black uppercase italic text-2xl tracking-tighter">Reporte <span className="text-primary">Manual</span></CardTitle></CardHeader>
             <form onSubmit={handleSubmit}>
                 <CardContent className="p-8 space-y-10">
@@ -640,7 +636,7 @@ function ReportPaymentComponent() {
                                         {!row.owner ? (
                                             <div className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" /><Input placeholder="Buscar Residente..." className="pl-12 h-14 rounded-2xl bg-slate-800 border-none text-white font-bold uppercase text-xs" value={row.searchTerm} onChange={(e) => updateBeneficiaryRow(row.id, { searchTerm: e.target.value })} />{row.searchTerm.length >= 2 && <Card className="absolute z-50 w-full mt-2 bg-slate-900 border-white/10 shadow-2xl rounded-2xl overflow-hidden"><ScrollArea className="h-48">{allOwners.filter(o => o.name.toLowerCase().includes(row.searchTerm.toLowerCase())).map(o => (<div key={o.id} onClick={() => handleOwnerSelect(row.id, o)} className="p-4 hover:bg-white/5 cursor-pointer font-black text-[10px] uppercase text-white border-b border-white/5">{o.name}</div>))}</ScrollArea></Card>}</div>
                                         ) : (<div className="p-5 bg-slate-800 rounded-2xl border border-white/5 flex justify-between items-center"><p className="font-black text-primary uppercase text-xs italic">{row.owner.name}</p><Button variant="ghost" size="icon" onClick={() => removeBeneficiaryRow(row.id)} className="text-red-500"><XCircle className="h-5 w-5"/></Button></div>)}
-                                        {row.owner && (<Select onValueChange={(v) => updateBeneficiaryRow(row.id, { selectedProperty: row.owner?.properties.find(p => `${p.street}-${p.house}` === v) })} value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''}><SelectTrigger className="h-12 bg-slate-800 rounded-xl border-none text-white font-bold uppercase text-[10px]"><SelectValue placeholder="Unidad..."/></SelectTrigger><SelectContent className="bg-slate-900 text-white border-white/10">{row.owner.properties.map((p, i) => (<SelectItem key={i} value={`${p.street}-${p.house}`} className="text-[10px] font-black uppercase">{p.street} - {p.house}</SelectItem>))}</SelectContent></Select>)}
+                                        {row.owner && (<Select onValueChange={(v) => updateBeneficiaryRow(row.id, { selectedProperty: row.owner?.properties.find(p => `${p.street}-${p.house}` === v) })} value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''}><SelectTrigger className="h-12 bg-slate-800 rounded-xl border-none text-white font-bold uppercase text-[10px]"><SelectValue placeholder="Unidad..."/></SelectTrigger><SelectContent className="bg-slate-900 text-white border-white/10 italic">{row.owner.properties.map((p, i) => (<SelectItem key={i} value={`${p.street}-${p.house}`} className="text-[10px] font-black uppercase">{p.street} - {p.house}</SelectItem>))}</SelectContent></Select>)}
                                     </div>
                                     <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-500 ml-2">Monto Individual (Bs.)</Label><Input type="number" value={row.amount} onChange={(e) => updateBeneficiaryRow(row.id, { amount: e.target.value })} className="h-14 rounded-2xl bg-slate-800 border-none text-white font-black text-xl italic text-right pr-6" placeholder="0,00" /></div>
                                 </div>
@@ -724,7 +720,7 @@ function CalculatorComponent({ condoId, onReport }: { condoId: string, onReport:
     }, [selectedPendingDebts, selectedAdvanceMonths, pendingDebts, activeRate, condoFee, selectedOwner]);
 
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 font-montserrat">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 font-montserrat italic">
             <div className="lg:col-span-2 space-y-6">
                 <Card className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 overflow-hidden border border-white/5">
                     <CardHeader className="bg-white/5 p-8 border-b border-white/5"><CardTitle className="text-white font-black uppercase italic text-xl">1. Seleccionar <span className="text-primary">Residente</span></CardTitle></CardHeader>
@@ -784,7 +780,7 @@ function PaymentsPage() {
     };
 
     return (
-        <div className="space-y-10 animate-in fade-in duration-700 font-montserrat">
+        <div className="space-y-10 animate-in fade-in duration-700 font-montserrat italic">
             <div className="mb-10">
                 <h2 className="text-4xl font-black text-white uppercase tracking-tighter italic drop-shadow-sm">Gestión de <span className="text-primary">Pagos</span></h2>
                 <div className="h-1.5 w-20 bg-primary mt-2 rounded-full"></div>
