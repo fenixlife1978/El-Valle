@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo, use } from 'react';
@@ -44,13 +43,12 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
     const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
 
     const [saldoAnteriorBanco, setSaldoAnteriorBanco] = useState(0);
-    const [ingresosOrdinariosBanco, setIngresosOrdinariosBanco] = useState(0);
-    const [ingresosOrdinariosEfectivo, setIngresosOrdinariosEfectivo] = useState(0);
     const [egresosTesorería, setEgresosTesorería] = useState<{ concepto: string, monto: number, cuenta: string }[]>([]);
     
     const [realBalances, setRealBalances] = useState({ banco: 0, cajaPrincipal: 0, cajaChica: 0 });
     const [notas, setNotas] = useState("");
 
+    // ESCUCHA DE SALDOS REALES DE CUENTAS (Sincronización Atómica)
     useEffect(() => {
         if (!workingCondoId) return;
         return onSnapshot(collection(db, 'condominios', workingCondoId, 'cuentas'), (snap) => {
@@ -58,7 +56,11 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
             const bdv = accounts.find(a => a.id === BDV_ACCOUNT_ID);
             const cp = accounts.find(a => a.id === 'CAJA_PRINCIPAL_ID' || a.nombre?.toUpperCase().includes('CAJA PRINCIPAL'));
             const cc = accounts.find(a => a.nombre?.toUpperCase().includes('CAJA CHICA'));
-            setRealBalances({ banco: bdv?.saldoActual || 0, cajaPrincipal: cp?.saldoActual || 0, cajaChica: cc?.saldoActual || 0 });
+            setRealBalances({ 
+                banco: bdv?.saldoActual || 0, 
+                cajaPrincipal: cp?.saldoActual || 0, 
+                cajaChica: cc?.saldoActual || 0 
+            });
         });
     }, [workingCondoId]);
 
@@ -69,16 +71,20 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
             try {
                 const year = parseInt(selectedYear), month = parseInt(selectedMonth) - 1;
                 const from = startOfMonth(new Date(year, month, 1)), to = endOfMonth(from);
-                const monthId = format(from, 'yyyy-MM');
-
-                const statsSnap = await getDoc(doc(db, 'condominios', workingCondoId, 'financial_stats', monthId));
-                if (statsSnap.exists()) {
-                    setIngresosOrdinariosBanco(statsSnap.data().saldoBancarioReal || 0);
-                    setIngresosOrdinariosEfectivo(statsSnap.data().saldoCajaReal || 0);
-                }
-
-                const tSnap = await getDocs(query(collection(db, 'condominios', workingCondoId, 'transacciones'), where('fecha', '>=', from), where('fecha', '<=', to), where('tipo', '==', 'egreso'), orderBy('fecha', 'desc')));
-                setEgresosTesorería(tSnap.docs.map(d => ({ concepto: d.data().descripcion, monto: d.data().monto, cuenta: d.data().nombreCuenta })));
+                
+                // Obtenemos los egresos reales de las transacciones para el periodo
+                const tSnap = await getDocs(query(
+                    collection(db, 'condominios', workingCondoId, 'transacciones'), 
+                    where('fecha', '>=', from), 
+                    where('fecha', '<=', to), 
+                    where('tipo', '==', 'egreso'), 
+                    orderBy('fecha', 'desc')
+                ));
+                setEgresosTesorería(tSnap.docs.map(d => ({ 
+                    concepto: d.data().descripcion, 
+                    monto: d.data().monto, 
+                    cuenta: d.data().nombreCuenta 
+                })));
             } catch (e) { console.error(e); } finally { setLoading(false); }
         };
         fetchData();
@@ -92,11 +98,22 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
         try {
             const docId = `${selectedYear}-${selectedMonth.padStart(2, '0')}`;
             await setDoc(doc(db, 'condominios', workingCondoId, 'financial_statements', docId), {
-                periodo: docId, saldoAnteriorBanco, ingresos: [{ concepto: 'BANCO', monto: ingresosOrdinariosBanco }, { concepto: 'CAJA', monto: ingresosOrdinariosEfectivo }],
-                egresos: egresosTesorería, estadoFinanciero: { saldoNetoBanco: realBalances.banco, saldoCajaPrincipal: realBalances.cajaPrincipal },
-                notas, updatedAt: serverTimestamp()
+                periodo: docId, 
+                saldoAnteriorBanco, 
+                ingresos: [
+                    { concepto: 'BANCO (DISPONIBILIDAD REAL)', monto: realBalances.banco }, 
+                    { concepto: 'CAJA (DISPONIBILIDAD REAL)', monto: realBalances.cajaPrincipal }
+                ],
+                egresos: egresosTesorería, 
+                estadoFinanciero: { 
+                    saldoNetoBanco: realBalances.banco, 
+                    saldoCajaPrincipal: realBalances.cajaPrincipal,
+                    saldoCajaChica: realBalances.cajaChica
+                },
+                notas, 
+                updatedAt: serverTimestamp()
             });
-            toast({ title: "Balance Guardado" });
+            toast({ title: "Balance Guardado", description: "Los saldos reales han sido sincronizados en el reporte." });
         } catch (e) { toast({ variant: 'destructive', title: "Error" }); } finally { setSaving(false); }
     };
 
@@ -121,11 +138,11 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-10">
-                    <Card className="rounded-[2.5rem] bg-slate-900 border-none shadow-2xl overflow-hidden border border-white/5"><CardHeader className="bg-slate-950 p-6 border-b border-white/5"><CardTitle className="text-[10px] font-black uppercase tracking-widest text-white/40 italic">Resumen de Ingresos</CardTitle></CardHeader>
+                    <Card className="rounded-[2.5rem] bg-slate-900 border-none shadow-2xl overflow-hidden border border-white/5"><CardHeader className="bg-slate-950 p-6 border-b border-white/5"><CardTitle className="text-[10px] font-black uppercase tracking-widest text-white/40 italic">Resumen de Ingresos (Sincronizado)</CardTitle></CardHeader>
                     <CardContent className="p-0"><Table><TableBody>
-                        <TableRow className="bg-white/5 border-b border-white/5"><TableCell className="font-black text-white text-[10px] uppercase italic">Saldo Anterior Banco</TableCell><TableCell className="p-2"><Input type="number" className="text-right bg-slate-950 font-black h-10 border-none italic" value={saldoAnteriorBanco} onChange={e=>setSaldoAnteriorBanco(Number(e.target.value))}/></TableCell></TableRow>
-                        <TableRow className="border-b border-white/5"><TableCell className="text-white/60 text-[10px] font-black uppercase italic">Ingresos Digitales</TableCell><TableCell className="text-right font-black italic">Bs. {formatCurrency(ingresosOrdinariosBanco)}</TableCell></TableRow>
-                        <TableRow className="border-none"><TableCell className="text-white/60 text-[10px] font-black uppercase italic">Ingresos Efectivo</TableCell><TableCell className="text-right font-black text-emerald-500 italic">Bs. {formatCurrency(ingresosOrdinariosEfectivo)}</TableCell></TableRow>
+                        <TableRow className="bg-white/5 border-b border-white/5"><TableCell className="font-black text-white text-[10px] uppercase italic">Saldo Anterior Banco (Ajuste)</TableCell><TableCell className="p-2"><Input type="number" className="text-right bg-slate-950 font-black h-10 border-none italic" value={saldoAnteriorBanco} onChange={e=>setSaldoAnteriorBanco(Number(e.target.value))}/></TableCell></TableRow>
+                        <TableRow className="border-b border-white/5"><TableCell className="text-white/60 text-[10px] font-black uppercase italic">Disponibilidad en Banco (Real)</TableCell><TableCell className="text-right font-black italic">Bs. {formatCurrency(realBalances.banco)}</TableCell></TableRow>
+                        <TableRow className="border-none"><TableCell className="text-white/60 text-[10px] font-black uppercase italic">Disponibilidad en Caja (Real)</TableCell><TableCell className="text-right font-black text-emerald-500 italic">Bs. {formatCurrency(realBalances.cajaPrincipal)}</TableCell></TableRow>
                     </TableBody></Table></CardContent></Card>
 
                     <Card className="rounded-[2.5rem] bg-slate-900 border-none shadow-2xl overflow-hidden border border-white/5"><CardHeader className="bg-slate-950 p-6 border-b border-white/5"><CardTitle className="text-[10px] font-black uppercase tracking-widest text-white/40 italic">Egresos de Tesorería</CardTitle></CardHeader>
