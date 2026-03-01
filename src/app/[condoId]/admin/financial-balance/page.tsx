@@ -47,7 +47,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
     const [saldoAnteriorBanco, setSaldoAnteriorBanco] = useState(0);
     const [egresosTesorería, setEgresosTesorería] = useState<{ concepto: string, monto: number, cuenta: string }[]>([]);
     
-    const [realBalances, setRealBalances] = useState({ banco: 0, cajaPrincipal: 0, cajaChica: 0 });
+    const [realBalances, setRealBalances] = useState({ banco: 0, cajaPrincipal: 0, cajaChica: 0, mercantil: 0 });
     const [notas, setNotas] = useState("");
 
     // ESCUCHA DE SALDOS REALES DE CUENTAS (Sincronización Atómica)
@@ -58,10 +58,12 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
             const bdv = accounts.find(a => a.id === BDV_ACCOUNT_ID);
             const cp = accounts.find(a => a.id === 'CAJA_PRINCIPAL_ID' || a.nombre?.toUpperCase().includes('CAJA PRINCIPAL'));
             const cc = accounts.find(a => a.nombre?.toUpperCase().includes('CAJA CHICA'));
+            const merc = accounts.find(a => a.nombre?.toUpperCase().includes('MERCANTIL'));
             setRealBalances({ 
                 banco: bdv?.saldoActual || 0, 
                 cajaPrincipal: cp?.saldoActual || 0, 
-                cajaChica: cc?.saldoActual || 0 
+                cajaChica: cc?.saldoActual || 0,
+                mercantil: merc?.saldoActual || 0
             });
         });
     }, [workingCondoId]);
@@ -103,14 +105,19 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 periodo: docId, 
                 saldoAnteriorBanco, 
                 ingresos: [
-                    { concepto: 'BANCO (DISPONIBILIDAD REAL)', monto: realBalances.banco }, 
-                    { concepto: 'CAJA (DISPONIBILIDAD REAL)', monto: realBalances.cajaPrincipal }
+                    { concepto: 'Saldo Mes Anterior (Banco BDV)', monto: saldoAnteriorBanco },
+                    { concepto: 'Banco de Venezuela (Ingresos del Mes)', monto: realBalances.banco }, 
+                    { concepto: 'Caja Principal', monto: realBalances.cajaPrincipal },
+                    { concepto: 'Caja Chica', monto: realBalances.cajaChica },
+                    { concepto: 'Banco Mercantil', monto: realBalances.mercantil }
                 ],
                 egresos: egresosTesorería, 
                 estadoFinanciero: { 
+                    saldoAnteriorBDV: saldoAnteriorBanco,
                     saldoNetoBanco: realBalances.banco, 
                     saldoCajaPrincipal: realBalances.cajaPrincipal,
-                    saldoCajaChica: realBalances.cajaChica
+                    saldoCajaChica: realBalances.cajaChica,
+                    saldoMercantil: realBalances.mercantil
                 },
                 notas, 
                 updatedAt: serverTimestamp()
@@ -136,14 +143,16 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
         doc.setTextColor(0, 0, 0);
         doc.setFontSize(12).text(`Período: ${monthLabel} ${selectedYear}`, 14, 45);
 
-        // Tabla de Disponibilidad Real
+        // Tabla de Disponibilidad Real con Descripciones Específicas
         autoTable(doc, {
             startY: 55,
-            head: [['CONCEPTO DE TESORERÍA', 'MONTO DISPONIBLE (BS.)']],
+            head: [['DESCRIPCIÓN DE INGRESOS', 'MONTO (BS.)']],
             body: [
-                ['BANCO (DISPONIBILIDAD REAL)', formatCurrency(realBalances.banco)],
-                ['CAJA PRINCIPAL (DISPONIBILIDAD REAL)', formatCurrency(realBalances.cajaPrincipal)],
-                ['CAJA CHICA', formatCurrency(realBalances.cajaChica)]
+                ['Saldo Mes Anterior (Banco BDV)', formatCurrency(saldoAnteriorBanco)],
+                ['Banco de Venezuela (Ingresos del Mes)', formatCurrency(realBalances.banco)],
+                ['Caja Principal', formatCurrency(realBalances.cajaPrincipal)],
+                ['Caja Chica', formatCurrency(realBalances.cajaChica)],
+                ['Banco Mercantil', formatCurrency(realBalances.mercantil)]
             ],
             headStyles: { fillColor: [15, 23, 42] },
             styles: { fontSize: 9, cellPadding: 4 }
@@ -218,21 +227,24 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
             </div>
 
             {loading ? <div className="py-20 flex justify-center"><Loader2 className="animate-spin h-10 w-10 text-primary" /></div> : <>
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <Card className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white p-8 border border-white/5 relative overflow-hidden italic"><div className="relative z-10"><p className="text-[10px] font-black uppercase text-primary italic">Saldo Real Banco</p><p className="text-3xl font-black italic mt-1">Bs. {formatCurrency(realBalances.banco)}</p></div><Landmark className="absolute top-6 right-6 h-12 w-12 text-white/5"/></Card>
-                    <Card className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white p-8 border border-white/5 relative overflow-hidden italic"><div className="relative z-10"><p className="text-[10px] font-black uppercase text-emerald-500 italic">Saldo Real Caja</p><p className="text-3xl font-black italic mt-1">Bs. {formatCurrency(realBalances.cajaPrincipal)}</p></div><Coins className="absolute top-6 right-6 h-12 w-12 text-white/5"/></Card>
-                    <Card className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white p-8 border border-white/5 relative overflow-hidden italic"><div className="relative z-10"><p className="text-[10px] font-black uppercase text-slate-500 italic">Caja Chica</p><p className="text-3xl font-black italic mt-1">Bs. {formatCurrency(realBalances.cajaChica)}</p></div><Wallet className="absolute top-6 right-6 h-12 w-12 text-white/5"/></Card>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <Card className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white p-6 border border-white/5 relative overflow-hidden italic"><div className="relative z-10"><p className="text-[10px] font-black uppercase text-primary italic">Banco BDV</p><p className="text-2xl font-black italic mt-1">Bs. {formatCurrency(realBalances.banco)}</p></div><Landmark className="absolute top-4 right-4 h-10 w-10 text-white/5"/></Card>
+                    <Card className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white p-6 border border-white/5 relative overflow-hidden italic"><div className="relative z-10"><p className="text-[10px] font-black uppercase text-sky-400 italic">Banco Mercantil</p><p className="text-2xl font-black italic mt-1">Bs. {formatCurrency(realBalances.mercantil)}</p></div><Landmark className="absolute top-4 right-4 h-10 w-10 text-white/5"/></Card>
+                    <Card className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white p-6 border border-white/5 relative overflow-hidden italic"><div className="relative z-10"><p className="text-[10px] font-black uppercase text-emerald-500 italic">Caja Principal</p><p className="text-2xl font-black italic mt-1">Bs. {formatCurrency(realBalances.cajaPrincipal)}</p></div><Coins className="absolute top-4 right-4 h-10 w-10 text-white/5"/></Card>
+                    <Card className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white p-6 border border-white/5 relative overflow-hidden italic"><div className="relative z-10"><p className="text-[10px] font-black uppercase text-slate-500 italic">Caja Chica</p><p className="text-2xl font-black italic mt-1">Bs. {formatCurrency(realBalances.cajaChica)}</p></div><Wallet className="absolute top-4 right-4 h-10 w-10 text-white/5"/></Card>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-10">
-                    <Card className="rounded-[2.5rem] bg-slate-900 border-none shadow-2xl overflow-hidden border border-white/5"><CardHeader className="bg-slate-950 p-6 border-b border-white/5"><CardTitle className="text-[10px] font-black uppercase tracking-widest text-white/40 italic">Resumen de Ingresos (Sincronizado)</CardTitle></CardHeader>
+                    <Card className="rounded-[2.5rem] bg-slate-900 border-none shadow-2xl overflow-hidden border border-white/5"><CardHeader className="bg-slate-950 p-6 border-b border-white/5"><CardTitle className="text-[10px] font-black uppercase tracking-widest text-white/40 italic">Resumen de Disponibilidad Real (Sincronizado)</CardTitle></CardHeader>
                     <CardContent className="p-0"><Table><TableBody>
-                        <TableRow className="bg-white/5 border-b border-white/5"><TableCell className="font-black text-white text-[10px] uppercase italic">Saldo Anterior Banco (Ajuste)</TableCell><TableCell className="p-2"><Input type="number" className="text-right bg-slate-950 font-black h-10 border-none italic" value={saldoAnteriorBanco} onChange={e=>setSaldoAnteriorBanco(Number(e.target.value))}/></TableCell></TableRow>
-                        <TableRow className="border-b border-white/5"><TableCell className="text-white/60 text-[10px] font-black uppercase italic">Disponibilidad en Banco (Real)</TableCell><TableCell className="text-right font-black italic">Bs. {formatCurrency(realBalances.banco)}</TableCell></TableRow>
-                        <TableRow className="border-none"><TableCell className="text-white/60 text-[10px] font-black uppercase italic">Disponibilidad en Caja (Real)</TableCell><TableCell className="text-right font-black text-emerald-500 italic">Bs. {formatCurrency(realBalances.cajaPrincipal)}</TableCell></TableRow>
+                        <TableRow className="bg-white/5 border-b border-white/5"><TableCell className="font-black text-white text-[10px] uppercase italic">Saldo Mes Anterior (Ajuste BDV)</TableCell><TableCell className="p-2"><Input type="number" className="text-right bg-slate-950 font-black h-10 border-none italic" value={saldoAnteriorBanco} onChange={e=>setSaldoAnteriorBanco(Number(e.target.value))}/></TableCell></TableRow>
+                        <TableRow className="border-b border-white/5"><TableCell className="text-white/60 text-[10px] font-black uppercase italic">Banco de Venezuela (Ingresos del Mes)</TableCell><TableCell className="text-right font-black italic">Bs. {formatCurrency(realBalances.banco)}</TableCell></TableRow>
+                        <TableRow className="border-b border-white/5"><TableCell className="text-white/60 text-[10px] font-black uppercase italic">Caja Principal</TableCell><TableCell className="text-right font-black text-emerald-500 italic">Bs. {formatCurrency(realBalances.cajaPrincipal)}</TableCell></TableRow>
+                        <TableRow className="border-b border-white/5"><TableCell className="text-white/60 text-[10px] font-black uppercase italic">Caja Chica</TableCell><TableCell className="text-right font-black text-slate-400 italic">Bs. {formatCurrency(realBalances.cajaChica)}</TableCell></TableRow>
+                        <TableRow className="border-none"><TableCell className="text-white/60 text-[10px] font-black uppercase italic">Banco Mercantil</TableCell><TableCell className="text-right font-black text-sky-400 italic">Bs. {formatCurrency(realBalances.mercantil)}</TableCell></TableRow>
                     </TableBody></Table></CardContent></Card>
 
-                    <Card className="rounded-[2.5rem] bg-slate-900 border-none shadow-2xl overflow-hidden border border-white/5"><CardHeader className="bg-slate-950 p-6 border-b border-white/5"><CardTitle className="text-[10px] font-black uppercase tracking-widest text-white/40 italic">Egresos de Tesorería</CardTitle></CardHeader>
+                    <Card className="rounded-[2.5rem] bg-slate-900 border-none shadow-2xl overflow-hidden border border-white/5"><CardHeader className="bg-slate-950 p-6 border-b border-white/5"><CardTitle className="text-[10px] font-black uppercase tracking-widest text-white/40 italic">Detalle de Egresos de Tesorería</CardTitle></CardHeader>
                     <CardContent className="p-0"><Table><TableHeader><TableRow className="bg-slate-950/50 border-white/5"><TableHead className="text-white/40 font-black text-[10px] uppercase">Concepto</TableHead><TableHead className="text-right text-white/40 font-black text-[10px] pr-8">Monto</TableHead></TableRow></TableHeader>
                     <TableBody>
                         {egresosTesorería.map((e, i) => (
