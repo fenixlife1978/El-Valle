@@ -35,6 +35,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
 import Image from 'next/image';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { 
@@ -77,6 +78,7 @@ type Payment = {
     liquidatedConcepts?: LiquidatedConcept[];
 };
 
+// RUTA MAESTRA BANCO DE VENEZUELA (AFECTACIÓN EXCLUSIVA)
 const BDV_ACCOUNT_ID = "3PBNZdNqO6jbHRJfadT3";
 const CAJA_PRINCIPAL_ID = "CAJA_PRINCIPAL_ID";
 
@@ -123,6 +125,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             setIsVerifying(true);
             try {
                 const method = (payment.paymentMethod || "").toLowerCase().trim();
+                // REGLA DE ORO: SI ES DIGITAL (MOVIL O TRANSFERENCIA), VA EXCLUSIVAMENTE AL BDV (3PBNZdNqO6jbHRJfadT3)
                 const isDigital = method.includes('movil') || method.includes('transferencia') || method.includes('pagomovil');
                 const targetAccountId = isDigital ? BDV_ACCOUNT_ID : CAJA_PRINCIPAL_ID;
                 const targetAccountName = isDigital ? "BANCO DE VENEZUELA" : "CAJA PRINCIPAL";
@@ -236,9 +239,11 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         transaction.update(ownerRef, { balance: funds.toDecimalPlaces(2).toNumber() });
                     }
 
+                    // AFECTACIÓN FÍSICA DE CUENTA
                     const accountRef = doc(db, 'condominios', condoId, 'cuentas', targetAccountId);
                     transaction.update(accountRef, { saldoActual: increment(payment.totalAmount) });
 
+                    // AFECTACIÓN ESTADÍSTICA DEL MES
                     const statsRef = doc(db, 'condominios', condoId, 'financial_stats', monthId);
                     transaction.set(statsRef, {
                         periodo: monthId,
@@ -248,6 +253,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         updatedAt: serverTimestamp()
                     }, { merge: true });
 
+                    // ASIENTO EN LIBRO DIARIO
                     const transRef = doc(collection(db, 'condominios', condoId, 'transacciones'));
                     transaction.set(transRef, {
                         monto: payment.totalAmount, 
@@ -276,6 +282,23 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 console.error(error);
                 toast({ variant: 'destructive', title: "Error en proceso", description: error.message }); 
             } finally { setIsVerifying(false); }
+        });
+    };
+
+    const handleReject = (payment: Payment) => {
+        if (!rejectionReason) return toast({ variant: 'destructive', title: "Motivo requerido" });
+        requestAuthorization(async () => {
+            if (!condoId) return;
+            try {
+                await updateDoc(doc(db, 'condominios', condoId, 'payments', payment.id), {
+                    status: 'rechazado',
+                    observations: rejectionReason.toUpperCase(),
+                    rejectedBy: user?.email,
+                    rejectedAt: serverTimestamp()
+                });
+                toast({ title: "Pago Rechazado" });
+                setSelectedPayment(null);
+            } catch (e) { toast({ variant: 'destructive', title: "Error" }); }
         });
     };
 
@@ -468,7 +491,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
 
             <Dialog open={!!selectedPayment} onOpenChange={() => setSelectedPayment(null)}>
                 <DialogContent className="max-w-2xl rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white font-montserrat max-h-[90vh] overflow-y-auto italic">
-                    <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter">Detalle del <span className="text-primary">Reporte</span></DialogTitle></DialogHeader>
+                    <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-white">Detalle del <span className="text-primary">Reporte</span></DialogTitle></DialogHeader>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 py-6">
                         <div className="space-y-6">
                             <div className="bg-slate-800 p-6 rounded-3xl border border-white/5">
@@ -636,7 +659,7 @@ function ReportPaymentComponent() {
                                         {!row.owner ? (
                                             <div className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" /><Input placeholder="Buscar Residente..." className="pl-12 h-14 rounded-2xl bg-slate-800 border-none text-white font-bold uppercase text-xs" value={row.searchTerm} onChange={(e) => updateBeneficiaryRow(row.id, { searchTerm: e.target.value })} />{row.searchTerm.length >= 2 && <Card className="absolute z-50 w-full mt-2 bg-slate-900 border-white/10 shadow-2xl rounded-2xl overflow-hidden"><ScrollArea className="h-48">{allOwners.filter(o => o.name.toLowerCase().includes(row.searchTerm.toLowerCase())).map(o => (<div key={o.id} onClick={() => handleOwnerSelect(row.id, o)} className="p-4 hover:bg-white/5 cursor-pointer font-black text-[10px] uppercase text-white border-b border-white/5">{o.name}</div>))}</ScrollArea></Card>}</div>
                                         ) : (<div className="p-5 bg-slate-800 rounded-2xl border border-white/5 flex justify-between items-center"><p className="font-black text-primary uppercase text-xs italic">{row.owner.name}</p><Button variant="ghost" size="icon" onClick={() => removeBeneficiaryRow(row.id)} className="text-red-500"><XCircle className="h-5 w-5"/></Button></div>)}
-                                        {row.owner && (<Select onValueChange={(v) => updateBeneficiaryRow(row.id, { selectedProperty: row.owner?.properties.find(p => `${p.street}-${p.house}` === v) })} value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''}><SelectTrigger className="h-12 bg-slate-800 rounded-xl border-none text-white font-bold uppercase text-[10px]"><SelectValue placeholder="Unidad..."/></SelectTrigger><SelectContent className="bg-slate-900 text-white border-white/10 italic">{row.owner.properties.map((p, i) => (<SelectItem key={i} value={`${p.street}-${p.house}`} className="text-[10px] font-black uppercase">{p.street} - {p.house}</SelectItem>))}</SelectContent></Select>)}
+                                        {row.owner && (<Select onValueChange={(v) => updateBeneficiaryRow(row.id, { selectedProperty: row.owner?.properties.find(p => `${p.street}-${p.house}` === v) })} value={row.selectedProperty ? `${row.selectedProperty.street}-${row.selectedProperty.house}` : ''}><SelectTrigger className="h-12 bg-slate-800 rounded-xl border-none text-white font-bold uppercase text-[10px]"><SelectValue placeholder="Unidad..."/></SelectTrigger><SelectContent className="bg-slate-900 text-white border-white/10 italic">{row.owner.properties.map((p, i) => (<SelectItem key={i} value={`${p.street}-${p.house}`} className="text-[10px] font-black uppercase italic">{p.street} - {p.house}</SelectItem>))}</SelectContent></Select>)}
                                     </div>
                                     <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-500 ml-2">Monto Individual (Bs.)</Label><Input type="number" value={row.amount} onChange={(e) => updateBeneficiaryRow(row.id, { amount: e.target.value })} className="h-14 rounded-2xl bg-slate-800 border-none text-white font-black text-xl italic text-right pr-6" placeholder="0,00" /></div>
                                 </div>
@@ -726,8 +749,8 @@ function CalculatorComponent({ condoId, onReport }: { condoId: string, onReport:
                     <CardHeader className="bg-white/5 p-8 border-b border-white/5"><CardTitle className="text-white font-black uppercase italic text-xl">1. Seleccionar <span className="text-primary">Residente</span></CardTitle></CardHeader>
                     <CardContent className="p-8">
                         {!selectedOwner ? (
-                            <div className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" /><Input placeholder="Buscar..." className="pl-12 h-14 rounded-2xl bg-slate-800 border-none text-white font-bold uppercase" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />{searchTerm.length >= 2 && <div className="absolute z-50 w-full mt-2 bg-slate-800 rounded-2xl shadow-2xl border border-white/10 overflow-hidden"><ScrollArea className="h-64">{allOwners.filter(o => o.name.toLowerCase().includes(searchTerm.toLowerCase())).map(o => (<div key={o.id} onClick={() => { setSelectedOwner(o); setSearchTerm(''); }} className="p-4 hover:bg-white/5 cursor-pointer border-b border-white/5 text-white font-black text-[10px] uppercase">{o.name}</div>))}</ScrollArea></div>}</div>
-                        ) : (<div className="p-6 bg-slate-800 rounded-2xl flex justify-between items-center border border-white/5"><div><p className="font-black text-primary uppercase text-sm italic">{selectedOwner.name}</p><p className="text-[10px] font-bold text-slate-400 uppercase">{selectedOwner.properties?.map(p=>`${p.street} ${p.house}`).join(' | ')}</p></div><Button variant="ghost" size="icon" onClick={() => { setSelectedOwner(null); setSelectedPendingDebts([]); setSelectedAdvanceMonths([]); }} className="text-red-500"><X className="h-5 w-5"/></Button></div>)}
+                            <div className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" /><Input placeholder="Buscar..." className="pl-12 h-14 rounded-2xl bg-slate-800 border-none text-white font-bold uppercase" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />{searchTerm.length >= 2 && <div className="absolute z-50 w-full mt-2 bg-slate-800 rounded-2xl shadow-2xl border border-white/10 overflow-hidden"><ScrollArea className="h-64">{allOwners.filter(o => o.name.toLowerCase().includes(searchTerm.toLowerCase())).map(o => (<div key={o.id} onClick={() => { setSelectedOwner(o); setSearchTerm(''); }} className="p-4 hover:bg-white/5 cursor-pointer border-b border-white/5 text-white font-black text-[10px] uppercase italic">{o.name}</div>))}</ScrollArea></div>}</div>
+                        ) : (<div className="p-6 bg-slate-800 rounded-2xl flex justify-between items-center border border-white/5"><div><p className="font-black text-primary uppercase text-sm italic">{selectedOwner.name}</p><p className="text-[10px] font-bold text-slate-400 uppercase italic">{selectedOwner.properties?.map(p=>`${p.street} ${p.house}`).join(' | ')}</p></div><Button variant="ghost" size="icon" onClick={() => { setSelectedOwner(null); setSelectedPendingDebts([]); setSelectedAdvanceMonths([]); }} className="text-red-500"><X className="h-5 w-5"/></Button></div>)}
                     </CardContent>
                 </Card>
 

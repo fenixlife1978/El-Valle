@@ -34,7 +34,8 @@ import {
     CheckCircle2,
     Edit,
     MoreVertical,
-    ShieldCheck
+    ShieldCheck,
+    Save
 } from 'lucide-react';
 
 import { Button } from "@/components/ui/button";
@@ -86,20 +87,28 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     
+    // Diálogos de Cuentas
     const [isAccountDialogOpen, setIsAccountDialogOpen] = useState(false);
+    const [isEditAccountDialogOpen, setIsEditAccountDialogOpen] = useState(false);
+    const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+    
+    // Diálogos de Movimientos
     const [isTransactionDialogOpen, setIsTransactionDialogOpen] = useState(false);
     const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false);
-    const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-    const [accountToDelete, setAccountToDelete] = useState<Account | null>(null);
-
     const [isEditTxDialogOpen, setIsEditTxDialogOpen] = useState(false);
     const [isDeleteTxDialogOpen, setIsDeleteTxDialogOpen] = useState(false);
-    const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
-    const [editTxData, setEditTxData] = useState({ descripcion: '', referencia: '' });
 
+    // Estados de selección
+    const [accountToEdit, setAccountToEdit] = useState<Account | null>(null);
+    const [accountToDelete, setAccountToDelete] = useState<Account | null>(null);
+    const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
+
+    // Formularios
     const [accountForm, setAccountForm] = useState({ nombre: '', tipo: 'banco' as any, saldoInicial: '0' });
+    const [editAccountForm, setEditAccountForm] = useState({ nombre: '', tipo: 'banco' as any, saldoActual: '0' });
     const [transForm, setTransactionForm] = useState({ monto: '', tipo: 'egreso' as 'ingreso' | 'egreso', cuentaId: '', descripcion: '', referencia: '', fecha: new Date() });
     const [transferForm, setTransferForm] = useState({ origenId: '', destinoId: '', monto: '', descripcion: 'Transferencia entre cuentas' });
+    const [editTxData, setEditTxData] = useState({ descripcion: '', referencia: '' });
 
     const [dateRange, setDateRange] = useState({ from: startOfMonth(new Date()), to: endOfMonth(new Date()) });
 
@@ -134,6 +143,36 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
             setAccountForm({ nombre: '', tipo: 'banco', saldoInicial: '0' });
         } catch (e) { toast({ variant: 'destructive', title: "Error al crear cuenta" }); }
         finally { setIsSubmitting(false); }
+    };
+
+    const handleOpenEditAccount = (acc: Account) => {
+        setAccountToEdit(acc);
+        setEditAccountForm({
+            nombre: acc.nombre,
+            tipo: acc.tipo,
+            saldoActual: String(acc.saldoActual)
+        });
+        setIsEditAccountDialogOpen(true);
+    };
+
+    const handleUpdateAccount = async () => {
+        if (!accountToEdit || !editAccountForm.nombre) return;
+        setIsSubmitting(true);
+        try {
+            const accRef = doc(db, 'condominios', condoId, 'cuentas', accountToEdit.id);
+            await updateDoc(accRef, {
+                nombre: editAccountForm.nombre.toUpperCase().trim(),
+                tipo: editAccountForm.tipo,
+                saldoActual: parseFloat(editAccountForm.saldoActual) || 0,
+                updatedAt: serverTimestamp()
+            });
+            toast({ title: "Cuenta Actualizada", description: "Los cambios se han guardado correctamente." });
+            setIsEditAccountDialogOpen(false);
+        } catch (e) {
+            toast({ variant: 'destructive', title: "Error al actualizar" });
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     const handleDeleteAccount = async () => {
@@ -292,7 +331,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
     );
 
     return (
-        <div className="space-y-8 p-4 md:p-8 min-h-screen bg-[#1A1D23] font-montserrat">
+        <div className="space-y-8 p-4 md:p-8 min-h-screen bg-[#1A1D23] font-montserrat italic">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 border-b border-white/5 pb-6">
                 <div>
                     <h2 className="text-4xl font-black text-white uppercase italic tracking-tighter leading-none">Cuentas y <span className="text-primary">Tesorería</span></h2>
@@ -320,9 +359,14 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                                     {acc.tipo === 'banco' ? <Landmark className="h-4 w-4 text-sky-500" /> : <Wallet className="h-4 w-4 text-emerald-500" />}
                                     <span className="text-[10px] font-black uppercase text-white/30 tracking-widest italic">{acc.tipo}</span>
                                 </div>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-white/20 hover:text-red-500 hover:bg-red-500/10 rounded-full" onClick={() => { setAccountToDelete(acc); setIsDeleteDialogOpen(true); }}>
-                                    <Trash2 className="h-4 w-4" />
-                                </Button>
+                                <div className="flex gap-1">
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-white/20 hover:text-primary hover:bg-primary/10 rounded-full" onClick={() => handleOpenEditAccount(acc)}>
+                                        <Edit className="h-4 w-4" />
+                                    </Button>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-white/20 hover:text-red-500 hover:bg-red-500/10 rounded-full" onClick={() => { setAccountToDelete(acc); setIsDeleteDialogOpen(true); }}>
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                </div>
                             </div>
                         </CardHeader>
                         <CardContent>
@@ -382,7 +426,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                                             <TableCell className="text-center">
                                                 <DropdownMenu>
                                                     <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="text-white/20 hover:text-white"><MoreVertical className="h-4 w-4"/></Button></DropdownMenuTrigger>
-                                                    <DropdownMenuContent align="end" className="rounded-xl border-white/10 shadow-2xl bg-slate-900 text-white">
+                                                    <DropdownMenuContent align="end" className="rounded-xl border-white/10 shadow-2xl bg-slate-900 text-white italic">
                                                         <DropdownMenuItem onClick={() => { setSelectedTx(tx); setEditTxData({ descripcion: tx.descripcion, referencia: tx.referencia || '' }); setIsEditTxDialogOpen(true); }} className="gap-2 font-black uppercase text-[10px] text-white/80 p-3 hover:bg-white/5"><Edit className="h-3 w-3 text-sky-500" /> Editar</DropdownMenuItem>
                                                         <DropdownMenuItem onClick={() => { setSelectedTx(tx); setIsDeleteTxDialogOpen(true); }} className="gap-2 font-black uppercase text-[10px] text-red-500 p-3 hover:bg-red-500/10"><Trash2 className="h-3 w-3" /> Eliminar</DropdownMenuItem>
                                                     </DropdownMenuContent>
@@ -398,26 +442,60 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
             </Card>
 
             <Dialog open={isAccountDialogOpen} onOpenChange={setIsAccountDialogOpen}>
-                <DialogContent className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white">
+                <DialogContent className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white italic">
                     <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-white">Nueva <span className="text-primary">Cuenta</span></DialogTitle></DialogHeader>
                     <div className="grid gap-4 py-4">
                         <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Nombre</Label><Input placeholder="BANCO DE VENEZUELA" value={accountForm.nombre} onChange={e => setAccountForm({...accountForm, nombre: e.target.value})} className="rounded-xl h-12 font-black bg-white/5 border-none text-white uppercase italic" /></div>
                         <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Tipo</Label><Select value={accountForm.tipo} onValueChange={v => setAccountForm({...accountForm, tipo: v as any})}><SelectTrigger className="rounded-xl h-12 bg-white/5 border-none font-black text-white uppercase italic"><SelectValue /></SelectTrigger><SelectContent className="bg-slate-900 border-white/10 text-white"><SelectItem value="banco" className="font-black">BANCO</SelectItem><SelectItem value="efectivo" className="font-black">EFECTIVO</SelectItem><SelectItem value="otros" className="font-black">OTROS</SelectItem></SelectContent></Select></div>
-                            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Saldo Inicial</Label><Input type="number" value={accountForm.saldoInicial} onChange={e => setAccountForm({...accountForm, saldoInicial: e.target.value})} className="rounded-xl h-12 font-black bg-white/5 border-none text-white italic" /></div>
+                            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Tipo</Label><Select value={accountForm.tipo} onValueChange={v => setAccountForm({...accountForm, tipo: v as any})}><SelectTrigger className="rounded-xl h-12 bg-white/5 border-none font-black text-white uppercase italic"><SelectValue /></SelectTrigger><SelectContent className="bg-slate-900 border-white/10 text-white italic"><SelectItem value="banco" className="font-black italic">BANCO</SelectItem><SelectItem value="efectivo" className="font-black italic">EFECTIVO</SelectItem><SelectItem value="otros" className="font-black italic">OTROS</SelectItem></SelectContent></Select></div>
+                            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Saldo Inicial (Bs.)</Label><Input type="number" value={accountForm.saldoInicial} onChange={e => setAccountForm({...accountForm, saldoInicial: e.target.value})} className="rounded-xl h-12 font-black bg-white/5 border-none text-white italic" /></div>
                         </div>
                     </div>
                     <DialogFooter><Button onClick={handleSaveAccount} disabled={isSubmitting} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase h-12 rounded-xl italic">{isSubmitting ? <Loader2 className="animate-spin" /> : "Crear Cuenta"}</Button></DialogFooter>
                 </DialogContent>
             </Dialog>
 
+            <Dialog open={isEditAccountDialogOpen} onOpenChange={setIsEditAccountDialogOpen}>
+                <DialogContent className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white italic">
+                    <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-white">Editar <span className="text-primary">Cuenta</span></DialogTitle></DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="space-y-2">
+                            <Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Nombre de la Cuenta</Label>
+                            <Input value={editAccountForm.nombre} onChange={e => setEditAccountForm({...editAccountForm, nombre: e.target.value})} className="rounded-xl h-12 font-black bg-white/5 border-none text-white uppercase italic" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Tipo</Label>
+                                <Select value={editAccountForm.tipo} onValueChange={v => setEditAccountForm({...editAccountForm, tipo: v as any})}>
+                                    <SelectTrigger className="rounded-xl h-12 bg-white/5 border-none font-black text-white uppercase italic"><SelectValue /></SelectTrigger>
+                                    <SelectContent className="bg-slate-900 border-white/10 text-white italic">
+                                        <SelectItem value="banco" className="font-black italic">BANCO</SelectItem>
+                                        <SelectItem value="efectivo" className="font-black italic">EFECTIVO</SelectItem>
+                                        <SelectItem value="otros" className="font-black italic">OTROS</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="space-y-2">
+                                <Label className="text-[10px] font-black uppercase text-primary ml-2 italic">Saldo Actual (Bs.)</Label>
+                                <Input type="number" value={editAccountForm.saldoActual} onChange={e => setEditAccountForm({...editAccountForm, saldoActual: e.target.value})} className="rounded-xl h-12 font-black bg-white/5 border-none text-emerald-500 text-lg italic" />
+                            </div>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button onClick={handleUpdateAccount} disabled={isSubmitting} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase h-14 rounded-2xl shadow-xl italic">
+                            {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2 h-5 w-5" />} Guardar Cambios
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
             <Dialog open={isTransactionDialogOpen} onOpenChange={setIsTransactionDialogOpen}>
-                <DialogContent className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white">
+                <DialogContent className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white italic">
                     <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-white">Registrar <span className="text-primary">Movimiento</span></DialogTitle></DialogHeader>
                     <div className="grid gap-4 py-4">
                         <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Tipo</Label><Select value={transForm.tipo} onValueChange={(v: any) => setTransactionForm({...transForm, tipo: v})}><SelectTrigger className="rounded-xl h-12 font-black bg-white/5 border-none text-white italic"><SelectValue /></SelectTrigger><SelectContent className="bg-slate-900 border-white/10 text-white"><SelectItem value="ingreso" className="text-emerald-500 font-black">INGRESO (+)</SelectItem><SelectItem value="egreso" className="text-red-500 font-black">EGRESO (-)</SelectItem></SelectContent></Select></div>
-                            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Cuenta</Label><Select value={transForm.cuentaId} onValueChange={v => setTransactionForm({...transForm, cuentaId: v})}><SelectTrigger className="rounded-xl h-12 font-black bg-white/5 border-none text-white italic"><SelectValue placeholder="Seleccionar..." /></SelectTrigger><SelectContent className="bg-slate-900 border-white/10 text-white">{accounts.map(acc => (<SelectItem key={acc.id} value={acc.id} className="text-white font-black">{acc.nombre} (Bs. {formatCurrency(acc.saldoActual)})</SelectItem>))}</SelectContent></Select></div>
+                            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Tipo</Label><Select value={transForm.tipo} onValueChange={(v: any) => setTransactionForm({...transForm, tipo: v})}><SelectTrigger className="rounded-xl h-12 font-black bg-white/5 border-none text-white italic"><SelectValue /></SelectTrigger><SelectContent className="bg-slate-900 border-white/10 text-white italic"><SelectItem value="ingreso" className="text-emerald-500 font-black italic">INGRESO (+)</SelectItem><SelectItem value="egreso" className="text-red-500 font-black italic">EGRESO (-)</SelectItem></SelectContent></Select></div>
+                            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Cuenta</Label><Select value={transForm.cuentaId} onValueChange={v => setTransactionForm({...transForm, cuentaId: v})}><SelectTrigger className="rounded-xl h-12 font-black bg-white/5 border-none text-white italic"><SelectValue placeholder="Seleccionar..." /></SelectTrigger><SelectContent className="bg-slate-900 border-white/10 text-white italic">{accounts.map(acc => (<SelectItem key={acc.id} value={acc.id} className="text-white font-black italic">{acc.nombre} (Bs. {formatCurrency(acc.saldoActual)})</SelectItem>))}</SelectContent></Select></div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Monto Bs.</Label><Input type="number" placeholder="0.00" value={transForm.monto} onChange={e => setTransactionForm({...transForm, monto: e.target.value})} className="rounded-xl h-12 font-black text-lg bg-white/5 border-none text-white italic" /></div>
@@ -431,12 +509,12 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
             </Dialog>
 
             <Dialog open={isTransferDialogOpen} onOpenChange={setIsTransferDialogOpen}>
-                <DialogContent className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white">
+                <DialogContent className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white italic">
                     <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-white">Trasladar <span className="text-primary">Fondos</span></DialogTitle></DialogHeader>
                     <div className="grid gap-4 py-4">
                         <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Cuenta Origen</Label><Select value={transferForm.origenId} onValueChange={v => setTransferForm({...transferForm, origenId: v})}><SelectTrigger className="rounded-xl h-12 bg-white/5 border-none font-black text-white italic"><SelectValue placeholder="Desde..." /></SelectTrigger><SelectContent className="bg-slate-900 border-white/10 text-white">{accounts.map(acc => (<SelectItem key={acc.id} value={acc.id} className="text-white font-black">{acc.nombre} (Bs. {formatCurrency(acc.saldoActual)})</SelectItem>))}</SelectContent></Select></div>
-                            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Cuenta Destino</Label><Select value={transferForm.destinoId} onValueChange={v => setTransferForm({...transferForm, destinoId: v})}><SelectTrigger className="rounded-xl h-12 bg-white/5 border-none font-black text-white italic"><SelectValue placeholder="Hacia..." /></SelectTrigger><SelectContent className="bg-slate-900 border-white/10 text-white">{accounts.map(acc => (<SelectItem key={acc.id} value={acc.id} disabled={acc.id === transferForm.origenId} className="text-white font-black">{acc.nombre}</SelectItem>))}</SelectContent></Select></div>
+                            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Cuenta Origen</Label><Select value={transferForm.origenId} onValueChange={v => setTransferForm({...transferForm, origenId: v})}><SelectTrigger className="rounded-xl h-12 bg-white/5 border-none font-black text-white italic"><SelectValue placeholder="Desde..." /></SelectTrigger><SelectContent className="bg-slate-900 border-white/10 text-white italic">{accounts.map(acc => (<SelectItem key={acc.id} value={acc.id} className="text-white font-black italic">{acc.nombre} (Bs. {formatCurrency(acc.saldoActual)})</SelectItem>))}</SelectContent></Select></div>
+                            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Cuenta Destino</Label><Select value={transferForm.destinoId} onValueChange={v => setTransferForm({...transferForm, destinoId: v})}><SelectTrigger className="rounded-xl h-12 bg-white/5 border-none font-black text-white italic"><SelectValue placeholder="Hacia..." /></SelectTrigger><SelectContent className="bg-slate-900 border-white/10 text-white italic">{accounts.map(acc => (<SelectItem key={acc.id} value={acc.id} disabled={acc.id === transferForm.origenId} className="text-white font-black italic">{acc.nombre}</SelectItem>))}</SelectContent></Select></div>
                         </div>
                         <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Monto del Traslado (Bs.)</Label><Input type="number" placeholder="0.00" value={transferForm.monto} onChange={e => setTransferForm({...transferForm, monto: e.target.value})} className="rounded-xl h-12 font-black text-lg bg-white/5 border-none text-white italic" /></div>
                         <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Motivo / Notas</Label><Input placeholder="EJ: FONDEO DE CAJA CHICA" value={transferForm.descripcion} onChange={e => setTransferForm({...transferForm, descripcion: e.target.value})} className="rounded-xl h-12 font-black bg-white/5 border-none text-white uppercase italic" /></div>
@@ -446,7 +524,7 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
             </Dialog>
 
             <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-                <DialogContent className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white">
+                <DialogContent className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white italic">
                     <DialogHeader>
                         <DialogTitle className="text-xl font-black uppercase italic text-red-500">¿Eliminar Cuenta?</DialogTitle>
                         <DialogDescription className="font-bold text-white/40 italic">Se borrará la cuenta "{accountToDelete?.nombre}". Los movimientos históricos permanecerán en el sistema pero no estarán asociados a una cuenta activa.</DialogDescription>
