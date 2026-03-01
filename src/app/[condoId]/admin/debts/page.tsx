@@ -4,12 +4,12 @@ import { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PlusCircle, MoreHorizontal, Edit, Trash2, Loader2, Search, WalletCards, ArrowLeft, Building, RefreshCw, CalendarPlus, Save, AlertCircle } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, Edit, Trash2, Loader2, Search, WalletCards, ArrowLeft, Building, RefreshCw, CalendarPlus, Save, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { collection, query, onSnapshot, where, doc, getDoc, writeBatch, updateDoc, deleteDoc, runTransaction, Timestamp, getDocs, addDoc, orderBy, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -217,6 +217,26 @@ export default function DebtManagementPage() {
         });
     };
 
+    const handleManualMarkAsPaid = async (debt: Debt) => {
+        if (!workingCondoId) return;
+        requestAuthorization(async () => {
+            setIsSubmitting(true);
+            try {
+                await updateDoc(doc(db, 'condominios', workingCondoId, 'debts', debt.id), {
+                    status: 'paid',
+                    paymentDate: Timestamp.now(),
+                    observations: 'MARCADO MANUALMENTE POR ADMINISTRADOR (SIN IMPACTO FINANCIERO)',
+                    updatedAt: serverTimestamp()
+                });
+                toast({ title: "Registro Actualizado", description: "La deuda ha sido marcada como pagada manualmente." });
+            } catch (e) {
+                toast({ variant: 'destructive', title: "Error al actualizar" });
+            } finally {
+                setIsSubmitting(false);
+            }
+        });
+    };
+
     const handleSaveNewDebt = async () => {
         if (!selectedOwner || !workingCondoId || !addForm.amountUSD || !addForm.propertyKey) return;
         setIsSubmitting(true);
@@ -341,6 +361,8 @@ export default function DebtManagementPage() {
                                                     <DropdownMenu>
                                                         <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="text-slate-500 hover:text-white"><MoreHorizontal className="h-4 w-4"/></Button></DropdownMenuTrigger>
                                                         <DropdownMenuContent align="end" className="bg-slate-900 text-white border-white/10 font-montserrat italic">
+                                                            <DropdownMenuItem onClick={() => handleManualMarkAsPaid(d)} className="gap-2 font-black uppercase text-[10px] p-3 text-emerald-500 hover:bg-emerald-500/10"><CheckCircle2 className="h-3 w-3" /> Marcar como Pagada (Manual)</DropdownMenuItem>
+                                                            <DropdownMenuSeparator className="bg-white/5" />
                                                             <DropdownMenuItem onClick={() => handleOpenEdit(d)} className="gap-2 font-black uppercase text-[10px] p-3"><Edit className="h-3 w-3 text-sky-500" /> Editar Registro</DropdownMenuItem>
                                                             <DropdownMenuItem onClick={() => { setEditingDebt(d); setIsDeleteDialog(true); }} className="gap-2 font-black uppercase text-[10px] p-3 text-red-500"><Trash2 className="h-3 w-3" /> Eliminar</DropdownMenuItem>
                                                         </DropdownMenuContent>
