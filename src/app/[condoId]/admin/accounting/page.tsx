@@ -121,6 +121,7 @@ const AccountingPage = () => {
             const to = endOfMonth(from);
             const monthId = format(from, 'yyyy-MM');
 
+            // ID EXCLUSIVO BANCO DE VENEZUELA
             const BDV_ACCOUNT_ID = "RdiTtY9ojCuYPRNvB7C3";
             const CAJA_PRINCIPAL_ID = "CAJA_PRINCIPAL_ID";
 
@@ -137,10 +138,11 @@ const AccountingPage = () => {
                     let targetAccountId = "";
                     let targetAccountName = "";
 
-                    if (['movil', 'transferencia', 'pagomovil', 'transferencias'].includes(p.paymentMethod)) {
+                    const method = (p.paymentMethod || "").toLowerCase().trim();
+                    if (method.includes('movil') || method.includes('transferencia') || method.includes('pagomovil')) {
                         targetAccountId = BDV_ACCOUNT_ID;
                         targetAccountName = "BANCO DE VENEZUELA";
-                    } else if (['efectivo_bs', 'efectivo'].includes(p.paymentMethod)) {
+                    } else if (method.includes('efectivo')) {
                         targetAccountId = CAJA_PRINCIPAL_ID;
                         targetAccountName = "CAJA PRINCIPAL";
                     }

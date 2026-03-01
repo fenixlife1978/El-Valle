@@ -107,17 +107,18 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             if (!condoId) return;
             setIsVerifying(true);
             try {
+                // ID EXCLUSIVO BANCO DE VENEZUELA
                 const BDV_ACCOUNT_ID = "RdiTtY9ojCuYPRNvB7C3";
                 const CAJA_PRINCIPAL_ID = "CAJA_PRINCIPAL_ID";
                 
                 let targetAccountId = "";
                 let targetAccountName = "";
                 
-                const method = payment.paymentMethod.toLowerCase();
-                if (['movil', 'transferencia', 'pagomovil', 'transferencias'].includes(method)) {
+                const method = payment.paymentMethod.toLowerCase().trim();
+                if (method.includes('movil') || method.includes('transferencia') || method.includes('pagomovil')) {
                     targetAccountId = BDV_ACCOUNT_ID;
                     targetAccountName = "BANCO DE VENEZUELA";
-                } else if (['efectivo_bs', 'efectivo'].includes(method)) {
+                } else if (method.includes('efectivo')) {
                     targetAccountId = CAJA_PRINCIPAL_ID;
                     targetAccountName = "CAJA PRINCIPAL";
                 }
@@ -127,16 +128,19 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 await runTransaction(db, async (transaction) => {
                     const receiptNumbers: { [ownerId: string]: string } = {};
 
+                    // 1. Actualizar saldos de propietarios
                     for (const beneficiary of payment.beneficiaries) {
                         const ownerRef = doc(db, 'condominios', condoId, ownersCollectionName, beneficiary.ownerId);
                         transaction.update(ownerRef, { balance: increment(beneficiary.amount) });
                         receiptNumbers[beneficiary.ownerId] = `REC-${Date.now().toString().substring(6)}-${beneficiary.ownerId.slice(-4)}`.toUpperCase();
                     }
 
+                    // 2. Afectar cuenta física en Tesorería
                     if (targetAccountId) {
                         const accountRef = doc(db, 'condominios', condoId, 'cuentas', targetAccountId);
                         transaction.update(accountRef, { saldoActual: increment(payment.totalAmount) });
 
+                        // 3. Actualizar Estadísticas Financieras Reales
                         const statsRef = doc(db, 'condominios', condoId, 'financial_stats', monthId);
                         transaction.set(statsRef, {
                             periodo: monthId,
@@ -146,6 +150,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                             updatedAt: serverTimestamp()
                         }, { merge: true });
 
+                        // 4. Crear Asiento Contable Detallado
                         const transRef = doc(collection(db, 'condominios', condoId, 'transacciones'));
                         transaction.set(transRef, {
                             monto: payment.totalAmount, 
@@ -161,16 +166,18 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         });
                     }
 
+                    // 5. Marcar pago como aprobado
                     transaction.update(doc(db, 'condominios', condoId, 'payments', payment.id), { 
                         status: 'aprobado', 
                         receiptNumbers, 
-                        observations: 'Auditado y Sincronizado en Libros.' 
+                        observations: 'AUDITADO Y SINCRONIZADO EN BANCO.' 
                     });
                 });
 
-                toast({ title: "Pago Validado", description: "Sincronizado en libros bancarios exitosamente." });
+                toast({ title: "Pago Validado", description: "Sincronizado con Banco de Venezuela exitosamente." });
                 setSelectedPayment(null);
             } catch (error: any) { 
+                console.error("Error en aprobación:", error);
                 toast({ variant: 'destructive', title: "Falla en Sincronización", description: error.message }); 
             }
             finally { setIsVerifying(false); }
@@ -431,7 +438,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 </DialogContent>
             </Dialog>
 
-            <Dialog open={!!paymentToDelete} onOpenChange={() => setPaymentToDelete(null)}>
+            <Dialog open={!!paymentToDelete} onValueChange={() => setPaymentToDelete(null)}>
                 <DialogContent className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white">
                     <DialogHeader><DialogTitle className="text-xl font-black uppercase italic text-red-500">¿Eliminar Registro Definitivamente?</DialogTitle></DialogHeader>
                     <p className="text-slate-400 font-bold text-sm leading-relaxed uppercase tracking-tight">
@@ -471,12 +478,10 @@ function ReportPaymentComponent({ condoId }: { condoId: string }) {
         const q = query(collection(db, "condominios", condoId, ownersCollectionName), where("role", "==", "propietario"));
         return onSnapshot(q, (snapshot) => {
             const ownersData: Owner[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner));
-            // Excluir Super Admin por email
             setAllOwners(ownersData.filter(o => o.email !== 'vallecondo@gmail.com').sort((a, b) => (a.name || '').localeCompare(b.name || '')));
         });
     }, [condoId, ownersCollectionName]);
 
-    // Iniciar con un beneficiario vacío (sin pre-carga automática)
     useEffect(() => {
         setBeneficiaryRows([{
             id: Date.now().toString(),
