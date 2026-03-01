@@ -35,7 +35,8 @@ import {
     Edit,
     MoreVertical,
     ShieldCheck,
-    Save
+    Save,
+    AlertCircle
 } from 'lucide-react';
 
 import { Button } from "@/components/ui/button";
@@ -532,6 +533,48 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                     <DialogFooter className="gap-2 mt-4">
                         <Button variant="ghost" onClick={() => setIsDeleteDialogOpen(false)} className="rounded-xl h-12 font-black uppercase text-white/60">Cancelar</Button>
                         <Button onClick={handleDeleteAccount} disabled={isSubmitting} variant="destructive" className="rounded-xl h-12 font-black uppercase italic shadow-lg shadow-red-500/20">Eliminar Cuenta</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* DIALOGO PARA EDITAR MOVIMIENTO DEL HISTORIAL */}
+            <Dialog open={isEditTxDialogOpen} onOpenChange={setIsEditTxDialogOpen}>
+                <DialogContent className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white italic">
+                    <DialogHeader>
+                        <DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-white">Editar <span className="text-primary">Movimiento</span></DialogTitle>
+                        <DialogDescription className="text-white/40 font-bold text-xs uppercase">Actualización de glosa y referencia del asiento contable.</DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="space-y-2">
+                            <Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Descripción / Concepto</Label>
+                            <Input value={editTxData.descripcion} onChange={e => setEditTxData({...editTxData, descripcion: e.target.value})} className="rounded-xl h-12 font-black bg-white/5 border-none text-white uppercase italic" />
+                        </div>
+                        <div className="space-y-2">
+                            <Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Referencia</Label>
+                            <Input value={editTxData.referencia} onChange={e => setEditTxData({...editTxData, referencia: e.target.value})} className="rounded-xl h-12 font-black bg-white/5 border-none text-white uppercase italic" />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button onClick={handleUpdateTx} disabled={isSubmitting} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase h-14 rounded-2xl shadow-xl italic">
+                            {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2 h-5 w-5" />} Actualizar Registro
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* DIALOGO PARA ELIMINAR MOVIMIENTO DEL HISTORIAL */}
+            <Dialog open={isDeleteTxDialogOpen} onOpenChange={setIsDeleteTxDialogOpen}>
+                <DialogContent className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white italic">
+                    <DialogHeader>
+                        <DialogTitle className="text-xl font-black uppercase italic text-red-500 flex items-center gap-2"><AlertCircle /> ¿Eliminar Movimiento?</DialogTitle>
+                        <DialogDescription className="font-bold text-white/40 italic">
+                            Esta acción revertirá automáticamente el saldo en la cuenta "{selectedTx?.nombreCuenta}". 
+                            El monto de Bs. {formatCurrency(selectedTx?.monto || 0)} será recalculado.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter className="gap-2 mt-4">
+                        <Button variant="ghost" onClick={() => setIsDeleteTxDialogOpen(false)} className="rounded-xl h-12 font-black uppercase text-white/60">Cancelar</Button>
+                        <Button onClick={handleDeleteTransaction} disabled={isSubmitting} variant="destructive" className="rounded-xl h-12 font-black uppercase italic shadow-lg shadow-red-500/20">Confirmar Reversión</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
