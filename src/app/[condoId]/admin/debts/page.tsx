@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -202,16 +201,18 @@ export default function DebtManagementPage() {
 
     const handleDeleteDebt = async () => {
         if (!editingDebt || !workingCondoId) return;
-        setIsSubmitting(true);
-        try {
-            await deleteDoc(doc(db, 'condominios', workingCondoId, 'debts', editingDebt.id));
-            toast({ title: "Registro Eliminado" });
-            setIsDeleteDialog(false);
-        } catch (e) {
-            toast({ variant: 'destructive', title: "Error al eliminar" });
-        } finally {
-            setIsSubmitting(false);
-        }
+        requestAuthorization(async () => {
+            setIsSubmitting(true);
+            try {
+                await deleteDoc(doc(db, 'condominios', workingCondoId, 'debts', editingDebt.id));
+                toast({ title: "Registro Eliminado" });
+                setIsDeleteDialog(false);
+            } catch (e) {
+                toast({ variant: 'destructive', title: "Error al eliminar" });
+            } finally {
+                setIsSubmitting(false);
+            }
+        });
     };
 
     const filteredOwners = useMemo(() => {
@@ -293,11 +294,11 @@ export default function DebtManagementPage() {
                             <AccordionItem value={key} className="border-none">
                                 <AccordionTrigger className="px-8 py-6 hover:no-underline"><div className="flex items-center gap-4 text-left"><div className="p-3 bg-slate-800 rounded-2xl"><Building className="text-primary"/></div><div><h3 className="text-lg font-black text-white uppercase italic">{p.street} - {p.house}</h3><p className="text-[10px] font-bold text-slate-500 uppercase italic">{pending.length} Pendientes</p></div></div></AccordionTrigger>
                                 <AccordionContent className="px-8 pb-8 pt-4 border-t border-white/5">
-                                    <Table><TableHeader><TableRow className="border-white/5"><TableHead className="text-[10px] font-black uppercase text-white/40 italic">Período</TableHead><TableHead className="text-[10px] font-black uppercase text-white/40 italic">Descripción</TableHead><TableHead className="text-[10px] font-black uppercase text-white/40 italic">Monto Bs.</TableHead><TableHead className="text-[10px] font-black uppercase text-white/40 italic text-right pr-14">Acciones</TableHead></TableRow></TableHeader>
+                                    <Table><TableHeader><TableRow className="border-white/5"><TableHead className="text-[10px] font-black uppercase text-white/40 italic">Período</TableHead><TableHead className="text-[10px] font-black uppercase text-white/40 italic">Descripción</TableHead><TableHead className="text-[10px] font-black uppercase text-white/40 italic">Monto Bs.</TableHead><TableHead className="text-right pr-14 text-[10px] font-black uppercase text-white/40 italic">Acciones</TableHead></TableRow></TableHeader>
                                     <TableBody>
                                         {pending.map(d => (
                                             <TableRow key={d.id} className="border-white/5">
-                                                <TableCell className="font-black text-white text-xs uppercase italic">{months[d.month-1].label} {d.year}</TableCell>
+                                                <TableCell className="font-black text-white text-xs uppercase italic">{months[d.month-1]?.label} {d.year}</TableCell>
                                                 <TableCell className="text-slate-400 font-bold text-xs uppercase italic">{d.description}</TableCell>
                                                 <TableCell className="font-black text-white italic">Bs. {formatToTwoDecimals(d.amountUSD * activeRate)}</TableCell>
                                                 <TableCell className="text-right pr-8">
@@ -313,7 +314,7 @@ export default function DebtManagementPage() {
                                         ))}
                                         {paid.map(d => (
                                             <TableRow key={d.id} className="border-white/5 opacity-50">
-                                                <TableCell className="font-bold text-slate-500 text-xs uppercase italic">{months[d.month-1].label} {d.year}</TableCell>
+                                                <TableCell className="font-bold text-slate-500 text-xs uppercase italic">{months[d.month-1]?.label} {d.year}</TableCell>
                                                 <TableCell className="text-slate-600 font-medium text-xs uppercase italic">{d.description}</TableCell>
                                                 <TableCell className="font-bold text-slate-500 italic">Bs. {formatToTwoDecimals(d.amountUSD * activeRate)}</TableCell>
                                                 <TableCell className="text-right pr-8">
@@ -364,7 +365,7 @@ export default function DebtManagementPage() {
                 <DialogContent className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white italic">
                     <DialogHeader>
                         <DialogTitle className="text-xl font-black uppercase italic text-red-500 flex items-center gap-2"><AlertCircle /> ¿Eliminar Registro?</DialogTitle>
-                        <DialogDescription className="font-bold text-white/40 italic">Esta acción borrará permanentemente la deuda de {months[parseInt(editForm.month)-1]?.label} {editForm.year}. No podrá revertirse.</DialogDescription>
+                        <DialogDescription className="font-bold text-white/40 italic">Esta acción borrará permanentemente el registro de deuda. No podrá revertirse.</DialogDescription>
                     </DialogHeader>
                     <DialogFooter className="gap-2 mt-4">
                         <Button variant="ghost" onClick={() => setIsDeleteDialog(false)} className="rounded-xl h-12 font-black uppercase text-white/60">Cancelar</Button>

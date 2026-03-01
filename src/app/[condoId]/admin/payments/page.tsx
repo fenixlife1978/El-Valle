@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
@@ -78,7 +77,7 @@ type Payment = {
     liquidatedConcepts?: LiquidatedConcept[];
 };
 
-// RUTA MAESTRA BANCO DE VENEZUELA (AFECTACIÓN EXCLUSIVA ACTUALIZADA)
+// RUTA MAESTRA BANCO DE VENEZUELA (AFECTACIÓN EXCLUSIVA)
 const BDV_ACCOUNT_ID = "Hlc0ky0QdnaXIsuf19Od";
 const CAJA_PRINCIPAL_ID = "CAJA_PRINCIPAL_ID";
 
@@ -186,7 +185,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                             
                             let nextMonthDate = addMonths(new Date(), 1);
                             if (allDebtsSorted.length > 0) {
-                                nextMonthDate = startOfMonth(new Date(allDebtsSorted[0].year, allDebtsSorted[0].month));
+                                nextMonthDate = startOfMonth(new Date(allDebtsSorted[allDebtsSorted.length-1].year, allDebtsSorted[allDebtsSorted.length-1].month));
                             }
 
                             while (funds.gte(advanceAmountBs)) {
@@ -665,120 +664,6 @@ function ReportPaymentComponent() {
             </form>
             <BankSelectionModal isOpen={isBankModalOpen} onOpenChange={setIsBankModalOpen} selectedValue={bank} onSelect={(v) => { setBank(v); setIsBankModalOpen(false); }} />
         </Card>
-    );
-}
-
-function CalculatorComponent({ condoId, onReport }: { condoId: string, onReport: (data: any) => void }) {
-    const { toast } = useToast();
-    const [allOwners, setAllOwners] = useState<Owner[]>([]);
-    const [selectedOwner, setSelectedOwner] = useState<Owner | null>(null);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [debts, setDebts] = useState<any[]>([]);
-    const [loading, setLoading] = useState(false);
-    const [activeRate, setActiveRate] = useState(0);
-    const [condoFee, setCondoFee] = useState(0);
-    const [selectedPendingDebts, setSelectedPendingDebts] = useState<string[]>([]);
-    const [selectedAdvanceMonths, setSelectedAdvanceMonths] = useState<string[]>([]);
-
-    const ownersCollectionName = condoId === 'condo_01' ? 'owners' : 'propietarios';
-
-    useEffect(() => {
-        if (!condoId) return;
-        const q = query(collection(db, "condominios", condoId, ownersCollectionName), where("role", "==", "propietario"));
-        return onSnapshot(q, (snapshot) => {
-            setAllOwners(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner)).filter(o => (o as any).email !== 'vallecondo@gmail.com').sort((a,b) => a.name.localeCompare(b.name)));
-        });
-    }, [condoId, ownersCollectionName]);
-
-    useEffect(() => {
-        if (!condoId) return;
-        getDoc(doc(db, 'condominios', condoId, 'config', 'mainSettings')).then(snap => {
-            if (snap.exists()) {
-                const data = snap.data();
-                setCondoFee(data.condoFee || 0);
-                const rates = data.exchangeRates || [];
-                const active = rates.find((r: any) => r.active);
-                setActiveRate(active?.rate || 0);
-            }
-        });
-    }, [condoId]);
-
-    useEffect(() => {
-        if (!selectedOwner || !condoId) return;
-        setLoading(true);
-        const q = query(collection(db, 'condominios', condoId, 'debts'), where("ownerId", "==", selectedOwner.id));
-        return onSnapshot(q, (snap) => {
-            setDebts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-            setLoading(false);
-        });
-    }, [selectedOwner, condoId]);
-
-    const pendingDebts = useMemo(() => {
-        return debts.filter(d => d.status === 'pending' || d.status === 'vencida').sort((a,b) => a.year - b.year || a.month - b.month);
-    }, [debts]);
-
-    const futureMonths = useMemo(() => {
-        const now = new Date();
-        const paidAdvance = debts.filter(d => d.status === 'paid' && d.description.includes('Adelantado')).map(d => `${d.year}-${String(d.month).padStart(2, '0')}`);
-        return Array.from({ length: 12 }, (_, i) => {
-            const d = addMonths(now, i);
-            const val = format(d, 'yyyy-MM');
-            return { val, label: format(d, 'MMMM yyyy', { locale: es }), disabled: paidAdvance.includes(val) };
-        });
-    }, [debts]);
-
-    const calc = useMemo(() => {
-        const dueUSD = pendingDebts.filter(d => selectedPendingDebts.includes(d.id)).reduce((s, d) => s + d.amountUSD, 0);
-        const advUSD = selectedAdvanceMonths.length * condoFee;
-        const totalBs = (dueUSD + advUSD) * activeRate;
-        const toPay = Math.max(0, totalBs - (selectedOwner?.balance || 0));
-        return { totalBs, toPay, balance: (selectedOwner as any)?.balance || 0 };
-    }, [selectedPendingDebts, selectedAdvanceMonths, pendingDebts, activeRate, condoFee, selectedOwner]);
-
-    return (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 font-montserrat italic">
-            <div className="lg:col-span-2 space-y-6">
-                <Card className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 overflow-hidden border border-white/5">
-                    <CardHeader className="bg-white/5 p-8 border-b border-white/5"><CardTitle className="text-white font-black uppercase italic text-xl">1. Seleccionar <span className="text-primary">Residente</span></CardTitle></CardHeader>
-                    <CardContent className="p-8">
-                        {!selectedOwner ? (
-                            <div className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" /><Input placeholder="Buscar..." className="pl-12 h-14 rounded-2xl bg-slate-800 border-none text-white font-bold uppercase" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />{searchTerm.length >= 2 && <div className="absolute z-50 w-full mt-2 bg-slate-800 rounded-2xl shadow-2xl border border-white/10 overflow-hidden"><ScrollArea className="h-64">{allOwners.filter(o => o.name.toLowerCase().includes(searchTerm.toLowerCase())).map(o => (<div key={o.id} onClick={() => { setSelectedOwner(o); setSearchTerm(''); }} className="p-4 hover:bg-white/5 cursor-pointer border-b border-white/5 text-white font-black text-[10px] uppercase italic">{o.name}</div>))}</ScrollArea></div>}</div>
-                        ) : (<div className="p-6 bg-slate-800 rounded-2xl flex justify-between items-center border border-white/5"><div><p className="font-black text-primary uppercase text-sm italic">{selectedOwner.name}</p><p className="text-[10px] font-bold text-slate-400 uppercase italic">{selectedOwner.properties?.map(p=>`${p.street} ${p.house}`).join(' | ')}</p></div><Button variant="ghost" size="icon" onClick={() => { setSelectedOwner(null); setSelectedPendingDebts([]); setSelectedAdvanceMonths([]); }} className="text-red-500"><X className="h-5 w-5"/></Button></div>)}
-                    </CardContent>
-                </Card>
-
-                {selectedOwner && (
-                    <div className="space-y-6 animate-in slide-in-from-top-4">
-                        <Card className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 overflow-hidden border border-white/5">
-                            <CardHeader className="bg-white/5 p-8 border-b border-white/5"><CardTitle className="text-white font-black uppercase italic text-xl">2. Deudas <span className="text-red-500">Pendientes</span></CardTitle></CardHeader>
-                            <CardContent className="p-0">
-                                <Table><TableHeader className="bg-slate-800/50"><TableRow className="border-white/5"><TableHead className="w-12 px-8"></TableHead><TableHead className="text-[10px] font-black uppercase text-slate-400">Mes/Año</TableHead><TableHead className="text-right pr-8 text-[10px] font-black uppercase text-slate-400">Monto Bs.</TableHead></TableRow></TableHeader>
-                                <TableBody>
-                                    {pendingDebts.length === 0 ? <TableRow><TableCell colSpan={3} className="h-32 text-center text-slate-500 font-bold italic uppercase text-[10px]">Sin deudas</TableCell></TableRow> : 
-                                    pendingDebts.map(d => (<TableRow key={d.id} className="border-white/5 hover:bg-white/5 cursor-pointer" onClick={() => setSelectedPendingDebts(p => p.includes(d.id) ? p.filter(id=>id!==d.id) : [...p, d.id])}><TableCell className="px-8"><Checkbox checked={selectedPendingDebts.includes(d.id)} /></TableCell><TableCell className="font-black text-white text-xs uppercase italic">{format(new Date(d.year, d.month - 1), 'MMMM yyyy', {locale: es})}</TableCell><TableCell className="text-right pr-8 font-black text-white italic">Bs. {formatCurrency(d.amountUSD * activeRate)}</TableCell></TableRow>))}
-                                </TableBody></Table>
-                            </CardContent>
-                        </Card>
-                        <Card className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 overflow-hidden border border-white/5">
-                            <CardHeader className="bg-white/5 p-8 border-b border-white/5"><CardTitle className="text-white font-black uppercase italic text-xl">3. Meses por <span className="text-emerald-500">Adelantar</span></CardTitle></CardHeader>
-                            <CardContent className="p-8 grid grid-cols-2 md:grid-cols-3 gap-4">{futureMonths.map(m => (<Button key={m.val} variant={selectedAdvanceMonths.includes(m.val) ? 'default' : 'outline'} disabled={m.disabled || selectedPendingDebts.length < pendingDebts.length} onClick={() => setSelectedAdvanceMonths(p => p.includes(m.val) ? p.filter(v=>v!==m.val) : [...p, m.val])} className={cn("rounded-xl h-12 font-black uppercase text-[9px] italic", selectedAdvanceMonths.includes(m.val) ? 'bg-emerald-600' : 'bg-slate-800 text-slate-400')}>{selectedAdvanceMonths.includes(m.val) && <Check className="mr-2 h-3 w-3" />} {m.label}</Button>))}</CardContent>
-                        </Card>
-                    </div>
-                )}
-            </div>
-
-            <div className="space-y-6">
-                <Card className="rounded-[2.5rem] border-none shadow-2xl bg-primary text-slate-900 overflow-hidden sticky top-24 italic">
-                    <CardHeader className="p-8 border-b border-black/5"><CardTitle className="font-black uppercase text-xl flex items-center gap-2"><Calculator /> Liquidación</CardTitle></CardHeader>
-                    <CardContent className="p-8 space-y-4">
-                        <div className="flex justify-between items-center"><span className="text-[10px] font-black uppercase opacity-60">Subtotal Selección:</span><span className="font-black">Bs. {formatCurrency(calc.totalBs)}</span></div>
-                        <div className="flex justify-between items-center"><span className="text-[10px] font-black uppercase opacity-60 flex items-center gap-1"><Minus className="h-3 w-3"/> Saldo a Favor:</span><span className="font-black">Bs. {formatCurrency(calc.balance)}</span></div>
-                        <div className="pt-4 border-t border-black/5 flex justify-between items-center"><span className="text-xs font-black uppercase flex items-center gap-1"><Equal className="h-4 w-4"/> Total a Pagar:</span><span className="text-3xl font-black tracking-tighter">Bs. {formatCurrency(calc.toPay)}</span></div>
-                    </CardContent>
-                    <CardFooter className="p-8 bg-black/5"><Button disabled={!selectedOwner || calc.toPay <= 0} onClick={() => onReport({ owner: selectedOwner, amount: calc.toPay })} className="w-full h-14 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-black uppercase italic tracking-widest gap-2 shadow-2xl"><Receipt className="h-5 w-5 text-primary"/> Reportar Pago</Button></CardFooter>
-                </Card>
-            </div>
-        </div>
     );
 }
 
