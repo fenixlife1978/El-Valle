@@ -646,7 +646,7 @@ function CalculatorComponent({ condoId, onReport }: { condoId: string, onReport:
         if (!condoId) return;
         const q = query(collection(db, "condominios", condoId, ownersCollectionName), where("role", "==", "propietario"));
         return onSnapshot(q, (snapshot) => {
-            setAllOwners(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner)).sort((a,b) => a.name.compareLocale(b.name)));
+            setAllOwners(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner)).sort((a,b) => a.name.localeCompare(b.name)));
         });
     }, [condoId, ownersCollectionName]);
 
@@ -700,7 +700,7 @@ function CalculatorComponent({ condoId, onReport }: { condoId: string, onReport:
     return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 font-montserrat">
             <div className="lg:col-span-2 space-y-6">
-                <Card className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 overflow-hidden">
+                <Card className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 overflow-hidden border border-white/5">
                     <CardHeader className="bg-white/5 p-8 border-b border-white/5">
                         <CardTitle className="text-white font-black uppercase italic text-xl">1. Seleccionar <span className="text-primary">Residente</span></CardTitle>
                     </CardHeader>
@@ -722,7 +722,7 @@ function CalculatorComponent({ condoId, onReport }: { condoId: string, onReport:
                                 )}
                             </div>
                         ) : (
-                            <div className="p-6 bg-slate-800 rounded-2xl flex justify-between items-center">
+                            <div className="p-6 bg-slate-800 rounded-2xl flex justify-between items-center border border-white/5">
                                 <div><p className="font-black text-primary uppercase text-sm italic">{selectedOwner.name}</p><p className="text-[10px] font-bold text-slate-400 uppercase">{selectedOwner.properties?.map(p=>`${p.street} ${p.house}`).join(' | ')}</p></div>
                                 <Button variant="ghost" size="icon" onClick={() => { setSelectedOwner(null); setSelectedPendingDebts([]); setSelectedAdvanceMonths([]); }} className="text-red-500 hover:bg-red-500/10"><X className="h-5 w-5"/></Button>
                             </div>
@@ -732,11 +732,11 @@ function CalculatorComponent({ condoId, onReport }: { condoId: string, onReport:
 
                 {selectedOwner && (
                     <>
-                        <Card className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 overflow-hidden">
+                        <Card className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 overflow-hidden border border-white/5">
                             <CardHeader className="bg-white/5 p-8 border-b border-white/5"><CardTitle className="text-white font-black uppercase italic text-xl">2. Deudas <span className="text-red-500">Pendientes</span></CardTitle></CardHeader>
                             <CardContent className="p-0">
                                 <Table>
-                                    <TableHeader className="bg-slate-800/50"><TableRow className="border-white/5"><TableHead className="w-12 px-8"></TableHead><TableHead className="text-[10px] font-black uppercase text-slate-400">Mes/Año</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-400 text-right pr-8">Monto Bs.</TableHead></TableRow></TableHeader>
+                                    <TableHeader className="bg-slate-800/50"><TableRow className="border-white/5"><TableHead className="w-12 px-8"></TableHead><TableHead className="text-[10px] font-black uppercase text-slate-400 italic">Mes/Año</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-400 text-right pr-8 italic">Monto Bs.</TableHead></TableRow></TableHeader>
                                     <TableBody>
                                         {pendingDebts.length === 0 ? <TableRow><TableCell colSpan={3} className="h-32 text-center text-slate-500 font-bold italic uppercase text-[10px]">Sin deudas pendientes</TableCell></TableRow> : 
                                         pendingDebts.map(d => (
@@ -751,11 +751,11 @@ function CalculatorComponent({ condoId, onReport }: { condoId: string, onReport:
                             </CardContent>
                         </Card>
 
-                        <Card className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 overflow-hidden">
+                        <Card className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 overflow-hidden border border-white/5">
                             <CardHeader className="bg-white/5 p-8 border-b border-white/5"><CardTitle className="text-white font-black uppercase italic text-xl">3. Meses por <span className="text-emerald-500">Adelantar</span></CardTitle></CardHeader>
                             <CardContent className="p-8 grid grid-cols-2 md:grid-cols-3 gap-4">
                                 {futureMonths.map(m => (
-                                    <Button key={m.val} variant={selectedAdvanceMonths.includes(m.val) ? 'default' : 'outline'} disabled={m.disabled} onClick={() => setSelectedAdvanceMonths(p => p.includes(m.val) ? p.filter(v=>v!==m.val) : [...p, m.val])} className={cn("rounded-xl h-12 font-black uppercase text-[9px] italic border-white/10", selectedAdvanceMonths.includes(m.val) ? 'bg-emerald-600' : 'bg-slate-800 text-slate-400')}>
+                                    <Button key={m.val} variant={selectedAdvanceMonths.includes(m.val) ? 'default' : 'outline'} disabled={m.disabled} onClick={() => setSelectedAdvanceMonths(p => p.includes(m.val) ? p.filter(v=>v!==m.val) : [...p, m.val])} className={cn("rounded-xl h-12 font-black uppercase text-[9px] italic border-white/10 shadow-lg", selectedAdvanceMonths.includes(m.val) ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700')}>
                                         {selectedAdvanceMonths.includes(m.val) && <Check className="mr-2 h-3 w-3" />} {m.label}
                                     </Button>
                                 ))}
@@ -766,16 +766,16 @@ function CalculatorComponent({ condoId, onReport }: { condoId: string, onReport:
             </div>
 
             <div className="space-y-6">
-                <Card className="rounded-[2.5rem] border-none shadow-2xl bg-primary text-slate-900 overflow-hidden sticky top-24">
-                    <CardHeader className="p-8 border-b border-black/5"><CardTitle className="font-black uppercase italic text-xl flex items-center gap-2"><Calculator /> Liquidación</CardTitle></CardHeader>
+                <Card className="rounded-[2.5rem] border-none shadow-2xl bg-primary text-slate-900 overflow-hidden sticky top-24 italic">
+                    <CardHeader className="p-8 border-b border-black/5"><CardTitle className="font-black uppercase text-xl flex items-center gap-2"><Calculator /> Liquidación</CardTitle></CardHeader>
                     <CardContent className="p-8 space-y-4">
-                        <div className="flex justify-between items-center"><span className="text-[10px] font-black uppercase opacity-60">Subtotal Selección:</span><span className="font-black italic">Bs. {formatCurrency(calc.totalBs)}</span></div>
-                        <div className="flex justify-between items-center"><span className="text-[10px] font-black uppercase opacity-60 flex items-center gap-1"><Minus className="h-3 w-3"/> Saldo a Favor:</span><span className="font-black italic">Bs. {formatCurrency(calc.balance)}</span></div>
-                        <div className="pt-4 border-t border-black/5 flex justify-between items-center"><span className="text-xs font-black uppercase flex items-center gap-1"><Equal className="h-4 w-4"/> Total a Pagar:</span><span className="text-3xl font-black italic tracking-tighter">Bs. {formatCurrency(calc.toPay)}</span></div>
+                        <div className="flex justify-between items-center"><span className="text-[10px] font-black uppercase opacity-60">Subtotal Selección:</span><span className="font-black">Bs. {formatCurrency(calc.totalBs)}</span></div>
+                        <div className="flex justify-between items-center"><span className="text-[10px] font-black uppercase opacity-60 flex items-center gap-1"><Minus className="h-3 w-3"/> Saldo a Favor:</span><span className="font-black">Bs. {formatCurrency(calc.balance)}</span></div>
+                        <div className="pt-4 border-t border-black/5 flex justify-between items-center"><span className="text-xs font-black uppercase flex items-center gap-1"><Equal className="h-4 w-4"/> Total a Pagar:</span><span className="text-3xl font-black tracking-tighter">Bs. {formatCurrency(calc.toPay)}</span></div>
                     </CardContent>
                     <CardFooter className="p-8 bg-black/5">
                         <Button disabled={!selectedOwner || calc.toPay <= 0} onClick={() => onReport({ owner: selectedOwner, amount: calc.toPay })} className="w-full h-14 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-black uppercase italic tracking-widest gap-2 shadow-2xl">
-                            <Receipt className="h-5 w-5"/> Reportar este Pago
+                            <Receipt className="h-5 w-5 text-primary"/> Reportar este Pago
                         </Button>
                     </CardFooter>
                 </Card>
@@ -800,12 +800,12 @@ function PaymentsPage() {
     return (
         <div className="space-y-10 animate-in fade-in duration-700 font-montserrat">
             <div className="mb-10">
-                <h2 className="text-4xl font-black text-foreground uppercase tracking-tighter italic drop-shadow-sm">Gestión de <span className="text-primary">Pagos</span></h2>
-                <div className="h-1.5 w-20 bg-[#f59e0b] mt-2 rounded-full shadow-[0_0_15px_rgba(245,158,11,0.3)]"></div>
-                <p className="text-muted-foreground font-bold mt-3 text-sm uppercase tracking-wide">Auditoría centralizada y afectación inmediata de Tesorería.</p>
+                <h2 className="text-4xl font-black text-white uppercase tracking-tighter italic drop-shadow-sm">Gestión de <span className="text-primary">Pagos</span></h2>
+                <div className="h-1.5 w-20 bg-primary mt-2 rounded-full shadow-[0_0_15px_rgba(245,158,11,0.3)]"></div>
+                <p className="text-white/40 font-bold mt-3 text-sm uppercase tracking-wide italic">Auditoría centralizada y afectación inmediata de Tesorería.</p>
             </div>
             <Tabs value={activeTab} onValueChange={(v) => router.push(`/${condoId}/admin/payments?tab=${v}`)}>
-                <TabsList className="grid w-full grid-cols-3 bg-slate-800/50 h-16 rounded-2xl p-1">
+                <TabsList className="grid w-full grid-cols-3 bg-slate-800/50 h-16 rounded-2xl p-1 border border-white/5">
                     <TabsTrigger value="verify" className="rounded-xl font-black uppercase text-xs tracking-widest italic">Verificación</TabsTrigger>
                     <TabsTrigger value="report" className="rounded-xl font-black uppercase text-xs tracking-widest italic">Reporte Manual</TabsTrigger>
                     <TabsTrigger value="calculator" className="rounded-xl font-black uppercase text-xs tracking-widest italic">Calculadora</TabsTrigger>

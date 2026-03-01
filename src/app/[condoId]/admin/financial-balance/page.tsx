@@ -114,8 +114,9 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                     let totalEfectivo = 0;
                     pSnap.forEach(doc => {
                         const data = doc.data();
-                        if (['transferencia', 'movil', 'pagomovil', 'transferencias'].includes(data.paymentMethod)) totalBancario += data.totalAmount;
-                        else if (['efectivo_bs', 'efectivo'].includes(data.paymentMethod)) totalEfectivo += data.totalAmount;
+                        const method = (data.paymentMethod || "").toLowerCase().trim();
+                        if (['transferencia', 'movil', 'pagomovil', 'transferencias'].includes(method)) totalBancario += data.totalAmount;
+                        else if (['efectivo_bs', 'efectivo'].includes(method)) totalEfectivo += data.totalAmount;
                     });
                     setIngresosOrdinariosBanco(totalBancario);
                     setIngresosOrdinariosEfectivo(totalEfectivo);
@@ -145,22 +146,10 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
         fetchAutomaticData();
     }, [selectedMonth, selectedYear, workingCondoId]);
 
-    const totalEgresosBanco = useMemo(() => 
-        egresosTesorería
-            .filter(e => e.cuenta.toUpperCase().includes("BANCO") || e.cuenta.toUpperCase().includes("VENEZUELA"))
-            .reduce((sum, e) => sum + e.monto, 0), 
-    [egresosTesorería]);
-
-    const totalEgresosCaja = useMemo(() => 
-        egresosTesorería
-            .filter(e => e.cuenta.toUpperCase().includes("CAJA PRINCIPAL"))
-            .reduce((sum, e) => sum + e.monto, 0), 
-    [egresosTesorería]);
-
     const totalEgresosMes = useMemo(() => egresosTesorería.reduce((sum, e) => sum + e.monto, 0), [egresosTesorería]);
     
-    const saldoCierreBancoCalculado = (saldoAnteriorBanco + ingresosOrdinariosBanco) - totalEgresosBanco;
-    const saldoCierreCajaCalculado = ingresosOrdinariosEfectivo - totalEgresosCaja;
+    const totalEntradas = saldoAnteriorBanco + ingresosOrdinariosBanco + ingresosOrdinariosEfectivo;
+    const saldoFinalCalculado = totalEntradas - totalEgresosMes;
 
     const handleSave = async () => {
         if (!workingCondoId) return;
@@ -228,129 +217,105 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
             columnStyles: { 2: { halign: 'right' } }
         });
 
-        const finalY = (docPDF as any).lastAutoTable.finalY + 15;
-        docPDF.setFont('helvetica', 'bold').setFontSize(11);
-        docPDF.text("RESUMEN DE CIERRE:", 14, finalY);
-        docPDF.setFont('helvetica', 'normal').setFontSize(10);
-        docPDF.text(`BANCO DE VENEZUELA (CONTABLE): Bs. ${formatCurrency(saldoCierreBancoCalculado)}`, 14, finalY + 7);
-        docPDF.text(`CAJA PRINCIPAL (EFECTIVO): Bs. ${formatCurrency(saldoCierreCajaCalculado)}`, 14, finalY + 14);
-        
-        docPDF.setFont('helvetica', 'bold').text("SALDOS REALES EN TESORERÍA:", 14, finalY + 25);
-        docPDF.text(`DISPONIBILIDAD BANCARIA: Bs. ${formatCurrency(realBalances.banco)}`, 14, finalY + 32);
-        docPDF.text(`DISPONIBILIDAD CAJA CHICA: Bs. ${formatCurrency(realBalances.cajaChica)}`, 14, finalY + 39);
-
-        if (notas) {
-            docPDF.setFont('helvetica', 'bold').text("OBSERVACIONES:", 14, finalY + 55);
-            docPDF.setFont('helvetica', 'normal').setFontSize(9).text(notas, 14, finalY + 60, { maxWidth: 180 });
-        }
-
         docPDF.save(`Balance_${selectedYear}_${selectedMonth}_${info.name.replace(/ /g, '_')}.pdf`);
     };
 
     return (
-        <div className="max-w-5xl mx-auto p-6 space-y-6 bg-slate-50 min-h-screen font-montserrat text-slate-900">
+        <div className="max-w-5xl mx-auto p-6 space-y-6 bg-background min-h-screen font-montserrat text-white">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-4">
                 <div>
-                    <h1 className="text-3xl font-black uppercase italic tracking-tighter text-slate-900 leading-none">
-                        Balance <span className="text-[#0081c9]">Financiero</span>
+                    <h1 className="text-3xl font-black uppercase italic tracking-tighter text-white leading-none">
+                        Balance <span className="text-primary">Financiero</span>
                     </h1>
-                    <p className="text-[10px] font-black uppercase text-slate-500 tracking-[0.3em] mt-2">Integridad Contable Digital</p>
+                    <p className="text-[10px] font-black uppercase text-white/40 tracking-[0.3em] mt-2 italic">Integridad Contable Digital</p>
                 </div>
                 <div className="flex gap-2">
-                    <Button onClick={handleExportPDF} variant="outline" className="rounded-xl border-slate-200 text-slate-700 font-bold h-10 px-4 bg-white hover:bg-slate-50">
-                        <Download className="mr-2 h-4 w-4" /> Exportar PDF
+                    <Button onClick={handleExportPDF} variant="outline" className="rounded-xl border-white/10 text-white font-black uppercase text-[10px] h-10 px-4 bg-white/5 hover:bg-white/10 italic">
+                        <Download className="mr-2 h-4 w-4 text-primary" /> Exportar PDF
                     </Button>
                     <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                        <SelectTrigger className="w-36 bg-white text-slate-900 border-slate-200 font-bold h-10 rounded-xl"><SelectValue /></SelectTrigger>
-                        <SelectContent className="bg-white">{Array.from({length:12}, (_,i)=>(<SelectItem key={i+1} value={String(i+1)} className="text-slate-900">{format(new Date(2000,i), 'MMMM', {locale:es})}</SelectItem>))}</SelectContent>
+                        <SelectTrigger className="w-36 bg-slate-900 text-white border-white/5 font-black uppercase text-[10px] h-10 rounded-xl italic"><SelectValue /></SelectTrigger>
+                        <SelectContent className="bg-slate-900 border-white/10 text-white">{Array.from({length:12}, (_,i)=>(<SelectItem key={i+1} value={String(i+1)} className="font-black uppercase text-[10px]">{format(new Date(2000,i), 'MMMM', {locale:es})}</SelectItem>))}</SelectContent>
                     </Select>
-                    <Input className="w-24 bg-white text-slate-900 border-slate-200 font-bold h-10 rounded-xl" type="number" value={selectedYear} onChange={(e)=>setSelectedYear(e.target.value)} />
+                    <Input className="w-24 bg-slate-900 text-white border-white/5 font-black h-10 rounded-xl italic" type="number" value={selectedYear} onChange={(e)=>setSelectedYear(e.target.value)} />
                 </div>
             </div>
 
-            {loading ? <div className="py-20 flex justify-center"><Loader2 className="animate-spin h-10 w-10 text-[#0081c9]" /></div> : <>
+            {loading ? <div className="py-20 flex justify-center"><Loader2 className="animate-spin h-10 w-10 text-primary" /></div> : <>
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <Card className="rounded-[2rem] border-none shadow-xl bg-slate-900 text-white p-6 flex flex-col justify-between relative overflow-hidden">
+                    <Card className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white p-6 flex flex-col justify-between relative overflow-hidden border border-white/5">
                         <div className="relative z-10">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-[#f59e0b]">Saldo Real en Banco</p>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-primary italic">Saldo Real en Banco</p>
                             <p className="text-3xl font-black italic mt-1">Bs. {formatCurrency(realBalances.banco)}</p>
                         </div>
-                        <Landmark className="absolute top-6 right-6 h-12 w-12 text-white/10" />
-                        <div className="mt-4 pt-4 border-t border-white/10 relative z-10">
-                            <p className="text-[9px] font-bold text-slate-400 uppercase">Cierre Estimado:</p>
-                            <p className="text-sm font-bold text-sky-400">Bs. {formatCurrency(saldoCierreBancoCalculado)}</p>
-                        </div>
+                        <Landmark className="absolute top-6 right-6 h-12 w-12 text-white/5" />
                     </Card>
 
-                    <Card className="rounded-[2rem] border-none shadow-xl bg-white p-6 flex flex-col justify-between border border-slate-100 relative overflow-hidden">
+                    <Card className="rounded-[2rem] border-none shadow-2xl bg-slate-900 p-6 flex flex-col justify-between border border-white/5 relative overflow-hidden">
                         <div className="relative z-10">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600">Saldo Real Caja Principal</p>
-                            <p className="text-3xl font-black italic mt-1 text-slate-900">Bs. {formatCurrency(realBalances.cajaPrincipal)}</p>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-emerald-500 italic">Saldo Real Caja Principal</p>
+                            <p className="text-3xl font-black italic mt-1 text-white">Bs. {formatCurrency(realBalances.cajaPrincipal)}</p>
                         </div>
-                        <Coins className="absolute top-6 right-6 h-12 w-12 text-slate-100" />
-                        <div className="mt-4 pt-4 border-t border-slate-50 relative z-10">
-                            <p className="text-[9px] font-bold text-slate-400 uppercase italic">Ingresos Efectivo Mes:</p>
-                            <p className="text-sm font-bold text-emerald-600">Bs. {formatCurrency(ingresosOrdinariosEfectivo)}</p>
-                        </div>
+                        <Coins className="absolute top-6 right-6 h-12 w-12 text-white/5" />
                     </Card>
 
-                    <Card className="rounded-[2rem] border-none shadow-xl bg-white p-6 flex flex-col justify-center border border-slate-100 relative overflow-hidden">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Fondo de Caja Chica</p>
-                        <p className="text-3xl font-black italic mt-1 text-slate-900">Bs. {formatCurrency(realBalances.cajaChica)}</p>
-                        <Wallet className="absolute top-6 right-6 h-12 w-12 text-slate-100" />
+                    <Card className="rounded-[2rem] border-none shadow-2xl bg-slate-900 p-6 flex flex-col justify-center border border-white/5 relative overflow-hidden">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-white/40 italic">Fondo de Caja Chica</p>
+                        <p className="text-3xl font-black italic mt-1 text-white">Bs. {formatCurrency(realBalances.cajaChica)}</p>
+                        <Wallet className="absolute top-6 right-6 h-12 w-12 text-white/5" />
                     </Card>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-                    <Card className="rounded-[2rem] border-none shadow-sm overflow-hidden bg-white h-fit border border-slate-100">
-                        <CardHeader className="bg-slate-50 border-b"><CardTitle className="text-[10px] font-black uppercase tracking-widest text-slate-600">Ingresos del Período</CardTitle></CardHeader>
+                    <Card className="rounded-[2.5rem] border-none shadow-xl overflow-hidden bg-slate-900 border border-white/5 h-fit">
+                        <CardHeader className="bg-slate-950 border-b border-white/5"><CardTitle className="text-[10px] font-black uppercase tracking-widest text-white/40 italic">Ingresos del Período</CardTitle></CardHeader>
                         <CardContent className="p-0">
                             <Table>
                                 <TableBody>
-                                    <TableRow className="bg-blue-50/30 border-b border-slate-100">
-                                        <TableCell className="font-bold text-slate-900 text-xs">SALDO ANTERIOR BANCO</TableCell>
-                                        <TableCell className="p-2"><Input type="number" className="text-right bg-white font-bold h-8 rounded-lg text-slate-900 border-slate-200" value={saldoAnteriorBanco} onChange={e=>setSaldoAnteriorBanco(Number(e.target.value))}/></TableCell>
+                                    <TableRow className="bg-white/5 border-b border-white/5">
+                                        <TableCell className="font-black text-white text-[10px] uppercase italic">SALDO ANTERIOR BANCO</TableCell>
+                                        <TableCell className="p-2"><Input type="number" className="text-right bg-slate-950 font-black h-10 rounded-xl text-white border-none italic" value={saldoAnteriorBanco} onChange={e=>setSaldoAnteriorBanco(Number(e.target.value))}/></TableCell>
                                     </TableRow>
-                                    <TableRow className="border-b border-slate-50">
-                                        <TableCell className="text-slate-700 text-xs font-black uppercase">Ingresos Banco (Digital)</TableCell>
-                                        <TableCell className="text-right font-black text-slate-900">Bs. {formatCurrency(ingresosOrdinariosBanco)}</TableCell>
+                                    <TableRow className="border-b border-white/5">
+                                        <TableCell className="text-white/60 text-[10px] font-black uppercase italic">Ingresos Banco (Digital)</TableCell>
+                                        <TableCell className="text-right font-black text-white italic">Bs. {formatCurrency(ingresosOrdinariosBanco)}</TableCell>
                                     </TableRow>
                                     <TableRow className="border-none">
-                                        <TableCell className="text-slate-700 text-xs font-black uppercase">Ingresos Efectivo (Caja)</TableCell>
-                                        <TableCell className="text-right font-black text-emerald-600">Bs. {formatCurrency(ingresosOrdinariosEfectivo)}</TableCell>
+                                        <TableCell className="text-white/60 text-[10px] font-black uppercase italic">Ingresos Efectivo (Caja)</TableCell>
+                                        <TableCell className="text-right font-black text-emerald-500 italic">Bs. {formatCurrency(ingresosOrdinariosEfectivo)}</TableCell>
                                     </TableRow>
                                 </TableBody>
                             </Table>
                         </CardContent>
                     </Card>
 
-                    <Card className="rounded-[2.5rem] border-none shadow-sm overflow-hidden bg-white border border-slate-100">
-                        <CardHeader className="bg-slate-50 border-b"><CardTitle className="text-[10px] font-black uppercase tracking-widest text-slate-600">Egresos Registrados (Tesorería)</CardTitle></CardHeader>
+                    <Card className="rounded-[2.5rem] border-none shadow-xl overflow-hidden bg-slate-900 border border-white/5">
+                        <CardHeader className="bg-slate-950 border-b border-white/5"><CardTitle className="text-[10px] font-black uppercase tracking-widest text-white/40 italic">Egresos Registrados (Tesorería)</CardTitle></CardHeader>
                         <CardContent className="p-0">
                             <Table>
                                 <TableHeader>
-                                    <TableRow className="bg-slate-100/20 border-b border-slate-100">
-                                        <TableHead className="text-slate-700 font-black text-[10px] uppercase">CONCEPTO / CUENTA</TableHead>
-                                        <TableHead className="text-right text-slate-700 font-black text-[10px] uppercase">MONTO (BS.)</TableHead>
+                                    <TableRow className="bg-slate-950/50 border-b border-white/5">
+                                        <TableHead className="text-white/40 font-black text-[10px] uppercase italic">CONCEPTO / CUENTA</TableHead>
+                                        <TableHead className="text-right text-white/40 font-black text-[10px] uppercase italic">MONTO (BS.)</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {egresosTesorería.length === 0 ? (
-                                        <TableRow><TableCell colSpan={2} className="text-center py-10 text-slate-400 italic text-xs font-bold">No se registraron egresos en este período.</TableCell></TableRow>
+                                        <TableRow className="border-none"><TableCell colSpan={2} className="text-center py-10 text-white/20 italic text-[10px] font-black uppercase">Sin egresos en este período.</TableCell></TableRow>
                                     ) : egresosTesorería.map((egreso, i) => (
-                                        <TableRow key={i} className="border-b border-slate-50">
+                                        <TableRow key={i} className="border-b border-white/5 hover:bg-white/5 transition-colors">
                                             <TableCell className="py-3">
-                                                <div className="text-slate-900 font-black uppercase text-[10px] italic">{egreso.concepto}</div>
-                                                <div className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">ORIGEN: {egreso.cuenta}</div>
+                                                <div className="text-white font-black uppercase text-[10px] italic">{egreso.concepto}</div>
+                                                <div className="text-[8px] font-black text-white/20 uppercase tracking-tighter">ORIGEN: {egreso.cuenta}</div>
                                             </TableCell>
-                                            <TableCell className="text-right font-black text-red-600">Bs. {formatCurrency(egreso.monto)}</TableCell>
+                                            <TableCell className="text-right font-black text-red-500 italic">Bs. {formatCurrency(egreso.monto)}</TableCell>
                                         </TableRow>
                                     ))}
                                 </TableBody>
-                                <TableFooter>
-                                    <TableRow className="bg-red-50/50">
-                                        <TableCell className="font-black text-red-900 text-[10px] uppercase">Total Egresos del Mes</TableCell>
-                                        <TableCell className="text-right font-black text-red-700 text-lg">Bs. {formatCurrency(totalEgresosMes)}</TableCell>
+                                <TableFooter className="bg-red-500/10">
+                                    <TableRow className="border-none">
+                                        <TableCell className="font-black text-red-400 text-[10px] uppercase italic">Total Egresos</TableCell>
+                                        <TableCell className="text-right font-black text-red-500 text-lg italic">Bs. {formatCurrency(totalEgresosMes)}</TableCell>
                                     </TableRow>
                                 </TableFooter>
                             </Table>
@@ -359,18 +324,18 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 </div>
 
                 <div className="space-y-2 mt-6">
-                    <Label className="text-[10px] font-black uppercase text-slate-500 ml-4">Observaciones y Notas del Balance</Label>
+                    <Label className="text-[10px] font-black uppercase text-white/40 ml-4 italic">Observaciones del Balance</Label>
                     <Textarea 
-                        className="rounded-[2rem] bg-white border-slate-200 text-slate-900 font-bold p-6 min-h-[120px] shadow-sm placeholder:text-slate-300 focus-visible:ring-[#0081c9]" 
+                        className="rounded-[2.5rem] bg-slate-900 border-white/5 text-white font-black p-6 min-h-[120px] shadow-2xl italic placeholder:text-white/10 focus-visible:ring-primary uppercase text-xs" 
                         value={notas} 
                         onChange={e => setNotas(e.target.value)} 
-                        placeholder="Escriba notas relevantes sobre el balance aquí..."
+                        placeholder="Escriba notas relevantes..."
                     />
                 </div>
 
                 <CardFooter className="flex justify-end p-0 pt-6">
-                    <Button onClick={handleSave} disabled={saving} className="bg-[#0081c9] hover:bg-[#006ba8] h-14 rounded-2xl font-black uppercase px-10 text-white shadow-lg shadow-blue-500/20 transition-all active:scale-95">
-                        {saving ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2 h-5 w-5" />} Guardar Balance del Período
+                    <Button onClick={handleSave} disabled={saving} className="bg-primary hover:bg-primary/90 h-14 rounded-2xl font-black uppercase px-10 text-primary-foreground shadow-2xl shadow-primary/20 italic transition-all active:scale-95">
+                        {saving ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2 h-5 w-5" />} Guardar Balance
                     </Button>
                 </CardFooter>
             </> }
