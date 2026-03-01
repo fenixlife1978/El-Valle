@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
 import { 
     Search, CheckCircle, XCircle, Eye, MoreHorizontal, 
@@ -72,6 +72,11 @@ type Payment = {
 
 const BDV_ACCOUNT_ID = "RdiTtY9ojCuYPRNvB7C3";
 const CAJA_PRINCIPAL_ID = "CAJA_PRINCIPAL_ID";
+
+const monthsLocale: { [key: number]: string } = {
+    1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril', 5: 'Mayo', 6: 'Junio',
+    7: 'Julio', 8: 'Agosto', 9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre'
+};
 
 function VerificationComponent({ condoId }: { condoId: string }) {
     const { user, companyInfo } = useAuth();
@@ -166,7 +171,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                     transaction.update(doc(db, 'condominios', condoId, 'payments', payment.id), { 
                         status: 'aprobado', 
                         receiptNumbers, 
-                        observations: 'AUDITADO Y SINCRONIZADO EN BANCO.' 
+                        observations: 'PAGO AUDITADO Y SINCRONIZADO.' 
                     });
                 });
 
@@ -488,13 +493,7 @@ function ReportPaymentComponent({ condoId, initialData }: { condoId: string, ini
                 selectedProperty: initialData.owner.properties?.[0] || null
             }]);
         } else {
-            setBeneficiaryRows([{
-                id: Date.now().toString(),
-                owner: null,
-                searchTerm: '',
-                amount: '',
-                selectedProperty: null
-            }]);
+            setBeneficiaryRows([]);
         }
     }, [initialData]);
 
@@ -530,7 +529,7 @@ function ReportPaymentComponent({ condoId, initialData }: { condoId: string, ini
     const updateBeneficiaryRow = (id: string, updates: Partial<BeneficiaryRow>) => setBeneficiaryRows(rows => rows.map(row => (row.id === id ? { ...row, ...updates } : row)));
     const handleOwnerSelect = (rowId: string, owner: Owner) => updateBeneficiaryRow(rowId, { owner, searchTerm: '', selectedProperty: owner.properties?.[0] || null });
     const addBeneficiaryRow = () => setBeneficiaryRows(rows => [...rows, { id: Date.now().toString(), owner: null, searchTerm: '', amount: '', selectedProperty: null }]);
-    const removeBeneficiaryRow = (id: string) => { if (beneficiaryRows.length > 1) setBeneficiaryRows(rows => rows.filter(row => row.id !== id)); };
+    const removeBeneficiaryRow = (id: string) => { if (beneficiaryRows.length > 0) setBeneficiaryRows(rows => rows.filter(row => row.id !== id)); };
     const getFilteredOwners = (searchTerm: string) => searchTerm.length < 2 ? [] : allOwners.filter(owner => owner.name?.toLowerCase().includes(searchTerm.toLowerCase()));
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -553,7 +552,7 @@ function ReportPaymentComponent({ condoId, initialData }: { condoId: string, ini
             });
             toast({ title: 'Reporte Enviado a Auditoría' });
             setTotalAmount(''); setReference(''); setReceiptImage(null);
-            setBeneficiaryRows([{ id: Date.now().toString(), owner: null, searchTerm: '', amount: '', selectedProperty: null }]);
+            setBeneficiaryRows([]);
         } catch (error) { toast({ variant: "destructive", title: "Error de Guardado" }); } 
         finally { setIsSubmitting(false); }
     };
@@ -647,7 +646,7 @@ function CalculatorComponent({ condoId, onReport }: { condoId: string, onReport:
         if (!condoId) return;
         const q = query(collection(db, "condominios", condoId, ownersCollectionName), where("role", "==", "propietario"));
         return onSnapshot(q, (snapshot) => {
-            setAllOwners(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner)).sort((a,b) => a.name.localeCompare(b.name)));
+            setAllOwners(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner)).sort((a,b) => a.name.compareLocale(b.name)));
         });
     }, [condoId, ownersCollectionName]);
 
