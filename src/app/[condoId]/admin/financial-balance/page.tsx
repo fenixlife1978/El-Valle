@@ -130,14 +130,22 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
         const { default: jsPDF } = await import('jspdf');
         const { default: autoTable } = await import('jspdf-autotable');
         const doc = new jsPDF();
-        const info = authCompanyInfo || { name: 'EFAS CondoSys', rif: 'J-00000000-0' };
+        const info = authCompanyInfo || { name: 'EFAS CondoSys', rif: 'J-00000000-0', logo: '' };
         const monthLabel = months.find(m => m.value === selectedMonth)?.label.toUpperCase();
         
         // Header Estilo Premium
         doc.setFillColor(15, 23, 42); doc.rect(0, 0, 210, 30, 'F');
+        
+        if (info.logo) {
+            try {
+                // Intentamos añadir el logo si existe y es una URL o Base64 válida
+                doc.addImage(info.logo, 'JPEG', 14, 5, 20, 20);
+            } catch (e) { console.warn("Error al cargar logo en PDF:", e); }
+        }
+
         doc.setTextColor(255, 255, 255);
-        doc.setFontSize(14).setFont('helvetica', 'bold').text(info.name.toUpperCase(), 14, 15);
-        doc.setFontSize(8).text(`RIF: ${info.rif}`, 14, 22);
+        doc.setFontSize(14).setFont('helvetica', 'bold').text(info.name.toUpperCase(), info.logo ? 40 : 14, 15);
+        doc.setFontSize(8).text(`RIF: ${info.rif}`, info.logo ? 40 : 14, 22);
         doc.setFontSize(10).text("BALANCE FINANCIERO", 196, 18, { align: 'right' });
         
         doc.setTextColor(0, 0, 0);
@@ -212,7 +220,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
             <div className="flex flex-col md:flex-row justify-between items-end gap-4 mb-10">
                 <div>
                     <h1 className="text-4xl font-black uppercase italic tracking-tighter text-white">Balance <span className="text-primary">Financiero</span></h1>
-                    <p className="text-[10px] font-black uppercase text-white/40 tracking-[0.3em] mt-2 italic">Integridad Contable EFAS</p>
+                    <p className="text-[10px] font-black uppercase text-white/40 tracking-[0.3em] mt-2 italic">Integridad Contable EFAS - {authCompanyInfo?.name?.toUpperCase() || workingCondoId}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                     <Select value={selectedMonth} onValueChange={setSelectedMonth}><SelectTrigger className="w-36 bg-slate-900 border-white/5 font-black uppercase text-[10px] rounded-xl"><SelectValue /></SelectTrigger><SelectContent className="bg-slate-900 border-white/10 text-white">{months.map(m => (<SelectItem key={m.value} value={m.value} className="font-black uppercase text-[10px]">{m.label}</SelectItem>))}</SelectContent></Select>
