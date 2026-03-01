@@ -71,7 +71,6 @@ type Payment = {
     receiptNumbers?: { [ownerId: string]: string }; 
 };
 
-// ID MAESTRO DEL BANCO DE VENEZUELA (Nueva Ruta)
 const BDV_ACCOUNT_ID = "3PBNZdNqO6jbHRJfadT3";
 const CAJA_PRINCIPAL_ID = "CAJA_PRINCIPAL_ID";
 
@@ -126,7 +125,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 await runTransaction(db, async (transaction) => {
                     const receiptNumbers: { [ownerId: string]: string } = {};
 
-                    // 1. LIQUIDACIÓN CRONOLÓGICA POR BENEFICIARIO
                     for (const beneficiary of payment.beneficiaries) {
                         const ownerRef = doc(db, 'condominios', condoId, ownersCollectionName, beneficiary.ownerId);
                         const ownerSnap = await transaction.get(ownerRef);
@@ -134,7 +132,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
 
                         let funds = new Decimal(beneficiary.amount).plus(new Decimal(ownerSnap.data().balance || 0));
                         
-                        // Obtener deudas pendientes
                         const debtsSnap = await getDocs(query(
                             collection(db, 'condominios', condoId, 'debts'),
                             where('ownerId', '==', beneficiary.ownerId),
@@ -145,7 +142,6 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                             .map(d => ({ id: d.id, ref: d.ref, ...d.data() } as any))
                             .sort((a, b) => a.year - b.year || a.month - b.month);
 
-                        // Liquidar deudas
                         for (const debt of pendingDebts) {
                             const debtAmountBs = new Decimal(debt.amountUSD).times(new Decimal(payment.exchangeRate));
                             if (funds.gte(debtAmountBs)) {
@@ -159,12 +155,10 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                             } else break;
                         }
 
-                        // Generar recibo
                         receiptNumbers[beneficiary.ownerId] = `REC-${Date.now().toString().substring(6)}-${beneficiary.ownerId.slice(-4)}`.toUpperCase();
                         transaction.update(ownerRef, { balance: funds.toDecimalPlaces(2).toNumber() });
                     }
 
-                    // 2. ACTUALIZAR TESORERÍA Y ESTADÍSTICAS
                     const accountRef = doc(db, 'condominios', condoId, 'cuentas', targetAccountId);
                     transaction.update(accountRef, { saldoActual: increment(payment.totalAmount) });
 
@@ -509,8 +503,8 @@ function ReportPaymentComponent() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!authUser || !condoId || !exchangeRate || !totalAmount || !receiptImage) {
-            toast({ variant: 'destructive', title: 'Faltan datos', description: 'Complete todos los campos incluyendo el comprobante.' });
+        if (!authUser || !condoId || !exchangeRate || !totalAmount) {
+            toast({ variant: 'destructive', title: 'Faltan datos', description: 'Monto y tasa son obligatorios.' });
             return;
         }
         setIsSubmitting(true);
@@ -525,7 +519,7 @@ function ReportPaymentComponent() {
                 reportedBy: authUser.uid, beneficiaries, beneficiaryIds: beneficiaries.map(b=>b.ownerId), 
                 totalAmount: Number(totalAmount), exchangeRate, paymentDate: Timestamp.fromDate(paymentDate!), 
                 paymentMethod, bank: paymentMethod === 'efectivo_bs' ? 'Efectivo' : bank, 
-                reference: paymentMethod === 'efectivo_bs' ? 'EFECTIVO' : reference, receiptUrl: receiptImage, 
+                reference: paymentMethod === 'efectivo_bs' ? 'EFECTIVO' : reference, receiptUrl: receiptImage || "", 
                 status: 'pendiente', reportedAt: serverTimestamp() 
             });
             toast({ title: 'Reporte Enviado' });
@@ -549,7 +543,7 @@ function ReportPaymentComponent() {
                             <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Monto Bs.</Label><Input type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} className="h-14 rounded-2xl bg-slate-800 border-none text-white font-black text-2xl italic text-right pr-6" placeholder="0,00" /></div>
                             <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Equiv. USD</Label><div className="relative"><DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" /><Input value={amountUSD} readOnly className="h-14 pl-9 rounded-2xl bg-slate-800 border-none text-emerald-500 font-black text-2xl italic text-right pr-6" /></div></div>
                         </div>
-                        <div className="md:col-span-2 space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Soporte Digital</Label><Input type="file" accept="image/*" onChange={async (e) => { const file = e.target.files?.[0]; if(file) setReceiptImage(await compressImage(file, 800, 800)); }} className="h-14 rounded-2xl bg-slate-800 border-none text-white font-bold" /></div>
+                        <div className="md:col-span-2 space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Soporte Digital (Opcional)</Label><Input type="file" accept="image/*" onChange={async (e) => { const file = e.target.files?.[0]; if(file) setReceiptImage(await compressImage(file, 800, 800)); }} className="h-14 rounded-2xl bg-slate-800 border-none text-white font-bold" /></div>
                     </div>
                     
                     <div className="space-y-6">
