@@ -1,140 +1,137 @@
 
 'use client';
 
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import JsBarcode from 'jsbarcode';
+
 const formatCurrency = (num: number) => {
     if (typeof num !== 'number' || isNaN(num)) return '0,00';
     return num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
+/**
+ * Motor de Generación de Recibos EFAS CondoSys
+ * Diseñado para descarga instantánea en PC y compartir en Dispositivos Móviles.
+ */
 export const generatePaymentReceipt = async (paymentData: any, condoLogoUrl: string | null, outputType: 'download' | 'blob' = 'download'): Promise<Blob | null> => {
-  const { default: jsPDF } = await import('jspdf');
-  const { default: autoTable } = await import('jspdf-autotable');
-  const { default: JsBarcode } = await import('jsbarcode');
-
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
     format: 'a4'
   });
+  
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 15;
 
-  // 1. Encabezado Azul Oscuro
-  doc.setFillColor(30, 41, 59); // Slate-800
+  // 1. Encabezado Premium (Slate-900)
+  doc.setFillColor(15, 23, 42); 
   doc.rect(0, 0, 210, 25, 'F');
 
-  // 2. Logo del Condominio
+  // 2. Logo e Identidad
   if (condoLogoUrl) {
     try {
+      // Intentamos añadir el logo. Si falla (formato no soportado), continuamos sin romper el PDF.
       doc.addImage(condoLogoUrl, 'JPEG', 14, 6.5, 12, 12);
     } catch (e) {
-      console.error("Error adding logo to PDF:", e);
+      console.warn("No se pudo cargar el logo en el PDF:", e);
     }
   }
 
-  // 3. Texto del Encabezado
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
-  doc.text(paymentData.condoName, 35, 12);
+  doc.text(paymentData.condoName.toUpperCase(), 35, 12);
   doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
   doc.text(`RIF: ${paymentData.rif}`, 35, 17);
 
-  // 4. Cuerpo del Recibo
+  // 3. Título y Código de Barras
   doc.setTextColor(0, 0, 0);
   doc.setFontSize(16);
   doc.setFont('helvetica', 'bold');
-  doc.text('RECIBO DE PAGO', 105, 45, { align: 'center' });
+  doc.text('RECIBO DE PAGO OFICIAL', 105, 45, { align: 'center' });
 
-  // Código de barras
-  const barcodeValue = `REC-${paymentData.receiptNumber}`;
+  const barcodeValue = paymentData.receiptNumber || `REC-${Date.now()}`;
   try {
       const canvas = document.createElement('canvas');
       JsBarcode(canvas, barcodeValue, {
           format: "CODE128", height: 40, width: 1, displayValue: false, margin: 0,
       });
       const barcodeDataUrl = canvas.toDataURL("image/png");
-      doc.addImage(barcodeDataUrl, 'PNG', pageWidth - margin - 50, 35, 45, 15);
+      doc.addImage(barcodeDataUrl, 'PNG', pageWidth - margin - 50, 35, 45, 12);
   } catch (e) {
-      console.error("Barcode generation failed", e);
+      console.error("Fallo al generar código de barras:", e);
   }
+  
   doc.setFontSize(8);
-  doc.text(`N° de recibo: ${paymentData.receiptNumber}`, 190, 55, { align: 'right' });
+  doc.setFont('helvetica', 'bold');
+  doc.text(`CONTROL N°: ${barcodeValue}`, 196, 52, { align: 'right' });
 
-
-  // 5. Información del Beneficiario
+  // 4. Datos de la Transacción
   doc.setFontSize(9);
-  const infoX = 15;
   let currentY = 65;
   
   const details = [
-    { label: 'Beneficiario:', value: paymentData.ownerName },
-    { label: 'Método de pago:', value: paymentData.method },
-    { label: 'Banco Emisor:', value: paymentData.bank },
-    { label: 'N° de Referencia Bancaria:', value: paymentData.reference },
-    { label: 'Fecha del pago:', value: paymentData.date },
-    { label: 'Tasa de Cambio Aplicada:', value: `Bs. ${paymentData.rate} por USD` }
+    { label: 'Beneficiario:', value: paymentData.ownerName.toUpperCase() },
+    { label: 'Método de pago:', value: paymentData.method.toUpperCase() },
+    { label: 'Banco Emisor:', value: paymentData.bank.toUpperCase() },
+    { label: 'N° de Referencia:', value: paymentData.reference },
+    { label: 'Fecha de Operación:', value: paymentData.date },
+    { label: 'Tasa BCV Aplicada:', value: `Bs. ${paymentData.rate}` }
   ];
 
   details.forEach(item => {
     doc.setFont('helvetica', 'bold');
-    doc.text(item.label, infoX, currentY);
+    doc.text(item.label, 15, currentY);
     doc.setFont('helvetica', 'normal');
-    doc.text(String(item.value), infoX + 45, currentY);
-    currentY += 5;
+    doc.text(String(item.value), 60, currentY);
+    currentY += 6;
   });
 
-  // 6. Tabla de Conceptos
+  // 5. Tabla de Liquidación Cronológica
   autoTable(doc, {
-    startY: 100,
-    head: [['Período', 'Concepto (Propiedad)', 'Monto ($)', 'Monto Pagado (Bs)']],
+    startY: 105,
+    head: [['PERÍODO', 'CONCEPTO / DESCRIPCIÓN', 'MONTO ($)', 'MONTO (BS)']],
     body: paymentData.concepts,
-    headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
-    styles: { fontSize: 8, halign: 'center' },
-    columnStyles: { 1: { halign: 'left' } }
+    headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: 'bold' },
+    styles: { fontSize: 8, cellPadding: 3 },
+    columnStyles: { 
+        2: { halign: 'right' }, 
+        3: { halign: 'right' } 
+    }
   });
 
-  // 7. Totales
+  // 6. Resumen Financiero
   let finalY = (doc as any).lastAutoTable.finalY + 10;
-  const totalX = 190;
+  const totalX = 196;
 
-  const totals = [
-    { label: 'Saldo a Favor Anterior:', value: `Bs. ${paymentData.prevBalance}` },
-    { label: 'Monto del Pago Recibido:', value: `Bs. ${paymentData.receivedAmount}` },
-    { label: 'Total Abonado en Deudas:', value: `Bs. ${paymentData.totalDebtPaid}` },
-    { label: 'Saldo a Favor Actual:', value: `Bs. ${paymentData.currentBalance}` }
-  ];
-
-  totals.forEach(item => {
-    doc.setFont('helvetica', 'normal');
-    doc.text(item.label, totalX - 50, finalY, { align: 'right' });
-    doc.text(item.value, totalX, finalY, { align: 'right' });
-    finalY += 5;
-  });
-
-  doc.setFont('helvetica', 'bold');
-  doc.text('TOTAL PAGADO:', totalX - 50, finalY + 5, { align: 'right' });
-  doc.text(`Bs. ${paymentData.receivedAmount}`, totalX, finalY + 5, { align: 'right' });
-
-  // 8. Pie de página y Notas
-  doc.setFontSize(7);
+  doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
-  const footerY = 250;
-  doc.text(`Observaciones: ${paymentData.observations}`, 15, footerY);
-  doc.text('Este recibo confirma que el pago ha sido validado para la(s) cuota(s) y propiedad(es) aquí detalladas.', 15, footerY + 10);
+  doc.text(`MONTO RECIBIDO:`, totalX - 40, finalY, { align: 'right' });
+  doc.text(`Bs. ${paymentData.receivedAmount}`, totalX, finalY, { align: 'right' });
+  
+  finalY += 6;
   doc.setFont('helvetica', 'bold');
-  doc.text(`Firma electrónica: '${paymentData.condoName} - Condominio'`, 15, footerY + 15);
+  doc.setFillColor(241, 245, 249);
+  doc.rect(15, finalY, 181, 10, 'F');
+  doc.text(`TOTAL LIQUIDADO EN CUOTAS:`, totalX - 40, finalY + 6.5, { align: 'right' });
+  doc.text(`Bs. ${paymentData.totalDebtPaid}`, totalX, finalY + 6.5, { align: 'right' });
 
-  doc.setLineWidth(0.5);
-  doc.line(15, footerY + 20, 195, footerY + 20);
+  // 7. Pie de Página y Seguridad
+  const footerY = 265;
+  doc.setFontSize(7);
   doc.setFont('helvetica', 'italic');
-  doc.text('Este recibo se generó de manera automática y es válido sin firma manuscrita.', 105, footerY + 25, { align: 'center' });
+  doc.setTextColor(100, 116, 139);
+  doc.text(`Observaciones: ${paymentData.observations}`, 15, footerY);
+  doc.setFont('helvetica', 'bold');
+  doc.text('DOCUMENTO GENERADO POR EFAS CONDOSYS - VALIDEZ DIGITAL SIN FIRMA MANUSCRITA', 105, footerY + 8, { align: 'center' });
 
+  // 8. Salida
   if (outputType === 'blob') {
     return doc.output('blob');
   } else {
-    doc.save(`Recibo_${paymentData.ownerName.replace(/ /g, '_')}.pdf`);
+    doc.save(`Recibo_EFAS_${paymentData.ownerName.replace(/ /g, '_')}_${barcodeValue}.pdf`);
     return null;
   }
 };

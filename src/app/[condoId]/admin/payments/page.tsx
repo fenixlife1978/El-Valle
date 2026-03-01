@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo, Suspense, use } from 'react';
@@ -322,7 +323,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                 : [[format(payment.paymentDate.toDate(), 'MM/yyyy'), 'ABONO A SALDO', (beneficiary.amount / payment.exchangeRate).toFixed(2), formatCurrency(beneficiary.amount)]]
         };
 
-        await generatePaymentReceipt(data, companyInfo.logo);
+        await generatePaymentReceipt(data, companyInfo.logo, 'download');
     };
 
     const handleSharePDF = async (payment: Payment, ownerId: string) => {
@@ -431,47 +432,60 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                                             <TableCell className="font-black text-white text-lg italic">Bs. {formatCurrency(p.totalAmount)}</TableCell>
                                             <TableCell className="font-mono text-[10px] text-slate-500">{p.reference}</TableCell>
                                             <TableCell className="text-right pr-8">
-                                                <DropdownMenu>
-                                                    <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="text-slate-500 hover:text-white"><MoreHorizontal className="h-5 w-5"/></Button></DropdownMenuTrigger>
-                                                    <DropdownMenuContent align="end" className="rounded-xl border-white/10 shadow-2xl bg-slate-900 text-white italic">
-                                                        <DropdownMenuItem onClick={() => setSelectedPayment(p)} className="font-black uppercase text-[10px] p-3 gap-2"><Eye className="h-4 w-4 text-primary" /> Ver Detalles</DropdownMenuItem>
-                                                        
-                                                        {p.status === 'aprobado' && (
-                                                            <>
-                                                                <DropdownMenuSeparator className="bg-white/5"/>
-                                                                <DropdownMenuSub>
-                                                                    <DropdownMenuSubTrigger className="font-black uppercase text-[10px] p-3 gap-2"><FileDown className="h-4 w-4 text-sky-400" /> Exportar PDF</DropdownMenuSubTrigger>
-                                                                    <DropdownMenuPortal><DropdownMenuSubContent className="bg-slate-900 text-white border-white/10 italic">
-                                                                        {p.beneficiaries.map(ben => (<DropdownMenuItem key={ben.ownerId} onClick={() => handleExportPDF(p, ben.ownerId)} className="font-black uppercase text-[9px] p-2">{ben.ownerName}</DropdownMenuItem>))}
-                                                                    </DropdownMenuSubContent></DropdownMenuPortal>
-                                                                </DropdownMenuSub>
-                                                                <DropdownMenuSub>
-                                                                    <DropdownMenuSubTrigger className="font-black uppercase text-[10px] p-3 gap-2"><Share2 className="h-4 w-4 text-emerald-400" /> Compartir</DropdownMenuSubTrigger>
-                                                                    <DropdownMenuPortal><DropdownMenuSubContent className="bg-slate-900 text-white border-white/10 italic">
-                                                                        {p.beneficiaries.map(ben => (<DropdownMenuItem key={ben.ownerId} onClick={() => handleSharePDF(p, ben.ownerId)} className="font-black uppercase text-[9px] p-2">{ben.ownerName}</DropdownMenuItem>))}
-                                                                    </DropdownMenuSubContent></DropdownMenuPortal>
-                                                                </DropdownMenuSub>
-                                                                <DropdownMenuSeparator className="bg-white/5"/>
-                                                                <DropdownMenuItem onClick={() => setPaymentToDelete(p)} className="text-red-500 font-black uppercase text-[10px] p-3 gap-2"><Trash2 className="h-4 w-4"/> Revertir y Eliminar</DropdownMenuItem>
-                                                            </>
-                                                        )}
+                                                <div className="flex justify-end items-center gap-2">
+                                                    {p.status === 'aprobado' && p.beneficiaries.length === 1 && (
+                                                        <Button 
+                                                            variant="ghost" 
+                                                            size="icon" 
+                                                            onClick={() => handleExportPDF(p, p.beneficiaries[0].ownerId)} 
+                                                            className="text-emerald-500 hover:bg-emerald-500/10 rounded-full h-10 w-10"
+                                                            title="Descargar Recibo Instantáneo"
+                                                        >
+                                                            <Download className="h-5 w-5" />
+                                                        </Button>
+                                                    )}
+                                                    <DropdownMenu>
+                                                        <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="text-slate-500 hover:text-white"><MoreHorizontal className="h-5 w-5"/></Button></DropdownMenuTrigger>
+                                                        <DropdownMenuContent align="end" className="rounded-xl border-white/10 shadow-2xl bg-slate-900 text-white italic">
+                                                            <DropdownMenuItem onClick={() => setSelectedPayment(p)} className="font-black uppercase text-[10px] p-3 gap-2"><Eye className="h-4 w-4 text-primary" /> Ver Detalles</DropdownMenuItem>
+                                                            
+                                                            {p.status === 'aprobado' && (
+                                                                <>
+                                                                    <DropdownMenuSeparator className="bg-white/5"/>
+                                                                    <DropdownMenuSub>
+                                                                        <DropdownMenuSubTrigger className="font-black uppercase text-[10px] p-3 gap-2"><FileDown className="h-4 w-4 text-sky-400" /> Descargar PDF</DropdownMenuSubTrigger>
+                                                                        <DropdownMenuPortal><DropdownMenuSubContent className="bg-slate-900 text-white border-white/10 italic">
+                                                                            {p.beneficiaries.map(ben => (<DropdownMenuItem key={ben.ownerId} onClick={() => handleExportPDF(p, ben.ownerId)} className="font-black uppercase text-[9px] p-2">{ben.ownerName}</DropdownMenuItem>))}
+                                                                        </DropdownMenuSubContent></DropdownMenuPortal>
+                                                                    </DropdownMenuSub>
+                                                                    <DropdownMenuSub>
+                                                                        <DropdownMenuSubTrigger className="font-black uppercase text-[10px] p-3 gap-2"><Share2 className="h-4 w-4 text-emerald-400" /> Compartir</DropdownMenuSubTrigger>
+                                                                        <DropdownMenuPortal><DropdownMenuSubContent className="bg-slate-900 text-white border-white/10 italic">
+                                                                            {p.beneficiaries.map(ben => (<DropdownMenuItem key={ben.ownerId} onClick={() => handleSharePDF(p, ben.ownerId)} className="font-black uppercase text-[9px] p-2">{ben.ownerName}</DropdownMenuItem>))}
+                                                                        </DropdownMenuSubContent></DropdownMenuPortal>
+                                                                    </DropdownMenuSub>
+                                                                    <DropdownMenuSeparator className="bg-white/5"/>
+                                                                    <DropdownMenuItem onClick={() => setPaymentToDelete(p)} className="text-red-500 font-black uppercase text-[10px] p-3 gap-2"><Trash2 className="h-4 w-4"/> Revertir y Eliminar</DropdownMenuItem>
+                                                                </>
+                                                            )}
 
-                                                        {p.status === 'pendiente' && (
-                                                            <>
-                                                                <DropdownMenuSeparator className="bg-white/5"/>
-                                                                <DropdownMenuItem onClick={() => handleApprove(p)} className="text-emerald-500 font-black uppercase text-[10px] p-3 gap-2"><CheckCircle className="h-4 w-4" /> Aprobar y Liquidar</DropdownMenuItem>
-                                                                <DropdownMenuItem onClick={() => { setSelectedPayment(p); setRejectionReason(''); }} className="text-red-500 font-black uppercase text-[10px] p-3 gap-2"><XCircle className="h-4 w-4" /> Rechazar Pago</DropdownMenuItem>
-                                                            </>
-                                                        )}
+                                                            {p.status === 'pendiente' && (
+                                                                <>
+                                                                    <DropdownMenuSeparator className="bg-white/5"/>
+                                                                    <DropdownMenuItem onClick={() => handleApprove(p)} className="text-emerald-500 font-black uppercase text-[10px] p-3 gap-2"><CheckCircle className="h-4 w-4" /> Aprobar y Liquidar</DropdownMenuItem>
+                                                                    <DropdownMenuItem onClick={() => { setSelectedPayment(p); setRejectionReason(''); }} className="text-red-500 font-black uppercase text-[10px] p-3 gap-2"><XCircle className="h-4 w-4" /> Rechazar Pago</DropdownMenuItem>
+                                                                </>
+                                                            )}
 
-                                                        {p.status === 'rechazado' && (
-                                                            <>
-                                                                <DropdownMenuSeparator className="bg-white/5"/>
-                                                                <DropdownMenuItem onClick={() => setPaymentToDelete(p)} className="text-red-500 font-black uppercase text-[10px] p-3 gap-2"><Trash2 className="h-4 w-4"/> Eliminar Definitivamente</DropdownMenuItem>
-                                                            </>
-                                                        )}
-                                                    </DropdownMenuContent>
-                                                </DropdownMenu>
+                                                            {p.status === 'rechazado' && (
+                                                                <>
+                                                                    <DropdownMenuSeparator className="bg-white/5"/>
+                                                                    <DropdownMenuItem onClick={() => setPaymentToDelete(p)} className="text-red-500 font-black uppercase text-[10px] p-3 gap-2"><Trash2 className="h-4 w-4"/> Eliminar Definitivamente</DropdownMenuItem>
+                                                                </>
+                                                            )}
+                                                        </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                                </div>
                                             </TableCell>
                                         </TableRow>
                                     ))}
@@ -500,7 +514,19 @@ function VerificationComponent({ condoId }: { condoId: string }) {
 
                             {selectedPayment?.status === 'aprobado' && selectedPayment?.liquidatedConcepts && (
                                 <div className="bg-slate-800 p-6 rounded-3xl border border-white/5 animate-in slide-in-from-top-4 duration-500">
-                                    <p className="text-[10px] font-black uppercase text-emerald-500 mb-4 tracking-widest">Conceptos Computados</p>
+                                    <div className="flex justify-between items-center mb-4">
+                                        <p className="text-[10px] font-black uppercase text-emerald-500 tracking-widest">Conceptos Computados</p>
+                                        {selectedPayment.beneficiaries.length === 1 && (
+                                            <Button 
+                                                variant="outline" 
+                                                size="sm" 
+                                                onClick={() => handleExportPDF(selectedPayment, selectedPayment.beneficiaries[0].ownerId)}
+                                                className="h-8 rounded-xl font-black uppercase text-[9px] border-emerald-500/20 text-emerald-500"
+                                            >
+                                                <Download className="h-3 w-3 mr-1" /> Recibo PDF
+                                            </Button>
+                                        )}
+                                    </div>
                                     <div className="space-y-3">
                                         {selectedPayment.liquidatedConcepts.map((concept, idx) => (
                                             <div key={idx} className="flex justify-between items-start gap-4 text-[10px]">
@@ -687,7 +713,7 @@ function CalculatorComponent({ condoId, onReport }: { condoId: string, onReport:
         return onSnapshot(q, snap => {
             setAllOwners(snap.docs.map(d => ({ id: d.id, ...d.data() } as Owner)).sort((a,b) => a.name.localeCompare(b.name)));
         });
-    }, [condoId]);
+    }, [condoId, ownersCol]);
 
     useEffect(() => {
         if (!condoId) return;
