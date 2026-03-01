@@ -1,4 +1,3 @@
-
 // @ts-nocheck
 
 
@@ -20,7 +19,7 @@ import { collection, getDocs, query, where, doc, getDoc, orderBy, Timestamp, add
 import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { Calendar } from "@/components/ui/calendar";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from '@/components/ui/label';
 import { format, addMonths, startOfMonth, parse, getYear, getMonth, isBefore, isEqual, differenceInCalendarMonths, differenceInMonths, endOfMonth, isSameMonth } from 'date-fns';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -73,7 +72,7 @@ type Debt = {
     amountUSD: number;
     description: string;
     status: 'pending' | 'paid' | 'vencida';
-    paymentId?: string; // <-- ¡Esta es la línea clave que faltaba!
+    paymentId?: string;
     paymentDate?: Timestamp;
     paidAmountUSD?: number;
     property: { street: string, house: string };
@@ -1170,7 +1169,7 @@ export default function ReportsPage() {
         
         // --- Footer Balance ---
         doc.setFontSize(12).setFont('helvetica', 'bold');
-        doc.text(`Saldo a Favor Actual: Bs. {formatToTwoDecimals(accountStatementData.balance)}`, margin, startY);
+        doc.text(`Saldo a Favor Actual: Bs. ${formatToTwoDecimals(accountStatementData.balance)}`, margin, startY);
 
         doc.save(`${filename}.pdf`);
     };
@@ -1591,7 +1590,7 @@ export default function ReportsPage() {
                                                                                         <TableRow key={debt.id}>
                                                                                             <TableCell>{monthsLocale[debt.month]} {debt.year}</TableCell>
                                                                                             <TableCell>{debt.description}</TableCell>
-                                                                                            <TableCell className="text-right">$${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}</TableCell>
+                                                                                            <TableCell className="text-right">${(debt.paidAmountUSD || debt.amountUSD).toFixed(2)}</TableCell>
                                                                                         </TableRow>
                                                                                     ))}
                                                                                 </TableBody>
@@ -1705,7 +1704,7 @@ export default function ReportsPage() {
                                                         <TableRow key={d.id}>
                                                             <TableCell>{monthsLocale[d.month]} {d.year}</TableCell>
                                                             <TableCell>{d.description}</TableCell>
-                                                            <TableCell className="text-right">$${d.amountUSD.toFixed(2)}</TableCell>
+                                                            <TableCell className="text-right">${d.amountUSD.toFixed(2)}</TableCell>
                                                             <TableCell className="text-right">{d.status === 'paid' ? 'Pagada' : 'Pendiente'}</TableCell>
                                                         </TableRow>
                                                      ))}
@@ -1713,7 +1712,7 @@ export default function ReportsPage() {
                                                 <TableFooter>
                                                     <TableRow className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold">
                                                         <TableCell colSpan={2}>Total Adeudado</TableCell>
-                                                        <TableCell className="text-right">$${accountStatementData.totalDebtUSD.toFixed(2)}</TableCell>
+                                                        <TableCell className="text-right">${accountStatementData.totalDebtUSD.toFixed(2)}</TableCell>
                                                         <TableCell></TableCell>
                                                     </TableRow>
                                                 </TableFooter>
@@ -1830,7 +1829,7 @@ export default function ReportsPage() {
                                                 <TableCell className="font-medium">{owner.name}</TableCell>
                                                 <TableCell>{owner.properties}</TableCell>
                                                 <TableCell>{owner.monthsOwed}</TableCell>
-                                                <TableCell className="text-right font-semibold">$${owner.debtAmountUSD.toFixed(2)}</TableCell>
+                                                <TableCell className="text-right font-semibold">${owner.debtAmountUSD.toFixed(2)}</TableCell>
                                             </TableRow>
                                         ))
                                     ) : (
