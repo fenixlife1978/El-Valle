@@ -17,7 +17,7 @@ import {
     Download, Loader2, Calendar as CalendarIcon, Banknote, 
     UserPlus, CheckCircle2, WalletCards, Trash2, 
     Hash, FileText, Save, Share2, FileDown,
-    Calculator, Minus, Equal, Check, Receipt, X
+    Calculator, Minus, Equal, Check, Receipt, X, DollarSign
 } from 'lucide-react';
 import { format, startOfMonth, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -70,6 +70,7 @@ type Payment = {
     receiptNumbers?: { [ownerId: string]: string }; 
 };
 
+// ID MAESTRO DEL BANCO DE VENEZUELA PARA CONDO_01
 const BDV_ACCOUNT_ID = "3PBNZdNqO6jbHRJfadT3";
 const CAJA_PRINCIPAL_ID = "CAJA_PRINCIPAL_ID";
 
@@ -108,7 +109,10 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             if (p.status !== activeTab) return false;
             if (!searchTerm) return true;
             const search = searchTerm.toLowerCase();
-            return (p.reference?.toLowerCase().includes(search) || p.beneficiaries?.some(b => b.ownerName?.toLowerCase().includes(search)));
+            return (
+                p.reference?.toLowerCase().includes(search) || 
+                p.beneficiaries?.some(b => b.ownerName?.toLowerCase().includes(search))
+            );
         });
     }, [payments, activeTab, searchTerm]);
 
@@ -423,18 +427,51 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                         <div className="space-y-6">
                             <div className="bg-slate-800 p-6 rounded-3xl border border-white/5">
                                 <p className="text-[10px] font-black uppercase text-slate-500 mb-4 tracking-[0.2em]">Desglose de Asignación</p>
-                                {selectedPayment?.beneficiaries.map((b, i) => (<div key={i} className="flex justify-between items-center py-3 border-b border-white/5 last:border-0"><div className="flex flex-col"><span className="font-black text-white text-xs uppercase italic">{b.ownerName}</span><span className="text-[9px] font-bold text-slate-500 uppercase">{b.street} {b.house}</span></div><span className="font-black text-primary">Bs. {formatCurrency(b.amount)}</span></div>))}
-                                <div className="mt-6 pt-6 border-t border-white/10 flex justify-between items-center"><span className="text-[10px] font-black uppercase text-white tracking-widest">Total Reportado:</span><span className="text-2xl font-black text-white italic">Bs. {formatCurrency(selectedPayment?.totalAmount || 0)}</span></div>
+                                {selectedPayment?.beneficiaries.map((b, i) => (
+                                    <div key={i} className="flex justify-between items-center py-3 border-b border-white/5 last:border-0">
+                                        <div className="flex flex-col">
+                                            <span className="font-black text-white text-xs uppercase italic">{b.ownerName}</span>
+                                            <span className="text-[9px] font-bold text-slate-500 uppercase">{b.street} {b.house}</span>
+                                        </div>
+                                        <span className="font-black text-primary">Bs. {formatCurrency(b.amount)}</span>
+                                    </div>
+                                ))}
+                                <div className="mt-6 pt-6 border-t border-white/10 flex justify-between items-center">
+                                    <span className="text-[10px] font-black uppercase text-white tracking-widest">Total Reportado:</span>
+                                    <span className="text-2xl font-black text-white italic">Bs. {formatCurrency(selectedPayment?.totalAmount || 0)}</span>
+                                </div>
                             </div>
-                            {selectedPayment?.status === 'pendiente' && (<div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Motivo del Rechazo</Label><Textarea value={rejectionReason} onChange={e => setRejectionReason(e.target.value)} className="rounded-2xl bg-slate-800 border-none font-bold text-white min-h-[100px]" placeholder="Ej: Referencia no coincide con extracto bancario..." /></div>)}
-                            {selectedPayment?.status === 'rechazado' && selectedPayment.observations && (<div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl"><p className="text-[10px] font-black text-red-400 uppercase tracking-widest mb-1">Motivo del Rechazo:</p><p className="text-sm font-bold text-white italic">{selectedPayment.observations}</p></div>)}
+                            {selectedPayment?.status === 'pendiente' && (
+                                <div className="space-y-2">
+                                    <Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Motivo del Rechazo</Label>
+                                    <Textarea 
+                                        value={rejectionReason} 
+                                        onChange={e => setRejectionReason(e.target.value)} 
+                                        className="rounded-2xl bg-slate-800 border-none font-bold text-white min-h-[100px]" 
+                                        placeholder="Ej: Referencia no coincide con extracto bancario..." 
+                                    />
+                                </div>
+                            )}
+                            {selectedPayment?.status === 'rechazado' && selectedPayment.observations && (
+                                <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl">
+                                    <p className="text-[10px] font-black text-red-400 uppercase tracking-widest mb-1">Motivo del Rechazo:</p>
+                                    <p className="text-sm font-bold text-white italic">{selectedPayment.observations}</p>
+                                </div>
+                            )}
                         </div>
                         <div className="relative aspect-[3/4] bg-slate-800 rounded-3xl overflow-hidden border border-white/5 group">
-                            {selectedPayment?.receiptUrl ? (<Image src={selectedPayment.receiptUrl} alt="Comprobante" fill className="object-contain p-2" />) : (<div className="flex h-full items-center justify-center text-slate-600 font-black uppercase italic text-xs">Sin imagen adjunta</div>)}
+                            {selectedPayment?.receiptUrl ? (
+                                <Image src={selectedPayment.receiptUrl} alt="Comprobante" fill className="object-contain p-2" />
+                            ) : (
+                                <div className="flex h-full items-center justify-center text-slate-600 font-black uppercase italic text-xs">Sin imagen adjunta</div>
+                            )}
                         </div>
                     </div>
                     {selectedPayment?.status === 'pendiente' && (
-                        <DialogFooter className="gap-3 mt-4"><Button variant="ghost" onClick={() => handleReject(selectedPayment!)} disabled={isVerifying} className="text-red-500 font-black uppercase text-[10px] hover:bg-red-500/10">Rechazar Pago</Button><Button onClick={() => handleApprove(selectedPayment!)} disabled={isVerifying} className="bg-primary hover:bg-primary/90 text-slate-900 font-black uppercase text-[10px] h-12 rounded-xl flex-1 shadow-lg shadow-primary/20 italic">Aprobar y Sincronizar Cuentas</Button></DialogFooter>
+                        <DialogFooter className="gap-3 mt-4">
+                            <Button variant="ghost" onClick={() => handleReject(selectedPayment!)} disabled={isVerifying} className="text-red-500 font-black uppercase text-[10px] hover:bg-red-500/10">Rechazar Pago</Button>
+                            <Button onClick={() => handleApprove(selectedPayment!)} disabled={isVerifying} className="bg-primary hover:bg-primary/90 text-slate-900 font-black uppercase text-[10px] h-12 rounded-xl flex-1 shadow-lg shadow-primary/20 italic">Aprobar y Sincronizar Cuentas</Button>
+                        </DialogFooter>
                     )}
                 </DialogContent>
             </Dialog>
@@ -447,7 +484,10 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                             ? "Esta acción revertirá los saldos de los propietarios, debitará el dinero de la cuenta bancaria y eliminará el asiento contable."
                             : "Se borrará permanentemente el registro de este reporte de la base de datos."}
                     </p>
-                    <DialogFooter className="gap-2 mt-8"><Button variant="ghost" onClick={() => setPaymentToDelete(null)} className="rounded-xl font-black uppercase text-[10px] h-12 text-white">Cancelar</Button><Button onClick={handleDeletePayment} disabled={isVerifying} className="bg-red-600 hover:bg-red-700 text-white rounded-xl font-black uppercase text-[10px] h-12 shadow-lg shadow-red-600/20">Confirmar Eliminación</Button></DialogFooter>
+                    <DialogFooter className="gap-2 mt-8">
+                        <Button variant="ghost" onClick={() => setPaymentToDelete(null)} className="rounded-xl font-black uppercase text-[10px] h-12 text-white">Cancelar</Button>
+                        <Button onClick={handleDeletePayment} disabled={isVerifying} className="bg-red-600 hover:bg-red-700 text-white rounded-xl font-black uppercase text-[10px] h-12 shadow-lg shadow-red-600/20">Confirmar Eliminación</Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </Card>
@@ -479,6 +519,7 @@ function ReportPaymentComponent({ condoId, initialData }: { condoId: string, ini
         const q = query(collection(db, "condominios", condoId, ownersCollectionName), where("role", "==", "propietario"));
         return onSnapshot(q, (snapshot) => {
             const ownersData: Owner[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner));
+            // Excluir Super Admin de la búsqueda
             setAllOwners(ownersData.filter(o => o.email !== 'vallecondo@gmail.com').sort((a, b) => (a.name || '').localeCompare(b.name || '')));
         });
     }, [condoId, ownersCollectionName]);
@@ -493,6 +534,7 @@ function ReportPaymentComponent({ condoId, initialData }: { condoId: string, ini
                 selectedProperty: initialData.owner.properties?.[0] || null
             }]);
         } else {
+            // Iniciar vacío por defecto
             setBeneficiaryRows([]);
         }
     }, [initialData]);
@@ -510,6 +552,14 @@ function ReportPaymentComponent({ condoId, initialData }: { condoId: string, ini
         };
         fetchRate();
     }, [paymentDate, condoId]);
+
+    const amountUSD = useMemo(() => {
+        const bs = parseFloat(totalAmount);
+        if (!isNaN(bs) && exchangeRate && exchangeRate > 0) {
+            return (bs / exchangeRate).toFixed(2);
+        }
+        return '0.00';
+    }, [totalAmount, exchangeRate]);
 
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -568,11 +618,18 @@ function ReportPaymentComponent({ condoId, initialData }: { condoId: string, ini
                         <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Método</Label><Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}><SelectTrigger className="h-14 rounded-2xl font-black bg-slate-800 border-none text-white uppercase italic text-xs"><SelectValue/></SelectTrigger><SelectContent className="bg-slate-900 border-white/10 text-white"><SelectItem value="transferencia">Transferencia</SelectItem><SelectItem value="movil">Pago Móvil</SelectItem><SelectItem value="efectivo_bs">Efectivo Bs.</SelectItem></SelectContent></Select></div>
                         <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Banco Emisor</Label><Button type="button" variant="outline" className="w-full h-14 rounded-2xl font-black bg-slate-800 border-none text-white uppercase italic text-xs text-left justify-start" onClick={() => setIsBankModalOpen(true)} disabled={isCashPayment}>{isCashPayment ? 'EFECTIVO' : (bank || "Seleccionar Banco...")}</Button></div>
                         <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Referencia Bancaria</Label><Input value={reference} onChange={(e) => setReference(e.target.value.replace(/\D/g, ''))} disabled={isCashPayment} className="h-14 rounded-2xl bg-slate-800 border-none text-white font-black italic tracking-widest" placeholder="6 DÍGITOS" /></div>
-                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Monto Total en Bs.</Label><Input type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} className="h-14 rounded-2xl bg-slate-800 border-none text-white font-black text-2xl italic text-right pr-6" placeholder="0,00" /></div>
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Monto en Bs.</Label><Input type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} className="h-14 rounded-2xl bg-slate-800 border-none text-white font-black text-2xl italic text-right pr-6" placeholder="0,00" /></div>
+                            <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-widest">Equivalencia USD</Label><div className="relative"><DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" /><Input value={amountUSD} readOnly className="h-14 pl-9 rounded-2xl bg-slate-800 border-none text-emerald-500 font-black text-2xl italic text-right pr-6" /></div></div>
+                        </div>
                     </div>
                     
                     <div className="space-y-6">
                         <Label className="text-[10px] font-black uppercase text-primary ml-2 tracking-[0.3em]">Asignación de Beneficiarios</Label>
+                        {beneficiaryRows.length === 0 && (
+                            <div className="p-10 text-center border-2 border-dashed border-white/10 rounded-[2rem]"><p className="text-slate-500 font-black uppercase italic text-xs">Sin beneficiarios asignados</p></div>
+                        )}
                         {beneficiaryRows.map((row, index) => (
                             <div key={row.id} className="p-8 bg-white/5 border border-white/5 rounded-[2rem] relative space-y-6">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -618,7 +675,7 @@ function ReportPaymentComponent({ condoId, initialData }: { condoId: string, ini
                 </CardContent>
                 <CardFooter className="bg-white/5 p-8 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-6">
                     <div className={cn("font-black text-2xl italic tracking-tighter uppercase", balance !== 0 ? 'text-red-500' : 'text-emerald-500')}>Diferencia: Bs. {formatCurrency(balance)}</div>
-                    <Button type="submit" disabled={isSubmitting || Math.abs(balance) > 0.01} className="h-16 px-12 rounded-2xl bg-primary hover:bg-primary/90 text-slate-900 font-black uppercase italic tracking-widest shadow-2xl shadow-primary/20 transition-all active:scale-95">
+                    <Button type="submit" disabled={isSubmitting || Math.abs(balance) > 0.01 || beneficiaryRows.length === 0} className="h-16 px-12 rounded-2xl bg-primary hover:bg-primary/90 text-slate-900 font-black uppercase italic tracking-widest shadow-2xl shadow-primary/20 transition-all active:scale-95">
                         {isSubmitting ? <Loader2 className="animate-spin mr-2"/> : <Save className="mr-2 h-5 w-5" />} REGISTRAR PAGO Y ASENTAR
                     </Button>
                 </CardFooter>
@@ -646,7 +703,7 @@ function CalculatorComponent({ condoId, onReport }: { condoId: string, onReport:
         if (!condoId) return;
         const q = query(collection(db, "condominios", condoId, ownersCollectionName), where("role", "==", "propietario"));
         return onSnapshot(q, (snapshot) => {
-            setAllOwners(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner)).sort((a,b) => a.name.localeCompare(b.name)));
+            setAllOwners(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner)).filter(o => o.email !== 'vallecondo@gmail.com').sort((a,b) => a.name.localeCompare(b.name)));
         });
     }, [condoId, ownersCollectionName]);
 
