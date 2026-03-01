@@ -15,17 +15,17 @@ import { useToast } from '@/hooks/use-toast';
 import { 
     Search, CheckCircle, XCircle, Eye, MoreHorizontal, 
     Download, Loader2, Calendar as CalendarIcon, Banknote, 
-    UserPlus, CheckCircle2, WalletCards, ArrowLeft, Trash2, 
-    Hash, FileText, Save, Share2, FileDown, UserCheck,
+    UserPlus, CheckCircle2, WalletCards, Trash2, 
+    Hash, FileText, Save, Share2, FileDown,
     Calculator, Minus, Equal, Check, Receipt, X
 } from 'lucide-react';
-import { format, isBefore, startOfMonth, addMonths } from 'date-fns';
+import { format, startOfMonth, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn, compressImage } from '@/lib/utils';
 import { 
     collection, onSnapshot, query, addDoc, serverTimestamp, 
     doc, getDoc, where, getDocs, Timestamp, runTransaction, 
-    updateDoc, deleteDoc, increment, orderBy 
+    updateDoc, increment, orderBy 
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
@@ -70,7 +70,6 @@ type Payment = {
     receiptNumbers?: { [ownerId: string]: string }; 
 };
 
-// ID ACTUALIZADO BANCO DE VENEZUELA
 const BDV_ACCOUNT_ID = "3PBNZdNqO6jbHRJfadT3";
 const CAJA_PRINCIPAL_ID = "CAJA_PRINCIPAL_ID";
 
@@ -109,7 +108,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             if (p.status !== activeTab) return false;
             if (!searchTerm) return true;
             const search = searchTerm.toLowerCase();
-            return p.reference?.toLowerCase().includes(search) || p.beneficiaries?.some(b => b.ownerName.toLowerCase().includes(search));
+            return (p.reference?.toLowerCase().includes(search) || p.beneficiaries?.some(b => b.ownerName?.toLowerCase().includes(search)));
         });
     }, [payments, activeTab, searchTerm]);
 
