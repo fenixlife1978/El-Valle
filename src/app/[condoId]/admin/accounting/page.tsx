@@ -1,15 +1,14 @@
-
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, Timestamp, query, orderBy, doc, serverTimestamp, increment, runTransaction, getDocs, where } from 'firebase/firestore';
-import { RefreshCw, History, Zap, Loader2, BookCopy, AlertCircle } from 'lucide-react';
+import { RefreshCw, History, Zap, Loader2, BookCopy } from 'lucide-react';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -38,7 +37,7 @@ const formatCurrency = (amount: number): string => {
 const months = Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: format(new Date(2000, i), 'MMMM', { locale: es }) }));
 const years = Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear() - i));
 
-// ID DE LA CUENTA BDV MAESTRO
+// ID MAESTRO ACTUALIZADO PARA EFAS CONDOSYS
 const BDV_ACCOUNT_ID = "Hlc0ky0QdnaXIsuf19Od";
 const CAJA_PRINCIPAL_ID = "CAJA_PRINCIPAL_ID";
 
@@ -125,14 +124,30 @@ const AccountingPage = () => {
             const to = endOfMonth(from);
             const monthId = format(from, 'yyyy-MM');
 
-            const paySnap = await getDocs(query(collection(db, 'condominios', workingCondoId, 'payments'), where('status', '==', 'aprobado'), where('paymentDate', '>=', from), where('paymentDate', '<=', to)));
+            // 1. Obtener pagos aprobados en el rango
+            const paySnap = await getDocs(query(
+                collection(db, 'condominios', workingCondoId, 'payments'), 
+                where('status', '==', 'aprobado'), 
+                where('paymentDate', '>=', from), 
+                where('paymentDate', '<=', to)
+            ));
             
+            if (paySnap.empty) throw "no_needed";
+
+            // 2. Obtener transacciones ya vinculadas a pagos para evitar duplicidad
+            const txSnap = await getDocs(query(
+                collection(db, 'condominios', workingCondoId, 'transacciones'), 
+                where('sourcePaymentId', '!=', null)
+            ));
+            const existingPaymentIds = new Set(txSnap.docs.map(d => d.data().sourcePaymentId));
+
+            const missingPayments = paySnap.docs.filter(d => !existingPaymentIds.has(d.id));
+            if (missingPayments.length === 0) throw "no_needed";
+
             let count = 0;
             await runTransaction(db, async (transaction) => {
-                for (const pDoc of paySnap.docs) {
+                for (const pDoc of missingPayments) {
                     const p = pDoc.data();
-                    if (allTransactions.some(tx => tx.sourcePaymentId === pDoc.id)) continue;
-
                     let targetAccountId = "";
                     let targetAccountName = "";
 
@@ -147,9 +162,11 @@ const AccountingPage = () => {
                     
                     if (!targetAccountId) continue;
 
+                    // Actualización Atómica de Saldo
                     const accountRef = doc(db, 'condominios', workingCondoId, 'cuentas', targetAccountId);
                     transaction.update(accountRef, { saldoActual: increment(p.totalAmount) });
 
+                    // Asiento en Libro Diario
                     const newTxRef = doc(collection(db, 'condominios', workingCondoId, 'transacciones'));
                     transaction.set(newTxRef, {
                         monto: p.totalAmount, 
@@ -157,13 +174,14 @@ const AccountingPage = () => {
                         cuentaId: targetAccountId, 
                         nombreCuenta: targetAccountName,
                         descripcion: `SINCRONIZACIÓN: PAGO DE ${p.beneficiaries?.[0]?.ownerName || 'RESIDENTE'}`.toUpperCase(),
-                        referencia: p.reference, 
+                        referencia: p.reference || 'S/R', 
                         fecha: p.paymentDate, 
                         sourcePaymentId: pDoc.id,
                         createdAt: serverTimestamp(), 
                         createdBy: user?.email
                     });
 
+                    // Sincronización de Estadísticas Financieras
                     const statsRef = doc(db, 'condominios', workingCondoId, 'financial_stats', monthId);
                     transaction.set(statsRef, {
                         periodo: monthId,
@@ -175,12 +193,15 @@ const AccountingPage = () => {
                     
                     count++;
                 }
-                if (count === 0) throw "no_needed";
             });
+
             toast({ title: "Sincronización Exitosa", description: `Se asentaron ${count} hitos contables.` });
         } catch (e) {
-            if (e === "no_needed") toast({ title: "Libros al día" });
-            else { console.error(e); toast({ variant: 'destructive', title: "Error en reparación" }); }
+            if (e === "no_needed") toast({ title: "Libros al día", description: "No se encontraron movimientos pendientes de asentar." });
+            else { 
+                console.error(e); 
+                toast({ variant: 'destructive', title: "Error en reparación", description: "Ocurrió un fallo al reconstruir los libros." }); 
+            }
         } finally { setIsSyncing(false); }
     };
 
@@ -192,24 +213,38 @@ const AccountingPage = () => {
     );
 
     return (
-        <div className="space-y-8 animate-in fade-in duration-700 font-montserrat bg-[#1A1D23] min-h-screen p-4 md:p-8 text-white">
+        <div className="space-y-8 animate-in fade-in duration-700 font-montserrat bg-[#1A1D23] min-h-screen p-4 md:p-8 text-white italic">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-10 border-b border-white/5 pb-6">
                 <div>
                     <h2 className="text-4xl font-black text-white uppercase tracking-tighter italic drop-shadow-sm">Libros <span className="text-primary">Contables</span></h2>
                     <div className="h-1.5 w-20 bg-primary mt-2 rounded-full"></div>
                     <p className="text-white/40 font-bold mt-3 text-sm uppercase tracking-wide">Visibilidad total de asientos por cuenta en tiempo real.</p>
                 </div>
-                <Button onClick={handleSyncPeriod} disabled={isSyncing} variant="outline" className="rounded-xl border-primary text-primary font-black uppercase text-[10px] h-12 shadow-sm bg-white/5 hover:bg-white/10">
+                <Button onClick={handleSyncPeriod} disabled={isSyncing} variant="outline" className="rounded-xl border-primary text-primary font-black uppercase text-[10px] h-12 shadow-sm bg-white/5 hover:bg-white/10 italic">
                     {isSyncing ? <Loader2 className="animate-spin mr-2" /> : <Zap className="mr-2 h-4 w-4" />} Reparar Período
                 </Button>
             </div>
             
-            <Card className="rounded-3xl border-none shadow-sm bg-slate-900 border border-white/5">
+            <Card className="rounded-3xl border-none shadow-sm bg-slate-900 border border-white/5 italic">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0">
                     <div><CardTitle className="text-white font-black uppercase text-sm tracking-widest italic">Período Fiscal</CardTitle></div>
                     <div className="flex gap-2">
-                        <Select value={selectedMonth} onValueChange={setSelectedMonth}><SelectTrigger className="w-36 rounded-xl bg-slate-800 text-white border-none font-bold"><SelectValue /></SelectTrigger><SelectContent className="bg-slate-900 border-white/10 text-white">{months.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent></Select>
-                        <Select value={selectedYear} onValueChange={setSelectedYear}><SelectTrigger className="w-24 rounded-xl bg-slate-800 text-white border-none font-bold"><SelectValue /></SelectTrigger><SelectContent className="bg-slate-900 border-white/10 text-white">{years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent></Select>
+                        <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                            <SelectTrigger className="w-36 rounded-xl bg-slate-800 text-white border-none font-bold italic">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="bg-slate-900 border-white/10 text-white italic">
+                                {months.map(m => <SelectItem key={m.value} value={m.value} className="italic">{m.label.toUpperCase()}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                        <Select value={selectedYear} onValueChange={setSelectedYear}>
+                            <SelectTrigger className="w-24 rounded-xl bg-slate-800 text-white border-none font-bold italic">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="bg-slate-900 border-white/10 text-white italic">
+                                {years.map(y => <SelectItem key={y} value={y} className="italic">{y}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
                     </div>
                 </CardHeader>
             </Card>
@@ -236,9 +271,9 @@ const AccountingPage = () => {
                                     {generalLedger.map(acc => (
                                         <TableRow key={acc.accountId} className="font-medium hover:bg-white/5 transition-colors border-white/5">
                                             <TableCell className="font-black px-8 py-6 uppercase text-xs text-white italic">{acc.accountName}</TableCell>
-                                            <TableCell className="text-right text-slate-500 font-bold">Bs. {formatCurrency(acc.startBalance)}</TableCell>
-                                            <TableCell className="text-right text-emerald-500 font-black">+{formatCurrency(acc.totalCredit)}</TableCell>
-                                            <TableCell className="text-right text-red-500 font-black">-{formatCurrency(acc.totalDebit)}</TableCell>
+                                            <TableCell className="text-right text-slate-500 font-bold italic">Bs. {formatCurrency(acc.startBalance)}</TableCell>
+                                            <TableCell className="text-right text-emerald-500 font-black italic">+{formatCurrency(acc.totalCredit)}</TableCell>
+                                            <TableCell className="text-right text-red-500 font-black italic">-{formatCurrency(acc.totalDebit)}</TableCell>
                                             <TableCell className="text-right font-black italic text-lg pr-8 text-white">Bs. {formatCurrency(acc.endBalance)}</TableCell>
                                         </TableRow>
                                     ))}
@@ -261,10 +296,10 @@ const AccountingPage = () => {
                                             <TableRow className="bg-white/5 text-[10px] font-black text-white/30 italic"><TableCell colSpan={4} className="px-8 py-4 uppercase">SALDO INICIAL AL 01 DE ESTE MES</TableCell><TableCell className="text-right pr-8">Bs. {formatCurrency(startBalance)}</TableCell></TableRow>
                                             {transactions.map((tx, i) => (
                                                 <TableRow key={i} className="hover:bg-white/5 transition-colors border-white/5">
-                                                    <TableCell className="px-8 py-5 font-bold text-white/40 text-xs">{format(tx.date, 'dd/MM/yy')}</TableCell>
+                                                    <TableCell className="px-8 py-5 font-bold text-white/40 text-xs italic">{format(tx.date, 'dd/MM/yy')}</TableCell>
                                                     <TableCell className="font-black text-white uppercase italic text-xs leading-tight">{tx.descripcion}</TableCell>
-                                                    <TableCell className="text-right text-emerald-500 font-black">{tx.credit ? `+${formatCurrency(tx.credit)}` : '-'}</TableCell>
-                                                    <TableCell className="text-right text-red-500 font-black">{tx.debit ? `-${formatCurrency(tx.debit)}` : '-'}</TableCell>
+                                                    <TableCell className="text-right text-emerald-500 font-black italic">{tx.credit ? `+${formatCurrency(tx.credit)}` : '-'}</TableCell>
+                                                    <TableCell className="text-right text-red-500 font-black italic">{tx.debit ? `-${formatCurrency(tx.debit)}` : '-'}</TableCell>
                                                     <TableCell className="text-right font-black pr-8 text-white italic">Bs. {formatCurrency(tx.balance)}</TableCell>
                                                 </TableRow>
                                             ))}
