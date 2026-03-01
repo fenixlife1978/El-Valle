@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFoo
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Save, Download, Landmark, Coins, Wallet } from "lucide-react";
+import { Loader2, Save, Download, Landmark, Coins, Wallet, Share2, FileText } from "lucide-react";
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Label } from '@/components/ui/label';
@@ -39,6 +39,8 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
 
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [exporting, setExporting] = useState(false);
+    const [sharing, setSharing] = useState(false);
     const [selectedMonth, setSelectedMonth] = useState(String(new Date().getMonth() + 1));
     const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
 
@@ -117,6 +119,85 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
         } catch (e) { toast({ variant: 'destructive', title: "Error" }); } finally { setSaving(false); }
     };
 
+    const generatePdfBlob = async () => {
+        const { default: jsPDF } = await import('jspdf');
+        const { default: autoTable } = await import('jspdf-autotable');
+        const doc = new jsPDF();
+        const info = authCompanyInfo || { name: 'EFAS CondoSys', rif: 'J-00000000-0' };
+        const monthLabel = months.find(m => m.value === selectedMonth)?.label.toUpperCase();
+        
+        // Header Estilo Premium
+        doc.setFillColor(15, 23, 42); doc.rect(0, 0, 210, 30, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(14).setFont('helvetica', 'bold').text(info.name.toUpperCase(), 14, 15);
+        doc.setFontSize(8).text(`RIF: ${info.rif}`, 14, 22);
+        doc.setFontSize(10).text("BALANCE FINANCIERO", 196, 18, { align: 'right' });
+        
+        doc.setTextColor(0, 0, 0);
+        doc.setFontSize(12).text(`Período: ${monthLabel} ${selectedYear}`, 14, 45);
+
+        // Tabla de Disponibilidad Real
+        autoTable(doc, {
+            startY: 55,
+            head: [['CONCEPTO DE TESORERÍA', 'MONTO DISPONIBLE (BS.)']],
+            body: [
+                ['BANCO (DISPONIBILIDAD REAL)', formatCurrency(realBalances.banco)],
+                ['CAJA PRINCIPAL (DISPONIBILIDAD REAL)', formatCurrency(realBalances.cajaPrincipal)],
+                ['CAJA CHICA', formatCurrency(realBalances.cajaChica)]
+            ],
+            headStyles: { fillColor: [15, 23, 42] },
+            styles: { fontSize: 9, cellPadding: 4 }
+        });
+
+        // Tabla de Egresos Detallados
+        autoTable(doc, {
+            startY: (doc as any).lastAutoTable.finalY + 10,
+            head: [['CONCEPTO / DESCRIPCIÓN', 'CUENTA DE PAGO', 'MONTO (BS.)']],
+            body: egresosTesorería.map(e => [e.concepto.toUpperCase(), e.cuenta.toUpperCase(), formatCurrency(e.monto)]),
+            headStyles: { fillColor: [220, 38, 38] },
+            styles: { fontSize: 8, cellPadding: 3 },
+            foot: [['TOTAL EGRESOS DEL PERIODO', '', formatCurrency(totalEgresosMes)]],
+            footStyles: { fillColor: [220, 38, 38], textColor: 255, fontStyle: 'bold' }
+        });
+
+        const finalY = (doc as any).lastAutoTable.finalY + 10;
+        doc.setFontSize(9).setFont('helvetica', 'bold').text("NOTAS Y OBSERVACIONES:", 14, finalY);
+        doc.setFont('helvetica', 'normal').text(notas || 'Sin notas adicionales.', 14, finalY + 5, { maxWidth: 180 });
+
+        return { doc, filename: `Balance_${selectedYear}_${selectedMonth}.pdf` };
+    };
+
+    const handleExportPdf = async () => {
+        setExporting(true);
+        try {
+            const { doc, filename } = await generatePdfBlob();
+            doc.save(filename);
+            toast({ title: "Descarga Iniciada", description: "El reporte se está guardando en su dispositivo." });
+        } catch (e) {
+            toast({ variant: 'destructive', title: "Error en exportación" });
+        } finally { setExporting(false); }
+    };
+
+    const handleSharePdf = async () => {
+        setSharing(true);
+        try {
+            const { doc, filename } = await generatePdfBlob();
+            const blob = doc.output('blob');
+            if (navigator.share) {
+                const file = new File([blob], filename, { type: 'application/pdf' });
+                await navigator.share({
+                    files: [file],
+                    title: 'Balance Financiero',
+                    text: `Reporte de balance correspondiente a ${months.find(m=>m.value === selectedMonth)?.label} ${selectedYear}`
+                });
+            } else {
+                toast({ title: "No compatible", description: "Su navegador no soporta la función de compartir archivos directamente." });
+            }
+        } catch (e) {
+            console.error(e);
+        } finally { setSharing(false); }
+    };
+
     return (
         <div className="max-w-5xl mx-auto p-6 space-y-8 bg-[#1A1D23] min-h-screen font-montserrat text-white italic">
             <div className="flex flex-col md:flex-row justify-between items-end gap-4 mb-10">
@@ -124,9 +205,15 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                     <h1 className="text-4xl font-black uppercase italic tracking-tighter text-white">Balance <span className="text-primary">Financiero</span></h1>
                     <p className="text-[10px] font-black uppercase text-white/40 tracking-[0.3em] mt-2 italic">Integridad Contable EFAS</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                     <Select value={selectedMonth} onValueChange={setSelectedMonth}><SelectTrigger className="w-36 bg-slate-900 border-white/5 font-black uppercase text-[10px] rounded-xl"><SelectValue /></SelectTrigger><SelectContent className="bg-slate-900 border-white/10 text-white">{months.map(m => (<SelectItem key={m.value} value={m.value} className="font-black uppercase text-[10px]">{m.label}</SelectItem>))}</SelectContent></Select>
                     <Input className="w-24 bg-slate-900 border-white/5 font-black rounded-xl" type="number" value={selectedYear} onChange={e => setSelectedYear(e.target.value)} />
+                    <Button onClick={handleExportPdf} disabled={exporting} variant="outline" className="rounded-xl border-white/10 text-white h-10 font-black uppercase text-[10px] bg-white/5 hover:bg-white/10 italic">
+                        {exporting ? <Loader2 className="animate-spin" /> : <Download className="mr-2 h-4 w-4" />} PDF
+                    </Button>
+                    <Button onClick={handleSharePdf} disabled={sharing} variant="outline" className="rounded-xl border-white/10 text-white h-10 font-black uppercase text-[10px] bg-white/5 hover:bg-white/10 italic">
+                        {sharing ? <Loader2 className="animate-spin" /> : <Share2 className="mr-2 h-4 w-4" />} Compartir
+                    </Button>
                 </div>
             </div>
 
