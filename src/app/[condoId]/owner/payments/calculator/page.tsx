@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, use } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Loader2, Info, Calculator, Minus, Equal, Check, Receipt, ArrowLeft } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { collection, query, onSnapshot, where, doc, Timestamp, addDoc } from 'firebase/firestore';
+import { collection, query, onSnapshot, where, doc, Timestamp, addDoc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -35,8 +35,9 @@ const formatToTwoDecimals = (num: number) => {
     return num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-export default function OwnerPaymentCalculatorPage({ params }: { params: { condoId: string } }) {
-    const workingCondoId = params.condoId;
+export default function OwnerPaymentCalculatorPage({ params }: { params: Promise<{ condoId: string }> }) {
+    const resolvedParams = use(params);
+    const workingCondoId = resolvedParams.condoId;
     const { user, ownerData, loading: authLoading } = useAuth();
     const router = useRouter();
     
@@ -199,7 +200,7 @@ export default function OwnerPaymentCalculatorPage({ params }: { params: { condo
                                     {pendingDebts.length === 0 ? (
                                         <TableRow>
                                             <TableCell colSpan={5} className="h-24 text-center">
-                                                <Info className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                                                <span className="h-8 w-8 mx-auto mb-2 text-muted-foreground"><Info size={32}/></span>
                                                 No tiene deudas pendientes.
                                             </TableCell>
                                         </TableRow>

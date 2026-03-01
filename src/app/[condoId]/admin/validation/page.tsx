@@ -1,7 +1,6 @@
-
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, use } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { db } from '@/lib/firebase';
 import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
@@ -12,8 +11,9 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, UserCheck, Building, ShieldCheck } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
-export default function ValidationPage({ params }: { params: { condoId: string } }) {
-    const workingCondoId = params.condoId;
+export default function ValidationPage({ params }: { params: Promise<{ condoId: string }> }) {
+    const resolvedParams = use(params);
+    const workingCondoId = resolvedParams.condoId;
     const { user } = useAuth();
     const [pendingUsers, setPendingUsers] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);

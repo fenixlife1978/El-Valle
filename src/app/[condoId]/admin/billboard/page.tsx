@@ -1,7 +1,6 @@
-
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, use } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -18,8 +17,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 
-export default function BillboardPage({ params }: { params: { condoId: string } }) {
-  const workingCondoId = params.condoId;
+export default function BillboardPage({ params }: { params: Promise<{ condoId: string }> }) {
+  const resolvedParams = use(params);
+  const workingCondoId = resolvedParams.condoId;
   const { toast } = useToast();
   const { requestAuthorization } = useAuthorization();
   

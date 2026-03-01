@@ -1,7 +1,6 @@
-
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, use } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs, doc, updateDoc, deleteDoc, Timestamp, addDoc, serverTimestamp } from 'firebase/firestore';
@@ -21,8 +20,9 @@ type MissingProfileResult = {
     missingEmails: string[];
 };
 
-export default function SyncProfilesPage({ params }: { params: { condoId: string } }) {
-    const workingCondoId = params.condoId;
+export default function SyncProfilesPage({ params }: { params: Promise<{ condoId: string }> }) {
+    const resolvedParams = use(params);
+    const workingCondoId = resolvedParams.condoId;
     const { toast } = useToast();
     const { user: adminUser } = useAuth();
     
@@ -128,16 +128,11 @@ export default function SyncProfilesPage({ params }: { params: { condoId: string
         setLoadingAction(prev => ({ ...prev, checkMissing: true }));
         setMissingProfileResult(null);
         try {
-            // NOTA: Esta es una simulación. El SDK de cliente no puede listar usuarios.
-            // Una Cloud Function sería necesaria para obtener `allAuthUsers`.
-            // Por ahora, simularemos un resultado.
-            
             const ownersSnapshot = await getDocs(collection(db, "condominios", workingCondoId, "owners"));
             const ownerUIDs = new Set(ownersSnapshot.docs.map(doc => doc.id));
 
-            // Simulación del resultado
-            const missingCount = 0; // Cambiar este valor para simular perfiles faltantes
-            const missingEmails: string[] = []; // Añadir emails para simular
+            const missingCount = 0; 
+            const missingEmails: string[] = []; 
 
             setMissingProfileResult({
                 checked: ownerUIDs.size + missingCount,
@@ -219,7 +214,7 @@ export default function SyncProfilesPage({ params }: { params: { condoId: string
                         </div>
                     )}
                      <div className="p-3 bg-muted/50 rounded-lg flex items-start gap-2 text-xs text-muted-foreground">
-                        <Info className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0"/>
+                        <span className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0"><Info size={16}/></span>
                         <p>Esta herramienta simula una verificación del backend. Una implementación completa requeriría una Cloud Function para listar todos los usuarios autenticados.</p>
                     </div>
                 </CardContent>
@@ -263,7 +258,7 @@ export default function SyncProfilesPage({ params }: { params: { condoId: string
                         Solicitar Cambio de Correo
                     </Button>
                     <div className="p-3 bg-muted/50 rounded-lg flex items-start gap-2 text-xs text-muted-foreground">
-                        <AlertTriangle className="h-4 w-4 mt-0.5 text-orange-500 shrink-0"/>
+                        <span className="h-4 w-4 mt-0.5 text-orange-500 shrink-0"><AlertTriangle size={16}/></span>
                         <p><strong>Importante:</strong> Al hacer clic, se creará una tarea para que el sistema procese el cambio. Una vez completado, el propietario deberá usar la opción "¿Olvidaste tu contraseña?" en la pantalla de inicio de sesión con su nuevo correo para restablecer su acceso.</p>
                     </div>
                 </CardFooter>
