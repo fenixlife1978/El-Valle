@@ -63,11 +63,11 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
     useEffect(() => {
         if (!workingCondoId) return;
 
-        // --- ESCUCHA DE SALDOS REALES ATÓMICOS ---
+        // ESCUCHA DE SALDOS REALES ATÓMICOS POR ID FIJO
         const unsubCuentas = onSnapshot(collection(db, 'condominios', workingCondoId, 'cuentas'), (snap) => {
             const accounts = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
             
-            // BUSCANDO POR ID ESPECÍFICO RdiTtY9ojCuYPRNvB7C3
+            // BANCO DE VENEZUELA (RdiTtY9ojCuYPRNvB7C3)
             const bdv = accounts.find(a => a.id === 'RdiTtY9ojCuYPRNvB7C3');
             const cp = accounts.find(a => a.id === 'CAJA_PRINCIPAL_ID' || a.nombre?.toUpperCase().trim() === 'CAJA PRINCIPAL');
             const cc = accounts.find(a => a.nombre?.toUpperCase().trim() === 'CAJA CHICA');
@@ -94,7 +94,6 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 const toDate = endOfMonth(fromDate);
                 const monthId = format(fromDate, 'yyyy-MM');
 
-                // 1. CARGAR DATOS DE HITO MENSUAL (financial_stats)
                 const statsRef = doc(db, 'condominios', workingCondoId, 'financial_stats', monthId);
                 const statsSnap = await getDoc(statsRef);
                 if (statsSnap.exists()) {
@@ -102,7 +101,6 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                     setIngresosOrdinariosBanco(s.saldoBancarioReal || 0);
                     setIngresosOrdinariosEfectivo(s.saldoCajaReal || 0);
                 } else {
-                    // Fallback a conteo manual si no hay hito procesado
                     const pQuery = query(
                         collection(db, 'condominios', workingCondoId, 'payments'),
                         where('paymentDate', '>=', fromDate),
@@ -122,7 +120,6 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                     setIngresosOrdinariosEfectivo(totalEfectivo);
                 }
 
-                // 2. EGRESOS REALES REGISTRADOS
                 const tQuery = query(
                     collection(db, 'condominios', workingCondoId, 'transacciones'), 
                     where('fecha', '>=', fromDate), 
@@ -138,7 +135,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                 })));
 
             } catch (error) { 
-                console.error("Error cargando datos del balance:", error); 
+                console.error("Error balance:", error); 
             } finally { 
                 setLoading(false); 
             }
@@ -147,9 +144,6 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
     }, [selectedMonth, selectedYear, workingCondoId]);
 
     const totalEgresosMes = useMemo(() => egresosTesorería.reduce((sum, e) => sum + e.monto, 0), [egresosTesorería]);
-    
-    const totalEntradas = saldoAnteriorBanco + ingresosOrdinariosBanco + ingresosOrdinariosEfectivo;
-    const saldoFinalCalculado = totalEntradas - totalEgresosMes;
 
     const handleSave = async () => {
         if (!workingCondoId) return;
@@ -221,7 +215,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
     };
 
     return (
-        <div className="max-w-5xl mx-auto p-6 space-y-6 bg-background min-h-screen font-montserrat text-white">
+        <div className="max-w-5xl mx-auto p-6 space-y-6 bg-[#1A1D23] min-h-screen font-montserrat text-white">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-4">
                 <div>
                     <h1 className="text-3xl font-black uppercase italic tracking-tighter text-white leading-none">

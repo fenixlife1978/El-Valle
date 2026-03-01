@@ -70,6 +70,7 @@ type Payment = {
     receiptNumbers?: { [ownerId: string]: string }; 
 };
 
+// ID EXCLUSIVO BANCO DE VENEZUELA
 const BDV_ACCOUNT_ID = "RdiTtY9ojCuYPRNvB7C3";
 const CAJA_PRINCIPAL_ID = "CAJA_PRINCIPAL_ID";
 

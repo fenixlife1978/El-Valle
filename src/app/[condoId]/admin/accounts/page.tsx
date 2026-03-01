@@ -285,14 +285,14 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
     };
 
     if (loading) return (
-        <div className="flex h-[70vh] flex-col items-center justify-center gap-4 bg-background">
+        <div className="flex h-[70vh] flex-col items-center justify-center gap-4 bg-[#1A1D23]">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
             <p className="text-[10px] font-black uppercase tracking-[0.4em] text-white/30 animate-pulse italic">EFAS CONDOSYS: Sincronizando Tesorería</p>
         </div>
     );
 
     return (
-        <div className="space-y-8 p-4 md:p-8 min-h-screen bg-background font-montserrat">
+        <div className="space-y-8 p-4 md:p-8 min-h-screen bg-[#1A1D23] font-montserrat">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 border-b border-white/5 pb-6">
                 <div>
                     <h2 className="text-4xl font-black text-white uppercase italic tracking-tighter leading-none">Cuentas y <span className="text-primary">Tesorería</span></h2>
@@ -397,7 +397,6 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                 </CardContent>
             </Card>
 
-            {/* Diálogos con Estilo EFAS */}
             <Dialog open={isAccountDialogOpen} onOpenChange={setIsAccountDialogOpen}>
                 <DialogContent className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white">
                     <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-white">Nueva <span className="text-primary">Cuenta</span></DialogTitle></DialogHeader>
@@ -431,7 +430,6 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                 </DialogContent>
             </Dialog>
 
-            {/* Diálogo de Traslado */}
             <Dialog open={isTransferDialogOpen} onOpenChange={setIsTransferDialogOpen}>
                 <DialogContent className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white">
                     <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-white">Trasladar <span className="text-primary">Fondos</span></DialogTitle></DialogHeader>
@@ -447,7 +445,6 @@ export default function AccountsPage({ params }: { params: Promise<{ condoId: st
                 </DialogContent>
             </Dialog>
 
-            {/* Confirmación de Eliminación de Cuenta */}
             <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
                 <DialogContent className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white">
                     <DialogHeader>
