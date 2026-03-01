@@ -46,6 +46,11 @@ import {
 import { generatePaymentReceipt } from '@/lib/pdf-generator';
 import Decimal from 'decimal.js';
 
+const monthsLocale: { [key: number]: string } = {
+    1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril', 5: 'Mayo', 6: 'Junio',
+    7: 'Julio', 8: 'Agosto', 9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre'
+};
+
 const formatCurrency = (num: number) => {
     if (typeof num !== 'number' || isNaN(num)) return '0,00';
     return num.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -54,6 +59,7 @@ const formatCurrency = (num: number) => {
 type Owner = { id: string; name: string; properties: { street: string, house: string }[]; balance?: number; role?: string; email?: string; };
 type BeneficiaryRow = { id: string; owner: Owner | null; searchTerm: string; amount: string; selectedProperty: { street: string, house: string } | null; };
 type PaymentMethod = 'movil' | 'transferencia' | 'efectivo_bs' | '';
+type LiquidatedConcept = { ownerId: string; description: string; amountUSD: number; period: string };
 type Payment = { 
     id: string; 
     beneficiaries: { ownerId: string; ownerName: string; amount: number; street?: string; house?: string; }[]; 
@@ -68,14 +74,15 @@ type Payment = {
     status: 'pendiente' | 'aprobado' | 'rechazado'; 
     receiptUrl?: string; 
     observations?: string; 
-    receiptNumbers?: { [ownerId: string]: string }; 
+    receiptNumbers?: { [ownerId: string]: string };
+    liquidatedConcepts?: LiquidatedConcept[];
 };
 
 const BDV_ACCOUNT_ID = "3PBNZdNqO6jbHRJfadT3";
 const CAJA_PRINCIPAL_ID = "CAJA_PRINCIPAL_ID";
 
 function VerificationComponent({ condoId }: { condoId: string }) {
-    const { user, companyInfo } = useAuth();
+    const { user, companyInfo, condoFee } = useAuth();
     const { requestAuthorization } = useAuthorization();
     const { toast } = useToast();
 
@@ -124,6 +131,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
 
                 await runTransaction(db, async (transaction) => {
                     const receiptNumbers: { [ownerId: string]: string } = {};
+                    const liquidatedConcepts: LiquidatedConcept[] = [];
 
                     for (const beneficiary of payment.beneficiaries) {
                         const ownerRef = doc(db, 'condominios', condoId, ownersCollectionName, beneficiary.ownerId);
@@ -132,6 +140,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
 
                         let funds = new Decimal(beneficiary.amount).plus(new Decimal(ownerSnap.data().balance || 0));
                         
+                        // 1. Liquidar deudas pendientes en orden cronológico
                         const debtsSnap = await getDocs(query(
                             collection(db, 'condominios', condoId, 'debts'),
                             where('ownerId', '==', beneficiary.ownerId),
@@ -152,7 +161,63 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                                     paymentDate: payment.paymentDate,
                                     paymentId: payment.id
                                 });
+                                liquidatedConcepts.push({
+                                    ownerId: beneficiary.ownerId,
+                                    description: debt.description,
+                                    amountUSD: debt.amountUSD,
+                                    period: `${monthsLocale[debt.month]} ${debt.year}`
+                                });
                             } else break;
+                        }
+
+                        // 2. Liquidar meses por adelantado si queda saldo y está al día
+                        const cFee = (condoFee || 25);
+                        const advanceAmountBs = new Decimal(cFee).times(payment.exchangeRate);
+                        
+                        if (funds.gte(advanceAmountBs)) {
+                            // Buscar el último mes registrado (ya sea pagado o pendiente)
+                            const allDebtsSnap = await getDocs(query(
+                                collection(db, 'condominios', condoId, 'debts'),
+                                where('ownerId', '==', beneficiary.ownerId)
+                            ));
+                            const allDebtsSorted = allDebtsSnap.docs
+                                .map(d => d.data())
+                                .sort((a, b) => b.year - a.year || b.month - a.month);
+                            
+                            let nextMonthDate = addMonths(new Date(), 1);
+                            if (allDebtsSorted.length > 0) {
+                                nextMonthDate = startOfMonth(new Date(allDebtsSorted[0].year, allDebtsSorted[0].month));
+                            }
+
+                            while (funds.gte(advanceAmountBs)) {
+                                const year = nextMonthDate.getFullYear();
+                                const month = nextMonthDate.getMonth() + 1;
+                                
+                                const newDebtRef = doc(collection(db, 'condominios', condoId, 'debts'));
+                                transaction.set(newDebtRef, {
+                                    ownerId: beneficiary.ownerId,
+                                    property: { street: beneficiary.street || '', house: beneficiary.house || '' },
+                                    year,
+                                    month,
+                                    amountUSD: cFee,
+                                    description: 'Cuota de Condominio (Adelantado)',
+                                    status: 'paid',
+                                    paidAmountUSD: cFee,
+                                    paymentDate: payment.paymentDate,
+                                    paymentId: payment.id,
+                                    published: true
+                                });
+
+                                liquidatedConcepts.push({
+                                    ownerId: beneficiary.ownerId,
+                                    description: 'CUOTA ADELANTADA',
+                                    amountUSD: cFee,
+                                    period: `${monthsLocale[month]} ${year}`
+                                });
+
+                                funds = funds.minus(advanceAmountBs);
+                                nextMonthDate = addMonths(nextMonthDate, 1);
+                            }
                         }
 
                         receiptNumbers[beneficiary.ownerId] = `REC-${Date.now().toString().substring(6)}-${beneficiary.ownerId.slice(-4)}`.toUpperCase();
@@ -188,6 +253,7 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                     transaction.update(doc(db, 'condominios', condoId, 'payments', payment.id), { 
                         status: 'aprobado', 
                         receiptNumbers, 
+                        liquidatedConcepts,
                         observations: 'PAGO AUDITADO Y LIQUIDADO CRONOLÓGICAMENTE.' 
                     });
                 });
@@ -404,26 +470,44 @@ function VerificationComponent({ condoId }: { condoId: string }) {
             </CardContent>
 
             <Dialog open={!!selectedPayment} onOpenChange={() => setSelectedPayment(null)}>
-                <DialogContent className="max-w-2xl rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white font-montserrat">
+                <DialogContent className="max-w-2xl rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white font-montserrat max-h-[90vh] overflow-y-auto">
                     <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter">Detalle del <span className="text-primary">Reporte</span></DialogTitle></DialogHeader>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 py-6">
                         <div className="space-y-6">
                             <div className="bg-slate-800 p-6 rounded-3xl border border-white/5">
-                                <p className="text-[10px] font-black uppercase text-slate-500 mb-4 tracking-widest">Asignación de Fondos</p>
+                                <p className="text-[10px] font-black uppercase text-slate-500 mb-4 tracking-widest">Distribución de Ingreso</p>
                                 {selectedPayment?.beneficiaries.map((b, i) => (
                                     <div key={i} className="flex justify-between items-center py-3 border-b border-white/5 last:border-0">
                                         <div className="flex flex-col"><span className="font-black text-white text-xs uppercase italic">{b.ownerName}</span><span className="text-[9px] font-bold text-slate-500 uppercase">{b.street} {b.house}</span></div>
                                         <span className="font-black text-primary">Bs. {formatCurrency(b.amount)}</span>
                                     </div>
                                 ))}
-                                <div className="mt-6 pt-6 border-t border-white/10 flex justify-between items-center"><span className="text-[10px] font-black uppercase text-white">Total:</span><span className="text-2xl font-black italic">Bs. {formatCurrency(selectedPayment?.totalAmount || 0)}</span></div>
+                                <div className="mt-6 pt-6 border-t border-white/10 flex justify-between items-center"><span className="text-[10px] font-black uppercase text-white">Total Reportado:</span><span className="text-2xl font-black italic">Bs. {formatCurrency(selectedPayment?.totalAmount || 0)}</span></div>
                             </div>
+
+                            {selectedPayment?.status === 'aprobado' && selectedPayment?.liquidatedConcepts && (
+                                <div className="bg-slate-800 p-6 rounded-3xl border border-white/5 animate-in slide-in-from-top-4 duration-500">
+                                    <p className="text-[10px] font-black uppercase text-emerald-500 mb-4 tracking-widest">Conceptos Computados</p>
+                                    <div className="space-y-3">
+                                        {selectedPayment.liquidatedConcepts.map((concept, idx) => (
+                                            <div key={idx} className="flex justify-between items-start gap-4 text-[10px]">
+                                                <div className="flex flex-col">
+                                                    <span className="font-black text-white uppercase italic">{concept.period}</span>
+                                                    <span className="font-bold text-slate-500 uppercase">{concept.description}</span>
+                                                </div>
+                                                <span className="font-black text-emerald-400 italic">${concept.amountUSD.toFixed(2)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
                             {selectedPayment?.status === 'pendiente' && (
                                 <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500 ml-2">Motivo Rechazo</Label><Textarea value={rejectionReason} onChange={e => setRejectionReason(e.target.value)} className="rounded-2xl bg-slate-800 border-none text-white font-bold" /></div>
                             )}
                         </div>
                         <div className="relative aspect-[3/4] bg-slate-800 rounded-3xl overflow-hidden border border-white/5">
-                            {selectedPayment?.receiptUrl ? (<Image src={selectedPayment.receiptUrl} alt="Comprobante" fill className="object-contain p-2" />) : (<div className="flex h-full items-center justify-center text-slate-600 font-black uppercase italic text-xs">Sin imagen</div>)}
+                            {selectedPayment?.receiptUrl ? (<Image src={selectedPayment.receiptUrl} alt="Comprobante" fill className="object-contain p-2" />) : (<div className="flex h-full items-center justify-center text-slate-600 font-black uppercase italic text-xs">Sin imagen adjunta</div>)}
                         </div>
                     </div>
                     {selectedPayment?.status === 'pendiente' && (
@@ -469,6 +553,7 @@ function ReportPaymentComponent() {
         const q = query(collection(db, "condominios", condoId, ownersCollectionName), where("role", "==", "propietario"));
         return onSnapshot(q, (snapshot) => {
             const ownersData: Owner[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Owner));
+            // Filtro Maestro: Excluir Super Admin y asegurar campo vacío inicial
             setAllOwners(ownersData.filter(o => o.email !== 'vallecondo@gmail.com').sort((a, b) => (a.name || '').localeCompare(b.name || '')));
         });
     }, [condoId]);
