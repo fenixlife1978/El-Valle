@@ -38,7 +38,7 @@ const formatCurrency = (amount: number): string => {
 const months = Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: format(new Date(2000, i), 'MMMM', { locale: es }) }));
 const years = Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear() - i));
 
-// ID DE LA CUENTA BDV ACTUALIZADO
+// ID DE LA CUENTA BDV MAESTRO
 const BDV_ACCOUNT_ID = "Hlc0ky0QdnaXIsuf19Od";
 const CAJA_PRINCIPAL_ID = "CAJA_PRINCIPAL_ID";
 

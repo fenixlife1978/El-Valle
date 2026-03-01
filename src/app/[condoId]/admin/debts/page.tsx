@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -10,16 +10,17 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PlusCircle, MoreHorizontal, Edit, Trash2, Loader2, Info, ArrowLeft, Search, WalletCards, Calculator, Minus, Equal, FileDown, FileCog, CalendarPlus, Building, RefreshCw } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, Edit, Trash2, Loader2, Search, WalletCards, ArrowLeft, Building, RefreshCw, CalendarPlus, Save, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { collection, query, onSnapshot, where, doc, getDoc, writeBatch, updateDoc, deleteDoc, runTransaction, Timestamp, getDocs, addDoc, orderBy, setDoc, limit, deleteField } from 'firebase/firestore';
+import { collection, query, onSnapshot, where, doc, getDoc, writeBatch, updateDoc, deleteDoc, runTransaction, Timestamp, getDocs, addDoc, orderBy, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Badge } from '@/components/ui/badge';
-import { differenceInCalendarMonths, format, addMonths, startOfMonth, isBefore } from 'date-fns';
+import { format, startOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import Decimal from 'decimal.js';
 import { useAuth } from '@/hooks/use-auth';
+import { useAuthorization } from '@/hooks/use-authorization';
 
 type Owner = { id: string; name: string; balance: number; pendingDebtUSD: number; properties?: { street: string, house: string }[]; role?: string; };
 type Property = { street: string; house: string; };
@@ -46,6 +47,7 @@ const getSortKeys = (owner: Owner) => {
 
 export default function DebtManagementPage() {
     const { user: currentUser, activeCondoId } = useAuth();
+    const { requestAuthorization } = useAuthorization();
     const workingCondoId = activeCondoId;
 
     const [view, setView] = useState<'list' | 'detail'>('list');
@@ -60,6 +62,13 @@ export default function DebtManagementPage() {
     const [selectedOwnerDebts, setSelectedOwnerDebts] = useState<Debt[]>([]);
     const [loadingDebts, setLoadingDebts] = useState(false);
     
+    // Estados para Edición y Eliminación
+    const [isEditDialogOpen, setIsEditDialog] = useState(false);
+    const [isDeleteDialogOpen, setIsDeleteDialog] = useState(false);
+    const [editingDebt, setEditingDebt] = useState<Debt | null>(null);
+    const [editForm, setEditForm] = useState({ description: '', amountUSD: '', month: '', year: '' });
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
     const { toast } = useToast();
 
     useEffect(() => {
@@ -102,58 +111,107 @@ export default function DebtManagementPage() {
 
     const handleReconcileAll = async () => {
         if (!workingCondoId || activeRate <= 0) return;
-        setIsReconciling(true);
-        const ownersWithBalance = owners.filter(o => o.balance > 0);
-        const ownersCol = workingCondoId === 'condo_01' ? 'owners' : 'propietarios';
+        requestAuthorization(async () => {
+            setIsReconciling(true);
+            const ownersWithBalance = owners.filter(o => o.balance > 0);
+            const ownersCol = workingCondoId === 'condo_01' ? 'owners' : 'propietarios';
 
-        for (const owner of ownersWithBalance) {
-            try {
-                await runTransaction(db, async (transaction) => {
-                    const ownerRef = doc(db, 'condominios', workingCondoId, ownersCol, owner.id);
-                    const ownerSnap = await transaction.get(ownerRef);
-                    let balance = new Decimal(ownerSnap.data()?.balance || 0);
+            for (const owner of ownersWithBalance) {
+                try {
+                    await runTransaction(db, async (transaction) => {
+                        const ownerRef = doc(db, 'condominios', workingCondoId, ownersCol, owner.id);
+                        const ownerSnap = await transaction.get(ownerRef);
+                        let balance = new Decimal(ownerSnap.data()?.balance || 0);
 
-                    const debtsSnap = await getDocs(query(collection(db, 'condominios', workingCondoId, 'debts'), where('ownerId', '==', owner.id), where('status', 'in', ['pending', 'vencida'])));
-                    const pendingDebts = debtsSnap.docs.map(d => ({ id: d.id, ref: d.ref, ...d.data() } as any)).sort((a, b) => a.year - b.year || a.month - b.month);
+                        const debtsSnap = await getDocs(query(collection(db, 'condominios', workingCondoId, 'debts'), where('ownerId', '==', owner.id), where('status', 'in', ['pending', 'vencida'])));
+                        const pendingDebts = debtsSnap.docs.map(d => ({ id: d.id, ref: d.ref, ...d.data() } as any)).sort((a, b) => a.year - b.year || a.month - b.month);
 
-                    for (const debt of pendingDebts) {
-                        const debtBs = new Decimal(debt.amountUSD).times(new Decimal(activeRate));
-                        if (balance.gte(debtBs)) {
-                            balance = balance.minus(debtBs);
-                            transaction.update(debt.ref, { status: 'paid', paidAmountUSD: debt.amountUSD, paymentDate: Timestamp.now() });
-                        } else break;
-                    }
-                    transaction.update(ownerRef, { balance: balance.toDecimalPlaces(2).toNumber() });
-                });
-            } catch (e) { console.error(e); }
-        }
-        setIsReconciling(false);
-        toast({ title: "Conciliación Finalizada", description: "Saldos liquidados cronológicamente." });
+                        for (const debt of pendingDebts) {
+                            const debtBs = new Decimal(debt.amountUSD).times(new Decimal(activeRate));
+                            if (balance.gte(debtBs)) {
+                                balance = balance.minus(debtBs);
+                                transaction.update(debt.ref, { status: 'paid', paidAmountUSD: debt.amountUSD, paymentDate: Timestamp.now() });
+                            } else break;
+                        }
+                        transaction.update(ownerRef, { balance: balance.toDecimalPlaces(2).toNumber() });
+                    });
+                } catch (e) { console.error(e); }
+            }
+            setIsReconciling(false);
+            toast({ title: "Conciliación Finalizada", description: "Saldos liquidados cronológicamente." });
+        });
     };
 
     const handleGenerateMonthlyDebt = async () => {
         if (!workingCondoId || condoFee <= 0) return;
-        setIsGeneratingMonthlyDebt(true);
-        try {
-            const now = new Date();
-            const year = now.getFullYear(), month = now.getMonth() + 1;
-            const existingSnap = await getDocs(query(collection(db, 'condominios', workingCondoId, 'debts'), where('year', '==', year), where('month', '==', month)));
-            const existingKeys = new Set(existingSnap.docs.map(d => `${d.data().ownerId}-${d.data().property.street}-${d.data().property.house}`));
+        requestAuthorization(async () => {
+            setIsGeneratingMonthlyDebt(true);
+            try {
+                const now = new Date();
+                const year = now.getFullYear(), month = now.getMonth() + 1;
+                const existingSnap = await getDocs(query(collection(db, 'condominios', workingCondoId, 'debts'), where('year', '==', year), where('month', '==', month)));
+                const existingKeys = new Set(existingSnap.docs.map(d => `${d.data().ownerId}-${d.data().property?.street}-${d.data().property?.house}`));
 
-            const batch = writeBatch(db);
-            let count = 0;
-            owners.forEach(o => {
-                o.properties?.forEach(p => {
-                    if (!existingKeys.has(`${o.id}-${p.street}-${p.house}`)) {
-                        batch.set(doc(collection(db, 'condominios', workingCondoId, 'debts')), { ownerId: o.id, property: p, year, month, amountUSD: condoFee, description: 'Cuota de Condominio', status: 'pending', published: true });
-                        count++;
-                    }
+                const batch = writeBatch(db);
+                let count = 0;
+                owners.forEach(o => {
+                    o.properties?.forEach(p => {
+                        if (!existingKeys.has(`${o.id}-${p.street}-${p.house}`)) {
+                            batch.set(doc(collection(db, 'condominios', workingCondoId, 'debts')), { ownerId: o.id, property: p, year, month, amountUSD: condoFee, description: 'Cuota de Condominio', status: 'pending', published: true });
+                            count++;
+                        }
+                    });
                 });
+                await batch.commit();
+                toast({ title: "Deudas Generadas", description: `${count} registros creados.` });
+            } catch (e) { console.error(e); }
+            finally { setIsGeneratingMonthlyDebt(false); }
+        });
+    };
+
+    const handleOpenEdit = (debt: Debt) => {
+        setEditingDebt(debt);
+        setEditForm({
+            description: debt.description,
+            amountUSD: debt.amountUSD.toString(),
+            month: debt.month.toString(),
+            year: debt.year.toString()
+        });
+        setIsEditDialog(true);
+    };
+
+    const handleUpdateDebt = async () => {
+        if (!editingDebt || !workingCondoId) return;
+        setIsSubmitting(true);
+        try {
+            await updateDoc(doc(db, 'condominios', workingCondoId, 'debts', editingDebt.id), {
+                description: editForm.description.toUpperCase(),
+                amountUSD: parseFloat(editForm.amountUSD),
+                month: parseInt(editForm.month),
+                year: parseInt(editForm.year),
+                updatedAt: serverTimestamp()
             });
-            await batch.commit();
-            toast({ title: "Deudas Generadas", description: `${count} registros creados.` });
-        } catch (e) { console.error(e); }
-        finally { setIsGeneratingMonthlyDebt(false); }
+            toast({ title: "Registro Actualizado" });
+            setIsEditDialog(false);
+        } catch (e) {
+            toast({ variant: 'destructive', title: "Error al actualizar" });
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleDeleteDebt = async () => {
+        if (!editingDebt || !workingCondoId) return;
+        setIsSubmitting(true);
+        try {
+            await deleteDoc(doc(db, 'condominios', workingCondoId, 'debts', editingDebt.id));
+            toast({ title: "Registro Eliminado" });
+            setIsDeleteDialog(false);
+        } catch (e) {
+            toast({ variant: 'destructive', title: "Error al eliminar" });
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     const filteredOwners = useMemo(() => {
@@ -235,10 +293,40 @@ export default function DebtManagementPage() {
                             <AccordionItem value={key} className="border-none">
                                 <AccordionTrigger className="px-8 py-6 hover:no-underline"><div className="flex items-center gap-4 text-left"><div className="p-3 bg-slate-800 rounded-2xl"><Building className="text-primary"/></div><div><h3 className="text-lg font-black text-white uppercase italic">{p.street} - {p.house}</h3><p className="text-[10px] font-bold text-slate-500 uppercase italic">{pending.length} Pendientes</p></div></div></AccordionTrigger>
                                 <AccordionContent className="px-8 pb-8 pt-4 border-t border-white/5">
-                                    <Table><TableHeader><TableRow className="border-white/5"><TableHead className="text-[10px] font-black uppercase text-white/40 italic">Período</TableHead><TableHead className="text-[10px] font-black uppercase text-white/40 italic">Descripción</TableHead><TableHead className="text-[10px] font-black uppercase text-white/40 italic">Monto Bs.</TableHead><TableHead className="text-right pr-4 text-[10px] font-black uppercase text-white/40 italic">Estado</TableHead></TableRow></TableHeader>
+                                    <Table><TableHeader><TableRow className="border-white/5"><TableHead className="text-[10px] font-black uppercase text-white/40 italic">Período</TableHead><TableHead className="text-[10px] font-black uppercase text-white/40 italic">Descripción</TableHead><TableHead className="text-[10px] font-black uppercase text-white/40 italic">Monto Bs.</TableHead><TableHead className="text-[10px] font-black uppercase text-white/40 italic text-right pr-14">Acciones</TableHead></TableRow></TableHeader>
                                     <TableBody>
-                                        {pending.map(d => (<TableRow key={d.id} className="border-white/5"><TableCell className="font-black text-white text-xs uppercase italic">{months[d.month-1].label} {d.year}</TableCell><TableCell className="text-slate-400 font-bold text-xs uppercase italic">{d.description}</TableCell><TableCell className="font-black text-white italic">Bs. {formatToTwoDecimals(d.amountUSD * activeRate)}</TableCell><TableCell className="text-right"><Badge variant="destructive" className="italic text-[9px]">PENDIENTE</Badge></TableCell></TableRow>))}
-                                        {paid.map(d => (<TableRow key={d.id} className="border-white/5 opacity-50"><TableCell className="font-bold text-slate-500 text-xs uppercase italic">{months[d.month-1].label} {d.year}</TableCell><TableCell className="text-slate-600 font-medium text-xs uppercase italic">{d.description}</TableCell><TableCell className="font-bold text-slate-500 italic">Bs. {formatToTwoDecimals(d.amountUSD * activeRate)}</TableCell><TableCell className="text-right"><Badge variant="outline" className="text-emerald-500 border-emerald-500 italic text-[9px]">PAGADA</Badge></TableCell></TableRow>))}
+                                        {pending.map(d => (
+                                            <TableRow key={d.id} className="border-white/5">
+                                                <TableCell className="font-black text-white text-xs uppercase italic">{months[d.month-1].label} {d.year}</TableCell>
+                                                <TableCell className="text-slate-400 font-bold text-xs uppercase italic">{d.description}</TableCell>
+                                                <TableCell className="font-black text-white italic">Bs. {formatToTwoDecimals(d.amountUSD * activeRate)}</TableCell>
+                                                <TableCell className="text-right pr-8">
+                                                    <DropdownMenu>
+                                                        <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="text-slate-500 hover:text-white"><MoreHorizontal className="h-4 w-4"/></Button></DropdownMenuTrigger>
+                                                        <DropdownMenuContent align="end" className="bg-slate-900 text-white border-white/10 font-montserrat italic">
+                                                            <DropdownMenuItem onClick={() => handleOpenEdit(d)} className="gap-2 font-black uppercase text-[10px] p-3"><Edit className="h-3 w-3 text-sky-500" /> Editar Registro</DropdownMenuItem>
+                                                            <DropdownMenuItem onClick={() => { setEditingDebt(d); setIsDeleteDialog(true); }} className="gap-2 font-black uppercase text-[10px] p-3 text-red-500"><Trash2 className="h-3 w-3" /> Eliminar</DropdownMenuItem>
+                                                        </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                        {paid.map(d => (
+                                            <TableRow key={d.id} className="border-white/5 opacity-50">
+                                                <TableCell className="font-bold text-slate-500 text-xs uppercase italic">{months[d.month-1].label} {d.year}</TableCell>
+                                                <TableCell className="text-slate-600 font-medium text-xs uppercase italic">{d.description}</TableCell>
+                                                <TableCell className="font-bold text-slate-500 italic">Bs. {formatToTwoDecimals(d.amountUSD * activeRate)}</TableCell>
+                                                <TableCell className="text-right pr-8">
+                                                    <DropdownMenu>
+                                                        <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="text-slate-500 hover:text-white"><MoreHorizontal className="h-4 w-4"/></Button></DropdownMenuTrigger>
+                                                        <DropdownMenuContent align="end" className="bg-slate-900 text-white border-white/10 font-montserrat italic">
+                                                            <DropdownMenuItem onClick={() => handleOpenEdit(d)} className="gap-2 font-black uppercase text-[10px] p-3"><Edit className="h-3 w-3 text-sky-500" /> Editar Registro</DropdownMenuItem>
+                                                            <DropdownMenuItem onClick={() => { setEditingDebt(d); setIsDeleteDialog(true); }} className="gap-2 font-black uppercase text-[10px] p-3 text-red-500"><Trash2 className="h-3 w-3" /> Eliminar</DropdownMenuItem>
+                                                        </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
                                     </TableBody></Table>
                                 </AccordionContent>
                             </AccordionItem>
@@ -246,6 +334,44 @@ export default function DebtManagementPage() {
                     );
                 })}
             </Accordion>
+
+            {/* Diálogo de Edición */}
+            <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialog}>
+                <DialogContent className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white italic">
+                    <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-white">Editar <span className="text-primary">Registro</span></DialogTitle></DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Concepto de Cobro</Label><Input value={editForm.description} onChange={e => setEditForm({...editForm, description: e.target.value})} className="rounded-xl h-12 font-black bg-white/5 border-none text-white uppercase italic" /></div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Monto ($)</Label><Input type="number" value={editForm.amountUSD} onChange={e => setEditForm({...editForm, amountUSD: e.target.value})} className="rounded-xl h-12 font-black bg-white/5 border-none text-white italic" /></div>
+                            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Año</Label><Input type="number" value={editForm.year} onChange={e => setEditForm({...editForm, year: e.target.value})} className="rounded-xl h-12 font-black bg-white/5 border-none text-white italic" /></div>
+                        </div>
+                        <div className="space-y-2">
+                            <Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Mes del Período</Label>
+                            <Select value={editForm.month} onValueChange={v => setEditForm({...editForm, month: v})}>
+                                <SelectTrigger className="rounded-xl h-12 bg-white/5 border-none font-black text-white italic"><SelectValue /></SelectTrigger>
+                                <SelectContent className="bg-slate-950 border-white/10 text-white italic">
+                                    {months.map(m => <SelectItem key={m.value} value={m.value.toString()} className="font-black italic">{m.label.toUpperCase()}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                    <DialogFooter><Button onClick={handleUpdateDebt} disabled={isSubmitting} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase h-14 rounded-2xl shadow-xl italic">{isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2 h-5 w-5" />} Guardar Cambios</Button></DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Diálogo de Eliminación */}
+            <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialog}>
+                <DialogContent className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white italic">
+                    <DialogHeader>
+                        <DialogTitle className="text-xl font-black uppercase italic text-red-500 flex items-center gap-2"><AlertCircle /> ¿Eliminar Registro?</DialogTitle>
+                        <DialogDescription className="font-bold text-white/40 italic">Esta acción borrará permanentemente la deuda de {months[parseInt(editForm.month)-1]?.label} {editForm.year}. No podrá revertirse.</DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter className="gap-2 mt-4">
+                        <Button variant="ghost" onClick={() => setIsDeleteDialog(false)} className="rounded-xl h-12 font-black uppercase text-white/60">Cancelar</Button>
+                        <Button onClick={handleDeleteDebt} disabled={isSubmitting} variant="destructive" className="rounded-xl h-12 font-black uppercase italic shadow-lg shadow-red-500/20">Confirmar Borrado</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

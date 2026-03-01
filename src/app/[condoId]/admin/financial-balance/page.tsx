@@ -27,7 +27,7 @@ const months = Array.from({ length: 12 }, (_, i) => ({
     label: format(new Date(2000, i), 'MMMM', { locale: es }),
 }));
 
-// RUTA MAESTRA ACTUALIZADA (NUEVO ID)
+// RUTA MAESTRA ACTUALIZADA (ID MAESTRO BDV)
 const BDV_ACCOUNT_ID = "Hlc0ky0QdnaXIsuf19Od";
 
 export default function FinancialBalancePage({ params }: { params: Promise<{ condoId: string }> }) {
