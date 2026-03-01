@@ -27,6 +27,7 @@ const months = Array.from({ length: 12 }, (_, i) => ({
     label: format(new Date(2000, i), 'MMMM', { locale: es }),
 }));
 
+// RUTA MAESTRA ACTUALIZADA
 const BDV_ACCOUNT_ID = "3PBNZdNqO6jbHRJfadT3";
 
 export default function FinancialBalancePage({ params }: { params: Promise<{ condoId: string }> }) {
@@ -100,7 +101,7 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
     };
 
     return (
-        <div className="max-w-5xl mx-auto p-6 space-y-8 bg-[#1A1D23] min-h-screen font-montserrat text-white">
+        <div className="max-w-5xl mx-auto p-6 space-y-8 bg-[#1A1D23] min-h-screen font-montserrat text-white italic">
             <div className="flex flex-col md:flex-row justify-between items-end gap-4 mb-10">
                 <div>
                     <h1 className="text-4xl font-black uppercase italic tracking-tighter text-white">Balance <span className="text-primary">Financiero</span></h1>
@@ -114,9 +115,9 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
 
             {loading ? <div className="py-20 flex justify-center"><Loader2 className="animate-spin h-10 w-10 text-primary" /></div> : <>
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <Card className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white p-8 border border-white/5 relative overflow-hidden"><div className="relative z-10"><p className="text-[10px] font-black uppercase text-primary italic">Saldo Real Banco</p><p className="text-3xl font-black italic mt-1">Bs. {formatCurrency(realBalances.banco)}</p></div><Landmark className="absolute top-6 right-6 h-12 w-12 text-white/5"/></Card>
-                    <Card className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white p-8 border border-white/5 relative overflow-hidden"><div className="relative z-10"><p className="text-[10px] font-black uppercase text-emerald-500 italic">Saldo Real Caja</p><p className="text-3xl font-black italic mt-1">Bs. {formatCurrency(realBalances.cajaPrincipal)}</p></div><Coins className="absolute top-6 right-6 h-12 w-12 text-white/5"/></Card>
-                    <Card className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white p-8 border border-white/5 relative overflow-hidden"><div className="relative z-10"><p className="text-[10px] font-black uppercase text-slate-500 italic">Caja Chica</p><p className="text-3xl font-black italic mt-1">Bs. {formatCurrency(realBalances.cajaChica)}</p></div><Wallet className="absolute top-6 right-6 h-12 w-12 text-white/5"/></Card>
+                    <Card className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white p-8 border border-white/5 relative overflow-hidden italic"><div className="relative z-10"><p className="text-[10px] font-black uppercase text-primary italic">Saldo Real Banco</p><p className="text-3xl font-black italic mt-1">Bs. {formatCurrency(realBalances.banco)}</p></div><Landmark className="absolute top-6 right-6 h-12 w-12 text-white/5"/></Card>
+                    <Card className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white p-8 border border-white/5 relative overflow-hidden italic"><div className="relative z-10"><p className="text-[10px] font-black uppercase text-emerald-500 italic">Saldo Real Caja</p><p className="text-3xl font-black italic mt-1">Bs. {formatCurrency(realBalances.cajaPrincipal)}</p></div><Coins className="absolute top-6 right-6 h-12 w-12 text-white/5"/></Card>
+                    <Card className="rounded-[2rem] border-none shadow-2xl bg-slate-900 text-white p-8 border border-white/5 relative overflow-hidden italic"><div className="relative z-10"><p className="text-[10px] font-black uppercase text-slate-500 italic">Caja Chica</p><p className="text-3xl font-black italic mt-1">Bs. {formatCurrency(realBalances.cajaChica)}</p></div><Wallet className="absolute top-6 right-6 h-12 w-12 text-white/5"/></Card>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-10">
@@ -130,7 +131,15 @@ export default function FinancialBalancePage({ params }: { params: Promise<{ con
                     <Card className="rounded-[2.5rem] bg-slate-900 border-none shadow-2xl overflow-hidden border border-white/5"><CardHeader className="bg-slate-950 p-6 border-b border-white/5"><CardTitle className="text-[10px] font-black uppercase tracking-widest text-white/40 italic">Egresos de Tesorería</CardTitle></CardHeader>
                     <CardContent className="p-0"><Table><TableHeader><TableRow className="bg-slate-950/50 border-white/5"><TableHead className="text-white/40 font-black text-[10px] uppercase">Concepto</TableHead><TableHead className="text-right text-white/40 font-black text-[10px] pr-8">Monto</TableHead></TableRow></TableHeader>
                     <TableBody>
-                        {egresosTesorería.map((e, i) => (<TableRow key={i} className="border-white/5 hover:bg-white/5"><TableCell className="py-4"><div className="text-white font-black uppercase text-[10px] italic">{e.concepto}</div><div className="text-[8px] font-black text-white/20 uppercase">ORIGEN: {e.cuenta}</div></TableCell><TableCell className="text-right font-black text-red-500 italic pr-8">Bs. {formatCurrency(e.monto)}</TableCell></TableRow>))}
+                        {egresosTesorería.map((e, i) => (
+                            <TableRow key={i} className="border-white/5 hover:bg-white/5">
+                                <TableCell className="py-4">
+                                    <div className="text-white font-black uppercase text-[10px] italic">{e.concepto}</div>
+                                    <div className="text-[8px] font-black text-white/20 uppercase">ORIGEN: {e.cuenta}</div>
+                                </TableCell>
+                                <TableCell className="text-right font-black text-red-500 italic pr-8">Bs. {formatCurrency(e.monto)}</TableCell>
+                            </TableRow>
+                        ))}
                     </TableBody>
                     <TableFooter className="bg-red-500/10 border-none"><TableRow className="border-none"><TableCell className="font-black text-red-400 text-[10px] uppercase italic">Total Egresos</TableCell><TableCell className="text-right font-black text-red-500 text-lg italic pr-8">Bs. {formatCurrency(totalEgresosMes)}</TableCell></TableRow></TableFooter></Table></CardContent></Card>
                 </div>

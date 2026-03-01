@@ -19,7 +19,7 @@ import {
     Hash, FileText, Save, Share2, FileDown,
     Calculator, Minus, Equal, Check, Receipt, X, DollarSign
 } from 'lucide-react';
-import { format, startOfMonth, addMonths } from 'date-fns';
+import { format, startOfMonth, addMonths, isBefore } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn, compressImage } from '@/lib/utils';
 import { 
@@ -71,13 +71,9 @@ type Payment = {
     receiptNumbers?: { [ownerId: string]: string }; 
 };
 
+// ID MAESTRO DEL BANCO DE VENEZUELA (Nueva Ruta)
 const BDV_ACCOUNT_ID = "3PBNZdNqO6jbHRJfadT3";
 const CAJA_PRINCIPAL_ID = "CAJA_PRINCIPAL_ID";
-
-const monthsLocale: { [key: number]: string } = {
-    1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril', 5: 'Mayo', 6: 'Junio',
-    7: 'Julio', 8: 'Agosto', 9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre'
-};
 
 function VerificationComponent({ condoId }: { condoId: string }) {
     const { user, companyInfo } = useAuth();
@@ -513,7 +509,10 @@ function ReportPaymentComponent() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!authUser || !condoId || !exchangeRate || !totalAmount || !receiptImage) return;
+        if (!authUser || !condoId || !exchangeRate || !totalAmount || !receiptImage) {
+            toast({ variant: 'destructive', title: 'Faltan datos', description: 'Complete todos los campos incluyendo el comprobante.' });
+            return;
+        }
         setIsSubmitting(true);
         try {
             const beneficiaries = beneficiaryRows.map(row => ({ 
@@ -665,7 +664,7 @@ function CalculatorComponent({ condoId, onReport }: { condoId: string, onReport:
                                 <Table><TableHeader className="bg-slate-800/50"><TableRow className="border-white/5"><TableHead className="w-12 px-8"></TableHead><TableHead className="text-[10px] font-black uppercase text-slate-400">Mes/Año</TableHead><TableHead className="text-right pr-8 text-[10px] font-black uppercase text-slate-400">Monto Bs.</TableHead></TableRow></TableHeader>
                                 <TableBody>
                                     {pendingDebts.length === 0 ? <TableRow><TableCell colSpan={3} className="h-32 text-center text-slate-500 font-bold italic uppercase text-[10px]">Sin deudas</TableCell></TableRow> : 
-                                    pendingDebts.map(d => (<TableRow key={d.id} className="border-white/5 hover:bg-white/5 cursor-pointer" onClick={() => setSelectedPendingDebts(p => p.includes(d.id) ? p.filter(id=>id!==d.id) : [...p, d.id])}><TableCell className="px-8"><Checkbox checked={selectedPendingDebts.includes(d.id)} /></TableCell><TableCell className="font-black text-white text-xs uppercase italic">{monthsLocale[d.month]} {d.year}</TableCell><TableCell className="text-right pr-8 font-black text-white italic">Bs. {formatCurrency(d.amountUSD * activeRate)}</TableCell></TableRow>))}
+                                    pendingDebts.map(d => (<TableRow key={d.id} className="border-white/5 hover:bg-white/5 cursor-pointer" onClick={() => setSelectedPendingDebts(p => p.includes(d.id) ? p.filter(id=>id!==d.id) : [...p, d.id])}><TableCell className="px-8"><Checkbox checked={selectedPendingDebts.includes(d.id)} /></TableCell><TableCell className="font-black text-white text-xs uppercase italic">{format(new Date(d.year, d.month - 1), 'MMMM yyyy', {locale: es})}</TableCell><TableCell className="text-right pr-8 font-black text-white italic">Bs. {formatCurrency(d.amountUSD * activeRate)}</TableCell></TableRow>))}
                                 </TableBody></Table>
                             </CardContent>
                         </Card>

@@ -191,7 +191,7 @@ const AccountingPage = () => {
     );
 
     return (
-        <div className="space-y-8 animate-in fade-in duration-700 font-montserrat bg-[#1A1D23] min-h-screen p-4 md:p-8">
+        <div className="space-y-8 animate-in fade-in duration-700 font-montserrat bg-[#1A1D23] min-h-screen p-4 md:p-8 text-white">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-10 border-b border-white/5 pb-6">
                 <div>
                     <h2 className="text-4xl font-black text-white uppercase tracking-tighter italic drop-shadow-sm">Libros <span className="text-primary">Contables</span></h2>
@@ -199,7 +199,7 @@ const AccountingPage = () => {
                     <p className="text-white/40 font-bold mt-3 text-sm uppercase tracking-wide">Visibilidad total de asientos por cuenta en tiempo real.</p>
                 </div>
                 <Button onClick={handleSyncPeriod} disabled={isSyncing} variant="outline" className="rounded-xl border-primary text-primary font-black uppercase text-[10px] h-12 shadow-sm bg-white/5 hover:bg-white/10">
-                    {isSyncing ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Zap className="mr-2 h-4 w-4" />} Reparar Período
+                    {isSyncing ? <Loader2 className="animate-spin mr-2" /> : <Zap className="mr-2 h-4 w-4" />} Reparar Período
                 </Button>
             </div>
             
@@ -215,13 +215,13 @@ const AccountingPage = () => {
 
             <Tabs defaultValue="mayor">
                 <TabsList className="flex flex-wrap h-auto gap-2 bg-slate-800/50 p-2 rounded-3xl border border-white/5">
-                    <TabsTrigger value="mayor" className="rounded-2xl font-black uppercase text-[10px] px-6 py-3">Libro Mayor</TabsTrigger>
+                    <TabsTrigger value="mayor" className="rounded-2xl font-black uppercase text-[10px] px-6 py-3 italic">Libro Mayor</TabsTrigger>
                     {accounts.map(acc => <TabsTrigger key={acc.id} value={acc.id} className="rounded-2xl font-black uppercase text-[10px] px-6 py-3 italic tracking-tight">{acc.nombre}</TabsTrigger>)}
                 </TabsList>
 
                 <TabsContent value="mayor" className="mt-4">
                     <Card className="rounded-[2.5rem] border-none shadow-2xl overflow-hidden bg-slate-900 border border-white/5">
-                        <CardHeader className="bg-slate-950 text-white p-8 border-b border-white/5"><CardTitle className="flex items-center gap-3 italic uppercase font-black tracking-widest"><History className="text-primary" /> Libro Mayor Consolidado</CardTitle></CardHeader>
+                        <CardHeader className="bg-slate-950 text-white p-8 border-b border-white/5"><CardTitle className="flex items-center gap-3 italic uppercase font-black tracking-widest text-white"><History className="text-primary" /> Libro Mayor Consolidado</CardTitle></CardHeader>
                         <CardContent className="p-0">
                              <Table>
                                 <TableHeader className="bg-slate-950/50"><TableRow className="border-white/5">
