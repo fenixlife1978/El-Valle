@@ -61,7 +61,6 @@ export default function DebtManagementPage() {
     const [selectedOwnerDebts, setSelectedOwnerDebts] = useState<Debt[]>([]);
     const [loadingDebts, setLoadingDebts] = useState(false);
     
-    // Estados para Edición y Eliminación
     const [isEditDialogOpen, setIsEditDialog] = useState(false);
     const [isDeleteDialogOpen, setIsDeleteDialog] = useState(false);
     const [isAddDialogOpen, setIsAddDialog] = useState(false);
@@ -242,11 +241,37 @@ export default function DebtManagementPage() {
         setIsSubmitting(true);
         try {
             const [street, house] = addForm.propertyKey.split('|');
+            const year = parseInt(addForm.year);
+            const month = parseInt(addForm.month);
+
+            // REGLA DE ORO: Validar duplicados para esta unidad y periodo
+            const q = query(
+                collection(db, 'condominios', workingCondoId, 'debts'),
+                where('ownerId', '==', selectedOwner.id),
+                where('year', '==', year),
+                where('month', '==', month)
+            );
+            const snap = await getDocs(q);
+            const duplicate = snap.docs.find(d => {
+                const p = d.data().property;
+                return p?.street === street && p?.house === house;
+            });
+
+            if (duplicate) {
+                toast({ 
+                    variant: 'destructive', 
+                    title: "Regla de Oro: Deuda Duplicada", 
+                    description: `Ya existe un registro para ${months[month-1].label} ${year} en esta unidad.` 
+                });
+                setIsSubmitting(false);
+                return;
+            }
+
             await addDoc(collection(db, 'condominios', workingCondoId, 'debts'), {
                 ownerId: selectedOwner.id,
                 property: { street, house },
-                year: parseInt(addForm.year),
-                month: parseInt(addForm.month),
+                year,
+                month,
                 amountUSD: parseFloat(addForm.amountUSD),
                 description: addForm.description.toUpperCase(),
                 status: 'pending',
@@ -394,7 +419,6 @@ export default function DebtManagementPage() {
                 })}
             </Accordion>
 
-            {/* Diálogo de Edición */}
             <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialog}>
                 <DialogContent className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white italic">
                     <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-white">Editar <span className="text-primary">Registro</span></DialogTitle></DialogHeader>
@@ -418,7 +442,6 @@ export default function DebtManagementPage() {
                 </DialogContent>
             </Dialog>
 
-            {/* Diálogo Nueva Deuda */}
             <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialog}>
                 <DialogContent className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white italic">
                     <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-white">Nueva <span className="text-primary">Deuda Manual</span></DialogTitle></DialogHeader>
@@ -453,7 +476,6 @@ export default function DebtManagementPage() {
                 </DialogContent>
             </Dialog>
 
-            {/* Diálogo de Eliminación */}
             <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialog}>
                 <DialogContent className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white italic">
                     <DialogHeader>

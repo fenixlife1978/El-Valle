@@ -35,6 +35,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Separator } from '@/components/ui/separator';
 import Image from 'next/image';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { 
@@ -77,7 +78,6 @@ type Payment = {
     liquidatedConcepts?: LiquidatedConcept[];
 };
 
-// RUTA MAESTRA BANCO DE VENEZUELA (AFECTACIÓN EXCLUSIVA)
 const BDV_ACCOUNT_ID = "Hlc0ky0QdnaXIsuf19Od";
 const CAJA_PRINCIPAL_ID = "CAJA_PRINCIPAL_ID";
 
