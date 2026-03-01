@@ -64,8 +64,10 @@ export default function DebtManagementPage() {
     // Estados para Edición y Eliminación
     const [isEditDialogOpen, setIsEditDialog] = useState(false);
     const [isDeleteDialogOpen, setIsDeleteDialog] = useState(false);
+    const [isAddDialogOpen, setIsAddDialog] = useState(false);
     const [editingDebt, setEditingDebt] = useState<Debt | null>(null);
     const [editForm, setEditForm] = useState({ description: '', amountUSD: '', month: '', year: '' });
+    const [addForm, setAddForm] = useState({ description: 'Cuota de Condominio', amountUSD: '', month: String(new Date().getMonth() + 1), year: String(new Date().getFullYear()), propertyKey: '' });
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const { toast } = useToast();
@@ -215,6 +217,32 @@ export default function DebtManagementPage() {
         });
     };
 
+    const handleSaveNewDebt = async () => {
+        if (!selectedOwner || !workingCondoId || !addForm.amountUSD || !addForm.propertyKey) return;
+        setIsSubmitting(true);
+        try {
+            const [street, house] = addForm.propertyKey.split('|');
+            await addDoc(collection(db, 'condominios', workingCondoId, 'debts'), {
+                ownerId: selectedOwner.id,
+                property: { street, house },
+                year: parseInt(addForm.year),
+                month: parseInt(addForm.month),
+                amountUSD: parseFloat(addForm.amountUSD),
+                description: addForm.description.toUpperCase(),
+                status: 'pending',
+                published: true,
+                createdAt: serverTimestamp()
+            });
+            toast({ title: "Deuda Creada" });
+            setIsAddDialog(false);
+            setAddForm({ ...addForm, amountUSD: '' });
+        } catch (e) {
+            toast({ variant: 'destructive', title: "Error al crear" });
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
     const filteredOwners = useMemo(() => {
         if (!searchTerm) return owners;
         const s = searchTerm.toLowerCase();
@@ -283,7 +311,15 @@ export default function DebtManagementPage() {
 
     return (
         <div className="space-y-8 font-montserrat bg-[#1A1D23] min-h-screen p-4 md:p-8 italic text-white">
-            <Button variant="ghost" onClick={() => setView('list')} className="text-white font-black uppercase text-[10px] h-10 hover:bg-white/5"><ArrowLeft className="mr-2 h-4 w-4"/> Volver</Button>
+            <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+                <Button variant="ghost" onClick={() => setView('list')} className="text-white font-black uppercase text-[10px] h-10 hover:bg-white/5"><ArrowLeft className="mr-2 h-4 w-4"/> Volver</Button>
+                <Button onClick={() => { 
+                    setAddForm(p => ({ ...p, propertyKey: selectedOwner?.properties?.[0] ? `${selectedOwner.properties[0].street}|${selectedOwner.properties[0].house}` : '' }));
+                    setIsAddDialog(true); 
+                }} className="bg-primary hover:bg-primary/90 text-slate-900 font-black uppercase text-[10px] h-12 rounded-xl italic">
+                    <PlusCircle className="mr-2 h-4 w-4"/> Nueva Deuda
+                </Button>
+            </div>
             <div className="mb-6"><h2 className="text-3xl font-black text-white uppercase italic tracking-tighter">Deudas de <span className="text-primary">{selectedOwner?.name}</span></h2></div>
             <Accordion type="multiple" className="space-y-4">
                 {selectedOwner?.properties?.map((p, i) => {
@@ -357,6 +393,41 @@ export default function DebtManagementPage() {
                         </div>
                     </div>
                     <DialogFooter><Button onClick={handleUpdateDebt} disabled={isSubmitting} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase h-14 rounded-2xl shadow-xl italic">{isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2 h-5 w-5" />} Guardar Cambios</Button></DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Diálogo Nueva Deuda */}
+            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialog}>
+                <DialogContent className="rounded-[2.5rem] border-none shadow-2xl bg-slate-900 text-white italic">
+                    <DialogHeader><DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-white">Nueva <span className="text-primary">Deuda Manual</span></DialogTitle></DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="space-y-2">
+                            <Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Propiedad Destino</Label>
+                            <Select value={addForm.propertyKey} onValueChange={v => setAddForm({...addForm, propertyKey: v})}>
+                                <SelectTrigger className="rounded-xl h-12 bg-white/5 border-none font-black text-white uppercase italic"><SelectValue placeholder="SELECCIONAR UNIDAD..." /></SelectTrigger>
+                                <SelectContent className="bg-slate-950 border-white/10 text-white italic">
+                                    {selectedOwner?.properties?.map((p, i) => (
+                                        <SelectItem key={i} value={`${p.street}|${p.house}`} className="font-black italic uppercase">{p.street} - {p.house}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Descripción / Concepto</Label><Input value={addForm.description} onChange={e => setAddForm({...addForm, description: e.target.value})} className="rounded-xl h-12 font-black bg-white/5 border-none text-white uppercase italic" /></div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Monto ($)</Label><Input type="number" value={addForm.amountUSD} onChange={e => setAddForm({...addForm, amountUSD: e.target.value})} className="rounded-xl h-12 font-black bg-white/5 border-none text-white italic" placeholder="0.00" /></div>
+                            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Año</Label><Input type="number" value={addForm.year} onChange={e => setAddForm({...addForm, year: e.target.value})} className="rounded-xl h-12 font-black bg-white/5 border-none text-white italic" /></div>
+                        </div>
+                        <div className="space-y-2">
+                            <Label className="text-[10px] font-black uppercase text-white/40 ml-2 italic">Mes</Label>
+                            <Select value={addForm.month} onValueChange={v => setAddForm({...addForm, month: v})}>
+                                <SelectTrigger className="rounded-xl h-12 bg-white/5 border-none font-black text-white italic"><SelectValue /></SelectTrigger>
+                                <SelectContent className="bg-slate-950 border-white/10 text-white italic">
+                                    {months.map(m => <SelectItem key={m.value} value={m.value.toString()} className="font-black italic">{m.label.toUpperCase()}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                    <DialogFooter><Button onClick={handleSaveNewDebt} disabled={isSubmitting || !addForm.amountUSD || !addForm.propertyKey} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase h-14 rounded-2xl shadow-xl italic">{isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2 h-5 w-5" />} Registrar Cargo</Button></DialogFooter>
                 </DialogContent>
             </Dialog>
 
