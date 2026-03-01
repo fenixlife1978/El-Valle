@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, Suspense } from 'react';
+import React, { useState, useEffect, useMemo, Suspense, use } from 'react';
 import { useSearchParams, useRouter, useParams } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
@@ -181,11 +181,12 @@ function VerificationComponent({ condoId }: { condoId: string }) {
                             ));
                             const allDebtsSorted = allDebtsSnap.docs
                                 .map(d => d.data())
-                                .sort((a, b) => b.year - a.year || b.month - a.month);
+                                .sort((a, b) => a.year - b.year || a.month - b.month);
                             
                             let nextMonthDate = addMonths(new Date(), 1);
                             if (allDebtsSorted.length > 0) {
-                                nextMonthDate = startOfMonth(new Date(allDebtsSorted[allDebtsSorted.length-1].year, allDebtsSorted[allDebtsSorted.length-1].month));
+                                const lastDebt = allDebtsSorted[allDebtsSorted.length-1];
+                                nextMonthDate = addMonths(new Date(lastDebt.year, lastDebt.month - 1), 1);
                             }
 
                             while (funds.gte(advanceAmountBs)) {
@@ -664,6 +665,114 @@ function ReportPaymentComponent() {
             </form>
             <BankSelectionModal isOpen={isBankModalOpen} onOpenChange={setIsBankModalOpen} selectedValue={bank} onSelect={(v) => { setBank(v); setIsBankModalOpen(false); }} />
         </Card>
+    );
+}
+
+function CalculatorComponent({ condoId, onReport }: { condoId: string, onReport: (data: any) => void }) {
+    const [searchTerm, setSearchTerm] = useState('');
+    const [allOwners, setAllOwners] = useState<Owner[]>([]);
+    const [selectedOwner, setSelectedOwner] = useState<Owner | null>(null);
+    const [debts, setDebts] = useState<any[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [activeRate, setActiveRate] = useState(0);
+    const [condoFee, setCondoFee] = useState(0);
+    const [selectedDebts, setSelectedDebts] = useState<string[]>([]);
+    const [advanceMonths, setAdvanceMonths] = useState(0);
+
+    const ownersCol = condoId === 'condo_01' ? 'owners' : 'propietarios';
+
+    useEffect(() => {
+        if (!condoId) return;
+        const q = query(collection(db, 'condominios', condoId, ownersCol), where('role', '==', 'propietario'));
+        return onSnapshot(q, snap => {
+            setAllOwners(snap.docs.map(d => ({ id: d.id, ...d.data() } as Owner)).sort((a,b) => a.name.localeCompare(b.name)));
+        });
+    }, [condoId]);
+
+    useEffect(() => {
+        if (!condoId) return;
+        getDoc(doc(db, 'condominios', condoId, 'config', 'mainSettings')).then(snap => {
+            if (snap.exists()) {
+                const data = snap.data();
+                setCondoFee(data.condoFee || 0);
+                const active = (data.exchangeRates || []).find((r:any) => r.active);
+                setActiveRate(active?.rate || 0);
+            }
+        });
+    }, [condoId]);
+
+    useEffect(() => {
+        if (!selectedOwner || !condoId) return;
+        setLoading(true);
+        const q = query(collection(db, 'condominios', condoId, 'debts'), where('ownerId', '==', selectedOwner.id), where('status', 'in', ['pending', 'vencida']));
+        return onSnapshot(q, snap => {
+            setDebts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+            setLoading(false);
+        });
+    }, [selectedOwner, condoId]);
+
+    const totals = useMemo(() => {
+        const selectedAmountUSD = debts.filter(d => selectedDebts.includes(d.id)).reduce((sum, d) => sum + d.amountUSD, 0);
+        const advanceAmountUSD = advanceMonths * condoFee;
+        const totalUSD = selectedAmountUSD + advanceAmountUSD;
+        const totalBs = totalUSD * activeRate;
+        return { totalUSD, totalBs };
+    }, [debts, selectedDebts, advanceMonths, condoFee, activeRate]);
+
+    return (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 font-montserrat italic text-white">
+            <div className="lg:col-span-2 space-y-6">
+                <Card className="bg-slate-900 border-none shadow-2xl overflow-hidden rounded-[2rem]">
+                    <CardHeader className="bg-white/5 p-8 border-b border-white/5"><CardTitle className="text-xl font-black uppercase italic">1. Seleccionar Residente</CardTitle></CardHeader>
+                    <CardContent className="p-8">
+                        {!selectedOwner ? (
+                            <div className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 h-5 w-5"/><Input placeholder="BUSCAR PROPIETARIO..." className="pl-12 h-14 rounded-2xl bg-slate-800 border-none font-black text-xs uppercase" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/>
+                            {searchTerm.length >= 2 && (
+                                <Card className="absolute z-50 w-full mt-2 bg-slate-950 border-white/10 shadow-2xl rounded-2xl overflow-hidden"><ScrollArea className="h-48">{allOwners.filter(o => o.name.toLowerCase().includes(searchTerm.toLowerCase())).map(o => (<div key={o.id} onClick={() => setSelectedOwner(o)} className="p-4 hover:bg-white/5 cursor-pointer font-black text-[10px] uppercase border-b border-white/5">{o.name}</div>))}</ScrollArea></Card>
+                            )}</div>
+                        ) : (
+                            <div className="flex justify-between items-center p-6 bg-slate-800 rounded-3xl border border-primary/20"><div className="flex items-center gap-4"><div className="bg-primary/10 p-3 rounded-2xl text-primary"><UserPlus /></div><div><p className="font-black text-lg uppercase">{selectedOwner.name}</p><p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{selectedOwner.properties.map(p => `${p.street} ${p.house}`).join(' | ')}</p></div></div><Button variant="ghost" size="icon" onClick={() => setSelectedOwner(null)} className="text-red-500 hover:bg-red-500/10"><XCircle /></Button></div>
+                        )}
+                    </CardContent>
+                </Card>
+
+                {selectedOwner && (
+                    <Card className="bg-slate-900 border-none shadow-2xl overflow-hidden rounded-[2rem]">
+                        <CardHeader className="bg-white/5 p-8 border-b border-white/5"><CardTitle className="text-xl font-black uppercase italic">2. Deudas y Adelantos</CardTitle></CardHeader>
+                        <CardContent className="p-0">
+                            {loading ? <div className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-primary h-10 w-10"/></div> : (
+                                <Table><TableHeader className="bg-slate-800/30"><TableRow className="border-white/5"><TableHead className="w-16 px-8 py-6 text-center">PAGAR</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-400">PERÍODO</TableHead><TableHead className="text-[10px] font-black uppercase text-slate-400">CONCEPTO</TableHead><TableHead className="text-right pr-8 text-[10px] font-black uppercase text-slate-400">MONTO BS.</TableHead></TableRow></TableHeader>
+                                <TableBody>
+                                    {debts.length === 0 ? <TableRow><TableCell colSpan={4} className="h-24 text-center text-slate-500 font-bold uppercase text-[10px]">Sin deudas pendientes</TableCell></TableRow> : 
+                                    debts.sort((a,b) => a.year - b.year || a.month - b.month).map(d => (
+                                        <TableRow key={d.id} className="border-white/5 hover:bg-white/5 transition-colors">
+                                            <TableCell className="px-8 py-6 text-center"><Checkbox checked={selectedDebts.includes(d.id)} onCheckedChange={c => setSelectedDebts(p => c ? [...p, d.id] : p.filter(id => id !== d.id))}/></TableCell>
+                                            <TableCell className="font-black text-white text-xs uppercase">{monthsLocale[d.month]} {d.year}</TableCell>
+                                            <TableCell className="text-[10px] font-bold text-slate-500 uppercase">{d.description}</TableCell>
+                                            <TableCell className="text-right pr-8 font-black text-white italic">Bs. {formatCurrency(d.amountUSD * activeRate)}</TableCell>
+                                        </TableRow>
+                                    ))}
+                                    <TableRow className="bg-primary/5 border-none"><TableCell className="px-8 py-8 font-black text-xs text-primary uppercase italic" colSpan={2}>MESES POR ADELANTADO</TableCell><TableCell className="text-center"><div className="flex items-center justify-center gap-4"><Button variant="outline" size="icon" className="h-10 w-10 border-primary text-primary rounded-xl" onClick={() => setAdvanceMonths(Math.max(0, advanceMonths - 1))}><Minus/></Button><span className="text-xl font-black w-8">{advanceMonths}</span><Button variant="outline" size="icon" className="h-10 w-10 border-primary text-primary rounded-xl" onClick={() => setAdvanceMonths(advanceMonths + 1)}><PlusCircle/></Button></div></TableCell><TableCell className="text-right pr-8 font-black text-primary italic">Bs. {formatCurrency(advanceMonths * condoFee * activeRate)}</TableCell></TableRow>
+                                </TableBody></Table>
+                            )}
+                        </CardContent>
+                    </Card>
+                )}
+            </div>
+
+            <div className="lg:sticky lg:top-24">
+                <Card className="bg-slate-900 border-none shadow-2xl overflow-hidden rounded-[3rem] border border-white/5">
+                    <CardHeader className="bg-primary text-slate-900 p-8 text-center"><CardTitle className="text-2xl font-black uppercase italic tracking-tighter flex items-center justify-center gap-3"><Calculator /> Liquidación</CardTitle></CardHeader>
+                    <CardContent className="p-8 space-y-6">
+                        <div className="flex justify-between items-center"><span className="text-[10px] font-black uppercase text-slate-500">TASA BCV</span><Badge variant="outline" className="font-black text-primary border-primary/20">Bs. {formatCurrency(activeRate)}</Badge></div>
+                        <Separator className="bg-white/5"/>
+                        <div className="flex justify-between items-end"><span className="text-[10px] font-black uppercase text-slate-500 mb-1">TOTAL USD</span><span className="text-3xl font-black text-emerald-500 italic">${totals.totalUSD.toFixed(2)}</span></div>
+                        <div className="flex flex-col gap-1 text-center bg-white/5 p-6 rounded-[2rem] border border-white/5"><span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">TOTAL A PAGAR BS.</span><span className="text-4xl font-black text-white italic drop-shadow-2xl">Bs. {formatCurrency(totals.totalBs)}</span></div>
+                    </CardContent>
+                    <CardFooter className="px-8 pb-8"><Button onClick={() => onReport({ owner: selectedOwner, totalBs: totals.totalBs })} disabled={!selectedOwner || totals.totalBs <= 0} className="w-full h-16 rounded-[1.5rem] bg-primary hover:bg-primary/90 text-slate-900 font-black uppercase italic tracking-widest shadow-2xl shadow-primary/20">PROCEDER AL REPORTE <Receipt className="ml-2"/></Button></CardFooter>
+                </Card>
+            </div>
+        </div>
     );
 }
 
